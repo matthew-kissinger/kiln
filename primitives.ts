@@ -377,6 +377,39 @@ export function getJointNames(root: THREE.Object3D): string[] {
 }
 
 /**
+ * Validates asset against category guidelines.
+ * Returns warnings for guidance but doesn't block on limits.
+ */
+export function validateAsset(
+  root: THREE.Object3D,
+  category: 'character' | 'prop' | 'vfx' | 'environment'
+): { valid: boolean; errors: string[]; warnings: string[] } {
+  const errors: string[] = [];
+  const warnings: string[] = [];
+
+  const guidelines = {
+    character: { suggestedTris: 5000, suggestedMats: 8 },
+    prop: { suggestedTris: 3000, suggestedMats: 6 },
+    vfx: { suggestedTris: 2000, suggestedMats: 4 },
+    environment: { suggestedTris: 15000, suggestedMats: 12 },
+  };
+
+  const limits = guidelines[category];
+  const tris = countTriangles(root);
+  const mats = countMaterials(root);
+
+  if (tris > limits.suggestedTris) {
+    warnings.push(`High triangle count: ${tris} (suggested: ${limits.suggestedTris})`);
+  }
+
+  if (mats > limits.suggestedMats) {
+    warnings.push(`High material count: ${mats} (suggested: ${limits.suggestedMats})`);
+  }
+
+  return { valid: true, errors, warnings };
+}
+
+/**
  * The full sandbox globals used when executing Kiln code. Kept in one place
  * so render.ts and any future evaluator share the same surface area as what
  * the LLM expects.
@@ -388,6 +421,7 @@ export function buildSandboxGlobals(): Record<string, unknown> {
     gameMaterial, basicMaterial, glassMaterial, lambertMaterial,
     rotationTrack, positionTrack, scaleTrack, createClip,
     spinAnimation, bobbingAnimation, idleBreathing,
+    countTriangles, countMaterials, getJointNames, validateAsset,
     Math, console,
   };
 }
