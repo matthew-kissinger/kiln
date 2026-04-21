@@ -88,13 +88,18 @@ export async function generateKilnCode(
 // Internal
 // =============================================================================
 
+// Claude Opus can take 2-5 minutes on coordinate-heavy prompts (guard
+// towers, vehicles) and has occasionally stretched past 8 min in testing.
+// Default 12 min gives the compound-prompt path breathing room.
+const DEFAULT_QUERY_TIMEOUT_MS = 720_000;
+
 async function runStructuredQuery(
   userPrompt: string,
   systemPrompt: string,
   _mode: RenderMode
 ): Promise<KilnGenerateResult> {
   const abortController = new AbortController();
-  const timeout = setTimeout(() => abortController.abort(), 300_000);
+  const timeout = setTimeout(() => abortController.abort(), DEFAULT_QUERY_TIMEOUT_MS);
 
   try {
     const q = query({
