@@ -321,6 +321,15 @@ export async function renderGLB(code: string): Promise<RenderResult> {
   const { meta, root, clips } = executeKilnCode(code);
   const tris = countTriangles(root);
 
+  // Runtime-aware joint-name validation (follow-up #6 from the W1.1 spike
+  // report). Walk the scene graph + animation tracks and surface any track
+  // whose target name doesn't resolve to a scene node. Non-fatal — the GLB
+  // still renders; agents iterating on code use these warnings to fix the
+  // next iteration. Runs before the bridge so the descriptive "rename the
+  // pivot" hint is first; the bridge also emits a briefer "target not
+  // found - skipped" for each unresolved track (kept for compatibility).
+  for (const w of inspectGeneratedAnimation(root, clips)) warnings.push(w);
+
   const doc = new Document();
   const buf = doc.createBuffer();
   const matCache = new Map<THREE.Material, GtMaterial>();
@@ -342,4 +351,56 @@ export async function renderGLB(code: string): Promise<RenderResult> {
     meta: { ...meta, tris },
     warnings,
   };
+}
+
+// =============================================================================
+// Runtime-aware animation inspection
+// =============================================================================
+
+/**
+ * Walk a Kiln-executed scene graph and its animation clips, and surface any
+ * track whose target (e.g. `Joint_LeftWheel.rotation`) doesn't resolve to a
+ * named node in the scene. These are *warnings*, not errors — the GLB still
+ * renders fine, the track just does nothing. Agents iterating on generated
+ * code use this signal to pick a real joint name on the next pass.
+ *
+ * Pure, side-effect free, safe to call without rendering.
+ */
+export function inspectGeneratedAnimation(
+  root: THREE.Object3D,
+  clips: THREE.AnimationClip[]
+): string[] {
+  const warnings: string[] = [];
+  if (clips.length === 0) return warnings;
+
+  const nodeNames = new Set<string>();
+  root.traverse((obj) => {
+    if (obj.name) nodeNames.add(obj.name);
+  });
+
+  for (const clip of clips) {
+    for (const track of clip.tracks) {
+      const dotIdx = track.name.lastIndexOf('.');
+      if (dotIdx === -1) {
+        warnings.push(`Track "${track.name}" is missing a node.property separator`);
+        continue;
+      }
+      const nodeName = track.name.substring(0, dotIdx);
+      const property = track.name.substring(dotIdx + 1);
+
+      if (!nodeNames.has(nodeName)) {
+        warnings.push(
+          `Animation track "${clip.name}:${track.name}" targets unknown node "${nodeName}" — rename the pivot or fix the track`
+        );
+      }
+
+      if (!['position', 'quaternion', 'scale'].includes(property)) {
+        warnings.push(
+          `Animation track "${clip.name}:${track.name}" uses unsupported property "${property}"`
+        );
+      }
+    }
+  }
+
+  return warnings;
 }

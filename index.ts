@@ -12,14 +12,30 @@ import type { KilnCodeMeta } from './render';
 import { renderGLB } from './render';
 import { generateKilnCode } from './generate';
 
-export { renderGLB } from './render';
-export { generateKilnCode } from './generate';
+export { renderGLB, inspectGeneratedAnimation } from './render';
+export {
+  generateKilnCode,
+  editKilnCode,
+  compactCode,
+  refactorCode,
+  // Companion aliases on the namespace for agent ergonomics:
+  editKilnCode as editCode,
+  compactCode as compact,
+  refactorCode as refactor,
+} from './generate';
+export type {
+  RefactorRequest,
+  KilnGenerateResult,
+  KilnGenerateCallOptions,
+} from './generate';
 export { validate, validateKilnCode } from './validation';
 export {
   buildUserPrompt,
   getSystemPrompt,
   STYLE_TEMPLATES,
   KILN_SYSTEM_PROMPT,
+  KILN_TSL_SYSTEM_PROMPT,
+  KILN_BOTH_SYSTEM_PROMPT,
   type KilnGenerateRequest,
   type RenderMode,
   type AssetCategory,
@@ -27,7 +43,6 @@ export {
   type AssetBudget,
 } from './prompt';
 export type { KilnCodeMeta, RenderResult, ExecutedKilnCode } from './render';
-export type { KilnGenerateResult } from './generate';
 export { executeKilnCode } from './render';
 export {
   buildSandboxGlobals,
@@ -74,6 +89,13 @@ export interface KilnGenerateOptions {
    * match the server's behavior.
    */
   includeAnimation?: boolean;
+  /**
+   * Abort milliseconds for the underlying SDK query. Defaults to 720_000
+   * (12 min) to fit Opus variance on coordinate-heavy prompts.
+   */
+  timeoutMs?: number;
+  /** Override the Claude model id used for generation. */
+  model?: string;
 }
 
 export interface KilnGenerateOutput {
@@ -99,14 +121,20 @@ export async function generate(
 ): Promise<KilnGenerateOutput> {
   const category = opts.category ?? 'prop';
 
-  const genResult = await generateKilnCode({
-    prompt,
-    mode: 'glb',
-    category,
-    style: opts.style,
-    includeAnimation: opts.includeAnimation ?? true,
-    referenceImageUrl: opts.referenceImageUrl,
-  });
+  const genResult = await generateKilnCode(
+    {
+      prompt,
+      mode: 'glb',
+      category,
+      style: opts.style,
+      includeAnimation: opts.includeAnimation ?? true,
+      referenceImageUrl: opts.referenceImageUrl,
+    },
+    {
+      timeoutMs: opts.timeoutMs,
+      model: opts.model,
+    }
+  );
 
   if (!genResult.success || !genResult.code) {
     throw new Error(`Kiln code generation failed: ${genResult.error ?? 'unknown error'}`);

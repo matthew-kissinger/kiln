@@ -1,12 +1,10 @@
 /**
  * Kiln System Prompts & User Prompt Builders
  *
- * Copied from packages/shared/kiln-prompts.ts for the core spike so the
- * headless pipeline has no run-time dependency on the shared package's
- * prompt content. Duplication is intentional - W2 will dedupe once the
- * editor migration lands.
- *
- * Local types mirror @pixel-forge/shared api-types so we stay additive.
+ * Canonical source in @pixel-forge/core. Was previously duplicated in
+ * `packages/shared/kiln-prompts.ts`; that file has been retired in favor of
+ * this one. Server imports via `@pixel-forge/core/kiln` (the route wrapper
+ * re-exports through `services/claude`).
  */
 
 export type RenderMode = 'glb' | 'tsl' | 'both';
@@ -65,7 +63,7 @@ Generate assets with realistic proportions and detail:
 };
 
 // =============================================================================
-// System Prompt (GLB mode - spike only cares about this)
+// System Prompts
 // =============================================================================
 
 export const KILN_SYSTEM_PROMPT = `You are an expert procedural 3D asset generator. Create game-ready models with character and style.
@@ -195,9 +193,198 @@ function animate(root) {
 }
 </example>`;
 
+export const KILN_TSL_SYSTEM_PROMPT = `You are an expert shader artist. Create stunning real-time visual effects using Three.js TSL.
+
+<file-format>
+import { MeshStandardNodeMaterial } from 'three/webgpu';
+import { color, float, vec3, time, positionWorld, normalWorld, cameraPosition, Fn } from 'three/tsl';
+
+const material = new MeshStandardNodeMaterial();
+
+// Configure shader nodes
+material.colorNode = ...;
+material.emissiveNode = ...;
+material.opacityNode = ...;
+
+export { material };
+</file-format>
+
+<api>
+// Types
+float(n), vec2(x,y), vec3(x,y,z), vec4(x,y,z,w), color(0xhex)
+
+// Geometry inputs
+positionLocal, positionWorld, normalLocal, normalWorld, uv()
+cameraPosition, time, deltaTime
+
+// Operations (method chaining)
+.add(n), .sub(n), .mul(n), .div(n)
+.sin(), .cos(), .abs(), .pow(n), .sqrt()
+.dot(v), .cross(v), .normalize(), .length()
+.mix(a,b), .smoothstep(min,max), .clamp(min,max), .saturate()
+.oneMinus() // = 1.0 - x
+
+// Functions
+Fn(() => { return nodeExpression; })  // Define reusable shader function
+
+// Material properties
+material.colorNode, material.emissiveNode, material.opacityNode
+material.metalnessNode, material.roughnessNode
+material.normalNode, material.positionNode
+</api>
+
+<patterns>
+// Fresnel (rim glow)
+const fresnel = cameraPosition.sub(positionWorld).normalize().dot(normalWorld).abs().oneMinus().pow(3);
+
+// Pulse
+const pulse = time.mul(2).sin().mul(0.5).add(0.5);
+
+// Color gradient by height
+const gradient = positionLocal.y.smoothstep(-1, 1);
+</patterns>
+
+<quality>
+- Effects should enhance the geometry, not overpower it
+- Use subtle animations (avoid jarring flashes)
+- Combine multiple effects (fresnel + pulse + gradient)
+- Colors should complement the base geometry
+</quality>
+
+<rules>
+- Method chaining: time.mul(2).sin() NOT sin(time * 2)
+- Always export { material }
+- Output ONLY valid JavaScript code
+</rules>
+
+## TSL Basics
+
+### Method Chaining (not operators)
+\`\`\`javascript
+// GLSL: sin(time * 2.0) * 0.5 + 0.5
+// TSL:
+time.mul(2.0).sin().mul(0.5).add(0.5)
+\`\`\`
+
+### Core Types
+\`\`\`javascript
+float(1.0)           // Scalar
+vec2(x, y)           // 2D vector
+vec3(x, y, z)        // 3D vector
+color(0xff0000)      // RGB from hex
+\`\`\`
+
+### Geometry Nodes
+\`\`\`javascript
+positionLocal        // Model space position
+positionWorld        // World space position
+normalWorld          // World space normal
+cameraPosition       // Camera world position
+uv()                 // UV coordinates
+time                 // Seconds since start
+\`\`\`
+
+### Material Properties
+\`\`\`javascript
+material.colorNode = color(0xff0000);
+material.emissiveNode = color(0x00ffff).mul(intensity);
+material.opacityNode = float(0.8);
+material.transparent = true;
+\`\`\`
+
+## Common Patterns
+
+### Fresnel (rim glow)
+\`\`\`javascript
+const fresnel = Fn(() => {
+  const viewDir = cameraPosition.sub(positionWorld).normalize();
+  const nDotV = normalWorld.dot(viewDir).saturate();
+  return float(1.0).sub(nDotV).pow(3.0);
+});
+material.emissiveNode = color(0x00ffff).mul(fresnel());
+\`\`\`
+
+### Pulse
+\`\`\`javascript
+const pulse = time.mul(2.0).sin().mul(0.5).add(0.5);
+material.emissiveNode = color(0xff0000).mul(pulse);
+\`\`\`
+
+## Rules
+1. Output ONLY code, no explanations or markdown
+2. Always import from three/webgpu and three/tsl
+3. Use method chaining for all operations
+4. Export the material for runtime use
+
+Generate complete, working code.`;
+
+export const KILN_BOTH_SYSTEM_PROMPT = `You generate TWO code files: geometry + shader effect.
+
+CRITICAL: geometry code has NO IMPORTS and NO EXPORTS. Just define meta, build, animate.
+
+OUTPUT FORMAT (MANDATORY):
+\`\`\`geometry
+const meta = { name: "Name", category: "prop" };
+
+function build() {
+  const root = createRoot("Name");
+  // createPart AUTO-ADDS to parent - NEVER call .add() on it!
+  createPart("Body", boxGeo(1, 1, 1), gameMaterial(0x4488ff), {
+    position: [0, 0.5, 0],
+    parent: root
+  });
+  return root;
+}
+
+function animate(root) {
+  // Track names must match Joint_* names created by createPivot
+  return [bobbingAnimation(root.name, 2, 0.1)];
+}
+\`\`\`
+
+\`\`\`effect
+import { MeshStandardNodeMaterial } from 'three/webgpu';
+import { color, float, time } from 'three/tsl';
+const material = new MeshStandardNodeMaterial();
+material.colorNode = color(0xff0000);
+export { material };
+\`\`\`
+
+GEOMETRY (no imports, no exports, globals available):
+createRoot(name) - creates root Object3D
+createPivot(name, [x,y,z], parent) - creates Joint_name pivot, returns it
+createPart(name, geo, mat, {position, rotation, scale, parent, pivot}) - AUTO-ADDS to parent!
+  NEVER: root.add(createPart(...))  // WRONG!
+  ALWAYS: createPart("Name", geo, mat, { parent: root })  // RIGHT!
+
+boxGeo, sphereGeo, cylinderGeo, coneGeo, capsuleGeo, torusGeo, planeGeo
+gameMaterial(0xcolor, {metalness, roughness, emissive, flatShading})
+glassMaterial(0xcolor, {opacity, roughness, metalness}) - transparent canopy/windows
+rotationTrack("Joint_Name", [{time, rotation:[x,y,z]}]) - degrees, NOT value!
+positionTrack("Joint_Name", [{time, position:[x,y,z]}]) - NOT value!
+createClip(name, duration, tracks) - 3 args!
+spinAnimation("Joint_Name", duration, axis), bobbingAnimation(rootName, duration, height)
+
+TSL (with imports/exports):
+float(n), vec3(x,y,z), color(0xhex)
+time, positionWorld, normalWorld, cameraPosition
+Method chaining: time.mul(2).sin().add(0.5)
+
+RULES:
+1. Output BOTH \`\`\`geometry AND \`\`\`effect blocks
+2. No text/explanations outside code blocks
+3. Effect enhances the geometry visually (glow, pulse, fresnel, etc)
+4. NEVER call .add() on createPart return value - it auto-adds to parent`;
+
 // =============================================================================
 // Prompt Helpers
 // =============================================================================
+
+export function getSystemPrompt(mode: RenderMode): string {
+  if (mode === 'tsl') return KILN_TSL_SYSTEM_PROMPT;
+  if (mode === 'both') return KILN_BOTH_SYSTEM_PROMPT;
+  return KILN_SYSTEM_PROMPT;
+}
 
 export interface AssetBudget {
   maxTriangles?: number;
@@ -215,21 +402,16 @@ export interface KilnGenerateRequest {
   referenceImageUrl?: string;
 }
 
-export function getSystemPrompt(mode: RenderMode): string {
-  // Spike only supports GLB mode; tsl/both fall back to GLB so future callers
-  // don't throw. W2 will pull the real TSL / Both prompts.
-  void mode;
-  return KILN_SYSTEM_PROMPT;
-}
-
 export function buildUserPrompt(request: KilnGenerateRequest): string {
   const parts: string[] = [];
 
+  // Add style template if specified
   if (request.style && STYLE_TEMPLATES[request.style]) {
     parts.push(STYLE_TEMPLATES[request.style]);
     parts.push('');
   }
 
+  // Budget constraints
   if (request.budget) {
     parts.push('## Constraints');
     if (request.budget.maxTriangles) {
@@ -241,12 +423,14 @@ export function buildUserPrompt(request: KilnGenerateRequest): string {
     parts.push('');
   }
 
+  // Main request
   if (request.existingCode) {
     parts.push(`## Current Code\n\n\`\`\`typescript\n${request.existingCode}\n\`\`\`\n\n## Edit Request\n\n${request.prompt}`);
   } else {
     parts.push(`## Task\n\nCreate a ${request.category}: ${request.prompt}`);
   }
 
+  // Animation instructions
   if (request.includeAnimation !== false) {
     parts.push(`
 ## Animation Requirements
