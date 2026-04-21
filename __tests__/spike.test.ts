@@ -204,17 +204,12 @@ function runFixtureTest(fixture: GlbFixture): void {
 
       // Diagnostic output first - fires whether the assertions pass or
       // fail so spike-report.md can reference the numbers either way.
-      // eslint-disable-next-line no-console
       console.log(`\n[${label}] prompt source: ${fixture.promptSource}`);
-      // eslint-disable-next-line no-console
       console.log(`  reference: ${reference.triangleCount} tris, ${reference.namedParts.length} named nodes, ${reference.animationTracks.length} animation tracks`);
-      // eslint-disable-next-line no-console
       console.log(`  generated: ${generated.triangleCount} tris, ${generated.namedParts.length} named nodes, ${generated.animationTracks.length} animation tracks`);
-      // eslint-disable-next-line no-console
       console.log(`  ratio:     ${triRatio.toFixed(3)}x tris, Δ${nodeDelta} nodes`);
       if (result.warnings.length > 0) {
-        // eslint-disable-next-line no-console
-        console.log(`  warnings:  ${result.warnings.join(' | ')}`);
+          console.log(`  warnings:  ${result.warnings.join(' | ')}`);
       }
 
       // Tri-count: ±20% tolerance. LLM output varies enough that exact
