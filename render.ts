@@ -11,12 +11,18 @@
  */
 
 import * as THREE from 'three';
-import { Document, NodeIO } from '@gltf-transform/core';
+import { Document, WebIO } from '@gltf-transform/core';
 
 import {
   buildSandboxGlobals,
   countTriangles,
 } from './primitives';
+
+// WebIO (not NodeIO) is used for GLB serialization so the same code path
+// works in both Node and browser environments. writeBinary() only builds the
+// GLB byte stream in memory - it never reads URIs - so the fetch/fs gap
+// between WebIO and NodeIO is irrelevant on the write side. This lets the
+// editor's exportGLB() and headless renderGLB() share one bridge.
 
 // Gltf-transform type aliases for local readability.
 type GtNode = import('@gltf-transform/core').Node;
@@ -307,23 +313,45 @@ export interface RenderResult {
   warnings: string[];
 }
 
+export interface RenderSceneResult {
+  /** Binary GLB bytes, platform-agnostic (Buffer-compatible in Node). */
+  bytes: Uint8Array;
+  tris: number;
+  warnings: string[];
+}
+
+export interface RenderSceneOptions {
+  /** Name of the glTF scene. Defaults to 'Scene'. */
+  sceneName?: string;
+  /** Animation clips to bridge into the document. */
+  clips?: THREE.AnimationClip[];
+}
+
 /**
- * Execute Kiln code and serialize to a GLB Buffer.
+ * Serialize a pre-built Three.js scene graph to a GLB byte stream.
  *
- * This is the main headless entry point. Takes the JS code Claude produces
- * (the same string shape `/api/kiln/generate` returns) and returns ready-
- * to-write bytes.
+ * This is the shared bridge used by both `renderGLB(code)` (headless, re-
+ * executes code) and the in-editor `exportGLB()` (uses the live scene).
+ *
+ * Works in both Node and browser - uses WebIO, which only touches network
+ * APIs on the read side. The write side is pure bytes-in/bytes-out, so the
+ * same function serializes identically on either platform. That unifies
+ * the two historical paths (Three.js GLTFExporter in the editor vs.
+ * gltf-transform bridge headlessly) into one canonical pipeline.
  *
  * Pure function: no file I/O, no globals, no WebGL.
  */
-export async function renderGLB(code: string): Promise<RenderResult> {
+export async function renderSceneToGLB(
+  root: THREE.Object3D,
+  opts: RenderSceneOptions = {}
+): Promise<RenderSceneResult> {
+  const clips = opts.clips ?? [];
   const warnings: string[] = [];
-  const { meta, root, clips } = executeKilnCode(code);
   const tris = countTriangles(root);
 
   // Runtime-aware joint-name validation (follow-up #6 from the W1.1 spike
   // report). Walk the scene graph + animation tracks and surface any track
-  // whose target name doesn't resolve to a scene node. Non-fatal — the GLB
+  // whose target name doesn't resolve to a scene node. Non-fatal - the GLB
   // still renders; agents iterating on code use these warnings to fix the
   // next iteration. Runs before the bridge so the descriptive "rename the
   // pivot" hint is first; the bridge also emits a briefer "target not
@@ -336,20 +364,39 @@ export async function renderGLB(code: string): Promise<RenderResult> {
   const nodeMap = new Map<string, GtNode>();
 
   const rootNode = bridgeNode(doc, buf, root, matCache, nodeMap);
-  doc.createScene(meta.name || 'Scene').addChild(rootNode);
+  doc.createScene(opts.sceneName ?? 'Scene').addChild(rootNode);
 
   if (clips.length > 0) {
     bridgeAnimations(doc, buf, clips, nodeMap, warnings);
   }
 
-  const io = new NodeIO();
-  const glbBytes = await io.writeBinary(doc);
+  const io = new WebIO();
+  const bytes = await io.writeBinary(doc);
+
+  return { bytes, tris, warnings };
+}
+
+/**
+ * Execute Kiln code and serialize to a GLB Buffer.
+ *
+ * This is the main headless entry point. Takes the JS code Claude produces
+ * (the same string shape `/api/kiln/generate` returns) and returns ready-
+ * to-write bytes.
+ *
+ * Pure function: no file I/O, no globals, no WebGL.
+ */
+export async function renderGLB(code: string): Promise<RenderResult> {
+  const { meta, root, clips } = executeKilnCode(code);
+  const scene = await renderSceneToGLB(root, {
+    sceneName: meta.name || 'Scene',
+    clips,
+  });
 
   return {
-    glb: Buffer.from(glbBytes),
-    tris,
-    meta: { ...meta, tris },
-    warnings,
+    glb: Buffer.from(scene.bytes),
+    tris: scene.tris,
+    meta: { ...meta, tris: scene.tris },
+    warnings: scene.warnings,
   };
 }
 

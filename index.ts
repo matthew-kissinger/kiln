@@ -12,7 +12,7 @@ import type { KilnCodeMeta } from './render';
 import { renderGLB } from './render';
 import { generateKilnCode } from './generate';
 
-export { renderGLB, inspectGeneratedAnimation } from './render';
+export { renderGLB, renderSceneToGLB, inspectGeneratedAnimation } from './render';
 export {
   generateKilnCode,
   editKilnCode,
@@ -52,7 +52,13 @@ export {
   type AssetStyle,
   type AssetBudget,
 } from './prompt';
-export type { KilnCodeMeta, RenderResult, ExecutedKilnCode } from './render';
+export type {
+  KilnCodeMeta,
+  RenderResult,
+  RenderSceneResult,
+  RenderSceneOptions,
+  ExecutedKilnCode,
+} from './render';
 export { executeKilnCode } from './render';
 export {
   buildSandboxGlobals,
