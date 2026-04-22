@@ -252,3 +252,45 @@ function animate() {
     expect(warnings.some((w) => w.includes('unsupported property'))).toBe(true);
   });
 });
+
+// =============================================================================
+// Primitive-usage instrumentation
+// =============================================================================
+
+describe('primitive usage tracking', () => {
+  test('executeKilnCode surfaces primitiveUsage with exact call counts', async () => {
+    const { primitiveUsage } = await executeKilnCode(`
+const meta = { name: 'UsageProbe' };
+function build() {
+  const root = createRoot('R');
+  createPart('A', boxGeo(1, 1, 1), gameMaterial(0xff0000), { parent: root });
+  createPart('B', boxGeo(2, 1, 1), gameMaterial(0x00ff00), { parent: root });
+  createPart('C', sphereGeo(0.5), gameMaterial(0x0000ff), { parent: root });
+  return root;
+}
+`);
+    expect(primitiveUsage.createRoot).toBe(1);
+    expect(primitiveUsage.createPart).toBe(3);
+    expect(primitiveUsage.boxGeo).toBe(2);
+    expect(primitiveUsage.sphereGeo).toBe(1);
+    expect(primitiveUsage.gameMaterial).toBe(3);
+    expect(primitiveUsage.torusGeo).toBeUndefined();
+  });
+
+  test('renderGLB copies primitiveUsage into meta', async () => {
+    const r = await renderGLB(`
+const meta = { name: 'UsageProbeRender' };
+function build() {
+  const root = createRoot('R');
+  createPart('A', boxGeo(1, 1, 1), gameMaterial(0xff0000), { parent: root });
+  return root;
+}
+`);
+    expect(r.meta.primitiveUsage).toBeDefined();
+    const usage = r.meta.primitiveUsage!;
+    expect(usage.createRoot).toBe(1);
+    expect(usage.createPart).toBe(1);
+    expect(usage.boxGeo).toBe(1);
+    expect(usage.gameMaterial).toBe(1);
+  });
+});

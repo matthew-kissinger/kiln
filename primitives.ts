@@ -509,8 +509,15 @@ export function validateAsset(
  * The full sandbox globals used when executing Kiln code. Kept in one place
  * so render.ts and any future evaluator share the same surface area as what
  * the LLM expects.
+ *
+ * Pass `usage` to tally how many times each primitive was invoked by the
+ * agent-generated `build()` call. The counter lives on the caller's object
+ * so render.ts can stash it into `render.meta.primitiveUsage` for
+ * downstream analysis. When omitted, wrapping is skipped (zero overhead).
  */
-export function buildSandboxGlobals(): Record<string, unknown> {
+export function buildSandboxGlobals(
+  usage?: Record<string, number>
+): Record<string, unknown> {
   // CSG ops are async — the executor awaits build() so agents can
   // `await boolDiff(...)` inside build().
   //
@@ -530,40 +537,72 @@ export function buildSandboxGlobals(): Record<string, unknown> {
   const uvShapes = require('./uv-shapes') as typeof import('./uv-shapes');
   // eslint-disable-next-line @typescript-eslint/no-require-imports
   const THREE = require('three') as typeof import('three');
+
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const wrap = <F extends (...args: any[]) => any>(name: string, fn: F): F => {
+    if (!usage) return fn;
+    const wrapped = (...args: Parameters<F>): ReturnType<F> => {
+      usage[name] = (usage[name] ?? 0) + 1;
+      return fn(...args);
+    };
+    return wrapped as F;
+  };
+
   return {
-    createRoot, createPivot, createPart,
-    capsuleGeo, cylinderGeo, boxGeo, sphereGeo, coneGeo, torusGeo, planeGeo,
-    gameMaterial, basicMaterial, glassMaterial, lambertMaterial,
-    rotationTrack, positionTrack, scaleTrack, createClip,
-    spinAnimation, bobbingAnimation, idleBreathing,
-    cloneGeometry, cloneMaterial, createInstance,
+    createRoot: wrap('createRoot', createRoot),
+    createPivot: wrap('createPivot', createPivot),
+    createPart: wrap('createPart', createPart),
+    capsuleGeo: wrap('capsuleGeo', capsuleGeo),
+    cylinderGeo: wrap('cylinderGeo', cylinderGeo),
+    boxGeo: wrap('boxGeo', boxGeo),
+    sphereGeo: wrap('sphereGeo', sphereGeo),
+    coneGeo: wrap('coneGeo', coneGeo),
+    torusGeo: wrap('torusGeo', torusGeo),
+    planeGeo: wrap('planeGeo', planeGeo),
+    gameMaterial: wrap('gameMaterial', gameMaterial),
+    basicMaterial: wrap('basicMaterial', basicMaterial),
+    glassMaterial: wrap('glassMaterial', glassMaterial),
+    lambertMaterial: wrap('lambertMaterial', lambertMaterial),
+    rotationTrack: wrap('rotationTrack', rotationTrack),
+    positionTrack: wrap('positionTrack', positionTrack),
+    scaleTrack: wrap('scaleTrack', scaleTrack),
+    createClip: wrap('createClip', createClip),
+    spinAnimation: wrap('spinAnimation', spinAnimation),
+    bobbingAnimation: wrap('bobbingAnimation', bobbingAnimation),
+    idleBreathing: wrap('idleBreathing', idleBreathing),
+    cloneGeometry: wrap('cloneGeometry', cloneGeometry),
+    cloneMaterial: wrap('cloneMaterial', cloneMaterial),
+    createInstance: wrap('createInstance', createInstance),
     // CSG (async)
-    boolUnion: solids.boolUnion,
-    boolDiff: solids.boolDiff,
-    boolIntersect: solids.boolIntersect,
-    hull: solids.hull,
+    boolUnion: wrap('boolUnion', solids.boolUnion),
+    boolDiff: wrap('boolDiff', solids.boolDiff),
+    boolIntersect: wrap('boolIntersect', solids.boolIntersect),
+    hull: wrap('hull', solids.hull),
     // Array/mirror/subdivide/curve ops
-    arrayLinear: ops.arrayLinear,
-    arrayRadial: ops.arrayRadial,
-    mirror: ops.mirror,
-    subdivide: ops.subdivide,
-    mergeVertices: ops.mergeVertices,
-    curveToMesh: ops.curveToMesh,
-    lathe: ops.lathe,
-    bezierCurve: ops.bezierCurve,
+    arrayLinear: wrap('arrayLinear', ops.arrayLinear),
+    arrayRadial: wrap('arrayRadial', ops.arrayRadial),
+    mirror: wrap('mirror', ops.mirror),
+    subdivide: wrap('subdivide', ops.subdivide),
+    mergeVertices: wrap('mergeVertices', ops.mergeVertices),
+    curveToMesh: wrap('curveToMesh', ops.curveToMesh),
+    lathe: wrap('lathe', ops.lathe),
+    bezierCurve: wrap('bezierCurve', ops.bezierCurve),
     // UV (async)
-    autoUnwrap: uv.autoUnwrap,
+    autoUnwrap: wrap('autoUnwrap', uv.autoUnwrap),
     // Shape-aware unwraps (sync — preserve built-in directional UVs)
-    boxUnwrap: uvShapes.boxUnwrap,
-    cylinderUnwrap: uvShapes.cylinderUnwrap,
-    planeUnwrap: uvShapes.planeUnwrap,
+    boxUnwrap: wrap('boxUnwrap', uvShapes.boxUnwrap),
+    cylinderUnwrap: wrap('cylinderUnwrap', uvShapes.cylinderUnwrap),
+    planeUnwrap: wrap('planeUnwrap', uvShapes.planeUnwrap),
     // Parametric primitives
-    gearGeo: gears.gearGeo,
-    bladeGeo: gears.bladeGeo,
+    gearGeo: wrap('gearGeo', gears.gearGeo),
+    bladeGeo: wrap('bladeGeo', gears.bladeGeo),
     // Textures + PBR (loadTexture is async)
-    loadTexture: textures.loadTexture,
-    pbrMaterial: textures.pbrMaterial,
-    countTriangles, countMaterials, getJointNames, validateAsset,
+    loadTexture: wrap('loadTexture', textures.loadTexture),
+    pbrMaterial: wrap('pbrMaterial', textures.pbrMaterial),
+    countTriangles: wrap('countTriangles', countTriangles),
+    countMaterials: wrap('countMaterials', countMaterials),
+    getJointNames: wrap('getJointNames', getJointNames),
+    validateAsset: wrap('validateAsset', validateAsset),
     // THREE namespace is exposed so agents can `new THREE.Mesh(geo, mat)`
     // as operands to CSG and other ops that expect Object3D inputs.
     THREE,

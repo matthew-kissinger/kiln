@@ -49,6 +49,12 @@ export interface KilnCodeMeta {
   name?: string;
   category?: string;
   tris?: number;
+  /**
+   * Count of primitive invocations from the agent-generated build() call.
+   * Populated by executeKilnCode / renderGLB; agents don't author this.
+   * Used to drive primitive-library prioritization from real usage.
+   */
+  primitiveUsage?: Record<string, number>;
   [key: string]: unknown;
 }
 
@@ -56,6 +62,11 @@ export interface ExecutedKilnCode {
   meta: KilnCodeMeta;
   root: THREE.Object3D;
   clips: THREE.AnimationClip[];
+  /**
+   * Primitive-call counts gathered while executing build()/animate().
+   * Identical to meta.primitiveUsage once renderGLB merges it in.
+   */
+  primitiveUsage: Record<string, number>;
 }
 
 /**
@@ -80,7 +91,8 @@ export async function executeKilnCode(code: string): Promise<ExecutedKilnCode> {
   // Function constructor.
   const normalized = code.replace(/\r\n/g, '\n');
 
-  const globals = buildSandboxGlobals();
+  const primitiveUsage: Record<string, number> = {};
+  const globals = buildSandboxGlobals(primitiveUsage);
   const globalNames = Object.keys(globals);
   const globalValues = Object.values(globals);
 
@@ -111,7 +123,7 @@ export async function executeKilnCode(code: string): Promise<ExecutedKilnCode> {
 
   const clips = animate ? ((await animate(root)) ?? []) : [];
 
-  return { meta: meta ?? {}, root, clips };
+  return { meta: meta ?? {}, root, clips, primitiveUsage };
 }
 
 // =============================================================================
@@ -486,7 +498,7 @@ export async function renderSceneToGLB(
  * Pure function: no file I/O, no globals, no WebGL.
  */
 export async function renderGLB(code: string): Promise<RenderResult> {
-  const { meta, root, clips } = await executeKilnCode(code);
+  const { meta, root, clips, primitiveUsage } = await executeKilnCode(code);
   const scene = await renderSceneToGLB(root, {
     sceneName: meta.name || 'Scene',
     clips,
@@ -495,7 +507,7 @@ export async function renderGLB(code: string): Promise<RenderResult> {
   return {
     glb: Buffer.from(scene.bytes),
     tris: scene.tris,
-    meta: { ...meta, tris: scene.tris },
+    meta: { ...meta, tris: scene.tris, primitiveUsage },
     warnings: scene.warnings,
   };
 }

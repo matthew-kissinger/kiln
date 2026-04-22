@@ -466,4 +466,51 @@ describe('buildSandboxGlobals', () => {
       expect(globals[name]).toBeDefined();
     }
   });
+
+  test('when given a usage map, tallies primitive invocations', () => {
+    const usage: Record<string, number> = {};
+    const globals = buildSandboxGlobals(usage) as Record<
+      string,
+      (...a: unknown[]) => unknown
+    >;
+
+    // Call a spread of primitives with varying counts.
+    globals.createRoot!('R');
+    globals.createRoot!('R2');
+    globals.createRoot!('R3');
+    globals.boxGeo!(1, 1, 1);
+    globals.boxGeo!(2, 2, 2);
+    globals.sphereGeo!(0.5);
+    globals.gameMaterial!(0xff0000);
+
+    expect(usage.createRoot).toBe(3);
+    expect(usage.boxGeo).toBe(2);
+    expect(usage.sphereGeo).toBe(1);
+    expect(usage.gameMaterial).toBe(1);
+    // Unused primitive has no entry.
+    expect(usage.torusGeo).toBeUndefined();
+  });
+
+  test('usage map is isolated per call', () => {
+    const usageA: Record<string, number> = {};
+    const usageB: Record<string, number> = {};
+    const gA = buildSandboxGlobals(usageA) as Record<string, (...a: unknown[]) => unknown>;
+    const gB = buildSandboxGlobals(usageB) as Record<string, (...a: unknown[]) => unknown>;
+
+    gA.createRoot!('A');
+    gB.createRoot!('B');
+    gB.createRoot!('B2');
+
+    expect(usageA.createRoot).toBe(1);
+    expect(usageB.createRoot).toBe(2);
+  });
+
+  test('without a usage map, primitives are unwrapped (zero-overhead path)', () => {
+    const globals = buildSandboxGlobals() as Record<string, unknown>;
+    // Identity check: the exposed function is the original primitive, not a
+    // wrapper. Looking up by name against a second fresh globals keeps the
+    // test independent of module structure.
+    const raw = buildSandboxGlobals() as Record<string, unknown>;
+    expect(globals.boxGeo).toBe(raw.boxGeo);
+  });
 });
