@@ -29,6 +29,14 @@ export type {
   KilnGenerateCallOptions,
 } from './generate';
 export { validate, validateKilnCode } from './validation';
+export { inspect } from './inspect';
+export type {
+  InspectResult,
+  InspectNamedPart,
+  InspectAnimationTrack,
+  InspectBoundingBox,
+  Vec3Tuple,
+} from './inspect';
 export {
   buildUserPrompt,
   getSystemPrompt,
