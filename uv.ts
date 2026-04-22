@@ -1,4 +1,3 @@
-/// <reference path="./xatlasjs-shims.d.ts" />
 /**
  * Kiln UV unwrapping — Wave 3A
  *
@@ -61,14 +60,16 @@ async function getXatlas(): Promise<XatlasApi> {
   if (!_xatlasReady) {
     _xatlasReady = (async () => {
       // xatlasjs publishes a Node-friendly emscripten build under dist/node.
-      const apiMod = (await import('xatlasjs/dist/node/api.mjs')) as unknown as {
+      const apiSpecifier = 'xatlasjs/dist/node/api.mjs';
+      const xatlasSpecifier = 'xatlasjs/dist/node/xatlas.js';
+      const apiMod = (await import(apiSpecifier)) as unknown as {
         Api: (createModule: unknown) => new (
           onLoad: () => void,
           locateFile: unknown,
           onProgress: unknown
         ) => XatlasApi;
       };
-      const xatlasMod = (await import('xatlasjs/dist/node/xatlas.js')) as unknown as {
+      const xatlasMod = (await import(xatlasSpecifier)) as unknown as {
         default?: unknown;
       };
       const create = xatlasMod.default ?? xatlasMod;

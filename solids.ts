@@ -24,8 +24,6 @@
  */
 
 import * as THREE from 'three';
-
-// eslint-disable-next-line @typescript-eslint/consistent-type-imports
 import type { ManifoldToplevel, Manifold, Mesh } from 'manifold-3d';
 
 // Lazy-init singleton. First call to any CSG op awaits init; subsequent

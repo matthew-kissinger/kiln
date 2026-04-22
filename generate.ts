@@ -85,6 +85,16 @@ const DEFAULT_OPUS_MODEL = 'claude-opus-4-7';
 /** The pinned Haiku compaction model. */
 const DEFAULT_HAIKU_MODEL = 'claude-haiku-4-5-20251001';
 
+type QueryMessage = {
+  type?: string;
+  subtype?: string;
+  session_id?: string;
+  structured_output?: { code: string; effectCode?: string };
+  result?: string;
+  errors?: unknown;
+  error?: string;
+};
+
 /**
  * The `@anthropic-ai/claude-agent-sdk` spawns a nested Claude Code process
  * and refuses to run when `CLAUDECODE` or `CLAUDE_CODE_ENTRYPOINT` are set
@@ -306,7 +316,7 @@ Fix these issues before producing the refactored code.`;
  * three branches (success / error result / auth failure).
  */
 function handleQueryMessage(
-  message: Record<string, any>,
+  message: QueryMessage,
   fallbackErrorLabel: string
 ): KilnGenerateResult | null {
   if (message['type'] === 'result' && message['subtype'] === 'success') {
@@ -320,7 +330,7 @@ function handleQueryMessage(
         sessionId,
       };
     }
-    return parseResultText(message['result'], sessionId);
+    return parseResultText(message['result'] ?? '', sessionId);
   }
   if (message['type'] === 'result' && message['subtype']?.startsWith('error')) {
     const errs = message['errors'];
@@ -365,7 +375,7 @@ async function runRefactorQuery(
     });
 
     for await (const message of q) {
-      const terminal = handleQueryMessage(message as Record<string, any>, 'Refactor failed');
+      const terminal = handleQueryMessage(message as QueryMessage, 'Refactor failed');
       if (terminal) return terminal;
     }
 
@@ -410,7 +420,7 @@ async function runStructuredQuery(
     });
 
     for await (const message of q) {
-      const terminal = handleQueryMessage(message as Record<string, any>, 'Generation failed');
+      const terminal = handleQueryMessage(message as QueryMessage, 'Generation failed');
       if (terminal) return terminal;
     }
 

@@ -312,7 +312,7 @@ function bridgeNode(
     // (same geo + mat as source) produces a GLB-level mesh instance: a
     // single Mesh referenced by multiple Nodes. Cuts duplicated accessors
     // for wheels, bolts, fence posts, etc.
-    const cacheKey = `${(threeObj.geometry as any).uuid}__${(threeMat as any).uuid}`;
+    const cacheKey = `${threeObj.geometry.uuid}__${threeMat.uuid}`;
     let gtMesh = meshCache.get(cacheKey);
     if (!gtMesh) {
       gtMesh = bridgeGeometry(doc, buf, threeObj.geometry, gtMat, threeObj.name || 'mesh');
