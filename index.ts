@@ -37,6 +37,8 @@ export type {
   InspectBoundingBox,
   Vec3Tuple,
 } from './inspect';
+export { listPrimitives } from './list-primitives';
+export type { PrimitiveSpec } from './list-primitives';
 export {
   buildUserPrompt,
   getSystemPrompt,
