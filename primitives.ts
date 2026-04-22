@@ -211,9 +211,21 @@ export function lambertMaterial(
 // Animation Helpers
 // =============================================================================
 
+/**
+ * Keyframe interpolation mode.
+ * - LINEAR: default, smooth transitions between keyframes.
+ * - STEP: discrete, hold value until next keyframe (good for robotic/mechanical motion).
+ */
+export type TrackInterpolation = 'LINEAR' | 'STEP';
+
+function threeInterpolation(mode?: TrackInterpolation): THREE.InterpolationModes {
+  return mode === 'STEP' ? THREE.InterpolateDiscrete : THREE.InterpolateLinear;
+}
+
 export function rotationTrack(
   jointName: string,
-  keyframes: Array<{ time: number; rotation: [number, number, number] }>
+  keyframes: Array<{ time: number; rotation: [number, number, number] }>,
+  interpolation?: TrackInterpolation
 ): THREE.QuaternionKeyframeTrack {
   const times: number[] = [];
   const values: number[] = [];
@@ -234,13 +246,15 @@ export function rotationTrack(
   return new THREE.QuaternionKeyframeTrack(
     `${jointName}.quaternion`,
     times,
-    values
+    values,
+    threeInterpolation(interpolation)
   );
 }
 
 export function positionTrack(
   jointName: string,
-  keyframes: Array<{ time: number; position: [number, number, number] }>
+  keyframes: Array<{ time: number; position: [number, number, number] }>,
+  interpolation?: TrackInterpolation
 ): THREE.VectorKeyframeTrack {
   const times: number[] = [];
   const values: number[] = [];
@@ -253,13 +267,15 @@ export function positionTrack(
   return new THREE.VectorKeyframeTrack(
     `${jointName}.position`,
     times,
-    values
+    values,
+    threeInterpolation(interpolation)
   );
 }
 
 export function scaleTrack(
   jointName: string,
-  keyframes: Array<{ time: number; scale: [number, number, number] }>
+  keyframes: Array<{ time: number; scale: [number, number, number] }>,
+  interpolation?: TrackInterpolation
 ): THREE.VectorKeyframeTrack {
   const times: number[] = [];
   const values: number[] = [];
@@ -269,7 +285,12 @@ export function scaleTrack(
     values.push(...kf.scale);
   }
 
-  return new THREE.VectorKeyframeTrack(`${jointName}.scale`, times, values);
+  return new THREE.VectorKeyframeTrack(
+    `${jointName}.scale`,
+    times,
+    values,
+    threeInterpolation(interpolation)
+  );
 }
 
 export function createClip(
@@ -334,6 +355,81 @@ export function spinAnimation(
 
 // =============================================================================
 // Utilities
+// =============================================================================
+
+// =============================================================================
+// Instancing / Reuse (Wave 1B)
+// =============================================================================
+
+/**
+ * Returns the same BufferGeometry reference — explicit no-op clone that
+ * signals intent to reuse geometry across multiple parts. gltf-transform
+ * will dedupe on export, but authoring with the shared ref keeps memory
+ * low at render time too.
+ *
+ * For 4 wheels on a truck: build one `cylinderGeo(...)`, pass it through
+ * `cloneGeometry` to each `createPart` call. Four meshes, one geometry.
+ */
+export function cloneGeometry(geo: THREE.BufferGeometry): THREE.BufferGeometry {
+  return geo;
+}
+
+/**
+ * Shared material reference. See `cloneGeometry` for the pattern.
+ */
+export function cloneMaterial(mat: THREE.Material): THREE.Material {
+  return mat;
+}
+
+/**
+ * Creates a new Object3D that reuses an existing part's geometry+material
+ * at a new transform. The cheapest way to replicate a part (wheel, bolt,
+ * window, fence-post) without duplicating GPU-side data.
+ *
+ * If `source` is a pivot (from `createPivot` or `createPart` with
+ * `pivot: true`), the instance replicates the first Mesh child's geometry.
+ *
+ * Automatically adds to `parent` when provided (mirrors createPart).
+ */
+export function createInstance(
+  name: string,
+  source: THREE.Object3D,
+  options: {
+    position?: [number, number, number];
+    rotation?: [number, number, number];
+    scale?: [number, number, number];
+    parent?: THREE.Object3D;
+  } = {}
+): THREE.Object3D {
+  const sourceMesh =
+    source instanceof THREE.Mesh
+      ? source
+      : (source.children.find((c) => c instanceof THREE.Mesh) as THREE.Mesh | undefined);
+
+  if (!sourceMesh) {
+    throw new Error(
+      `createInstance("${name}"): source "${source.name}" has no Mesh to clone from`
+    );
+  }
+
+  const mesh = new THREE.Mesh(sourceMesh.geometry, sourceMesh.material);
+  mesh.name = `Mesh_${name}`;
+
+  if (options.position) mesh.position.set(...options.position);
+  if (options.rotation)
+    mesh.rotation.set(
+      THREE.MathUtils.degToRad(options.rotation[0]),
+      THREE.MathUtils.degToRad(options.rotation[1]),
+      THREE.MathUtils.degToRad(options.rotation[2])
+    );
+  if (options.scale) mesh.scale.set(...options.scale);
+
+  if (options.parent) options.parent.add(mesh);
+  return mesh;
+}
+
+// =============================================================================
+// Introspection
 // =============================================================================
 
 export function countTriangles(root: THREE.Object3D): number {
@@ -415,13 +511,50 @@ export function validateAsset(
  * the LLM expects.
  */
 export function buildSandboxGlobals(): Record<string, unknown> {
+  // CSG ops are async — the executor awaits build() so agents can
+  // `await boolDiff(...)` inside build().
+  //
+  // Lazy-required at call-time so the Three.js-only path doesn't pay the
+  // manifold WASM init unless an agent actually uses CSG.
+  // eslint-disable-next-line @typescript-eslint/no-require-imports
+  const solids = require('./solids') as typeof import('./solids');
+  // eslint-disable-next-line @typescript-eslint/no-require-imports
+  const ops = require('./ops') as typeof import('./ops');
+  // eslint-disable-next-line @typescript-eslint/no-require-imports
+  const uv = require('./uv') as typeof import('./uv');
+  // eslint-disable-next-line @typescript-eslint/no-require-imports
+  const textures = require('./textures') as typeof import('./textures');
+  // eslint-disable-next-line @typescript-eslint/no-require-imports
+  const THREE = require('three') as typeof import('three');
   return {
     createRoot, createPivot, createPart,
     capsuleGeo, cylinderGeo, boxGeo, sphereGeo, coneGeo, torusGeo, planeGeo,
     gameMaterial, basicMaterial, glassMaterial, lambertMaterial,
     rotationTrack, positionTrack, scaleTrack, createClip,
     spinAnimation, bobbingAnimation, idleBreathing,
+    cloneGeometry, cloneMaterial, createInstance,
+    // CSG (async)
+    boolUnion: solids.boolUnion,
+    boolDiff: solids.boolDiff,
+    boolIntersect: solids.boolIntersect,
+    hull: solids.hull,
+    // Array/mirror/subdivide/curve ops
+    arrayLinear: ops.arrayLinear,
+    arrayRadial: ops.arrayRadial,
+    mirror: ops.mirror,
+    subdivide: ops.subdivide,
+    curveToMesh: ops.curveToMesh,
+    lathe: ops.lathe,
+    bezierCurve: ops.bezierCurve,
+    // UV (async)
+    autoUnwrap: uv.autoUnwrap,
+    // Textures + PBR (loadTexture is async)
+    loadTexture: textures.loadTexture,
+    pbrMaterial: textures.pbrMaterial,
     countTriangles, countMaterials, getJointNames, validateAsset,
+    // THREE namespace is exposed so agents can `new THREE.Mesh(geo, mat)`
+    // as operands to CSG and other ops that expect Object3D inputs.
+    THREE,
     Math, console,
   };
 }

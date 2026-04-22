@@ -254,7 +254,7 @@ function collectAnimationTracks(
  *                 {@link executeKilnCode}).
  */
 export async function inspect(code: string): Promise<InspectResult> {
-  const { meta, root, clips } = executeKilnCode(code);
+  const { meta, root, clips } = await executeKilnCode(code);
 
   const primitivesUsed = detectPrimitivesUsed(code);
   const namedParts = collectNamedParts(root);

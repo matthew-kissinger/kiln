@@ -24,7 +24,19 @@ export interface PrimitiveSpec {
   /** Idiomatic usage snippet agents can splice directly into generated code. */
   example: string;
   /** High-level grouping for filtering in agent UIs. */
-  category: 'geometry' | 'material' | 'structure' | 'animation' | 'utility';
+  category:
+    | 'geometry'
+    | 'material'
+    | 'structure'
+    | 'animation'
+    | 'utility'
+    | 'instancing'
+    | 'csg'
+    | 'arrays'
+    | 'mesh-ops'
+    | 'curves'
+    | 'uv'
+    | 'textures';
 }
 
 const PRIMITIVES: PrimitiveSpec[] = [
@@ -232,6 +244,208 @@ const PRIMITIVES: PrimitiveSpec[] = [
     category: 'animation',
     description: '360° rotation over `duration` around `axis`.',
     example: "return [spinAnimation('Joint_Rotor', 0.5, 'y')];",
+  },
+
+  // ---------------------------------------------------------------------------
+  // Instancing (Wave 1B) — reuse geometry + material across many parts
+  // ---------------------------------------------------------------------------
+  {
+    name: 'cloneGeometry',
+    signature: 'cloneGeometry(geo: BufferGeometry)',
+    returns: 'THREE.BufferGeometry (same ref)',
+    category: 'instancing',
+    description:
+      'Returns the same geometry reference. Use it as a signal that you are intentionally sharing geometry across multiple parts; gltf-transform dedupes on export.',
+    example: 'const wheelGeo = cylinderGeo(0.4, 0.4, 0.2, 12);',
+  },
+  {
+    name: 'cloneMaterial',
+    signature: 'cloneMaterial(mat: Material)',
+    returns: 'THREE.Material (same ref)',
+    category: 'instancing',
+    description: 'Shared material reference. See cloneGeometry.',
+    example: 'const rubberMat = gameMaterial(0x1a1a1a, { roughness: 0.95 });',
+  },
+  {
+    name: 'createInstance',
+    signature:
+      'createInstance(name, source, opts?: { position, rotation, scale, parent })',
+    returns: 'THREE.Object3D',
+    category: 'instancing',
+    description:
+      'Creates a new mesh reusing an existing part\'s geometry + material at a new transform. Cheapest way to replicate wheels / bolts / fence posts / windows.',
+    example:
+      "const wheelFL = createPart('WheelFL', wheelGeo, rubberMat, { position: [-0.8, 0.3, 1.2], parent: root });\ncreateInstance('WheelFR', wheelFL, { position: [0.8, 0.3, 1.2], parent: root });\ncreateInstance('WheelRL', wheelFL, { position: [-0.8, 0.3, -1.2], parent: root });\ncreateInstance('WheelRR', wheelFL, { position: [0.8, 0.3, -1.2], parent: root });",
+  },
+
+  // ---------------------------------------------------------------------------
+  // CSG / Boolean ops (Wave 2A) — async, backed by manifold-3d
+  // ---------------------------------------------------------------------------
+  // IMPORTANT: build() must be `async` and the call must use `await` because
+  // these ops are WASM-backed. The executor awaits build() transparently.
+  {
+    name: 'boolUnion',
+    signature: 'await boolUnion(name: string, ...parts: Object3D[])',
+    returns: 'Promise<THREE.Mesh>',
+    category: 'csg',
+    description:
+      'Merges two or more parts into one watertight manifold mesh. Inherits material from the first operand.',
+    example:
+      "const body = new THREE.Mesh(boxGeo(2, 1, 1), steel);\nconst turret = new THREE.Mesh(cylinderGeo(0.3, 0.3, 0.4, 16), steel);\nturret.position.y = 0.5;\nconst hull = await boolUnion('Hull', body, turret);",
+  },
+  {
+    name: 'boolDiff',
+    signature: 'await boolDiff(name: string, body: Object3D, ...cutters: Object3D[])',
+    returns: 'Promise<THREE.Mesh>',
+    category: 'csg',
+    description:
+      'Subtracts one or more cutters from a body. Use to carve holes, button recesses, window slots, bolt mounts.',
+    example:
+      "const body = new THREE.Mesh(cylinderGeo(1, 1, 0.3, 32), steel);\nconst teeth = [...]; // 8 radially-arrayed box meshes\nconst gear = await boolDiff('Gear', body, ...teeth);",
+  },
+  {
+    name: 'boolIntersect',
+    signature: 'await boolIntersect(name: string, a: Object3D, b: Object3D)',
+    returns: 'Promise<THREE.Mesh>',
+    category: 'csg',
+    description:
+      'Keeps only the volume where both operands overlap. Less common than union/diff but useful for lens shapes and trim cuts.',
+    example:
+      "const lens = await boolIntersect('Lens', boxMesh, sphereMesh);",
+  },
+  {
+    name: 'hull',
+    signature: 'await hull(name: string, ...parts: Object3D[])',
+    returns: 'Promise<THREE.Mesh>',
+    category: 'csg',
+    description:
+      'Tightest convex mesh enclosing all input points. Good for simplifying rocks, loose clusters, or collision volumes.',
+    example:
+      "const rockChunks = [...]; // scattered box meshes\nconst rock = await hull('Rock', ...rockChunks);",
+  },
+
+  // ---------------------------------------------------------------------------
+  // Arrays / mirror (Wave 2B) — replicate a source part with shared geo/mat
+  // ---------------------------------------------------------------------------
+  {
+    name: 'arrayLinear',
+    signature:
+      'arrayLinear(namePrefix, source, count, offset: [x,y,z], parent?)',
+    returns: 'THREE.Object3D[]',
+    category: 'arrays',
+    description:
+      'Places N copies of `source` along a constant offset vector. Copies share geometry + material via createInstance.',
+    example:
+      "const post = createPart('Post0', cylinderGeo(0.05,0.05,1.5,6), wood, { position: [0,0.75,0], parent: root });\narrayLinear('Post', post, 10, [0.5, 0, 0], root);",
+  },
+  {
+    name: 'arrayRadial',
+    signature:
+      "arrayRadial(namePrefix, source, count, axis?: 'x'|'y'|'z', parent?)",
+    returns: 'THREE.Object3D[]',
+    category: 'arrays',
+    description:
+      "Places N copies of `source` around the given axis. Source's local rotation is oriented outward. Perfect for gear teeth, radial bolts, circle of columns.",
+    example:
+      "const bolt = createPart('Bolt0', cylinderGeo(0.02,0.02,0.1,6), steel, { position: [1,0,0], parent: root });\narrayRadial('Bolt', bolt, 8, 'y', root);",
+  },
+  {
+    name: 'mirror',
+    signature: "mirror(name, source, axis: 'x'|'y'|'z', parent?)",
+    returns: 'THREE.Object3D',
+    category: 'arrays',
+    description:
+      "Reflects source across the plane whose normal is `axis`. Uses negative scale (winding flip handled by viewers).",
+    example: "mirror('WingR', wingL, 'x', root);",
+  },
+
+  // ---------------------------------------------------------------------------
+  // Mesh ops (Wave 2B)
+  // ---------------------------------------------------------------------------
+  {
+    name: 'subdivide',
+    signature:
+      'subdivide(geometry: BufferGeometry, iterations?: 1, opts?: { split, uvSmooth, preserveEdges, flatOnly })',
+    returns: 'THREE.BufferGeometry',
+    category: 'mesh-ops',
+    description:
+      'Loop subdivision. Each iteration ~4x the triangle count and smooths the surface. Use 1 for mild smoothing, 2 for organic shapes.',
+    example: "const smoothRock = subdivide(boxGeo(1, 1, 1), 2);",
+  },
+
+  // ---------------------------------------------------------------------------
+  // Curves (Wave 2B)
+  // ---------------------------------------------------------------------------
+  {
+    name: 'curveToMesh',
+    signature:
+      'curveToMesh(points: [x,y,z][], radius, tubularSegs?: 32, radialSegs?: 8, closed?: false)',
+    returns: 'THREE.BufferGeometry',
+    category: 'curves',
+    description:
+      "Sweeps a circular profile along a path. Equivalent to Blender's Curve to Mesh node with a circle profile. Use for pipes, cables, tubular frames.",
+    example:
+      "const pipe = curveToMesh([[0,0,0],[0,1,0],[1,1,0],[1,2,0]], 0.1);",
+  },
+  {
+    name: 'lathe',
+    signature: 'lathe(profile: [x,y][], segments?: 12)',
+    returns: 'THREE.BufferGeometry',
+    category: 'curves',
+    description:
+      'Surface of revolution. Spins a 2D profile around the Y axis. For bottles, vases, wheels, turned wood parts.',
+    example:
+      "const vase = lathe([[0.1,0],[0.3,0.5],[0.2,1],[0.1,1.2]], 16);",
+  },
+  {
+    name: 'bezierCurve',
+    signature: 'bezierCurve(controlPoints: [x,y,z][], samples?: 32)',
+    returns: '[x,y,z][]',
+    category: 'curves',
+    description:
+      "Samples a quadratic (3 ctrl pts) or cubic (4 ctrl pts) Bézier into a point list you can feed into curveToMesh.",
+    example:
+      "const path = bezierCurve([[0,0,0],[1,2,0],[3,2,0],[4,0,0]], 24);\nconst geo = curveToMesh(path, 0.1);",
+  },
+
+  // ---------------------------------------------------------------------------
+  // UV (Wave 3A) — async, WASM-backed via xatlasjs
+  // ---------------------------------------------------------------------------
+  {
+    name: 'autoUnwrap',
+    signature:
+      'await autoUnwrap(geometry: BufferGeometry, opts?: { resolution?: 1024, padding?: 2, useNormals?: false })',
+    returns: 'Promise<THREE.BufferGeometry>',
+    category: 'uv',
+    description:
+      "Auto-generates a UV atlas for any BufferGeometry using xatlas. Required before applying textures or projection-baking. Input not mutated; output geometry has fresh uv attribute in [0,1] and atlas metadata on userData.atlas.",
+    example:
+      "const unwrapped = await autoUnwrap(boxGeo(1, 2, 1), { resolution: 1024 });\nconst crate = new THREE.Mesh(unwrapped, woodPBR);",
+  },
+
+  // ---------------------------------------------------------------------------
+  // Textures + PBR (Wave 3B)
+  // ---------------------------------------------------------------------------
+  {
+    name: 'loadTexture',
+    signature: 'await loadTexture(source: string | Buffer | Uint8Array)',
+    returns: 'Promise<THREE.DataTexture>',
+    category: 'textures',
+    description:
+      'Loads a PNG/JPG/WebP image into a Three.js Texture. Stashes the encoded bytes on userData.encoded so GLB export is lossless.',
+    example:
+      "const wood = await loadTexture('./textures/oak-albedo.png');",
+  },
+  {
+    name: 'pbrMaterial',
+    signature:
+      'pbrMaterial({ albedo?, normal?, roughness?, metalness?, emissive?, aoMap? })',
+    returns: 'THREE.MeshStandardMaterial',
+    category: 'material',
+    description:
+      'Full PBR material. Each slot can be a hex color/scalar or a Texture loaded via loadTexture. Exports as glTF pbrMetallicRoughness.',
+    example:
+      "const wood = await loadTexture('./oak.png');\nconst crate = pbrMaterial({ albedo: wood, roughness: 0.85, metalness: 0 });",
   },
 
   // ---------------------------------------------------------------------------

@@ -298,6 +298,46 @@ Fix these issues before producing the refactored code.`;
   return retried;
 }
 
+/**
+ * Maps a single SDK message to a terminal KilnGenerateResult, or returns
+ * null if the message is not terminal and the caller should keep iterating.
+ *
+ * Shared between runRefactorQuery and runStructuredQuery to dedupe the
+ * three branches (success / error result / auth failure).
+ */
+function handleQueryMessage(
+  message: Record<string, any>,
+  fallbackErrorLabel: string
+): KilnGenerateResult | null {
+  if (message['type'] === 'result' && message['subtype'] === 'success') {
+    const sessionId = message['session_id'];
+    if (message['structured_output']) {
+      const output = message['structured_output'] as { code: string; effectCode?: string };
+      return {
+        success: true,
+        code: output.code,
+        effectCode: output.effectCode,
+        sessionId,
+      };
+    }
+    return parseResultText(message['result'], sessionId);
+  }
+  if (message['type'] === 'result' && message['subtype']?.startsWith('error')) {
+    const errs = message['errors'];
+    return {
+      success: false,
+      error: Array.isArray(errs) ? errs.join('; ') : fallbackErrorLabel,
+    };
+  }
+  if (message['type'] === 'auth_status' && message['error']) {
+    return {
+      success: false,
+      error: `Auth failed: ${message['error']}. Run "claude auth login".`,
+    };
+  }
+  return null;
+}
+
 async function runRefactorQuery(
   prompt: string,
   systemPrompt: string,
@@ -324,38 +364,9 @@ async function runRefactorQuery(
       },
     });
 
-    let sessionId: string | undefined;
-
     for await (const message of q) {
-      if (message.type === 'result' && message.subtype === 'success') {
-        sessionId = message.session_id;
-        if (message.structured_output) {
-          const output = message.structured_output as {
-            code: string;
-            effectCode?: string;
-          };
-          return {
-            success: true,
-            code: output.code,
-            effectCode: output.effectCode,
-            sessionId,
-          };
-        }
-        return parseResultText(message.result, sessionId);
-      }
-      if (message.type === 'result' && message.subtype?.startsWith('error')) {
-        const errMsg = (message as Record<string, unknown>).errors;
-        return {
-          success: false,
-          error: Array.isArray(errMsg) ? errMsg.join('; ') : 'Refactor failed',
-        };
-      }
-      if (message.type === 'auth_status' && message.error) {
-        return {
-          success: false,
-          error: `Auth failed: ${message.error}. Run "claude auth login".`,
-        };
-      }
+      const terminal = handleQueryMessage(message as Record<string, any>, 'Refactor failed');
+      if (terminal) return terminal;
     }
 
     return { success: false, error: 'No result received from refactor query' };
@@ -399,31 +410,8 @@ async function runStructuredQuery(
     });
 
     for await (const message of q) {
-      if (message.type === 'result' && message.subtype === 'success') {
-        if (message.structured_output) {
-          const output = message.structured_output as { code: string; effectCode?: string };
-          return {
-            success: true,
-            code: output.code,
-            effectCode: output.effectCode,
-            sessionId: message.session_id,
-          };
-        }
-        return parseResultText(message.result, message.session_id);
-      }
-      if (message.type === 'result' && message.subtype?.startsWith('error')) {
-        const errors = (message as Record<string, unknown>).errors;
-        return {
-          success: false,
-          error: Array.isArray(errors) ? errors.join('; ') : 'Generation failed',
-        };
-      }
-      if (message.type === 'auth_status' && message.error) {
-        return {
-          success: false,
-          error: `Auth failed: ${message.error}. Run "claude auth login".`,
-        };
-      }
+      const terminal = handleQueryMessage(message as Record<string, any>, 'Generation failed');
+      if (terminal) return terminal;
     }
 
     return { success: false, error: 'No result received from query' };

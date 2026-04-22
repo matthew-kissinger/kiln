@@ -73,14 +73,24 @@ CRITICAL: NO import/export statements. Code runs in a sandbox with primitives as
 <file-format>
 const meta = { name: "AssetName", category: "prop" };
 
-function build() {
+// build() may be sync OR async. Mark it async if you use any CSG op
+// (boolUnion / boolDiff / boolIntersect / hull) because those await WASM.
+function build() {               // simple, no CSG
   const root = createRoot("AssetName");
-  // Build scene graph with pivots and meshes
   return root;
 }
 
-function animate(root) {
-  // Return animation clips (optional)
+// OR when using CSG:
+async function build() {         // use this form when any await is needed
+  const root = createRoot("AssetName");
+  const body = new THREE.Mesh(boxGeo(1,1,1), steel);
+  const hole = new THREE.Mesh(cylinderGeo(0.2, 0.2, 2, 16), steel);
+  const pierced = await boolDiff("Pierced", body, hole);
+  root.add(pierced);
+  return root;
+}
+
+function animate(root) {         // optional
   return [clip1, clip2];
 }
 </file-format>
@@ -89,14 +99,14 @@ function animate(root) {
 // Scene (no imports needed - globals)
 createRoot(name: string): Object3D
 createPivot(name: string, position: [x,y,z], parent: Object3D): Object3D
-createPart(name, geo, mat, opts): void  // AUTO-ADDS to parent! Do NOT call .add() on it
+createPart(name, geo, mat, opts): Object3D  // AUTO-ADDS to opts.parent! Do NOT call .add() on result
 
 // createPart usage - it automatically adds to parent:
 createPart("Name", geometry, material, { position: [x,y,z], parent: parentObj });
 // WRONG: parent.add(createPart(...))  // DO NOT DO THIS
 // RIGHT: createPart("Name", geo, mat, { parent: parentObj });  // auto-adds
 
-// Geometry
+// Geometry (returns BufferGeometry)
 boxGeo(width, height, depth)
 sphereGeo(radius, widthSegs=8, heightSegs=6)
 cylinderGeo(radiusTop, radiusBot, height, segments=8)
@@ -109,10 +119,52 @@ planeGeo(width, height, widthSegs=1, heightSegs=1)
 gameMaterial(0xcolor, {metalness?, roughness?, emissive?, flatShading?})
 lambertMaterial(0xcolor, {flatShading?, emissive?})
 glassMaterial(0xcolor, {opacity?, roughness?, metalness?})  // transparent, DoubleSide - cockpits, windows
+basicMaterial(0xcolor, {transparent?, opacity?})
+
+// Instancing (share geometry+material; smaller GLBs)
+createInstance(name, sourceObj, { position?, rotation?, scale?, parent? })
+// Pattern for repeated parts (4 wheels, 10 posts, 12 bolts):
+//   const wheelFL = createPart("WheelFL", wheelGeo, rubberMat, { position: [...], parent: root });
+//   createInstance("WheelFR", wheelFL, { position: [...], parent: root });
+// GLB exports these as true mesh instances — one geometry, many nodes.
+
+// Arrays (replicate a source part)
+arrayLinear(namePrefix, source, count, [x,y,z], parent?)     // returns Object3D[]
+arrayRadial(namePrefix, source, count, 'x'|'y'|'z', parent?) // returns Object3D[]
+mirror(name, source, 'x'|'y'|'z', parent?)                   // returns Object3D
+
+// CSG / Boolean (async - requires \`async function build()\`)
+await boolUnion(name, ...parts)         // merge into one watertight mesh
+await boolDiff(name, body, ...cutters)  // subtract cutters from body (holes, recesses)
+await boolIntersect(name, a, b)         // keep overlapping volume only
+await hull(name, ...parts)              // tightest convex hull
+
+// Mesh ops
+subdivide(geometry, iterations=1)  // Loop subdivision, returns new BufferGeometry
+
+// Curves
+curveToMesh(points: [x,y,z][], radius, tubularSegs=32, radialSegs=8, closed=false)  // returns BufferGeometry (tube)
+lathe(profile: [x,y][], segments=12)  // surface of revolution (vase, wheel, bottle)
+bezierCurve(ctrlPts: [x,y,z][], samples=32)  // returns [x,y,z][] — feed into curveToMesh
+
+// UV + Textures (both async, require \`async function build()\`)
+await autoUnwrap(geometry, { resolution?: 1024, padding?: 2 })  // returns BufferGeometry with uv attribute
+await loadTexture(path)  // returns THREE.DataTexture with encoded bytes stashed for GLB export
+pbrMaterial({ albedo?, normal?, roughness?, metalness?, emissive?, aoMap? })  // Any slot = color/scalar OR Texture
+
+// Textured asset pipeline:
+//   1. Build a geometry (boxGeo / CSG / subdivide / curveToMesh / etc)
+//   2. \`await autoUnwrap(geo)\` → adds a uv attribute
+//   3. \`await loadTexture(path)\` → load albedo/normal/etc PNG
+//   4. \`pbrMaterial({ albedo: tex, ... })\` → build PBR material
+//   5. new THREE.Mesh(unwrappedGeo, mat) → attach to scene
+
+// THREE namespace is exposed — use \`new THREE.Mesh(geo, mat)\` when an op needs a
+// Mesh input (like CSG operands) without attaching it to the scene.
 
 // Animation - IMPORTANT: keyframes use "rotation" or "position" keys, NOT "value"
-rotationTrack(jointName: string, keyframes: [{time, rotation: [x,y,z]}])  // rotation in DEGREES
-positionTrack(jointName: string, keyframes: [{time, position: [x,y,z]}])
+rotationTrack(jointName: string, keyframes: [{time, rotation: [x,y,z]}], interp?: 'LINEAR'|'STEP')
+positionTrack(jointName: string, keyframes: [{time, position: [x,y,z]}], interp?: 'LINEAR'|'STEP')
 createClip(name: string, duration: number, tracks: Track[])
 spinAnimation(jointName, duration, axis: 'x'|'y'|'z')  // returns a clip
 bobbingAnimation(rootName, duration, height)           // returns a clip
@@ -159,7 +211,7 @@ RIGHT: { time: 0, rotation: [0,0,0] } for rotationTrack (degrees)
 RIGHT: { time: 0, position: [0,0,0] } for positionTrack
 </critical-animation-format>
 
-<example>
+<example name="animated-chest">
 const meta = { name: "Chest", category: "prop" };
 
 function build() {
@@ -190,6 +242,83 @@ function animate(root) {
       {time: 2, rotation: [0, 0, 0]}
     ])
   ])];
+}
+</example>
+
+<example name="gear-with-csg">
+// Gear = cylinder body - 8 radially-arrayed cutter boxes - center hole.
+// NOTE: build() is async because boolDiff awaits WASM.
+const meta = { name: "Gear", category: "prop" };
+
+async function build() {
+  const root = createRoot("Gear");
+  const steel = gameMaterial(0xb0b0b0, { metalness: 0.8, roughness: 0.3 });
+
+  // Body disc (not added to root — will be consumed by boolDiff)
+  const body = new THREE.Mesh(cylinderGeo(1, 1, 0.3, 32), steel);
+
+  // 8 teeth cutters around the rim, detached from scene
+  const cutters = [];
+  for (let i = 0; i < 8; i++) {
+    const a = (i / 8) * Math.PI * 2;
+    const c = new THREE.Mesh(boxGeo(0.4, 0.4, 0.4), steel);
+    c.position.set(Math.cos(a) * 1.1, 0, Math.sin(a) * 1.1);
+    cutters.push(c);
+  }
+
+  // Center shaft hole
+  const hole = new THREE.Mesh(cylinderGeo(0.25, 0.25, 0.5, 16), steel);
+
+  const gear = await boolDiff("Gear", body, ...cutters, hole);
+  root.add(gear);
+  return root;
+}
+</example>
+
+<example name="textured-crate">
+// A unit-cube crate with a wood albedo texture.
+// autoUnwrap adds UVs so the texture maps cleanly; pbrMaterial wraps the
+// texture into a MeshStandardMaterial that exports as glTF PBR.
+const meta = { name: "Crate", category: "prop" };
+
+async function build() {
+  const root = createRoot("Crate");
+  const wood = await loadTexture('./war-assets/textures/wood-planks.png');
+  const mat = pbrMaterial({ albedo: wood, roughness: 0.88, metalness: 0 });
+  const geo = await autoUnwrap(boxGeo(1, 1, 1), { resolution: 1024 });
+  const mesh = new THREE.Mesh(geo, mat);
+  mesh.name = "Mesh_Crate";
+  root.add(mesh);
+  return root;
+}
+</example>
+
+<example name="fence-with-array">
+// Linear + radial arrays share geometry across many instances.
+const meta = { name: "Fence", category: "environment" };
+
+function build() {
+  const root = createRoot("Fence");
+  const wood = gameMaterial(0x8b6f3d, { roughness: 0.9 });
+
+  // One post, then 9 instances along +X (10 posts total, 0.5 apart)
+  const post0 = createPart("Post0", cylinderGeo(0.05, 0.05, 1.2, 6), wood, {
+    position: [0, 0.6, 0],
+    parent: root
+  });
+  arrayLinear("Post", post0, 10, [0.5, 0, 0], root);
+
+  // Two horizontal rails across the length
+  createPart("RailTop", boxGeo(4.6, 0.08, 0.06), wood, {
+    position: [2.25, 0.95, 0],
+    parent: root
+  });
+  createPart("RailBot", boxGeo(4.6, 0.08, 0.06), wood, {
+    position: [2.25, 0.35, 0],
+    parent: root
+  });
+
+  return root;
 }
 </example>`;
 

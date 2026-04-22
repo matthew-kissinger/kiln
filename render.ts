@@ -12,6 +12,7 @@
 
 import * as THREE from 'three';
 import { Document, WebIO } from '@gltf-transform/core';
+import { dedup } from '@gltf-transform/functions';
 
 import {
   buildSandboxGlobals,
@@ -29,6 +30,7 @@ type GtNode = import('@gltf-transform/core').Node;
 type GtMesh = import('@gltf-transform/core').Mesh;
 type GtMaterial = import('@gltf-transform/core').Material;
 type GtBuffer = import('@gltf-transform/core').Buffer;
+type GtTexture = import('@gltf-transform/core').Texture;
 
 // Accessor.Type is typed as Record<string, AccessorType> which runs afoul of
 // noUncheckedIndexedAccess. Use the literal strings directly - same values,
@@ -61,7 +63,15 @@ export interface ExecutedKilnCode {
  * Three.js scene plus animation clips. Throws on any runtime error in the
  * generated code.
  */
-export function executeKilnCode(code: string): ExecutedKilnCode {
+/**
+ * Execute generated Kiln code and return the built scene + clips.
+ *
+ * Async because CSG primitives (boolUnion, boolDiff, etc.) are WASM-backed
+ * and async. Sync `build()` functions are supported transparently — if the
+ * return value is a Promise it is awaited, otherwise it is used as-is.
+ * Same for `animate()`.
+ */
+export async function executeKilnCode(code: string): Promise<ExecutedKilnCode> {
   if (!code || typeof code !== 'string') {
     throw new Error('executeKilnCode: code must be a non-empty string');
   }
@@ -81,20 +91,25 @@ export function executeKilnCode(code: string): ExecutedKilnCode {
 
   const { meta, build, animate } = fn(...globalValues) as {
     meta: KilnCodeMeta;
-    build: () => THREE.Object3D;
-    animate: ((root: THREE.Object3D) => THREE.AnimationClip[] | undefined) | null;
+    build: () => THREE.Object3D | Promise<THREE.Object3D>;
+    animate:
+      | ((root: THREE.Object3D) =>
+          | THREE.AnimationClip[]
+          | undefined
+          | Promise<THREE.AnimationClip[] | undefined>)
+      | null;
   };
 
   if (typeof build !== 'function') {
     throw new Error('executeKilnCode: generated code did not define `build`');
   }
 
-  const root = build();
+  const root = await build();
   if (!(root instanceof THREE.Object3D)) {
     throw new Error('executeKilnCode: build() did not return a THREE.Object3D');
   }
 
-  const clips = animate ? (animate(root) ?? []) : [];
+  const clips = animate ? ((await animate(root)) ?? []) : [];
 
   return { meta: meta ?? {}, root, clips };
 }
@@ -106,7 +121,8 @@ export function executeKilnCode(code: string): ExecutedKilnCode {
 function bridgeMaterial(
   doc: Document,
   threeMat: THREE.Material,
-  cache: Map<THREE.Material, GtMaterial>
+  cache: Map<THREE.Material, GtMaterial>,
+  textureCache: Map<THREE.Texture, GtTexture>
 ): GtMaterial {
   const cached = cache.get(threeMat);
   if (cached) return cached;
@@ -126,6 +142,32 @@ function bridgeMaterial(
     if (threeMat.side === THREE.DoubleSide) {
       mat.setDoubleSided(true);
     }
+    // PBR texture slots (Wave 3B)
+    if (threeMat.map) {
+      const t = bridgeTexture(doc, threeMat.map, textureCache);
+      if (t) mat.setBaseColorTexture(t);
+    }
+    if (threeMat.normalMap) {
+      const t = bridgeTexture(doc, threeMat.normalMap, textureCache);
+      if (t) mat.setNormalTexture(t);
+    }
+    // metallic + roughness live in one glTF texture (R=unused, G=rough, B=metal).
+    // If the agent used separate Three.js maps we emit the roughness one as
+    // the combined channel — the common case is a single combined map anyway.
+    const mrSource = threeMat.roughnessMap ?? threeMat.metalnessMap;
+    if (mrSource) {
+      const t = bridgeTexture(doc, mrSource, textureCache);
+      if (t) mat.setMetallicRoughnessTexture(t);
+    }
+    if (threeMat.emissiveMap) {
+      const t = bridgeTexture(doc, threeMat.emissiveMap, textureCache);
+      if (t) mat.setEmissiveTexture(t);
+    }
+    if (threeMat.aoMap) {
+      const t = bridgeTexture(doc, threeMat.aoMap, textureCache);
+      if (t) mat.setOcclusionTexture(t);
+      mat.setOcclusionStrength(threeMat.aoMapIntensity ?? 1);
+    }
   } else if (threeMat instanceof THREE.MeshLambertMaterial) {
     mat.setBaseColorFactor([threeMat.color.r, threeMat.color.g, threeMat.color.b, threeMat.opacity]);
     mat.setRoughnessFactor(1.0);
@@ -141,6 +183,34 @@ function bridgeMaterial(
 
   cache.set(threeMat, mat);
   return mat;
+}
+
+/**
+ * Bridge a Three.js Texture to a gltf-transform Texture.
+ *
+ * Prefers `userData.encoded` (raw PNG/JPG bytes from loadTexture) so we
+ * don't re-encode. Falls back to null if nothing is encoded — procedural
+ * DataTextures without encoded bytes aren't exportable yet (requires
+ * runtime PNG encoding, which we'll wire in Wave 3D via sharp).
+ */
+function bridgeTexture(
+  doc: Document,
+  threeTex: THREE.Texture,
+  cache: Map<THREE.Texture, GtTexture>
+): GtTexture | null {
+  const cached = cache.get(threeTex);
+  if (cached) return cached;
+
+  const encoded = (threeTex.userData as Record<string, unknown>)['encoded'] as
+    | { mime: string; bytes: Uint8Array }
+    | undefined;
+  if (!encoded) return null;
+
+  const t = doc.createTexture(threeTex.name || 'texture');
+  t.setMimeType(encoded.mime);
+  t.setImage(encoded.bytes);
+  cache.set(threeTex, t);
+  return t;
 }
 
 function bridgeGeometry(
@@ -207,7 +277,9 @@ function bridgeNode(
   buf: GtBuffer,
   threeObj: THREE.Object3D,
   matCache: Map<THREE.Material, GtMaterial>,
-  nodeMap: Map<string, GtNode>
+  nodeMap: Map<string, GtNode>,
+  meshCache: Map<string, GtMesh>,
+  texCache: Map<THREE.Texture, GtTexture>
 ): GtNode {
   const gtNode = doc.createNode(threeObj.name || undefined);
 
@@ -222,8 +294,18 @@ function bridgeNode(
 
   if (threeObj instanceof THREE.Mesh) {
     const threeMat = threeObj.material as THREE.Material;
-    const gtMat = bridgeMaterial(doc, threeMat, matCache);
-    const gtMesh = bridgeGeometry(doc, buf, threeObj.geometry, gtMat, threeObj.name || 'mesh');
+    const gtMat = bridgeMaterial(doc, threeMat, matCache, texCache);
+
+    // Key the mesh cache by (geometry ref, material ref) so createInstance
+    // (same geo + mat as source) produces a GLB-level mesh instance: a
+    // single Mesh referenced by multiple Nodes. Cuts duplicated accessors
+    // for wheels, bolts, fence posts, etc.
+    const cacheKey = `${(threeObj.geometry as any).uuid}__${(threeMat as any).uuid}`;
+    let gtMesh = meshCache.get(cacheKey);
+    if (!gtMesh) {
+      gtMesh = bridgeGeometry(doc, buf, threeObj.geometry, gtMat, threeObj.name || 'mesh');
+      meshCache.set(cacheKey, gtMesh);
+    }
     gtNode.setMesh(gtMesh);
   }
 
@@ -232,7 +314,7 @@ function bridgeNode(
   }
 
   for (const child of threeObj.children) {
-    const childNode = bridgeNode(doc, buf, child, matCache, nodeMap);
+    const childNode = bridgeNode(doc, buf, child, matCache, nodeMap, meshCache, texCache);
     gtNode.addChild(childNode);
   }
 
@@ -325,6 +407,11 @@ export interface RenderSceneOptions {
   sceneName?: string;
   /** Animation clips to bridge into the document. */
   clips?: THREE.AnimationClip[];
+  /**
+   * Run gltf-transform dedup() before serializing. Default true. Set false
+   * to inspect raw bridge output for debugging.
+   */
+  dedup?: boolean;
 }
 
 /**
@@ -361,13 +448,26 @@ export async function renderSceneToGLB(
   const doc = new Document();
   const buf = doc.createBuffer();
   const matCache = new Map<THREE.Material, GtMaterial>();
+  const meshCache = new Map<string, GtMesh>();
+  const texCache = new Map<THREE.Texture, GtTexture>();
   const nodeMap = new Map<string, GtNode>();
 
-  const rootNode = bridgeNode(doc, buf, root, matCache, nodeMap);
+  const rootNode = bridgeNode(doc, buf, root, matCache, nodeMap, meshCache, texCache);
   doc.createScene(opts.sceneName ?? 'Scene').addChild(rootNode);
 
   if (clips.length > 0) {
     bridgeAnimations(doc, buf, clips, nodeMap, warnings);
+  }
+
+  // Dedupe accessors/materials/meshes so instanced parts (4 wheels, 10 posts,
+  // 12 windows) share a single underlying resource in the GLB. Cuts file
+  // size on instancing-heavy assets; no-op on unique-geometry scenes.
+  if (opts.dedup !== false) {
+    try {
+      await doc.transform(dedup());
+    } catch (err) {
+      warnings.push(`dedup transform failed: ${err instanceof Error ? err.message : String(err)}`);
+    }
   }
 
   const io = new WebIO();
@@ -386,7 +486,7 @@ export async function renderSceneToGLB(
  * Pure function: no file I/O, no globals, no WebGL.
  */
 export async function renderGLB(code: string): Promise<RenderResult> {
-  const { meta, root, clips } = executeKilnCode(code);
+  const { meta, root, clips } = await executeKilnCode(code);
   const scene = await renderSceneToGLB(root, {
     sceneName: meta.name || 'Scene',
     clips,

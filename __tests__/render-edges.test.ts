@@ -22,43 +22,42 @@ import {
 // =============================================================================
 
 describe('executeKilnCode input validation', () => {
-  test('throws on empty string', () => {
-    expect(() => executeKilnCode('')).toThrow(/non-empty string/);
+  test('throws on empty string', async () => {
+    await expect(executeKilnCode('')).rejects.toThrow(/non-empty string/);
   });
 
-  test('throws when build is not defined at all', () => {
+  test('throws when build is not defined at all', async () => {
     // The Function-constructor sandbox references `build` unconditionally
     // in its return wrapper, so a missing declaration surfaces as a
     // ReferenceError before the typeof check fires. Either failure
     // mode is acceptable - the contract is "code without build() does
     // not silently render".
-    expect(() =>
+    await expect(
       executeKilnCode(`const meta = { name: 'NoBuild' };`)
-    ).toThrow(/build is not defined|did not define `build`/);
+    ).rejects.toThrow(/build is not defined|did not define `build`/);
   });
 
-  test('throws when build is defined but is not a function', () => {
-    // This drives the explicit `typeof build !== 'function'` branch.
-    expect(() =>
+  test('throws when build is defined but is not a function', async () => {
+    await expect(
       executeKilnCode(`
 const meta = { name: 'NotFn' };
 const build = 'not a function';
 `)
-    ).toThrow(/did not define `build`/);
+    ).rejects.toThrow(/did not define `build`/);
   });
 
-  test('throws when build() does not return an Object3D', () => {
-    expect(() =>
+  test('throws when build() does not return an Object3D', async () => {
+    await expect(
       executeKilnCode(`
 const meta = { name: 'BadReturn' };
 function build() { return 42; }
 `)
-    ).toThrow(/did not return a THREE.Object3D/);
+    ).rejects.toThrow(/did not return a THREE.Object3D/);
   });
 
-  test('normalizes CRLF line endings', () => {
+  test('normalizes CRLF line endings', async () => {
     const code = `\r\nconst meta = { name: 'CRLF' };\r\nfunction build() { return createRoot('CRLF'); }\r\n`;
-    const { meta, root } = executeKilnCode(code);
+    const { meta, root } = await executeKilnCode(code);
     expect(meta.name).toBe('CRLF');
     expect(root.name).toBe('CRLF');
   });
@@ -220,8 +219,8 @@ function animate() {
 // =============================================================================
 
 describe('inspectGeneratedAnimation track validation', () => {
-  test('flags tracks whose name lacks a dot separator', () => {
-    const { root, clips } = executeKilnCode(`
+  test('flags tracks whose name lacks a dot separator', async () => {
+    const { root, clips } = await executeKilnCode(`
 const meta = { name: 'R' };
 function build() { return createRoot('R'); }
 function animate() {
@@ -235,8 +234,8 @@ function animate() {
     expect(warnings.some((w) => w.includes('missing a node.property separator'))).toBe(true);
   });
 
-  test('flags tracks using unsupported properties', () => {
-    const { root, clips } = executeKilnCode(`
+  test('flags tracks using unsupported properties', async () => {
+    const { root, clips } = await executeKilnCode(`
 const meta = { name: 'R' };
 function build() {
   const root = createRoot('R');

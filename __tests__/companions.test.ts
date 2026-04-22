@@ -151,7 +151,7 @@ function animate() {
   ])];
 }
 `;
-    const { root, clips } = kiln.executeKilnCode(code);
+    const { root, clips } = await kiln.executeKilnCode(code);
     const warnings = kiln.inspectGeneratedAnimation(root, clips);
     expect(warnings.length).toBeGreaterThan(0);
     expect(warnings.some((w) => w.includes('Joint_Missing'))).toBe(true);
@@ -172,7 +172,7 @@ function animate() {
   ])];
 }
 `;
-    const { root, clips } = kiln.executeKilnCode(code);
+    const { root, clips } = await kiln.executeKilnCode(code);
     const warnings = kiln.inspectGeneratedAnimation(root, clips);
     expect(warnings).toEqual([]);
   });
@@ -186,7 +186,7 @@ function build() {
   return root;
 }
 `;
-    const { root, clips } = kiln.executeKilnCode(code);
+    const { root, clips } = await kiln.executeKilnCode(code);
     expect(clips).toEqual([]);
     expect(kiln.inspectGeneratedAnimation(root, clips)).toEqual([]);
   });

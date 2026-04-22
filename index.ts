@@ -88,7 +88,25 @@ export {
   idleBreathing,
   bobbingAnimation,
   spinAnimation,
+  cloneGeometry,
+  cloneMaterial,
+  createInstance,
 } from './primitives';
+export type { TrackInterpolation } from './primitives';
+export { boolUnion, boolDiff, boolIntersect, hull } from './solids';
+export {
+  arrayLinear,
+  arrayRadial,
+  mirror,
+  subdivide,
+  curveToMesh,
+  lathe,
+  bezierCurve,
+} from './ops';
+export { autoUnwrap } from './uv';
+export type { AutoUnwrapOptions } from './uv';
+export { loadTexture, pbrMaterial } from './textures';
+export type { PbrMaterialOptions, TextureSource, EncodedTextureData } from './textures';
 
 // =============================================================================
 // Top-level `generate()` - the full pipeline: prompt -> code -> GLB

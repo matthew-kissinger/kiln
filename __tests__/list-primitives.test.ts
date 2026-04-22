@@ -22,9 +22,20 @@ describe('kiln.listPrimitives', () => {
       expect(p.returns.length).toBeGreaterThan(0);
       expect(p.description.length).toBeGreaterThan(0);
       expect(p.example.length).toBeGreaterThan(0);
-      expect(['geometry', 'material', 'structure', 'animation', 'utility']).toContain(
-        p.category
-      );
+      expect([
+        'geometry',
+        'material',
+        'structure',
+        'animation',
+        'utility',
+        'instancing',
+        'csg',
+        'arrays',
+        'mesh-ops',
+        'curves',
+        'uv',
+        'textures',
+      ]).toContain(p.category);
     }
   });
 
