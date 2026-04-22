@@ -227,6 +227,11 @@ Output minified code only.`,
  * Refactor existing code (geometry, effect, or both) against an instruction.
  * Preserves asset character; structured output keeps the client's downstream
  * rendering path stable.
+ *
+ * For geometry refactors, runs the (W3b.3) hardened validator over the
+ * refactored code and re-prompts once if validation fails. Effect-only
+ * refactors are returned as-is — the geometry validator doesn't apply to
+ * TSL shader code.
  */
 export async function refactorCode(
   request: RefactorRequest,
@@ -234,11 +239,7 @@ export async function refactorCode(
 ): Promise<KilnGenerateResult> {
   stripClaudeCodeNestingMarkers();
 
-  const abortController = new AbortController();
-  const timeoutMs = opts.timeoutMs ?? DEFAULT_QUERY_TIMEOUT_MS;
-  const timeout = setTimeout(() => abortController.abort(), timeoutMs);
-
-  try {
+  const buildRefactorPrompt = (extraInstruction?: string): string => {
     const codeContext: string[] = [];
     if (request.geometryCode) {
       codeContext.push(
@@ -258,18 +259,55 @@ export async function refactorCode(
         ? 'Update only the geometry code'
         : 'Update only the effect code';
 
-    const prompt = `${codeContext.join('\n\n')}
+    return `${codeContext.join('\n\n')}
 
 ## Refactor Instructions
 ${request.instruction}
-
+${extraInstruction ? `\n${extraInstruction}\n` : ''}
 ## Task
 ${outputInstructions}`;
+  };
 
-    const systemPrompt = `You are refactoring existing 3D asset code.
+  const systemPrompt = `You are refactoring existing 3D asset code.
 Preserve the asset's character and style while applying the requested changes.
 Keep working code - only modify what's necessary for the refactor.`;
 
+  const initial = await runRefactorQuery(buildRefactorPrompt(), systemPrompt, opts);
+  if (!initial.success) return initial;
+
+  // Skip validation when no geometry was generated (effect-only refactor).
+  if (!initial.code || request.target === 'effect') return initial;
+
+  const v = validate(initial.code);
+  if (v.valid) return initial;
+
+  // Re-prompt once with the structured errors as feedback. Mirrors the
+  // retryWithFeedback pattern used by generateKilnCode.
+  const retryInstruction = `Previous attempt had validation errors:
+${v.issues
+  .map((i) => `- [${i.code}] ${i.message}${i.fixHint ? ` (${i.fixHint})` : ''}`)
+  .join('\n')}
+
+Fix these issues before producing the refactored code.`;
+
+  const retried = await runRefactorQuery(
+    buildRefactorPrompt(retryInstruction),
+    systemPrompt,
+    opts
+  );
+  return retried;
+}
+
+async function runRefactorQuery(
+  prompt: string,
+  systemPrompt: string,
+  opts: KilnGenerateCallOptions
+): Promise<KilnGenerateResult> {
+  const abortController = new AbortController();
+  const timeoutMs = opts.timeoutMs ?? DEFAULT_QUERY_TIMEOUT_MS;
+  const timeout = setTimeout(() => abortController.abort(), timeoutMs);
+
+  try {
     const q = query({
       prompt,
       options: {
