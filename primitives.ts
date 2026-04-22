@@ -525,6 +525,10 @@ export function buildSandboxGlobals(): Record<string, unknown> {
   // eslint-disable-next-line @typescript-eslint/no-require-imports
   const textures = require('./textures') as typeof import('./textures');
   // eslint-disable-next-line @typescript-eslint/no-require-imports
+  const gears = require('./gears') as typeof import('./gears');
+  // eslint-disable-next-line @typescript-eslint/no-require-imports
+  const uvShapes = require('./uv-shapes') as typeof import('./uv-shapes');
+  // eslint-disable-next-line @typescript-eslint/no-require-imports
   const THREE = require('three') as typeof import('three');
   return {
     createRoot, createPivot, createPart,
@@ -543,11 +547,19 @@ export function buildSandboxGlobals(): Record<string, unknown> {
     arrayRadial: ops.arrayRadial,
     mirror: ops.mirror,
     subdivide: ops.subdivide,
+    mergeVertices: ops.mergeVertices,
     curveToMesh: ops.curveToMesh,
     lathe: ops.lathe,
     bezierCurve: ops.bezierCurve,
     // UV (async)
     autoUnwrap: uv.autoUnwrap,
+    // Shape-aware unwraps (sync — preserve built-in directional UVs)
+    boxUnwrap: uvShapes.boxUnwrap,
+    cylinderUnwrap: uvShapes.cylinderUnwrap,
+    planeUnwrap: uvShapes.planeUnwrap,
+    // Parametric primitives
+    gearGeo: gears.gearGeo,
+    bladeGeo: gears.bladeGeo,
     // Textures + PBR (loadTexture is async)
     loadTexture: textures.loadTexture,
     pbrMaterial: textures.pbrMaterial,

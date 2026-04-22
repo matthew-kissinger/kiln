@@ -15,6 +15,7 @@
 
 import * as THREE from 'three';
 import { LoopSubdivision } from 'three-subdivide';
+import { mergeVertices as threeMergeVertices } from 'three/examples/jsm/utils/BufferGeometryUtils.js';
 import { createInstance } from './primitives';
 
 // =============================================================================
@@ -132,11 +133,62 @@ export function mirror(
 // =============================================================================
 
 /**
+ * Weld coincident vertices into shared indexed ones.
+ *
+ * Three.js's built-in BoxGeometry / CylinderGeometry / SphereGeometry carry
+ * 4 verts per face so per-face normals and UVs stay independent. That's
+ * correct for rendering but breaks any op that depends on vertex adjacency
+ * — subdivision, smooth shading, per-vertex deformation.
+ *
+ * By default Three's `mergeVertices` hashes position + normal + uv, so
+ * face-adjacent verts with different normals (e.g. a cube corner touching
+ * 3 faces) do NOT collapse. Pass `{ positionOnly: true }` to weld purely
+ * by position — the other attributes get dropped; the caller is
+ * responsible for recomputing normals / UVs afterward.
+ *
+ * @example
+ * // Full weld (preserves seams where normals or UVs differ):
+ * const welded = mergeVertices(boxGeo(1, 1, 1));   // stays 24 verts
+ *
+ * @example
+ * // Position-only weld (collapses shared corners for subdivision):
+ * const merged = mergeVertices(boxGeo(1, 1, 1), { positionOnly: true }); // 8 verts
+ * const smoothed = subdivide(merged, 2);            // single connected blob
+ */
+export function mergeVertices(
+  geometry: THREE.BufferGeometry,
+  opts: { tolerance?: number; positionOnly?: boolean } | number = {}
+): THREE.BufferGeometry {
+  // Legacy numeric second-arg still works: mergeVertices(geo, 1e-4)
+  const { tolerance = 1e-4, positionOnly = false } =
+    typeof opts === 'number' ? { tolerance: opts } : opts;
+
+  if (!positionOnly) return threeMergeVertices(geometry, tolerance);
+
+  // Strip non-position attributes so the hash only keys on position.
+  const stripped = new THREE.BufferGeometry();
+  const pos = geometry.getAttribute('position') as THREE.BufferAttribute | undefined;
+  if (!pos) return geometry;
+  stripped.setAttribute(
+    'position',
+    new THREE.BufferAttribute(new Float32Array(pos.array), pos.itemSize, pos.normalized)
+  );
+  if (geometry.index) {
+    stripped.setIndex(new THREE.BufferAttribute(new Uint32Array(geometry.index.array), 1));
+  }
+  return threeMergeVertices(stripped, tolerance);
+}
+
+/**
  * Subdivide a geometry using Loop subdivision (via three-subdivide).
  * Returns a new BufferGeometry; the input is not mutated.
  *
  * Higher `iterations` = smoother but exponentially more triangles.
  * 1 iteration ~= 4x triangle count, 2 ~= 16x. Budget accordingly.
+ *
+ * Non-indexed inputs (Three's built-in primitives) are auto-welded via
+ * `mergeVertices` first so shared corners subdivide as one surface, not
+ * as disconnected face patches. Pass `opts.weld = false` to skip.
  *
  * @example
  * const smoothRock = subdivide(boxGeo(1, 1, 1), 2);
@@ -144,9 +196,20 @@ export function mirror(
 export function subdivide(
   geometry: THREE.BufferGeometry,
   iterations = 1,
-  opts: { split?: boolean; uvSmooth?: boolean; preserveEdges?: boolean; flatOnly?: boolean } = {}
+  opts: {
+    split?: boolean;
+    uvSmooth?: boolean;
+    preserveEdges?: boolean;
+    flatOnly?: boolean;
+    weld?: boolean;
+  } = {}
 ): THREE.BufferGeometry {
-  return LoopSubdivision.modify(geometry, iterations, opts);
+  const { weld = true, ...subOpts } = opts;
+  // Subdivision wants position-only adjacency. Weld shared corners so
+  // Three's box/sphere/cylinder (which keep 4 verts per face for
+  // independent normals/UVs) become a single connected surface.
+  const input = weld ? mergeVertices(geometry, { positionOnly: true }) : geometry;
+  return LoopSubdivision.modify(input, iterations, subOpts);
 }
 
 // =============================================================================

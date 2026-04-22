@@ -99,12 +99,16 @@ export {
   arrayRadial,
   mirror,
   subdivide,
+  mergeVertices,
   curveToMesh,
   lathe,
   bezierCurve,
 } from './ops';
 export { autoUnwrap } from './uv';
 export type { AutoUnwrapOptions } from './uv';
+export { boxUnwrap, cylinderUnwrap, planeUnwrap } from './uv-shapes';
+export { gearGeo, bladeGeo } from './gears';
+export type { GearOptions, BladeOptions } from './gears';
 export { loadTexture, pbrMaterial } from './textures';
 export type { PbrMaterialOptions, TextureSource, EncodedTextureData } from './textures';
 

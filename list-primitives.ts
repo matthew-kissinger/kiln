@@ -136,6 +136,28 @@ const PRIMITIVES: PrimitiveSpec[] = [
     description: 'Flat quad. Faces +Z by default. Rotate to use as ground / decal.',
     example: 'const geo = planeGeo(4, 4);',
   },
+  {
+    name: 'gearGeo',
+    signature:
+      'gearGeo(opts?: { teeth?: 12, rootRadius?: 0.8, tipRadius?: 1.0, boreRadius?: 0.2, height?: 0.3, toothWidthFrac?: 0.5 })',
+    returns: 'THREE.BufferGeometry',
+    category: 'geometry',
+    description:
+      'Parametric gear: disc with N additive teeth around the rim and a center bore. Flat-shaded hard edges. Built directly (no CSG), so cheap.',
+    example:
+      "const g = gearGeo({ teeth: 16, tipRadius: 1.0, boreRadius: 0.15, height: 0.25 });\ncreatePart('Gear', g, gameMaterial(0x909090, { metalness: 0.8 }), { parent: root });",
+  },
+  {
+    name: 'bladeGeo',
+    signature:
+      'bladeGeo(opts?: { length?: 1.5, baseWidth?: 0.1, thickness?: 0.015, tipLength?: 0.25, edgeBevel?: 0 })',
+    returns: 'THREE.BufferGeometry',
+    category: 'geometry',
+    description:
+      'Parametric sword blade: rectangular base tapering to a point over tipLength. edgeBevel > 0 pinches the cross-section toward a diamond ridge.',
+    example:
+      "const b = bladeGeo({ length: 1.6, baseWidth: 0.09, tipLength: 0.3, edgeBevel: 0.5 });\ncreatePart('Blade', b, steel, { position: [0, 0, 0], parent: root });",
+  },
 
   // ---------------------------------------------------------------------------
   // Materials
@@ -285,41 +307,41 @@ const PRIMITIVES: PrimitiveSpec[] = [
   // these ops are WASM-backed. The executor awaits build() transparently.
   {
     name: 'boolUnion',
-    signature: 'await boolUnion(name: string, ...parts: Object3D[])',
+    signature: 'await boolUnion(name: string, ...parts: Object3D[], opts?: { smooth?: false })',
     returns: 'Promise<THREE.Mesh>',
     category: 'csg',
     description:
-      'Merges two or more parts into one watertight manifold mesh. Inherits material from the first operand.',
+      'Merges two or more parts into one watertight manifold mesh. Default flat shading (hard edges) — pass { smooth: true } as last arg for averaged normals on organic merges.',
     example:
       "const body = new THREE.Mesh(boxGeo(2, 1, 1), steel);\nconst turret = new THREE.Mesh(cylinderGeo(0.3, 0.3, 0.4, 16), steel);\nturret.position.y = 0.5;\nconst hull = await boolUnion('Hull', body, turret);",
   },
   {
     name: 'boolDiff',
-    signature: 'await boolDiff(name: string, body: Object3D, ...cutters: Object3D[])',
+    signature: 'await boolDiff(name: string, body: Object3D, ...cutters: Object3D[], opts?: { smooth?: false })',
     returns: 'Promise<THREE.Mesh>',
     category: 'csg',
     description:
-      'Subtracts one or more cutters from a body. Use to carve holes, button recesses, window slots, bolt mounts.',
+      'Subtracts cutters from a body (holes, button recesses, window slots). Default flat shading for sharp mechanical edges.',
     example:
-      "const body = new THREE.Mesh(cylinderGeo(1, 1, 0.3, 32), steel);\nconst teeth = [...]; // 8 radially-arrayed box meshes\nconst gear = await boolDiff('Gear', body, ...teeth);",
+      "const body = new THREE.Mesh(cylinderGeo(1, 1, 0.3, 32), steel);\nconst teeth = [...]; // 8 radially-arrayed box meshes\nconst gear = await boolDiff('Gear', body, ...teeth);  // hard-edged",
   },
   {
     name: 'boolIntersect',
-    signature: 'await boolIntersect(name: string, a: Object3D, b: Object3D)',
+    signature: 'await boolIntersect(name: string, a: Object3D, b: Object3D, opts?: { smooth?: false })',
     returns: 'Promise<THREE.Mesh>',
     category: 'csg',
     description:
-      'Keeps only the volume where both operands overlap. Less common than union/diff but useful for lens shapes and trim cuts.',
+      'Keeps only the volume where both operands overlap. Default flat shading.',
     example:
       "const lens = await boolIntersect('Lens', boxMesh, sphereMesh);",
   },
   {
     name: 'hull',
-    signature: 'await hull(name: string, ...parts: Object3D[])',
+    signature: 'await hull(name: string, ...parts: Object3D[], opts?: { smooth?: true })',
     returns: 'Promise<THREE.Mesh>',
     category: 'csg',
     description:
-      'Tightest convex mesh enclosing all input points. Good for simplifying rocks, loose clusters, or collision volumes.',
+      'Tightest convex mesh enclosing all input points. Default smooth shading (rocks, collision volumes). Pass { smooth: false } for a faceted look.',
     example:
       "const rockChunks = [...]; // scattered box meshes\nconst rock = await hull('Rock', ...rockChunks);",
   },
@@ -365,12 +387,22 @@ const PRIMITIVES: PrimitiveSpec[] = [
   {
     name: 'subdivide',
     signature:
-      'subdivide(geometry: BufferGeometry, iterations?: 1, opts?: { split, uvSmooth, preserveEdges, flatOnly })',
+      'subdivide(geometry: BufferGeometry, iterations?: 1, opts?: { split, uvSmooth, preserveEdges, flatOnly, weld })',
     returns: 'THREE.BufferGeometry',
     category: 'mesh-ops',
     description:
-      'Loop subdivision. Each iteration ~4x the triangle count and smooths the surface. Use 1 for mild smoothing, 2 for organic shapes.',
+      'Loop subdivision. Each iteration ~4x the triangle count and smooths the surface. Non-indexed input is auto-welded via mergeVertices (weld: false to skip). Use 1 for mild smoothing, 2 for organic shapes.',
     example: "const smoothRock = subdivide(boxGeo(1, 1, 1), 2);",
+  },
+  {
+    name: 'mergeVertices',
+    signature: 'mergeVertices(geometry: BufferGeometry, tolerance?: 1e-4)',
+    returns: 'THREE.BufferGeometry',
+    category: 'mesh-ops',
+    description:
+      "Welds coincident vertices into shared, indexed ones. Three's primitives emit disconnected per-face strips — call this before subdividing, deforming, or smooth-shading so shared corners move once.",
+    example:
+      "// Weld before random deformation so corners drift together:\nconst base = mergeVertices(boxGeo(1, 1, 1));\nconst pos = base.getAttribute('position');\nfor (let i = 0; i < pos.count; i++) pos.setXYZ(i, pos.getX(i) + jitter(), pos.getY(i) + jitter(), pos.getZ(i) + jitter());\nconst rock = subdivide(base, 2);",
   },
 
   // ---------------------------------------------------------------------------
@@ -418,9 +450,39 @@ const PRIMITIVES: PrimitiveSpec[] = [
     returns: 'Promise<THREE.BufferGeometry>',
     category: 'uv',
     description:
-      "Auto-generates a UV atlas for any BufferGeometry using xatlas. Required before applying textures or projection-baking. Input not mutated; output geometry has fresh uv attribute in [0,1] and atlas metadata on userData.atlas.",
+      "xatlas-based UV atlas for ANY geometry (CSG output, subdivided, deformed). Output is a packed atlas with arbitrary per-chart rotation — use for non-tileable baked textures. For directional tileable textures on box/cylinder/plane primitives, prefer the shape-aware unwraps below.",
     example:
-      "const unwrapped = await autoUnwrap(boxGeo(1, 2, 1), { resolution: 1024 });\nconst crate = new THREE.Mesh(unwrapped, woodPBR);",
+      "const unwrapped = await autoUnwrap(someCsgResult, { resolution: 1024 });\nconst mesh = new THREE.Mesh(unwrapped, bakedPbr);",
+  },
+  {
+    name: 'boxUnwrap',
+    signature: 'boxUnwrap(geometry: BufferGeometry)',
+    returns: 'THREE.BufferGeometry',
+    category: 'uv',
+    description:
+      "Preserves BoxGeometry's built-in per-face UVs — every face maps [0,1] with consistent orientation. Use for crates/blocks with a tileable texture. Sync; no WASM cost.",
+    example:
+      "const crate = boxUnwrap(boxGeo(1, 1, 1));\nconst mesh = new THREE.Mesh(crate, pbrMaterial({ albedo: planksTex }));",
+  },
+  {
+    name: 'cylinderUnwrap',
+    signature: 'cylinderUnwrap(geometry: BufferGeometry)',
+    returns: 'THREE.BufferGeometry',
+    category: 'uv',
+    description:
+      "Preserves CylinderGeometry's built-in UVs: u wraps around the axis (horizontal texture features ring the cylinder), v runs up the height. Caps use circle-in-square. Sync; no WASM cost.",
+    example:
+      "const barrel = cylinderUnwrap(cylinderGeo(0.5, 0.5, 1.2, 24));\nconst mesh = new THREE.Mesh(barrel, pbrMaterial({ albedo: bandsTex }));",
+  },
+  {
+    name: 'planeUnwrap',
+    signature: 'planeUnwrap(geometry: BufferGeometry)',
+    returns: 'THREE.BufferGeometry',
+    category: 'uv',
+    description:
+      "Projects xy-extent of the bbox to [0,1]. Use for signs/decals/posters where you want ONE readable texture and no edge-face bleeding. Sync.",
+    example:
+      "const sign = planeUnwrap(planeGeo(1, 0.6));\nconst mesh = new THREE.Mesh(sign, pbrMaterial({ albedo: kilnTextTex }));",
   },
 
   // ---------------------------------------------------------------------------

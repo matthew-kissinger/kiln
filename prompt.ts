@@ -114,6 +114,8 @@ coneGeo(radius, height, segments=8)
 capsuleGeo(radius, height, segments=6)
 torusGeo(radius, tube, radialSegs=8, tubularSegs=12)
 planeGeo(width, height, widthSegs=1, heightSegs=1)
+gearGeo({ teeth=12, rootRadius=0.8, tipRadius=1.0, boreRadius=0.2, height=0.3, toothWidthFrac=0.5 })  // parametric gear, flat-shaded
+bladeGeo({ length=1.5, baseWidth=0.1, thickness=0.015, tipLength=0.25, edgeBevel=0 })  // tapered sword blade with pointed tip
 
 // Materials
 gameMaterial(0xcolor, {metalness?, roughness?, emissive?, flatShading?})
@@ -134,21 +136,27 @@ arrayRadial(namePrefix, source, count, 'x'|'y'|'z', parent?) // returns Object3D
 mirror(name, source, 'x'|'y'|'z', parent?)                   // returns Object3D
 
 // CSG / Boolean (async - requires \`async function build()\`)
-await boolUnion(name, ...parts)         // merge into one watertight mesh
-await boolDiff(name, body, ...cutters)  // subtract cutters from body (holes, recesses)
-await boolIntersect(name, a, b)         // keep overlapping volume only
-await hull(name, ...parts)              // tightest convex hull
+// Default: flat shading (hard mechanical edges). Pass { smooth: true }
+// as the LAST arg for averaged normals on organic/blended merges.
+await boolUnion(name, ...parts, opts?)         // merge into one watertight mesh
+await boolDiff(name, body, ...cutters, opts?)  // subtract cutters from body (holes, recesses)
+await boolIntersect(name, a, b, opts?)         // keep overlapping volume only
+await hull(name, ...parts, opts?)              // tightest convex hull (defaults to smooth)
 
 // Mesh ops
-subdivide(geometry, iterations=1)  // Loop subdivision, returns new BufferGeometry
+subdivide(geometry, iterations=1)  // Loop subdivision, returns new BufferGeometry (auto-welds non-indexed input)
+mergeVertices(geometry, tolerance=1e-4)  // weld coincident verts; call before deforming/subdividing box/sphere/cylinder
 
 // Curves
 curveToMesh(points: [x,y,z][], radius, tubularSegs=32, radialSegs=8, closed=false)  // returns BufferGeometry (tube)
 lathe(profile: [x,y][], segments=12)  // surface of revolution (vase, wheel, bottle)
 bezierCurve(ctrlPts: [x,y,z][], samples=32)  // returns [x,y,z][] — feed into curveToMesh
 
-// UV + Textures (both async, require \`async function build()\`)
-await autoUnwrap(geometry, { resolution?: 1024, padding?: 2 })  // returns BufferGeometry with uv attribute
+// UV + Textures (loadTexture is async; shape-aware unwraps are sync)
+await autoUnwrap(geometry, { resolution?: 1024, padding?: 2 })  // xatlas atlas — for CSG/subdivided/deformed meshes
+boxUnwrap(boxGeo(...))            // preserves per-face [0,1] UVs — crates, blocks
+cylinderUnwrap(cylinderGeo(...))  // u around axis, v up — barrels, pipes (texture bands ring the mesh)
+planeUnwrap(planeGeo(...))        // xy-extent → [0,1] — signs, decals, posters
 await loadTexture(path)  // returns THREE.DataTexture with encoded bytes stashed for GLB export
 pbrMaterial({ albedo?, normal?, roughness?, metalness?, emissive?, aoMap? })  // Any slot = color/scalar OR Texture
 

@@ -39,8 +39,11 @@ describe('Wave 2A: CSG primitives (manifold-3d)', () => {
     const hole = new THREE.Mesh(cylinderGeo(0.4, 0.4, 3, 16), gameMaterial(0x000000));
 
     const pierced = await boolDiff('Pierced', body, hole);
-    const piercedTris =
-      (pierced.geometry.getIndex()?.count ?? 0) / 3;
+    // Default output is flat-shaded (non-indexed): count positions/3.
+    const posCount = (pierced.geometry.getAttribute('position') as THREE.BufferAttribute).count;
+    const piercedTris = pierced.geometry.index
+      ? pierced.geometry.index.count / 3
+      : posCount / 3;
     // A pierced box has more triangles than a plain box (12).
     expect(piercedTris).toBeGreaterThan(12);
   });
@@ -98,5 +101,45 @@ describe('Wave 2A: CSG primitives (manifold-3d)', () => {
     await expect(
       boolUnion('X', new THREE.Mesh(boxGeo(1, 1, 1), gameMaterial(0xff0000)))
     ).rejects.toThrow(/at least two/);
+  });
+
+  it('flat shading (default) produces non-indexed output with per-face normals', async () => {
+    const body = new THREE.Mesh(boxGeo(2, 2, 2), gameMaterial(0x888888));
+    const hole = new THREE.Mesh(cylinderGeo(0.4, 0.4, 3, 16), gameMaterial(0x000000));
+    const pierced = await boolDiff('Pierced', body, hole);
+    // Flat-shaded output is non-indexed: each triangle has 3 unique verts
+    // so normals stay per-face.
+    expect(pierced.geometry.index).toBeNull();
+    const norm = pierced.geometry.getAttribute('normal') as THREE.BufferAttribute;
+    expect(norm).toBeDefined();
+  });
+
+  it('smooth shading preserves indexed output and averages normals', async () => {
+    const body = new THREE.Mesh(boxGeo(2, 2, 2), gameMaterial(0x888888));
+    const hole = new THREE.Mesh(cylinderGeo(0.4, 0.4, 3, 16), gameMaterial(0x000000));
+    const pierced = await boolDiff('Pierced', body, hole, { smooth: true });
+    expect(pierced.geometry.index).not.toBeNull();
+  });
+
+  it('hull defaults to smooth (organic wrapping shapes)', async () => {
+    const parts: THREE.Mesh[] = [];
+    for (let i = 0; i < 4; i++) {
+      const b = new THREE.Mesh(boxGeo(0.2, 0.2, 0.2), gameMaterial(0x6699cc));
+      b.position.set(Math.cos(i) * 0.8, Math.sin(i) * 0.8, 0);
+      parts.push(b);
+    }
+    const wrapped = await hull('Cluster', ...parts);
+    expect(wrapped.geometry.index).not.toBeNull();
+  });
+
+  it('hull can be opted into flat shading', async () => {
+    const parts: THREE.Mesh[] = [];
+    for (let i = 0; i < 4; i++) {
+      const b = new THREE.Mesh(boxGeo(0.2, 0.2, 0.2), gameMaterial(0x6699cc));
+      b.position.set(Math.cos(i) * 0.8, Math.sin(i) * 0.8, 0);
+      parts.push(b);
+    }
+    const wrapped = await hull('Cluster', ...parts, { smooth: false });
+    expect(wrapped.geometry.index).toBeNull();
   });
 });
