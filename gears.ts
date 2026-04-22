@@ -120,50 +120,58 @@ export function gearGeo(opts: GearOptions = {}): THREE.BufferGeometry {
   const boreTop = 2 * N;
   const boreBot = 3 * N;
 
-  // Top cap: annulus between boreTop and crownTop (CCW seen from +Y).
+  // Winding convention: Three.js is right-handed (X right, Y up, Z out of
+  // screen). A triangle (A,B,C) has normal = (B-A) × (C-A). For an outward
+  // normal on the TOP face (+Y), we need (B-A) × (C-A) to point +Y — which
+  // means A → B → C is CW when viewed from +Y looking down. (Equivalently:
+  // CCW when viewed from -Y.) Getting this wrong back-face-culls the face.
+
+  // Top cap: normal should point +Y. Verts go bore-inner → crown-outer-next
+  // → crown-outer → ... so the triangle pair is (bA, cB, cA) and (bA, bB, cB).
   for (let i = 0; i < N; i++) {
     const j = (i + 1) % N;
     const cA = crownTop + i;
     const cB = crownTop + j;
     const bA = boreTop + i;
     const bB = boreTop + j;
-    // Quad (bA, bB, cB, cA) → two tris, CCW from +Y
-    indices.push(bA, cA, cB);
-    indices.push(bA, cB, bB);
+    indices.push(bA, cB, cA);
+    indices.push(bA, bB, cB);
   }
 
-  // Bottom cap: annulus (CCW seen from -Y, i.e. reversed winding)
+  // Bottom cap: normal should point -Y. Reverse of top-cap winding.
   for (let i = 0; i < N; i++) {
     const j = (i + 1) % N;
     const cA = crownBot + i;
     const cB = crownBot + j;
     const bA = boreBot + i;
     const bB = boreBot + j;
-    indices.push(bA, cB, cA);
-    indices.push(bA, bB, cB);
+    indices.push(bA, cA, cB);
+    indices.push(bA, cB, bB);
   }
 
-  // Outer side wall: rectangle between crownTop[i] → crownTop[i+1] → crownBot[i+1] → crownBot[i]
+  // Outer side wall: normal should point RADIALLY OUTWARD. Going around in
+  // increasing angle (i→i+1) with top above bottom, the CW-from-outside
+  // order is tA → tB → bB → bA. Triangles: (tA, tB, bB), (tA, bB, bA).
   for (let i = 0; i < N; i++) {
     const j = (i + 1) % N;
     const tA = crownTop + i;
     const tB = crownTop + j;
     const bA = crownBot + i;
     const bB = crownBot + j;
-    indices.push(tA, bA, bB);
-    indices.push(tA, bB, tB);
+    indices.push(tA, tB, bB);
+    indices.push(tA, bB, bA);
   }
 
-  // Inner side wall (bore cylinder): reversed winding since the bore
-  // surface faces inward toward the axis.
+  // Inner side wall (bore): normal should point INWARD toward axis.
+  // Reverse of outer wall winding.
   for (let i = 0; i < N; i++) {
     const j = (i + 1) % N;
     const tA = boreTop + i;
     const tB = boreTop + j;
     const bA = boreBot + i;
     const bB = boreBot + j;
-    indices.push(tA, bB, bA);
-    indices.push(tA, tB, bB);
+    indices.push(tA, bA, bB);
+    indices.push(tA, bB, tB);
   }
 
   const geo = new THREE.BufferGeometry();
