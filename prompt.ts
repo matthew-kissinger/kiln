@@ -95,6 +95,18 @@ function animate(root) {         // optional
 }
 </file-format>
 
+<coordinate-contract>
+World coordinates are strict:
+- +X = forward / nose / muzzle direction
+- +Y = up
+- +Z = asset right side
+- Ground rests at Y=0
+
+Vehicles, aircraft, weapons, boats, and buildings must follow this frame. If a
+part points forward, build it along +X. If a part spans left/right, build it
+along Z. Do not make each asset invent its own forward axis.
+</coordinate-contract>
+
 <api>
 // Scene (no imports needed - globals)
 createRoot(name: string): Object3D
@@ -109,13 +121,25 @@ createPart("Name", geometry, material, { position: [x,y,z], parent: parentObj })
 // Geometry (returns BufferGeometry)
 boxGeo(width, height, depth)
 sphereGeo(radius, widthSegs=8, heightSegs=6)
-cylinderGeo(radiusTop, radiusBot, height, segments=8)
-coneGeo(radius, height, segments=8)
-capsuleGeo(radius, height, segments=6)
+cylinderGeo(radiusTop, radiusBot, height, segments=8)  // Y-axis
+cylinderXGeo(radiusTop, radiusBot, length, segments=8) // X-axis
+cylinderZGeo(radiusTop, radiusBot, length, segments=8) // Z-axis
+coneGeo(radius, height, segments=8)                    // Y-axis, point +Y
+coneXGeo(radius, length, segments=8)                   // point +X
+coneZGeo(radius, length, segments=8)                   // point +Z
+capsuleGeo(radius, height, segments=6)                 // Y-axis
+capsuleXGeo(radius, length, segments=6)                // X-axis
+capsuleZGeo(radius, length, segments=6)                // Z-axis
 torusGeo(radius, tube, radialSegs=8, tubularSegs=12)
 planeGeo(width, height, widthSegs=1, heightSegs=1)
+wingGeo({ span, rootChord, tipChord, sweep, thickness, dihedral }) // root at Z=0, span extends +Z
 gearGeo({ teeth=12, rootRadius=0.8, tipRadius=1.0, boreRadius=0.2, height=0.3, toothWidthFrac=0.5 })  // parametric gear, flat-shaded
 bladeGeo({ length=1.5, baseWidth=0.1, thickness=0.015, tipLength=0.25, edgeBevel=0 })  // tapered sword blade with pointed tip
+
+// Attachment helpers
+beamBetween(name, start: [x,y,z], end: [x,y,z], radius, material, { segments?, parent? })
+createLadder(name, { bottom, top, material, width?, rungCount?, railRadius?, rungRadius?, widthAxis?, parent? })
+createWingPair(name, material, { rootZ, span, rootChord, tipChord, sweep?, thickness?, dihedral?, rootX?, rootY?, parent? })
 
 // Materials
 gameMaterial(0xcolor, {metalness?, roughness?, emissive?, flatShading?})
@@ -199,9 +223,29 @@ For animations, track names must use "Joint_" prefix:
 - Name parts descriptively (Body, LeftArm, Wheel)
 </quality>
 
+<attachment-rules>
+- Use cylinderXGeo / capsuleXGeo / coneXGeo for forward-facing bodies, barrels,
+  aircraft fuselages, missiles, and weapon muzzles. Do not hand-rotate Y-axis
+  cylinders unless you have a specific reason.
+- Use cylinderZGeo / capsuleZGeo / coneZGeo for side-facing rails, pods, floats,
+  and crossbars.
+- Use beamBetween() for struts, braces, cables, skid supports, scaffolding, and
+  diagonal rails. Endpoints must touch the parts they connect to.
+- Use createLadder() for ladders. A ladder must have two continuous rails and
+  repeated rungs spanning between those rails. Do not fake ladders with random
+  boxes.
+- Use createWingPair() for aircraft wings and helicopter stub wings. Set rootZ
+  to the fuselage half-width so the wing roots touch the body. Wings must not
+  float near the body, pass through the centerline, or angle as detached planks.
+- Any visually-attached part should overlap or touch its parent by about 0.02
+  units. Floating parts are invalid even if the named-parts check passes.
+- Low triangle count is not the goal by itself. Spend triangles where silhouette
+  matters: cockpits, wheels, rotors, wings, organic rocks, and curved aircraft.
+</attachment-rules>
+
 <rules>
 - Colors as hex: 0xff0000
-- Y-up, ground at Y=0
+- Coordinates: +X forward, +Y up, +Z right, ground at Y=0
 - Animate pivots only (Joint_* names)
 - Loops: end keyframe = start keyframe
 - Track names: "Joint_Name" format (must exist in scene)

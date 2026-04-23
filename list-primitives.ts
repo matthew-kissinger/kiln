@@ -6,7 +6,7 @@
  * discover the surface without reading `primitives.ts` directly.
  *
  * The list is hand-authored rather than JSDoc-parsed — the catalog is
- * small (25 entries) and hand-authoring gives cleaner `signature` /
+ * small and hand-authoring gives cleaner `signature` /
  * `example` strings than we'd get from TS AST extraction. Drift is caught
  * by `__tests__/list-primitives.test.ts` which asserts every entry
  * matches a real sandbox global.
@@ -71,6 +71,39 @@ const PRIMITIVES: PrimitiveSpec[] = [
     example:
       "createPart('Barrel', cylinderGeo(0.1, 0.1, 1), gameMaterial(0x556b2f), { position: [0, 0.5, 0], parent: root });",
   },
+  {
+    name: 'beamBetween',
+    signature:
+      'beamBetween(name, start: [x,y,z], end: [x,y,z], radius, material, opts?: { segments, parent })',
+    returns: 'THREE.Object3D (prefixed `Mesh_`)',
+    category: 'structure',
+    description:
+      'Creates a cylindrical rail/strut exactly between two endpoints. Use for braces, gun barrels, skid struts, cables, and scaffolding.',
+    example:
+      "beamBetween('SkidBraceA', [0.8, 0.3, 0.7], [0.8, 1.0, 0.45], 0.025, black, { parent: root });",
+  },
+  {
+    name: 'createLadder',
+    signature:
+      "createLadder(name, { bottom, top, material, width?, rungCount?, railRadius?, rungRadius?, widthAxis?, parent? })",
+    returns: '{ leftRail: Object3D, rightRail: Object3D, rungs: Object3D[] }',
+    category: 'structure',
+    description:
+      'Builds two continuous rails plus evenly-spaced rungs. Use this instead of loose boxes for ladders.',
+    example:
+      "createLadder('TowerLadder', { bottom: [0,0,0], top: [0,2.2,0], width: 0.45, rungCount: 7, material: steel, parent: root });",
+  },
+  {
+    name: 'createWingPair',
+    signature:
+      'createWingPair(name, material, { rootZ, span, rootChord, tipChord, sweep?, thickness?, dihedral?, rootX?, rootY?, parent? })',
+    returns: '{ right: Object3D, left: Object3D }',
+    category: 'structure',
+    description:
+      'Creates mirrored trapezoid aircraft wings with roots attached at +/-rootZ. Use for aircraft wings and helicopter stub wings.',
+    example:
+      "createWingPair('MainWing', olive, { rootX: 0, rootY: 1.0, rootZ: 0.42, span: 2.4, rootChord: 0.9, tipChord: 0.35, sweep: 0.25, dihedral: 0.08, parent: root });",
+  },
 
   // ---------------------------------------------------------------------------
   // Geometry
@@ -103,6 +136,26 @@ const PRIMITIVES: PrimitiveSpec[] = [
     example: 'const geo = cylinderGeo(0.25, 0.25, 1, 12);',
   },
   {
+    name: 'cylinderXGeo',
+    signature:
+      'cylinderXGeo(radiusTop: number, radiusBottom: number, length: number, segments?: 8)',
+    returns: 'THREE.CylinderGeometry',
+    category: 'geometry',
+    description:
+      'Cylinder pre-rotated to run along +X/-X. Use for fuselages, cannons, barrels, axles, and forward-facing tubes.',
+    example: 'const geo = cylinderXGeo(0.1, 0.1, 1.2, 12);',
+  },
+  {
+    name: 'cylinderZGeo',
+    signature:
+      'cylinderZGeo(radiusTop: number, radiusBottom: number, length: number, segments?: 8)',
+    returns: 'THREE.CylinderGeometry',
+    category: 'geometry',
+    description:
+      'Cylinder pre-rotated to run along +Z/-Z. Use for side-mounted weapons, rails, crossbars, and pipes.',
+    example: 'const geo = cylinderZGeo(0.08, 0.08, 0.9, 10);',
+  },
+  {
     name: 'capsuleGeo',
     signature: 'capsuleGeo(radius: number, height: number, segments?: 6)',
     returns: 'THREE.CapsuleGeometry',
@@ -111,12 +164,48 @@ const PRIMITIVES: PrimitiveSpec[] = [
     example: 'const geo = capsuleGeo(0.1, 0.5, 6);',
   },
   {
+    name: 'capsuleXGeo',
+    signature: 'capsuleXGeo(radius: number, length: number, segments?: 6)',
+    returns: 'THREE.CapsuleGeometry',
+    category: 'geometry',
+    description:
+      'Capsule pre-rotated to run along +X/-X. Use for aircraft bodies, rounded vehicle hulls, and missiles.',
+    example: 'const geo = capsuleXGeo(0.35, 2.4, 10);',
+  },
+  {
+    name: 'capsuleZGeo',
+    signature: 'capsuleZGeo(radius: number, length: number, segments?: 6)',
+    returns: 'THREE.CapsuleGeometry',
+    category: 'geometry',
+    description:
+      'Capsule pre-rotated to run along +Z/-Z. Use for lateral pods, floats, and side tanks.',
+    example: 'const geo = capsuleZGeo(0.18, 1.1, 8);',
+  },
+  {
     name: 'coneGeo',
     signature: 'coneGeo(radius: number, height: number, segments?: 8)',
     returns: 'THREE.ConeGeometry',
     category: 'geometry',
     description: 'Y-axis cone (pointed up). Use for spikes, roofs, projectiles.',
     example: 'const geo = coneGeo(0.3, 0.8, 8);',
+  },
+  {
+    name: 'coneXGeo',
+    signature: 'coneXGeo(radius: number, length: number, segments?: 8)',
+    returns: 'THREE.ConeGeometry',
+    category: 'geometry',
+    description:
+      'Cone pre-rotated so its point faces +X. Use for noses, rockets, shells, and forward-facing tips.',
+    example: 'const geo = coneXGeo(0.18, 0.45, 12);',
+  },
+  {
+    name: 'coneZGeo',
+    signature: 'coneZGeo(radius: number, length: number, segments?: 8)',
+    returns: 'THREE.ConeGeometry',
+    category: 'geometry',
+    description:
+      'Cone pre-rotated so its point faces +Z. Use for side-facing projectiles and tips.',
+    example: 'const geo = coneZGeo(0.12, 0.35, 10);',
   },
   {
     name: 'torusGeo',
@@ -135,6 +224,17 @@ const PRIMITIVES: PrimitiveSpec[] = [
     category: 'geometry',
     description: 'Flat quad. Faces +Z by default. Rotate to use as ground / decal.',
     example: 'const geo = planeGeo(4, 4);',
+  },
+  {
+    name: 'wingGeo',
+    signature:
+      'wingGeo(opts?: { span, rootChord, tipChord, sweep, thickness, dihedral })',
+    returns: 'THREE.BufferGeometry',
+    category: 'geometry',
+    description:
+      'Trapezoid wing panel. Local root edge is at Z=0, span extends toward +Z, positive sweep moves the tip aft along -X.',
+    example:
+      'const geo = wingGeo({ span: 2.2, rootChord: 0.8, tipChord: 0.3, sweep: 0.25, dihedral: 0.08 });',
   },
   {
     name: 'gearGeo',

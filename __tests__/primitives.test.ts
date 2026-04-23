@@ -23,14 +23,24 @@ import {
   createRoot,
   createPivot,
   createPart,
+  beamBetween,
+  createLadder,
+  createWingPair,
   // geometries
   boxGeo,
   sphereGeo,
   cylinderGeo,
+  cylinderXGeo,
+  cylinderZGeo,
   coneGeo,
+  coneXGeo,
+  coneZGeo,
   capsuleGeo,
+  capsuleXGeo,
+  capsuleZGeo,
   torusGeo,
   planeGeo,
+  wingGeo,
   // materials
   gameMaterial,
   basicMaterial,
@@ -52,6 +62,13 @@ import {
   validateAsset,
   buildSandboxGlobals,
 } from '../primitives';
+
+function geometrySize(geometry: THREE.BufferGeometry): THREE.Vector3 {
+  geometry.computeBoundingBox();
+  const size = new THREE.Vector3();
+  geometry.boundingBox!.getSize(size);
+  return size;
+}
 
 // =============================================================================
 // Construction primitives
@@ -130,6 +147,77 @@ describe('createRoot / createPivot / createPart', () => {
   });
 });
 
+describe('attachment helpers', () => {
+  test('beamBetween creates a named cylinder centered between endpoints', () => {
+    const root = createRoot('R');
+    const beam = beamBetween(
+      'Brace',
+      [1, 0, 0],
+      [1, 2, 0],
+      0.05,
+      gameMaterial(0x333333),
+      { parent: root, segments: 6 }
+    ) as THREE.Mesh;
+
+    expect(beam.name).toBe('Mesh_Brace');
+    expect(beam.parent).toBe(root);
+    expect(beam.position.x).toBeCloseTo(1);
+    expect(beam.position.y).toBeCloseTo(1);
+    expect(beam.position.z).toBeCloseTo(0);
+    expect(geometrySize(beam.geometry).y).toBeCloseTo(2);
+  });
+
+  test('beamBetween rejects zero-length beams', () => {
+    expect(() =>
+      beamBetween('Bad', [0, 0, 0], [0, 0, 0], 0.05, gameMaterial(0x333333))
+    ).toThrow('start and end must be different points');
+  });
+
+  test('createLadder creates two continuous rails and evenly named rungs', () => {
+    const root = createRoot('R');
+    const ladder = createLadder('TowerLadder', {
+      bottom: [0, 0, 0],
+      top: [0, 2, 0],
+      width: 0.5,
+      rungCount: 4,
+      material: gameMaterial(0x555555),
+      parent: root,
+    });
+
+    expect(ladder.leftRail.name).toBe('Mesh_TowerLadderLeftRail');
+    expect(ladder.rightRail.name).toBe('Mesh_TowerLadderRightRail');
+    expect(ladder.rungs.map((r) => r.name)).toEqual([
+      'Mesh_TowerLadderRung1',
+      'Mesh_TowerLadderRung2',
+      'Mesh_TowerLadderRung3',
+      'Mesh_TowerLadderRung4',
+    ]);
+    expect(root.children.length).toBe(6);
+  });
+
+  test('createWingPair attaches mirrored wing roots at +/-rootZ', () => {
+    const root = createRoot('Aircraft');
+    const wings = createWingPair('MainWing', gameMaterial(0x556b2f), {
+      rootZ: 0.45,
+      rootX: 0.1,
+      rootY: 1.0,
+      span: 2,
+      rootChord: 0.8,
+      tipChord: 0.3,
+      sweep: 0.25,
+      dihedral: 0.08,
+      parent: root,
+    });
+
+    expect(wings.right.name).toBe('Mesh_MainWingRight');
+    expect(wings.left.name).toBe('Mesh_MainWingLeft');
+    expect(wings.right.position.z).toBeCloseTo(0.45);
+    expect(wings.left.position.z).toBeCloseTo(-0.45);
+    expect(root.children).toContain(wings.right);
+    expect(root.children).toContain(wings.left);
+  });
+});
+
 // =============================================================================
 // Geometry primitives
 // =============================================================================
@@ -155,16 +243,41 @@ describe('geometry primitives produce real Three.js geometries', () => {
     expect(g.parameters.radialSegments).toBe(12);
   });
 
+  test('axis-specific cylinder helpers align length to requested axis', () => {
+    const x = geometrySize(cylinderXGeo(0.2, 0.2, 2, 12));
+    const z = geometrySize(cylinderZGeo(0.2, 0.2, 3, 12));
+    expect(x.x).toBeCloseTo(2);
+    expect(x.y).toBeLessThan(0.5);
+    expect(z.z).toBeCloseTo(3);
+    expect(z.y).toBeLessThan(0.5);
+  });
+
   test('coneGeo with default segments', () => {
     const g = coneGeo(1, 2);
     expect(g).toBeInstanceOf(THREE.ConeGeometry);
     expect(g.parameters.radialSegments).toBe(8);
   });
 
+  test('axis-specific cone helpers point toward +X and +Z', () => {
+    const x = coneXGeo(0.5, 2, 8);
+    const z = coneZGeo(0.5, 2, 8);
+    const xSize = geometrySize(x);
+    const zSize = geometrySize(z);
+    expect(xSize.x).toBeCloseTo(2);
+    expect(zSize.z).toBeCloseTo(2);
+  });
+
   test('capsuleGeo with default segments', () => {
     const g = capsuleGeo(0.5, 1);
     expect(g).toBeInstanceOf(THREE.CapsuleGeometry);
     expect(g.getAttribute('position').count).toBeGreaterThan(0);
+  });
+
+  test('axis-specific capsule helpers align length to requested axis', () => {
+    const x = geometrySize(capsuleXGeo(0.2, 2, 6));
+    const z = geometrySize(capsuleZGeo(0.2, 3, 6));
+    expect(x.x).toBeGreaterThan(x.y);
+    expect(z.z).toBeGreaterThan(z.y);
   });
 
   test('torusGeo with custom segments', () => {
@@ -177,6 +290,23 @@ describe('geometry primitives produce real Three.js geometries', () => {
   test('planeGeo', () => {
     const g = planeGeo(2, 2);
     expect(g).toBeInstanceOf(THREE.PlaneGeometry);
+  });
+
+  test('wingGeo builds a swept trapezoid panel extending along +Z', () => {
+    const g = wingGeo({
+      span: 2,
+      rootChord: 0.8,
+      tipChord: 0.3,
+      sweep: 0.25,
+      thickness: 0.06,
+      dihedral: 0.08,
+    });
+    const size = geometrySize(g);
+
+    expect(g).toBeInstanceOf(THREE.BufferGeometry);
+    expect(size.z).toBeCloseTo(2);
+    expect(size.x).toBeGreaterThan(0.75);
+    expect(size.y).toBeGreaterThan(0.05);
   });
 });
 
@@ -454,8 +584,11 @@ describe('buildSandboxGlobals', () => {
     const globals = buildSandboxGlobals();
     const expected = [
       'createRoot', 'createPivot', 'createPart',
-      'capsuleGeo', 'cylinderGeo', 'boxGeo', 'sphereGeo', 'coneGeo',
-      'torusGeo', 'planeGeo',
+      'beamBetween', 'createLadder', 'createWingPair',
+      'capsuleGeo', 'capsuleXGeo', 'capsuleZGeo',
+      'cylinderGeo', 'cylinderXGeo', 'cylinderZGeo',
+      'boxGeo', 'sphereGeo', 'coneGeo', 'coneXGeo', 'coneZGeo',
+      'torusGeo', 'planeGeo', 'wingGeo',
       'gameMaterial', 'basicMaterial', 'glassMaterial', 'lambertMaterial',
       'rotationTrack', 'positionTrack', 'scaleTrack', 'createClip',
       'spinAnimation', 'bobbingAnimation', 'idleBreathing',

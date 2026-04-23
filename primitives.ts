@@ -11,6 +11,12 @@
 
 import * as THREE from 'three';
 
+type Vec3Tuple = [number, number, number];
+
+function vectorToTuple(v: THREE.Vector3): Vec3Tuple {
+  return [v.x, v.y, v.z];
+}
+
 // =============================================================================
 // Geometry Helpers
 // =============================================================================
@@ -96,6 +102,26 @@ export function capsuleGeo(
   return new THREE.CapsuleGeometry(radius, height, 2, segments);
 }
 
+export function capsuleXGeo(
+  radius: number,
+  length: number,
+  segments = 6
+): THREE.CapsuleGeometry {
+  const geo = capsuleGeo(radius, length, segments);
+  geo.rotateZ(-Math.PI / 2);
+  return geo;
+}
+
+export function capsuleZGeo(
+  radius: number,
+  length: number,
+  segments = 6
+): THREE.CapsuleGeometry {
+  const geo = capsuleGeo(radius, length, segments);
+  geo.rotateX(Math.PI / 2);
+  return geo;
+}
+
 export function cylinderGeo(
   radiusTop: number,
   radiusBottom: number,
@@ -103,6 +129,28 @@ export function cylinderGeo(
   segments = 8
 ): THREE.CylinderGeometry {
   return new THREE.CylinderGeometry(radiusTop, radiusBottom, height, segments);
+}
+
+export function cylinderXGeo(
+  radiusTop: number,
+  radiusBottom: number,
+  length: number,
+  segments = 8
+): THREE.CylinderGeometry {
+  const geo = cylinderGeo(radiusTop, radiusBottom, length, segments);
+  geo.rotateZ(-Math.PI / 2);
+  return geo;
+}
+
+export function cylinderZGeo(
+  radiusTop: number,
+  radiusBottom: number,
+  length: number,
+  segments = 8
+): THREE.CylinderGeometry {
+  const geo = cylinderGeo(radiusTop, radiusBottom, length, segments);
+  geo.rotateX(Math.PI / 2);
+  return geo;
 }
 
 export function boxGeo(
@@ -129,6 +177,26 @@ export function coneGeo(
   return new THREE.ConeGeometry(radius, height, segments);
 }
 
+export function coneXGeo(
+  radius: number,
+  length: number,
+  segments = 8
+): THREE.ConeGeometry {
+  const geo = coneGeo(radius, length, segments);
+  geo.rotateZ(-Math.PI / 2);
+  return geo;
+}
+
+export function coneZGeo(
+  radius: number,
+  length: number,
+  segments = 8
+): THREE.ConeGeometry {
+  const geo = coneGeo(radius, length, segments);
+  geo.rotateX(Math.PI / 2);
+  return geo;
+}
+
 export function torusGeo(
   radius: number,
   tube: number,
@@ -145,6 +213,209 @@ export function planeGeo(
   heightSegments = 1
 ): THREE.PlaneGeometry {
   return new THREE.PlaneGeometry(width, height, widthSegments, heightSegments);
+}
+
+export interface WingGeometryOptions {
+  span?: number;
+  rootChord?: number;
+  tipChord?: number;
+  sweep?: number;
+  thickness?: number;
+  dihedral?: number;
+}
+
+/**
+ * Trapezoid aircraft wing panel.
+ *
+ * Coordinate contract: +X forward, +Y up, +Z right. The root edge sits at
+ * local Z=0 and the panel extends toward +Z. Positive sweep moves the tip aft
+ * along -X. Positive dihedral raises the tip along +Y.
+ */
+export function wingGeo(options: WingGeometryOptions = {}): THREE.BufferGeometry {
+  const span = options.span ?? 1;
+  const rootChord = options.rootChord ?? 0.6;
+  const tipChord = options.tipChord ?? rootChord * 0.5;
+  const sweep = options.sweep ?? 0;
+  const thickness = options.thickness ?? 0.04;
+  const dihedral = options.dihedral ?? 0;
+
+  const rootLead = rootChord / 2;
+  const rootTrail = -rootChord / 2;
+  const tipLead = rootLead - sweep;
+  const tipTrail = tipLead - tipChord;
+  const halfThickness = thickness / 2;
+
+  const vertices = new Float32Array([
+    rootLead, halfThickness, 0,
+    rootTrail, halfThickness, 0,
+    tipLead, dihedral + halfThickness, span,
+    tipTrail, dihedral + halfThickness, span,
+    rootLead, -halfThickness, 0,
+    rootTrail, -halfThickness, 0,
+    tipLead, dihedral - halfThickness, span,
+    tipTrail, dihedral - halfThickness, span,
+  ]);
+
+  const indices = [
+    0, 3, 2, 0, 1, 3, // top
+    4, 6, 7, 4, 7, 5, // bottom
+    0, 2, 6, 0, 6, 4, // leading edge
+    1, 5, 7, 1, 7, 3, // trailing edge
+    0, 4, 5, 0, 5, 1, // root cap
+    2, 3, 7, 2, 7, 6, // tip cap
+  ];
+
+  const geo = new THREE.BufferGeometry();
+  geo.setAttribute('position', new THREE.BufferAttribute(vertices, 3));
+  geo.setIndex(indices);
+  geo.computeVertexNormals();
+  return geo;
+}
+
+export interface WingPairOptions extends WingGeometryOptions {
+  rootX?: number;
+  rootY?: number;
+  /** Fuselage half-width / root offset. Roots attach at +/-rootZ. */
+  rootZ: number;
+  parent?: THREE.Object3D;
+}
+
+export function createWingPair(
+  name: string,
+  material: THREE.Material,
+  options: WingPairOptions
+): { right: THREE.Object3D; left: THREE.Object3D } {
+  const { parent, rootX = 0, rootY = 0, rootZ, ...wingOptions } = options;
+  const rightGeo = wingGeo(wingOptions);
+  const leftGeo = wingGeo(wingOptions);
+  leftGeo.scale(1, 1, -1);
+  leftGeo.computeVertexNormals();
+
+  return {
+    right: createPart(`${name}Right`, rightGeo, material, {
+      position: [rootX, rootY, rootZ],
+      parent,
+    }),
+    left: createPart(`${name}Left`, leftGeo, material, {
+      position: [rootX, rootY, -rootZ],
+      parent,
+    }),
+  };
+}
+
+export interface BeamBetweenOptions {
+  segments?: number;
+  parent?: THREE.Object3D;
+}
+
+export function beamBetween(
+  name: string,
+  start: Vec3Tuple,
+  end: Vec3Tuple,
+  radius: number,
+  material: THREE.Material,
+  options: BeamBetweenOptions = {}
+): THREE.Object3D {
+  const a = new THREE.Vector3(...start);
+  const b = new THREE.Vector3(...end);
+  const direction = b.clone().sub(a);
+  const length = direction.length();
+
+  if (length <= 0) {
+    throw new Error(`beamBetween("${name}"): start and end must be different points`);
+  }
+
+  const mesh = new THREE.Mesh(
+    cylinderGeo(radius, radius, length, options.segments ?? 8),
+    material
+  );
+  mesh.name = `Mesh_${name}`;
+  mesh.position.copy(a.add(b).multiplyScalar(0.5));
+  mesh.quaternion.setFromUnitVectors(
+    new THREE.Vector3(0, 1, 0),
+    direction.normalize()
+  );
+
+  if (options.parent) options.parent.add(mesh);
+  return mesh;
+}
+
+export interface LadderOptions {
+  bottom: Vec3Tuple;
+  top: Vec3Tuple;
+  material: THREE.Material;
+  width?: number;
+  rungCount?: number;
+  railRadius?: number;
+  rungRadius?: number;
+  segments?: number;
+  widthAxis?: 'x' | 'z';
+  parent?: THREE.Object3D;
+}
+
+export function createLadder(
+  name: string,
+  options: LadderOptions
+): { leftRail: THREE.Object3D; rightRail: THREE.Object3D; rungs: THREE.Object3D[] } {
+  const {
+    bottom,
+    top,
+    material,
+    width = 0.42,
+    rungCount = 6,
+    railRadius = 0.025,
+    rungRadius = 0.02,
+    segments = 6,
+    widthAxis = 'x',
+    parent,
+  } = options;
+
+  const bottomVec = new THREE.Vector3(...bottom);
+  const topVec = new THREE.Vector3(...top);
+  const offset =
+    widthAxis === 'x'
+      ? new THREE.Vector3(width / 2, 0, 0)
+      : new THREE.Vector3(0, 0, width / 2);
+
+  const leftBottom = bottomVec.clone().sub(offset);
+  const leftTop = topVec.clone().sub(offset);
+  const rightBottom = bottomVec.clone().add(offset);
+  const rightTop = topVec.clone().add(offset);
+
+  const leftRail = beamBetween(
+    `${name}LeftRail`,
+    vectorToTuple(leftBottom),
+    vectorToTuple(leftTop),
+    railRadius,
+    material,
+    { parent, segments }
+  );
+  const rightRail = beamBetween(
+    `${name}RightRail`,
+    vectorToTuple(rightBottom),
+    vectorToTuple(rightTop),
+    railRadius,
+    material,
+    { parent, segments }
+  );
+
+  const rungs: THREE.Object3D[] = [];
+  for (let i = 0; i < rungCount; i++) {
+    const t = (i + 1) / (rungCount + 1);
+    const center = bottomVec.clone().lerp(topVec, t);
+    rungs.push(
+      beamBetween(
+        `${name}Rung${i + 1}`,
+        vectorToTuple(center.clone().sub(offset)),
+        vectorToTuple(center.clone().add(offset)),
+        rungRadius,
+        material,
+        { parent, segments }
+      )
+    );
+  }
+
+  return { leftRail, rightRail, rungs };
 }
 
 // =============================================================================
@@ -553,12 +824,22 @@ export function buildSandboxGlobals(
     createPivot: wrap('createPivot', createPivot),
     createPart: wrap('createPart', createPart),
     capsuleGeo: wrap('capsuleGeo', capsuleGeo),
+    capsuleXGeo: wrap('capsuleXGeo', capsuleXGeo),
+    capsuleZGeo: wrap('capsuleZGeo', capsuleZGeo),
     cylinderGeo: wrap('cylinderGeo', cylinderGeo),
+    cylinderXGeo: wrap('cylinderXGeo', cylinderXGeo),
+    cylinderZGeo: wrap('cylinderZGeo', cylinderZGeo),
     boxGeo: wrap('boxGeo', boxGeo),
     sphereGeo: wrap('sphereGeo', sphereGeo),
     coneGeo: wrap('coneGeo', coneGeo),
+    coneXGeo: wrap('coneXGeo', coneXGeo),
+    coneZGeo: wrap('coneZGeo', coneZGeo),
     torusGeo: wrap('torusGeo', torusGeo),
     planeGeo: wrap('planeGeo', planeGeo),
+    wingGeo: wrap('wingGeo', wingGeo),
+    createWingPair: wrap('createWingPair', createWingPair),
+    beamBetween: wrap('beamBetween', beamBetween),
+    createLadder: wrap('createLadder', createLadder),
     gameMaterial: wrap('gameMaterial', gameMaterial),
     basicMaterial: wrap('basicMaterial', basicMaterial),
     glassMaterial: wrap('glassMaterial', glassMaterial),
