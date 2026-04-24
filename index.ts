@@ -165,6 +165,15 @@ export { retexCharacter, FACTION_PRESETS } from './retex';
 export type { RetexCharacterOptions, RetexCharacterResult, FactionPreset } from './retex';
 
 // -----------------------------------------------------------------------------
+// Photogrammetry cleanup (kiln/photogrammetry)
+// -----------------------------------------------------------------------------
+export { cleanupPhotogrammetry } from './photogrammetry';
+export type {
+  CleanupPhotogrammetryOptions,
+  CleanupPhotogrammetryResult,
+} from './photogrammetry';
+
+// -----------------------------------------------------------------------------
 // Imposter baker (kiln/imposter)
 // -----------------------------------------------------------------------------
 export { bakeImposter, openImposterSession } from './imposter';
