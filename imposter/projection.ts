@@ -72,13 +72,15 @@ export function resolveLayout(angles: ImposterAngleCount, axis: ImposterAxis): T
         elevations: [degToRad(30), degToRad(-30)],
       };
     }
-    // hemi-y: 4 × 4
+    // hemi-y: 4 × 4. Elevations pushed higher at the top so aircraft/helicopter
+    // cameras looking down still land on a populated tile. Top row is nearly
+    // straight-down (85°); bottom row near-horizon (5°).
     return {
       tilesX: 4,
       tilesY: 4,
       axis,
       azimuths: evenAzimuths(4),
-      elevations: [degToRad(75), degToRad(50), degToRad(25), degToRad(5)],
+      elevations: [degToRad(85), degToRad(60), degToRad(30), degToRad(5)],
     };
   }
 
@@ -86,12 +88,15 @@ export function resolveLayout(angles: ImposterAngleCount, axis: ImposterAxis): T
     if (axis !== 'hemi-y') {
       throw new Error(`32-angle imposter requires axis='hemi-y' (got '${axis}')`);
     }
+    // 8 azimuths × 4 elevations. Elevation 85° gives near-zenith coverage for
+    // aerial cameras; the full column spread means smoother transitions as a
+    // helicopter banks.
     return {
       tilesX: 8,
       tilesY: 4,
       axis,
       azimuths: evenAzimuths(8),
-      elevations: [degToRad(75), degToRad(50), degToRad(25), degToRad(5)],
+      elevations: [degToRad(85), degToRad(60), degToRad(30), degToRad(5)],
     };
   }
 
