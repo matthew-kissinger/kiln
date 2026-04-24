@@ -263,6 +263,36 @@ const PRIMITIVES: PrimitiveSpec[] = [
       "const star = decalBox(0.18, 0.18, 0.01);\ncreatePart('Mesh_StarPort', star, gameMaterial(0xc61f2a), { position: [0.4, 0.6, 0.41], parent: fuselage });",
   },
   {
+    name: 'foliageCardGeo',
+    signature: 'foliageCardGeo(opts?: { width?, height?, yPivot?: 0..1 })',
+    returns: 'THREE.PlaneGeometry',
+    category: 'geometry',
+    description:
+      'Single-quad foliage card with a configurable Y pivot. yPivot=0 plants the quad on the ground. Pair with an alpha-tested material and a leaf/plant sprite.',
+    example:
+      "const quad = foliageCardGeo({ width: 4, height: 6, yPivot: 0 });\ncreatePart('Mesh_Fern', quad, gameMaterial(0x3a6b2e), { parent: root });",
+  },
+  {
+    name: 'crossedQuadsGeo',
+    signature: 'crossedQuadsGeo(opts?: { width?, height?, planes?: 2 | 3, yPivot? })',
+    returns: 'THREE.BufferGeometry',
+    category: 'geometry',
+    description:
+      'Cross-billboard bush primitive: 2 or 3 planes intersecting along the Y axis. Reads as a dense plant from any angle, cheaper than real geometry.',
+    example:
+      "const bush = crossedQuadsGeo({ width: 2, height: 2, planes: 3 });\ncreatePart('Mesh_Bush', bush, gameMaterial(0x2f4a1a), { parent: root });",
+  },
+  {
+    name: 'octaGridPlane',
+    signature: 'octaGridPlane({ tilesX, tilesY, width?, height?, yPivot? })',
+    returns: 'THREE.PlaneGeometry',
+    category: 'geometry',
+    description:
+      'Atlas-ready billboard quad. UVs are pre-scaled to cover one tile of a tilesX×tilesY atlas; the consumer shader adds per-instance tile offsets at draw time.',
+    example:
+      "const card = octaGridPlane({ tilesX: 4, tilesY: 4, width: 6, height: 6 });",
+  },
+  {
     name: 'wingGeo',
     signature:
       'wingGeo(opts?: { span, rootChord, tipChord, sweep, thickness, dihedral })',

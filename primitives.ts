@@ -254,6 +254,150 @@ export function decalBox(
   return new THREE.BoxGeometry(width, height, d);
 }
 
+// =============================================================================
+// Billboard / imposter primitives
+// =============================================================================
+
+export interface FoliageCardOptions {
+  /** Quad width in world units. */
+  width?: number;
+  /** Quad height in world units. */
+  height?: number;
+  /**
+   * Vertical pivot as a fraction of height: 0 = bottom, 0.5 = center, 1 = top.
+   * Foliage usually wants 0 so the card plants on the ground.
+   */
+  yPivot?: number;
+}
+
+/**
+ * Double-sided quad for foliage / vegetation cards. Y-up facing +Z by default.
+ * The pivot is placed at `yPivot * height` below the quad center — set 0 to
+ * have the card root on the ground plane.
+ *
+ * Use with an alpha-tested material for leaves and billboard plants.
+ */
+export function foliageCardGeo(opts: FoliageCardOptions = {}): THREE.PlaneGeometry {
+  const w = opts.width ?? 1;
+  const h = opts.height ?? 1;
+  const yPivot = opts.yPivot ?? 0;
+  const geom = new THREE.PlaneGeometry(w, h);
+  // Shift so the pivot offset becomes the local origin.
+  geom.translate(0, h * (0.5 - yPivot), 0);
+  return geom;
+}
+
+export interface CrossedQuadsOptions {
+  width?: number;
+  height?: number;
+  /** Number of intersecting planes. 2 = X-cross, 3 = triple-star. Default 2. */
+  planes?: 2 | 3;
+  /** Y pivot fraction of height (see foliageCardGeo). Default 0. */
+  yPivot?: number;
+}
+
+/**
+ * Two or three planes intersecting along the Y axis — the classic "bush" or
+ * "cross-billboard" near-field vegetation primitive. Cheaper than real
+ * geometry, denser-looking than a single foliage card from any angle.
+ */
+export function crossedQuadsGeo(opts: CrossedQuadsOptions = {}): THREE.BufferGeometry {
+  const w = opts.width ?? 1;
+  const h = opts.height ?? 1;
+  const planes = opts.planes ?? 2;
+  const yPivot = opts.yPivot ?? 0;
+
+  const geometries: THREE.PlaneGeometry[] = [];
+  for (let i = 0; i < planes; i++) {
+    const angle = (i / planes) * Math.PI;
+    const quad = new THREE.PlaneGeometry(w, h);
+    quad.translate(0, h * (0.5 - yPivot), 0);
+    quad.rotateY(angle);
+    geometries.push(quad);
+  }
+
+  // Merge into one BufferGeometry — deterministic + cheaper at draw time.
+  const out = new THREE.BufferGeometry();
+  const posCount = geometries.reduce(
+    (sum, g) => sum + (g.attributes.position?.count ?? 0),
+    0,
+  );
+  const positions = new Float32Array(posCount * 3);
+  const normals = new Float32Array(posCount * 3);
+  const uvs = new Float32Array(posCount * 2);
+  const indices: number[] = [];
+  let vOffset = 0;
+  let iOffset = 0;
+  for (const g of geometries) {
+    const p = g.attributes.position!;
+    const n = g.attributes.normal!;
+    const uv = g.attributes.uv!;
+    for (let i = 0; i < p.count; i++) {
+      positions[(vOffset + i) * 3] = p.getX(i);
+      positions[(vOffset + i) * 3 + 1] = p.getY(i);
+      positions[(vOffset + i) * 3 + 2] = p.getZ(i);
+      normals[(vOffset + i) * 3] = n.getX(i);
+      normals[(vOffset + i) * 3 + 1] = n.getY(i);
+      normals[(vOffset + i) * 3 + 2] = n.getZ(i);
+      uvs[(vOffset + i) * 2] = uv.getX(i);
+      uvs[(vOffset + i) * 2 + 1] = uv.getY(i);
+    }
+    const idx = g.index!;
+    for (let i = 0; i < idx.count; i++) {
+      indices.push(idx.getX(i) + vOffset);
+    }
+    vOffset += p.count;
+    iOffset += idx.count;
+  }
+  out.setAttribute('position', new THREE.BufferAttribute(positions, 3));
+  out.setAttribute('normal', new THREE.BufferAttribute(normals, 3));
+  out.setAttribute('uv', new THREE.BufferAttribute(uvs, 2));
+  out.setIndex(indices);
+  return out;
+}
+
+export interface OctaGridPlaneOptions {
+  /** Atlas tile grid X. */
+  tilesX: number;
+  /** Atlas tile grid Y. */
+  tilesY: number;
+  /** Quad width in world units. Default 1. */
+  width?: number;
+  /** Quad height in world units. Default 1. */
+  height?: number;
+  /** 0 = bottom pivot, 0.5 = center, 1 = top. Default 0. */
+  yPivot?: number;
+}
+
+/**
+ * Atlas-ready billboard quad — same geometry as foliageCardGeo but the UV
+ * rect is [0, 1/tilesX]×[1 - 1/tilesY, 1] so a shader using viewDir->tileIdx
+ * can offset the UVs per-instance to sample the right imposter tile.
+ *
+ * The returned geometry has its UVs pre-scaled to cover exactly one tile.
+ * The shader (TIJ billboard material) is expected to add (tileX/tilesX,
+ * tileY/tilesY) to each vertex's UV at draw time.
+ */
+export function octaGridPlane(opts: OctaGridPlaneOptions): THREE.PlaneGeometry {
+  const w = opts.width ?? 1;
+  const h = opts.height ?? 1;
+  const yPivot = opts.yPivot ?? 0;
+  const geom = new THREE.PlaneGeometry(w, h);
+  geom.translate(0, h * (0.5 - yPivot), 0);
+
+  // Scale UVs so the quad covers one tile-sized rect in the top-left corner.
+  const uv = geom.attributes.uv!;
+  const du = 1 / opts.tilesX;
+  const dv = 1 / opts.tilesY;
+  for (let i = 0; i < uv.count; i++) {
+    uv.setX(i, uv.getX(i) * du);
+    // Top row — start at 1 - dv so the default samples the top-left tile.
+    uv.setY(i, 1 - dv + uv.getY(i) * dv);
+  }
+  uv.needsUpdate = true;
+  return geom;
+}
+
 export interface WingGeometryOptions {
   span?: number;
   rootChord?: number;
@@ -881,6 +1025,9 @@ export function buildSandboxGlobals(
     torusGeo: wrap('torusGeo', torusGeo),
     planeGeo: wrap('planeGeo', planeGeo),
     decalBox: wrap('decalBox', decalBox),
+    foliageCardGeo: wrap('foliageCardGeo', foliageCardGeo),
+    crossedQuadsGeo: wrap('crossedQuadsGeo', crossedQuadsGeo),
+    octaGridPlane: wrap('octaGridPlane', octaGridPlane),
     wingGeo: wrap('wingGeo', wingGeo),
     createWingPair: wrap('createWingPair', createWingPair),
     beamBetween: wrap('beamBetween', beamBetween),
