@@ -121,17 +121,21 @@ createPart("Name", geometry, material, { position: [x,y,z], parent: parentObj })
 // Geometry (returns BufferGeometry)
 boxGeo(width, height, depth)
 sphereGeo(radius, widthSegs=8, heightSegs=6)
-cylinderGeo(radiusTop, radiusBot, height, segments=8)  // Y-axis
+cylinderGeo(radiusTop, radiusBot, height, segments=8)  // Y-axis (preferred)
 cylinderXGeo(radiusTop, radiusBot, length, segments=8) // X-axis
+cylinderYGeo(radiusTop, radiusBot, length, segments=8) // alias for cylinderGeo (Y-axis)
 cylinderZGeo(radiusTop, radiusBot, length, segments=8) // Z-axis
-coneGeo(radius, height, segments=8)                    // Y-axis, point +Y
+coneGeo(radius, height, segments=8)                    // Y-axis, point +Y (preferred)
 coneXGeo(radius, length, segments=8)                   // point +X
+coneYGeo(radius, length, segments=8)                   // alias for coneGeo (point +Y)
 coneZGeo(radius, length, segments=8)                   // point +Z
-capsuleGeo(radius, height, segments=6)                 // Y-axis
+capsuleGeo(radius, height, segments=6)                 // Y-axis (preferred)
 capsuleXGeo(radius, length, segments=6)                // X-axis
+capsuleYGeo(radius, length, segments=6)                // alias for capsuleGeo (Y-axis)
 capsuleZGeo(radius, length, segments=6)                // Z-axis
 torusGeo(radius, tube, radialSegs=8, tubularSegs=12)
-planeGeo(width, height, widthSegs=1, heightSegs=1)
+planeGeo(width, height, widthSegs=1, heightSegs=1)     // texture-only; for solid-color decals use decalBox
+decalBox(width, height, depth=0.01)                    // flat box for solid-color decals: red stars, hull numbers, stamps, windows on no-texture assets. MUST be placed on a surface via position + rotation.
 wingGeo({ span, rootChord, tipChord, sweep, thickness, dihedral }) // root at Z=0, span extends +Z
 gearGeo({ teeth=12, rootRadius=0.8, tipRadius=1.0, boreRadius=0.2, height=0.3, toothWidthFrac=0.5 })  // parametric gear, flat-shaded
 bladeGeo({ length=1.5, baseWidth=0.1, thickness=0.015, tipLength=0.25, edgeBevel=0 })  // tapered sword blade with pointed tip

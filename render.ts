@@ -456,6 +456,7 @@ export async function renderSceneToGLB(
   // pivot" hint is first; the bridge also emits a briefer "target not
   // found - skipped" for each unresolved track (kept for compatibility).
   for (const w of inspectGeneratedAnimation(root, clips)) warnings.push(w);
+  for (const w of inspectSceneStructure(root)) warnings.push(w);
 
   const doc = new Document();
   const buf = doc.createBuffer();
@@ -558,6 +559,113 @@ export function inspectGeneratedAnimation(
           `Animation track "${clip.name}:${track.name}" uses unsupported property "${property}"`
         );
       }
+    }
+  }
+
+  return warnings;
+}
+
+// =============================================================================
+// Runtime structural validators (stray planes, floating parts)
+// =============================================================================
+
+interface MeshStats {
+  name: string;
+  triCount: number;
+  isPlaneGeo: boolean;
+  center: THREE.Vector3;
+  size: THREE.Vector3;
+  box: THREE.Box3;
+}
+
+function collectMeshStats(root: THREE.Object3D): MeshStats[] {
+  root.updateMatrixWorld(true);
+  const out: MeshStats[] = [];
+  root.traverse((obj) => {
+    if (!(obj instanceof THREE.Mesh)) return;
+    const geo = obj.geometry;
+    if (!geo) return;
+
+    const idx = geo.getIndex();
+    const tri = idx ? idx.count / 3 : (geo.getAttribute('position')?.count ?? 0) / 3;
+
+    const box = new THREE.Box3().setFromObject(obj);
+    if (!isFinite(box.min.x) || !isFinite(box.max.x)) {
+      return;
+    }
+    const center = new THREE.Vector3();
+    const size = new THREE.Vector3();
+    box.getCenter(center);
+    box.getSize(size);
+
+    out.push({
+      name: obj.name || '(unnamed)',
+      triCount: Math.floor(tri),
+      isPlaneGeo: geo instanceof THREE.PlaneGeometry,
+      center,
+      size,
+      box,
+    });
+  });
+  return out;
+}
+
+/**
+ * Detects two structural failure modes observed in real overnight runs:
+ *
+ * 1. **Stray plane at origin** — a 2-triangle `PlaneGeometry` mesh whose
+ *    world-space bbox centroid sits within 2cm of world origin. This is
+ *    what happens when the model reaches for `planeGeo` as a decal (red
+ *    star, stamp, hull number) and forgets to position it on the host
+ *    surface. Fix: move the decal into place, or switch to `decalBox`.
+ * 2. **Floating part** — a mesh whose world-space bbox has no overlap
+ *    (with a 2cm tolerance) with any other mesh in the scene. Fix: move
+ *    the mesh so it contacts its intended parent surface.
+ *
+ * Emits strings compatible with the existing `warnings` channel on
+ * `RenderResult`. `_direct-generate.ts` threshold-checks these to trigger
+ * a single corrective retry.
+ */
+export function inspectSceneStructure(root: THREE.Object3D): string[] {
+  const warnings: string[] = [];
+  const meshes = collectMeshStats(root);
+  if (meshes.length === 0) return warnings;
+
+  const STRAY_CENTROID_TOL = 0.02;
+  const FLOATING_EXPAND = 0.02;
+  const DECAL_EXTENT_MAX = 0.5; // anything smaller than 50cm fits decal profile
+
+  for (const m of meshes) {
+    if (!m.isPlaneGeo) continue;
+    if (m.triCount > 2) continue;
+    if (m.size.length() > DECAL_EXTENT_MAX) continue;
+    if (m.center.length() < STRAY_CENTROID_TOL) {
+      warnings.push(
+        `Stray plane "${m.name}" at world origin (centroid ≈ [0,0,0]). Replace planeGeo with decalBox and position on a host surface, or move this mesh into place.`,
+      );
+    }
+  }
+
+  if (meshes.length > 1) {
+    const floaters: string[] = [];
+    for (let i = 0; i < meshes.length; i++) {
+      const a = meshes[i]!;
+      const ax = a.box.clone().expandByScalar(FLOATING_EXPAND);
+      let overlapsAny = false;
+      for (let j = 0; j < meshes.length; j++) {
+        if (i === j) continue;
+        const b = meshes[j]!;
+        if (ax.intersectsBox(b.box)) {
+          overlapsAny = true;
+          break;
+        }
+      }
+      if (!overlapsAny) floaters.push(a.name);
+    }
+    if (floaters.length > 0) {
+      warnings.push(
+        `Floating parts (no mesh overlap with any sibling, 2cm tol): ${floaters.join(', ')}. Move these so their bbox contacts a parent/surface mesh.`,
+      );
     }
   }
 

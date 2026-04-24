@@ -136,6 +136,16 @@ const PRIMITIVES: PrimitiveSpec[] = [
     example: 'const geo = cylinderGeo(0.25, 0.25, 1, 12);',
   },
   {
+    name: 'cylinderYGeo',
+    signature:
+      'cylinderYGeo(radiusTop: number, radiusBottom: number, height: number, segments?: 8)',
+    returns: 'THREE.CylinderGeometry',
+    category: 'geometry',
+    description:
+      'Alias for cylinderGeo — a Y-axis cylinder. Provided because the sandbox exposes cylinderXGeo / cylinderZGeo and the symmetric Y form is commonly reached for.',
+    example: 'const geo = cylinderYGeo(0.25, 0.25, 1, 12);',
+  },
+  {
     name: 'cylinderXGeo',
     signature:
       'cylinderXGeo(radiusTop: number, radiusBottom: number, length: number, segments?: 8)',
@@ -164,6 +174,14 @@ const PRIMITIVES: PrimitiveSpec[] = [
     example: 'const geo = capsuleGeo(0.1, 0.5, 6);',
   },
   {
+    name: 'capsuleYGeo',
+    signature: 'capsuleYGeo(radius: number, height: number, segments?: 6)',
+    returns: 'THREE.CapsuleGeometry',
+    category: 'geometry',
+    description: 'Alias for capsuleGeo — a Y-axis capsule. Provided for symmetry with capsuleXGeo / capsuleZGeo.',
+    example: 'const geo = capsuleYGeo(0.1, 0.5, 6);',
+  },
+  {
     name: 'capsuleXGeo',
     signature: 'capsuleXGeo(radius: number, length: number, segments?: 6)',
     returns: 'THREE.CapsuleGeometry',
@@ -188,6 +206,14 @@ const PRIMITIVES: PrimitiveSpec[] = [
     category: 'geometry',
     description: 'Y-axis cone (pointed up). Use for spikes, roofs, projectiles.',
     example: 'const geo = coneGeo(0.3, 0.8, 8);',
+  },
+  {
+    name: 'coneYGeo',
+    signature: 'coneYGeo(radius: number, height: number, segments?: 8)',
+    returns: 'THREE.ConeGeometry',
+    category: 'geometry',
+    description: 'Alias for coneGeo — a Y-axis cone (point +Y). Provided for symmetry with coneXGeo / coneZGeo.',
+    example: 'const geo = coneYGeo(0.3, 0.8, 8);',
   },
   {
     name: 'coneXGeo',
@@ -222,8 +248,19 @@ const PRIMITIVES: PrimitiveSpec[] = [
       'planeGeo(width: number, height: number, widthSegments?: 1, heightSegments?: 1)',
     returns: 'THREE.PlaneGeometry',
     category: 'geometry',
-    description: 'Flat quad. Faces +Z by default. Rotate to use as ground / decal.',
+    description:
+      'Flat quad for TEXTURED surfaces (ground, signs, walls with albedo maps). For solid-color decals like red stars, hull numbers, stamps, or window cutouts on no-texture assets use decalBox — a bare planeGeo without a texture will render as a disconnected 2-tri square and get flagged as a stray plane.',
     example: 'const geo = planeGeo(4, 4);',
+  },
+  {
+    name: 'decalBox',
+    signature: 'decalBox(width: number, height: number, depth?: 0.01)',
+    returns: 'THREE.BoxGeometry',
+    category: 'geometry',
+    description:
+      'Thin box for solid-color surface decals: red stars, hull numbers, stamps, no-texture windows. Unlike planeGeo, has real depth so it visibly attaches to its host surface. Must be placed on a surface with position + rotation.',
+    example:
+      "const star = decalBox(0.18, 0.18, 0.01);\ncreatePart('Mesh_StarPort', star, gameMaterial(0xc61f2a), { position: [0.4, 0.6, 0.41], parent: fuselage });",
   },
   {
     name: 'wingGeo',

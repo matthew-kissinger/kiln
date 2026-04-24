@@ -197,6 +197,15 @@ export function coneZGeo(
   return geo;
 }
 
+// Y-axis aliases. The base geometries (`cylinderGeo`, `capsuleGeo`, `coneGeo`)
+// are already Y-axis by default, but LLMs see `*XGeo` / `*ZGeo` and infer a
+// matching `*YGeo` sibling. Rather than argue the naming, we accept the
+// symmetric form and route it to the base implementation. No behavior change
+// for existing code.
+export const cylinderYGeo = cylinderGeo;
+export const capsuleYGeo = capsuleGeo;
+export const coneYGeo = coneGeo;
+
 export function torusGeo(
   radius: number,
   tube: number,
@@ -213,6 +222,36 @@ export function planeGeo(
   heightSegments = 1
 ): THREE.PlaneGeometry {
   return new THREE.PlaneGeometry(width, height, widthSegments, heightSegments);
+}
+
+/**
+ * Flat box sized for surface-attached decals: red stars on fuselages, hull
+ * numbers, stamps, dome windows on no-texture vehicles. Returns a very thin
+ * {@link THREE.BoxGeometry} so the decal has depth and is visibly attached
+ * to its host surface — unlike a bare {@link planeGeo} which renders as a
+ * disconnected 2-tri quad when it drifts away from a parent mesh.
+ *
+ * Always place the returned geometry with `position` + `rotation` on the
+ * host surface via `createPart`. Keep `depth` as small as 0.005 for
+ * paper-thin decals, or bump to 0.05 for raised plates / badges.
+ *
+ * ```ts
+ * // Red star on the fuselage side.
+ * const star = decalBox(0.18, 0.18, 0.01);
+ * createPart('Mesh_StarPort', star, gameMaterial(0xc61f2a), {
+ *   position: [0.4, 0.6, 0.41], // on +Z fuselage surface
+ *   rotation: [0, 0, 0],
+ *   parent: fuselage,
+ * });
+ * ```
+ */
+export function decalBox(
+  width: number,
+  height: number,
+  depth: number = 0.01,
+): THREE.BoxGeometry {
+  const d = Math.max(depth, 0.002);
+  return new THREE.BoxGeometry(width, height, d);
 }
 
 export interface WingGeometryOptions {
@@ -321,8 +360,10 @@ export function beamBetween(
   const direction = b.clone().sub(a);
   const length = direction.length();
 
-  if (length <= 0) {
-    throw new Error(`beamBetween("${name}"): start and end must be different points`);
+  if (length <= 1e-4) {
+    throw new Error(
+      `beamBetween("${name}"): start and end must be different points (got start=[${start.join(',')}], end=[${end.join(',')}], delta=${length.toExponential(2)}). Pick two distinct endpoints or switch to cylinderGeo with an explicit length + position.`,
+    );
   }
 
   const mesh = new THREE.Mesh(
@@ -825,17 +866,21 @@ export function buildSandboxGlobals(
     createPart: wrap('createPart', createPart),
     capsuleGeo: wrap('capsuleGeo', capsuleGeo),
     capsuleXGeo: wrap('capsuleXGeo', capsuleXGeo),
+    capsuleYGeo: wrap('capsuleYGeo', capsuleYGeo),
     capsuleZGeo: wrap('capsuleZGeo', capsuleZGeo),
     cylinderGeo: wrap('cylinderGeo', cylinderGeo),
     cylinderXGeo: wrap('cylinderXGeo', cylinderXGeo),
+    cylinderYGeo: wrap('cylinderYGeo', cylinderYGeo),
     cylinderZGeo: wrap('cylinderZGeo', cylinderZGeo),
     boxGeo: wrap('boxGeo', boxGeo),
     sphereGeo: wrap('sphereGeo', sphereGeo),
     coneGeo: wrap('coneGeo', coneGeo),
     coneXGeo: wrap('coneXGeo', coneXGeo),
+    coneYGeo: wrap('coneYGeo', coneYGeo),
     coneZGeo: wrap('coneZGeo', coneZGeo),
     torusGeo: wrap('torusGeo', torusGeo),
     planeGeo: wrap('planeGeo', planeGeo),
+    decalBox: wrap('decalBox', decalBox),
     wingGeo: wrap('wingGeo', wingGeo),
     createWingPair: wrap('createWingPair', createWingPair),
     beamBetween: wrap('beamBetween', beamBetween),

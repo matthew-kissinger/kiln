@@ -80,7 +80,18 @@ const KILN_OUTPUT_SCHEMA = {
 const DEFAULT_QUERY_TIMEOUT_MS = 720_000;
 
 /** The pinned Opus generation model. Bump in one place. */
-const DEFAULT_OPUS_MODEL = 'claude-opus-4-7';
+// History:
+// - 2026-04-23 (early): temporarily downgraded to 'claude-sonnet-4-6' because
+//   claude-agent-sdk 0.2.50 sent `thinking.type=enabled` which Opus 4.7
+//   rejects ("use thinking.type=adaptive + effort").
+// - 2026-04-23 (late): SDK bumped to ^0.2.118 which accepts the new thinking
+//   API. Restored to 'claude-opus-4-7'. If a future SDK release regresses,
+//   set `KILN_MODEL=claude-sonnet-4-6` in the environment to bypass without
+//   touching code.
+const DEFAULT_OPUS_MODEL =
+  process.env['KILN_MODEL'] ??
+  process.env['PIXEL_FORGE_MODEL'] ??
+  'claude-opus-4-7';
 
 /** The pinned Haiku compaction model. */
 const DEFAULT_HAIKU_MODEL = 'claude-haiku-4-5-20251001';
