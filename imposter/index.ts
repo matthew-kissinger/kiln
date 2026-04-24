@@ -27,3 +27,15 @@ export type {
 
 export { resolveLayout, enumerateTiles, dirFromAzEl } from './projection';
 export type { TileCamera, TileLayout } from './projection';
+
+export {
+  resolveClips,
+  applyClipFallbacks,
+  normalizeClipName,
+  CLIP_ALIASES,
+} from './clip-resolver';
+export type {
+  ClipTarget,
+  ResolvedClip,
+  ClipResolutionReport,
+} from './clip-resolver';
