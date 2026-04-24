@@ -122,6 +122,23 @@ export type { GearOptions, BladeOptions } from './gears';
 export { loadTexture, pbrMaterial } from './textures';
 export type { PbrMaterialOptions, TextureSource, EncodedTextureData } from './textures';
 
+// -----------------------------------------------------------------------------
+// Imposter baker (kiln/imposter)
+// -----------------------------------------------------------------------------
+export { bakeImposter, openImposterSession } from './imposter';
+export type {
+  BakeImposterOptions,
+  BakeImposterResult,
+  ImposterSession,
+  ImposterMeta,
+  ImposterAngleCount,
+  ImposterAxis,
+  ImposterLayout,
+  ImposterAuxLayer,
+  ImposterBgColor,
+} from './imposter';
+export { ImposterMetaSchema, IMPOSTER_SCHEMA_VERSION } from './imposter';
+
 // =============================================================================
 // Top-level `generate()` - the full pipeline: prompt -> code -> GLB
 // =============================================================================
