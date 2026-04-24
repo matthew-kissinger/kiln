@@ -153,6 +153,12 @@ export {
 } from './sprite-atlas';
 
 // -----------------------------------------------------------------------------
+// FBX ingest (kiln/fbx-ingest)
+// -----------------------------------------------------------------------------
+export { ingestFbx, openFbxIngestSession } from './fbx-ingest';
+export type { IngestFbxOptions, IngestFbxResult, IngestFbxSession } from './fbx-ingest';
+
+// -----------------------------------------------------------------------------
 // Imposter baker (kiln/imposter)
 // -----------------------------------------------------------------------------
 export { bakeImposter, openImposterSession } from './imposter';
