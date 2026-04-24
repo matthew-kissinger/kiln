@@ -123,6 +123,19 @@ export { loadTexture, pbrMaterial } from './textures';
 export type { PbrMaterialOptions, TextureSource, EncodedTextureData } from './textures';
 
 // -----------------------------------------------------------------------------
+// LOD chain generator (kiln/lod)
+// -----------------------------------------------------------------------------
+// Note: `countTriangles` is intentionally NOT re-exported from the kiln
+// namespace — primitives.ts already exports a THREE.Object3D variant under
+// the same name. Reach into `./lod/generate` if you need the Document variant.
+export { generateLODChain } from './lod';
+export type {
+  GenerateLODChainOptions,
+  GenerateLODChainResult,
+  LODLevel,
+} from './lod';
+
+// -----------------------------------------------------------------------------
 // Imposter baker (kiln/imposter)
 // -----------------------------------------------------------------------------
 export { bakeImposter, openImposterSession } from './imposter';
