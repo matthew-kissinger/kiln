@@ -160,6 +160,22 @@ window.__fbxIngest = async (dataUrl, scale, sceneName) => {
   group.name = sceneName;
   const tris = countTris(group);
 
+  // Strip texture map references — our ingest path doesn't load external
+  // texture files (FBXLoader was given an empty base path), so keeping the
+  // map slots populated with broken proxy textures triggers GLTFExporter's
+  // "No valid image data" error. We preserve each material's name and
+  // baseColor tint instead so a downstream retex pass can restore textures.
+  group.traverse((obj) => {
+    if (!obj.isMesh || !obj.material) return;
+    const mats = Array.isArray(obj.material) ? obj.material : [obj.material];
+    for (const m of mats) {
+      for (const key of ['map', 'normalMap', 'roughnessMap', 'metalnessMap', 'emissiveMap', 'aoMap', 'bumpMap', 'specularMap']) {
+        if (m[key]) m[key] = null;
+      }
+      if (typeof m.needsUpdate !== 'undefined') m.needsUpdate = true;
+    }
+  });
+
   const exporter = new GLTFExporter();
   const glb = await new Promise((resolve, reject) => {
     exporter.parse(
