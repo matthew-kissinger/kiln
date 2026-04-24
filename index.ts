@@ -136,6 +136,23 @@ export type {
 } from './lod';
 
 // -----------------------------------------------------------------------------
+// Sprite atlas packer (kiln/sprite-atlas)
+// -----------------------------------------------------------------------------
+export { packSpriteAtlas } from './sprite-atlas';
+export type {
+  PackSpriteAtlasInput,
+  PackSpriteAtlasOptions,
+  PackSpriteAtlasResult,
+  SpriteFrame,
+  SpriteFrameTable,
+} from './sprite-atlas';
+export {
+  SPRITE_ATLAS_SCHEMA_VERSION,
+  SpriteFrameSchema,
+  SpriteFrameTableSchema,
+} from './sprite-atlas';
+
+// -----------------------------------------------------------------------------
 // Imposter baker (kiln/imposter)
 // -----------------------------------------------------------------------------
 export { bakeImposter, openImposterSession } from './imposter';
