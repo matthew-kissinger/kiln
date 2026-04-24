@@ -159,6 +159,12 @@ export { ingestFbx, openFbxIngestSession } from './fbx-ingest';
 export type { IngestFbxOptions, IngestFbxResult, IngestFbxSession } from './fbx-ingest';
 
 // -----------------------------------------------------------------------------
+// Character retex (kiln/retex)
+// -----------------------------------------------------------------------------
+export { retexCharacter, FACTION_PRESETS } from './retex';
+export type { RetexCharacterOptions, RetexCharacterResult, FactionPreset } from './retex';
+
+// -----------------------------------------------------------------------------
 // Imposter baker (kiln/imposter)
 // -----------------------------------------------------------------------------
 export { bakeImposter, openImposterSession } from './imposter';
