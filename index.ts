@@ -190,8 +190,42 @@ export type {
   ImposterLayout,
   ImposterAuxLayer,
   ImposterBgColor,
+  AnimatedClipTarget,
+  AnimatedImposterMeta,
+  AnimatedImposterPreBakeConfig,
+  AnimatedImposterPreBakeInput,
+  AnimatedImposterPreBakeReport,
+  AnimatedImposterRuntimeAttribute,
+  AnimatedImposterStorageEstimate,
+  AnimatedImposterTextureFormat,
+  AnimatedImposterTextureLayout,
+  AnimatedImposterTextureMode,
+  AnimatedImposterWarning,
+  AnimatedImposterSession,
+  AnimatedTileCamera,
+  BakeAnimatedImposterOptions,
+  BakeAnimatedImposterResult,
 } from './imposter';
-export { ImposterMetaSchema, IMPOSTER_SCHEMA_VERSION } from './imposter';
+export {
+  ANIMATED_IMPOSTER_DEFAULT_ENVELOPE_BYTES,
+  ANIMATED_IMPOSTER_KIND,
+  ANIMATED_IMPOSTER_SCHEMA_VERSION,
+  AnimatedClipTargetSchema,
+  AnimatedImposterMetaSchema,
+  AnimatedImposterPreBakeInputSchema,
+  AnimatedImposterRuntimeAttributeSchema,
+  AnimatedImposterTextureFormatSchema,
+  AnimatedImposterTextureLayoutSchema,
+  AnimatedImposterTextureModeSchema,
+  AnimatedImposterWarningSchema,
+  ImposterMetaSchema,
+  IMPOSTER_SCHEMA_VERSION,
+  estimateAnimatedImposterStorage,
+  validateAnimatedImposterPreBake,
+  bakeAnimatedImposter,
+  enumerateOctahedralGrid,
+  openAnimatedImposterSession,
+} from './imposter';
 
 // =============================================================================
 // Top-level `generate()` - the full pipeline: prompt -> code -> GLB

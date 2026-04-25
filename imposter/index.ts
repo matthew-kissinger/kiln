@@ -16,6 +16,19 @@ export {
   IMPOSTER_SCHEMA_VERSION,
   ImposterMetaSchema,
 } from './schema';
+export {
+  ANIMATED_IMPOSTER_DEFAULT_ENVELOPE_BYTES,
+  ANIMATED_IMPOSTER_KIND,
+  ANIMATED_IMPOSTER_SCHEMA_VERSION,
+  AnimatedClipTargetSchema,
+  AnimatedImposterMetaSchema,
+  AnimatedImposterPreBakeInputSchema,
+  AnimatedImposterRuntimeAttributeSchema,
+  AnimatedImposterTextureFormatSchema,
+  AnimatedImposterTextureLayoutSchema,
+  AnimatedImposterTextureModeSchema,
+  AnimatedImposterWarningSchema,
+} from './animated-schema';
 export type {
   ImposterMeta,
   ImposterAngleCount,
@@ -24,6 +37,17 @@ export type {
   ImposterAuxLayer,
   ImposterBgColor,
 } from './schema';
+export type {
+  AnimatedClipTarget,
+  AnimatedImposterMeta,
+  AnimatedImposterPreBakeConfig,
+  AnimatedImposterPreBakeInput,
+  AnimatedImposterRuntimeAttribute,
+  AnimatedImposterTextureFormat,
+  AnimatedImposterTextureLayout,
+  AnimatedImposterTextureMode,
+  AnimatedImposterWarning,
+} from './animated-schema';
 
 export { resolveLayout, enumerateTiles, dirFromAzEl } from './projection';
 export type { TileCamera, TileLayout } from './projection';
@@ -39,3 +63,24 @@ export type {
   ResolvedClip,
   ClipResolutionReport,
 } from './clip-resolver';
+
+export {
+  estimateAnimatedImposterStorage,
+  validateAnimatedImposterPreBake,
+} from './animated-validate';
+export type {
+  AnimatedImposterPreBakeReport,
+  AnimatedImposterStorageEstimate,
+} from './animated-validate';
+
+export {
+  bakeAnimatedImposter,
+  enumerateOctahedralGrid,
+  openAnimatedImposterSession,
+} from './animated-bake';
+export type {
+  AnimatedImposterSession,
+  AnimatedTileCamera,
+  BakeAnimatedImposterOptions,
+  BakeAnimatedImposterResult,
+} from './animated-bake';

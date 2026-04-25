@@ -327,7 +327,6 @@ export function crossedQuadsGeo(opts: CrossedQuadsOptions = {}): THREE.BufferGeo
   const uvs = new Float32Array(posCount * 2);
   const indices: number[] = [];
   let vOffset = 0;
-  let iOffset = 0;
   for (const g of geometries) {
     const p = g.attributes.position!;
     const n = g.attributes.normal!;
@@ -347,7 +346,6 @@ export function crossedQuadsGeo(opts: CrossedQuadsOptions = {}): THREE.BufferGeo
       indices.push(idx.getX(i) + vOffset);
     }
     vOffset += p.count;
-    iOffset += idx.count;
   }
   out.setAttribute('position', new THREE.BufferAttribute(positions, 3));
   out.setAttribute('normal', new THREE.BufferAttribute(normals, 3));

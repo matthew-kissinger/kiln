@@ -21,7 +21,7 @@
 import { Buffer } from 'node:buffer';
 import { readFileSync } from 'node:fs';
 import sharp from 'sharp';
-import { chromium, type Browser, type BrowserContext, type Page } from 'playwright';
+import { chromium, type Page } from 'playwright';
 
 import type {
   ImposterAngleCount,
