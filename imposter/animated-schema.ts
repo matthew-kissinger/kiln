@@ -35,6 +35,16 @@ export const AnimatedImposterWarningSchema = z
 
 const Vec3Schema = z.tuple([z.number(), z.number(), z.number()]);
 
+const AnimatedAttachmentMetaSchema = z
+  .object({
+    id: z.string().min(1),
+    kind: z.enum(['weapon']),
+    sourcePath: z.string().optional(),
+    bytes: z.number().int().nonnegative(),
+    hash: z.string().optional(),
+  })
+  .strict();
+
 const AnimatedClipMetaSchema = z
   .object({
     target: AnimatedClipTargetSchema,
@@ -42,6 +52,7 @@ const AnimatedClipMetaSchema = z
     rawName: z.string().nullable(),
     matchedBy: z.enum(['exact', 'alias', 'fallback', 'missing']),
     fallbackFor: AnimatedClipTargetSchema.optional(),
+    fallbackRawName: z.string().optional(),
     frameCount: z.number().int().nonnegative(),
     durationSec: z.number().positive().optional(),
   })
@@ -73,6 +84,7 @@ export const AnimatedImposterMetaSchema = z
         skinned: z.boolean(),
         hash: z.string().optional(),
         animationClips: z.array(z.string()),
+        attachments: z.array(AnimatedAttachmentMetaSchema).optional(),
       })
       .strict(),
     bbox: z
@@ -296,9 +308,13 @@ export const AnimatedImposterPreBakeInputSchema = z
         z
           .object({
             target: AnimatedClipTargetSchema,
-            donor: AnimatedClipTargetSchema,
+            donor: AnimatedClipTargetSchema.optional(),
+            rawName: z.string().min(1).optional(),
           })
-          .strict(),
+          .strict()
+          .refine((value) => Boolean(value.donor) !== Boolean(value.rawName), {
+            message: 'clip fallback must set exactly one of donor or rawName',
+          }),
       )
       .default([]),
     viewGrid: z

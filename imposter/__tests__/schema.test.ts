@@ -26,6 +26,10 @@ const VALID: ImposterMeta = {
   source: { path: 'foo.glb', bytes: 12345, tris: 987 },
   auxLayers: ['albedo', 'depth'],
   bgColor: 'transparent',
+  colorLayer: 'beauty',
+  normalSpace: 'capture-view',
+  edgeBleedPx: 0,
+  textureColorSpace: 'srgb',
 };
 
 describe('ImposterMetaSchema', () => {
@@ -57,5 +61,26 @@ describe('ImposterMetaSchema', () => {
   test('source.path is optional', () => {
     const noPath = { ...VALID, source: { bytes: 0, tris: 0 } };
     expect(() => ImposterMetaSchema.parse(noPath)).not.toThrow();
+  });
+
+  test('defaults legacy sidecars to the beauty contract', () => {
+    const legacy = { ...VALID };
+    delete (legacy as Partial<ImposterMeta>).colorLayer;
+    delete (legacy as Partial<ImposterMeta>).normalSpace;
+    delete (legacy as Partial<ImposterMeta>).edgeBleedPx;
+    delete (legacy as Partial<ImposterMeta>).textureColorSpace;
+
+    const decoded = ImposterMetaSchema.parse(legacy);
+    expect(decoded.colorLayer).toBe('beauty');
+    expect(decoded.normalSpace).toBe('capture-view');
+    expect(decoded.edgeBleedPx).toBe(0);
+    expect(decoded.textureColorSpace).toBe('srgb');
+  });
+
+  test('requires normal output for baseColor production bakes', () => {
+    const bad = { ...VALID, colorLayer: 'baseColor' as const, auxLayers: ['albedo'] };
+    expect(() => ImposterMetaSchema.parse(bad)).toThrow();
+    const ok = { ...bad, auxLayers: ['albedo', 'normal'] };
+    expect(() => ImposterMetaSchema.parse(ok)).not.toThrow();
   });
 });

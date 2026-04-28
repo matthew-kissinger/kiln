@@ -190,6 +190,9 @@ export type {
   ImposterLayout,
   ImposterAuxLayer,
   ImposterBgColor,
+  ImposterColorLayer,
+  ImposterNormalSpace,
+  ImposterTextureColorSpace,
   AnimatedClipTarget,
   AnimatedImposterMeta,
   AnimatedImposterPreBakeConfig,
@@ -205,6 +208,12 @@ export type {
   AnimatedTileCamera,
   BakeAnimatedImposterOptions,
   BakeAnimatedImposterResult,
+  NpcCharacterPackFactionMetrics,
+  NpcCharacterPackIssue,
+  NpcCharacterPackManifest,
+  NpcCharacterPackOutputMetrics,
+  NpcCharacterPackValidationReport,
+  ValidateNpcCharacterPackOptions,
 } from './imposter';
 export {
   ANIMATED_IMPOSTER_DEFAULT_ENVELOPE_BYTES,
@@ -225,6 +234,8 @@ export {
   bakeAnimatedImposter,
   enumerateOctahedralGrid,
   openAnimatedImposterSession,
+  NpcCharacterPackManifestSchema,
+  validateNpcCharacterPack,
 } from './imposter';
 
 // =============================================================================

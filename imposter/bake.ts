@@ -28,6 +28,7 @@ import type {
   ImposterAuxLayer,
   ImposterAxis,
   ImposterBgColor,
+  ImposterColorLayer,
   ImposterMeta,
 } from './schema';
 import { IMPOSTER_SCHEMA_VERSION } from './schema';
@@ -42,6 +43,10 @@ export interface BakeImposterOptions {
   auxLayers?: ImposterAuxLayer[];
   /** Background color for the albedo bake. 'transparent' uses RGBA alpha. */
   bgColor?: ImposterBgColor;
+  /** 'beauty' preserves legacy lit bakes; 'baseColor' emits unlit color for runtime lighting. */
+  colorLayer?: ImposterColorLayer;
+  /** RGB bleed radius into transparent pixels before atlas packing. Defaults to 2 for baseColor bakes. */
+  edgeBleedPx?: number;
   /** Included in meta.source.path for provenance. */
   sourcePath?: string;
 }
@@ -105,8 +110,17 @@ async function bakeOnPage(
   const angles = opts.angles;
   const axis: ImposterAxis = opts.axis ?? (angles === 16 ? 'y' : 'hemi-y');
   const tileSize = opts.tileSize ?? 512;
-  const auxLayers = opts.auxLayers ?? [];
+  const auxLayers = uniqueAuxLayers(opts.auxLayers ?? []);
   const bgColor: ImposterBgColor = opts.bgColor ?? 'transparent';
+  const colorLayer: ImposterColorLayer = opts.colorLayer ?? 'beauty';
+  const edgeBleedPx = opts.edgeBleedPx ?? (colorLayer === 'baseColor' && bgColor === 'transparent' ? 2 : 0);
+
+  if (!Number.isInteger(edgeBleedPx) || edgeBleedPx < 0) {
+    throw new Error(`edgeBleedPx must be a non-negative integer (got ${edgeBleedPx})`);
+  }
+  if (colorLayer === 'baseColor' && !auxLayers.includes('normal')) {
+    throw new Error("baseColor imposter bakes require auxLayers to include 'normal'");
+  }
 
   const buf = typeof glb === 'string' ? readFileSync(glb) : glb;
   const sourcePath = opts.sourcePath ?? (typeof glb === 'string' ? glb : undefined);
@@ -140,13 +154,14 @@ async function bakeOnPage(
           dir: tile.dir,
           layer,
           bgColor,
+          colorLayer,
           tileSize,
         },
       )) as string;
       const png = Buffer.from(dataUrl.split(',')[1]!, 'base64');
       tilePngs.push(png);
     }
-    atlases[layer] = await composeAtlas(tilePngs, tileSize, layout.tilesX, layout.tilesY, bgColor);
+    atlases[layer] = await composeAtlas(tilePngs, tileSize, layout.tilesX, layout.tilesY, bgColor, edgeBleedPx);
   }
 
   const albedo = atlases.albedo!;
@@ -189,6 +204,10 @@ async function bakeOnPage(
     },
     auxLayers: layers,
     bgColor,
+    colorLayer,
+    normalSpace: 'capture-view',
+    edgeBleedPx,
+    textureColorSpace: 'srgb',
   };
 
   return { atlas: albedo, aux, meta };
@@ -200,6 +219,7 @@ async function composeAtlas(
   tilesX: number,
   tilesY: number,
   bgColor: ImposterBgColor,
+  edgeBleedPx: number,
 ): Promise<Buffer> {
   const width = tilesX * tileSize;
   const height = tilesY * tileSize;
@@ -212,15 +232,83 @@ async function composeAtlas(
   for (let idx = 0; idx < tilePngs.length; idx++) {
     const i = idx % tilesX;
     const j = Math.floor(idx / tilesX);
-    composites.push({ input: tilePngs[idx]!, left: i * tileSize, top: j * tileSize });
+    const input = bgColor === 'transparent' && edgeBleedPx > 0
+      ? await bleedTransparentRgb(tilePngs[idx]!, edgeBleedPx)
+      : tilePngs[idx]!;
+    composites.push({ input, left: i * tileSize, top: j * tileSize });
   }
 
-  return sharp({
+  const atlas = await sharp({
     create: { width, height, channels: 4, background: bg },
   })
     .composite(composites)
     .png()
     .toBuffer();
+
+  return bgColor === 'transparent' && edgeBleedPx > 0
+    ? bleedTransparentRgb(atlas, edgeBleedPx)
+    : atlas;
+}
+
+function uniqueAuxLayers(layers: ImposterAuxLayer[]): ImposterAuxLayer[] {
+  const out: ImposterAuxLayer[] = [];
+  for (const layer of layers) {
+    if (layer === 'albedo') continue;
+    if (!out.includes(layer)) out.push(layer);
+  }
+  return out;
+}
+
+export async function bleedTransparentRgb(png: Buffer, radius: number): Promise<Buffer> {
+  if (radius <= 0) return png;
+  const { data, info } = await sharp(png).ensureAlpha().raw().toBuffer({ resolveWithObject: true });
+  const width = info.width;
+  const height = info.height;
+  let src = Buffer.from(data);
+  let dst = Buffer.from(data);
+
+  for (let pass = 0; pass < radius; pass++) {
+    let changed = false;
+    src.copy(dst);
+    for (let y = 0; y < height; y++) {
+      for (let x = 0; x < width; x++) {
+        const idx = (y * width + x) * 4;
+        if (src[idx + 3] !== 0) continue;
+
+        let r = 0;
+        let g = 0;
+        let b = 0;
+        let n = 0;
+        for (let oy = -1; oy <= 1; oy++) {
+          const ny = y + oy;
+          if (ny < 0 || ny >= height) continue;
+          for (let ox = -1; ox <= 1; ox++) {
+            if (ox === 0 && oy === 0) continue;
+            const nx = x + ox;
+            if (nx < 0 || nx >= width) continue;
+            const ni = (ny * width + nx) * 4;
+            if (src[ni + 3] === 0) continue;
+            r += src[ni]!;
+            g += src[ni + 1]!;
+            b += src[ni + 2]!;
+            n++;
+          }
+        }
+        if (n > 0) {
+          dst[idx] = Math.round(r / n);
+          dst[idx + 1] = Math.round(g / n);
+          dst[idx + 2] = Math.round(b / n);
+          changed = true;
+        }
+      }
+    }
+    if (!changed) break;
+    const tmp = src;
+    src = dst;
+    dst = tmp;
+  }
+
+  return sharp(src, { raw: { width, height, channels: 4 } }).png().toBuffer();
 }
 
 // ============================================================================
@@ -269,10 +357,12 @@ let root = null;
 let boundsRadius = 1;
 let boundsCenter = new THREE.Vector3();
 let originalMaterials = new Map();
+let baseColorMaterials = new Map();
 
 window.__imposterLoadGlb = async (dataUrl, tileSize) => {
   if (root) scene.remove(root);
   originalMaterials.clear();
+  baseColorMaterials.clear();
   if (renderer.domElement.width !== tileSize) {
     renderer.setSize(tileSize, tileSize);
   }
@@ -291,6 +381,8 @@ window.__imposterLoadGlb = async (dataUrl, tileSize) => {
         if (obj.isMesh && obj.material) {
           originalMaterials.set(obj, obj.material);
           const mats = Array.isArray(obj.material) ? obj.material : [obj.material];
+          const baseMats = mats.map((material) => createBaseColorMaterial(material, obj.geometry));
+          baseColorMaterials.set(obj, Array.isArray(obj.material) ? baseMats : baseMats[0]);
           for (const m of mats) {
             m.side = THREE.FrontSide;
             m.needsUpdate = true;
@@ -307,7 +399,22 @@ window.__imposterLoadGlb = async (dataUrl, tileSize) => {
   });
 };
 
-window.__imposterRenderTile = ({ dir, layer, bgColor, tileSize }) => {
+function createBaseColorMaterial(source, geometry) {
+  const mat = new THREE.MeshBasicMaterial({
+    color: source.color ? source.color.clone() : new THREE.Color(0xffffff),
+    map: source.map ?? null,
+    alphaMap: source.alphaMap ?? null,
+    vertexColors: Boolean(source.vertexColors || geometry?.attributes?.color),
+    opacity: source.opacity ?? 1,
+    transparent: Boolean(source.transparent || (source.opacity ?? 1) < 1 || source.alphaMap),
+    alphaTest: source.alphaTest ?? 0,
+    side: THREE.FrontSide,
+  });
+  mat.name = source.name ? source.name + '__baseColor' : 'baseColor';
+  return mat;
+}
+
+window.__imposterRenderTile = ({ dir, layer, bgColor, colorLayer, tileSize }) => {
   if (!root) throw new Error('no GLB loaded');
   if (renderer.domElement.width !== tileSize) renderer.setSize(tileSize, tileSize);
 
@@ -322,9 +429,15 @@ window.__imposterRenderTile = ({ dir, layer, bgColor, tileSize }) => {
     });
     root.traverse((o) => { if (o.isMesh) o.material = depthMat; });
   } else {
-    // albedo — restore originals
+    // albedo: legacy beauty restores original materials, production baseColor
+    // swaps to unlit MeshBasicMaterial so runtime lighting owns the shade.
     root.traverse((o) => {
-      if (o.isMesh && originalMaterials.has(o)) o.material = originalMaterials.get(o);
+      if (!o.isMesh) return;
+      if (colorLayer === 'baseColor' && baseColorMaterials.has(o)) {
+        o.material = baseColorMaterials.get(o);
+      } else if (originalMaterials.has(o)) {
+        o.material = originalMaterials.get(o);
+      }
     });
   }
 

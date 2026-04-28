@@ -20,6 +20,9 @@ export type ImposterAxis = 'y' | 'hemi-y';
 export type ImposterLayout = 'latlon' | 'octahedral';
 export type ImposterAuxLayer = 'albedo' | 'normal' | 'depth';
 export type ImposterBgColor = 'magenta' | 'transparent';
+export type ImposterColorLayer = 'baseColor' | 'beauty';
+export type ImposterNormalSpace = 'capture-view';
+export type ImposterTextureColorSpace = 'srgb';
 
 export const ImposterMetaSchema = z.object({
   version: z.literal(IMPOSTER_SCHEMA_VERSION),
@@ -79,6 +82,23 @@ export const ImposterMetaSchema = z.object({
 
   /** Background color used for the bake. 'transparent' uses RGBA alpha. */
   bgColor: z.enum(['magenta', 'transparent']),
+
+  /** Color layer contract. Legacy sidecars default to lit beauty output. */
+  colorLayer: z.enum(['baseColor', 'beauty']).default('beauty'),
+  /** Normal layer coordinate contract. Current baker emits capture/view-space normal RGB. */
+  normalSpace: z.literal('capture-view').default('capture-view'),
+  /** RGB bleed radius applied into transparent pixels before atlas packing. */
+  edgeBleedPx: z.number().int().nonnegative().default(0),
+  /** Color atlas storage space. PNG color layers are authored as sRGB. */
+  textureColorSpace: z.literal('srgb').default('srgb'),
+}).superRefine((meta, ctx) => {
+  if (meta.colorLayer === 'baseColor' && !meta.auxLayers.includes('normal')) {
+    ctx.addIssue({
+      code: z.ZodIssueCode.custom,
+      path: ['auxLayers'],
+      message: "baseColor production imposters must include a 'normal' aux layer",
+    });
+  }
 });
 
 export type ImposterMeta = z.infer<typeof ImposterMetaSchema>;

@@ -72,6 +72,8 @@ export interface ResolvedClip {
   matchedBy: 'exact' | 'alias' | 'fallback' | 'missing';
   /** If the matcher fell through to a best-guess, note what target was missing and what was used. */
   fallbackFor?: ClipTarget;
+  /** If the fallback was a specific source clip, keep the requested raw name for traceability. */
+  fallbackRawName?: string;
 }
 
 export interface ClipResolutionReport {
@@ -206,5 +208,52 @@ export function applyClipFallbacks(
     const mIdx = next.missing.indexOf(target);
     if (mIdx >= 0) next.missing.splice(mIdx, 1);
   }
+  return next;
+}
+
+export function applyRawClipFallbacks(
+  report: ClipResolutionReport,
+  clipNames: string[],
+  fallbacks: Array<{ target: ClipTarget; rawName: string }>,
+): ClipResolutionReport {
+  const next: ClipResolutionReport = {
+    clips: { ...report.clips },
+    missing: [...report.missing],
+    unmapped: [...report.unmapped],
+  };
+  const byRaw = new Map<string, string>();
+  const byNorm = new Map<string, string>();
+  for (const raw of clipNames) {
+    byRaw.set(raw.toLowerCase(), raw);
+    byNorm.set(normalizeClipName(raw).toLowerCase(), raw);
+  }
+
+  for (const fallback of fallbacks) {
+    const current = next.clips[fallback.target];
+    if (current?.resolved) continue;
+
+    const hit =
+      byRaw.get(fallback.rawName.toLowerCase()) ??
+      byNorm.get(normalizeClipName(fallback.rawName).toLowerCase());
+    if (!hit) continue;
+
+    const normalized = normalizeClipName(hit);
+    next.clips[fallback.target] = {
+      target: fallback.target,
+      resolved: normalized,
+      rawName: hit,
+      matchedBy: 'fallback',
+      fallbackRawName: fallback.rawName,
+    };
+
+    const missingIdx = next.missing.indexOf(fallback.target);
+    if (missingIdx >= 0) next.missing.splice(missingIdx, 1);
+
+    const unmappedIdx = next.unmapped.findIndex(
+      (raw) => raw === hit || normalizeClipName(raw).toLowerCase() === normalized.toLowerCase(),
+    );
+    if (unmappedIdx >= 0) next.unmapped.splice(unmappedIdx, 1);
+  }
+
   return next;
 }

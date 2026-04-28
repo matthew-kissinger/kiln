@@ -13,8 +13,9 @@ import { describe, expect, test } from 'bun:test';
 import { existsSync, readFileSync } from 'node:fs';
 import { join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
+import sharp from 'sharp';
 
-import { bakeImposter } from '../bake';
+import { bakeImposter, bleedTransparentRgb } from '../bake';
 import { ImposterMetaSchema } from '../schema';
 
 const LIVE = process.env.KILN_IMPOSTER_LIVE === '1';
@@ -49,8 +50,10 @@ describe.if(LIVE)('bakeImposter (live)', () => {
       angles: 16,
       axis: 'hemi-y',
       tileSize: 256,
-      auxLayers: ['depth'],
+      auxLayers: ['normal', 'depth'],
       bgColor: 'transparent',
+      colorLayer: 'baseColor',
+      edgeBleedPx: 2,
       sourcePath: fixture,
     });
 
@@ -63,15 +66,44 @@ describe.if(LIVE)('bakeImposter (live)', () => {
     expect(meta.atlasHeight).toBe(1024);
     expect(meta.source.tris).toBeGreaterThan(0);
     expect(meta.worldSize).toBeGreaterThan(0);
+    expect(meta.colorLayer).toBe('baseColor');
+    expect(meta.auxLayers).toContain('normal');
+    expect(meta.normalSpace).toBe('capture-view');
+    expect(meta.edgeBleedPx).toBe(2);
 
     // Albedo atlas is a valid PNG buffer.
     expect(result.atlas.byteLength).toBeGreaterThan(1000);
     expect(result.atlas.subarray(0, 4).toString('hex')).toBe('89504e47'); // PNG magic
 
+    // Aux normal atlas present.
+    expect(result.aux.normal).toBeTruthy();
+    expect(result.aux.normal!.byteLength).toBeGreaterThan(1000);
+
     // Aux depth atlas present.
     expect(result.aux.depth).toBeTruthy();
     expect(result.aux.depth!.byteLength).toBeGreaterThan(1000);
   }, 60_000);
+});
+
+describe('bleedTransparentRgb', () => {
+  test('extends RGB into transparent pixels without changing alpha', async () => {
+    const input = Buffer.from([
+      0, 0, 0, 0,       80, 140, 30, 255,
+      0, 0, 0, 0,       0, 0, 0, 0,
+    ]);
+    const png = await sharp(input, { raw: { width: 2, height: 2, channels: 4 } }).png().toBuffer();
+    const out = await bleedTransparentRgb(png, 1);
+    const { data } = await sharp(out).ensureAlpha().raw().toBuffer({ resolveWithObject: true });
+
+    expect(data[0]).toBe(80);
+    expect(data[1]).toBe(140);
+    expect(data[2]).toBe(30);
+    expect(data[3]).toBe(0);
+    expect(data[4]).toBe(80);
+    expect(data[5]).toBe(140);
+    expect(data[6]).toBe(30);
+    expect(data[7]).toBe(255);
+  });
 });
 
 // When LIVE is off, still run at least one placeholder so bun reports the file.

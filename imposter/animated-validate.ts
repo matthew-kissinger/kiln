@@ -16,6 +16,7 @@ import {
 } from './animated-schema';
 import {
   applyClipFallbacks,
+  applyRawClipFallbacks,
   resolveClips,
   type ClipResolutionReport,
   type ClipTarget,
@@ -139,6 +140,7 @@ export function validateAnimatedImposterPreBake(
   let clipResolution = resolveClips(input.source.clipNames, toClipTargets(input.clipTargets));
   if (input.clipFallbacks.length > 0) {
     clipResolution = applyClipFallbacks(clipResolution, fallbackMap(input.clipFallbacks));
+    clipResolution = applyRawClipFallbacks(clipResolution, input.source.clipNames, rawFallbacks(input.clipFallbacks));
   }
 
   for (const target of input.clipTargets) {
@@ -151,10 +153,11 @@ export function validateAnimatedImposterPreBake(
         fixHint: 'Add a clip fallback or remove the target from this bake slice.',
       });
     } else if (clip.matchedBy === 'fallback') {
+      const donor = clip.fallbackRawName ?? clip.fallbackFor;
       add({
         code: 'ANIMATED_IMPOSTER_CLIP_FALLBACK',
         severity: 'warning',
-        message: `${target} will use ${clip.fallbackFor} as a fallback clip.`,
+        message: `${target} will use ${donor} as a fallback clip.`,
         fixHint: 'Treat the output as visually provisional until a dedicated clip exists.',
       });
     }
@@ -175,7 +178,7 @@ export function validateAnimatedImposterPreBake(
       code: 'ANIMATED_IMPOSTER_VIEW_GRID_NOT_SQUARE',
       severity: 'error',
       message: 'The first octahedral view grid must be square.',
-      fixHint: 'Use 6x6 or 8x8 for the first implementation slice.',
+      fixHint: 'Use 6x6, 7x7, or 8x8 for the first implementation slice.',
     });
   }
 
@@ -184,14 +187,14 @@ export function validateAnimatedImposterPreBake(
       code: 'ANIMATED_IMPOSTER_VIEW_GRID_OUT_OF_RANGE',
       severity: 'error',
       message: 'View grid dimensions must stay between 4 and 16.',
-      fixHint: 'Use 6x6 for the storage-safe spike or 8x8 for the quality spike.',
+      fixHint: 'Use 6x6 for the storage-safe spike, 7x7 for centered head-on reads, or 8x8 for the quality spike.',
     });
-  } else if (input.viewGrid.x !== 6 && input.viewGrid.x !== 8) {
+  } else if (![6, 7, 8].includes(input.viewGrid.x)) {
     add({
       code: 'ANIMATED_IMPOSTER_VIEW_GRID_UNPROVEN',
       severity: 'warning',
-      message: 'Only 6x6 and 8x8 view grids are part of the initial validation plan.',
-      fixHint: 'Prefer 6x6 or 8x8 until yaw-sweep validation proves another grid.',
+      message: 'Only 6x6, 7x7, and 8x8 view grids are part of the initial validation plan.',
+      fixHint: 'Prefer 6x6, 7x7, or 8x8 until yaw-sweep validation proves another grid.',
     });
   }
 
@@ -287,7 +290,19 @@ function fallbackMap(
 ): Partial<Record<ClipTarget, ClipTarget>> {
   const out: Partial<Record<ClipTarget, ClipTarget>> = {};
   for (const fallback of fallbacks) {
-    out[fallback.target as ClipTarget] = fallback.donor as ClipTarget;
+    if (fallback.donor) {
+      out[fallback.target as ClipTarget] = fallback.donor as ClipTarget;
+    }
+  }
+  return out;
+}
+
+function rawFallbacks(
+  fallbacks: AnimatedImposterPreBakeConfig['clipFallbacks'],
+): Array<{ target: ClipTarget; rawName: string }> {
+  const out: Array<{ target: ClipTarget; rawName: string }> = [];
+  for (const fallback of fallbacks) {
+    if (fallback.rawName) out.push({ target: fallback.target as ClipTarget, rawName: fallback.rawName });
   }
   return out;
 }

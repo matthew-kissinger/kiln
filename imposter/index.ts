@@ -36,6 +36,9 @@ export type {
   ImposterLayout,
   ImposterAuxLayer,
   ImposterBgColor,
+  ImposterColorLayer,
+  ImposterNormalSpace,
+  ImposterTextureColorSpace,
 } from './schema';
 export type {
   AnimatedClipTarget,
@@ -84,3 +87,16 @@ export type {
   BakeAnimatedImposterOptions,
   BakeAnimatedImposterResult,
 } from './animated-bake';
+
+export {
+  NpcCharacterPackManifestSchema,
+  validateNpcCharacterPack,
+} from './npc-character-pack';
+export type {
+  NpcCharacterPackFactionMetrics,
+  NpcCharacterPackIssue,
+  NpcCharacterPackManifest,
+  NpcCharacterPackOutputMetrics,
+  NpcCharacterPackValidationReport,
+  ValidateNpcCharacterPackOptions,
+} from './npc-character-pack';

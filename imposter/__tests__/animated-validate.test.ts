@@ -75,6 +75,15 @@ describe('validateAnimatedImposterPreBake', () => {
     expect(report.clipResolution.clips.walking?.resolved).toBe('Walk');
   });
 
+  test('accepts 7x7 as the centered-front review grid', () => {
+    const report = validateAnimatedImposterPreBake({
+      ...VALID,
+      viewGrid: { x: 7, y: 7 },
+    });
+    expect(report.ok).toBe(true);
+    expect(report.warnings.map((issue) => issue.code)).not.toContain('ANIMATED_IMPOSTER_VIEW_GRID_UNPROVEN');
+  });
+
   test('blocks non-skinned sources', () => {
     const report = validateAnimatedImposterPreBake({
       ...VALID,
@@ -107,6 +116,22 @@ describe('validateAnimatedImposterPreBake', () => {
     expect(report.ok).toBe(true);
     expect(report.clipResolution.clips.walking?.resolved).toBe('Run');
     expect(report.clipResolution.clips.walking?.matchedBy).toBe('fallback');
+    expect(report.warnings.map((issue) => issue.code)).toContain('ANIMATED_IMPOSTER_CLIP_FALLBACK');
+  });
+
+  test('allows a logical target to use an explicit raw source clip fallback', () => {
+    const report = validateAnimatedImposterPreBake({
+      ...VALID,
+      source: {
+        ...VALID.source,
+        clipNames: ['Armature|Walk_Fight_Forward|baselayer'],
+      },
+      clipTargets: ['shoot'],
+      clipFallbacks: [{ target: 'shoot', rawName: 'Armature|Walk_Fight_Forward|baselayer' }],
+    });
+    expect(report.ok).toBe(true);
+    expect(report.clipResolution.clips.shoot?.rawName).toBe('Armature|Walk_Fight_Forward|baselayer');
+    expect(report.clipResolution.clips.shoot?.matchedBy).toBe('fallback');
     expect(report.warnings.map((issue) => issue.code)).toContain('ANIMATED_IMPOSTER_CLIP_FALLBACK');
   });
 

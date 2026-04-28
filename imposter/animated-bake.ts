@@ -38,6 +38,7 @@ export interface AnimatedTileCamera {
 export interface BakeAnimatedImposterOptions {
   clipTargets?: AnimatedClipTarget[];
   clipFallbacks?: AnimatedImposterPreBakeInput['clipFallbacks'];
+  attachments?: AnimatedImposterAttachment[];
   viewGrid?: { x: number; y: number };
   tileSize?: number;
   framesPerClip?: number;
@@ -45,6 +46,23 @@ export interface BakeAnimatedImposterOptions {
   sourcePath?: string;
   colorUri?: string;
   envelopeBytes?: number;
+}
+
+export interface AnimatedImposterAttachment {
+  id: string;
+  kind: 'weapon';
+  glb: Buffer | string;
+  sourcePath?: string;
+  lengthMeters: number;
+  gripNames?: string[];
+  supportNames?: string[];
+  muzzleNames?: string[];
+  stockNames?: string[];
+  sourceForward?: [number, number, number];
+  pitchTrimDeg?: number;
+  forwardHold?: number;
+  gripOffset?: number;
+  socketMode?: 'shouldered-forward';
 }
 
 export interface BakeAnimatedImposterResult {
@@ -71,6 +89,12 @@ interface LoadedAnimatedGlbInfo {
   skinned: boolean;
   clipNames: string[];
   clipDurations: Record<string, number>;
+}
+
+interface BrowserAttachmentInput extends Omit<AnimatedImposterAttachment, 'glb'> {
+  dataUrl: string;
+  bytes: number;
+  hash: string;
 }
 
 export function enumerateOctahedralGrid(x: number, y: number): AnimatedTileCamera[] {
@@ -133,19 +157,24 @@ async function bakeAnimatedOnPage(
   const textureLayout = opts.textureLayout ?? 'atlas';
   const colorUri = opts.colorUri ?? 'animated-albedo-packed.png';
   const envelopeBytes = opts.envelopeBytes ?? ANIMATED_IMPOSTER_DEFAULT_ENVELOPE_BYTES;
+  const attachments = loadBrowserAttachments(opts.attachments ?? []);
 
   if (textureLayout !== 'atlas') {
     throw new Error('W2 animated imposter bake currently writes packed 2D atlas output only');
   }
 
   const loadInfo = (await page.evaluate(
-    async ([dataUrl, tileSz]) => {
+    async ([dataUrl, tileSz, browserAttachments]) => {
       const w = globalThis as unknown as {
-        __animatedImposterLoadGlb: (dataUrl: string, tileSize: number) => Promise<LoadedAnimatedGlbInfo>;
+        __animatedImposterLoadGlb: (
+          dataUrl: string,
+          tileSize: number,
+          attachments: BrowserAttachmentInput[],
+        ) => Promise<LoadedAnimatedGlbInfo>;
       };
-      return w.__animatedImposterLoadGlb(dataUrl, tileSz);
+      return w.__animatedImposterLoadGlb(dataUrl, tileSz, browserAttachments);
     },
-    [`data:model/gltf-binary;base64,${buf.toString('base64')}`, tileSize] as const,
+    [`data:model/gltf-binary;base64,${buf.toString('base64')}`, tileSize, attachments] as const,
   )) as LoadedAnimatedGlbInfo;
 
   const preBake = validateAnimatedImposterPreBake({
@@ -228,6 +257,17 @@ async function bakeAnimatedOnPage(
       skinned: loadInfo.skinned,
       hash: createHash('sha256').update(buf).digest('hex'),
       animationClips: loadInfo.clipNames,
+      ...(attachments.length
+        ? {
+            attachments: attachments.map((attachment) => ({
+              id: attachment.id,
+              kind: attachment.kind,
+              ...(attachment.sourcePath ? { sourcePath: attachment.sourcePath } : {}),
+              bytes: attachment.bytes,
+              hash: attachment.hash,
+            })),
+          }
+        : {}),
     },
     bbox: { min, max, worldSize, yOffset },
     projection: 'orthographic',
@@ -244,6 +284,7 @@ async function bakeAnimatedOnPage(
       rawName: clip.rawName,
       matchedBy: clip.matchedBy,
       ...(clip.fallbackFor ? { fallbackFor: clip.fallbackFor } : {}),
+      ...(clip.fallbackRawName ? { fallbackRawName: clip.fallbackRawName } : {}),
       frameCount: framesPerClip,
       durationSec: durationForClip(loadInfo.clipDurations, clip.rawName!, clip.resolved!),
     })),
@@ -286,6 +327,19 @@ async function bakeAnimatedOnPage(
     preBake,
     frameAtlas: { width: layerWidth, height: layerHeight, framesX, framesY },
   };
+}
+
+function loadBrowserAttachments(attachments: AnimatedImposterAttachment[]): BrowserAttachmentInput[] {
+  return attachments.map((attachment) => {
+    const buf = typeof attachment.glb === 'string' ? readFileSync(attachment.glb) : attachment.glb;
+    const { glb: _glb, ...rest } = attachment;
+    return {
+      ...rest,
+      dataUrl: `data:model/gltf-binary;base64,${buf.toString('base64')}`,
+      bytes: buf.byteLength,
+      hash: createHash('sha256').update(buf).digest('hex'),
+    };
+  });
 }
 
 async function composeAtlas(
@@ -382,12 +436,18 @@ const fill = new THREE.DirectionalLight(0xffffff, 0.35);
 fill.position.set(-1, 0.5, -1);
 scene.add(fill);
 
+let actorGroup = null;
 let root = null;
 let mixer = null;
 let clips = [];
 let boundsRadius = 1;
 let boundsCenter = new THREE.Vector3();
 let originalMaterials = new Map();
+let bones = {};
+let rootMotionBase = null;
+let weaponPivot = new THREE.Group();
+let currentWeapon = null;
+let currentWeaponMeta = null;
 
 function normalizeClipName(raw) {
   let s = raw;
@@ -400,24 +460,58 @@ function findClip(rawName) {
     || clips.find((c) => normalizeClipName(c.name) === normalizeClipName(rawName));
 }
 
-window.__animatedImposterLoadGlb = async (dataUrl, tileSize) => {
-  if (root) scene.remove(root);
+window.__animatedImposterLoadGlb = async (dataUrl, tileSize, attachments = []) => {
+  if (actorGroup) scene.remove(actorGroup);
   originalMaterials.clear();
+  bones = {};
+  rootMotionBase = null;
+  currentWeapon = null;
+  currentWeaponMeta = null;
+  weaponPivot = new THREE.Group();
   if (renderer.domElement.width !== tileSize) renderer.setSize(tileSize, tileSize);
   const loader = new GLTFLoader();
   return new Promise((resolve, reject) => {
-    loader.load(dataUrl, (gltf) => {
+    loader.load(dataUrl, async (gltf) => {
       root = gltf.scene;
       clips = gltf.animations || [];
       mixer = new THREE.AnimationMixer(root);
-      scene.add(root);
-      const box = new THREE.Box3().setFromObject(root);
+      actorGroup = new THREE.Group();
+      actorGroup.add(root);
+      actorGroup.add(weaponPivot);
+      scene.add(actorGroup);
+      collectBones(root);
+      const firstClip = clips[0];
+      if (firstClip) {
+        const action = mixer.clipAction(firstClip);
+        action.reset();
+        action.setLoop(THREE.LoopRepeat, Infinity);
+        action.play();
+        mixer.setTime(0);
+        root.updateMatrixWorld(true);
+      }
+      rootMotionBase = bones.Hips ? bones.Hips.position.clone() : null;
+
+      if (attachments.length > 0) {
+        currentWeaponMeta = attachments[0];
+        try {
+          const weaponGltf = await loadGltf(loader, currentWeaponMeta.dataUrl);
+          currentWeapon = weaponGltf.scene;
+          normalizeWeapon(currentWeapon, currentWeaponMeta);
+          weaponPivot.add(currentWeapon);
+          updateWeaponSocket();
+        } catch (error) {
+          console.warn('Animated imposter weapon attachment failed', error);
+        }
+      }
+
+      actorGroup.updateMatrixWorld(true);
+      const box = new THREE.Box3().setFromObject(actorGroup);
       boundsCenter = box.getCenter(new THREE.Vector3());
       const size = box.getSize(new THREE.Vector3());
       boundsRadius = Math.sqrt(size.x * size.x + size.y * size.y + size.z * size.z) * 0.5 || 1;
       let tris = 0;
       let skinned = false;
-      root.traverse((obj) => {
+      actorGroup.traverse((obj) => {
         if (obj.isSkinnedMesh) skinned = true;
         if (obj.isMesh && obj.material) {
           originalMaterials.set(obj, obj.material);
@@ -459,9 +553,12 @@ window.__animatedImposterRenderTile = ({ dir, clipRawName, timeSec, tileSize }) 
   action.setLoop(THREE.LoopRepeat, Infinity);
   action.play();
   mixer.setTime((timeSec || 0) % (clip.duration || 1));
+  lockRootMotion();
   root.updateMatrixWorld(true);
+  updateWeaponSocket();
+  actorGroup?.updateMatrixWorld(true);
 
-  root.traverse((o) => {
+  actorGroup.traverse((o) => {
     if (o.isMesh && originalMaterials.has(o)) o.material = originalMaterials.get(o);
   });
 
@@ -478,6 +575,215 @@ window.__animatedImposterRenderTile = ({ dir, clipRawName, timeSec, tileSize }) 
   renderer.render(scene, camera);
   return renderer.domElement.toDataURL('image/png');
 };
+
+function loadGltf(loader, dataUrl) {
+  return new Promise((resolve, reject) => {
+    loader.load(dataUrl, resolve, undefined, reject);
+  });
+}
+
+function collectBones(rootObject) {
+  bones = {};
+  rootObject.traverse((node) => {
+    if (node.isBone) bones[node.name] = node;
+  });
+}
+
+function findNamed(rootObject, names = []) {
+  for (const name of names) {
+    let found = null;
+    rootObject.traverse((node) => {
+      if (!found && node.name === name) found = node;
+    });
+    if (found) return found;
+  }
+  return null;
+}
+
+function centerOfObject(rootObject, object) {
+  if (!object) return null;
+  rootObject.updateMatrixWorld(true);
+  const box = new THREE.Box3().setFromObject(object);
+  if (box.isEmpty()) return null;
+  const center = box.getCenter(new THREE.Vector3());
+  return rootObject.worldToLocal(center.clone());
+}
+
+function normalizeWeapon(weaponRoot, weapon) {
+  weaponRoot.updateMatrixWorld(true);
+  const box = new THREE.Box3().setFromObject(weaponRoot);
+  const size = box.getSize(new THREE.Vector3());
+  const long = Math.max(size.x, size.y, size.z) || 1;
+  const scale = weapon.lengthMeters / long;
+  weaponRoot.scale.setScalar(scale);
+  const gripObject = findNamed(weaponRoot, weapon.gripNames || []);
+  const supportObject = findNamed(weaponRoot, weapon.supportNames || []);
+  const muzzleObject = findNamed(weaponRoot, weapon.muzzleNames || []);
+  const stockObject = findNamed(weaponRoot, weapon.stockNames || []);
+  const grip = centerOfObject(weaponRoot, gripObject) || new THREE.Vector3(0, 0, 0);
+  const support = centerOfObject(weaponRoot, supportObject);
+  const muzzle = centerOfObject(weaponRoot, muzzleObject);
+  const stock = centerOfObject(weaponRoot, stockObject);
+  const muzzleDirection = weapon.sourceForward
+    ? new THREE.Vector3(...weapon.sourceForward)
+    : muzzle
+      ? muzzle.clone().sub(grip)
+      : new THREE.Vector3(1, 0, 0);
+  const alignment = muzzleDirection.lengthSq() > 0.0001
+    ? new THREE.Quaternion().setFromUnitVectors(muzzleDirection.normalize(), new THREE.Vector3(1, 0, 0))
+    : new THREE.Quaternion();
+  weaponRoot.quaternion.copy(alignment);
+  const transformLocal = (point) => point.clone().multiplyScalar(scale).applyQuaternion(weaponRoot.quaternion);
+  const transformedGrip = transformLocal(grip);
+  weaponRoot.position.copy(transformedGrip.multiplyScalar(-1));
+  weaponRoot.userData.stockOffset = stock
+    ? transformLocal(stock).sub(transformLocal(grip))
+    : new THREE.Vector3(-0.28, 0.04, 0);
+  weaponRoot.userData.supportOffset = support
+    ? transformLocal(support).sub(transformLocal(grip))
+    : new THREE.Vector3(0.28, 0.02, 0);
+  weaponRoot.updateMatrixWorld(true);
+}
+
+function worldPosition(name) {
+  const bone = bones[name];
+  if (!bone) return null;
+  return bone.getWorldPosition(new THREE.Vector3());
+}
+
+function rootForward() {
+  const q = root.getWorldQuaternion(new THREE.Quaternion());
+  return new THREE.Vector3(0, 0, 1).applyQuaternion(q).normalize();
+}
+
+function bodyForward() {
+  const hips = bones.Hips || bones.Spine || root;
+  const q = hips.getWorldQuaternion(new THREE.Quaternion());
+  return new THREE.Vector3(0, 0, 1).applyQuaternion(q).normalize();
+}
+
+function lockRootMotion() {
+  if (!rootMotionBase || !bones.Hips) return;
+  bones.Hips.position.x = rootMotionBase.x;
+  bones.Hips.position.z = rootMotionBase.z;
+}
+
+const boneUp = new THREE.Vector3(0, 1, 0);
+
+function setBoneDirectionWorld(bone, directionWorld) {
+  if (!bone?.parent) return;
+  const direction = directionWorld.clone().normalize();
+  if (direction.lengthSq() < 0.0001) return;
+  const parentInv = bone.parent.getWorldQuaternion(new THREE.Quaternion()).invert();
+  const targetLocal = direction.applyQuaternion(parentInv).normalize();
+  bone.quaternion.setFromUnitVectors(boneUp, targetLocal);
+  bone.updateMatrixWorld(true);
+}
+
+function solveArmToTarget(side, target, axes) {
+  const upper = bones[side + 'Arm'];
+  const fore = bones[side + 'ForeArm'];
+  const hand = bones[side + 'Hand'];
+  if (!upper || !fore || !hand || !target) return;
+
+  root.updateMatrixWorld(true);
+  const shoulder = upper.getWorldPosition(new THREE.Vector3());
+  const elbowNow = fore.getWorldPosition(new THREE.Vector3());
+  const handNow = hand.getWorldPosition(new THREE.Vector3());
+  const upperLength = Math.max(0.001, shoulder.distanceTo(elbowNow));
+  const foreLength = Math.max(0.001, elbowNow.distanceTo(handNow));
+  const reach = Math.max(0.08, upperLength + foreLength - 0.025);
+  const targetVector = target.clone().sub(shoulder);
+  const distance = targetVector.length();
+  if (distance < 0.001) return;
+
+  const direction = targetVector.clone().normalize();
+  const clampedTarget = distance > reach
+    ? shoulder.clone().add(direction.clone().multiplyScalar(reach))
+    : target.clone();
+  const clampedDistance = Math.min(distance, reach);
+  const sideSign = side === 'Right' ? 1 : -1;
+  const pole = shoulder.clone()
+    .add(axes.cleanUp.clone().multiplyScalar(-0.24))
+    .add(axes.actorRight.clone().multiplyScalar(0.22 * sideSign))
+    .add(axes.forward.clone().multiplyScalar(0.04));
+  let planeNormal = direction.clone().cross(pole.clone().sub(shoulder)).normalize();
+  if (planeNormal.lengthSq() < 0.0001) planeNormal = axes.actorRight.clone().multiplyScalar(sideSign);
+  const bendDirection = planeNormal.clone().cross(direction).normalize();
+  const along = (upperLength * upperLength - foreLength * foreLength + clampedDistance * clampedDistance) / (2 * clampedDistance);
+  const height = Math.sqrt(Math.max(0, upperLength * upperLength - along * along));
+  const elbow = shoulder.clone()
+    .add(direction.clone().multiplyScalar(along))
+    .add(bendDirection.multiplyScalar(height));
+
+  setBoneDirectionWorld(upper, elbow.clone().sub(shoulder));
+  root.updateMatrixWorld(true);
+  const elbowWorld = fore.getWorldPosition(new THREE.Vector3());
+  setBoneDirectionWorld(fore, clampedTarget.clone().sub(elbowWorld));
+  root.updateMatrixWorld(true);
+}
+
+function updateWeaponSocket() {
+  if (!currentWeapon || !currentWeaponMeta) return;
+  const right = worldPosition('RightHand');
+  const leftShoulder = worldPosition('LeftArm') || worldPosition('LeftShoulder');
+  const rightShoulder = worldPosition('RightArm') || worldPosition('RightShoulder');
+  if (!right) return;
+
+  const up = new THREE.Vector3(0, 1, 0);
+  const travelForward = rootForward();
+  travelForward.y = 0;
+  if (travelForward.lengthSq() < 0.0001) travelForward.set(0, 0, 1);
+  travelForward.normalize();
+  const torsoForward = bodyForward();
+  torsoForward.y = 0;
+  if (torsoForward.lengthSq() < 0.0001) torsoForward.set(0, 0, 1);
+  torsoForward.normalize();
+  const forward = currentWeaponMeta.socketMode === 'shouldered-forward' ? travelForward : torsoForward;
+  let actorRight = new THREE.Vector3().crossVectors(forward, up).normalize();
+  if (leftShoulder && rightShoulder) {
+    const shoulderSpan = rightShoulder.clone().sub(leftShoulder);
+    shoulderSpan.y = 0;
+    if (shoulderSpan.lengthSq() > 0.0001) {
+      shoulderSpan.normalize();
+      if (shoulderSpan.dot(actorRight) < 0) shoulderSpan.multiplyScalar(-1);
+      actorRight = shoulderSpan;
+    }
+  }
+  const cleanUp = new THREE.Vector3().crossVectors(actorRight, forward).normalize();
+  const matrix = new THREE.Matrix4().makeBasis(forward, cleanUp, actorRight);
+  weaponPivot.quaternion.setFromRotationMatrix(matrix);
+  if (currentWeaponMeta.pitchTrimDeg) {
+    weaponPivot.rotateZ(THREE.MathUtils.degToRad(currentWeaponMeta.pitchTrimDeg));
+  }
+
+  const shoulder = rightShoulder || right;
+  const shoulderCenter = leftShoulder && rightShoulder
+    ? leftShoulder.clone().lerp(rightShoulder, 0.5)
+    : shoulder.clone().sub(actorRight.clone().multiplyScalar(0.12));
+  const shoulderPocket = shoulder.clone()
+    .lerp(shoulderCenter, 0.42)
+    .add(cleanUp.clone().multiplyScalar(-0.035));
+  const stockOffset = currentWeapon.userData.stockOffset instanceof THREE.Vector3
+    ? currentWeapon.userData.stockOffset.clone()
+    : new THREE.Vector3(-0.28, 0.04, 0);
+  const stockWorldOffset = stockOffset.applyQuaternion(weaponPivot.quaternion);
+  const offset = currentWeaponMeta.gripOffset || 0;
+  const stockAnchoredGrip = shoulderPocket.clone()
+    .add(forward.clone().multiplyScalar((currentWeaponMeta.forwardHold ?? 0.06) + offset))
+    .sub(stockWorldOffset);
+  weaponPivot.position.copy(stockAnchoredGrip).add(actorRight.clone().multiplyScalar(0.006));
+
+  const supportOffset = currentWeapon.userData.supportOffset instanceof THREE.Vector3
+    ? currentWeapon.userData.supportOffset.clone()
+    : new THREE.Vector3(0.28, 0.02, 0);
+  const supportTarget = weaponPivot.position.clone().add(supportOffset.applyQuaternion(weaponPivot.quaternion));
+  const gripTarget = weaponPivot.position.clone();
+  const axes = { forward, cleanUp, actorRight };
+  solveArmToTarget('Right', gripTarget, axes);
+  solveArmToTarget('Left', supportTarget, axes);
+  root.updateMatrixWorld(true);
+}
 
 window.__animatedImposterReady = true;
 </script>

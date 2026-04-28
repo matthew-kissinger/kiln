@@ -106,6 +106,25 @@ describe('AnimatedImposterMetaSchema', () => {
     expect(decoded).toEqual(VALID);
   });
 
+  test('accepts source attachments for baked weapons', () => {
+    const withAttachment = {
+      ...VALID,
+      source: {
+        ...VALID.source,
+        attachments: [
+          {
+            id: 'ak47',
+            kind: 'weapon',
+            sourcePath: 'tmp/weapon-rig-lab/weapons/ak47.glb',
+            bytes: 67_588,
+            hash: '1fab1876b236f1cf2c5759cb7e669c5badf7fc4195fd6640c35f46c515c43ce8',
+          },
+        ],
+      },
+    };
+    expect(AnimatedImposterMetaSchema.parse(withAttachment).source.attachments?.[0]?.id).toBe('ak47');
+  });
+
   test('rejects the static imposter kind', () => {
     const bad = { ...VALID, kind: 'imposter' };
     expect(() => AnimatedImposterMetaSchema.parse(bad)).toThrow();
