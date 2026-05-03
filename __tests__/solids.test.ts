@@ -142,4 +142,49 @@ describe('Wave 2A: CSG primitives (manifold-3d)', () => {
     const wrapped = await hull('Cluster', ...parts, { smooth: false });
     expect(wrapped.geometry.index).toBeNull();
   });
+
+  // ---- B3 mesh-range tagging ---------------------------------------------
+
+  it('boolUnion stamps kilnRanges with one entry per operand, summing to total tris', async () => {
+    // Build operands through buildSandboxGlobals so they're auto-tagged.
+    const { buildSandboxGlobals } = await import('../primitives');
+    const sandbox = buildSandboxGlobals();
+    const aGeo = (sandbox.boxGeo as typeof boxGeo)(1, 1, 1);
+    const bGeo = (sandbox.boxGeo as typeof boxGeo)(1.2, 1.2, 1.2);
+    const a = new THREE.Mesh(aGeo, gameMaterial(0xff0000));
+    const b = new THREE.Mesh(bGeo, gameMaterial(0xff0000));
+    b.position.set(0.4, 0, 0);
+
+    const merged = await boolUnion('Merged', a, b);
+    const ranges = (merged.geometry.userData as Record<string, unknown>).kilnRanges as
+      | Array<{ name: string; start: number; count: number }>
+      | undefined;
+    expect(Array.isArray(ranges)).toBe(true);
+    expect(ranges).toHaveLength(2);
+
+    // Total tri count from output index (or non-indexed positions).
+    const idx = merged.geometry.getIndex();
+    const totalTris = idx
+      ? idx.count / 3
+      : (merged.geometry.getAttribute('position') as THREE.BufferAttribute).count / 3;
+    const sum = ranges!.reduce((s, r) => s + r.count, 0);
+    expect(sum).toBe(Math.floor(totalTris));
+
+    // Non-overlapping windows, monotonic starts.
+    expect(ranges![0]!.start).toBe(0);
+    expect(ranges![1]!.start).toBe(ranges![0]!.start + ranges![0]!.count);
+  });
+
+  it('GLB export round-trips without serialising kilnRanges (userData is dropped)', async () => {
+    const { buildSandboxGlobals } = await import('../primitives');
+    const sandbox = buildSandboxGlobals();
+    const geo = (sandbox.boxGeo as typeof boxGeo)(1, 1, 1);
+    const root = createRoot('Crate');
+    createPart('Body', geo, gameMaterial(0xc0a26b), { parent: root });
+
+    const { bytes } = await renderSceneToGLB(root);
+    expect(bytes.length).toBeGreaterThan(0);
+    // gltf-transform doesn't carry userData through the buffer; this is a
+    // smoke-test that the metadata doesn't blow up the writer.
+  });
 });

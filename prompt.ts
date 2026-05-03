@@ -125,10 +125,12 @@ cylinderGeo(radiusTop, radiusBot, height, segments=8)  // Y-axis (preferred)
 cylinderXGeo(radiusTop, radiusBot, length, segments=8) // X-axis
 cylinderYGeo(radiusTop, radiusBot, length, segments=8) // alias for cylinderGeo (Y-axis)
 cylinderZGeo(radiusTop, radiusBot, length, segments=8) // Z-axis
+cylinderOnAxis(center: [x,y,z], normal: [x,y,z], radiusBottom, height, opts?: { radiusTop?, segments? })  // arbitrary axis — use only when not cardinal
 coneGeo(radius, height, segments=8)                    // Y-axis, point +Y (preferred)
 coneXGeo(radius, length, segments=8)                   // point +X
 coneYGeo(radius, length, segments=8)                   // alias for coneGeo (point +Y)
 coneZGeo(radius, length, segments=8)                   // point +Z
+taperConeGeo(radiusBottom, radiusTop, height, axis?='y', segments?=8)  // truncated cone / frustum — use for soda cans, pylon caps, lampshades
 capsuleGeo(radius, height, segments=6)                 // Y-axis (preferred)
 capsuleXGeo(radius, length, segments=6)                // X-axis
 capsuleYGeo(radius, length, segments=6)                // alias for capsuleGeo (Y-axis)
@@ -177,7 +179,9 @@ mergeVertices(geometry, tolerance=1e-4)  // weld coincident verts; call before d
 
 // Curves
 curveToMesh(points: [x,y,z][], radius, tubularSegs=32, radialSegs=8, closed=false)  // returns BufferGeometry (tube)
-lathe(profile: [x,y][], segments=12)  // surface of revolution (vase, wheel, bottle)
+pipeAlongPath(points: [x,y,z][], radius, opts?: { bendRadius?, closed?, tubularSegments?, radialSegments? })  // path-driven swept circle with corner smoothing — use for cables, hoses, tubing, rigging
+lathe(profile: [x,y][], segments=12)  // surface of revolution around Y axis (vase, wheel, bottle)
+revolveGeo(profile: [x,y][], opts?: { angle?=2π, axis?=[0,1,0], segments?=12 })  // partial sweep / non-Y axis (half-domes, 90° wedges, fan blades around +X)
 bezierCurve(ctrlPts: [x,y,z][], samples=32)  // returns [x,y,z][] — feed into curveToMesh
 
 // UV + Textures (loadTexture is async; shape-aware unwraps are sync)
@@ -185,8 +189,11 @@ await autoUnwrap(geometry, { resolution?: 1024, padding?: 2 })  // xatlas atlas 
 boxUnwrap(boxGeo(...))            // preserves per-face [0,1] UVs — crates, blocks
 cylinderUnwrap(cylinderGeo(...))  // u around axis, v up — barrels, pipes (texture bands ring the mesh)
 planeUnwrap(planeGeo(...))        // xy-extent → [0,1] — signs, decals, posters
+panelRemapV(geo, vScale=0.30)     // rescale UV.y so a SMALL part samples a sub-region of a SHARED texture (e.g. clean v=0..0.30 panel zone)
 await loadTexture(path)  // returns THREE.DataTexture with encoded bytes stashed for GLB export
 pbrMaterial({ albedo?, normal?, roughness?, metalness?, emissive?, aoMap? })  // Any slot = color/scalar OR Texture
+// Do NOT clone a loaded texture (texture.clone() corrupts userData via JSON.stringify, breaking GLB export).
+// Use panelRemapV on the SMALL mesh's geometry instead, sharing the same Texture object across materials.
 
 // Textured asset pipeline:
 //   1. Build a geometry (boxGeo / CSG / subdivide / curveToMesh / etc)
@@ -233,6 +240,17 @@ For animations, track names must use "Joint_" prefix:
   cylinders unless you have a specific reason.
 - Use cylinderZGeo / capsuleZGeo / coneZGeo for side-facing rails, pods, floats,
   and crossbars.
+- Use cylinderOnAxis(center, normal, radius, height) ONLY when the cylinder
+  needs to point along a non-cardinal direction (oblique struts, antennae off
+  a tilted face). For X/Y/Z-aligned parts the terser *XGeo / *YGeo / *ZGeo
+  helpers stay preferred.
+- Use taperConeGeo(rBottom, rTop, height) for truncated/frustum shapes (soda
+  cans, lampshades, pylon caps). coneGeo only does pointed cones.
+- Use pipeAlongPath(points, radius, { bendRadius }) for cables, hoses,
+  rigging, multi-segment piping. beamBetween is point-to-point only.
+- Use revolveGeo(profile, { angle, axis }) for partial sweeps (half-domes,
+  90° wedges) or revolution around non-Y axes. lathe stays for full Y-axis
+  revolutions.
 - Use beamBetween() for struts, braces, cables, skid supports, scaffolding, and
   diagonal rails. Endpoints must touch the parts they connect to.
 - Use createLadder() for ladders. A ladder must have two continuous rails and

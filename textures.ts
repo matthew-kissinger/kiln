@@ -142,36 +142,41 @@ export interface PbrMaterialOptions {
 export function pbrMaterial(opts: PbrMaterialOptions = {}): THREE.MeshStandardMaterial {
   const mat = new THREE.MeshStandardMaterial();
 
-  if (opts.albedo instanceof THREE.Texture) {
+  // Duck-typed `.isTexture` — sandbox-created textures may belong to a
+  // different module realm. See render.ts cross-module-THREE comment.
+  const isTex = (v: unknown): v is THREE.Texture =>
+    !!(v as { isTexture?: boolean } | null)?.isTexture;
+
+  if (isTex(opts.albedo)) {
     mat.map = opts.albedo;
     mat.color = new THREE.Color(0xffffff);
   } else if (opts.albedo !== undefined) {
-    mat.color = new THREE.Color(opts.albedo);
+    mat.color = new THREE.Color(opts.albedo as number | string);
   }
 
   if (opts.normal) mat.normalMap = opts.normal;
 
-  if (opts.roughness instanceof THREE.Texture) {
+  if (isTex(opts.roughness)) {
     mat.roughnessMap = opts.roughness;
     mat.roughness = 1;
   } else if (opts.roughness !== undefined) {
-    mat.roughness = opts.roughness;
+    mat.roughness = opts.roughness as number;
   } else {
     mat.roughness = 0.8;
   }
 
-  if (opts.metalness instanceof THREE.Texture) {
+  if (isTex(opts.metalness)) {
     mat.metalnessMap = opts.metalness;
     mat.metalness = 1;
   } else if (opts.metalness !== undefined) {
-    mat.metalness = opts.metalness;
+    mat.metalness = opts.metalness as number;
   }
 
-  if (opts.emissive instanceof THREE.Texture) {
+  if (isTex(opts.emissive)) {
     mat.emissiveMap = opts.emissive;
     mat.emissive = new THREE.Color(0xffffff);
   } else if (opts.emissive !== undefined) {
-    mat.emissive = new THREE.Color(opts.emissive);
+    mat.emissive = new THREE.Color(opts.emissive as number | string);
   }
   if (opts.emissiveIntensity !== undefined) {
     mat.emissiveIntensity = opts.emissiveIntensity;

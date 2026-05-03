@@ -62,12 +62,15 @@ function threeToManifold(src: THREE.Object3D, ManifoldCls: typeof Manifold, Mesh
   let vertexOffset = 0;
 
   src.traverse((child) => {
-    if (!(child instanceof THREE.Mesh)) return;
-    const geo = child.geometry as THREE.BufferGeometry;
+    // Duck-typed `.isMesh` — sandbox-created meshes belong to a different
+    // module realm than this file's THREE import. See render.ts comment.
+    if (!(child as { isMesh?: boolean }).isMesh) return;
+    const meshChild = child as THREE.Mesh;
+    const geo = meshChild.geometry as THREE.BufferGeometry;
     const posAttr = geo.getAttribute('position') as THREE.BufferAttribute | undefined;
     if (!posAttr) return;
 
-    const matrix = child.matrixWorld;
+    const matrix = meshChild.matrixWorld;
 
     for (let i = 0; i < posAttr.count; i++) {
       tmpVec.fromBufferAttribute(posAttr, i).applyMatrix4(matrix);
@@ -162,7 +165,7 @@ function splitPartsAndOpts(
   if (
     last &&
     typeof last === 'object' &&
-    !(last instanceof THREE.Object3D) &&
+    !(last as { isObject3D?: boolean }).isObject3D &&
     ('smooth' in last)
   ) {
     return {
@@ -174,12 +177,90 @@ function splitPartsAndOpts(
 }
 
 function materialOf(src: THREE.Object3D, fallback: THREE.Material): THREE.Material {
-  if (src instanceof THREE.Mesh) return src.material as THREE.Material;
+  if ((src as { isMesh?: boolean }).isMesh) {
+    return (src as THREE.Mesh).material as THREE.Material;
+  }
   let found: THREE.Material | null = null;
   src.traverse((c) => {
-    if (!found && c instanceof THREE.Mesh) found = c.material as THREE.Material;
+    if (!found && (c as { isMesh?: boolean }).isMesh) {
+      found = (c as THREE.Mesh).material as THREE.Material;
+    }
   });
   return found ?? fallback;
+}
+
+interface KilnRange {
+  name: string;
+  start: number;
+  count: number;
+}
+
+/**
+ * Synthesise a `kilnRanges` array for a CSG output by walking each input's
+ * geometry.userData.kilnRanges (or falling back to mesh names + tri counts)
+ * and weight-partitioning the *output* triangle count among them. The
+ * partition is a coarse approximation — manifold-3d does not preserve per-
+ * triangle provenance, so we cannot map output tris back to input tris
+ * exactly. Sum invariant holds: `Σ count === outputTris`.
+ *
+ * The metadata is consumed by future click-to-inspect UI; the GLB exporter
+ * ignores it (gltf-transform doesn't serialise userData).
+ */
+function combineRangesFromCsgInputs(
+  parts: THREE.Object3D[],
+  outputTris: number
+): KilnRange[] {
+  const inputs: Array<{ name: string; weight: number }> = [];
+  for (const part of parts) {
+    part.traverse((child) => {
+      if (!(child as { isMesh?: boolean }).isMesh) return;
+      const meshChild = child as THREE.Mesh;
+      if (!meshChild.geometry) return;
+      const ranges = (meshChild.geometry.userData as Record<string, unknown>)['kilnRanges'] as
+        | KilnRange[]
+        | undefined;
+      if (ranges && ranges.length > 0) {
+        for (const r of ranges) inputs.push({ name: r.name, weight: r.count });
+        return;
+      }
+      // No prior ranges — fall back to mesh name + own tri count.
+      const idx = meshChild.geometry.getIndex();
+      const tris = idx
+        ? idx.count / 3
+        : (meshChild.geometry.getAttribute('position')?.count ?? 0) / 3;
+      inputs.push({ name: meshChild.name || 'csgInput', weight: Math.floor(tris) });
+    });
+  }
+
+  if (inputs.length === 0) {
+    return [{ name: 'csg', start: 0, count: outputTris }];
+  }
+  const totalWeight = inputs.reduce((s, i) => s + i.weight, 0) || 1;
+  const out: KilnRange[] = [];
+  let offset = 0;
+  for (let i = 0; i < inputs.length; i++) {
+    const isLast = i === inputs.length - 1;
+    const weight = inputs[i]!.weight;
+    const count = isLast
+      ? outputTris - offset
+      : Math.floor((weight / totalWeight) * outputTris);
+    out.push({ name: inputs[i]!.name, start: offset, count });
+    offset += count;
+  }
+  return out;
+}
+
+/** Stamp `kilnRanges` on the result mesh's geometry from its CSG inputs. */
+function tagCsgOutput(result: THREE.Mesh, parts: THREE.Object3D[]): void {
+  const idx = result.geometry.getIndex();
+  const tris = idx
+    ? idx.count / 3
+    : (result.geometry.getAttribute('position')?.count ?? 0) / 3;
+  const ranges = combineRangesFromCsgInputs(parts, Math.floor(tris));
+  result.geometry.userData = {
+    ...(result.geometry.userData ?? {}),
+    kilnRanges: ranges,
+  };
 }
 
 // =============================================================================
@@ -210,6 +291,7 @@ export async function boolUnion(
   const result = mod.Manifold.union(manifolds);
   const mat = materialOf(parts[0]!, new THREE.MeshStandardMaterial());
   const mesh = manifoldToThree(result, mat, `Mesh_${name}`, opts);
+  tagCsgOutput(mesh, parts);
   manifolds.forEach((m) => m.delete());
   result.delete();
   return mesh;
@@ -242,6 +324,7 @@ export async function boolDiff(
   const result = bodyM.subtract(cutterUnion);
   const mat = materialOf(body, new THREE.MeshStandardMaterial());
   const mesh = manifoldToThree(result, mat, `Mesh_${name}`, opts);
+  tagCsgOutput(mesh, [body, ...cutters]);
   bodyM.delete();
   cutterM.forEach((m) => m.delete());
   if (cutterM.length > 1) cutterUnion.delete();
@@ -267,6 +350,7 @@ export async function boolIntersect(
   const result = aM.intersect(bM);
   const mat = materialOf(a, new THREE.MeshStandardMaterial());
   const mesh = manifoldToThree(result, mat, `Mesh_${name}`, opts);
+  tagCsgOutput(mesh, [a, b]);
   aM.delete();
   bM.delete();
   result.delete();
@@ -295,6 +379,7 @@ export async function hull(
     manifolds.length === 1 ? (manifolds[0] as Manifold).hull() : mod.Manifold.hull(manifolds);
   const mat = materialOf(parts[0]!, new THREE.MeshStandardMaterial());
   const mesh = manifoldToThree(result, mat, `Mesh_${name}`, { smooth: opts.smooth ?? true });
+  tagCsgOutput(mesh, parts);
   manifolds.forEach((m) => m.delete());
   if (manifolds.length > 1) result.delete();
   return mesh;

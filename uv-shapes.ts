@@ -77,6 +77,48 @@ export function planeUnwrap(geo: THREE.BufferGeometry): THREE.BufferGeometry {
   return cloned;
 }
 
+/**
+ * Remap an existing UV attribute to a sub-region of the texture, by scaling
+ * U by `uScale` and V by `vScale` (both default 1.0 = identity), with
+ * optional offsets `uOffset`/`vOffset`. Use this when you want a small mesh
+ * to sample a specific zone of a SHARED texture without cloning the texture
+ * itself — Three.js `Texture.clone()` runs `JSON.parse(JSON.stringify(...))`
+ * on userData, which mangles the encoded PNG `Uint8Array` (becomes a plain
+ * object) and breaks the GLB bridge.
+ *
+ * Typical use: a multi-zone albedo where the bottom 30% (v=0..0.30) is a
+ * clean panel-only region and the top 70% (v=0.30..1.0) carries
+ * windows/markings/decoration. The fuselage uses the full UV range; smaller
+ * parts (engine cowling, tail boom, fin) call `panelRemapV(geo, 0.30)` so
+ * their 0..1 UV.y collapses to 0..0.30, sampling only the clean strip.
+ *
+ * Operates on a CLONE of the input; input geometry is not mutated.
+ *
+ * @example
+ * // Engine cowling shares the body's bodyMat but only samples the clean
+ * // bottom strip — no doorway/window pixels show on the small part.
+ * const cowlGeo = panelRemapV(cylinderUnwrap(capsuleXGeo(0.45, 1.0)), 0.30);
+ * const cowl = new THREE.Mesh(cowlGeo, bodyMat);
+ */
+export function panelRemapV(
+  geo: THREE.BufferGeometry,
+  vScale = 0.30,
+  vOffset = 0,
+  uScale = 1,
+  uOffset = 0,
+): THREE.BufferGeometry {
+  const cloned = geo.clone();
+  const uvAttr = cloned.getAttribute('uv') as THREE.BufferAttribute | undefined;
+  if (!uvAttr) return cloned;
+  const arr = uvAttr.array as Float32Array;
+  for (let i = 0; i < arr.length; i += 2) {
+    arr[i] = (arr[i] ?? 0) * uScale + uOffset;
+    arr[i + 1] = (arr[i + 1] ?? 0) * vScale + vOffset;
+  }
+  uvAttr.needsUpdate = true;
+  return cloned;
+}
+
 // =============================================================================
 // Internal helpers
 // =============================================================================

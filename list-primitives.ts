@@ -166,6 +166,17 @@ const PRIMITIVES: PrimitiveSpec[] = [
     example: 'const geo = cylinderZGeo(0.08, 0.08, 0.9, 10);',
   },
   {
+    name: 'cylinderOnAxis',
+    signature:
+      'cylinderOnAxis(center: [x,y,z], normal: [x,y,z], radiusBottom: number, height: number, opts?: { radiusTop?, segments? })',
+    returns: 'THREE.CylinderGeometry',
+    category: 'geometry',
+    description:
+      'Frame-first cylinder: position + axis specified directly, no post-hoc rotation. Use when the cylinder needs to point along a non-cardinal direction (struts inside CSG operands, antennas off a tilted surface). For cardinal axes prefer the terser cylinderXGeo / cylinderYGeo / cylinderZGeo helpers.',
+    example:
+      "const strut = cylinderOnAxis([0.5, 0.7, 0], [1, 1, 0.3], 0.05, 0.9);",
+  },
+  {
     name: 'capsuleGeo',
     signature: 'capsuleGeo(radius: number, height: number, segments?: 6)',
     returns: 'THREE.CapsuleGeometry',
@@ -232,6 +243,16 @@ const PRIMITIVES: PrimitiveSpec[] = [
     description:
       'Cone pre-rotated so its point faces +Z. Use for side-facing projectiles and tips.',
     example: 'const geo = coneZGeo(0.12, 0.35, 10);',
+  },
+  {
+    name: 'taperConeGeo',
+    signature:
+      "taperConeGeo(radiusBottom: number, radiusTop: number, height: number, axis?: 'x'|'y'|'z', segments?: 8)",
+    returns: 'THREE.CylinderGeometry',
+    category: 'geometry',
+    description:
+      'Truncated cone (frustum) — exposes both bottom and top radius. radiusTop=0 matches coneGeo, radiusTop=radiusBottom matches cylinderGeo. Use for pylon caps, soda cans, lampshades, anything tapered that does not come to a point. axis selects orientation (default Y).',
+    example: 'const cap = taperConeGeo(0.3, 0.18, 0.4);  // frustum',
   },
   {
     name: 'torusGeo',
@@ -587,6 +608,17 @@ const PRIMITIVES: PrimitiveSpec[] = [
       "const pipe = curveToMesh([[0,0,0],[0,1,0],[1,1,0],[1,2,0]], 0.1);",
   },
   {
+    name: 'pipeAlongPath',
+    signature:
+      'pipeAlongPath(points: [x,y,z][], radius: number, opts?: { bendRadius?: 0, closed?: false, tubularSegments?: 32, radialSegments?: 8 })',
+    returns: 'THREE.BufferGeometry',
+    category: 'curves',
+    description:
+      'Path-driven swept circle with optional bend smoothing. Generalises beamBetween (point-to-point) and curveToMesh (raw spline) into one helper. bendRadius>0 inserts interpolated waypoints near interior corners so the spline reads as a rounded turn instead of pinching to the control point.',
+    example:
+      "const cable = pipeAlongPath([[0, 0.5, 0], [1, 0.5, 0], [1, 0.5, 2]], 0.02, { bendRadius: 0.1 });",
+  },
+  {
     name: 'lathe',
     signature: 'lathe(profile: [x,y][], segments?: 12)',
     returns: 'THREE.BufferGeometry',
@@ -595,6 +627,17 @@ const PRIMITIVES: PrimitiveSpec[] = [
       'Surface of revolution. Spins a 2D profile around the Y axis. For bottles, vases, wheels, turned wood parts.',
     example:
       "const vase = lathe([[0.1,0],[0.3,0.5],[0.2,1],[0.1,1.2]], 16);",
+  },
+  {
+    name: 'revolveGeo',
+    signature:
+      'revolveGeo(profile: [x,y][], opts?: { angle?: 2π, axis?: [x,y,z]=[0,1,0], segments?: 12 })',
+    returns: 'THREE.BufferGeometry',
+    category: 'curves',
+    description:
+      'Surface of revolution with explicit axis + sweep angle. Generalises lathe — use it when you need a partial sweep (half-dome, 90° wedge) or revolution around a non-Y axis. Profile convention is identical to lathe: x = radial distance, y = position along the axis.',
+    example:
+      "// Half-dome (180° sweep around +Y):\nconst quarter = [...Array(8)].map((_, i) => { const t = (i/7)*Math.PI/2; return [Math.cos(t), Math.sin(t)] as [number, number]; });\nconst dome = revolveGeo(quarter, { angle: Math.PI });",
   },
   {
     name: 'bezierCurve',
@@ -650,6 +693,16 @@ const PRIMITIVES: PrimitiveSpec[] = [
       "Projects xy-extent of the bbox to [0,1]. Use for signs/decals/posters where you want ONE readable texture and no edge-face bleeding. Sync.",
     example:
       "const sign = planeUnwrap(planeGeo(1, 0.6));\nconst mesh = new THREE.Mesh(sign, pbrMaterial({ albedo: kilnTextTex }));",
+  },
+  {
+    name: 'panelRemapV',
+    signature: 'panelRemapV(geo, vScale=0.30, vOffset=0, uScale=1, uOffset=0)',
+    returns: 'THREE.BufferGeometry',
+    category: 'uv',
+    description:
+      "Scales an existing UV attribute so a small mesh samples a sub-region of a SHARED texture. Replaces the broken texture.clone() pattern (Three.js Texture.clone() runs JSON.stringify on userData, mangling encoded PNG bytes — panelRemapV avoids that by remapping UVs on the geometry instead). Typical use: multi-zone albedo where v=0..0.30 is plain panel and v=0.30..1 has windows/markings — small parts call panelRemapV(unwrap(geo), 0.30) to sample only the clean strip.",
+    example:
+      "const cowlGeo = panelRemapV(cylinderUnwrap(capsuleXGeo(0.45, 1.0)), 0.30);\nconst cowl = new THREE.Mesh(cowlGeo, bodyMat); // SAME bodyMat as fuselage, no clone needed",
   },
 
   // ---------------------------------------------------------------------------

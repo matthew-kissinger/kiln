@@ -76,11 +76,13 @@ export {
   cylinderGeo,
   cylinderXGeo,
   cylinderZGeo,
+  cylinderOnAxis,
   boxGeo,
   sphereGeo,
   coneGeo,
   coneXGeo,
   coneZGeo,
+  taperConeGeo,
   torusGeo,
   planeGeo,
   wingGeo,
@@ -114,7 +116,9 @@ export {
   subdivide,
   mergeVertices,
   curveToMesh,
+  pipeAlongPath,
   lathe,
+  revolveGeo,
   bezierCurve,
 } from './ops';
 export { autoUnwrap } from './uv';

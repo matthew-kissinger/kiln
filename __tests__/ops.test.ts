@@ -7,8 +7,8 @@
 
 import { describe, it, expect } from 'bun:test';
 import * as THREE from 'three';
-import { boxGeo, sphereGeo } from '../primitives';
-import { mergeVertices, subdivide } from '../ops';
+import { boxGeo, sphereGeo, cylinderGeo } from '../primitives';
+import { mergeVertices, subdivide, revolveGeo, lathe, pipeAlongPath } from '../ops';
 
 describe('mergeVertices', () => {
   it('default (attribute-aware) preserves per-face normal splits', () => {
@@ -114,5 +114,159 @@ describe('subdivide auto-weld', () => {
       expect(Number.isFinite(pos.getY(i))).toBe(true);
       expect(Number.isFinite(pos.getZ(i))).toBe(true);
     }
+  });
+});
+
+describe('revolveGeo', () => {
+  function bbox(geo: THREE.BufferGeometry): { x: number; y: number; z: number } {
+    geo.computeBoundingBox();
+    const size = new THREE.Vector3();
+    geo.boundingBox!.getSize(size);
+    return { x: size.x, y: size.y, z: size.z };
+  }
+
+  it('full revolution of a vertical line ≡ cylinder bbox', () => {
+    // Profile: a vertical line at radius=0.5, from y=0 to y=2.
+    // Note: lathe orients y from bottom to top. To match cylinderGeo (which
+    // is centered on origin), we offset the profile so it spans y=-1..+1.
+    const profile: Array<[number, number]> = [
+      [0.5, -1],
+      [0.5, 1],
+    ];
+    const cyl = cylinderGeo(0.5, 0.5, 2, 16);
+    const rev = revolveGeo(profile, { segments: 16 });
+    const a = bbox(cyl);
+    const b = bbox(rev);
+    expect(b.x).toBeCloseTo(a.x, 3);
+    expect(b.y).toBeCloseTo(a.y, 3);
+    expect(b.z).toBeCloseTo(a.z, 3);
+  });
+
+  it('full revolution matches lathe (back-compat sanity)', () => {
+    const profile: Array<[number, number]> = [
+      [0.1, 0],
+      [0.3, 0.5],
+      [0.2, 1],
+      [0.1, 1.2],
+    ];
+    const a = bbox(lathe(profile, 16));
+    const b = bbox(revolveGeo(profile, { segments: 16 }));
+    expect(b.x).toBeCloseTo(a.x, 5);
+    expect(b.y).toBeCloseTo(a.y, 5);
+    expect(b.z).toBeCloseTo(a.z, 5);
+  });
+
+  it('partial sweep covers the requested angular extent', () => {
+    // Quarter sweep (90°) of a vertical line at radius=1.
+    // LatheGeometry's phi=0 starts at +Z (not +X), so:
+    //   quarter (0..π/2): sweeps +Z → +X → bbox.x≈1, bbox.z≈1
+    //   half (0..π):       sweeps +Z → -Z passing through +X → bbox.x≈1, bbox.z≈2
+    //   full (0..2π):      bbox.x≈2, bbox.z≈2
+    const profile: Array<[number, number]> = [
+      [1, 0],
+      [1, 1],
+    ];
+    const quarter = revolveGeo(profile, { angle: Math.PI / 2, segments: 16 });
+    const half = revolveGeo(profile, { angle: Math.PI, segments: 16 });
+    const full = revolveGeo(profile, { angle: Math.PI * 2, segments: 16 });
+    expect(bbox(full).x).toBeCloseTo(2, 1);
+    expect(bbox(full).z).toBeCloseTo(2, 1);
+    expect(bbox(half).x).toBeCloseTo(1, 1);
+    expect(bbox(half).z).toBeCloseTo(2, 1);
+    expect(bbox(quarter).x).toBeCloseTo(1, 1);
+    expect(bbox(quarter).z).toBeCloseTo(1, 1);
+  });
+
+  it('non-Y axis reorients the surface', () => {
+    // Same line profile, sweep around +X instead of +Y. The "height" should
+    // now lie along X, the radial direction in the YZ plane.
+    const profile: Array<[number, number]> = [
+      [0.5, -1],
+      [0.5, 1],
+    ];
+    const aroundX = revolveGeo(profile, { axis: [1, 0, 0], segments: 16 });
+    const b = bbox(aroundX);
+    expect(b.x).toBeCloseTo(2, 1); // along X = the lathe axis
+    expect(b.y).toBeCloseTo(1, 1); // diameter in YZ
+    expect(b.z).toBeCloseTo(1, 1);
+  });
+
+  it('rejects zero-length axis', () => {
+    expect(() =>
+      revolveGeo(
+        [
+          [1, 0],
+          [1, 1],
+        ],
+        { axis: [0, 0, 0] }
+      )
+    ).toThrow('axis must be a non-zero vector');
+  });
+});
+
+describe('pipeAlongPath', () => {
+  function bbox(geo: THREE.BufferGeometry): { x: number; y: number; z: number } {
+    geo.computeBoundingBox();
+    const size = new THREE.Vector3();
+    geo.boundingBox!.getSize(size);
+    return { x: size.x, y: size.y, z: size.z };
+  }
+
+  it('2-point pipe matches a beamBetween bbox along the same vector', () => {
+    // Path = [origin, +Y at 1]; radius 0.05.
+    // Bbox should span 1 along Y, ≈0.1 along X and Z (diameter).
+    const pipe = pipeAlongPath(
+      [
+        [0, 0, 0],
+        [0, 1, 0],
+      ],
+      0.05
+    );
+    const b = bbox(pipe);
+    expect(b.y).toBeCloseTo(1, 1);
+    expect(b.x).toBeLessThan(0.2);
+    expect(b.z).toBeLessThan(0.2);
+  });
+
+  it('3-point right-angle path covers both legs', () => {
+    // L-shape in the XY plane: (0,0,0) → (1,0,0) → (1,1,0).
+    const pipe = pipeAlongPath(
+      [
+        [0, 0, 0],
+        [1, 0, 0],
+        [1, 1, 0],
+      ],
+      0.05
+    );
+    const b = bbox(pipe);
+    expect(b.x).toBeGreaterThan(0.9);
+    expect(b.y).toBeGreaterThan(0.9);
+  });
+
+  it('bendRadius>0 changes the geometry vs unsmoothed path', () => {
+    const pts: Array<[number, number, number]> = [
+      [0, 0, 0],
+      [1, 0, 0],
+      [1, 1, 0],
+    ];
+    const sharp = pipeAlongPath(pts, 0.05);
+    const smooth = pipeAlongPath(pts, 0.05, { bendRadius: 0.2 });
+    // Both produce non-empty geometry; the bend variant has a different
+    // vertex count due to inserted waypoints / spline resampling.
+    const sharpVerts = (sharp.getAttribute('position') as THREE.BufferAttribute).count;
+    const smoothVerts = (smooth.getAttribute('position') as THREE.BufferAttribute).count;
+    expect(sharpVerts).toBeGreaterThan(0);
+    expect(smoothVerts).toBeGreaterThan(0);
+    // Bend radius adds interpolated waypoints — vertex counts may differ
+    // (the underlying TubeGeometry uses CatmullRom over the new path).
+    const sharpBb = bbox(sharp);
+    const smoothBb = bbox(smooth);
+    // Smoothed corner shouldn't bow OUTSIDE the original path's bbox.
+    expect(smoothBb.x).toBeLessThanOrEqual(sharpBb.x + 0.05);
+    expect(smoothBb.y).toBeLessThanOrEqual(sharpBb.y + 0.05);
+  });
+
+  it('rejects single-point input', () => {
+    expect(() => pipeAlongPath([[0, 0, 0]], 0.05)).toThrow('need at least 2 points');
   });
 });

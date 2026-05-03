@@ -117,7 +117,12 @@ export async function executeKilnCode(code: string): Promise<ExecutedKilnCode> {
   }
 
   const root = await build();
-  if (!(root instanceof THREE.Object3D)) {
+  // Duck-typed check — the kiln sandbox uses `new Function(...)`, which under
+  // bun creates an isolated module realm. `new THREE.X()` inside the sandbox
+  // produces objects whose constructor is a *different* class object from the
+  // THREE imported here, so `instanceof THREE.Object3D` returns false.
+  // Three.js sets `.isObject3D = true` on the prototype for exactly this case.
+  if (!(root as { isObject3D?: boolean })?.isObject3D) {
     throw new Error('executeKilnCode: build() did not return a THREE.Object3D');
   }
 
@@ -141,54 +146,65 @@ function bridgeMaterial(
 
   const mat = doc.createMaterial(threeMat.name || undefined);
 
-  if (threeMat instanceof THREE.MeshStandardMaterial) {
-    mat.setBaseColorFactor([threeMat.color.r, threeMat.color.g, threeMat.color.b, threeMat.opacity]);
-    mat.setRoughnessFactor(threeMat.roughness);
-    mat.setMetallicFactor(threeMat.metalness);
-    if (threeMat.emissive) {
-      mat.setEmissiveFactor([threeMat.emissive.r, threeMat.emissive.g, threeMat.emissive.b]);
+  // Duck-typed material checks — see executeKilnCode for the rationale.
+  // Sandbox-created materials are different class instances of the same
+  // module, so `.isXMaterial` is the only reliable identity test.
+  const matFlags = threeMat as unknown as {
+    isMeshStandardMaterial?: boolean;
+    isMeshLambertMaterial?: boolean;
+    isMeshBasicMaterial?: boolean;
+  };
+  if (matFlags.isMeshStandardMaterial) {
+    const stdMat = threeMat as THREE.MeshStandardMaterial;
+    mat.setBaseColorFactor([stdMat.color.r, stdMat.color.g, stdMat.color.b, stdMat.opacity]);
+    mat.setRoughnessFactor(stdMat.roughness);
+    mat.setMetallicFactor(stdMat.metalness);
+    if (stdMat.emissive) {
+      mat.setEmissiveFactor([stdMat.emissive.r, stdMat.emissive.g, stdMat.emissive.b]);
     }
-    if (threeMat.transparent) {
+    if (stdMat.transparent) {
       mat.setAlphaMode('BLEND');
     }
-    if (threeMat.side === THREE.DoubleSide) {
+    if (stdMat.side === THREE.DoubleSide) {
       mat.setDoubleSided(true);
     }
     // PBR texture slots (Wave 3B)
-    if (threeMat.map) {
-      const t = bridgeTexture(doc, threeMat.map, textureCache);
+    if (stdMat.map) {
+      const t = bridgeTexture(doc, stdMat.map, textureCache);
       if (t) mat.setBaseColorTexture(t);
     }
-    if (threeMat.normalMap) {
-      const t = bridgeTexture(doc, threeMat.normalMap, textureCache);
+    if (stdMat.normalMap) {
+      const t = bridgeTexture(doc, stdMat.normalMap, textureCache);
       if (t) mat.setNormalTexture(t);
     }
     // metallic + roughness live in one glTF texture (R=unused, G=rough, B=metal).
     // If the agent used separate Three.js maps we emit the roughness one as
     // the combined channel — the common case is a single combined map anyway.
-    const mrSource = threeMat.roughnessMap ?? threeMat.metalnessMap;
+    const mrSource = stdMat.roughnessMap ?? stdMat.metalnessMap;
     if (mrSource) {
       const t = bridgeTexture(doc, mrSource, textureCache);
       if (t) mat.setMetallicRoughnessTexture(t);
     }
-    if (threeMat.emissiveMap) {
-      const t = bridgeTexture(doc, threeMat.emissiveMap, textureCache);
+    if (stdMat.emissiveMap) {
+      const t = bridgeTexture(doc, stdMat.emissiveMap, textureCache);
       if (t) mat.setEmissiveTexture(t);
     }
-    if (threeMat.aoMap) {
-      const t = bridgeTexture(doc, threeMat.aoMap, textureCache);
+    if (stdMat.aoMap) {
+      const t = bridgeTexture(doc, stdMat.aoMap, textureCache);
       if (t) mat.setOcclusionTexture(t);
-      mat.setOcclusionStrength(threeMat.aoMapIntensity ?? 1);
+      mat.setOcclusionStrength(stdMat.aoMapIntensity ?? 1);
     }
-  } else if (threeMat instanceof THREE.MeshLambertMaterial) {
-    mat.setBaseColorFactor([threeMat.color.r, threeMat.color.g, threeMat.color.b, threeMat.opacity]);
+  } else if (matFlags.isMeshLambertMaterial) {
+    const lambMat = threeMat as THREE.MeshLambertMaterial;
+    mat.setBaseColorFactor([lambMat.color.r, lambMat.color.g, lambMat.color.b, lambMat.opacity]);
     mat.setRoughnessFactor(1.0);
     mat.setMetallicFactor(0.0);
-    if (threeMat.emissive) {
-      mat.setEmissiveFactor([threeMat.emissive.r, threeMat.emissive.g, threeMat.emissive.b]);
+    if (lambMat.emissive) {
+      mat.setEmissiveFactor([lambMat.emissive.r, lambMat.emissive.g, lambMat.emissive.b]);
     }
-  } else if (threeMat instanceof THREE.MeshBasicMaterial) {
-    mat.setBaseColorFactor([threeMat.color.r, threeMat.color.g, threeMat.color.b, threeMat.opacity]);
+  } else if (matFlags.isMeshBasicMaterial) {
+    const basicMat = threeMat as THREE.MeshBasicMaterial;
+    mat.setBaseColorFactor([basicMat.color.r, basicMat.color.g, basicMat.color.b, basicMat.opacity]);
     mat.setRoughnessFactor(1.0);
     mat.setMetallicFactor(0.0);
   }
@@ -304,18 +320,19 @@ function bridgeNode(
   ]);
   gtNode.setScale([threeObj.scale.x, threeObj.scale.y, threeObj.scale.z]);
 
-  if (threeObj instanceof THREE.Mesh) {
-    const threeMat = threeObj.material as THREE.Material;
+  if ((threeObj as { isMesh?: boolean }).isMesh) {
+    const threeMesh = threeObj as THREE.Mesh;
+    const threeMat = threeMesh.material as THREE.Material;
     const gtMat = bridgeMaterial(doc, threeMat, matCache, texCache);
 
     // Key the mesh cache by (geometry ref, material ref) so createInstance
     // (same geo + mat as source) produces a GLB-level mesh instance: a
     // single Mesh referenced by multiple Nodes. Cuts duplicated accessors
     // for wheels, bolts, fence posts, etc.
-    const cacheKey = `${threeObj.geometry.uuid}__${threeMat.uuid}`;
+    const cacheKey = `${threeMesh.geometry.uuid}__${threeMat.uuid}`;
     let gtMesh = meshCache.get(cacheKey);
     if (!gtMesh) {
-      gtMesh = bridgeGeometry(doc, buf, threeObj.geometry, gtMat, threeObj.name || 'mesh');
+      gtMesh = bridgeGeometry(doc, buf, threeMesh.geometry, gtMat, threeMesh.name || 'mesh');
       meshCache.set(cacheKey, gtMesh);
     }
     gtNode.setMesh(gtMesh);
@@ -582,8 +599,9 @@ function collectMeshStats(root: THREE.Object3D): MeshStats[] {
   root.updateMatrixWorld(true);
   const out: MeshStats[] = [];
   root.traverse((obj) => {
-    if (!(obj instanceof THREE.Mesh)) return;
-    const geo = obj.geometry;
+    if (!(obj as { isMesh?: boolean }).isMesh) return;
+    const meshObj = obj as THREE.Mesh;
+    const geo = meshObj.geometry;
     if (!geo) return;
 
     const idx = geo.getIndex();
@@ -601,7 +619,7 @@ function collectMeshStats(root: THREE.Object3D): MeshStats[] {
     out.push({
       name: obj.name || '(unnamed)',
       triCount: Math.floor(tri),
-      isPlaneGeo: geo instanceof THREE.PlaneGeometry,
+      isPlaneGeo: geo.type === 'PlaneGeometry',
       center,
       size,
       box,

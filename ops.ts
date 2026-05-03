@@ -258,6 +258,139 @@ export function lathe(
 }
 
 /**
+ * Surface of revolution with explicit axis + sweep angle. Generalises
+ * `lathe` (which is locked to a full revolution around +Y) for cases where
+ * you need a partial sweep (e.g. half a dome, a 90° wedge of a wheel) or
+ * a non-Y axis of revolution (e.g. a fan blade revolved around +X).
+ *
+ * The 2D `profile` is in the same convention as `lathe`: x = radial
+ * distance from the axis, y = position along the axis. Then:
+ *   - `angle` controls the sweep (default `2π` = full revolution).
+ *   - `axis` reorients the resulting Y-up surface to point along the
+ *     supplied unit vector (defaults to `[0, 1, 0]` = no reorientation).
+ *
+ * Pattern adapted from chili3d's `revolve(profile, axis: Line, angle)` —
+ * the parameter shape is the same, but the implementation is mesh-only
+ * (Three.js LatheGeometry + a quaternion reorientation) rather than B-rep.
+ *
+ * @example
+ * // Half-dome: profile traces a quarter circle, sweep 180°.
+ * const dome = revolveGeo(
+ *   [...Array(8)].map((_, i) => {
+ *     const t = (i / 7) * Math.PI / 2;
+ *     return [Math.cos(t), Math.sin(t)] as [number, number];
+ *   }),
+ *   { angle: Math.PI }
+ * );
+ */
+export function revolveGeo(
+  profile: Array<[number, number]>,
+  options: {
+    angle?: number;
+    axis?: [number, number, number];
+    segments?: number;
+  } = {}
+): THREE.BufferGeometry {
+  const { angle = Math.PI * 2, axis = [0, 1, 0], segments = 12 } = options;
+  const points2d = profile.map((p) => new THREE.Vector2(p[0], p[1]));
+  // LatheGeometry signature: (points, segments, phiStart, phiLength).
+  const geo = new THREE.LatheGeometry(points2d, segments, 0, angle);
+
+  const n = new THREE.Vector3(axis[0], axis[1], axis[2]);
+  if (n.lengthSq() < 1e-12) {
+    throw new Error(`revolveGeo: axis must be a non-zero vector (got [${axis.join(',')}]).`);
+  }
+  n.normalize();
+  if (n.x !== 0 || n.y !== 1 || n.z !== 0) {
+    const q = new THREE.Quaternion().setFromUnitVectors(new THREE.Vector3(0, 1, 0), n);
+    geo.applyQuaternion(q);
+  }
+  return geo;
+}
+
+/**
+ * Path-driven swept circle. Generalises `beamBetween` (point-to-point) and
+ * `curveToMesh` (raw catmull-rom) into a single helper that accepts a path
+ * of waypoints plus an optional bend-radius for smoothing sharp corners.
+ *
+ * Compared to `curveToMesh`:
+ *   - Same TubeGeometry/CatmullRomCurve3 backbone, so the visual result is
+ *     identical for unsmoothed paths.
+ *   - `bendRadius > 0` inserts interpolated waypoints near each interior
+ *     turn so the spline reads as a rounded corner instead of a single
+ *     control point yanking the curve.
+ *   - `closed` loops the path end back to start.
+ *
+ * Pattern adapted from chili3d's PipeNode (`bendRadius` + path interpolation
+ * for sharp turns) — implementation is original Three.js mesh-side code.
+ *
+ * @example
+ * // Cable run along the gunwale of a boat:
+ * const cable = pipeAlongPath(
+ *   [[0, 0.5, 0], [1, 0.5, 0], [1, 0.5, 2]],
+ *   0.02,
+ *   { bendRadius: 0.1 }
+ * );
+ */
+export function pipeAlongPath(
+  points: Array<[number, number, number]>,
+  radius: number,
+  options: {
+    bendRadius?: number;
+    closed?: boolean;
+    tubularSegments?: number;
+    radialSegments?: number;
+  } = {}
+): THREE.BufferGeometry {
+  const {
+    bendRadius = 0,
+    closed = false,
+    tubularSegments = 32,
+    radialSegments = 8,
+  } = options;
+
+  if (points.length < 2) {
+    throw new Error(
+      `pipeAlongPath: need at least 2 points (got ${points.length}).`
+    );
+  }
+
+  let pathPoints = points;
+
+  // Bend smoothing: at each interior corner, replace the corner point with
+  // two points offset along the incoming/outgoing edges by `bendRadius`.
+  // The Catmull-Rom spline then curves smoothly between them instead of
+  // pinching tightly to the corner. Skipped for endpoints (or always for a
+  // closed path's first/last, since they're not corners).
+  if (bendRadius > 0 && points.length >= 3) {
+    const smoothed: Array<[number, number, number]> = [];
+    smoothed.push(points[0]!);
+    for (let i = 1; i < points.length - 1; i++) {
+      const prev = new THREE.Vector3(...points[i - 1]!);
+      const cur = new THREE.Vector3(...points[i]!);
+      const next = new THREE.Vector3(...points[i + 1]!);
+      const inDir = cur.clone().sub(prev);
+      const outDir = next.clone().sub(cur);
+      const inLen = inDir.length();
+      const outLen = outDir.length();
+      // Cap the offset so adjacent segments don't overlap.
+      const inOffset = Math.min(bendRadius, inLen / 2);
+      const outOffset = Math.min(bendRadius, outLen / 2);
+      const before = cur.clone().sub(inDir.clone().normalize().multiplyScalar(inOffset));
+      const after = cur.clone().add(outDir.clone().normalize().multiplyScalar(outOffset));
+      smoothed.push([before.x, before.y, before.z]);
+      smoothed.push([after.x, after.y, after.z]);
+    }
+    smoothed.push(points[points.length - 1]!);
+    pathPoints = smoothed;
+  }
+
+  const vectors = pathPoints.map((p) => new THREE.Vector3(p[0], p[1], p[2]));
+  const curve = new THREE.CatmullRomCurve3(vectors, closed);
+  return new THREE.TubeGeometry(curve, tubularSegments, radius, radialSegments, closed);
+}
+
+/**
  * Quadratic or cubic Bézier curve sampled into a point list for curveToMesh.
  * 3 points = quadratic, 4 points = cubic.
  *

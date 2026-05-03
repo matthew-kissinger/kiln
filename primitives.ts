@@ -206,6 +206,74 @@ export const cylinderYGeo = cylinderGeo;
 export const capsuleYGeo = capsuleGeo;
 export const coneYGeo = coneGeo;
 
+/**
+ * Frame-first cylinder. Builds a Y-up cylinder of `height` at the origin,
+ * orients its axis to `normal`, and translates the center to `center`. Use
+ * this when the cylinder needs to point along a non-cardinal axis — struts
+ * inside CSG operands, antennas off a tilted surface, anything where the
+ * `*XGeo` / `*ZGeo` variants don't fit.
+ *
+ * `radiusTop === radiusBottom` for plain tubes; pass different values for a
+ * tapered/conical body without reaching for `coneGeo`.
+ *
+ * The returned geometry has its position pre-baked. You can pass it straight
+ * to `new THREE.Mesh(...)` without further rotation.
+ */
+export function cylinderOnAxis(
+  center: Vec3Tuple,
+  normal: Vec3Tuple,
+  radiusBottom: number,
+  height: number,
+  options: { radiusTop?: number; segments?: number } = {}
+): THREE.CylinderGeometry {
+  const radiusTop = options.radiusTop ?? radiusBottom;
+  const segments = options.segments ?? 8;
+  const geo = new THREE.CylinderGeometry(radiusTop, radiusBottom, height, segments);
+
+  const n = new THREE.Vector3(normal[0], normal[1], normal[2]);
+  const len = n.length();
+  if (len < 1e-6) {
+    throw new Error(
+      `cylinderOnAxis: normal must be a non-zero vector (got [${normal.join(',')}]).`
+    );
+  }
+  n.divideScalar(len);
+
+  // Quaternion from Y to normal.
+  const q = new THREE.Quaternion().setFromUnitVectors(
+    new THREE.Vector3(0, 1, 0),
+    n
+  );
+  geo.applyQuaternion(q);
+  geo.translate(center[0], center[1], center[2]);
+  return geo;
+}
+
+/**
+ * Tapered cone helper that exposes the bottom + top radius. The default Y-up
+ * `coneGeo` is apex-only (top radius locked at 0); for truncated/frustum
+ * shapes — soda cans, pylon caps, lampshades — pass a non-zero
+ * `radiusTop`. When `radiusTop === 0` it matches `coneGeo` exactly; when
+ * `radiusTop === radiusBottom` it matches `cylinderGeo`.
+ *
+ * `axis` selects the orientation:
+ *   - `'y'` (default) — apex/cap on +Y, matches `coneGeo`
+ *   - `'x'` — pre-rotated along +X, matches the `coneXGeo` family
+ *   - `'z'` — pre-rotated along +Z
+ */
+export function taperConeGeo(
+  radiusBottom: number,
+  radiusTop: number,
+  height: number,
+  axis: 'x' | 'y' | 'z' = 'y',
+  segments = 8
+): THREE.CylinderGeometry {
+  const geo = new THREE.CylinderGeometry(radiusTop, radiusBottom, height, segments);
+  if (axis === 'x') geo.rotateZ(-Math.PI / 2);
+  else if (axis === 'z') geo.rotateX(Math.PI / 2);
+  return geo;
+}
+
 export function torusGeo(
   radius: number,
   tube: number,
@@ -409,8 +477,20 @@ export interface WingGeometryOptions {
  * Trapezoid aircraft wing panel.
  *
  * Coordinate contract: +X forward, +Y up, +Z right. The root edge sits at
- * local Z=0 and the panel extends toward +Z. Positive sweep moves the tip aft
- * along -X. Positive dihedral raises the tip along +Y.
+ * local Z=0 and the panel extends toward +Z.
+ *
+ * **Parameter units (READ THIS — these are NOT angles):**
+ * - `sweep` is the **X-displacement of the tip leading edge in world units**
+ *   (positive = tip moves aft along -X). NOT an angle in degrees/radians.
+ * - `dihedral` is the **Y-displacement of the tip in world units**
+ *   (positive = tip rises). NOT an angle. For most aircraft you want a
+ *   small value like 0.05–0.1 — a value of 1 with span=2 gives a 45°
+ *   gull-wing, almost certainly wrong unless explicitly designing one.
+ * - `span` is wing length in world units (root to tip).
+ * - `rootChord` / `tipChord` / `thickness` are all world units.
+ *
+ * Quick reference: a real-aircraft-looking wing has dihedral roughly 2–7%
+ * of span (e.g. span=4, dihedral=0.1 to 0.25).
  */
 export function wingGeo(options: WingGeometryOptions = {}): THREE.BufferGeometry {
   const span = options.span ?? 1;
@@ -855,10 +935,13 @@ export function createInstance(
     parent?: THREE.Object3D;
   } = {}
 ): THREE.Object3D {
-  const sourceMesh =
-    source instanceof THREE.Mesh
-      ? source
-      : (source.children.find((c) => c instanceof THREE.Mesh) as THREE.Mesh | undefined);
+  // Duck-typed `.isMesh` — sandbox-created meshes belong to a different
+  // module realm than this file's THREE import. See render.ts comment.
+  const isMesh = (o: THREE.Object3D | undefined): o is THREE.Mesh =>
+    !!(o as { isMesh?: boolean })?.isMesh;
+  const sourceMesh = isMesh(source)
+    ? source
+    : (source.children.find(isMesh) as THREE.Mesh | undefined);
 
   if (!sourceMesh) {
     throw new Error(
@@ -889,8 +972,9 @@ export function createInstance(
 export function countTriangles(root: THREE.Object3D): number {
   let count = 0;
   root.traverse((child) => {
-    if (child instanceof THREE.Mesh) {
-      const geometry = child.geometry;
+    if ((child as { isMesh?: boolean }).isMesh) {
+      const meshChild = child as THREE.Mesh;
+      const geometry = meshChild.geometry;
       if (geometry.index) {
         count += geometry.index.count / 3;
       } else {
@@ -905,11 +989,12 @@ export function countTriangles(root: THREE.Object3D): number {
 export function countMaterials(root: THREE.Object3D): number {
   const materials = new Set<THREE.Material>();
   root.traverse((child) => {
-    if (child instanceof THREE.Mesh) {
-      if (Array.isArray(child.material)) {
-        child.material.forEach((m) => materials.add(m));
+    if ((child as { isMesh?: boolean }).isMesh) {
+      const meshChild = child as THREE.Mesh;
+      if (Array.isArray(meshChild.material)) {
+        meshChild.material.forEach((m) => materials.add(m));
       } else {
-        materials.add(child.material);
+        materials.add(meshChild.material);
       }
     }
   });
@@ -1002,31 +1087,107 @@ export function buildSandboxGlobals(
     return wrapped as F;
   };
 
+  // -- Lazy mesh cache (per-sandbox, not a process global) ---------------
+  //
+  // Pattern adapted from chili3d's lazy-mesher: each parametric geometry is
+  // memoised on stringified args, so repeated calls inside a single build()
+  // return the same BufferGeometry reference. gltf-transform deduplicates
+  // on export but agents that don't reach for cloneGeometry/createInstance
+  // still get the win for free.
+  //
+  // Contract: callers must NOT mutate returned geometries. The existing
+  // primitive surface already follows this — every helper returns a fresh
+  // object today, and any caller that wants to mutate uses cloneGeometry
+  // first (already a no-op-by-design signal). With caching enabled, that
+  // signal becomes load-bearing: mutating a cached geometry corrupts every
+  // subsequent caller.
+  //
+  // Each cached geometry is also stamped with a `kilnRanges` entry on its
+  // userData (B3 — sub-shape mapping). The renderer ignores it (gltf-
+  // transform doesn't serialise userData), but downstream tooling — a
+  // future click-to-edit interaction in the gallery viewer — can map a
+  // clicked triangle back to the primitive call that produced it.
+  const geoCache = new Map<string, THREE.BufferGeometry>();
+  let _kilnCallSeq = 0;
+  const stampKilnRange = (name: string, geo: THREE.BufferGeometry) => {
+    const idx = geo.getIndex();
+    const triCount = idx
+      ? idx.count / 3
+      : (geo.getAttribute('position')?.count ?? 0) / 3;
+    const callId = ++_kilnCallSeq;
+    geo.userData = {
+      ...(geo.userData ?? {}),
+      kilnRanges: [
+        {
+          name: `${name}#${callId}`,
+          start: 0,
+          count: Math.floor(triCount),
+        },
+      ],
+    };
+  };
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const cacheGeo = <F extends (...args: any[]) => THREE.BufferGeometry>(
+    name: string,
+    fn: F
+  ): F => {
+    const memoFn = (...args: Parameters<F>): THREE.BufferGeometry => {
+      let key: string;
+      try {
+        key = `${name}::${JSON.stringify(args)}`;
+      } catch {
+        // Args weren't JSON-stringifiable (circular ref, BufferGeometry,
+        // etc.) — bypass the cache rather than throw, but still tag the
+        // result with kilnRanges so downstream inspection works.
+        const result = fn(...args);
+        stampKilnRange(name, result);
+        return result;
+      }
+      const hit = geoCache.get(key);
+      if (hit) return hit;
+      const result = fn(...args);
+      stampKilnRange(name, result);
+      geoCache.set(key, result);
+      return result;
+    };
+    return memoFn as F;
+  };
+  // Compose: usage tracking (outer) + memoisation (inner). A cache hit
+  // still ticks the usage counter so the telemetry reflects what the
+  // agent wrote, not what was recomputed.
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const wrapGeo = <F extends (...args: any[]) => THREE.BufferGeometry>(
+    name: string,
+    fn: F
+  ): F => wrap(name, cacheGeo(name, fn));
+
   return {
     createRoot: wrap('createRoot', createRoot),
     createPivot: wrap('createPivot', createPivot),
     createPart: wrap('createPart', createPart),
-    capsuleGeo: wrap('capsuleGeo', capsuleGeo),
-    capsuleXGeo: wrap('capsuleXGeo', capsuleXGeo),
-    capsuleYGeo: wrap('capsuleYGeo', capsuleYGeo),
-    capsuleZGeo: wrap('capsuleZGeo', capsuleZGeo),
-    cylinderGeo: wrap('cylinderGeo', cylinderGeo),
-    cylinderXGeo: wrap('cylinderXGeo', cylinderXGeo),
-    cylinderYGeo: wrap('cylinderYGeo', cylinderYGeo),
-    cylinderZGeo: wrap('cylinderZGeo', cylinderZGeo),
-    boxGeo: wrap('boxGeo', boxGeo),
-    sphereGeo: wrap('sphereGeo', sphereGeo),
-    coneGeo: wrap('coneGeo', coneGeo),
-    coneXGeo: wrap('coneXGeo', coneXGeo),
-    coneYGeo: wrap('coneYGeo', coneYGeo),
-    coneZGeo: wrap('coneZGeo', coneZGeo),
-    torusGeo: wrap('torusGeo', torusGeo),
-    planeGeo: wrap('planeGeo', planeGeo),
-    decalBox: wrap('decalBox', decalBox),
-    foliageCardGeo: wrap('foliageCardGeo', foliageCardGeo),
-    crossedQuadsGeo: wrap('crossedQuadsGeo', crossedQuadsGeo),
-    octaGridPlane: wrap('octaGridPlane', octaGridPlane),
-    wingGeo: wrap('wingGeo', wingGeo),
+    capsuleGeo: wrapGeo('capsuleGeo', capsuleGeo),
+    capsuleXGeo: wrapGeo('capsuleXGeo', capsuleXGeo),
+    capsuleYGeo: wrapGeo('capsuleYGeo', capsuleYGeo),
+    capsuleZGeo: wrapGeo('capsuleZGeo', capsuleZGeo),
+    cylinderGeo: wrapGeo('cylinderGeo', cylinderGeo),
+    cylinderXGeo: wrapGeo('cylinderXGeo', cylinderXGeo),
+    cylinderYGeo: wrapGeo('cylinderYGeo', cylinderYGeo),
+    cylinderZGeo: wrapGeo('cylinderZGeo', cylinderZGeo),
+    boxGeo: wrapGeo('boxGeo', boxGeo),
+    sphereGeo: wrapGeo('sphereGeo', sphereGeo),
+    coneGeo: wrapGeo('coneGeo', coneGeo),
+    coneXGeo: wrapGeo('coneXGeo', coneXGeo),
+    coneYGeo: wrapGeo('coneYGeo', coneYGeo),
+    coneZGeo: wrapGeo('coneZGeo', coneZGeo),
+    taperConeGeo: wrapGeo('taperConeGeo', taperConeGeo),
+    cylinderOnAxis: wrapGeo('cylinderOnAxis', cylinderOnAxis),
+    torusGeo: wrapGeo('torusGeo', torusGeo),
+    planeGeo: wrapGeo('planeGeo', planeGeo),
+    decalBox: wrapGeo('decalBox', decalBox),
+    foliageCardGeo: wrapGeo('foliageCardGeo', foliageCardGeo),
+    crossedQuadsGeo: wrapGeo('crossedQuadsGeo', crossedQuadsGeo),
+    octaGridPlane: wrapGeo('octaGridPlane', octaGridPlane),
+    wingGeo: wrapGeo('wingGeo', wingGeo),
     createWingPair: wrap('createWingPair', createWingPair),
     beamBetween: wrap('beamBetween', beamBetween),
     createLadder: wrap('createLadder', createLadder),
@@ -1056,7 +1217,9 @@ export function buildSandboxGlobals(
     subdivide: wrap('subdivide', ops.subdivide),
     mergeVertices: wrap('mergeVertices', ops.mergeVertices),
     curveToMesh: wrap('curveToMesh', ops.curveToMesh),
+    pipeAlongPath: wrap('pipeAlongPath', ops.pipeAlongPath),
     lathe: wrap('lathe', ops.lathe),
+    revolveGeo: wrap('revolveGeo', ops.revolveGeo),
     bezierCurve: wrap('bezierCurve', ops.bezierCurve),
     // UV (async)
     autoUnwrap: wrap('autoUnwrap', uv.autoUnwrap),
@@ -1064,9 +1227,10 @@ export function buildSandboxGlobals(
     boxUnwrap: wrap('boxUnwrap', uvShapes.boxUnwrap),
     cylinderUnwrap: wrap('cylinderUnwrap', uvShapes.cylinderUnwrap),
     planeUnwrap: wrap('planeUnwrap', uvShapes.planeUnwrap),
+    panelRemapV: wrap('panelRemapV', uvShapes.panelRemapV),
     // Parametric primitives
-    gearGeo: wrap('gearGeo', gears.gearGeo),
-    bladeGeo: wrap('bladeGeo', gears.bladeGeo),
+    gearGeo: wrapGeo('gearGeo', gears.gearGeo),
+    bladeGeo: wrapGeo('bladeGeo', gears.bladeGeo),
     // Textures + PBR (loadTexture is async)
     loadTexture: wrap('loadTexture', textures.loadTexture),
     pbrMaterial: wrap('pbrMaterial', textures.pbrMaterial),

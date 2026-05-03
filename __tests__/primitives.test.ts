@@ -32,9 +32,11 @@ import {
   cylinderGeo,
   cylinderXGeo,
   cylinderZGeo,
+  cylinderOnAxis,
   coneGeo,
   coneXGeo,
   coneZGeo,
+  taperConeGeo,
   capsuleGeo,
   capsuleXGeo,
   capsuleZGeo,
@@ -250,6 +252,179 @@ describe('geometry primitives produce real Three.js geometries', () => {
     expect(x.y).toBeLessThan(0.5);
     expect(z.z).toBeCloseTo(3);
     expect(z.y).toBeLessThan(0.5);
+  });
+
+  test('cylinderOnAxis with Y normal matches cylinderGeo bbox at origin', () => {
+    const baseline = cylinderGeo(0.3, 0.3, 1.5, 16);
+    const onAxis = cylinderOnAxis([0, 0, 0], [0, 1, 0], 0.3, 1.5, { segments: 16 });
+    const a = geometrySize(baseline);
+    const b = geometrySize(onAxis);
+    expect(b.x).toBeCloseTo(a.x, 5);
+    expect(b.y).toBeCloseTo(a.y, 5);
+    expect(b.z).toBeCloseTo(a.z, 5);
+  });
+
+  test('cylinderOnAxis with X normal matches cylinderXGeo bbox', () => {
+    const ax = geometrySize(cylinderXGeo(0.2, 0.2, 1.2, 12));
+    const on = geometrySize(cylinderOnAxis([0, 0, 0], [1, 0, 0], 0.2, 1.2, { segments: 12 }));
+    expect(on.x).toBeCloseTo(ax.x, 5);
+    expect(on.y).toBeCloseTo(ax.y, 5);
+    expect(on.z).toBeCloseTo(ax.z, 5);
+  });
+
+  test('cylinderOnAxis with Z normal matches cylinderZGeo bbox', () => {
+    const az = geometrySize(cylinderZGeo(0.18, 0.18, 0.9, 10));
+    const on = geometrySize(cylinderOnAxis([0, 0, 0], [0, 0, 1], 0.18, 0.9, { segments: 10 }));
+    expect(on.x).toBeCloseTo(az.x, 5);
+    expect(on.y).toBeCloseTo(az.y, 5);
+    expect(on.z).toBeCloseTo(az.z, 5);
+  });
+
+  test('cylinderOnAxis with arbitrary normal lies along the requested vector', () => {
+    const center: [number, number, number] = [1, 2, -0.5];
+    const normal: [number, number, number] = [1, 1, 0];
+    const geo = cylinderOnAxis(center, normal, 0.05, 2);
+    geo.computeBoundingBox();
+    const center3 = new THREE.Vector3();
+    geo.boundingBox!.getCenter(center3);
+    expect(center3.x).toBeCloseTo(1, 5);
+    expect(center3.y).toBeCloseTo(2, 5);
+    expect(center3.z).toBeCloseTo(-0.5, 5);
+    // For normal=[1,1,0] (axis in XY plane at 45°), height=2, radius=0.05:
+    //   bbox.x = bbox.y = cos(45°)·2 + sin(45°)·0.1 ≈ 1.485
+    //   bbox.z = 2·radius = 0.1
+    const size = geometrySize(geo);
+    const expectedXY = Math.SQRT2 + 0.1 * Math.SQRT1_2;
+    expect(size.x).toBeCloseTo(expectedXY, 2);
+    expect(size.y).toBeCloseTo(expectedXY, 2);
+    expect(size.z).toBeLessThan(0.2);
+  });
+
+  test('cylinderOnAxis rejects zero-length normal', () => {
+    expect(() => cylinderOnAxis([0, 0, 0], [0, 0, 0], 0.1, 1)).toThrow(
+      'normal must be a non-zero vector'
+    );
+  });
+
+  test('cylinderOnAxis radiusTop option produces a frustum', () => {
+    const frustum = cylinderOnAxis([0, 0, 0], [0, 1, 0], 0.5, 1, { radiusTop: 0.2 });
+    expect(frustum.parameters.radiusTop).toBeCloseTo(0.2);
+    expect(frustum.parameters.radiusBottom).toBeCloseTo(0.5);
+  });
+
+  test('taperConeGeo with radiusTop=0 matches coneGeo bbox', () => {
+    const a = geometrySize(coneGeo(0.5, 1.2, 12));
+    const b = geometrySize(taperConeGeo(0.5, 0, 1.2, 'y', 12));
+    expect(b.x).toBeCloseTo(a.x, 5);
+    expect(b.y).toBeCloseTo(a.y, 5);
+    expect(b.z).toBeCloseTo(a.z, 5);
+  });
+
+  test('taperConeGeo with equal radii matches cylinderGeo bbox', () => {
+    const a = geometrySize(cylinderGeo(0.3, 0.3, 1.0, 12));
+    const b = geometrySize(taperConeGeo(0.3, 0.3, 1.0, 'y', 12));
+    expect(b.x).toBeCloseTo(a.x, 5);
+    expect(b.y).toBeCloseTo(a.y, 5);
+    expect(b.z).toBeCloseTo(a.z, 5);
+  });
+
+  test('taperConeGeo emits a true frustum (top !== bottom !== 0)', () => {
+    const f = taperConeGeo(0.4, 0.15, 0.8);
+    expect(f.parameters.radiusTop).toBeCloseTo(0.15);
+    expect(f.parameters.radiusBottom).toBeCloseTo(0.4);
+  });
+
+  test('taperConeGeo axis="x" aligns height along +X', () => {
+    const size = geometrySize(taperConeGeo(0.2, 0.2, 1.6, 'x'));
+    expect(size.x).toBeCloseTo(1.6);
+    expect(size.y).toBeLessThan(0.5);
+  });
+
+  test('taperConeGeo axis="z" aligns height along +Z', () => {
+    const size = geometrySize(taperConeGeo(0.2, 0.2, 1.4, 'z'));
+    expect(size.z).toBeCloseTo(1.4);
+    expect(size.y).toBeLessThan(0.5);
+  });
+
+  // ---- Lazy mesh cache (Wave 2 B2) -----------------------------------------
+
+  test('sandbox geometry cache returns the same ref for identical args', () => {
+    const sandbox = buildSandboxGlobals();
+    const box1 = (sandbox.boxGeo as typeof boxGeo)(1, 2, 3);
+    const box2 = (sandbox.boxGeo as typeof boxGeo)(1, 2, 3);
+    expect(box1).toBe(box2);
+  });
+
+  test('sandbox geometry cache returns a new ref when args differ', () => {
+    const sandbox = buildSandboxGlobals();
+    const a = (sandbox.boxGeo as typeof boxGeo)(1, 1, 1);
+    const b = (sandbox.boxGeo as typeof boxGeo)(1, 1, 2);
+    expect(a).not.toBe(b);
+  });
+
+  test('sandbox geometry cache is per-execution — fresh sandbox = fresh cache', () => {
+    const s1 = buildSandboxGlobals();
+    const s2 = buildSandboxGlobals();
+    const a = (s1.boxGeo as typeof boxGeo)(1, 1, 1);
+    const b = (s2.boxGeo as typeof boxGeo)(1, 1, 1);
+    // Different sandbox -> different cached instance even with same args.
+    expect(a).not.toBe(b);
+  });
+
+  test('cache hits still tick the usage counter', () => {
+    const usage: Record<string, number> = {};
+    const sandbox = buildSandboxGlobals(usage);
+    (sandbox.boxGeo as typeof boxGeo)(1, 2, 3);
+    (sandbox.boxGeo as typeof boxGeo)(1, 2, 3);
+    (sandbox.boxGeo as typeof boxGeo)(1, 2, 3);
+    expect(usage.boxGeo).toBe(3);
+  });
+
+  test('cache spans different geometry families independently', () => {
+    const sandbox = buildSandboxGlobals();
+    const box = (sandbox.boxGeo as typeof boxGeo)(1, 1, 1);
+    const sphere = (sandbox.sphereGeo as typeof sphereGeo)(1);
+    const cyl = (sandbox.cylinderGeo as typeof cylinderGeo)(1, 1, 1);
+    // Each is independent; caching doesn't collide across primitive names.
+    expect(box).not.toBe(sphere);
+    expect(box).not.toBe(cyl);
+    expect(sphere).not.toBe(cyl);
+  });
+
+  // ---- Mesh-range / sub-shape mapping (Wave 3 B3) -------------------------
+
+  test('sandbox primitives stamp userData.kilnRanges with one entry covering all triangles', () => {
+    const sandbox = buildSandboxGlobals();
+    const geo = (sandbox.boxGeo as typeof boxGeo)(1, 1, 1);
+    const ranges = (geo.userData as Record<string, unknown>).kilnRanges as
+      | Array<{ name: string; start: number; count: number }>
+      | undefined;
+    expect(Array.isArray(ranges)).toBe(true);
+    expect(ranges).toHaveLength(1);
+    expect(ranges![0]!.name).toMatch(/^boxGeo#\d+$/);
+    expect(ranges![0]!.start).toBe(0);
+    // Box has 12 tris regardless of size.
+    expect(ranges![0]!.count).toBe(12);
+  });
+
+  test('kilnRanges name carries the primitive function name', () => {
+    const sandbox = buildSandboxGlobals();
+    const cyl = (sandbox.cylinderGeo as typeof cylinderGeo)(1, 1, 1, 8);
+    const ranges = (cyl.userData as Record<string, unknown>).kilnRanges as
+      | Array<{ name: string; start: number; count: number }>
+      | undefined;
+    expect(ranges![0]!.name).toMatch(/^cylinderGeo#\d+$/);
+  });
+
+  test('different primitive calls get distinct kilnRange call ids', () => {
+    const sandbox = buildSandboxGlobals();
+    const a = (sandbox.boxGeo as typeof boxGeo)(1, 1, 1);
+    const b = (sandbox.boxGeo as typeof boxGeo)(2, 2, 2);
+    const idA = ((a.userData as Record<string, unknown>).kilnRanges as Array<{ name: string }>)[0]!
+      .name;
+    const idB = ((b.userData as Record<string, unknown>).kilnRanges as Array<{ name: string }>)[0]!
+      .name;
+    expect(idA).not.toBe(idB);
   });
 
   test('coneGeo with default segments', () => {
@@ -638,12 +813,15 @@ describe('buildSandboxGlobals', () => {
     expect(usageB.createRoot).toBe(2);
   });
 
-  test('without a usage map, primitives are unwrapped (zero-overhead path)', () => {
+  test('without a usage map, geometry primitives still produce valid output', () => {
+    // Round 4: caching is now baseline — geometry primitives go through a
+    // per-sandbox memo wrapper even without usage instrumentation. The
+    // wrapper is observably equivalent to the raw primitive for first-call
+    // semantics (returns a real BufferGeometry of the right type).
     const globals = buildSandboxGlobals() as Record<string, unknown>;
-    // Identity check: the exposed function is the original primitive, not a
-    // wrapper. Looking up by name against a second fresh globals keeps the
-    // test independent of module structure.
-    const raw = buildSandboxGlobals() as Record<string, unknown>;
-    expect(globals.boxGeo).toBe(raw.boxGeo);
+    const fn = globals.boxGeo as (w: number, h: number, d: number) => THREE.BoxGeometry;
+    const geo = fn(1, 1, 1);
+    expect(geo).toBeInstanceOf(THREE.BoxGeometry);
+    expect(geo.getAttribute('position').count).toBeGreaterThan(0);
   });
 });

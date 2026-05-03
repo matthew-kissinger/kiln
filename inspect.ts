@@ -138,7 +138,11 @@ function detectPrimitivesUsed(code: string): string[] {
 // =============================================================================
 
 function classifyNode(obj: THREE.Object3D): 'pivot' | 'mesh' | 'group' {
-  if (obj instanceof THREE.Mesh) return 'mesh';
+  // Duck-typed `.isMesh` instead of `instanceof` — sandbox-created meshes
+  // (from `new Function(...)` in executeKilnCode) belong to a different
+  // module realm than this file's THREE import, so `instanceof` returns
+  // false. See `kiln-cross-module-three.md` memory + render.ts comment.
+  if ((obj as { isMesh?: boolean }).isMesh) return 'mesh';
   if (obj.name.startsWith('Joint_')) return 'pivot';
   return 'group';
 }
@@ -159,8 +163,9 @@ function collectNamedParts(root: THREE.Object3D): InspectNamedPart[] {
 function countTris(root: THREE.Object3D): number {
   let count = 0;
   root.traverse((child) => {
-    if (!(child instanceof THREE.Mesh)) return;
-    const geometry = child.geometry;
+    if (!(child as { isMesh?: boolean }).isMesh) return;
+    const meshChild = child as THREE.Mesh;
+    const geometry = meshChild.geometry;
     if (!geometry) return;
     if (geometry.index) {
       count += geometry.index.count / 3;
@@ -175,11 +180,12 @@ function countTris(root: THREE.Object3D): number {
 function countUniqueMaterials(root: THREE.Object3D): number {
   const materials = new Set<THREE.Material>();
   root.traverse((child) => {
-    if (!(child instanceof THREE.Mesh)) return;
-    if (Array.isArray(child.material)) {
-      for (const m of child.material) materials.add(m);
-    } else if (child.material) {
-      materials.add(child.material);
+    if (!(child as { isMesh?: boolean }).isMesh) return;
+    const meshChild = child as THREE.Mesh;
+    if (Array.isArray(meshChild.material)) {
+      for (const m of meshChild.material) materials.add(m);
+    } else if (meshChild.material) {
+      materials.add(meshChild.material);
     }
   });
   return materials.size;
