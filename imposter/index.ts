@@ -13,6 +13,21 @@ export { bakeImposter, openImposterSession } from './bake';
 export type { BakeImposterOptions, BakeImposterResult, ImposterSession } from './bake';
 
 export {
+  ATLAS_PROFILES,
+  ATLAS_PROFILE_NAMES,
+  isAtlasProfileName,
+  validateAgainstAtlasProfile,
+} from './atlas-profiles';
+export type {
+  AtlasProfileLimits,
+  AtlasProfileMetaInput,
+  AtlasProfileName,
+  AtlasProfileValidationResult,
+  AtlasProfileViolation,
+  AtlasProfileViolationField,
+} from './atlas-profiles';
+
+export {
   IMPOSTER_SCHEMA_VERSION,
   ImposterMetaSchema,
 } from './schema';
