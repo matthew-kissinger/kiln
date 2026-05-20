@@ -10,6 +10,12 @@
  */
 
 import * as THREE from 'three';
+import * as gears from './gears';
+import * as ops from './ops';
+import * as solids from './solids';
+import * as textures from './textures';
+import * as uv from './uv';
+import * as uvShapes from './uv-shapes';
 
 type Vec3Tuple = [number, number, number];
 
@@ -1057,25 +1063,8 @@ export function validateAsset(
 export function buildSandboxGlobals(
   usage?: Record<string, number>
 ): Record<string, unknown> {
-  // CSG ops are async — the executor awaits build() so agents can
-  // `await boolDiff(...)` inside build().
-  //
-  // Lazy-required at call-time so the Three.js-only path doesn't pay the
-  // manifold WASM init unless an agent actually uses CSG.
-  // eslint-disable-next-line @typescript-eslint/no-require-imports
-  const solids = require('./solids') as typeof import('./solids');
-  // eslint-disable-next-line @typescript-eslint/no-require-imports
-  const ops = require('./ops') as typeof import('./ops');
-  // eslint-disable-next-line @typescript-eslint/no-require-imports
-  const uv = require('./uv') as typeof import('./uv');
-  // eslint-disable-next-line @typescript-eslint/no-require-imports
-  const textures = require('./textures') as typeof import('./textures');
-  // eslint-disable-next-line @typescript-eslint/no-require-imports
-  const gears = require('./gears') as typeof import('./gears');
-  // eslint-disable-next-line @typescript-eslint/no-require-imports
-  const uvShapes = require('./uv-shapes') as typeof import('./uv-shapes');
-  // eslint-disable-next-line @typescript-eslint/no-require-imports
-  const THREE = require('three') as typeof import('three');
+  // CSG ops remain lazy at their own call sites, so importing the wrapper here
+  // is safe for Node ESM builds and still avoids manifold WASM init unless used.
 
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const wrap = <F extends (...args: any[]) => any>(name: string, fn: F): F => {

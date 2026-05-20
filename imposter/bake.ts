@@ -1,10 +1,11 @@
 /**
  * Imposter baker — renders a GLB from N camera angles into a packed atlas.
  *
- * Backend: Playwright + Chromium (same pattern as scripts/visual-audit.ts).
+ * Backend: Playwright + Chromium.
  * Reason: the kiln render substrate (render.ts) is pure scene-graph math with
- * no WebGL, so actual pixel output requires a real GPU context. Playwright is
- * already a repo dep and works on Windows, which headless-gl does not.
+ * no WebGL, so actual pixel output requires a real browser context. The public
+ * pixelforge CLI runs this path through Node, which is Playwright's supported
+ * JavaScript runtime across Windows, macOS, and Linux.
  *
  * Strategy:
  *   1. Launch one Chromium page per session (ImposterSession).
@@ -19,24 +20,34 @@
  */
 
 import { Buffer } from 'node:buffer';
-import { readFileSync } from 'node:fs';
+import { existsSync, readFileSync } from 'node:fs';
+import { createRequire } from 'node:module';
+import { dirname, extname, resolve, sep } from 'node:path';
 import sharp from 'sharp';
 import { chromium, type Page } from 'playwright';
 
 import type {
   ImposterAngleCount,
   ImposterAuxLayer,
-  ImposterAxis,
   ImposterBgColor,
   ImposterColorLayer,
+  ImposterLayout,
   ImposterMeta,
+  LatLonImposterAxis,
 } from './schema';
-import { IMPOSTER_SCHEMA_VERSION } from './schema';
-import { enumerateTiles, resolveLayout } from './projection';
+import { IMPOSTER_LEGACY_SCHEMA_VERSION, IMPOSTER_SCHEMA_VERSION, ImposterMetaSchema } from './schema';
+import { enumerateOctahedralTiles, enumerateTiles, resolveLayout } from './projection';
+
+const HARNESS_ORIGIN = 'https://pixel-forge-kiln.local';
+const nodeRequire = createRequire(import.meta.url);
 
 export interface BakeImposterOptions {
-  angles: ImposterAngleCount;
-  axis?: ImposterAxis;
+  angles?: ImposterAngleCount;
+  axis?: LatLonImposterAxis | 'octahedral';
+  /** Tile layout. Defaults to lat/lon unless axis is the octahedral compatibility alias. */
+  layout?: ImposterLayout;
+  /** Octahedral grid dimensions. Defaults to 8x8 when layout='octahedral'. */
+  grid?: { x: number; y: number };
   /** Pixel size of a single tile (square). Atlas size = tileSize * tilesX × tilesY. */
   tileSize?: 128 | 256 | 512 | 1024;
   /** Which layers to produce. 'albedo' is always included. */
@@ -49,6 +60,8 @@ export interface BakeImposterOptions {
   edgeBleedPx?: number;
   /** Included in meta.source.path for provenance. */
   sourcePath?: string;
+  /** Pin deterministic browser and PNG settings where Chromium permits it. */
+  deterministic?: boolean;
 }
 
 export interface BakeImposterResult {
@@ -65,12 +78,28 @@ export interface ImposterSession {
   close(): Promise<void>;
 }
 
+export interface OpenImposterSessionOptions {
+  deterministic?: boolean;
+}
+
 /** Spin up a reusable Playwright session. Call close() when you're done batching. */
-export async function openImposterSession(): Promise<ImposterSession> {
-  const browser = await chromium.launch();
+export async function openImposterSession(opts: OpenImposterSessionOptions = {}): Promise<ImposterSession> {
+  assertSupportedBrowserBakeRuntime();
+  const browser = await chromium.launch({
+    ...(opts.deterministic
+      ? {
+          args: [
+            '--disable-gpu',
+            '--use-angle=swiftshader-webgl',
+            '--use-gl=angle',
+          ],
+        }
+      : {}),
+  });
   const ctx = await browser.newContext({ viewport: { width: 1024, height: 1024 }, deviceScaleFactor: 1 });
   const page = await ctx.newPage();
-  await page.setContent(buildHarnessHtml());
+  await installHarnessRoutes(page);
+  await page.setContent(buildHarnessHtml({ deterministic: Boolean(opts.deterministic) }));
   await page.waitForFunction(
     () => (globalThis as unknown as { __imposterReady?: boolean }).__imposterReady === true,
     { timeout: 30_000 },
@@ -85,12 +114,21 @@ export async function openImposterSession(): Promise<ImposterSession> {
   };
 }
 
+function assertSupportedBrowserBakeRuntime(): void {
+  const isBun = Boolean((globalThis as { Bun?: unknown }).Bun);
+  if (isBun && process.platform === 'win32') {
+    throw new Error(
+      'Playwright-backed imposter baking is not supported through Bun on Windows. Build and run the public Node CLI instead: bun run --filter @pixel-forge/cli build && node packages/cli/dist/index.js kiln bake-imposter ...',
+    );
+  }
+}
+
 /** Convenience: one-shot bake. Internally opens + closes a session. */
 export async function bakeImposter(
   glb: Buffer | string,
   opts: BakeImposterOptions,
 ): Promise<BakeImposterResult> {
-  const session = await openImposterSession();
+  const session = await openImposterSession({ deterministic: opts.deterministic });
   try {
     return await session.bake(glb, opts);
   } finally {
@@ -107,8 +145,7 @@ async function bakeOnPage(
   glb: Buffer | string,
   opts: BakeImposterOptions,
 ): Promise<BakeImposterResult> {
-  const angles = opts.angles;
-  const axis: ImposterAxis = opts.axis ?? (angles === 16 ? 'y' : 'hemi-y');
+  const requestedLayout: ImposterLayout = opts.layout ?? (opts.axis === 'octahedral' ? 'octahedral' : 'latlon');
   const tileSize = opts.tileSize ?? 512;
   const auxLayers = uniqueAuxLayers(opts.auxLayers ?? []);
   const bgColor: ImposterBgColor = opts.bgColor ?? 'transparent';
@@ -125,8 +162,10 @@ async function bakeOnPage(
   const buf = typeof glb === 'string' ? readFileSync(glb) : glb;
   const sourcePath = opts.sourcePath ?? (typeof glb === 'string' ? glb : undefined);
 
-  const layout = resolveLayout(angles, axis);
-  const tiles = enumerateTiles(layout);
+  const resolved = resolveBakeLayout(opts, requestedLayout);
+  const tiles = resolved.layout === 'octahedral'
+    ? enumerateOctahedralTiles(resolved.grid)
+    : enumerateTiles(resolved.latLon);
 
   // Load the GLB into the harness and pull back bbox + tri count.
   const loadInfo = (await page.evaluate(
@@ -161,7 +200,7 @@ async function bakeOnPage(
       const png = Buffer.from(dataUrl.split(',')[1]!, 'base64');
       tilePngs.push(png);
     }
-    atlases[layer] = await composeAtlas(tilePngs, tileSize, layout.tilesX, layout.tilesY, bgColor, edgeBleedPx);
+    atlases[layer] = await composeAtlas(tilePngs, tileSize, resolved.tilesX, resolved.tilesY, bgColor, edgeBleedPx);
   }
 
   const albedo = atlases.albedo!;
@@ -180,22 +219,16 @@ async function bakeOnPage(
   const worldSize = Math.max(sizeX, sizeY, sizeZ);
   const yOffset = (min[1] + max[1]) * 0.5;
 
-  const meta: ImposterMeta = {
-    version: IMPOSTER_SCHEMA_VERSION,
-    angles,
-    tilesX: layout.tilesX,
-    tilesY: layout.tilesY,
+  const common = {
+    angles: resolved.angles,
+    tilesX: resolved.tilesX,
+    tilesY: resolved.tilesY,
     tileSize,
-    atlasWidth: layout.tilesX * tileSize,
-    atlasHeight: layout.tilesY * tileSize,
+    atlasWidth: resolved.tilesX * tileSize,
+    atlasHeight: resolved.tilesY * tileSize,
     worldSize,
     yOffset,
     projection: 'orthographic',
-    axis,
-    hemi: axis === 'hemi-y',
-    layout: 'latlon',
-    azimuths: layout.azimuths,
-    elevations: layout.elevations,
     bbox: { min, max },
     source: {
       ...(sourcePath ? { path: sourcePath } : {}),
@@ -208,9 +241,80 @@ async function bakeOnPage(
     normalSpace: 'capture-view',
     edgeBleedPx,
     textureColorSpace: 'srgb',
-  };
+  } as const;
+
+  const metaPayload = resolved.layout === 'octahedral'
+    ? {
+        version: IMPOSTER_SCHEMA_VERSION,
+        ...common,
+        axis: 'octahedral',
+        hemi: false,
+        layout: 'octahedral',
+        directionEncoding: 'octahedral',
+        directions: tiles.map((tile) => tile.dir),
+      }
+    : {
+        version: IMPOSTER_LEGACY_SCHEMA_VERSION,
+        ...common,
+        axis: resolved.latLon.axis,
+        hemi: resolved.latLon.axis === 'hemi-y',
+        layout: 'latlon',
+        azimuths: resolved.latLon.azimuths,
+        elevations: resolved.latLon.elevations,
+      };
+  ImposterMetaSchema.parse(metaPayload);
+  const meta = metaPayload as ImposterMeta;
 
   return { atlas: albedo, aux, meta };
+}
+
+type ResolvedBakeLayout =
+  | {
+      layout: 'latlon';
+      angles: ImposterAngleCount;
+      tilesX: number;
+      tilesY: number;
+      latLon: ReturnType<typeof resolveLayout>;
+    }
+  | {
+      layout: 'octahedral';
+      angles: number;
+      tilesX: number;
+      tilesY: number;
+      grid: { x: number; y: number };
+    };
+
+function resolveBakeLayout(
+  opts: BakeImposterOptions,
+  layout: ImposterLayout,
+): ResolvedBakeLayout {
+  if (layout === 'octahedral') {
+    const grid = opts.grid ?? { x: 8, y: 8 };
+    if (!Number.isInteger(grid.x) || !Number.isInteger(grid.y) || grid.x <= 0 || grid.y <= 0) {
+      throw new Error(`octahedral grid must be positive integers (got ${grid.x}x${grid.y})`);
+    }
+    return {
+      layout,
+      angles: grid.x * grid.y,
+      tilesX: grid.x,
+      tilesY: grid.y,
+      grid,
+    };
+  }
+
+  if (opts.axis === 'octahedral') {
+    throw new Error("axis='octahedral' requires layout='octahedral'");
+  }
+  const angles = opts.angles ?? 16;
+  const axis: LatLonImposterAxis = opts.axis ?? (angles === 16 ? 'y' : 'hemi-y');
+  const latLon = resolveLayout(angles, axis);
+  return {
+    layout,
+    angles,
+    tilesX: latLon.tilesX,
+    tilesY: latLon.tilesY,
+    latLon,
+  };
 }
 
 async function composeAtlas(
@@ -242,7 +346,7 @@ async function composeAtlas(
     create: { width, height, channels: 4, background: bg },
   })
     .composite(composites)
-    .png()
+    .png({ compressionLevel: 9, adaptiveFiltering: false })
     .toBuffer();
 
   return bgColor === 'transparent' && edgeBleedPx > 0
@@ -257,6 +361,42 @@ function uniqueAuxLayers(layers: ImposterAuxLayer[]): ImposterAuxLayer[] {
     if (!out.includes(layer)) out.push(layer);
   }
   return out;
+}
+
+async function installHarnessRoutes(page: Page): Promise<void> {
+  const threeRoot = dirname(dirname(nodeRequire.resolve('three')));
+  await page.route(`${HARNESS_ORIGIN}/three/**`, async (route) => {
+    const url = new URL(route.request().url());
+    const rel = decodeURIComponent(url.pathname.replace(/^\/three\//, ''));
+    const filePath = resolve(threeRoot, rel);
+    const rootWithSep = threeRoot.endsWith(sep) ? threeRoot : `${threeRoot}${sep}`;
+    if (filePath !== threeRoot && !filePath.startsWith(rootWithSep)) {
+      await route.abort();
+      return;
+    }
+    if (!existsSync(filePath)) {
+      await route.abort();
+      return;
+    }
+    await route.fulfill({
+      status: 200,
+      contentType: contentTypeFor(filePath),
+      body: readFileSync(filePath),
+    });
+  });
+}
+
+function contentTypeFor(filePath: string): string {
+  switch (extname(filePath).toLowerCase()) {
+    case '.js':
+      return 'application/javascript';
+    case '.wasm':
+      return 'application/wasm';
+    case '.json':
+      return 'application/json';
+    default:
+      return 'application/octet-stream';
+  }
 }
 
 export async function bleedTransparentRgb(png: Buffer, radius: number): Promise<Buffer> {
@@ -308,14 +448,17 @@ export async function bleedTransparentRgb(png: Buffer, radius: number): Promise<
     dst = tmp;
   }
 
-  return sharp(src, { raw: { width, height, channels: 4 } }).png().toBuffer();
+  return sharp(src, { raw: { width, height, channels: 4 } })
+    .png({ compressionLevel: 9, adaptiveFiltering: false })
+    .toBuffer();
 }
 
 // ============================================================================
-// In-browser harness — three.js 0.184 from CDN, with loader + render helpers.
+// In-browser harness - local three.js modules, with loader + render helpers.
 // ============================================================================
 
-function buildHarnessHtml(): string {
+function buildHarnessHtml(opts: { deterministic: boolean }): string {
+  const antialias = opts.deterministic ? 'false' : 'true';
   return `<!DOCTYPE html>
 <html><head>
 <meta charset="utf-8">
@@ -323,8 +466,8 @@ function buildHarnessHtml(): string {
 <script type="importmap">
 {
   "imports": {
-    "three": "https://unpkg.com/three@0.184.0/build/three.module.js",
-    "three/addons/": "https://unpkg.com/three@0.184.0/examples/jsm/"
+    "three": "${HARNESS_ORIGIN}/three/build/three.module.js",
+    "three/addons/": "${HARNESS_ORIGIN}/three/examples/jsm/"
   }
 }
 </script>
@@ -334,10 +477,11 @@ function buildHarnessHtml(): string {
 <script type="module">
 import * as THREE from 'three';
 import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
+import { DRACOLoader } from 'three/addons/loaders/DRACOLoader.js';
 
 const W = () => renderer.domElement.width;
 const app = document.getElementById('app');
-const renderer = new THREE.WebGLRenderer({ antialias: true, alpha: true, preserveDrawingBuffer: true });
+const renderer = new THREE.WebGLRenderer({ antialias: ${antialias}, alpha: true, preserveDrawingBuffer: true });
 renderer.setPixelRatio(1);
 renderer.setSize(1024, 1024);
 renderer.outputColorSpace = THREE.SRGBColorSpace;
@@ -367,6 +511,9 @@ window.__imposterLoadGlb = async (dataUrl, tileSize) => {
     renderer.setSize(tileSize, tileSize);
   }
   const loader = new GLTFLoader();
+  const dracoLoader = new DRACOLoader();
+  dracoLoader.setDecoderPath('${HARNESS_ORIGIN}/three/examples/jsm/libs/draco/');
+  loader.setDRACOLoader(dracoLoader);
   return new Promise((resolve, reject) => {
     loader.load(dataUrl, (gltf) => {
       root = gltf.scene;
@@ -447,6 +594,7 @@ window.__imposterRenderTile = ({ dir, layer, bgColor, colorLayer, tileSize }) =>
   const d = new THREE.Vector3(dir[0], dir[1], dir[2]).normalize();
   camera.position.copy(boundsCenter).addScaledVector(d, boundsRadius * 4);
   camera.up.set(0, 1, 0);
+  if (Math.abs(d.dot(camera.up)) > 0.97) camera.up.set(0, 0, 1);
   camera.lookAt(boundsCenter);
 
   // Background.

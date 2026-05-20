@@ -4,10 +4,15 @@
 
 import { describe, expect, test } from 'bun:test';
 
-import { IMPOSTER_SCHEMA_VERSION, ImposterMetaSchema, type ImposterMeta } from '../schema';
+import {
+  IMPOSTER_LEGACY_SCHEMA_VERSION,
+  IMPOSTER_SCHEMA_VERSION,
+  ImposterMetaSchema,
+  type ImposterMeta,
+} from '../schema';
 
 const VALID: ImposterMeta = {
-  version: IMPOSTER_SCHEMA_VERSION,
+  version: IMPOSTER_LEGACY_SCHEMA_VERSION,
   angles: 16,
   tilesX: 4,
   tilesY: 4,
@@ -82,5 +87,61 @@ describe('ImposterMetaSchema', () => {
     expect(() => ImposterMetaSchema.parse(bad)).toThrow();
     const ok = { ...bad, auxLayers: ['albedo', 'normal'] };
     expect(() => ImposterMetaSchema.parse(ok)).not.toThrow();
+  });
+
+  test('accepts v2 latlon sidecars for forward-compatible static bakes', () => {
+    const decoded = ImposterMetaSchema.parse({ ...VALID, version: IMPOSTER_SCHEMA_VERSION });
+    expect(decoded.version).toBe(IMPOSTER_SCHEMA_VERSION);
+    expect(decoded.layout).toBe('latlon');
+  });
+
+  test('accepts a valid v2 octahedral sidecar', () => {
+    const octa = {
+      ...VALID,
+      version: IMPOSTER_SCHEMA_VERSION,
+      angles: 4,
+      tilesX: 2,
+      tilesY: 2,
+      atlasWidth: 1024,
+      atlasHeight: 1024,
+      axis: 'octahedral',
+      hemi: false,
+      layout: 'octahedral',
+      directionEncoding: 'octahedral',
+      directions: [
+        [1, 0, 0],
+        [0, 1, 0],
+        [0, 0, 1],
+        [-1, 0, 0],
+      ],
+    };
+    delete (octa as Record<string, unknown>).azimuths;
+    delete (octa as Record<string, unknown>).elevations;
+
+    const decoded = ImposterMetaSchema.parse(octa);
+    expect(decoded.version).toBe(2);
+    expect(decoded.layout).toBe('octahedral');
+    if (decoded.layout !== 'octahedral') throw new Error('expected octahedral payload');
+    expect(decoded.directions).toHaveLength(4);
+  });
+
+  test('rejects octahedral sidecars with non-unit directions', () => {
+    const bad = {
+      ...VALID,
+      version: IMPOSTER_SCHEMA_VERSION,
+      angles: 1,
+      tilesX: 1,
+      tilesY: 1,
+      atlasWidth: 512,
+      atlasHeight: 512,
+      axis: 'octahedral',
+      hemi: false,
+      layout: 'octahedral',
+      directionEncoding: 'octahedral',
+      directions: [[2, 0, 0]],
+    };
+    delete (bad as Record<string, unknown>).azimuths;
+    delete (bad as Record<string, unknown>).elevations;
+    expect(() => ImposterMetaSchema.parse(bad)).toThrow();
   });
 });

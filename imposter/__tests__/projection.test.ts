@@ -6,7 +6,10 @@ import { describe, expect, test } from 'bun:test';
 
 import {
   dirFromAzEl,
+  enumerateOctahedralTiles,
   enumerateTiles,
+  octaDecode,
+  octaEncode,
   resolveLayout,
 } from '../projection';
 
@@ -112,5 +115,41 @@ describe('enumerateTiles', () => {
     expect(enumerateTiles(resolveLayout(16, 'y'))).toHaveLength(16);
     expect(enumerateTiles(resolveLayout(16, 'hemi-y'))).toHaveLength(16);
     expect(enumerateTiles(resolveLayout(32, 'hemi-y'))).toHaveLength(32);
+  });
+});
+
+describe('octahedral projection', () => {
+  test('enumerateOctahedralTiles returns row-major unit directions', () => {
+    const tiles = enumerateOctahedralTiles({ x: 4, y: 4 });
+    expect(tiles).toHaveLength(16);
+    expect(tiles.map((tile) => [tile.i, tile.j]).slice(0, 5)).toEqual([
+      [0, 0],
+      [1, 0],
+      [2, 0],
+      [3, 0],
+      [0, 1],
+    ]);
+    for (const tile of tiles) expect(unit(tile.dir)).toBe(true);
+  });
+
+  test('octaEncode and octaDecode round-trip canonical directions', () => {
+    for (const dir of [
+      [1, 0, 0],
+      [0, 1, 0],
+      [0, -1, 0],
+      [0, 0, 1],
+      [0, 0, -1],
+    ] as Array<[number, number, number]>) {
+      const encoded = octaEncode(dir);
+      const decoded = octaDecode(encoded[0], encoded[1]);
+      expect(decoded[0]).toBeCloseTo(dir[0], 6);
+      expect(decoded[1]).toBeCloseTo(dir[1], 6);
+      expect(decoded[2]).toBeCloseTo(dir[2], 6);
+    }
+  });
+
+  test('rejects invalid octahedral grid dimensions', () => {
+    expect(() => enumerateOctahedralTiles({ x: 0, y: 4 })).toThrow();
+    expect(() => enumerateOctahedralTiles({ x: 4.5, y: 4 })).toThrow();
   });
 });

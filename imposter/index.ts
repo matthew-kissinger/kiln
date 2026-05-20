@@ -10,7 +10,12 @@
  */
 
 export { bakeImposter, openImposterSession } from './bake';
-export type { BakeImposterOptions, BakeImposterResult, ImposterSession } from './bake';
+export type {
+  BakeImposterOptions,
+  BakeImposterResult,
+  ImposterSession,
+  OpenImposterSessionOptions,
+} from './bake';
 
 export {
   ATLAS_PROFILES,
@@ -18,6 +23,13 @@ export {
   isAtlasProfileName,
   validateAgainstAtlasProfile,
 } from './atlas-profiles';
+
+export { validateImposterSidecar } from './validate';
+export type {
+  ImposterValidationIssue,
+  ImposterValidationResult,
+  ValidateImposterOptions,
+} from './validate';
 export type {
   AtlasProfileLimits,
   AtlasProfileMetaInput,
@@ -28,6 +40,7 @@ export type {
 } from './atlas-profiles';
 
 export {
+  IMPOSTER_LEGACY_SCHEMA_VERSION,
   IMPOSTER_SCHEMA_VERSION,
   ImposterMetaSchema,
 } from './schema';
@@ -48,6 +61,7 @@ export type {
   ImposterMeta,
   ImposterAngleCount,
   ImposterAxis,
+  LatLonImposterAxis,
   ImposterLayout,
   ImposterAuxLayer,
   ImposterBgColor,
@@ -67,8 +81,20 @@ export type {
   AnimatedImposterWarning,
 } from './animated-schema';
 
-export { resolveLayout, enumerateTiles, dirFromAzEl } from './projection';
-export type { TileCamera, TileLayout } from './projection';
+export {
+  dirFromAzEl,
+  enumerateOctahedralTiles,
+  enumerateTiles,
+  octaDecode,
+  octaEncode,
+  resolveLayout,
+} from './projection';
+export type {
+  OctahedralGrid,
+  OctahedralTileCamera,
+  TileCamera,
+  TileLayout,
+} from './projection';
 
 export {
   resolveClips,

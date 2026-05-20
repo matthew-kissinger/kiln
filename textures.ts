@@ -9,9 +9,6 @@
  */
 
 import * as THREE from 'three';
-import { readFileSync } from 'node:fs';
-import path from 'node:path';
-import sharp from 'sharp';
 
 export type TextureSource = string | Buffer | Uint8Array;
 
@@ -36,15 +33,18 @@ export interface EncodedTextureData {
 export async function loadTexture(source: TextureSource): Promise<THREE.DataTexture> {
   let bytes: Uint8Array;
   if (typeof source === 'string') {
+    const fs = await import('node:fs');
+    const path = await import('node:path');
     const abs = path.isAbsolute(source) ? source : path.resolve(source);
-    bytes = new Uint8Array(readFileSync(abs));
-  } else if (Buffer.isBuffer(source)) {
+    bytes = new Uint8Array(fs.readFileSync(abs));
+  } else if (typeof Buffer !== 'undefined' && Buffer.isBuffer(source)) {
     bytes = new Uint8Array(source);
   } else {
     bytes = source;
   }
 
   const mime = sniffMime(bytes);
+  const sharp = (await import('sharp')).default;
 
   // Decode to RGBA via sharp so we have a live Texture for editor preview
   // and for any client-side work (projection baking, normal-map inspect).

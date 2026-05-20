@@ -26,6 +26,7 @@ import {
   type AnimatedImposterPreBakeReport,
 } from './animated-validate';
 import type { ResolvedClip } from './clip-resolver';
+import { enumerateOctahedralTiles } from './projection';
 
 export interface AnimatedTileCamera {
   i: number;
@@ -98,18 +99,7 @@ interface BrowserAttachmentInput extends Omit<AnimatedImposterAttachment, 'glb'>
 }
 
 export function enumerateOctahedralGrid(x: number, y: number): AnimatedTileCamera[] {
-  if (!Number.isInteger(x) || !Number.isInteger(y) || x <= 0 || y <= 0) {
-    throw new Error('octahedral grid dimensions must be positive integers');
-  }
-  const out: AnimatedTileCamera[] = [];
-  for (let j = 0; j < y; j++) {
-    for (let i = 0; i < x; i++) {
-      const u = ((i + 0.5) / x) * 2 - 1;
-      const v = 1 - ((j + 0.5) / y) * 2;
-      out.push({ i, j, u, v, dir: octaDecode(u, v) });
-    }
-  }
-  return out;
+  return enumerateOctahedralTiles({ x, y });
 }
 
 export async function openAnimatedImposterSession(): Promise<AnimatedImposterSession> {
@@ -383,21 +373,6 @@ function chooseFrameGrid(layerCount: number): { framesX: number; framesY: number
     }
   }
   return { framesX: best.framesX, framesY: best.framesY };
-}
-
-function octaDecode(u: number, v: number): [number, number, number] {
-  let x = u;
-  const y = 1 - Math.abs(u) - Math.abs(v);
-  let z = v;
-
-  if (y < 0) {
-    const oldX = x;
-    x = (1 - Math.abs(z)) * Math.sign(oldX || 1);
-    z = (1 - Math.abs(oldX)) * Math.sign(z || 1);
-  }
-
-  const len = Math.hypot(x, y, z) || 1;
-  return [x / len, y / len, z / len];
 }
 
 function buildAnimatedHarnessHtml(): string {

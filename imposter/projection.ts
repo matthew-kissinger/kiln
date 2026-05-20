@@ -42,6 +42,24 @@ export interface TileLayout {
   axis: ImposterAxis;
 }
 
+export interface OctahedralGrid {
+  x: number;
+  y: number;
+}
+
+export interface OctahedralTileCamera {
+  /** Tile column (0 = leftmost). */
+  i: number;
+  /** Tile row (0 = topmost). */
+  j: number;
+  /** Octahedral encoded U coordinate at tile center, -1..1. */
+  u: number;
+  /** Octahedral encoded V coordinate at tile center, -1..1. */
+  v: number;
+  /** Unit direction FROM target center TOWARD camera. */
+  dir: [number, number, number];
+}
+
 /**
  * Resolve grid dimensions + angle sequences for a given (angles, axis) combo.
  * Throws on unsupported combinations.
@@ -123,6 +141,56 @@ export function dirFromAzEl(az: number, el: number): [number, number, number] {
   const z = Math.sin(az) * ce;
   const y = Math.sin(el);
   return [x, y, z];
+}
+
+/** Enumerate an octahedral atlas grid, left-to-right top-to-bottom. */
+export function enumerateOctahedralTiles(grid: OctahedralGrid): OctahedralTileCamera[] {
+  if (!Number.isInteger(grid.x) || !Number.isInteger(grid.y) || grid.x <= 0 || grid.y <= 0) {
+    throw new Error('octahedral grid dimensions must be positive integers');
+  }
+  const out: OctahedralTileCamera[] = [];
+  for (let j = 0; j < grid.y; j++) {
+    for (let i = 0; i < grid.x; i++) {
+      const u = ((i + 0.5) / grid.x) * 2 - 1;
+      const v = 1 - ((j + 0.5) / grid.y) * 2;
+      out.push({ i, j, u, v, dir: octaDecode(u, v) });
+    }
+  }
+  return out;
+}
+
+/**
+ * Decode 2D octahedral coordinates into a Kiln world-frame direction.
+ * The Y component is world-up, matching the animated imposter baker.
+ */
+export function octaDecode(u: number, v: number): [number, number, number] {
+  let x = u;
+  const y = 1 - Math.abs(u) - Math.abs(v);
+  let z = v;
+  if (y < 0) {
+    const ox = x;
+    x = (1 - Math.abs(z)) * Math.sign(ox || 1);
+    z = (1 - Math.abs(ox)) * Math.sign(z || 1);
+  }
+  const len = Math.hypot(x, y, z) || 1;
+  return [x / len, y / len, z / len];
+}
+
+/** Encode a Kiln world-frame direction into octahedral coordinates. */
+export function octaEncode(dir: [number, number, number]): [number, number] {
+  const len = Math.hypot(dir[0], dir[1], dir[2]) || 1;
+  let x = dir[0] / len;
+  const y = dir[1] / len;
+  let z = dir[2] / len;
+  const denom = Math.abs(x) + Math.abs(y) + Math.abs(z) || 1;
+  x /= denom;
+  z /= denom;
+  if (y < 0) {
+    const ox = x;
+    x = (1 - Math.abs(z)) * Math.sign(ox || 1);
+    z = (1 - Math.abs(ox)) * Math.sign(z || 1);
+  }
+  return [x, z];
 }
 
 function evenAzimuths(count: number): number[] {
