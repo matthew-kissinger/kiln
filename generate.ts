@@ -16,6 +16,12 @@
 import { query } from '@anthropic-ai/claude-agent-sdk';
 
 import {
+  generateKilnCodeCandidate,
+  generateTextWithRoute,
+  isExperimentalKilnModel,
+  resolveKilnModelRoute,
+} from '../llm';
+import {
   buildUserPrompt,
   getSystemPrompt,
   type KilnGenerateRequest,
@@ -137,6 +143,18 @@ export async function generateKilnCode(
   stripClaudeCodeNestingMarkers();
 
   try {
+    if (shouldUseModelHarness(opts.model)) {
+      const result = await runHarnessGenerate(request, opts);
+      if (!result.success) return result;
+      if (result.code && request.mode !== 'tsl') {
+        const validation = validate(result.code);
+        if (!validation.valid) {
+          return retryWithFeedback(request, result.code, validation.errors, opts);
+        }
+      }
+      return result;
+    }
+
     const userPrompt = buildUserPrompt(request);
     const systemPrompt = getSystemPrompt(request.mode);
 
@@ -364,6 +382,10 @@ async function runRefactorQuery(
   systemPrompt: string,
   opts: KilnGenerateCallOptions
 ): Promise<KilnGenerateResult> {
+  if (shouldUseModelHarness(opts.model)) {
+    return runHarnessTextQuery(prompt, systemPrompt, opts);
+  }
+
   const abortController = new AbortController();
   const timeoutMs = opts.timeoutMs ?? DEFAULT_QUERY_TIMEOUT_MS;
   const timeout = setTimeout(() => abortController.abort(), timeoutMs);
@@ -441,12 +463,62 @@ async function runStructuredQuery(
   }
 }
 
+async function runHarnessTextQuery(
+  prompt: string,
+  systemPrompt: string,
+  opts: KilnGenerateCallOptions,
+): Promise<KilnGenerateResult> {
+  try {
+    const route = resolveKilnModelRoute({
+      model:
+        opts.model ??
+        process.env['KILN_MODEL'] ??
+        process.env['PIXEL_FORGE_MODEL'],
+    });
+    const out = await generateTextWithRoute({
+      route,
+      system: systemPrompt,
+      prompt,
+      maxOutputTokens: 16_000,
+    });
+    const parsed = parseResultText(out.text);
+    return {
+      ...parsed,
+      usage: toKilnUsage(out.usage),
+    };
+  } catch (error) {
+    const message = error instanceof Error ? error.message : 'Unknown error';
+    return { success: false, error: message };
+  }
+}
+
 async function retryWithFeedback(
   request: KilnGenerateRequest,
   failedCode: string,
   errors: string[],
   opts: KilnGenerateCallOptions
 ): Promise<KilnGenerateResult> {
+  if (shouldUseModelHarness(opts.model)) {
+    try {
+      const candidate = await generateKilnCodeCandidate(request, {
+        model:
+          opts.model ??
+          process.env['KILN_MODEL'] ??
+          process.env['PIXEL_FORGE_MODEL'],
+        priorCode: failedCode,
+        priorWarnings: errors,
+      });
+      return {
+        success: true,
+        code: candidate.code,
+        usage: toKilnUsage(candidate.usage),
+      };
+    } catch (error) {
+      const message = error instanceof Error ? error.message : 'Unknown error';
+      return { success: false, error: `Retry failed: ${message}` };
+    }
+  }
+
   const retryPrompt = `Previous attempt had validation errors:
 ${errors.map((e) => `- ${e}`).join('\n')}
 
@@ -501,4 +573,44 @@ function parseResultText(result: string, sessionId?: string): KilnGenerateResult
   }
 
   return { success: true, code: result.trim(), sessionId };
+}
+
+function shouldUseModelHarness(model: string | undefined): boolean {
+  return isExperimentalKilnModel(
+    model ?? process.env['KILN_MODEL'] ?? process.env['PIXEL_FORGE_MODEL'],
+  );
+}
+
+async function runHarnessGenerate(
+  request: KilnGenerateRequest,
+  opts: KilnGenerateCallOptions,
+): Promise<KilnGenerateResult> {
+  try {
+    const candidate = await generateKilnCodeCandidate(request, {
+      model:
+        opts.model ??
+        process.env['KILN_MODEL'] ??
+        process.env['PIXEL_FORGE_MODEL'],
+    });
+    return {
+      success: true,
+      code: candidate.code,
+      usage: toKilnUsage(candidate.usage),
+    };
+  } catch (error) {
+    const message = error instanceof Error ? error.message : 'Unknown error';
+    return { success: false, error: message };
+  }
+}
+
+function toKilnUsage(
+  usage: { inputTokens?: number; outputTokens?: number } | undefined,
+): KilnGenerateResult['usage'] | undefined {
+  if (usage?.inputTokens === undefined && usage?.outputTokens === undefined) {
+    return undefined;
+  }
+  return {
+    inputTokens: usage?.inputTokens ?? 0,
+    outputTokens: usage?.outputTokens ?? 0,
+  };
 }
