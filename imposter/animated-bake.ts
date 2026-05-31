@@ -538,7 +538,8 @@ window.__animatedImposterRenderTile = ({ dir, clipRawName, timeSec, tileSize }) 
   });
 
   const half = boundsRadius * 1.05;
-  const camera = new THREE.OrthographicCamera(-half, half, half, -half, 0.01, 200);
+  const far = Math.max(200, boundsRadius * 8);
+  const camera = new THREE.OrthographicCamera(-half, half, half, -half, 0.01, far);
   const d = new THREE.Vector3(dir[0], dir[1], dir[2]).normalize();
   camera.position.copy(boundsCenter).addScaledVector(d, boundsRadius * 4);
   camera.up.set(0, 1, 0);
