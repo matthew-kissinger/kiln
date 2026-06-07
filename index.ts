@@ -130,6 +130,12 @@ export { loadTexture, pbrMaterial } from './textures';
 export type { PbrMaterialOptions, TextureSource, EncodedTextureData } from './textures';
 
 // -----------------------------------------------------------------------------
+// Shared tool registry (kiln/tools) — Kiln Bench capability surface
+// -----------------------------------------------------------------------------
+export { kilnToolRegistry } from './tools/registry';
+export type { KilnToolDef, KilnRenderMetrics } from './tools/registry';
+
+// -----------------------------------------------------------------------------
 // LOD chain generator (kiln/lod)
 // -----------------------------------------------------------------------------
 // Note: `countTriangles` is intentionally NOT re-exported from the kiln
