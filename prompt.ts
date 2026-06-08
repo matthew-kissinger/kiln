@@ -589,6 +589,25 @@ export function getSystemPrompt(mode: RenderMode): string {
   return KILN_SYSTEM_PROMPT;
 }
 
+/**
+ * Prepended to the system prompt when refining an existing asset (existingCode set).
+ * Frames the model as an editor working on top of the unchanged Kiln conventions, so
+ * it preserves the asset's character and changes only what the Edit Request asks. The
+ * task-level know-how (primitives, orientation, attachment) still comes from
+ * `getSystemPrompt`; this is an additive directive, not a replacement.
+ */
+export const KILN_REFINE_DIRECTIVE = `You are MODIFYING an existing Kiln asset, not building a new one from scratch. The user message gives you the Original Request that created the asset, its Current Code, and an Edit Request. Keep the asset's established character, proportions, and structure; change ONLY what the Edit Request asks for. Re-validate and re-render the edited program with the kiln tools, then submit it with kiln_submit.`;
+
+/**
+ * Prepended to the system prompt when refining in EDIT mode (existingCode set and the
+ * caller chose surgical edits). Supersedes {@link KILN_REFINE_DIRECTIVE}: it carries the
+ * same modify-not-rebuild framing plus the edit-tool mechanics. The model works on a live
+ * working buffer seeded with the Current Code and changes it in place with `kiln_edit`,
+ * rather than re-emitting the whole program. The full-rewrite path stays available as an
+ * escape hatch (submit a complete program) so edit mode is never strictly worse.
+ */
+export const KILN_EDIT_DIRECTIVE = `You are EDITING an existing Kiln asset in place, not rebuilding it. A working buffer holds the Current Code shown in the user message. Use the kiln_edit tool to make the SMALLEST set of changes that satisfy the Edit Request: replace an exact span (oldString) with newString. Each oldString must match the current buffer verbatim - call kiln_view to read it (the text is raw, with no line-number prefixes). Keep everything the Edit Request does not mention byte-for-byte unchanged. After your edits, re-validate and re-render the buffer with the kiln tools, then call kiln_submit (omit its code argument to submit the working buffer). If an edit cannot be anchored after a couple of tries, you may submit a complete corrected program instead.`;
+
 export interface AssetBudget {
   maxTriangles?: number;
   maxMaterials?: number;
@@ -602,6 +621,10 @@ export interface KilnGenerateRequest {
   budget?: AssetBudget;
   includeAnimation?: boolean;
   existingCode?: string;
+  /** The asset's original generation prompt. When refining (existingCode set) it
+   *  is rendered as a "## Original Request" section ahead of the code so the model
+   *  knows the asset's intent, not just its source. Ignored for fresh generation. */
+  originalPrompt?: string;
   referenceImageUrl?: string;
 }
 
@@ -628,23 +651,34 @@ export function buildUserPrompt(request: KilnGenerateRequest): string {
 
   // Main request
   if (request.existingCode) {
-    parts.push(`## Current Code\n\n\`\`\`typescript\n${request.existingCode}\n\`\`\`\n\n## Edit Request\n\n${request.prompt}`);
+    // Refine framing: Original Request (intent) -> Current Code (source) -> Edit Request.
+    const editSections: string[] = [];
+    if (request.originalPrompt) {
+      editSections.push(`## Original Request\n\n${request.originalPrompt}`);
+    }
+    editSections.push(`## Current Code\n\n\`\`\`typescript\n${request.existingCode}\n\`\`\``);
+    editSections.push(`## Edit Request\n\n${request.prompt}`);
+    parts.push(editSections.join('\n\n'));
   } else {
     parts.push(`## Task\n\nCreate a ${request.category}: ${request.prompt}`);
   }
 
-  // Animation instructions
-  if (request.includeAnimation !== false) {
-    parts.push(`
+  // Animation instructions — only for fresh generation. When editing existing code
+  // the Edit Request governs whether animation changes, so forcing either block
+  // would fight the instruction (e.g. "add a spin" vs a "## No Animation" directive).
+  if (!request.existingCode) {
+    if (request.includeAnimation !== false) {
+      parts.push(`
 ## Animation Requirements
 Include an animate() function that returns an array of AnimationClips.
 Use createPivot() for parts that need animation, then animate them with rotationTrack/positionTrack.
 Track names MUST match pivot names exactly (e.g., createPivot("Lid",...) -> rotationTrack("Joint_Lid",...)).
 Make animations loop seamlessly (end keyframe = start keyframe values).`);
-  } else {
-    parts.push(`
+    } else {
+      parts.push(`
 ## No Animation
 Do NOT include an animate() function. Only create the static geometry in build().`);
+    }
   }
 
   parts.push('\n\nGenerate the complete code.');

@@ -9,15 +9,20 @@
  *
  * - {@link runKilnAgent}      — drive any Strands Model through the kiln tool loop
  * - {@link makeKilnTools}     — in-process tool skin over the shared registry
+ * - {@link makeKilnEditTools} — surgical edit-tool skin for refining an existing asset
+ * - {@link unifiedDiff}       — dependency-free unified diff (the refine patch artifact)
  * - {@link ensureStreamStart} — the OpenRouter/Vercel-bridge stream fix
  * - {@link makeOpenRouterModel} — build an OpenRouter Strands model with the fix
  * - {@link MetricsCollector}  — per-loop tool/step/usage metrics via hooks
  */
 export { runKilnAgent } from './run';
-export type { RunKilnAgentOptions, RunKilnAgentResult, KilnKnowhow } from './run';
+export type { RunKilnAgentOptions, RunKilnAgentResult, KilnKnowhow, RefineMode } from './run';
 
-export { makeKilnTools, KILN_SUBMIT_TOOL_NAME } from './tools';
-export type { SubmitSink } from './tools';
+export { makeKilnTools, makeKilnEditTools, KilnEditBuffer, KILN_SUBMIT_TOOL_NAME } from './tools';
+export type { SubmitSink, EditSink, EditRecord, EditResult } from './tools';
+
+export { unifiedDiff } from './diff';
+export type { UnifiedDiffOptions } from './diff';
 
 export { ensureStreamStart } from './stream-start';
 

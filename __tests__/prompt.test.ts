@@ -16,6 +16,7 @@ import {
   KILN_SYSTEM_PROMPT,
   KILN_TSL_SYSTEM_PROMPT,
   KILN_BOTH_SYSTEM_PROMPT,
+  KILN_REFINE_DIRECTIVE,
 } from '../prompt';
 
 describe('getSystemPrompt', () => {
@@ -96,6 +97,66 @@ describe('buildUserPrompt', () => {
     expect(prompt).toContain('Create a prop: red barrel');
   });
 
+  test('prepends an Original Request section (intent -> code -> edit order) when refining', () => {
+    const prompt = buildUserPrompt({
+      prompt: 'make the barrel taller',
+      mode: 'glb',
+      category: 'prop',
+      existingCode: 'const meta = {};',
+      originalPrompt: 'a wooden barrel',
+    });
+    // All three refine sections are present...
+    expect(prompt).toContain('## Original Request');
+    expect(prompt).toContain('## Current Code');
+    expect(prompt).toContain('## Edit Request');
+    // ...the original intent and the edit instruction are both carried...
+    expect(prompt).toContain('a wooden barrel');
+    expect(prompt).toContain('make the barrel taller');
+    // ...and they appear in intent -> code -> edit order, with no fresh-gen framing.
+    expect(prompt.indexOf('## Original Request')).toBeLessThan(prompt.indexOf('## Current Code'));
+    expect(prompt.indexOf('## Current Code')).toBeLessThan(prompt.indexOf('## Edit Request'));
+    expect(prompt).not.toContain('## Task');
+  });
+
+  test('omits the Original Request section when refining without originalPrompt', () => {
+    const prompt = buildUserPrompt({
+      prompt: 'add a hat',
+      mode: 'glb',
+      category: 'character',
+      existingCode: 'const meta = {};',
+    });
+    expect(prompt).not.toContain('## Original Request');
+    expect(prompt).toContain('## Current Code');
+    expect(prompt).toContain('## Edit Request');
+  });
+
+  test('ignores originalPrompt entirely for fresh generation (no existingCode)', () => {
+    const prompt = buildUserPrompt({
+      prompt: 'red barrel',
+      mode: 'glb',
+      category: 'prop',
+      originalPrompt: 'should be ignored',
+    });
+    expect(prompt).not.toContain('## Original Request');
+    expect(prompt).not.toContain('should be ignored');
+    expect(prompt).toContain('## Task');
+    expect(prompt).toContain('Create a prop: red barrel');
+  });
+
+  test('omits both animation blocks when refining so the edit request governs', () => {
+    // includeAnimation defaults to "on", but a refine must not force an animate()
+    // function onto an asset the edit did not ask to animate (and vice versa).
+    const prompt = buildUserPrompt({
+      prompt: 'make the lid open',
+      mode: 'glb',
+      category: 'prop',
+      existingCode: 'function build() { return createRoot("x"); }',
+      originalPrompt: 'a treasure chest',
+    });
+    expect(prompt).not.toContain('## Animation Requirements');
+    expect(prompt).not.toContain('## No Animation');
+  });
+
   test('emits the No Animation block when includeAnimation=false', () => {
     const prompt = buildUserPrompt({
       prompt: 'static prop',
@@ -114,5 +175,14 @@ describe('buildUserPrompt', () => {
       category: 'prop',
     });
     expect(prompt).toContain('## Animation Requirements');
+  });
+});
+
+describe('KILN_REFINE_DIRECTIVE', () => {
+  test('is a non-empty editor-framing directive that points at the refine sections', () => {
+    expect(KILN_REFINE_DIRECTIVE.length).toBeGreaterThan(40);
+    expect(KILN_REFINE_DIRECTIVE).toContain('MODIFYING');
+    expect(KILN_REFINE_DIRECTIVE).toContain('Edit Request');
+    expect(KILN_REFINE_DIRECTIVE).toContain('kiln_submit');
   });
 });
