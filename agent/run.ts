@@ -20,7 +20,7 @@ import { Agent, type Plugin, type Tool, type Message } from '@strands-agents/sdk
 import { AgentSkills } from '@strands-agents/sdk/vended-plugins/skills';
 
 import { getSystemPrompt, buildUserPrompt, KILN_REFINE_DIRECTIVE, KILN_EDIT_DIRECTIVE } from '../prompt';
-import type { AssetCategory } from '../prompt';
+import type { AssetCategory, AssetStyle } from '../prompt';
 import { makeKilnTools, makeKilnEditTools, type SubmitSink, type EditSink, type EditRecord } from './tools';
 import { unifiedDiff } from './diff';
 import { MetricsCollector, type AgentUsage } from './hooks';
@@ -38,6 +38,8 @@ export interface RunKilnAgentOptions {
   prompt: string;
   /** Asset category (drives prompt framing). Default 'prop'. */
   category?: AssetCategory;
+  /** Optional style template (low-poly / stylized / voxel / detailed / realistic) injected into the user prompt. */
+  style?: AssetStyle;
   /** Know-how source: inline system prompt (default) or the kiln-glb skill. */
   knowhow?: KilnKnowhow;
   /** Absolute path to a SKILL.md dir, required when knowhow='skill'. */
@@ -146,6 +148,7 @@ export async function runKilnAgent(opts: RunKilnAgentOptions): Promise<RunKilnAg
         mode: 'glb',
         category: opts.category ?? 'prop',
         includeAnimation: opts.includeAnimation ?? false,
+        ...(opts.style ? { style: opts.style } : {}),
         ...(opts.existingCode ? { existingCode: opts.existingCode } : {}),
         ...(opts.originalPrompt ? { originalPrompt: opts.originalPrompt } : {}),
       }) +

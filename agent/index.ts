@@ -8,6 +8,9 @@
  * from `@pixel-forge/core/kiln/agent` only when you want the agent loop.
  *
  * - {@link runKilnAgent}      — drive any Strands Model through the kiln tool loop
+ * - {@link generateKilnAsset} — model id -> tool loop -> rendered GLB (the default codegen engine)
+ * - {@link makeKilnModel}     — agnostic Strands model factory (native + OpenRouter)
+ * - {@link resolveKilnAgentModel} — model-id string -> Strands provider descriptor
  * - {@link makeKilnTools}     — in-process tool skin over the shared registry
  * - {@link makeKilnEditTools} — surgical edit-tool skin for refining an existing asset
  * - {@link unifiedDiff}       — dependency-free unified diff (the refine patch artifact)
@@ -18,6 +21,9 @@
 export { runKilnAgent } from './run';
 export type { RunKilnAgentOptions, RunKilnAgentResult, KilnKnowhow, RefineMode } from './run';
 
+export { generateKilnAsset, DEFAULT_KILN_AGENT_MODEL } from './generate';
+export type { GenerateKilnAssetOptions, GenerateKilnAssetResult } from './generate';
+
 export { makeKilnTools, makeKilnEditTools, KilnEditBuffer, KILN_SUBMIT_TOOL_NAME } from './tools';
 export type { SubmitSink, EditSink, EditRecord, EditResult } from './tools';
 
@@ -26,8 +32,13 @@ export type { UnifiedDiffOptions } from './diff';
 
 export { ensureStreamStart } from './stream-start';
 
-export { makeOpenRouterModel } from './providers';
-export type { OpenRouterModelOptions } from './providers';
+export { makeOpenRouterModel, makeKilnModel, resolveKilnAgentModel } from './providers';
+export type {
+  OpenRouterModelOptions,
+  KilnAgentProvider,
+  KilnModelDescriptor,
+  MakeKilnModelOptions,
+} from './providers';
 
 export { MetricsCollector } from './hooks';
 export type { CollectedMetrics, AgentUsage } from './hooks';

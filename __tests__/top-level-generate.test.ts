@@ -7,7 +7,7 @@
  * we can drive both branches without an LLM round-trip.
  */
 
-import { describe, expect, test, mock, beforeEach } from 'bun:test';
+import { describe, expect, test, mock, beforeEach, afterAll } from 'bun:test';
 
 // Per-importer mock pattern, matching companions.test.ts. Each test gets
 // a fresh import of `../index` so the module-scoped mock state stays clean.
@@ -35,8 +35,15 @@ function build() {
 }
 `;
 
-describe('kiln.generate() top-level pipeline', () => {
+// These tests cover the SINGLE-SHOT fallback path (the Claude Agent SDK query),
+// which kiln.generate() now reaches only via codegen='single-shot' /
+// KILN_CODEGEN=single-shot. The default 'agent' path is covered by the agent
+// engine tests (agent/generate.test.ts) + the live e2e; pin single-shot here so
+// the SDK mock is the one exercised.
+describe('kiln.generate() top-level pipeline (single-shot fallback)', () => {
+  const savedCodegen = process.env['KILN_CODEGEN'];
   beforeEach(async () => {
+    process.env['KILN_CODEGEN'] = 'single-shot';
     queryImpl = async function* () {
       yield {
         type: 'result',
@@ -46,6 +53,10 @@ describe('kiln.generate() top-level pipeline', () => {
       };
     };
     kiln = await freshImport();
+  });
+  afterAll(() => {
+    if (savedCodegen === undefined) delete process.env['KILN_CODEGEN'];
+    else process.env['KILN_CODEGEN'] = savedCodegen;
   });
 
   test('returns code + glb + meta + warnings for a valid response', async () => {

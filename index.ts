@@ -287,12 +287,24 @@ export interface KilnGenerateOptions {
    */
   includeAnimation?: boolean;
   /**
-   * Abort milliseconds for the underlying SDK query. Defaults to 720_000
-   * (12 min) to fit Opus variance on coordinate-heavy prompts.
+   * Abort milliseconds for the underlying single-shot SDK query. Defaults to
+   * 720_000 (12 min). Ignored by the default 'agent' path (the tool loop manages
+   * its own timeouts).
    */
   timeoutMs?: number;
-  /** Override the Claude model id used for generation. */
+  /**
+   * Override the code model. In the default 'agent' path this is a Strands model
+   * id (e.g. 'google:gemini-3.5-flash', 'anthropic:claude-opus-4-8'); in the
+   * 'single-shot' fallback it is the Claude/harness model id.
+   */
   model?: string;
+  /**
+   * Codegen mechanism. 'agent' (default) drives the Strands tool loop
+   * (list -> validate -> render -> submit, Gemini 3.5 Flash default, self-
+   * correcting on render metrics); 'single-shot' uses the legacy emit-and-render
+   * path. Falls back to the `KILN_CODEGEN` env var, then 'agent'.
+   */
+  codegen?: 'agent' | 'single-shot';
 }
 
 export interface KilnGenerateOutput {
@@ -304,13 +316,31 @@ export interface KilnGenerateOutput {
   meta: KilnCodeMeta;
   /** Non-fatal issues (e.g. animation target missing). */
   warnings: string[];
+  /** Resolved Strands provider (agent path only) - for honest provenance. */
+  provider?: string;
+  /** Resolved concrete model id (agent path only) - for honest provenance. */
+  model?: string;
+  /** Tools the agent called, in order (agent path only). */
+  toolCalls?: string[];
+  /** Number of agent-loop iterations (agent path only). */
+  steps?: number;
+}
+
+/** Resolve the codegen mechanism: explicit opt > `KILN_CODEGEN` env > 'agent'. */
+function resolveCodegenMode(explicit?: 'agent' | 'single-shot'): 'agent' | 'single-shot' {
+  if (explicit) return explicit;
+  const env = process.env['KILN_CODEGEN']?.trim().toLowerCase();
+  if (env === 'single-shot' || env === 'singleshot' || env === 'single') return 'single-shot';
+  return 'agent';
 }
 
 /**
- * End-to-end Kiln generation: call Claude, validate the code, render GLB.
+ * End-to-end Kiln generation: prompt -> code -> rendered GLB.
  *
- * Throws on any hard failure (LLM error, invalid code, render failure).
- * Non-fatal issues surface via `warnings`.
+ * Default path is the Strands agent tool loop (Gemini 3.5 Flash); set
+ * `codegen: 'single-shot'` or `KILN_CODEGEN=single-shot` for the legacy
+ * emit-and-render fallback. Throws on any hard failure (LLM error, invalid code,
+ * render failure); non-fatal issues surface via `warnings`.
  */
 export async function generate(
   prompt: string,
@@ -318,6 +348,30 @@ export async function generate(
 ): Promise<KilnGenerateOutput> {
   const category = opts.category ?? 'prop';
 
+  // Default: the Strands agent tool loop. Imported lazily so @strands-agents/sdk
+  // never enters the non-agent core module graph (browser/editor bundle safety).
+  if (resolveCodegenMode(opts.codegen) === 'agent') {
+    const { generateKilnAsset } = await import('./agent/generate');
+    const r = await generateKilnAsset({
+      prompt,
+      category,
+      includeAnimation: opts.includeAnimation ?? true,
+      ...(opts.style ? { style: opts.style } : {}),
+      ...(opts.model ? { model: opts.model } : {}),
+    });
+    return {
+      code: r.code,
+      glb: r.glb,
+      meta: r.meta,
+      warnings: r.warnings,
+      provider: r.provider,
+      model: r.model,
+      toolCalls: r.toolCalls,
+      steps: r.steps,
+    };
+  }
+
+  // Fallback (KILN_CODEGEN=single-shot): legacy emit-and-render.
   const genResult = await generateKilnCode(
     {
       prompt,
