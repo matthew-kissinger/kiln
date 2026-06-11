@@ -10,7 +10,7 @@
 
 import type { KilnCodeMeta } from './render';
 import { renderGLB } from './render';
-import { generateKilnCode } from './generate';
+import { generateKilnCode, resolveCodegenMode } from './generate';
 
 export { renderGLB, renderSceneToGLB, inspectGeneratedAnimation } from './render';
 export {
@@ -39,6 +39,11 @@ export type {
 } from './inspect';
 export { listPrimitives } from './list-primitives';
 export type { PrimitiveSpec } from './list-primitives';
+export {
+  renderApiSection,
+  renderPrimitivesMarkdown,
+  renderSkillQuickReference,
+} from './prompt-api';
 export {
   buildUserPrompt,
   getSystemPrompt,
@@ -89,6 +94,7 @@ export {
   createWingPair,
   beamBetween,
   createLadder,
+  snapTo,
   foliageCardGeo,
   crossedQuadsGeo,
   octaGridPlane,
@@ -305,6 +311,14 @@ export interface KilnGenerateOptions {
    * path. Falls back to the `KILN_CODEGEN` env var, then 'agent'.
    */
   codegen?: 'agent' | 'single-shot';
+  /**
+   * Also rasterize the final asset into the six-view grid PNG (`output.views`)
+   * for sidecars / review UIs. Best-effort; agent codegen path only.
+   */
+  captureViews?: boolean;
+  /** Style anchor: a complete Kiln program rendered as "## Reference Asset"
+   *  (fresh generation only). ~5-15k input tokens/run; mostly prompt-cached. */
+  exemplarCode?: string;
 }
 
 export interface KilnGenerateOutput {
@@ -324,15 +338,10 @@ export interface KilnGenerateOutput {
   toolCalls?: string[];
   /** Number of agent-loop iterations (agent path only). */
   steps?: number;
+  /** Six-view grid PNG (only when `captureViews` was set; agent path only). */
+  views?: Buffer;
 }
 
-/** Resolve the codegen mechanism: explicit opt > `KILN_CODEGEN` env > 'agent'. */
-function resolveCodegenMode(explicit?: 'agent' | 'single-shot'): 'agent' | 'single-shot' {
-  if (explicit) return explicit;
-  const env = process.env['KILN_CODEGEN']?.trim().toLowerCase();
-  if (env === 'single-shot' || env === 'singleshot' || env === 'single') return 'single-shot';
-  return 'agent';
-}
 
 /**
  * End-to-end Kiln generation: prompt -> code -> rendered GLB.
@@ -358,6 +367,8 @@ export async function generate(
       includeAnimation: opts.includeAnimation ?? true,
       ...(opts.style ? { style: opts.style } : {}),
       ...(opts.model ? { model: opts.model } : {}),
+      ...(opts.captureViews ? { captureViews: true } : {}),
+      ...(opts.exemplarCode ? { exemplarCode: opts.exemplarCode } : {}),
     });
     return {
       code: r.code,
@@ -368,6 +379,7 @@ export async function generate(
       model: r.model,
       toolCalls: r.toolCalls,
       steps: r.steps,
+      ...(r.views ? { views: r.views } : {}),
     };
   }
 

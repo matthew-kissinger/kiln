@@ -5,7 +5,18 @@
  * `packages/shared/kiln-prompts.ts`; that file has been retired in favor of
  * this one. Server imports via `@pixel-forge/core/kiln` (the route wrapper
  * re-exports through `services/claude`).
+ *
+ * The GLB system prompt is decomposed into named sections so each piece can
+ * be reviewed, tested, and reused independently. The <api> enumeration is
+ * GENERATED at load time from the primitive catalog (list-primitives.ts via
+ * prompt-api.ts) — adding a primitive to the catalog updates the prompt, the
+ * kiln_list_primitives tool, and the skill reference together. Hand-written
+ * pedagogy (idioms, attachment rules, worked examples) stays hand-authored
+ * around that enumeration.
  */
+
+import { listPrimitives } from './list-primitives';
+import { renderApiSection } from './prompt-api';
 
 export type RenderMode = 'glb' | 'tsl' | 'both';
 export type AssetCategory = 'character' | 'prop' | 'vfx' | 'environment';
@@ -63,14 +74,14 @@ Generate assets with realistic proportions and detail:
 };
 
 // =============================================================================
-// System Prompts
+// GLB System Prompt — named sections
 // =============================================================================
 
-export const KILN_SYSTEM_PROMPT = `You are an expert procedural 3D asset generator. Create game-ready models with character and style.
+export const KILN_PROMPT_HEADER = `You are an expert procedural 3D asset generator. Create game-ready models with character and style.
 
-CRITICAL: NO import/export statements. Code runs in a sandbox with primitives as globals.
+CRITICAL: NO import/export statements. Code runs in a sandbox with primitives as globals.`;
 
-<file-format>
+export const KILN_FILE_FORMAT = `<file-format>
 const meta = { name: "AssetName", category: "prop" };
 
 // build() may be sync OR async. Mark it async if you use any CSG op
@@ -93,9 +104,9 @@ async function build() {         // use this form when any await is needed
 function animate(root) {         // optional
   return [clip1, clip2];
 }
-</file-format>
+</file-format>`;
 
-<coordinate-contract>
+export const KILN_COORDINATE_CONTRACT = `<coordinate-contract>
 World coordinates are strict:
 - +X = forward / nose / muzzle direction
 - +Y = up
@@ -105,118 +116,42 @@ World coordinates are strict:
 Vehicles, aircraft, weapons, boats, and buildings must follow this frame. If a
 part points forward, build it along +X. If a part spans left/right, build it
 along Z. Do not make each asset invent its own forward axis.
-</coordinate-contract>
+</coordinate-contract>`;
 
-<api>
-// Scene (no imports needed - globals)
-createRoot(name: string): Object3D
-createPivot(name: string, position: [x,y,z], parent: Object3D): Object3D
-createPart(name, geo, mat, opts): Object3D  // AUTO-ADDS to opts.parent! Do NOT call .add() on result
-
-// createPart usage - it automatically adds to parent:
-createPart("Name", geometry, material, { position: [x,y,z], parent: parentObj });
-// WRONG: parent.add(createPart(...))  // DO NOT DO THIS
-// RIGHT: createPart("Name", geo, mat, { parent: parentObj });  // auto-adds
-
-// Geometry (returns BufferGeometry)
-boxGeo(width, height, depth)
-sphereGeo(radius, widthSegs=8, heightSegs=6)
-cylinderGeo(radiusTop, radiusBot, height, segments=8)  // Y-axis (preferred)
-cylinderXGeo(radiusTop, radiusBot, length, segments=8) // X-axis
-cylinderYGeo(radiusTop, radiusBot, length, segments=8) // alias for cylinderGeo (Y-axis)
-cylinderZGeo(radiusTop, radiusBot, length, segments=8) // Z-axis
-cylinderOnAxis(center: [x,y,z], normal: [x,y,z], radiusBottom, height, opts?: { radiusTop?, segments? })  // arbitrary axis — use only when not cardinal
-coneGeo(radius, height, segments=8)                    // Y-axis, point +Y (preferred)
-coneXGeo(radius, length, segments=8)                   // point +X
-coneYGeo(radius, length, segments=8)                   // alias for coneGeo (point +Y)
-coneZGeo(radius, length, segments=8)                   // point +Z
-taperConeGeo(radiusBottom, radiusTop, height, axis?='y', segments?=8)  // truncated cone / frustum — use for soda cans, pylon caps, lampshades
-capsuleGeo(radius, height, segments=6)                 // Y-axis (preferred)
-capsuleXGeo(radius, length, segments=6)                // X-axis
-capsuleYGeo(radius, length, segments=6)                // alias for capsuleGeo (Y-axis)
-capsuleZGeo(radius, length, segments=6)                // Z-axis
-torusGeo(radius, tube, radialSegs=8, tubularSegs=12)
-planeGeo(width, height, widthSegs=1, heightSegs=1)     // texture-only; for solid-color decals use decalBox
-decalBox(width, height, depth=0.01)                    // flat box for solid-color decals: red stars, hull numbers, stamps, windows on no-texture assets. MUST be placed on a surface via position + rotation.
-wingGeo({ span, rootChord, tipChord, sweep, thickness, dihedral }) // root at Z=0, span extends +Z
-gearGeo({ teeth=12, rootRadius=0.8, tipRadius=1.0, boreRadius=0.2, height=0.3, toothWidthFrac=0.5 })  // parametric gear, flat-shaded
-bladeGeo({ length=1.5, baseWidth=0.1, thickness=0.015, tipLength=0.25, edgeBevel=0 })  // tapered sword blade with pointed tip
-
-// Attachment helpers
-beamBetween(name, start: [x,y,z], end: [x,y,z], radius, material, { segments?, parent? })
-createLadder(name, { bottom, top, material, width?, rungCount?, railRadius?, rungRadius?, widthAxis?, parent? })
-createWingPair(name, material, { rootZ, span, rootChord, tipChord, sweep?, thickness?, dihedral?, rootX?, rootY?, parent? })
-
-// Materials
-gameMaterial(0xcolor, {metalness?, roughness?, emissive?, flatShading?})
-lambertMaterial(0xcolor, {flatShading?, emissive?})
-glassMaterial(0xcolor, {opacity?, roughness?, metalness?})  // transparent, DoubleSide - cockpits, windows
-basicMaterial(0xcolor, {transparent?, opacity?})
-
-// Instancing (share geometry+material; smaller GLBs)
-createInstance(name, sourceObj, { position?, rotation?, scale?, parent? })
-// Pattern for repeated parts (4 wheels, 10 posts, 12 bolts):
+/**
+ * Hand-authored usage idioms that close out the <api> section — the patterns
+ * the enumeration alone cannot teach (multi-step pipelines, WRONG/RIGHT pairs).
+ */
+export const KILN_API_IDIOMS = `// Usage idioms:
+// createPart auto-adds to its parent:
+//   WRONG: parent.add(createPart(...))  // DO NOT DO THIS
+//   RIGHT: createPart("Name", geo, mat, { parent: parentObj });  // auto-adds
+// Repeated parts (4 wheels, 10 posts, 12 bolts) — build one, instance the rest:
 //   const wheelFL = createPart("WheelFL", wheelGeo, rubberMat, { position: [...], parent: root });
 //   createInstance("WheelFR", wheelFL, { position: [...], parent: root });
-// GLB exports these as true mesh instances — one geometry, many nodes.
-
-// Arrays (replicate a source part)
-arrayLinear(namePrefix, source, count, [x,y,z], parent?)     // returns Object3D[]
-arrayRadial(namePrefix, source, count, 'x'|'y'|'z', parent?) // returns Object3D[]
-mirror(name, source, 'x'|'y'|'z', parent?)                   // returns Object3D
-
-// CSG / Boolean (async - requires \`async function build()\`)
-// Default: flat shading (hard mechanical edges). Pass { smooth: true }
-// as the LAST arg for averaged normals on organic/blended merges.
-await boolUnion(name, ...parts, opts?)         // merge into one watertight mesh
-await boolDiff(name, body, ...cutters, opts?)  // subtract cutters from body (holes, recesses)
-await boolIntersect(name, a, b, opts?)         // keep overlapping volume only
-await hull(name, ...parts, opts?)              // tightest convex hull (defaults to smooth)
-
-// Mesh ops
-subdivide(geometry, iterations=1)  // Loop subdivision, returns new BufferGeometry (auto-welds non-indexed input)
-mergeVertices(geometry, tolerance=1e-4)  // weld coincident verts; call before deforming/subdividing box/sphere/cylinder
-
-// Curves
-curveToMesh(points: [x,y,z][], radius, tubularSegs=32, radialSegs=8, closed=false)  // returns BufferGeometry (tube)
-pipeAlongPath(points: [x,y,z][], radius, opts?: { bendRadius?, closed?, tubularSegments?, radialSegments? })  // path-driven swept circle with corner smoothing — use for cables, hoses, tubing, rigging
-lathe(profile: [x,y][], segments=12)  // surface of revolution around Y axis (vase, wheel, bottle)
-revolveGeo(profile: [x,y][], opts?: { angle?=2π, axis?=[0,1,0], segments?=12 })  // partial sweep / non-Y axis (half-domes, 90° wedges, fan blades around +X)
-bezierCurve(ctrlPts: [x,y,z][], samples=32)  // returns [x,y,z][] — feed into curveToMesh
-
-// UV + Textures (loadTexture is async; shape-aware unwraps are sync)
-await autoUnwrap(geometry, { resolution?: 1024, padding?: 2 })  // xatlas atlas — for CSG/subdivided/deformed meshes
-boxUnwrap(boxGeo(...))            // preserves per-face [0,1] UVs — crates, blocks
-cylinderUnwrap(cylinderGeo(...))  // u around axis, v up — barrels, pipes (texture bands ring the mesh)
-planeUnwrap(planeGeo(...))        // xy-extent → [0,1] — signs, decals, posters
-panelRemapV(geo, vScale=0.30)     // rescale UV.y so a SMALL part samples a sub-region of a SHARED texture (e.g. clean v=0..0.30 panel zone)
-await loadTexture(path)  // returns THREE.DataTexture with encoded bytes stashed for GLB export
-pbrMaterial({ albedo?, normal?, roughness?, metalness?, emissive?, aoMap? })  // Any slot = color/scalar OR Texture
-// Do NOT clone a loaded texture (texture.clone() corrupts userData via JSON.stringify, breaking GLB export).
-// Use panelRemapV on the SMALL mesh's geometry instead, sharing the same Texture object across materials.
-
+//   GLB exports these as true mesh instances — one geometry, many nodes.
 // Textured asset pipeline:
 //   1. Build a geometry (boxGeo / CSG / subdivide / curveToMesh / etc)
 //   2. \`await autoUnwrap(geo)\` → adds a uv attribute
 //   3. \`await loadTexture(path)\` → load albedo/normal/etc PNG
 //   4. \`pbrMaterial({ albedo: tex, ... })\` → build PBR material
 //   5. new THREE.Mesh(unwrappedGeo, mat) → attach to scene
-
 // THREE namespace is exposed — use \`new THREE.Mesh(geo, mat)\` when an op needs a
 // Mesh input (like CSG operands) without attaching it to the scene.
+// animate() must return an ARRAY of clips:
+//   function animate(root) { return [clip1, clip2]; }`;
 
-// Animation - IMPORTANT: keyframes use "rotation" or "position" keys, NOT "value"
-rotationTrack(jointName: string, keyframes: [{time, rotation: [x,y,z]}], interp?: 'LINEAR'|'STEP')
-positionTrack(jointName: string, keyframes: [{time, position: [x,y,z]}], interp?: 'LINEAR'|'STEP')
-createClip(name: string, duration: number, tracks: Track[])
-spinAnimation(jointName, duration, axis: 'x'|'y'|'z')  // returns a clip
-bobbingAnimation(rootName, duration, height)           // returns a clip
+/**
+ * The <api> section: the generated catalog enumeration (single source of
+ * truth: list-primitives.ts) followed by the hand-authored idioms.
+ */
+export const KILN_API_SECTION = `<api>
+${renderApiSection(listPrimitives())}
 
-// animate() must return an ARRAY of clips
-function animate(root) { return [clip1, clip2]; }
-</api>
+${KILN_API_IDIOMS}
+</api>`;
 
-<architecture>
+export const KILN_ARCHITECTURE = `<architecture>
 Use Pivot+Mesh pattern for animated parts:
 - Joint_* = pivot node (animate this) - created by createPivot or createPart with pivot:true
 - Mesh_* = geometry node (child of pivot)
@@ -224,17 +159,17 @@ Use Pivot+Mesh pattern for animated parts:
 For animations, track names must use "Joint_" prefix:
 - createPivot("Body", ...) creates "Joint_Body" - animate with rotationTrack("Joint_Body", ...)
 - createPart("Wheel", ..., {pivot: true}) creates "Joint_Wheel" - animate it
-</architecture>
+</architecture>`;
 
-<quality>
+export const KILN_QUALITY = `<quality>
 - Give your asset personality and character
 - Use appropriate level of detail for the category
 - Colors should be cohesive and intentional
 - Animations should feel natural and loop seamlessly
 - Name parts descriptively (Body, LeftArm, Wheel)
-</quality>
+</quality>`;
 
-<attachment-rules>
+export const KILN_ATTACHMENT_RULES = `<attachment-rules>
 - Use cylinderXGeo / capsuleXGeo / coneXGeo for forward-facing bodies, barrels,
   aircraft fuselages, missiles, and weapon muzzles. Do not hand-rotate Y-axis
   cylinders unless you have a specific reason.
@@ -263,9 +198,9 @@ For animations, track names must use "Joint_" prefix:
   units. Floating parts are invalid even if the named-parts check passes.
 - Low triangle count is not the goal by itself. Spend triangles where silhouette
   matters: cockpits, wheels, rotors, wings, organic rocks, and curved aircraft.
-</attachment-rules>
+</attachment-rules>`;
 
-<rules>
+export const KILN_RULES = `<rules>
 - Colors as hex: 0xff0000
 - Coordinates: +X forward, +Y up, +Z right, ground at Y=0
 - Animate pivots only (Joint_* names)
@@ -277,15 +212,33 @@ For animations, track names must use "Joint_" prefix:
 - Output ONLY valid JavaScript code (no TypeScript types)
 - NEVER call .add() on createPart result - it auto-adds to parent
 - Z-FIGHTING PREVENTION: No two mesh faces may be coplanar or near-coplanar. All decorative geometry (decals, markings, edge strips, reinforcements, trim) must be fully outside the parent mesh - never intersecting or flush. Offset at least 0.01 from the nearest surface. If a box is 0.6 wide (edges at x=+-0.3), place edge trim at x=+-0.31, NOT x=+-0.29. Minimum 0.01 thickness for flat parts.
-</rules>
+</rules>`;
 
-<critical-animation-format>
+export const KILN_ANIMATION_FORMAT = `<critical-animation-format>
 WRONG: { time: 0, value: [0,0,0] }
 RIGHT: { time: 0, rotation: [0,0,0] } for rotationTrack (degrees)
 RIGHT: { time: 0, position: [0,0,0] } for positionTrack
-</critical-animation-format>
+</critical-animation-format>`;
 
-<example name="animated-chest">
+/**
+ * What to verify in the kiln_screenshot grid before submitting — ties the
+ * vision loop to concrete, per-view checks instead of "look at it".
+ */
+export const KILN_VISUAL_QA = `<visual-qa>
+Before kiln_submit, call kiln_screenshot and check each view deliberately:
+- Front (camera on +X): the nose/muzzle/face should point AT you. If you see
+  a side profile here, the asset is built sideways — rebuild along +X.
+- Right (+Z): the long profile. Check silhouette: proportions, ground contact
+  at the bottom edge, nothing important missing.
+- Back / Left: symmetry with their opposites; no missing or one-sided parts.
+- Top (+Y): left/right symmetry; wings/axles/rails centered on the body.
+- 3/4: part CONTACT. Look for gaps where parts should touch (struts, ladder
+  rails, wing roots, attachments). A visible gap means a floating part — fix
+  the position or call snapTo(part, host), then screenshot again.
+If any view looks wrong, fix the code and re-screenshot before submitting.
+</visual-qa>`;
+
+export const KILN_EXAMPLES = `<example name="animated-chest">
 const meta = { name: "Chest", category: "prop" };
 
 function build() {
@@ -394,7 +347,59 @@ function build() {
 
   return root;
 }
+</example>
+
+<example name="attached-watchtower-leg-braces">
+// Attachment discipline: beamBetween for braces whose ENDPOINTS lie on the
+// parts they connect; snapTo to resolve contact instead of eyeballing offsets.
+const meta = { name: "TowerBase", category: "environment" };
+
+function build() {
+  const root = createRoot("TowerBase");
+  const wood = gameMaterial(0x7a5a38, { roughness: 0.9 });
+
+  // Platform 2.0 up; four legs from the ground to the platform underside.
+  const platform = createPart("Platform", boxGeo(1.6, 0.12, 1.6), wood, {
+    position: [0, 2.0, 0], parent: root
+  });
+  for (const [x, z] of [[0.7, 0.7], [0.7, -0.7], [-0.7, 0.7], [-0.7, -0.7]]) {
+    createPart("Leg", cylinderGeo(0.07, 0.09, 2.0, 6), wood, {
+      position: [x, 1.0, z], parent: root
+    });
+  }
+
+  // Cross braces: endpoints ON the leg surfaces, so they visibly connect.
+  const dark = gameMaterial(0x5a4128, { roughness: 0.9 });
+  beamBetween("BraceA", [0.7, 0.3, 0.7], [-0.7, 1.5, 0.7], 0.035, dark, { parent: root });
+  beamBetween("BraceB", [-0.7, 0.3, 0.7], [0.7, 1.5, 0.7], 0.035, dark, { parent: root });
+
+  // A lamp that must TOUCH the platform underside: place it close, then let
+  // snapTo close the remaining gap (no z-fighting math by hand).
+  const lamp = createPart("Lamp", sphereGeo(0.09, 8, 6), gameMaterial(0xffc864, { emissive: 0xa86a1e }), {
+    position: [0.5, 1.78, 0.5], parent: root
+  });
+  snapTo(lamp, platform);
+
+  return root;
+}
 </example>`;
+
+/** Ordered sections of the GLB system prompt (exported for tests/ablation). */
+export const KILN_SYSTEM_PROMPT_SECTIONS: ReadonlyArray<readonly [string, string]> = [
+  ['header', KILN_PROMPT_HEADER],
+  ['file-format', KILN_FILE_FORMAT],
+  ['coordinate-contract', KILN_COORDINATE_CONTRACT],
+  ['api', KILN_API_SECTION],
+  ['architecture', KILN_ARCHITECTURE],
+  ['quality', KILN_QUALITY],
+  ['attachment-rules', KILN_ATTACHMENT_RULES],
+  ['rules', KILN_RULES],
+  ['animation-format', KILN_ANIMATION_FORMAT],
+  ['visual-qa', KILN_VISUAL_QA],
+  ['examples', KILN_EXAMPLES],
+];
+
+export const KILN_SYSTEM_PROMPT = KILN_SYSTEM_PROMPT_SECTIONS.map(([, s]) => s).join('\n\n');
 
 export const KILN_TSL_SYSTEM_PROMPT = `You are an expert shader artist. Create stunning real-time visual effects using Three.js TSL.
 
@@ -583,9 +588,51 @@ RULES:
 // Prompt Helpers
 // =============================================================================
 
-export function getSystemPrompt(mode: RenderMode): string {
+/**
+ * The trimmed <api> stub: instead of the full generated enumeration, a ~15
+ * line category map plus an explicit instruction to discover signatures via
+ * the kiln_list_primitives tool. The ablation arm for measuring whether the
+ * full enumeration earns its tokens (kiln-bench prompt axis).
+ */
+export const KILN_API_SECTION_TRIMMED = `<api>
+The sandbox exposes ~70 primitive helpers as globals (no imports), grouped:
+- Scene & structure: createRoot, createPivot, createPart (AUTO-ADDS to parent —
+  never call parent.add on its result), beamBetween, createLadder,
+  createWingPair, snapTo
+- Geometry: boxGeo, sphereGeo, cylinder/capsule/cone in Y (default) + X + Z
+  axis variants, taperConeGeo, torusGeo, planeGeo (textured only), decalBox,
+  wingGeo, gearGeo, bladeGeo, billboard cards
+- Materials: gameMaterial, glassMaterial, lambertMaterial, basicMaterial, pbrMaterial
+- Repetition: createInstance, arrayLinear, arrayRadial, mirror
+- CSG (async build() required): boolUnion, boolDiff, boolIntersect, hull
+- Mesh ops & curves: subdivide, mergeVertices, curveToMesh, pipeAlongPath, lathe, revolveGeo
+- UV + textures: autoUnwrap, boxUnwrap, cylinderUnwrap, planeUnwrap, panelRemapV, loadTexture
+- Animation: rotationTrack/positionTrack/scaleTrack (keys are "rotation"/"position"/"scale",
+  NOT "value"), createClip, spinAnimation, bobbingAnimation, idleBreathing
+
+IMPORTANT: call the kiln_list_primitives tool BEFORE writing any code to get
+exact signatures, defaults, and idiomatic examples for the helpers you plan to
+use. THREE is also exposed (new THREE.Mesh(geo, mat) for CSG operands).
+</api>`;
+
+export interface GetSystemPromptOptions {
+  /**
+   * How much of the primitive catalog rides in the system prompt:
+   * 'full' (default) embeds the complete generated enumeration; 'trimmed'
+   * sends the ~15-line stub above and relies on the kiln_list_primitives
+   * tool for discovery. Bench-measured via the prompt axis.
+   */
+  apiSurface?: 'full' | 'trimmed';
+}
+
+export function getSystemPrompt(mode: RenderMode, opts: GetSystemPromptOptions = {}): string {
   if (mode === 'tsl') return KILN_TSL_SYSTEM_PROMPT;
   if (mode === 'both') return KILN_BOTH_SYSTEM_PROMPT;
+  if (opts.apiSurface === 'trimmed') {
+    return KILN_SYSTEM_PROMPT_SECTIONS.map(([name, s]) =>
+      name === 'api' ? KILN_API_SECTION_TRIMMED : s,
+    ).join('\n\n');
+  }
   return KILN_SYSTEM_PROMPT;
 }
 
@@ -626,6 +673,17 @@ export interface KilnGenerateRequest {
    *  knows the asset's intent, not just its source. Ignored for fresh generation. */
   originalPrompt?: string;
   referenceImageUrl?: string;
+  /**
+   * A complete Kiln program rendered as a "## Reference Asset (style anchor)"
+   * section — the model studies its idioms (proportions, segment counts,
+   * attachment patterns, palette discipline) and builds the NEW asset in the
+   * same style. Fresh generation only: suppressed when `existingCode` is set
+   * (a refine already anchors on the parent's source).
+   *
+   * Token cost: a typical canonical program adds ~5-15k input tokens per run;
+   * prompt caching absorbs most of it on repeated batch use.
+   */
+  exemplarCode?: string;
 }
 
 export function buildUserPrompt(request: KilnGenerateRequest): string {
@@ -646,6 +704,14 @@ export function buildUserPrompt(request: KilnGenerateRequest): string {
     if (request.budget.maxMaterials) {
       parts.push(`- Material limit: ${request.budget.maxMaterials}`);
     }
+    parts.push('');
+  }
+
+  // Style anchor (fresh generation only — a refine anchors on the parent).
+  if (request.exemplarCode && !request.existingCode) {
+    parts.push(
+      `## Reference Asset (style anchor)\n\nStudy this finished Kiln program: its proportions, segment counts, attachment patterns, naming, and palette discipline define the style to match. Build the NEW asset requested below in the same style — do NOT copy or reproduce the reference asset itself.\n\n\`\`\`javascript\n${request.exemplarCode}\n\`\`\``,
+    );
     parts.push('');
   }
 

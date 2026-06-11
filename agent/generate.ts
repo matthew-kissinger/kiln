@@ -58,6 +58,13 @@ export interface GenerateKilnAssetOptions {
   refineMode?: RefineMode;
   /** Agent name (for tracing). */
   agentName?: string;
+  /** Also rasterize the final asset into the six-view grid PNG (`result.views`).
+   *  Best-effort: a views failure never fails the run. Default false. */
+  captureViews?: boolean;
+  /** Style anchor: a complete Kiln program rendered as "## Reference Asset" for
+   *  FRESH generation (ignored on refine). ~5-15k input tokens/run, mostly
+   *  absorbed by prompt caching when reused across a batch. */
+  exemplarCode?: string;
 }
 
 export interface GenerateKilnAssetResult {
@@ -83,6 +90,66 @@ export interface GenerateKilnAssetResult {
   edits?: EditRecord[];
   /** Edit-mode refine: a unified diff from the parent code to the final buffer. */
   diff?: string;
+  /** Six-view grid PNG of the final asset (only when `captureViews` was set and the render succeeded). */
+  views?: Buffer;
+}
+
+/**
+ * CODE-ONLY agent generation — the agent tool loop without the final GLB
+ * render. The retirement bridge for the legacy `generateKilnCode` fork:
+ * `kiln/generate.ts` lazy-imports this when the codegen mode is 'agent', so
+ * the editor server route and `editKilnCode` ride the Strands loop with zero
+ * route changes (they render separately, exactly as they did with the
+ * single-shot emitter). Returns the same success/error shape that path expects.
+ */
+export async function generateKilnCodeAgent(opts: {
+  prompt: string;
+  category?: AssetCategory;
+  style?: AssetStyle;
+  includeAnimation?: boolean;
+  existingCode?: string;
+  originalPrompt?: string;
+  /** Strands model id; defaults like {@link generateKilnAsset}. */
+  model?: string;
+}): Promise<{
+  success: boolean;
+  code?: string;
+  usage?: { inputTokens: number; outputTokens: number };
+  error?: string;
+  provider?: KilnAgentProvider;
+  model?: string;
+}> {
+  const modelId =
+    opts.model ??
+    process.env['KILN_MODEL'] ??
+    process.env['PIXEL_FORGE_MODEL'] ??
+    DEFAULT_KILN_AGENT_MODEL;
+  const desc = resolveKilnAgentModel(modelId);
+  const model = makeKilnModel(desc);
+
+  const agent = await runKilnAgent({
+    model,
+    prompt: opts.prompt,
+    category: opts.category ?? 'prop',
+    includeAnimation: opts.includeAnimation ?? false,
+    ...(opts.style ? { style: opts.style } : {}),
+    ...(opts.existingCode ? { existingCode: opts.existingCode } : {}),
+    ...(opts.originalPrompt ? { originalPrompt: opts.originalPrompt } : {}),
+  });
+
+  if (agent.error || !agent.code) {
+    return { success: false, error: agent.error ?? 'agent produced no code' };
+  }
+  return {
+    success: true,
+    code: agent.code,
+    usage: {
+      inputTokens: agent.usage?.inputTokens ?? 0,
+      outputTokens: agent.usage?.outputTokens ?? 0,
+    },
+    provider: desc.provider,
+    model: desc.model,
+  };
 }
 
 /**
@@ -113,6 +180,7 @@ export async function generateKilnAsset(
     ...(opts.originalPrompt ? { originalPrompt: opts.originalPrompt } : {}),
     ...(opts.existingCode && opts.refineMode ? { refineMode: opts.refineMode } : {}),
     ...(opts.agentName ? { agentName: opts.agentName } : {}),
+    ...(opts.exemplarCode ? { exemplarCode: opts.exemplarCode } : {}),
   });
 
   if (agent.error || !agent.code) {
@@ -120,6 +188,18 @@ export async function generateKilnAsset(
   }
 
   const render = await renderGLB(agent.code);
+
+  // Best-effort views artifact: what the vision loop / review UIs show.
+  // Never fails the run — a rasterizer error just drops the sidecar.
+  let views: Buffer | undefined;
+  if (opts.captureViews) {
+    try {
+      const { renderCodeViewGrid } = await import('../views');
+      views = (await renderCodeViewGrid(agent.code)).png;
+    } catch {
+      views = undefined;
+    }
+  }
 
   return {
     code: agent.code,
@@ -133,5 +213,6 @@ export async function generateKilnAsset(
     model: desc.model,
     ...(agent.edits ? { edits: agent.edits } : {}),
     ...(agent.diff ? { diff: agent.diff } : {}),
+    ...(views ? { views } : {}),
   };
 }

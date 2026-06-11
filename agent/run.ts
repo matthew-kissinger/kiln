@@ -23,7 +23,7 @@ import { getSystemPrompt, buildUserPrompt, KILN_REFINE_DIRECTIVE, KILN_EDIT_DIRE
 import type { AssetCategory, AssetStyle } from '../prompt';
 import { makeKilnTools, makeKilnEditTools, type SubmitSink, type EditSink, type EditRecord } from './tools';
 import { unifiedDiff } from './diff';
-import { MetricsCollector, type AgentUsage } from './hooks';
+import { MetricsCollector, type AgentUsage, type KilnAgentEvent } from './hooks';
 
 /** How the agent learns Kiln conventions. */
 export type KilnKnowhow = 'inline' | 'skill';
@@ -42,6 +42,10 @@ export interface RunKilnAgentOptions {
   style?: AssetStyle;
   /** Know-how source: inline system prompt (default) or the kiln-glb skill. */
   knowhow?: KilnKnowhow;
+  /** Inline-knowhow only: 'full' (default) embeds the whole primitive
+   *  enumeration in the system prompt; 'trimmed' sends a ~15-line stub and
+   *  relies on the kiln_list_primitives tool. The bench prompt-ablation axis. */
+  apiSurface?: 'full' | 'trimmed';
   /** Absolute path to a SKILL.md dir, required when knowhow='skill'. */
   skillDir?: string;
   /** Extra tools to expose (e.g. a Strands McpClient for the MCP transport). */
@@ -62,6 +66,13 @@ export interface RunKilnAgentOptions {
   refineMode?: RefineMode;
   /** Agent name (for tracing). Default 'kiln-agent'. */
   agentName?: string;
+  /** Live agent-loop events (tool calls / model calls) for progress UIs.
+   *  Best-effort: sink errors are swallowed and never fail the run. */
+  onEvent?: (event: KilnAgentEvent) => void;
+  /** A complete Kiln program used as a style anchor for FRESH generation —
+   *  rendered as "## Reference Asset" in the user prompt (ignored when
+   *  existingCode is set). ~5-15k input tokens/run; cached on most providers. */
+  exemplarCode?: string;
 }
 
 export interface RunKilnAgentResult {
@@ -101,7 +112,7 @@ function lastMessageText(message: Message | undefined): string | undefined {
  * on `result.error` with whatever metrics were collected beforehand.
  */
 export async function runKilnAgent(opts: RunKilnAgentOptions): Promise<RunKilnAgentResult> {
-  const metrics = new MetricsCollector();
+  const metrics = new MetricsCollector(opts.onEvent);
   // Edit mode only engages when refining (existingCode set) AND explicitly chosen.
   const editMode = Boolean(opts.existingCode) && opts.refineMode === 'edit';
   const sink: SubmitSink = {};
@@ -123,7 +134,7 @@ export async function runKilnAgent(opts: RunKilnAgentOptions): Promise<RunKilnAg
         'validate and render it with the kiln tools, then call kiln_submit with the ' +
         'final code.';
     } else {
-      systemPrompt = getSystemPrompt('glb');
+      systemPrompt = getSystemPrompt('glb', opts.apiSurface ? { apiSurface: opts.apiSurface } : {});
     }
 
     // Refine framing: edit an existing asset on top of the unchanged conventions.
@@ -151,9 +162,13 @@ export async function runKilnAgent(opts: RunKilnAgentOptions): Promise<RunKilnAg
         ...(opts.style ? { style: opts.style } : {}),
         ...(opts.existingCode ? { existingCode: opts.existingCode } : {}),
         ...(opts.originalPrompt ? { originalPrompt: opts.originalPrompt } : {}),
+        ...(opts.exemplarCode ? { exemplarCode: opts.exemplarCode } : {}),
       }) +
-      '\n\nWhen finished, call the kiln_submit tool exactly once with your final, ' +
-      'complete Kiln program.';
+      '\n\nBefore submitting, call kiln_screenshot once on your final code and check ' +
+      'the six views: correct facing in Front, a clean silhouette in Right, symmetry in ' +
+      'Top, and no floating or detached parts in the 3/4 view. Fix anything that looks ' +
+      'wrong, then call the kiln_submit tool exactly once with your final, complete ' +
+      'Kiln program.';
 
     const result = await agent.invoke(userPrompt);
     metrics.recordResultUsage(result.metrics?.latestAgentInvocation?.usage);

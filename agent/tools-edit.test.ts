@@ -2,7 +2,7 @@
  * Unit tests for the surgical edit-tool skin (KilnEditBuffer + makeKilnEditTools).
  *
  * The buffer is the whole edit contract - pure string ops, no Strands / THREE -
- * so it is tested directly. The tool factory is checked for its wiring (the six
+ * so it is tested directly. The tool factory is checked for its wiring (the seven
  * tools and their names, plus the shared edit trace). The run-level gating (edit
  * mode only when refining) is exercised by the studio mock-adapter tests.
  */
@@ -89,7 +89,7 @@ test('view returns the raw buffer and a line count that tracks edits', () => {
   expect(buf.view().lines).toBe(buf.code.split('\n').length);
 });
 
-test('makeKilnEditTools exposes the six edit-mode tools and wires the edit trace', () => {
+test('makeKilnEditTools exposes the seven edit-mode tools and wires the edit trace', () => {
   const sink: EditSink = { edits: [] };
   const tools = makeKilnEditTools({ seedCode: SEED, sink });
   expect(tools.map((t) => t.name)).toEqual([
@@ -98,6 +98,7 @@ test('makeKilnEditTools exposes the six edit-mode tools and wires the edit trace
     'kiln_edit',
     'kiln_validate',
     'kiln_render',
+    'kiln_screenshot',
     'kiln_submit',
   ]);
   // The sink's edit trace is the buffer's live array (shared reference).

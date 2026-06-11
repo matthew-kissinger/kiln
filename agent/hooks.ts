@@ -19,6 +19,11 @@ export interface AgentUsage {
   outputTokens?: number;
 }
 
+/** A live agent-loop event, emitted as the loop runs (for progress UIs). */
+export type KilnAgentEvent =
+  | { type: 'tool'; tool: string; step: number }
+  | { type: 'model_call'; step: number };
+
 /** The agent-loop-derived metrics this collector produces. */
 export interface CollectedMetrics {
   toolCalls: string[];
@@ -32,13 +37,31 @@ export class MetricsCollector {
   private usage: AgentUsage | undefined;
   private cleanups: Array<() => void> = [];
 
+  /**
+   * @param onEvent - Optional live sink, fired as the loop runs (tool calls,
+   * model calls). Errors thrown by the sink are swallowed — a broken progress
+   * listener must never fail a generation.
+   */
+  constructor(private readonly onEvent?: (event: KilnAgentEvent) => void) {}
+
+  private emit(event: KilnAgentEvent): void {
+    if (!this.onEvent) return;
+    try {
+      this.onEvent(event);
+    } catch {
+      // progress sinks are best-effort
+    }
+  }
+
   /** Attach hooks; returns a cleanup function (also tracked for `detach()`). */
   attach(agent: Agent): () => void {
     const offTool = agent.addHook(BeforeToolCallEvent, (event) => {
       this.toolCalls.push(event.toolUse.name);
+      this.emit({ type: 'tool', tool: event.toolUse.name, step: this.steps });
     });
     const offModel = agent.addHook(AfterModelCallEvent, () => {
       this.steps += 1;
+      this.emit({ type: 'model_call', step: this.steps });
     });
     this.cleanups.push(offTool, offModel);
     return () => this.detach();

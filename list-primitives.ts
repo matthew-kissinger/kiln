@@ -23,6 +23,12 @@ export interface PrimitiveSpec {
   description: string;
   /** Idiomatic usage snippet agents can splice directly into generated code. */
   example: string;
+  /**
+   * Extra imperative guidance surfaced verbatim in model-facing renderings of
+   * the catalog (system prompt API section, skill reference). Use for footguns
+   * the description alone does not make actionable.
+   */
+  promptNotes?: string;
   /** High-level grouping for filtering in agent UIs. */
   category:
     | 'geometry'
@@ -70,6 +76,8 @@ const PRIMITIVES: PrimitiveSpec[] = [
       'Creates a mesh, optionally wrapped in a pivot, and attaches it to `opts.parent`.',
     example:
       "createPart('Barrel', cylinderGeo(0.1, 0.1, 1), gameMaterial(0x556b2f), { position: [0, 0.5, 0], parent: root });",
+    promptNotes:
+      'AUTO-ADDS to opts.parent. NEVER call parent.add(createPart(...)) — pass { parent } instead.',
   },
   {
     name: 'beamBetween',
@@ -81,6 +89,15 @@ const PRIMITIVES: PrimitiveSpec[] = [
       'Creates a cylindrical rail/strut exactly between two endpoints. Use for braces, gun barrels, skid struts, cables, and scaffolding.',
     example:
       "beamBetween('SkidBraceA', [0.8, 0.3, 0.7], [0.8, 1.0, 0.45], 0.025, black, { parent: root });",
+  },
+  {
+    name: 'snapTo',
+    signature: "snapTo(part: Object3D, host: Object3D, opts?: { axis?: 'x'|'y'|'z', overlap?: 0.02 })",
+    returns: 'THREE.Object3D (the part, for chaining)',
+    category: 'structure',
+    description:
+      'Translates `part` by the minimal vector that brings its bounding box into contact with `host` (plus a small overlap). The direct cure for a "Floating parts" warning — attach the part instead of eyeballing a corrective offset. No-op if they already touch.',
+    example: "const scope = createPart('Scope', cylinderXGeo(0.04, 0.04, 0.3), steel, { parent: root, position: [0.1, 0.32, 0] });\nsnapTo(scope, receiver);",
   },
   {
     name: 'createLadder',
@@ -282,6 +299,8 @@ const PRIMITIVES: PrimitiveSpec[] = [
       'Thin box for solid-color surface decals: red stars, hull numbers, stamps, no-texture windows. Unlike planeGeo, has real depth so it visibly attaches to its host surface. Must be placed on a surface with position + rotation.',
     example:
       "const star = decalBox(0.18, 0.18, 0.01);\ncreatePart('Mesh_StarPort', star, gameMaterial(0xc61f2a), { position: [0.4, 0.6, 0.41], parent: fuselage });",
+    promptNotes:
+      'Offset at least 0.01 outside the host surface to avoid z-fighting (a 0.8-wide hull has faces at z=±0.4, so place the decal at z=±0.41).',
   },
   {
     name: 'foliageCardGeo',
@@ -391,7 +410,7 @@ const PRIMITIVES: PrimitiveSpec[] = [
   {
     name: 'rotationTrack',
     signature:
-      'rotationTrack(jointName: string, keyframes: Array<{ time, rotation: [xDeg, yDeg, zDeg] }>)',
+      "rotationTrack(jointName: string, keyframes: Array<{ time, rotation: [xDeg, yDeg, zDeg] }>, interp?: 'LINEAR' | 'STEP')",
     returns: 'THREE.QuaternionKeyframeTrack',
     category: 'animation',
     description:
@@ -402,7 +421,7 @@ const PRIMITIVES: PrimitiveSpec[] = [
   {
     name: 'positionTrack',
     signature:
-      'positionTrack(jointName: string, keyframes: Array<{ time, position: [x, y, z] }>)',
+      "positionTrack(jointName: string, keyframes: Array<{ time, position: [x, y, z] }>, interp?: 'LINEAR' | 'STEP')",
     returns: 'THREE.VectorKeyframeTrack',
     category: 'animation',
     description: 'Position track in world units. Always use `position:` not `value:` in keyframes.',
@@ -412,7 +431,7 @@ const PRIMITIVES: PrimitiveSpec[] = [
   {
     name: 'scaleTrack',
     signature:
-      'scaleTrack(jointName: string, keyframes: Array<{ time, scale: [x, y, z] }>)',
+      "scaleTrack(jointName: string, keyframes: Array<{ time, scale: [x, y, z] }>, interp?: 'LINEAR' | 'STEP')",
     returns: 'THREE.VectorKeyframeTrack',
     category: 'animation',
     description: 'Uniform or per-axis scale track.',
@@ -717,6 +736,8 @@ const PRIMITIVES: PrimitiveSpec[] = [
       'Loads a PNG/JPG/WebP image into a Three.js Texture. Stashes the encoded bytes on userData.encoded so GLB export is lossless.',
     example:
       "const wood = await loadTexture('./textures/oak-albedo.png');",
+    promptNotes:
+      'NEVER texture.clone() a loaded texture (clone() corrupts the encoded bytes and breaks GLB export). Share the same Texture object and remap UVs with panelRemapV on the smaller mesh instead.',
   },
   {
     name: 'pbrMaterial',

@@ -643,11 +643,60 @@ function collectMeshStats(root: THREE.Object3D): MeshStats[] {
  * Emits strings compatible with the existing `warnings` channel on
  * `RenderResult`. `_direct-generate.ts` threshold-checks these to trigger
  * a single corrective retry.
+ *
+ * Floating-part warnings carry an actionable fix: the minimal world-space
+ * shift that brings the floater into contact with its nearest sibling (or the
+ * `snapTo(part, host)` call that applies it).
+ *
+ * Pass `opts.category` (vehicle / weapon / boat / aircraft) to additionally
+ * run the orientation advisory: kiln assets face +X, so a vehicle whose Z
+ * extent dominates its X extent was probably built sideways. Aircraft skip
+ * the Z check (wingspan legitimately dominates) and check Y instead.
  */
-export function inspectSceneStructure(root: THREE.Object3D): string[] {
+export interface InspectStructureOptions {
+  /** Asset kind for the orientation advisory. Omit to skip it. */
+  category?: 'vehicle' | 'weapon' | 'boat' | 'aircraft' | (string & {});
+}
+
+/** Minimal world-space translation that closes the gap between two boxes
+ *  (zero on axes that already overlap). */
+function minimalGapVector(a: THREE.Box3, b: THREE.Box3): THREE.Vector3 {
+  const v = new THREE.Vector3();
+  for (const axis of ['x', 'y', 'z'] as const) {
+    if (a.min[axis] > b.max[axis]) v[axis] = b.max[axis] - a.min[axis];
+    else if (a.max[axis] < b.min[axis]) v[axis] = b.min[axis] - a.max[axis];
+    else v[axis] = 0;
+  }
+  return v;
+}
+
+export function inspectSceneStructure(
+  root: THREE.Object3D,
+  opts: InspectStructureOptions = {},
+): string[] {
   const warnings: string[] = [];
   const meshes = collectMeshStats(root);
   if (meshes.length === 0) return warnings;
+
+  // Orientation advisory (category-aware; runs even for single-mesh scenes).
+  const cat = opts.category?.toLowerCase();
+  if (cat === 'vehicle' || cat === 'weapon' || cat === 'boat' || cat === 'aircraft') {
+    const all = new THREE.Box3();
+    for (const m of meshes) all.union(m.box);
+    const size = new THREE.Vector3();
+    all.getSize(size);
+    if (cat === 'aircraft') {
+      if (size.y > size.x * 1.2) {
+        warnings.push(
+          `Orientation: this aircraft is ${size.y.toFixed(2)} tall but only ${size.x.toFixed(2)} long along +X (the nose axis). Kiln aircraft fly nose-first along +X — it may be built vertically or sideways.`,
+        );
+      }
+    } else if (size.z > size.x * 1.3) {
+      warnings.push(
+        `Orientation: this ${cat} spans ${size.z.toFixed(2)} along Z but only ${size.x.toFixed(2)} along +X. Kiln ${cat}s face +X (forward/muzzle/bow) — it looks built sideways; rebuild the long axis along X.`,
+      );
+    }
+  }
 
   const STRAY_CENTROID_TOL = 0.02;
   const FLOATING_EXPAND = 0.02;
@@ -678,14 +727,104 @@ export function inspectSceneStructure(root: THREE.Object3D): string[] {
           break;
         }
       }
-      if (!overlapsAny) floaters.push(a.name);
+      if (overlapsAny) continue;
+
+      // Actionable fix: the minimal shift to the NEAREST sibling, plus the
+      // snapTo call that applies it.
+      let nearest: MeshStats | undefined;
+      let nearestGap: THREE.Vector3 | undefined;
+      for (let j = 0; j < meshes.length; j++) {
+        if (i === j) continue;
+        const gap = minimalGapVector(a.box, meshes[j]!.box);
+        if (!nearestGap || gap.length() < nearestGap.length()) {
+          nearest = meshes[j]!;
+          nearestGap = gap;
+        }
+      }
+      const fix =
+        nearest && nearestGap
+          ? ` Fix: shift "${a.name}" by [${nearestGap.x.toFixed(3)}, ${nearestGap.y.toFixed(3)}, ${nearestGap.z.toFixed(3)}] toward "${nearest.name}", or call snapTo(part, hostPart) to do it automatically.`
+          : '';
+      floaters.push(`${a.name}${fix ? ' —' + fix : ''}`);
     }
     if (floaters.length > 0) {
       warnings.push(
-        `Floating parts (no mesh overlap with any sibling, 2cm tol): ${floaters.join(', ')}. Move these so their bbox contacts a parent/surface mesh.`,
+        `Floating parts (no mesh overlap with any sibling, 2cm tol): ${floaters.join(' | ')}`,
       );
     }
   }
 
   return warnings;
+}
+
+/**
+ * OPT-IN geometry settle: translate each floating mesh into contact with its
+ * nearest sibling, but only when the gap is small (≤ `maxGap`). Deliberately
+ * NOT applied inside kiln_render or renderGLB — silently mutating geometry
+ * would desync the code from the artifact and poison refine loops. The batch
+ * harness uses it after a soft-retry still warns, and records the settled part
+ * names in provenance so the mutation is visible.
+ *
+ * Returns the names of the parts that were moved.
+ */
+export function settleContacts(
+  root: THREE.Object3D,
+  opts: { maxGap?: number; overlap?: number } = {},
+): string[] {
+  const maxGap = opts.maxGap ?? 0.05;
+  const overlap = opts.overlap ?? 0.01;
+  const settled: string[] = [];
+
+  // One move per pass, then re-collect: moving a part changes every other
+  // part's floating status (with two meshes BOTH read as floaters — moving
+  // either resolves both). Among the settleable floaters, move the smallest
+  // (it's the attachment, not the hull).
+  for (let pass = 0; pass < 8; pass++) {
+    const meshes = collectMeshStats(root);
+    if (meshes.length < 2) return settled;
+
+    let pick: { stats: MeshStats; gap: THREE.Vector3; volume: number } | undefined;
+    for (let i = 0; i < meshes.length; i++) {
+      const a = meshes[i]!;
+      const ax = a.box.clone().expandByScalar(0.02);
+      if (meshes.some((b, j) => j !== i && ax.intersectsBox(b.box))) continue;
+
+      let nearestGap: THREE.Vector3 | undefined;
+      for (let j = 0; j < meshes.length; j++) {
+        if (i === j) continue;
+        const gap = minimalGapVector(a.box, meshes[j]!.box);
+        if (!nearestGap || gap.length() < nearestGap.length()) nearestGap = gap;
+      }
+      if (!nearestGap || nearestGap.length() === 0 || nearestGap.length() > maxGap) continue;
+
+      const volume = a.size.x * a.size.y * a.size.z;
+      if (!pick || volume < pick.volume) pick = { stats: a, gap: nearestGap, volume };
+    }
+    if (!pick) break;
+
+    // Close the gap plus a small overlap along the dominant gap axis.
+    const delta = pick.gap.clone();
+    const dominant = (['x', 'y', 'z'] as const).reduce((d, axis) =>
+      Math.abs(delta[axis]) > Math.abs(delta[d]) ? axis : d,
+    'x' as 'x' | 'y' | 'z');
+    delta[dominant] += Math.sign(delta[dominant]) * overlap;
+
+    // Find the named object and move it, converting the world delta into the
+    // parent's local space (handles rotated/scaled ancestors).
+    let target: THREE.Object3D | undefined;
+    root.traverse((obj) => {
+      if (!target && obj.name === pick!.stats.name && (obj as { isMesh?: boolean }).isMesh) target = obj;
+    });
+    if (!target) break;
+    const parent = target.parent ?? root;
+    const p0 = new THREE.Vector3();
+    target.getWorldPosition(p0);
+    const p1 = p0.clone().add(delta);
+    const l0 = parent.worldToLocal(p0.clone());
+    const l1 = parent.worldToLocal(p1.clone());
+    target.position.add(l1.sub(l0));
+    target.updateMatrixWorld(true);
+    settled.push(pick.stats.name);
+  }
+  return settled;
 }

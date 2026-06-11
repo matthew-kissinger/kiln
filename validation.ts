@@ -81,28 +81,58 @@ function estimateGeometryTris(
     return null;
   }
 
+  /** Numeric property off an options-object literal arg (e.g. gearGeo({ teeth: 16 })). */
+  function asObjNum(node: acorn.Expression | undefined, prop: string): number | null {
+    if (!node || node.type !== 'ObjectExpression') return null;
+    for (const p of node.properties) {
+      if (
+        p.type === 'Property' &&
+        !p.computed &&
+        ((p.key.type === 'Identifier' && p.key.name === prop) ||
+          (p.key.type === 'Literal' && p.key.value === prop))
+      ) {
+        return asNum(p.value as acorn.Expression);
+      }
+    }
+    return null;
+  }
+
   switch (name) {
     case 'boxGeo':
+    case 'decalBox':
       return 12; // 6 faces x 2 tris
     case 'planeGeo': {
       const ws = asNum(args[2]) ?? 1;
       const hs = asNum(args[3]) ?? 1;
       return Math.max(1, ws * hs) * 2;
     }
-    case 'coneGeo': {
+    case 'coneGeo':
+    case 'coneXGeo':
+    case 'coneYGeo':
+    case 'coneZGeo': {
       const segs = asNum(args[2]) ?? 8;
       return segs * 2; // cap + sides
     }
-    case 'cylinderGeo': {
+    case 'cylinderGeo':
+    case 'cylinderXGeo':
+    case 'cylinderYGeo':
+    case 'cylinderZGeo': {
       const segs = asNum(args[3]) ?? 8;
       return segs * 4; // side + 2 caps
+    }
+    case 'taperConeGeo': {
+      const segs = asNum(args[4]) ?? 8;
+      return segs * 4; // open frustum ≈ cylinder budget
     }
     case 'sphereGeo': {
       const w = asNum(args[1]) ?? 8;
       const h = asNum(args[2]) ?? 6;
       return w * h * 2;
     }
-    case 'capsuleGeo': {
+    case 'capsuleGeo':
+    case 'capsuleXGeo':
+    case 'capsuleYGeo':
+    case 'capsuleZGeo': {
       const segs = asNum(args[2]) ?? 6;
       return segs * 8; // rough: body + caps
     }
@@ -111,6 +141,16 @@ function estimateGeometryTris(
       const tub = asNum(args[3]) ?? 12;
       return rad * tub * 2;
     }
+    case 'gearGeo': {
+      // Calibrated against countTriangles on the parametric gear builder:
+      // each tooth contributes ~32 tris (tooth walls + rim segments + caps).
+      const teeth = asObjNum(args[0], 'teeth') ?? 12;
+      return teeth * 32;
+    }
+    case 'bladeGeo':
+      return 36; // tapered prism + tip
+    case 'wingGeo':
+      return 24; // closed trapezoid slab
     default:
       return null;
   }
@@ -402,15 +442,62 @@ function analyzeBody(ast: acorn.Program): BodyAnalysis {
         recursiveBuild ??= node.loc?.start.line;
       }
 
-      // Tri estimate — count geometry primitive calls at any depth.
+      // Tri estimate — count geometry primitive calls at any depth, scaled by
+      // any enclosing literal-bound for-loops (the dominant undercount in real
+      // failures: radial arrays and CSG cutter loops that build N geometries).
       if (node.callee.type === 'Identifier') {
-        const est = estimateGeometryTris(node.callee.name, node.arguments as acorn.Expression[]);
-        if (est !== null) estimatedTris += est;
+        let est = estimateGeometryTris(node.callee.name, node.arguments as acorn.Expression[]);
+
+        // subdivide(geo, n): Loop subdivision quadruples tris per iteration.
+        // When the input is an inline estimable call its base count is already
+        // accumulated by this walker, so add only the growth (e * (4^n - 1)).
+        if (est === null && node.callee.name === 'subdivide') {
+          const inner = node.arguments[0];
+          if (inner && inner.type === 'CallExpression' && inner.callee.type === 'Identifier') {
+            const base = estimateGeometryTris(
+              inner.callee.name,
+              inner.arguments as acorn.Expression[],
+            );
+            if (base !== null) {
+              const nArg = node.arguments[1];
+              const n = Math.min(
+                4, // cap: beyond 4 iterations the estimate is noise anyway
+                (nArg && nArg.type === 'Literal' && typeof nArg.value === 'number' ? nArg.value : 1),
+              );
+              est = base * (Math.pow(4, Math.max(0, n)) - 1);
+            }
+          }
+        }
+
+        if (est !== null) {
+          estimatedTris += est * loopMultiplier(ancestors);
+        }
       }
     },
   });
 
   return { infiniteLoops, recursiveBuild, estimatedTris };
+}
+
+/**
+ * Product of the literal iteration counts of every enclosing for-loop of the
+ * shape `for (let i = 0; i < N; i++)` (or `<=`). Unknown bounds contribute 1
+ * (no scaling) so the estimate only ever moves toward the truth. Capped so a
+ * pathological literal can't produce a nonsense advisory.
+ */
+function loopMultiplier(ancestors: readonly acorn.Node[]): number {
+  let mult = 1;
+  for (const node of ancestors) {
+    if (node.type !== 'ForStatement') continue;
+    const f = node as acorn.ForStatement;
+    if (!f.test || f.test.type !== 'BinaryExpression') continue;
+    const { operator, right } = f.test;
+    if (operator !== '<' && operator !== '<=') continue;
+    if (right.type !== 'Literal' || typeof right.value !== 'number') continue;
+    const n = operator === '<' ? right.value : right.value + 1;
+    if (n > 1 && Number.isFinite(n)) mult *= Math.min(n, 256);
+  }
+  return Math.min(mult, 4096);
 }
 
 function insideFunctionNamed(

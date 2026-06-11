@@ -1,0 +1,231 @@
+// Bun Snapshot v1, https://bun.sh/docs/test/snapshots
+
+exports[`system prompt embeds the generated catalog api section snapshot (review prompt changes in this diff) 1`] = `
+"// Scene & structure (globals — no imports needed)
+createRoot(name: string)  // Creates the root Object3D for an asset. Call first in build().
+createPivot(name: string, position?: [x, y, z], parent?: Object3D)
+  // Creates an empty pivot node for skeletal animation. Name is auto-prefixed with \`Joint_\`.
+createPart(name, geometry, material, opts?: { position, rotation, scale, pivot, parent })
+  // Creates a mesh, optionally wrapped in a pivot, and attaches it to \`opts.parent\`.
+  // NOTE: AUTO-ADDS to opts.parent. NEVER call parent.add(createPart(...)) — pass { parent }
+  // instead.
+beamBetween(name, start: [x,y,z], end: [x,y,z], radius, material, opts?: { segments, parent })
+  // Creates a cylindrical rail/strut exactly between two endpoints. Use for braces, gun
+  // barrels, skid struts, cables, and scaffolding.
+snapTo(part: Object3D, host: Object3D, opts?: { axis?: 'x'|'y'|'z', overlap?: 0.02 })
+  // Translates \`part\` by the minimal vector that brings its bounding box into contact with
+  // \`host\` (plus a small overlap). The direct cure for a "Floating parts" warning — attach the
+  // part instead of eyeballing a corrective offset. No-op if they already touch.
+createLadder(name, { bottom, top, material, width?, rungCount?, railRadius?, rungRadius?, widthAxis?, parent? })
+  // Builds two continuous rails plus evenly-spaced rungs. Use this instead of loose boxes for
+  // ladders.
+createWingPair(name, material, { rootZ, span, rootChord, tipChord, sweep?, thickness?, dihedral?, rootX?, rootY?, parent? })
+  // Creates mirrored trapezoid aircraft wings with roots attached at +/-rootZ. Use for aircraft
+  // wings and helicopter stub wings.
+
+// Geometry (returns BufferGeometry)
+boxGeo(width: number, height: number, depth: number)  // 6-face box. 12 tris regardless of size. Cheapest geometry.
+sphereGeo(radius: number, widthSegments?: 8, heightSegments?: 6)
+  // UV sphere. Default 8x6 segments = 84 tris. Bump segments for smoother curves.
+cylinderGeo(radiusTop: number, radiusBottom: number, height: number, segments?: 8)
+  // Y-axis cylinder. Use radiusTop != radiusBottom for cones / tapered pieces.
+cylinderYGeo(radiusTop: number, radiusBottom: number, height: number, segments?: 8)
+  // Alias for cylinderGeo — a Y-axis cylinder. Provided because the sandbox exposes
+  // cylinderXGeo / cylinderZGeo and the symmetric Y form is commonly reached for.
+cylinderXGeo(radiusTop: number, radiusBottom: number, length: number, segments?: 8)
+  // Cylinder pre-rotated to run along +X/-X. Use for fuselages, cannons, barrels, axles, and
+  // forward-facing tubes.
+cylinderZGeo(radiusTop: number, radiusBottom: number, length: number, segments?: 8)
+  // Cylinder pre-rotated to run along +Z/-Z. Use for side-mounted weapons, rails, crossbars,
+  // and pipes.
+cylinderOnAxis(center: [x,y,z], normal: [x,y,z], radiusBottom: number, height: number, opts?: { radiusTop?, segments? })
+  // Frame-first cylinder: position + axis specified directly, no post-hoc rotation. Use when
+  // the cylinder needs to point along a non-cardinal direction (struts inside CSG operands,
+  // antennas off a tilted surface). For cardinal axes prefer the terser cylinderXGeo /
+  // cylinderYGeo / cylinderZGeo helpers.
+capsuleGeo(radius: number, height: number, segments?: 6)
+  // Stadium shape (cylinder with hemispherical caps). Good for limbs.
+capsuleYGeo(radius: number, height: number, segments?: 6)
+  // Alias for capsuleGeo — a Y-axis capsule. Provided for symmetry with capsuleXGeo /
+  // capsuleZGeo.
+capsuleXGeo(radius: number, length: number, segments?: 6)
+  // Capsule pre-rotated to run along +X/-X. Use for aircraft bodies, rounded vehicle hulls, and
+  // missiles.
+capsuleZGeo(radius: number, length: number, segments?: 6)
+  // Capsule pre-rotated to run along +Z/-Z. Use for lateral pods, floats, and side tanks.
+coneGeo(radius: number, height: number, segments?: 8)
+  // Y-axis cone (pointed up). Use for spikes, roofs, projectiles.
+coneYGeo(radius: number, height: number, segments?: 8)
+  // Alias for coneGeo — a Y-axis cone (point +Y). Provided for symmetry with coneXGeo /
+  // coneZGeo.
+coneXGeo(radius: number, length: number, segments?: 8)
+  // Cone pre-rotated so its point faces +X. Use for noses, rockets, shells, and forward-facing
+  // tips.
+coneZGeo(radius: number, length: number, segments?: 8)
+  // Cone pre-rotated so its point faces +Z. Use for side-facing projectiles and tips.
+taperConeGeo(radiusBottom: number, radiusTop: number, height: number, axis?: 'x'|'y'|'z', segments?: 8)
+  // Truncated cone (frustum) — exposes both bottom and top radius. radiusTop=0 matches coneGeo,
+  // radiusTop=radiusBottom matches cylinderGeo. Use for pylon caps, soda cans, lampshades,
+  // anything tapered that does not come to a point. axis selects orientation (default Y).
+torusGeo(radius: number, tube: number, radialSegments?: 8, tubularSegments?: 12)
+  // Donut shape. For rings, tyres, barrel ribs.
+planeGeo(width: number, height: number, widthSegments?: 1, heightSegments?: 1)
+  // Flat quad for TEXTURED surfaces (ground, signs, walls with albedo maps). For solid-color
+  // decals like red stars, hull numbers, stamps, or window cutouts on no-texture assets use
+  // decalBox — a bare planeGeo without a texture will render as a disconnected 2-tri square and
+  // get flagged as a stray plane.
+decalBox(width: number, height: number, depth?: 0.01)
+  // Thin box for solid-color surface decals: red stars, hull numbers, stamps, no-texture
+  // windows. Unlike planeGeo, has real depth so it visibly attaches to its host surface. Must
+  // be placed on a surface with position + rotation.
+  // NOTE: Offset at least 0.01 outside the host surface to avoid z-fighting (a 0.8-wide hull
+  // has faces at z=±0.4, so place the decal at z=±0.41).
+foliageCardGeo(opts?: { width?, height?, yPivot?: 0..1 })
+  // Single-quad foliage card with a configurable Y pivot. yPivot=0 plants the quad on the
+  // ground. Pair with an alpha-tested material and a leaf/plant sprite.
+crossedQuadsGeo(opts?: { width?, height?, planes?: 2 | 3, yPivot? })
+  // Cross-billboard bush primitive: 2 or 3 planes intersecting along the Y axis. Reads as a
+  // dense plant from any angle, cheaper than real geometry.
+octaGridPlane({ tilesX, tilesY, width?, height?, yPivot? })
+  // Atlas-ready billboard quad. UVs are pre-scaled to cover one tile of a tilesX×tilesY atlas;
+  // the consumer shader adds per-instance tile offsets at draw time.
+wingGeo(opts?: { span, rootChord, tipChord, sweep, thickness, dihedral })
+  // Trapezoid wing panel. Local root edge is at Z=0, span extends toward +Z, positive sweep
+  // moves the tip aft along -X.
+gearGeo(opts?: { teeth?: 12, rootRadius?: 0.8, tipRadius?: 1.0, boreRadius?: 0.2, height?: 0.3, toothWidthFrac?: 0.5 })
+  // Parametric gear: disc with N additive teeth around the rim and a center bore. Flat-shaded
+  // hard edges. Built directly (no CSG), so cheap.
+bladeGeo(opts?: { length?: 1.5, baseWidth?: 0.1, thickness?: 0.015, tipLength?: 0.25, edgeBevel?: 0 })
+  // Parametric sword blade: rectangular base tapering to a point over tipLength. edgeBevel > 0
+  // pinches the cross-section toward a diamond ridge.
+
+// Materials
+gameMaterial(color, opts?: { metalness, roughness, emissive, emissiveIntensity, flatShading })
+  // Flat-shaded PBR material. Default for game-ready low-poly. Use for 95% of parts.
+basicMaterial(color, opts?: { transparent, opacity })
+  // Unlit flat material. For UI / effects where lighting is baked in.
+glassMaterial(color, opts?: { opacity, roughness, metalness })
+  // Semi-transparent double-sided material. Panels need ~0.05 offset to avoid z-fighting.
+lambertMaterial(color, opts?: { flatShading, emissive })
+  // Cheaper than gameMaterial. No metalness/roughness. Use when PBR is overkill.
+pbrMaterial({ albedo?, normal?, roughness?, metalness?, emissive?, aoMap? })
+  // Full PBR material. Each slot can be a hex color/scalar or a Texture loaded via loadTexture.
+  // Exports as glTF pbrMetallicRoughness.
+
+// Instancing (share geometry+material; smaller GLBs)
+cloneGeometry(geo: BufferGeometry)
+  // Returns the same geometry reference. Use it as a signal that you are intentionally sharing
+  // geometry across multiple parts; gltf-transform dedupes on export.
+cloneMaterial(mat: Material)  // Shared material reference. See cloneGeometry.
+createInstance(name, source, opts?: { position, rotation, scale, parent })
+  // Creates a new mesh reusing an existing part's geometry + material at a new transform.
+  // Cheapest way to replicate wheels / bolts / fence posts / windows.
+
+// Arrays (replicate a source part)
+arrayLinear(namePrefix, source, count, offset: [x,y,z], parent?)
+  // Places N copies of \`source\` along a constant offset vector. Copies share geometry +
+  // material via createInstance.
+arrayRadial(namePrefix, source, count, axis?: 'x'|'y'|'z', parent?)
+  // Places N copies of \`source\` around the given axis. Source's local rotation is oriented
+  // outward. Perfect for gear teeth, radial bolts, circle of columns.
+mirror(name, source, axis: 'x'|'y'|'z', parent?)
+  // Reflects source across the plane whose normal is \`axis\`. Uses negative scale (winding flip
+  // handled by viewers).
+
+// CSG / Boolean (async — using any of these requires \`async function build()\`)
+await boolUnion(name: string, ...parts: Object3D[], opts?: { smooth?: false })
+  // Merges two or more parts into one watertight manifold mesh. Default flat shading (hard
+  // edges) — pass { smooth: true } as last arg for averaged normals on organic merges.
+await boolDiff(name: string, body: Object3D, ...cutters: Object3D[], opts?: { smooth?: false })
+  // Subtracts cutters from a body (holes, button recesses, window slots). Default flat shading
+  // for sharp mechanical edges.
+await boolIntersect(name: string, a: Object3D, b: Object3D, opts?: { smooth?: false })
+  // Keeps only the volume where both operands overlap. Default flat shading.
+await hull(name: string, ...parts: Object3D[], opts?: { smooth?: true })
+  // Tightest convex mesh enclosing all input points. Default smooth shading (rocks, collision
+  // volumes). Pass { smooth: false } for a faceted look.
+
+// Mesh ops
+subdivide(geometry: BufferGeometry, iterations?: 1, opts?: { split, uvSmooth, preserveEdges, flatOnly, weld })
+  // Loop subdivision. Each iteration ~4x the triangle count and smooths the surface.
+  // Non-indexed input is auto-welded via mergeVertices (weld: false to skip). Use 1 for mild
+  // smoothing, 2 for organic shapes.
+mergeVertices(geometry: BufferGeometry, tolerance?: 1e-4)
+  // Welds coincident vertices into shared, indexed ones. Three's primitives emit disconnected
+  // per-face strips — call this before subdividing, deforming, or smooth-shading so shared
+  // corners move once.
+
+// Curves
+curveToMesh(points: [x,y,z][], radius, tubularSegs?: 32, radialSegs?: 8, closed?: false)
+  // Sweeps a circular profile along a path. Equivalent to Blender's Curve to Mesh node with a
+  // circle profile. Use for pipes, cables, tubular frames.
+pipeAlongPath(points: [x,y,z][], radius: number, opts?: { bendRadius?: 0, closed?: false, tubularSegments?: 32, radialSegments?: 8 })
+  // Path-driven swept circle with optional bend smoothing. Generalises beamBetween
+  // (point-to-point) and curveToMesh (raw spline) into one helper. bendRadius>0 inserts
+  // interpolated waypoints near interior corners so the spline reads as a rounded turn instead
+  // of pinching to the control point.
+lathe(profile: [x,y][], segments?: 12)
+  // Surface of revolution. Spins a 2D profile around the Y axis. For bottles, vases, wheels,
+  // turned wood parts.
+revolveGeo(profile: [x,y][], opts?: { angle?: 2π, axis?: [x,y,z]=[0,1,0], segments?: 12 })
+  // Surface of revolution with explicit axis + sweep angle. Generalises lathe — use it when you
+  // need a partial sweep (half-dome, 90° wedge) or revolution around a non-Y axis. Profile
+  // convention is identical to lathe: x = radial distance, y = position along the axis.
+bezierCurve(controlPoints: [x,y,z][], samples?: 32)
+  // Samples a quadratic (3 ctrl pts) or cubic (4 ctrl pts) Bézier into a point list you can
+  // feed into curveToMesh.
+
+// UV unwrapping
+await autoUnwrap(geometry: BufferGeometry, opts?: { resolution?: 1024, padding?: 2, useNormals?: false })
+  // xatlas-based UV atlas for ANY geometry (CSG output, subdivided, deformed). Output is a
+  // packed atlas with arbitrary per-chart rotation — use for non-tileable baked textures. For
+  // directional tileable textures on box/cylinder/plane primitives, prefer the shape-aware
+  // unwraps below.
+boxUnwrap(geometry: BufferGeometry)
+  // Preserves BoxGeometry's built-in per-face UVs — every face maps [0,1] with consistent
+  // orientation. Use for crates/blocks with a tileable texture. Sync; no WASM cost.
+cylinderUnwrap(geometry: BufferGeometry)
+  // Preserves CylinderGeometry's built-in UVs: u wraps around the axis (horizontal texture
+  // features ring the cylinder), v runs up the height. Caps use circle-in-square. Sync; no WASM
+  // cost.
+planeUnwrap(geometry: BufferGeometry)
+  // Projects xy-extent of the bbox to [0,1]. Use for signs/decals/posters where you want ONE
+  // readable texture and no edge-face bleeding. Sync.
+panelRemapV(geo, vScale=0.30, vOffset=0, uScale=1, uOffset=0)
+  // Scales an existing UV attribute so a small mesh samples a sub-region of a SHARED texture.
+  // Replaces the broken texture.clone() pattern (Three.js Texture.clone() runs JSON.stringify
+  // on userData, mangling encoded PNG bytes — panelRemapV avoids that by remapping UVs on the
+  // geometry instead). Typical use: multi-zone albedo where v=0..0.30 is plain panel and
+  // v=0.30..1 has windows/markings — small parts call panelRemapV(unwrap(geo), 0.30) to sample
+  // only the clean strip.
+
+// Textures (loadTexture is async)
+await loadTexture(source: string | Buffer | Uint8Array)
+  // Loads a PNG/JPG/WebP image into a Three.js Texture. Stashes the encoded bytes on
+  // userData.encoded so GLB export is lossless.
+  // NOTE: NEVER texture.clone() a loaded texture (clone() corrupts the encoded bytes and breaks
+  // GLB export). Share the same Texture object and remap UVs with panelRemapV on the smaller
+  // mesh instead.
+
+// Animation — keyframes use "rotation"/"position"/"scale" keys, NOT "value"
+rotationTrack(jointName: string, keyframes: Array<{ time, rotation: [xDeg, yDeg, zDeg] }>, interp?: 'LINEAR' | 'STEP')
+  // Rotation track in degrees, auto-converted to quaternions. Joint name must include \`Joint_\`
+  // prefix.
+positionTrack(jointName: string, keyframes: Array<{ time, position: [x, y, z] }>, interp?: 'LINEAR' | 'STEP')
+  // Position track in world units. Always use \`position:\` not \`value:\` in keyframes.
+scaleTrack(jointName: string, keyframes: Array<{ time, scale: [x, y, z] }>, interp?: 'LINEAR' | 'STEP')
+  // Uniform or per-axis scale track.
+createClip(name: string, duration: number, tracks: KeyframeTrack[])
+  // Collects tracks into a named clip. Returned from animate().
+idleBreathing(bodyJoint: string, duration?: 2, amount?: 0.02)  // Gentle Y-axis bob. For NPC idle states.
+bobbingAnimation(rootName: string, duration?: 2, height?: 0.1)  // Floating / bobbing loop for pickups and effects.
+spinAnimation(jointName: string, duration?: 2, axis?: 'x' | 'y' | 'z')
+  // 360° rotation over \`duration\` around \`axis\`.
+
+// Inspection utilities
+countTriangles(root: Object3D)  // Sums triangle count across every mesh in the subtree.
+countMaterials(root: Object3D)  // Unique material count (by reference) across the subtree.
+getJointNames(root: Object3D)  // All node names beginning with \`Joint_\`. Use to sanity-check animation targets.
+validateAsset(root: Object3D, category: 'character' | 'prop' | 'vfx' | 'environment')
+  // Warns on category-appropriate triangle / material budgets."
+`;

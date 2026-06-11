@@ -21,7 +21,7 @@
 export { runKilnAgent } from './run';
 export type { RunKilnAgentOptions, RunKilnAgentResult, KilnKnowhow, RefineMode } from './run';
 
-export { generateKilnAsset, DEFAULT_KILN_AGENT_MODEL } from './generate';
+export { generateKilnAsset, generateKilnCodeAgent, DEFAULT_KILN_AGENT_MODEL } from './generate';
 export type { GenerateKilnAssetOptions, GenerateKilnAssetResult } from './generate';
 
 export { makeKilnTools, makeKilnEditTools, KilnEditBuffer, KILN_SUBMIT_TOOL_NAME } from './tools';
@@ -32,7 +32,7 @@ export type { UnifiedDiffOptions } from './diff';
 
 export { ensureStreamStart } from './stream-start';
 
-export { makeOpenRouterModel, makeKilnModel, resolveKilnAgentModel } from './providers';
+export { makeOpenRouterModel, makeKilnModel, resolveKilnAgentModel, harnessIdToAgentModelId } from './providers';
 export type {
   OpenRouterModelOptions,
   KilnAgentProvider,
@@ -41,4 +41,4 @@ export type {
 } from './providers';
 
 export { MetricsCollector } from './hooks';
-export type { CollectedMetrics, AgentUsage } from './hooks';
+export type { CollectedMetrics, AgentUsage, KilnAgentEvent } from './hooks';

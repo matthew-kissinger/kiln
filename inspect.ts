@@ -19,6 +19,7 @@
 import * as THREE from 'three';
 
 import { executeKilnCode, inspectGeneratedAnimation } from './render';
+import { listPrimitives } from './list-primitives';
 
 // =============================================================================
 // Types
@@ -76,51 +77,12 @@ export interface InspectResult {
 // =============================================================================
 
 /**
- * Names of every primitive helper exposed in the Kiln sandbox. Kept in sync
- * with `buildSandboxGlobals` by hand — the catalog is tiny and any drift
- * surfaces immediately in `listPrimitives()` tests.
+ * Names of every primitive helper exposed in the Kiln sandbox, derived from
+ * the canonical catalog (list-primitives.ts) so this detector can never drift
+ * from the real surface — the catalog itself is parity-tested against
+ * `buildSandboxGlobals` in `__tests__/list-primitives.test.ts`.
  */
-const KNOWN_PRIMITIVE_NAMES = [
-  'createRoot',
-  'createPivot',
-  'createPart',
-  'capsuleGeo',
-  'capsuleXGeo',
-  'capsuleYGeo',
-  'capsuleZGeo',
-  'cylinderGeo',
-  'cylinderXGeo',
-  'cylinderYGeo',
-  'cylinderZGeo',
-  'boxGeo',
-  'sphereGeo',
-  'coneGeo',
-  'coneXGeo',
-  'coneYGeo',
-  'coneZGeo',
-  'torusGeo',
-  'planeGeo',
-  'decalBox',
-  'wingGeo',
-  'createWingPair',
-  'beamBetween',
-  'createLadder',
-  'gameMaterial',
-  'basicMaterial',
-  'glassMaterial',
-  'lambertMaterial',
-  'rotationTrack',
-  'positionTrack',
-  'scaleTrack',
-  'createClip',
-  'idleBreathing',
-  'bobbingAnimation',
-  'spinAnimation',
-  'countTriangles',
-  'countMaterials',
-  'getJointNames',
-  'validateAsset',
-] as const;
+const KNOWN_PRIMITIVE_NAMES: readonly string[] = listPrimitives().map((p) => p.name);
 
 function detectPrimitivesUsed(code: string): string[] {
   const seen = new Set<string>();

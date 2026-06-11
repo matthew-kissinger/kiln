@@ -609,6 +609,62 @@ export function beamBetween(
   return mesh;
 }
 
+/**
+ * Snap a part into contact with a host: translate `part` by the minimal
+ * world-space vector that closes the gap between its bounding box and the
+ * host's, plus a small `overlap` along the dominant gap axis (or the forced
+ * `axis`). The cure for "Floating parts" warnings — instead of eyeballing a
+ * corrective offset, attach the part and let the geometry resolve contact.
+ *
+ * If the boxes already touch or overlap, the part is left in place.
+ * Returns `part` for chaining.
+ */
+export function snapTo(
+  part: THREE.Object3D,
+  host: THREE.Object3D,
+  options: { axis?: 'x' | 'y' | 'z'; overlap?: number } = {},
+): THREE.Object3D {
+  const overlap = options.overlap ?? 0.02;
+  // Boxes in world space (works mid-build; matrices may be stale otherwise).
+  part.updateMatrixWorld(true);
+  host.updateMatrixWorld(true);
+  const a = new THREE.Box3().setFromObject(part);
+  const b = new THREE.Box3().setFromObject(host);
+  if (a.isEmpty() || b.isEmpty()) return part;
+
+  const delta = new THREE.Vector3();
+  for (const axis of ['x', 'y', 'z'] as const) {
+    if (a.min[axis] > b.max[axis]) delta[axis] = b.max[axis] - a.min[axis];
+    else if (a.max[axis] < b.min[axis]) delta[axis] = b.min[axis] - a.max[axis];
+  }
+  if (delta.lengthSq() === 0) return part; // already in contact
+
+  const dominant =
+    options.axis ??
+    (['x', 'y', 'z'] as const).reduce<'x' | 'y' | 'z'>(
+      (d, axis) => (Math.abs(delta[axis]) > Math.abs(delta[d]) ? axis : d),
+      'x',
+    );
+  if (delta[dominant] !== 0) delta[dominant] += Math.sign(delta[dominant]) * overlap;
+  else delta[dominant] = -overlap; // forced axis had no gap — bias into the host
+
+  // Convert the world delta into the part's parent space (handles rotated or
+  // scaled ancestors) by mapping two world points.
+  const parent = part.parent;
+  if (parent) {
+    const p0 = new THREE.Vector3();
+    part.getWorldPosition(p0);
+    const p1 = p0.clone().add(delta);
+    const l0 = parent.worldToLocal(p0.clone());
+    const l1 = parent.worldToLocal(p1.clone());
+    part.position.add(l1.sub(l0));
+  } else {
+    part.position.add(delta);
+  }
+  part.updateMatrixWorld(true);
+  return part;
+}
+
 export interface LadderOptions {
   bottom: Vec3Tuple;
   top: Vec3Tuple;
@@ -1180,6 +1236,7 @@ export function buildSandboxGlobals(
     createWingPair: wrap('createWingPair', createWingPair),
     beamBetween: wrap('beamBetween', beamBetween),
     createLadder: wrap('createLadder', createLadder),
+    snapTo: wrap('snapTo', snapTo),
     gameMaterial: wrap('gameMaterial', gameMaterial),
     basicMaterial: wrap('basicMaterial', basicMaterial),
     glassMaterial: wrap('glassMaterial', glassMaterial),

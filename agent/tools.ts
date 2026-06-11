@@ -11,7 +11,7 @@
  * latter's coexistence with a full tool set is provider-dependent; a submit tool
  * is unambiguous and works across every provider.
  */
-import { tool, type Tool, type JSONValue } from '@strands-agents/sdk';
+import { tool, ImageBlock, JsonBlock, type Tool, type JSONValue } from '@strands-agents/sdk';
 import { z } from 'zod';
 
 import { kilnToolRegistry } from '../tools/registry';
@@ -36,18 +36,38 @@ const submitInput = z.object({
     ),
 });
 
+/**
+ * Convert a registry `run()` output into the tool-callback return value. Defs
+ * with a `media` extractor (kiln_screenshot) return [ImageBlock, JsonBlock] so
+ * the model literally sees the rendered views; everything else passes the JSON
+ * output through unchanged. The array of content blocks is a valid (if untyped)
+ * Strands callback return — the SDK's tool-result coercion passes block arrays
+ * through as-is — so it is cast past JSONValue.
+ */
+function toCallbackResult(def: (typeof kilnToolRegistry)[number], output: unknown): JSONValue {
+  const media = def.media?.(output);
+  if (media) {
+    return [
+      new ImageBlock({ format: 'png', source: { bytes: media.png } }),
+      new JsonBlock({ json: media.json as JSONValue }),
+    ] as unknown as JSONValue;
+  }
+  return output as JSONValue;
+}
+
 function toStrandsTool(def: (typeof kilnToolRegistry)[number]): Tool {
   return tool({
     name: def.name,
     description: def.description,
     inputSchema: def.inputSchema as z.ZodType,
-    callback: async (input) => (await def.run(input)) as JSONValue,
+    callback: async (input) => toCallbackResult(def, await def.run(input)),
   });
 }
 
 /**
  * Build the in-process tool list for an agent: the kiln registry tools
- * (list_primitives / validate / render) plus the terminal `kiln_submit` tool.
+ * (list_primitives / validate / render / screenshot) plus the terminal
+ * `kiln_submit` tool.
  *
  * @param sink - Receives the submitted final code. Read `sink.code` after invoke.
  */
@@ -213,8 +233,8 @@ const submitEditInput = z.object({
 /**
  * Build the edit-mode tool list for a refine run: list_primitives (as-is),
  * `kiln_view` + `kiln_edit` over a working buffer seeded with `seedCode`, plus
- * `kiln_validate` / `kiln_render` / `kiln_submit` that default to the buffer
- * when their `code` arg is omitted. The buffer's live edit trace is shared into
+ * `kiln_validate` / `kiln_render` / `kiln_screenshot` / `kiln_submit` that
+ * default to the buffer when their `code` arg is omitted. The buffer's live edit trace is shared into
  * `sink.edits`; `sink.code` tracks the latest buffer (so an un-submitted run
  * still captures the edits).
  */
@@ -229,6 +249,7 @@ export function makeKilnEditTools(opts: { seedCode: string; sink: EditSink }): T
   };
   const validateDef = find('kiln_validate');
   const renderDef = find('kiln_render');
+  const screenshotDef = find('kiln_screenshot');
 
   const listTool = toStrandsTool(find('kiln_list_primitives'));
 
@@ -272,6 +293,17 @@ export function makeKilnEditTools(opts: { seedCode: string; sink: EditSink }): T
       (await renderDef.run({ code: (input as { code?: string }).code ?? buffer.code })) as JSONValue,
   });
 
+  const screenshotTool: Tool = tool({
+    name: 'kiln_screenshot',
+    description: `${screenshotDef.description} Omit code to screenshot the current working buffer.`,
+    inputSchema: bufferCodeInput,
+    callback: async (input) =>
+      toCallbackResult(
+        screenshotDef,
+        await screenshotDef.run({ code: (input as { code?: string }).code ?? buffer.code }),
+      ),
+  });
+
   const submitTool: Tool = tool({
     name: KILN_SUBMIT_TOOL_NAME,
     description:
@@ -286,5 +318,5 @@ export function makeKilnEditTools(opts: { seedCode: string; sink: EditSink }): T
     },
   });
 
-  return [listTool, viewTool, editTool, validateTool, renderTool, submitTool];
+  return [listTool, viewTool, editTool, validateTool, renderTool, screenshotTool, submitTool];
 }

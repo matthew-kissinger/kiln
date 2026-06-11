@@ -151,3 +151,29 @@ export function resolveKilnAgentModel(modelId: string): KilnModelDescriptor {
   // Default: Anthropic (claude-*).
   return { provider: 'anthropic', model: id };
 }
+
+/**
+ * Translate a HARNESS model id (the `llm.resolveKilnModelRoute` vocabulary the
+ * single-shot path takes via `KILN_MODEL` / `--model`) into a Strands agent
+ * model id, or null when the id has no agent-path equivalent.
+ *
+ * This explicit bridge exists because the two resolvers use different provider
+ * vocabularies (harness `gemini` vs Strands `google`; harness routes via the
+ * AI-SDK, Strands via native providers) — DO NOT merge the resolvers: feeding
+ * a Strands id like `google:gemini-3.5-flash` through the harness resolver (or
+ * vice versa) misroutes silently. A null return means "no agent route — let
+ * the single-shot fallback handle this id".
+ */
+export function harnessIdToAgentModelId(id: string): string | null {
+  const trimmed = id.trim();
+  if (!trimmed) return null;
+  // Already a Strands-form id (provider:model) — pass through untouched.
+  if (/^(anthropic|openai|google|bedrock|openrouter):/.test(trimmed)) return trimmed;
+  // OpenRouter `vendor/model` slashes route the same on both paths.
+  if (trimmed.includes('/')) return `openrouter:${trimmed}`;
+  if (trimmed.startsWith('claude-')) return `anthropic:${trimmed}`;
+  if (trimmed.startsWith('gemini-')) return `google:${trimmed}`;
+  if (trimmed.startsWith('gpt-') || /^o[34]/.test(trimmed)) return `openai:${trimmed}`;
+  // Unknown family (imagen, embeddings, harness-only aliases): no agent route.
+  return null;
+}

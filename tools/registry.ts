@@ -30,6 +30,14 @@ export interface KilnToolDef {
   inputSchema: z.ZodType;
   /** Execute the tool. Returns JSON-serializable output. */
   run(input: unknown): Promise<unknown>;
+  /**
+   * Extract media from a `run()` output, for transports that can show the
+   * model images (Strands ImageBlock tool results, MCP image content). Returns
+   * the PNG bytes plus the JSON payload to send alongside them (the output
+   * with any embedded base64 stripped, so the image is never double-encoded).
+   * Transports without image support just use the raw `run()` output.
+   */
+  media?(output: unknown): { png: Uint8Array; json: unknown } | undefined;
 }
 
 // =============================================================================
@@ -51,6 +59,10 @@ const validateInput = z.object({
 
 const renderInput = z.object({
   code: z.string().describe('Kiln source code to execute and render to an in-memory GLB.'),
+});
+
+const screenshotInput = z.object({
+  code: z.string().describe('Kiln source code to execute and render to a six-view image grid.'),
 });
 
 // =============================================================================
@@ -170,6 +182,59 @@ async function runRender(input: z.infer<typeof renderInput>): Promise<KilnRender
 }
 
 // =============================================================================
+// kiln_screenshot
+// =============================================================================
+
+export interface KilnScreenshotResult {
+  ok: boolean;
+  /** View names in grid order (row-major): Front, Right, Back, Left, Top, 3/4. */
+  views?: string[];
+  width?: number;
+  height?: number;
+  /** The 3x2 grid PNG, base64-encoded (transports with image support strip this and attach the bytes). */
+  pngBase64?: string;
+  warnings: string[];
+  error?: string;
+}
+
+/**
+ * Execute Kiln code and rasterize it into the 3x2 six-view grid (pure CPU —
+ * no browser, no GPU). Never throws — failures come back as { ok:false, error }.
+ * The renderer is imported lazily so the views module (node:zlib) never enters
+ * the browser bundle graph.
+ */
+async function runScreenshot(input: z.infer<typeof screenshotInput>): Promise<KilnScreenshotResult> {
+  try {
+    const { renderViewGrid } = await import('../views');
+    const { root } = await executeKilnCode(input.code);
+    const warnings = inspectSceneStructure(root);
+    const grid = await renderViewGrid(root);
+    return {
+      ok: true,
+      views: grid.views,
+      width: grid.width,
+      height: grid.height,
+      pngBase64: grid.png.toString('base64'),
+      warnings,
+    };
+  } catch (err) {
+    return {
+      ok: false,
+      error: err instanceof Error ? err.message : String(err),
+      warnings: [],
+    };
+  }
+}
+
+/** Shared media extractor for screenshot-shaped outputs (pngBase64 -> bytes + stripped JSON). */
+function screenshotMedia(output: unknown): { png: Uint8Array; json: unknown } | undefined {
+  const o = output as KilnScreenshotResult | undefined;
+  if (!o || typeof o.pngBase64 !== 'string' || o.pngBase64.length === 0) return undefined;
+  const { pngBase64: _png, ...json } = o;
+  return { png: new Uint8Array(Buffer.from(o.pngBase64, 'base64')), json };
+}
+
+// =============================================================================
 // Registry
 // =============================================================================
 
@@ -194,5 +259,17 @@ export const kilnToolRegistry: KilnToolDef[] = [
       'Execute Kiln code and render it to an in-memory GLB, returning geometry metrics: triangle count, mesh count, material count, and the world-space bounding box. Includes structural warnings for floating parts and stray planes left at the origin. Use this to confirm a model builds and to inspect its size and structure. Does not write any files.',
     inputSchema: renderInput,
     run: async (input) => runRender(renderInput.parse(input)),
+  },
+  {
+    name: 'kiln_screenshot',
+    description:
+      'Render Kiln code to a six-view image grid so you can SEE the asset: ' +
+      'row 1 = Front (camera on +X, the nose/muzzle should face you), Right (+Z, the long profile), Back (-X); ' +
+      'row 2 = Left (-Z), Top (+Y, check symmetry), 3/4 perspective (check part contact and overall read). ' +
+      'Use it to verify orientation (+X forward), attachment (no floating parts), and silhouette before submitting. ' +
+      'If a view looks wrong, fix the code and screenshot again. Flat-shaded CPU render; does not write files.',
+    inputSchema: screenshotInput,
+    run: async (input) => runScreenshot(screenshotInput.parse(input)),
+    media: screenshotMedia,
   },
 ];

@@ -128,6 +128,19 @@ function stripClaudeCodeNestingMarkers(): void {
   delete process.env['CLAUDE_CODE_ENTRYPOINT'];
 }
 
+/**
+ * Resolve the codegen mechanism: `KILN_CODEGEN` env > 'agent' default. Shared
+ * by `kiln.generate()` (index.ts) and `generateKilnCode` (this file) so both
+ * forks flip together.
+ */
+export function resolveCodegenMode(explicit?: 'agent' | 'single-shot'): 'agent' | 'single-shot' {
+  if (explicit) return explicit;
+  const env = process.env['KILN_CODEGEN']?.trim().toLowerCase();
+  if (env === 'single-shot' || env === 'singleshot' || env === 'single') return 'single-shot';
+  return 'agent';
+}
+
+
 // =============================================================================
 // Public API
 // =============================================================================
@@ -143,6 +156,40 @@ export async function generateKilnCode(
   stripClaudeCodeNestingMarkers();
 
   try {
+    // DEFAULT: the Strands agent tool loop (code-only — callers render
+    // separately, exactly as with the single-shot emitter). This retires the
+    // last fork: the editor server route + editKilnCode now ride the same
+    // engine as the CLI/MCP/batch/studio. Falls through to single-shot for
+    // tsl/both modes, reference-image requests, KILN_CODEGEN=single-shot, or
+    // a model id the agent path can't translate.
+    if (resolveCodegenMode() === 'agent' && request.mode === 'glb' && !request.referenceImageUrl) {
+      // Lazy imports keep @strands-agents/sdk out of the non-agent module
+      // graph (browser/editor bundle safety) — same pattern as kiln.generate.
+      const { harnessIdToAgentModelId } = await import('./agent/providers');
+      const agentModel = opts.model ? harnessIdToAgentModelId(opts.model) : undefined;
+      if (!opts.model || agentModel) {
+        const { generateKilnCodeAgent } = await import('./agent/generate');
+        const result = await generateKilnCodeAgent({
+          prompt: request.prompt,
+          category: request.category,
+          ...(request.style ? { style: request.style } : {}),
+          includeAnimation: request.includeAnimation ?? false,
+          ...(request.existingCode ? { existingCode: request.existingCode } : {}),
+          ...(request.originalPrompt ? { originalPrompt: request.originalPrompt } : {}),
+          ...(agentModel ? { model: agentModel } : {}),
+        });
+        if (!result.success) return { success: false, error: result.error };
+        if (result.code) {
+          const validation = validate(result.code);
+          if (!validation.valid) {
+            return retryWithFeedback(request, result.code, validation.errors, opts);
+          }
+        }
+        return { success: true, code: result.code, usage: result.usage };
+      }
+      // opts.model had no agent translation — single-shot owns that id.
+    }
+
     if (shouldUseModelHarness(opts.model)) {
       const result = await runHarnessGenerate(request, opts);
       if (!result.success) return result;

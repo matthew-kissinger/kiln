@@ -12,6 +12,11 @@
 
 import { describe, expect, test, mock, beforeEach } from 'bun:test';
 
+// These companions test the SINGLE-SHOT machinery (mocked claude-agent-sdk).
+// The codegen default is now the Strands agent loop — pin this file's runs to
+// the mocked path before the module under test is imported.
+process.env['KILN_CODEGEN'] = 'single-shot';
+
 // Mocks must be declared before importing the module under test.
 let queryImpl = async function* (_args: unknown): AsyncGenerator<unknown> {
   yield { type: 'result', subtype: 'success', result: '', session_id: 'test' };
