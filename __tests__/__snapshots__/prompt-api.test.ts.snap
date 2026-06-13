@@ -5,10 +5,13 @@ exports[`system prompt embeds the generated catalog api section snapshot (review
 createRoot(name: string)  // Creates the root Object3D for an asset. Call first in build().
 createPivot(name: string, position?: [x, y, z], parent?: Object3D)
   // Creates an empty pivot node for skeletal animation. Name is auto-prefixed with \`Joint_\`.
-createPart(name, geometry, material, opts?: { position, rotation, scale, pivot, parent })
-  // Creates a mesh, optionally wrapped in a pivot, and attaches it to \`opts.parent\`.
+createPart(name, geometry, material, opts?: { position, rotation: [xDeg, yDeg, zDeg], scale, pivot, parent })
+  // Creates a mesh, optionally wrapped in a pivot, and attaches it to \`opts.parent\`. \`rotation\`
+  // is in DEGREES (like rotationTrack), NOT radians: [0, 0, 90] is a quarter turn; [0, 0, 1.57]
+  // is a no-op.
   // NOTE: AUTO-ADDS to opts.parent. NEVER call parent.add(createPart(...)) — pass { parent }
-  // instead.
+  // instead. rotation is DEGREES — writing radians (e.g. 0.785 or Math.PI/4) silently produces
+  // ~zero rotation.
 beamBetween(name, start: [x,y,z], end: [x,y,z], radius, material, opts?: { segments, parent })
   // Creates a cylindrical rail/strut exactly between two endpoints. Use for braces, gun
   // barrels, skid struts, cables, and scaffolding.
@@ -117,9 +120,10 @@ cloneGeometry(geo: BufferGeometry)
   // Returns the same geometry reference. Use it as a signal that you are intentionally sharing
   // geometry across multiple parts; gltf-transform dedupes on export.
 cloneMaterial(mat: Material)  // Shared material reference. See cloneGeometry.
-createInstance(name, source, opts?: { position, rotation, scale, parent })
+createInstance(name, source, opts?: { position, rotation: [xDeg, yDeg, zDeg], scale, parent })
   // Creates a new mesh reusing an existing part's geometry + material at a new transform.
-  // Cheapest way to replicate wheels / bolts / fence posts / windows.
+  // Cheapest way to replicate wheels / bolts / fence posts / windows. \`rotation\` is in DEGREES,
+  // like createPart.
 
 // Arrays (replicate a source part)
 arrayLinear(namePrefix, source, count, offset: [x,y,z], parent?)

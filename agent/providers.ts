@@ -62,6 +62,23 @@ export interface KilnModelDescriptor {
   model: string;
   /** Output-token budget; applied to anthropic/openai/bedrock (GoogleModel uses its own default). */
   maxTokens?: number;
+  /**
+   * Anthropic thinking control (anthropic provider only; others ignore it).
+   *
+   * - Effort keyword (`'low' | 'medium' | 'high'`, passed through verbatim) →
+   *   `thinking: {type:'adaptive'}` + `output_config: {effort}` — the
+   *   Fable-5-family shape. These models think adaptively BY DEFAULT (verified
+   *   live: reasoning blocks interleave with kiln tool calls on a plain
+   *   request); the keyword only tunes how hard.
+   * - Number → legacy `thinking: {type:'enabled', budget_tokens}` plus the
+   *   interleaved-thinking beta, for pre-adaptive Claude models. Fable 5
+   *   REJECTS this shape with a 400 (verified live 2026-06-11).
+   *
+   * Unset falls back to the `KILN_THINKING` env (read at call time); 0 / ''
+   * forces default behavior even when the env is set. Default: send nothing —
+   * the API default, which on Fable 5 is adaptive thinking at default effort.
+   */
+  thinking?: string | number;
 }
 
 export interface MakeKilnModelOptions {
@@ -77,6 +94,32 @@ const trimmedEnv = (k: string): string | undefined => {
 };
 
 /**
+ * Resolve the Anthropic thinking control: per-call descriptor wins, else the
+ * `KILN_THINKING` env. Effort keywords map to the adaptive shape (Fable 5
+ * family); numbers map to the legacy enabled+budget shape (floored to the API
+ * minimum of 1024, interleaved beta added). Unset / 0 / '' → undefined, i.e.
+ * send nothing and take the API default.
+ */
+function resolveAnthropicThinking(
+  fromDesc?: string | number,
+): { params: Record<string, unknown>; betas?: string[] } | undefined {
+  const raw = fromDesc ?? trimmedEnv('KILN_THINKING');
+  if (raw == null || raw === '' || raw === 0) return undefined;
+  const asNum =
+    typeof raw === 'number' ? raw : /^\d+$/.test(String(raw).trim()) ? Number.parseInt(String(raw).trim(), 10) : undefined;
+  if (asNum !== undefined) {
+    if (!Number.isFinite(asNum) || asNum <= 0) return undefined;
+    return {
+      params: { thinking: { type: 'enabled', budget_tokens: Math.max(1024, Math.floor(asNum)) } },
+      betas: ['interleaved-thinking-2025-05-14'],
+    };
+  }
+  const effort = String(raw).trim().toLowerCase();
+  if (!/^[a-z]+$/.test(effort)) return undefined;
+  return { params: { thinking: { type: 'adaptive' }, output_config: { effort } } };
+}
+
+/**
  * Construct a Strands `Model` from a provider+model descriptor — the agnostic
  * factory the whole Kiln agent path builds on. Native providers (Anthropic /
  * OpenAI / Google / Bedrock) construct directly from their model subpath;
@@ -86,8 +129,15 @@ const trimmedEnv = (k: string): string | undefined => {
 export function makeKilnModel(desc: KilnModelDescriptor, opts: MakeKilnModelOptions = {}): Model {
   const maxTokens = desc.maxTokens;
   switch (desc.provider) {
-    case 'anthropic':
-      return new AnthropicModel({ modelId: desc.model, ...(maxTokens != null ? { maxTokens } : {}) });
+    case 'anthropic': {
+      const thinking = resolveAnthropicThinking(desc.thinking);
+      return new AnthropicModel({
+        modelId: desc.model,
+        ...(maxTokens != null ? { maxTokens } : {}),
+        ...(thinking ? { params: thinking.params } : {}),
+        ...(thinking?.betas ? { betas: thinking.betas } : {}),
+      });
+    }
     case 'openai':
       return new OpenAIModel({ api: 'chat', modelId: desc.model, ...(maxTokens != null ? { maxTokens } : {}) });
     case 'google':

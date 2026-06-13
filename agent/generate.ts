@@ -16,7 +16,7 @@
  */
 import { renderGLB, type KilnCodeMeta } from '../render';
 import type { AssetCategory, AssetStyle } from '../prompt';
-import { runKilnAgent, type RefineMode, type KilnKnowhow } from './run';
+import { runKilnAgent, type RefineMode, type KilnKnowhow, type KilnInputImage } from './run';
 import {
   makeKilnModel,
   resolveKilnAgentModel,
@@ -65,6 +65,8 @@ export interface GenerateKilnAssetOptions {
    *  FRESH generation (ignored on refine). ~5-15k input tokens/run, mostly
    *  absorbed by prompt caching when reused across a batch. */
   exemplarCode?: string;
+  /** Optional reference image fed to the model as multimodal context (fresh gen + refine). */
+  inputImage?: KilnInputImage;
 }
 
 export interface GenerateKilnAssetResult {
@@ -109,6 +111,8 @@ export async function generateKilnCodeAgent(opts: {
   includeAnimation?: boolean;
   existingCode?: string;
   originalPrompt?: string;
+  /** Optional reference image fed to the model as multimodal context. */
+  inputImage?: KilnInputImage;
   /** Strands model id; defaults like {@link generateKilnAsset}. */
   model?: string;
 }): Promise<{
@@ -135,6 +139,7 @@ export async function generateKilnCodeAgent(opts: {
     ...(opts.style ? { style: opts.style } : {}),
     ...(opts.existingCode ? { existingCode: opts.existingCode } : {}),
     ...(opts.originalPrompt ? { originalPrompt: opts.originalPrompt } : {}),
+    ...(opts.inputImage ? { inputImage: opts.inputImage } : {}),
   });
 
   if (agent.error || !agent.code) {
@@ -181,6 +186,7 @@ export async function generateKilnAsset(
     ...(opts.existingCode && opts.refineMode ? { refineMode: opts.refineMode } : {}),
     ...(opts.agentName ? { agentName: opts.agentName } : {}),
     ...(opts.exemplarCode ? { exemplarCode: opts.exemplarCode } : {}),
+    ...(opts.inputImage ? { inputImage: opts.inputImage } : {}),
   });
 
   if (agent.error || !agent.code) {

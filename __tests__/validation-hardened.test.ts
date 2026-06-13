@@ -261,3 +261,72 @@ function build() { return createRoot('X'); }
     expect(r.errors).toEqual(r.issues.map((i) => i.message));
   });
 });
+
+describe('kiln validation — rotation units lint (ROTATION_RADIANS_SUSPECTED)', () => {
+  const wrap = (body: string) => `
+const meta = { name: 'X' };
+function build() {
+  const root = createRoot('X');
+  ${body}
+  return root;
+}`;
+
+  const radianWarnings = (code: string) =>
+    validate(code).warnings.filter((w) => w.code === 'ROTATION_RADIANS_SUSPECTED');
+
+  test('flags a numeric radian triple with the degree equivalent', () => {
+    const w = radianWarnings(
+      wrap(`createPart('Grip', boxGeo(1, 1, 1), gameMaterial(0x333333), { rotation: [0, 0, 0.785], parent: root });`)
+    );
+    expect(w.length).toBe(1);
+    expect(w[0]!.message).toContain('[0, 0, 0.785]');
+    expect(w[0]!.message).toContain('[0, 0, 45]');
+    expect(w[0]!.line).toBeDefined();
+    // Advisory only — the program is still valid.
+    expect(validate(wrap(`createPart('G', boxGeo(1,1,1), gameMaterial(0x333333), { rotation: [0, 0, 0.785], parent: root });`)).valid).toBe(true);
+  });
+
+  test('flags Math.PI expressions (the -Math.PI/2 fin case)', () => {
+    const w = radianWarnings(
+      wrap(`createPart('Fin', wingGeo({ span: 3 }), gameMaterial(0x445522), { rotation: [-Math.PI / 2, 0, 0], parent: root });`)
+    );
+    expect(w.length).toBe(1);
+    expect(w[0]!.message).toContain('RADIANS');
+  });
+
+  test('does NOT flag the rad-to-deg conversion idiom (a * 180 / Math.PI)', () => {
+    const w = radianWarnings(
+      wrap(`const a = 0.5;
+  createPart('Blade', boxGeo(0.06, 1.7, 0.27), gameMaterial(0x111111), { rotation: [a * 180 / Math.PI, 0, 0], parent: root });`)
+    );
+    expect(w).toEqual([]);
+  });
+
+  test('does NOT flag degree-style values', () => {
+    const cases = ['[0, 0, 90]', '[0, 0, -15]', '[0, 0, 28.6]', '[0, 45, 0.5]', '[0, 0, 0]', '[0, 0, 1]'];
+    for (const rot of cases) {
+      const w = radianWarnings(
+        wrap(`createPart('P', boxGeo(1, 1, 1), gameMaterial(0x333333), { rotation: ${rot}, parent: root });`)
+      );
+      expect(w).toEqual([]);
+    }
+  });
+
+  test('stays quiet on dynamic expressions it cannot read', () => {
+    const w = radianWarnings(
+      wrap(`const tilt = 17;
+  createPart('P', boxGeo(1, 1, 1), gameMaterial(0x333333), { rotation: [0, 0, tilt], parent: root });`)
+    );
+    expect(w).toEqual([]);
+  });
+
+  test('covers createInstance and ignores unrelated rotation keys', () => {
+    const w = radianWarnings(
+      wrap(`const src = createPart('W', cylinderZGeo(0.5, 0.5, 0.3), gameMaterial(0x222222), { parent: root });
+  createInstance('W2', src, { position: [1, 0, 0], rotation: [0, 1.57, 0], parent: root });
+  rotationTrack('Joint_X', [{ time: 0, rotation: [0, 0, 0] }, { time: 1, rotation: [0, 0, 0.5] }]);`)
+    );
+    expect(w.length).toBe(1);
+    expect(w[0]!.message).toContain('createInstance');
+  });
+});

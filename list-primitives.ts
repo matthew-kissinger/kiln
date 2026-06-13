@@ -69,15 +69,15 @@ const PRIMITIVES: PrimitiveSpec[] = [
   {
     name: 'createPart',
     signature:
-      'createPart(name, geometry, material, opts?: { position, rotation, scale, pivot, parent })',
+      'createPart(name, geometry, material, opts?: { position, rotation: [xDeg, yDeg, zDeg], scale, pivot, parent })',
     returns: 'THREE.Object3D (mesh or wrapping pivot)',
     category: 'structure',
     description:
-      'Creates a mesh, optionally wrapped in a pivot, and attaches it to `opts.parent`.',
+      'Creates a mesh, optionally wrapped in a pivot, and attaches it to `opts.parent`. `rotation` is in DEGREES (like rotationTrack), NOT radians: [0, 0, 90] is a quarter turn; [0, 0, 1.57] is a no-op.',
     example:
-      "createPart('Barrel', cylinderGeo(0.1, 0.1, 1), gameMaterial(0x556b2f), { position: [0, 0.5, 0], parent: root });",
+      "createPart('Barrel', cylinderGeo(0.1, 0.1, 1), gameMaterial(0x556b2f), { position: [0, 0.5, 0], rotation: [0, 0, 90], parent: root });",
     promptNotes:
-      'AUTO-ADDS to opts.parent. NEVER call parent.add(createPart(...)) — pass { parent } instead.',
+      'AUTO-ADDS to opts.parent. NEVER call parent.add(createPart(...)) — pass { parent } instead. rotation is DEGREES — writing radians (e.g. 0.785 or Math.PI/4) silently produces ~zero rotation.',
   },
   {
     name: 'beamBetween',
@@ -498,11 +498,11 @@ const PRIMITIVES: PrimitiveSpec[] = [
   {
     name: 'createInstance',
     signature:
-      'createInstance(name, source, opts?: { position, rotation, scale, parent })',
+      'createInstance(name, source, opts?: { position, rotation: [xDeg, yDeg, zDeg], scale, parent })',
     returns: 'THREE.Object3D',
     category: 'instancing',
     description:
-      'Creates a new mesh reusing an existing part\'s geometry + material at a new transform. Cheapest way to replicate wheels / bolts / fence posts / windows.',
+      'Creates a new mesh reusing an existing part\'s geometry + material at a new transform. Cheapest way to replicate wheels / bolts / fence posts / windows. `rotation` is in DEGREES, like createPart.',
     example:
       "const wheelFL = createPart('WheelFL', wheelGeo, rubberMat, { position: [-0.8, 0.3, 1.2], parent: root });\ncreateInstance('WheelFR', wheelFL, { position: [0.8, 0.3, 1.2], parent: root });\ncreateInstance('WheelRL', wheelFL, { position: [-0.8, 0.3, -1.2], parent: root });\ncreateInstance('WheelRR', wheelFL, { position: [0.8, 0.3, -1.2], parent: root });",
   },

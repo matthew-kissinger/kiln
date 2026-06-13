@@ -16,7 +16,7 @@
  * caller constructs the `model` (see provider helpers) and owns any out-of-process
  * resources (e.g. an MCP client passed via `extraTools`).
  */
-import { Agent, type Plugin, type Tool, type Message } from '@strands-agents/sdk';
+import { Agent, TextBlock, ImageBlock, type Plugin, type Tool, type Message } from '@strands-agents/sdk';
 import { AgentSkills } from '@strands-agents/sdk/vended-plugins/skills';
 
 import { getSystemPrompt, buildUserPrompt, KILN_REFINE_DIRECTIVE, KILN_EDIT_DIRECTIVE } from '../prompt';
@@ -30,6 +30,24 @@ export type KilnKnowhow = 'inline' | 'skill';
 
 /** How a refine applies its change: whole-program re-emission, or surgical edits. */
 export type RefineMode = 'rewrite' | 'edit';
+
+/** A user-supplied reference image fed to the agent as multimodal context.
+ *  `base64` is the raw image bytes base64-encoded (JSON/wire-safe); `mime` is the
+ *  source content-type (e.g. 'image/png'). Gemini 3.5 Flash consumes it via the
+ *  same Strands ImageBlock path the agent already uses for kiln_screenshot. */
+export interface KilnInputImage {
+  base64: string;
+  mime: string;
+}
+
+/** Map an input-image MIME to a Strands ImageFormat (defaults to png). */
+function imageFormatFromMime(mime: string): 'png' | 'jpeg' | 'gif' | 'webp' {
+  const m = mime.toLowerCase();
+  if (m.includes('jpeg') || m.includes('jpg')) return 'jpeg';
+  if (m.includes('gif')) return 'gif';
+  if (m.includes('webp')) return 'webp';
+  return 'png';
+}
 
 export interface RunKilnAgentOptions {
   /** A constructed Strands `Model` instance (provider-agnostic). */
@@ -73,6 +91,10 @@ export interface RunKilnAgentOptions {
    *  rendered as "## Reference Asset" in the user prompt (ignored when
    *  existingCode is set). ~5-15k input tokens/run; cached on most providers. */
   exemplarCode?: string;
+  /** Optional reference image fed to the model alongside the text prompt. When set,
+   *  the initial message becomes a [TextBlock, ImageBlock] pair and the prompt notes
+   *  that a reference image is attached. Works for fresh gen AND refine. */
+  inputImage?: KilnInputImage;
 }
 
 export interface RunKilnAgentResult {
@@ -153,9 +175,20 @@ export async function runKilnAgent(opts: RunKilnAgentOptions): Promise<RunKilnAg
     });
     metrics.attach(agent);
 
+    // An image-only request still needs a textual anchor for prompt framing.
+    const promptText =
+      opts.prompt?.trim() || (opts.inputImage ? 'Build a 3D game asset that matches the attached reference image.' : opts.prompt);
+
+    const reviewNote =
+      '\n\nBefore submitting, call kiln_screenshot once on your final code and check ' +
+      'the six views: correct facing in Front, a clean silhouette in Right, symmetry in ' +
+      'Top, and no floating or detached parts in the 3/4 view. Fix anything that looks ' +
+      'wrong, then call the kiln_submit tool exactly once with your final, complete ' +
+      'Kiln program.';
+
     const userPrompt =
       buildUserPrompt({
-        prompt: opts.prompt,
+        prompt: promptText,
         mode: 'glb',
         category: opts.category ?? 'prop',
         includeAnimation: opts.includeAnimation ?? false,
@@ -164,13 +197,25 @@ export async function runKilnAgent(opts: RunKilnAgentOptions): Promise<RunKilnAg
         ...(opts.originalPrompt ? { originalPrompt: opts.originalPrompt } : {}),
         ...(opts.exemplarCode ? { exemplarCode: opts.exemplarCode } : {}),
       }) +
-      '\n\nBefore submitting, call kiln_screenshot once on your final code and check ' +
-      'the six views: correct facing in Front, a clean silhouette in Right, symmetry in ' +
-      'Top, and no floating or detached parts in the 3/4 view. Fix anything that looks ' +
-      'wrong, then call the kiln_submit tool exactly once with your final, complete ' +
-      'Kiln program.';
+      (opts.inputImage
+        ? '\n\nA reference image of the desired asset is attached. Match its overall form, ' +
+          'proportions, and silhouette; treat the text above as the intent and any specific changes.'
+        : '') +
+      reviewNote;
 
-    const result = await agent.invoke(userPrompt);
+    // With a reference image, send a [text, image] content-block pair (the same
+    // ImageBlock path kiln_screenshot uses); otherwise a plain string prompt.
+    const invokeArgs = opts.inputImage
+      ? [
+          new TextBlock(userPrompt),
+          new ImageBlock({
+            format: imageFormatFromMime(opts.inputImage.mime),
+            source: { bytes: new Uint8Array(Buffer.from(opts.inputImage.base64, 'base64')) },
+          }),
+        ]
+      : userPrompt;
+
+    const result = await agent.invoke(invokeArgs as never);
     metrics.recordResultUsage(result.metrics?.latestAgentInvocation?.usage);
 
     let code = editMode ? editSink.code : sink.code;

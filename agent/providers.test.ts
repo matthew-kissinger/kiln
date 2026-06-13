@@ -79,4 +79,54 @@ describe('makeKilnModel', () => {
     const m = makeKilnModel({ provider: 'google', model: 'gemini-3.5-flash' }, { apiKey: 'byok-override' });
     expect(m).toBeTruthy();
   });
+
+  describe('anthropic thinking control (KILN_THINKING)', () => {
+    const getCfg = (m: unknown): Record<string, unknown> =>
+      (m as { getConfig(): Record<string, unknown> }).getConfig();
+
+    test('sends nothing by default — the API default (adaptive on Fable 5), the verified config', () => {
+      const cfg = getCfg(makeKilnModel({ provider: 'anthropic', model: 'claude-fable-5' }));
+      expect(cfg['params']).toBeUndefined();
+      expect(cfg['betas']).toBeUndefined();
+    });
+
+    test('effort keyword maps to the adaptive shape (Fable 5 family), no beta header', () => {
+      const cfg = getCfg(
+        makeKilnModel({ provider: 'anthropic', model: 'claude-fable-5', thinking: 'high' }),
+      );
+      expect(cfg['params']).toEqual({ thinking: { type: 'adaptive' }, output_config: { effort: 'high' } });
+      expect(cfg['betas']).toBeUndefined();
+    });
+
+    test('numeric budget maps to the legacy enabled shape + interleaved beta (pre-adaptive models)', () => {
+      const cfg = getCfg(
+        makeKilnModel({ provider: 'anthropic', model: 'claude-opus-4-8', thinking: 8000 }),
+      );
+      expect(cfg['params']).toEqual({ thinking: { type: 'enabled', budget_tokens: 8000 } });
+      expect(cfg['betas']).toEqual(['interleaved-thinking-2025-05-14']);
+    });
+
+    test('env keyword/number applies (numbers floored to 1024); descriptor 0 forces default; google ignores it', () => {
+      const prev = process.env['KILN_THINKING'];
+      try {
+        process.env['KILN_THINKING'] = 'medium';
+        const adaptive = getCfg(makeKilnModel({ provider: 'anthropic', model: 'claude-fable-5' }));
+        expect(adaptive['params']).toEqual({ thinking: { type: 'adaptive' }, output_config: { effort: 'medium' } });
+
+        process.env['KILN_THINKING'] = '512';
+        const floored = getCfg(makeKilnModel({ provider: 'anthropic', model: 'claude-opus-4-8' }));
+        expect(floored['params']).toEqual({ thinking: { type: 'enabled', budget_tokens: 1024 } });
+
+        const off = getCfg(makeKilnModel({ provider: 'anthropic', model: 'claude-fable-5', thinking: 0 }));
+        expect(off['params']).toBeUndefined();
+
+        // Non-anthropic providers must not grow a thinking param from the env.
+        const google = getCfg(makeKilnModel({ provider: 'google', model: 'gemini-3.5-flash' }));
+        expect(google['params']).toBeUndefined();
+      } finally {
+        if (prev === undefined) delete process.env['KILN_THINKING'];
+        else process.env['KILN_THINKING'] = prev;
+      }
+    });
+  });
 });

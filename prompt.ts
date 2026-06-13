@@ -211,7 +211,11 @@ export const KILN_RULES = `<rules>
 - NO "export" statements - just define meta, build, animate
 - Output ONLY valid JavaScript code (no TypeScript types)
 - NEVER call .add() on createPart result - it auto-adds to parent
+- createPart/createInstance rotation is in DEGREES, not radians. rotation: [0,0,90] is a quarter turn; rotation: [0,0,0.785] is invisible. Never pass Math.PI-based values to the rotation option (direct THREE properties like group.rotation.z stay radians)
 - Z-FIGHTING PREVENTION: No two mesh faces may be coplanar or near-coplanar. All decorative geometry (decals, markings, edge strips, reinforcements, trim) must be fully outside the parent mesh - never intersecting or flush. Offset at least 0.01 from the nearest surface. If a box is 0.6 wide (edges at x=+-0.3), place edge trim at x=+-0.31, NOT x=+-0.29. Minimum 0.01 thickness for flat parts.
+- ROOFS AND TENTS: the two gable slopes MIRROR each other (+angle / -angle) and their top edges meet at the ridge. Every slope must extend PAST its wall line so the eave hangs below the wall top with real overhang - a panel that stops flush at the wall reads as a lid propped on the box. A panel perpendicular to its roof plane is wrong: its thin axis must align with the roof NORMAL, not the slope direction.
+- CLOSED CIRCLES: barrels, drums, and towers built from staves/planks must close the full circumference - each stave TANGENT to the circle (rotate by its own angle), never radial fins with gaps. Do not carve groove detail with many thin CSG cutters (booleans blow up on thin blades); use lathe facets or thin proud surface strips instead.
+- GROUND: only intentionally below-grade parts (earth mounds, footings, piles, keels/rudders) may dip below Y=0. Functional surface parts - wheels, tails, missiles, furniture, equipment - must stay at or above it; if a tilted assembly buries one end, raise or re-pivot it.
 </rules>`;
 
 export const KILN_ANIMATION_FORMAT = `<critical-animation-format>
@@ -228,13 +232,21 @@ export const KILN_VISUAL_QA = `<visual-qa>
 Before kiln_submit, call kiln_screenshot and check each view deliberately:
 - Front (camera on +X): the nose/muzzle/face should point AT you. If you see
   a side profile here, the asset is built sideways — rebuild along +X.
+  Wheels/discs read edge-on here and as circles from the side — a circle seen
+  from the front means the disc faces the wrong axis.
 - Right (+Z): the long profile. Check silhouette: proportions, ground contact
-  at the bottom edge, nothing important missing.
+  at the bottom edge, nothing important missing. Roof slopes must DRAPE — the
+  eave line drops below the wall top with visible overhang; a roofline flush
+  with the walls reads as a flap propped open. Nothing functional should hang
+  below the ground line (cross-check kiln_render bbox.min[1]: below -0.05 is
+  only OK for intentional earthworks, piles, or keels).
 - Back / Left: symmetry with their opposites; no missing or one-sided parts.
 - Top (+Y): left/right symmetry; wings/axles/rails centered on the body.
 - 3/4: part CONTACT. Look for gaps where parts should touch (struts, ladder
   rails, wing roots, attachments). A visible gap means a floating part — fix
-  the position or call snapTo(part, host), then screenshot again.
+  the position or call snapTo(part, host), then screenshot again. Cylindrical
+  stave assemblies (barrels, drums) must look CLOSED — daylight through the
+  wall means staves are rotated radial instead of tangent.
 If any view looks wrong, fix the code and re-screenshot before submitting.
 </visual-qa>`;
 
@@ -564,6 +576,8 @@ createPivot(name, [x,y,z], parent) - creates Joint_name pivot, returns it
 createPart(name, geo, mat, {position, rotation, scale, parent, pivot}) - AUTO-ADDS to parent!
   NEVER: root.add(createPart(...))  // WRONG!
   ALWAYS: createPart("Name", geo, mat, { parent: root })  // RIGHT!
+  rotation is DEGREES, not radians: [0,0,90] = quarter turn; [0,0,1.57] does nothing.
+  (Same for createInstance. Only direct THREE access like obj.rotation.z uses radians.)
 
 boxGeo, sphereGeo, cylinderGeo, coneGeo, capsuleGeo, torusGeo, planeGeo
 gameMaterial(0xcolor, {metalness, roughness, emissive, flatShading})

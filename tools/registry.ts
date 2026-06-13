@@ -113,6 +113,10 @@ export interface KilnRenderMetrics {
   meshes?: number;
   materials?: number;
   bbox?: { min: number[]; max: number[]; size: number[] };
+  /** Mesh touching the lowest world point — ground-contact attribution. When
+   *  bbox.min[1] dips below 0, this names the buried part so the agent can
+   *  judge intent (earthworks/keels are fine; wheels/tails/missiles are not). */
+  lowestPart?: { name: string; y: number };
   warnings: string[];
   error?: string;
 }
@@ -132,6 +136,7 @@ async function runRender(input: z.infer<typeof renderInput>): Promise<KilnRender
     // realm than this module's THREE — `instanceof` would always be false).
     let meshes = 0;
     const materialSet = new Set<unknown>();
+    let lowestPart: KilnRenderMetrics['lowestPart'];
     root.traverse((node: THREE.Object3D) => {
       const n = node as { isMesh?: boolean; material?: unknown };
       if (n.isMesh) {
@@ -141,6 +146,11 @@ async function runRender(input: z.infer<typeof renderInput>): Promise<KilnRender
           for (const m of mat) materialSet.add(m);
         } else if (mat) {
           materialSet.add(mat);
+        }
+        // Ground-contact attribution: which mesh touches the lowest point.
+        const mb = new THREE.Box3().setFromObject(node);
+        if (!mb.isEmpty() && (!lowestPart || mb.min.y < lowestPart.y)) {
+          lowestPart = { name: node.name || '(unnamed mesh)', y: mb.min.y };
         }
       }
     });
@@ -170,6 +180,7 @@ async function runRender(input: z.infer<typeof renderInput>): Promise<KilnRender
       meshes,
       materials: materialSet.size,
       bbox,
+      lowestPart,
       warnings,
     };
   } catch (err) {
@@ -256,7 +267,7 @@ export const kilnToolRegistry: KilnToolDef[] = [
   {
     name: 'kiln_render',
     description:
-      'Execute Kiln code and render it to an in-memory GLB, returning geometry metrics: triangle count, mesh count, material count, and the world-space bounding box. Includes structural warnings for floating parts and stray planes left at the origin. Use this to confirm a model builds and to inspect its size and structure. Does not write any files.',
+      'Execute Kiln code and render it to an in-memory GLB, returning geometry metrics: triangle count, mesh count, material count, the world-space bounding box, and lowestPart (the mesh touching the lowest point — anything below Y=0 must be intentionally below-grade like earthworks or keels, never wheels/tails/equipment). Includes structural warnings for floating parts and stray planes left at the origin. Use this to confirm a model builds and to inspect its size and structure. Does not write any files.',
     inputSchema: renderInput,
     run: async (input) => runRender(renderInput.parse(input)),
   },

@@ -313,6 +313,19 @@ export function validate(
     }
   }
 
+  // Rotation-units advisory: createPart/createInstance rotation is DEGREES,
+  // but models steeped in raw THREE habitually write radians — which silently
+  // flatten to ~0°. Caught live 2026-06-11 (AC-47 prop blades all vertical).
+  for (const smell of analyzeRotationUnits(ast, normalized)) {
+    warnings.push({
+      code: 'ROTATION_RADIANS_SUSPECTED',
+      message: `${smell.fn} rotation ${smell.rendered} looks like RADIANS — the rotation option is DEGREES${smell.suggestion ? `; did you mean ${smell.suggestion}?` : ''}`,
+      fixHint:
+        'createPart/createInstance rotation is degrees ([0,0,90] = quarter turn). Convert: deg = rad * 180 / Math.PI. Direct THREE properties (obj.rotation.z) stay radians.',
+      line: smell.line,
+    });
+  }
+
   return toResult(issues, warnings);
 }
 
@@ -345,6 +358,159 @@ function lineOfIndex(code: string, idx: number): number {
   let line = 1;
   for (let i = 0; i < idx; i++) if (code.charCodeAt(i) === 10) line++;
   return line;
+}
+
+// -----------------------------------------------------------------------------
+// Rotation-units lint — createPart/createInstance rotation is DEGREES
+// -----------------------------------------------------------------------------
+
+interface RotationSmell {
+  fn: string;
+  /** The rotation array as written in source (truncated). */
+  rendered: string;
+  /** Degree equivalent, when the array is a pure numeric literal triple. */
+  suggestion?: string;
+  line?: number;
+}
+
+const ROTATION_OPTION_FNS = new Set(['createPart', 'createInstance']);
+
+/**
+ * Find `rotation: [...]` options on createPart/createInstance calls that look
+ * like radians. Two signals:
+ *  - `Math.PI` anywhere in an element (unless the element divides by Math.PI —
+ *    the `x * 180 / Math.PI` rad→deg conversion idiom, which IS degrees).
+ *  - Pure numeric triples where every non-zero |v| < 6.3 and at least one is
+ *    a non-integer: a degrees author writes 90 / 45 / -15 / 28.6, a radians
+ *    author writes 0.3 / 0.785 / 1.57 / 4.49.
+ * Anything dynamic (identifiers, calls) stays quiet — warnings must not cry
+ * wolf on code the heuristic can't read.
+ */
+function analyzeRotationUnits(ast: acorn.Program, source: string): RotationSmell[] {
+  const smells: RotationSmell[] = [];
+  walk.simple(ast, {
+    CallExpression(node) {
+      if (node.callee.type !== 'Identifier' || !ROTATION_OPTION_FNS.has(node.callee.name)) return;
+      const fn = node.callee.name;
+      for (const arg of node.arguments) {
+        if (arg.type !== 'ObjectExpression') continue;
+        for (const prop of arg.properties) {
+          if (prop.type !== 'Property' || prop.computed) continue;
+          const key =
+            prop.key.type === 'Identifier'
+              ? prop.key.name
+              : prop.key.type === 'Literal'
+                ? String(prop.key.value)
+                : '';
+          if (key !== 'rotation' || prop.value.type !== 'ArrayExpression') continue;
+          const smell = classifyRotationArray(prop.value, fn, source);
+          if (smell) smells.push(smell);
+        }
+      }
+    },
+  });
+  return smells;
+}
+
+function classifyRotationArray(
+  arr: acorn.ArrayExpression,
+  fn: string,
+  source: string
+): RotationSmell | null {
+  const rendered = () => {
+    const text = source.slice(arr.start, arr.end).replace(/\s+/g, ' ');
+    return text.length > 64 ? `${text.slice(0, 61)}...` : text;
+  };
+
+  // Signal 1: Math.PI in any element = radians thinking, unless every PI use
+  // is the rad→deg conversion idiom (`... / Math.PI`).
+  let sawPI = false;
+  let onlyConversions = true;
+  for (const el of arr.elements) {
+    if (!el || el.type === 'SpreadElement') continue;
+    if (containsMathPI(el)) {
+      sawPI = true;
+      if (!dividesByMathPI(el)) onlyConversions = false;
+    }
+  }
+  if (sawPI) {
+    if (onlyConversions) return null;
+    return { fn, rendered: rendered(), line: arr.loc?.start.line };
+  }
+
+  // Signal 2: pure numeric literal triples with radian-scale magnitudes.
+  const nums: number[] = [];
+  for (const el of arr.elements) {
+    if (!el || el.type === 'SpreadElement') return null;
+    const n = literalNumber(el);
+    if (n === undefined) return null; // dynamic expression — stay quiet
+    nums.push(n);
+  }
+  const nonZero = nums.filter((n) => n !== 0);
+  if (nonZero.length === 0) return null;
+  if (!nonZero.every((n) => Math.abs(n) < 6.3)) return null;
+  if (!nonZero.some((n) => !Number.isInteger(n))) return null;
+  const deg = nums.map((n) => (n === 0 ? 0 : Math.round((n * 180) / Math.PI)));
+  return {
+    fn,
+    rendered: rendered(),
+    suggestion: `[${deg.join(', ')}]`,
+    line: arr.loc?.start.line,
+  };
+}
+
+/** Literal number, including the `-x` unary form. */
+function literalNumber(el: acorn.Expression): number | undefined {
+  if (el.type === 'Literal' && typeof el.value === 'number') return el.value;
+  if (el.type === 'UnaryExpression' && el.operator === '-') {
+    const inner = literalNumber(el.argument);
+    return inner === undefined ? undefined : -inner;
+  }
+  return undefined;
+}
+
+/** Deep scan for a `Math.PI` member expression anywhere in the subtree. */
+function containsMathPI(node: unknown): boolean {
+  if (!node || typeof node !== 'object') return false;
+  const n = node as Record<string, unknown> & { type?: string };
+  if (n.type === 'MemberExpression') {
+    const obj = n['object'] as { type?: string; name?: string } | undefined;
+    const prop = n['property'] as { type?: string; name?: string } | undefined;
+    if (
+      obj?.type === 'Identifier' &&
+      obj.name === 'Math' &&
+      prop?.type === 'Identifier' &&
+      prop.name === 'PI'
+    ) {
+      return true;
+    }
+  }
+  for (const key of Object.keys(n)) {
+    if (key === 'loc' || key === 'start' || key === 'end') continue;
+    const v = n[key];
+    if (Array.isArray(v)) {
+      for (const item of v) if (containsMathPI(item)) return true;
+    } else if (v && typeof v === 'object' && (v as { type?: string }).type) {
+      if (containsMathPI(v)) return true;
+    }
+  }
+  return false;
+}
+
+/** Is this expression a division whose divisor contains Math.PI (rad→deg)? */
+function dividesByMathPI(node: unknown): boolean {
+  if (!node || typeof node !== 'object') return false;
+  const n = node as {
+    type?: string;
+    operator?: string;
+    left?: unknown;
+    right?: unknown;
+    argument?: unknown;
+  };
+  if (n.type === 'BinaryExpression' && n.operator === '/' && containsMathPI(n.right)) return true;
+  if (n.type === 'BinaryExpression') return dividesByMathPI(n.left) || dividesByMathPI(n.right);
+  if (n.type === 'UnaryExpression') return dividesByMathPI(n.argument);
+  return false;
 }
 
 // -----------------------------------------------------------------------------
