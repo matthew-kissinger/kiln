@@ -17,6 +17,11 @@ import {
   KILN_TSL_SYSTEM_PROMPT,
   KILN_BOTH_SYSTEM_PROMPT,
   KILN_REFINE_DIRECTIVE,
+  KILN_API_SECTION,
+  KILN_API_SECTION_UNIFIED,
+  KILN_VISUAL_QA_UNIFIED,
+  KILN_REFINE_DIRECTIVE_UNIFIED,
+  KILN_EDIT_DIRECTIVE_UNIFIED,
 } from '../prompt';
 
 describe('getSystemPrompt', () => {
@@ -184,5 +189,41 @@ describe('KILN_REFINE_DIRECTIVE', () => {
     expect(KILN_REFINE_DIRECTIVE).toContain('MODIFYING');
     expect(KILN_REFINE_DIRECTIVE).toContain('Edit Request');
     expect(KILN_REFINE_DIRECTIVE).toContain('kiln_submit');
+  });
+});
+
+describe('unified tool surface prompt', () => {
+  test('toolSurface:unified swaps in the examples-folded api and the unified visual-qa', () => {
+    const unified = getSystemPrompt('glb', { toolSurface: 'unified' });
+    expect(unified).not.toBe(KILN_SYSTEM_PROMPT);
+    expect(unified).toContain(KILN_API_SECTION_UNIFIED);
+    expect(unified).toContain(KILN_VISUAL_QA_UNIFIED);
+    // The non-examples api block and the legacy verb sentence are gone.
+    expect(unified).not.toContain(KILN_API_SECTION);
+    expect(unified).not.toContain('Before kiln_submit, call kiln_screenshot');
+  });
+
+  test('unified takes precedence over apiSurface:trimmed (which points at the removed list tool)', () => {
+    expect(getSystemPrompt('glb', { toolSurface: 'unified', apiSurface: 'trimmed' })).toBe(
+      getSystemPrompt('glb', { toolSurface: 'unified' }),
+    );
+  });
+
+  test('default (current) surface is unchanged', () => {
+    expect(getSystemPrompt('glb')).toBe(KILN_SYSTEM_PROMPT);
+    expect(getSystemPrompt('glb', { toolSurface: 'current' })).toBe(KILN_SYSTEM_PROMPT);
+  });
+
+  test('unified directives use kiln_finalize / kiln_render, never kiln_submit / kiln_screenshot', () => {
+    expect(KILN_REFINE_DIRECTIVE_UNIFIED).toContain('kiln_finalize');
+    expect(KILN_REFINE_DIRECTIVE_UNIFIED).toContain('MODIFYING');
+    expect(KILN_REFINE_DIRECTIVE_UNIFIED).not.toContain('kiln_submit');
+    expect(KILN_REFINE_DIRECTIVE_UNIFIED).not.toContain('kiln_screenshot');
+
+    expect(KILN_EDIT_DIRECTIVE_UNIFIED).toContain('kiln_finalize');
+    expect(KILN_EDIT_DIRECTIVE_UNIFIED).toContain('kiln_edit');
+    expect(KILN_EDIT_DIRECTIVE_UNIFIED).toContain('kiln_draft');
+    expect(KILN_EDIT_DIRECTIVE_UNIFIED).not.toContain('kiln_submit');
+    expect(KILN_EDIT_DIRECTIVE_UNIFIED).not.toContain('kiln_screenshot');
   });
 });

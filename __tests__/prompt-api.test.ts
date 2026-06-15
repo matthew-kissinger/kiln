@@ -126,6 +126,35 @@ describe('system prompt embeds the generated catalog', () => {
   });
 });
 
+describe('unified api surface (examples folded in)', () => {
+  const primitives = listPrimitives();
+  const def = renderApiSection(primitives);
+  const withExamples = renderApiSection(primitives, { includeExamples: true });
+
+  test('includeExamples:false is byte-identical to the default rendering', () => {
+    expect(renderApiSection(primitives, { includeExamples: false })).toBe(def);
+  });
+
+  test('includeExamples:true folds an `e.g.` line per primitive (longer than default)', () => {
+    const count = (s: string) => (s.match(/\/\/ e\.g\./g) ?? []).length;
+    expect(withExamples.length).toBeGreaterThan(def.length);
+    // Every primitive carries an example, so the folded render adds many `e.g.` lines.
+    expect(count(withExamples)).toBeGreaterThan(count(def) + 40);
+  });
+
+  test('multi-line examples are collapsed to a single logical comment (no raw newline-in-example)', () => {
+    // snapTo / createPart have multi-line examples; folded output must not leave a
+    // bare un-commented continuation line (every wrapped line is `//`-prefixed).
+    for (const line of withExamples.split('\n')) {
+      expect(line === '' || line.trimStart().startsWith('//') || line.includes('(')).toBe(true);
+    }
+  });
+
+  test('unified api snapshot (review folded examples in this diff)', () => {
+    expect(withExamples).toMatchSnapshot();
+  });
+});
+
 // =============================================================================
 // (3) Skill drift gate
 // =============================================================================

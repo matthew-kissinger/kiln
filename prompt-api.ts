@@ -53,7 +53,7 @@ function wrapComment(text: string, indent: string): string[] {
   return lines;
 }
 
-function renderPrimitiveLines(p: PrimitiveSpec): string[] {
+function renderPrimitiveLines(p: PrimitiveSpec, includeExamples = false): string[] {
   const oneLiner = `${p.signature}  // ${p.description}`;
   const lines: string[] = [];
   if (oneLiner.length <= WRAP + 20 && !p.description.includes('\n')) {
@@ -65,6 +65,14 @@ function renderPrimitiveLines(p: PrimitiveSpec): string[] {
   if (p.promptNotes) {
     lines.push(...wrapComment(`NOTE: ${p.promptNotes}`, '  '));
   }
+  if (includeExamples && p.example) {
+    // Fold the per-primitive example into the <api> (replaces the dropped
+    // kiln_list_primitives tool's only extra signal). Collapse internal newlines
+    // in multi-line examples (snapTo/createPart) to one logical line so the
+    // section stays scannable; wrapComment re-wraps long ones at WRAP columns.
+    const collapsed = p.example.replace(/\s*\n\s*/g, ' ').replace(/\s{2,}/g, ' ').trim();
+    lines.push(...wrapComment(`e.g. ${collapsed}`, '  '));
+  }
   return lines;
 }
 
@@ -73,8 +81,16 @@ function renderPrimitiveLines(p: PrimitiveSpec): string[] {
  * category comment headers followed by one entry per primitive (signature plus
  * a wrapped description comment and any promptNotes). Order is the canonical
  * category order, primitives in catalog order within each category.
+ *
+ * `includeExamples` (default false → byte-identical to today) appends each
+ * primitive's collapsed example, used by the unified tool surface to fold in the
+ * signal the dropped kiln_list_primitives tool used to carry.
  */
-export function renderApiSection(primitives: PrimitiveSpec[]): string {
+export function renderApiSection(
+  primitives: PrimitiveSpec[],
+  opts: { includeExamples?: boolean } = {},
+): string {
+  const includeExamples = opts.includeExamples ?? false;
   const byCategory = new Map<string, PrimitiveSpec[]>();
   for (const p of primitives) {
     const list = byCategory.get(p.category) ?? [];
@@ -87,7 +103,7 @@ export function renderApiSection(primitives: PrimitiveSpec[]): string {
     const list = byCategory.get(category);
     if (!list || list.length === 0) continue;
     const lines = [header];
-    for (const p of list) lines.push(...renderPrimitiveLines(p));
+    for (const p of list) lines.push(...renderPrimitiveLines(p, includeExamples));
     blocks.push(lines.join('\n'));
   }
 
@@ -96,7 +112,7 @@ export function renderApiSection(primitives: PrimitiveSpec[]): string {
   for (const [category, list] of byCategory) {
     if (known.has(category as PrimitiveSpec['category'])) continue;
     const lines = [`// ${category}`];
-    for (const p of list) lines.push(...renderPrimitiveLines(p));
+    for (const p of list) lines.push(...renderPrimitiveLines(p, includeExamples));
     blocks.push(lines.join('\n'));
   }
 

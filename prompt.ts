@@ -151,6 +151,18 @@ ${renderApiSection(listPrimitives())}
 ${KILN_API_IDIOMS}
 </api>`;
 
+/**
+ * The <api> section for the unified tool surface: identical to {@link KILN_API_SECTION}
+ * but with each primitive's example folded in (`includeExamples`). This replaces the
+ * dropped kiln_list_primitives tool — the per-primitive examples now ride in the (cached)
+ * prompt instead of a round-trip. Used only when toolSurface:'unified'.
+ */
+export const KILN_API_SECTION_UNIFIED = `<api>
+${renderApiSection(listPrimitives(), { includeExamples: true })}
+
+${KILN_API_IDIOMS}
+</api>`;
+
 export const KILN_ARCHITECTURE = `<architecture>
 Use Pivot+Mesh pattern for animated parts:
 - Joint_* = pivot node (animate this) - created by createPivot or createPart with pivot:true
@@ -248,6 +260,34 @@ Before kiln_submit, call kiln_screenshot and check each view deliberately:
   stave assemblies (barrels, drums) must look CLOSED — daylight through the
   wall means staves are rotated radial instead of tangent.
 If any view looks wrong, fix the code and re-screenshot before submitting.
+</visual-qa>`;
+
+/**
+ * The visual-qa section for the unified tool surface: same per-view checks as
+ * {@link KILN_VISUAL_QA}, but phrased for the collapsed kiln_render (which SHOWS
+ * the six views) and the kiln_finalize terminal verb instead of
+ * kiln_screenshot + kiln_submit.
+ */
+export const KILN_VISUAL_QA_UNIFIED = `<visual-qa>
+After kiln_render you SEE the six views (metrics ride alongside the image). Before kiln_finalize, check each view deliberately:
+- Front (camera on +X): the nose/muzzle/face should point AT you. If you see
+  a side profile here, the asset is built sideways — rebuild along +X.
+  Wheels/discs read edge-on here and as circles from the side — a circle seen
+  from the front means the disc faces the wrong axis.
+- Right (+Z): the long profile. Check silhouette: proportions, ground contact
+  at the bottom edge, nothing important missing. Roof slopes must DRAPE — the
+  eave line drops below the wall top with visible overhang; a roofline flush
+  with the walls reads as a flap propped open. Nothing functional should hang
+  below the ground line (cross-check the kiln_render bbox.min[1]: below -0.05 is
+  only OK for intentional earthworks, piles, or keels).
+- Back / Left: symmetry with their opposites; no missing or one-sided parts.
+- Top (+Y): left/right symmetry; wings/axles/rails centered on the body.
+- 3/4: part CONTACT. Look for gaps where parts should touch (struts, ladder
+  rails, wing roots, attachments). A visible gap means a floating part — fix
+  the position or call snapTo(part, host), then render again. Cylindrical
+  stave assemblies (barrels, drums) must look CLOSED — daylight through the
+  wall means staves are rotated radial instead of tangent.
+If any view looks wrong, fix the code (kiln_edit or kiln_draft) and re-render before finalizing.
 </visual-qa>`;
 
 export const KILN_EXAMPLES = `<example name="animated-chest">
@@ -637,11 +677,30 @@ export interface GetSystemPromptOptions {
    * tool for discovery. Bench-measured via the prompt axis.
    */
   apiSurface?: 'full' | 'trimmed';
+  /**
+   * Which agent tool surface the prompt is written for: 'current' (default)
+   * matches the kiln_screenshot + kiln_submit verbs; 'unified' folds the
+   * per-primitive examples into <api> (the dropped kiln_list_primitives tool's
+   * signal) and swaps the visual-qa verbs to kiln_render + kiln_finalize.
+   * INCOMPATIBLE with apiSurface:'trimmed' (the trimmed stub points at the
+   * removed kiln_list_primitives tool) — 'unified' takes precedence.
+   */
+  toolSurface?: 'current' | 'unified';
 }
 
 export function getSystemPrompt(mode: RenderMode, opts: GetSystemPromptOptions = {}): string {
   if (mode === 'tsl') return KILN_TSL_SYSTEM_PROMPT;
   if (mode === 'both') return KILN_BOTH_SYSTEM_PROMPT;
+  // Unified tool surface: fold per-primitive examples into <api> and swap the
+  // verb-bearing visual-qa section. Takes precedence over apiSurface:'trimmed'
+  // (the trimmed stub references the removed kiln_list_primitives tool).
+  if (opts.toolSurface === 'unified') {
+    return KILN_SYSTEM_PROMPT_SECTIONS.map(([name, s]) => {
+      if (name === 'api') return KILN_API_SECTION_UNIFIED;
+      if (name === 'visual-qa') return KILN_VISUAL_QA_UNIFIED;
+      return s;
+    }).join('\n\n');
+  }
   if (opts.apiSurface === 'trimmed') {
     return KILN_SYSTEM_PROMPT_SECTIONS.map(([name, s]) =>
       name === 'api' ? KILN_API_SECTION_TRIMMED : s,
@@ -668,6 +727,17 @@ export const KILN_REFINE_DIRECTIVE = `You are MODIFYING an existing Kiln asset, 
  * escape hatch (submit a complete program) so edit mode is never strictly worse.
  */
 export const KILN_EDIT_DIRECTIVE = `You are EDITING an existing Kiln asset in place, not rebuilding it. A working buffer holds the Current Code shown in the user message. Use the kiln_edit tool to make the SMALLEST set of changes that satisfy the Edit Request: replace an exact span (oldString) with newString. Each oldString must match the current buffer verbatim - call kiln_view to read it (the text is raw, with no line-number prefixes). Keep everything the Edit Request does not mention byte-for-byte unchanged. After your edits, re-validate and re-render the buffer with the kiln tools, then call kiln_submit (omit its code argument to submit the working buffer). If an edit cannot be anchored after a couple of tries, you may submit a complete corrected program instead.`;
+
+/**
+ * The unified-surface counterparts of {@link KILN_REFINE_DIRECTIVE} and
+ * {@link KILN_EDIT_DIRECTIVE}. Same modify-not-rebuild framing, but the working
+ * buffer IS the unified surface (already seeded with the Current Code) and the
+ * terminal verb is kiln_finalize, not kiln_submit. Used only when
+ * toolSurface:'unified'.
+ */
+export const KILN_REFINE_DIRECTIVE_UNIFIED = `You are MODIFYING an existing Kiln asset, not building a new one from scratch. The user message gives you the Original Request that created the asset, its Current Code, and an Edit Request. Your working buffer is already seeded with the Current Code. Keep the asset's established character, proportions, and structure; change ONLY what the Edit Request asks for — use kiln_edit for small changes, or kiln_draft to rewrite the whole program. Re-validate and re-render the buffer with the kiln tools, then call kiln_finalize.`;
+
+export const KILN_EDIT_DIRECTIVE_UNIFIED = `You are EDITING an existing Kiln asset in place, not rebuilding it. Your working buffer is already seeded with the Current Code shown in the user message. Use the kiln_edit tool to make the SMALLEST set of changes that satisfy the Edit Request: replace an exact span (oldString) with newString. Each oldString must match the current buffer verbatim - call kiln_view to read it (the text is raw, with no line-number prefixes). Keep everything the Edit Request does not mention byte-for-byte unchanged. After your edits, re-validate and re-render the buffer with the kiln tools, then call kiln_finalize. If an edit cannot be anchored after a couple of tries, call kiln_draft to rewrite the whole program instead.`;
 
 export interface AssetBudget {
   maxTriangles?: number;
