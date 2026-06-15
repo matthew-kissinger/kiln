@@ -1,11 +1,18 @@
 /**
  * Kiln Tool Registry — shared capability surface for agents.
  *
- * Three model-facing tools, each a thin wrapper over the existing kiln core
- * functions. This registry is the single source of truth for both the
- * in-process-tool capability skin and the MCP capability skin in the Kiln
- * Bench spike: both adapters iterate `kilnToolRegistry` so the tool names,
- * descriptions, and behavior stay identical across mechanisms.
+ * Four model-facing tools (list, validate, render, screenshot), each a thin
+ * wrapper over the existing kiln core functions. This registry is the single
+ * source of truth for both the in-process-tool capability skin and the MCP
+ * capability skin in the Kiln Bench spike: both adapters iterate
+ * `kilnToolRegistry` so the tool names, descriptions, and behavior stay
+ * identical across mechanisms.
+ *
+ * A fifth def, `kilnRenderViewsDef`, collapses render + screenshot into one
+ * "see it" tool (metrics + six-view image from a single execution). It is
+ * exported separately and deliberately NOT added to `kilnToolRegistry` — the
+ * unified tool surface (KILN_TOOL_SURFACE='unified') consumes it, while the
+ * bench baseline keeps iterating the unchanged four.
  *
  * Pure metrics only — `kiln_render` never writes files and never throws.
  */
@@ -121,6 +128,61 @@ export interface KilnRenderMetrics {
   error?: string;
 }
 
+/** Traversal-derived geometry metrics shared by `runRender` and `runRenderViews`. */
+interface SceneMetrics {
+  meshes: number;
+  materials: number;
+  bbox?: KilnRenderMetrics['bbox'];
+  lowestPart?: KilnRenderMetrics['lowestPart'];
+}
+
+/**
+ * Walk a (sandbox-created) scene root and collect mesh/material counts, the
+ * world-space bounding box, and the lowest-touching mesh. Read-only — safe to
+ * call alongside `renderSceneToGLB` / `renderViewGrid` on the same root.
+ *
+ * Mesh + material detection uses duck-typing (`.isMesh`): the sandbox THREE is
+ * a different module realm than this module's THREE, so `instanceof` would
+ * always be false across that boundary.
+ */
+function collectSceneMetrics(root: THREE.Object3D): SceneMetrics {
+  let meshes = 0;
+  const materialSet = new Set<unknown>();
+  let lowestPart: SceneMetrics['lowestPart'];
+  root.traverse((node: THREE.Object3D) => {
+    const n = node as { isMesh?: boolean; material?: unknown };
+    if (n.isMesh) {
+      meshes += 1;
+      const mat = n.material;
+      if (Array.isArray(mat)) {
+        for (const m of mat) materialSet.add(m);
+      } else if (mat) {
+        materialSet.add(mat);
+      }
+      // Ground-contact attribution: which mesh touches the lowest point.
+      const mb = new THREE.Box3().setFromObject(node);
+      if (!mb.isEmpty() && (!lowestPart || mb.min.y < lowestPart.y)) {
+        lowestPart = { name: node.name || '(unnamed mesh)', y: mb.min.y };
+      }
+    }
+  });
+
+  // World-space bounding box.
+  const box = new THREE.Box3().setFromObject(root);
+  let bbox: SceneMetrics['bbox'];
+  if (!box.isEmpty()) {
+    const size = new THREE.Vector3();
+    box.getSize(size);
+    bbox = {
+      min: [box.min.x, box.min.y, box.min.z],
+      max: [box.max.x, box.max.y, box.max.z],
+      size: [size.x, size.y, size.z],
+    };
+  }
+
+  return { meshes, materials: materialSet.size, bbox, lowestPart };
+}
+
 /**
  * Execute Kiln code, render it to an in-memory GLB, and report metrics.
  * Never writes files; never throws — failures come back as { ok:false, error }.
@@ -131,42 +193,7 @@ async function runRender(input: z.infer<typeof renderInput>): Promise<KilnRender
 
     // Structural advisories (floating parts / stray planes at origin).
     const structuralWarnings = inspectSceneStructure(root);
-
-    // Mesh + material counts via duck-typing (sandbox THREE is a different
-    // realm than this module's THREE — `instanceof` would always be false).
-    let meshes = 0;
-    const materialSet = new Set<unknown>();
-    let lowestPart: KilnRenderMetrics['lowestPart'];
-    root.traverse((node: THREE.Object3D) => {
-      const n = node as { isMesh?: boolean; material?: unknown };
-      if (n.isMesh) {
-        meshes += 1;
-        const mat = n.material;
-        if (Array.isArray(mat)) {
-          for (const m of mat) materialSet.add(m);
-        } else if (mat) {
-          materialSet.add(mat);
-        }
-        // Ground-contact attribution: which mesh touches the lowest point.
-        const mb = new THREE.Box3().setFromObject(node);
-        if (!mb.isEmpty() && (!lowestPart || mb.min.y < lowestPart.y)) {
-          lowestPart = { name: node.name || '(unnamed mesh)', y: mb.min.y };
-        }
-      }
-    });
-
-    // World-space bounding box.
-    const box = new THREE.Box3().setFromObject(root);
-    let bbox: KilnRenderMetrics['bbox'];
-    if (!box.isEmpty()) {
-      const size = new THREE.Vector3();
-      box.getSize(size);
-      bbox = {
-        min: [box.min.x, box.min.y, box.min.z],
-        max: [box.max.x, box.max.y, box.max.z],
-        size: [size.x, size.y, size.z],
-      };
-    }
+    const metrics = collectSceneMetrics(root);
 
     // Render to GLB bytes for the triangle count. Output is discarded — pure
     // metrics, no files written.
@@ -177,10 +204,10 @@ async function runRender(input: z.infer<typeof renderInput>): Promise<KilnRender
     return {
       ok: true,
       tris: rendered.tris,
-      meshes,
-      materials: materialSet.size,
-      bbox,
-      lowestPart,
+      meshes: metrics.meshes,
+      materials: metrics.materials,
+      bbox: metrics.bbox,
+      lowestPart: metrics.lowestPart,
       warnings,
     };
   } catch (err) {
@@ -237,13 +264,100 @@ async function runScreenshot(input: z.infer<typeof screenshotInput>): Promise<Ki
   }
 }
 
-/** Shared media extractor for screenshot-shaped outputs (pngBase64 -> bytes + stripped JSON). */
-function screenshotMedia(output: unknown): { png: Uint8Array; json: unknown } | undefined {
+/** Shared media extractor for screenshot-shaped outputs (pngBase64 -> bytes + stripped JSON).
+ *  Used by both `kiln_screenshot` and the unified `kilnRenderViewsDef` (both carry `pngBase64`). */
+export function screenshotMedia(output: unknown): { png: Uint8Array; json: unknown } | undefined {
   const o = output as KilnScreenshotResult | undefined;
   if (!o || typeof o.pngBase64 !== 'string' || o.pngBase64.length === 0) return undefined;
   const { pngBase64: _png, ...json } = o;
   return { png: new Uint8Array(Buffer.from(o.pngBase64, 'base64')), json };
 }
+
+// =============================================================================
+// kiln_render (unified) — collapsed render + screenshot
+// =============================================================================
+
+export interface KilnRenderViewsResult {
+  ok: boolean;
+  tris?: number;
+  meshes?: number;
+  materials?: number;
+  bbox?: { min: number[]; max: number[]; size: number[] };
+  lowestPart?: { name: string; y: number };
+  /** View names in grid order (row-major): Front, Right, Back, Left, Top, 3/4. */
+  views?: string[];
+  gridWidth?: number;
+  gridHeight?: number;
+  /** The 3x2 grid PNG, base64-encoded (transports with image support strip this and attach the bytes). */
+  pngBase64?: string;
+  warnings: string[];
+  error?: string;
+}
+
+/**
+ * Collapsed "see it" tool for the unified surface: execute the code ONCE, then
+ * report geometry metrics AND the six-view image grid together. A build error
+ * throws before any image is produced, so failures come back image-free
+ * ({ ok:false, error }, no `pngBase64`) — the model never gets a picture of a
+ * model that did not build. Warnings mirror `runRender` exactly (structural +
+ * render warnings) so this is a drop-in superset of `kiln_render` plus an image.
+ * The views module is imported lazily (node:zlib) to keep it out of the browser
+ * bundle graph.
+ */
+async function runRenderViews(input: z.infer<typeof renderInput>): Promise<KilnRenderViewsResult> {
+  try {
+    const { renderViewGrid } = await import('../views');
+    const { root, clips } = await executeKilnCode(input.code);
+
+    const structuralWarnings = inspectSceneStructure(root);
+    const metrics = collectSceneMetrics(root);
+
+    // Single execution, two consumers — both read-only on `root`.
+    const rendered = await renderSceneToGLB(root, { clips });
+    const grid = await renderViewGrid(root);
+
+    const warnings = [...structuralWarnings, ...rendered.warnings];
+
+    return {
+      ok: true,
+      tris: rendered.tris,
+      meshes: metrics.meshes,
+      materials: metrics.materials,
+      bbox: metrics.bbox,
+      lowestPart: metrics.lowestPart,
+      views: grid.views,
+      gridWidth: grid.width,
+      gridHeight: grid.height,
+      pngBase64: grid.png.toString('base64'),
+      warnings,
+    };
+  } catch (err) {
+    return {
+      ok: false,
+      error: err instanceof Error ? err.message : String(err),
+      warnings: [],
+    };
+  }
+}
+
+/**
+ * The unified-surface render tool: render + screenshot collapsed into one.
+ * Exported separately and intentionally NOT part of `kilnToolRegistry` (which
+ * stays the four-tool bench baseline). Shares `screenshotMedia` so transports
+ * with image support attach the PNG bytes and strip the base64 from the JSON.
+ */
+export const kilnRenderViewsDef: KilnToolDef = {
+  name: 'kiln_render',
+  description:
+    'Execute the current model and SEE it: returns geometry metrics (triangle count, mesh + material counts, world-space bounding box, and lowestPart — the mesh touching the lowest point, which must be intentional below Y=0 like earthworks or keels, never wheels/tails/equipment) TOGETHER with a six-view image grid. ' +
+    'Row 1 = Front (camera on +X, the nose/muzzle should face you), Right (+Z, the long profile), Back (-X); ' +
+    'row 2 = Left (-Z), Top (+Y, check symmetry), 3/4 perspective (check part contact and overall read). ' +
+    'Use it to confirm the model builds and to verify orientation (+X forward), attachment (no floating parts), proportion, and silhouette. ' +
+    'If the build fails you get an error and NO image — fix the code and render again. Flat-shaded CPU render; writes no files.',
+  inputSchema: renderInput,
+  run: async (input) => runRenderViews(renderInput.parse(input)),
+  media: screenshotMedia,
+};
 
 // =============================================================================
 // Registry
