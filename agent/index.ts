@@ -20,7 +20,10 @@
  * - {@link MetricsCollector}  — per-loop tool/step/usage metrics via hooks
  */
 export { runKilnAgent } from './run';
-export type { RunKilnAgentOptions, RunKilnAgentResult, KilnKnowhow, RefineMode, KilnInputImage } from './run';
+export type { RunKilnAgentOptions, RunKilnAgentResult, KilnKnowhow, KilnInputImage } from './run';
+
+export { resolveToolSurface, buildAgentTools } from './surface';
+export type { KilnToolSurface, RefineMode } from './surface';
 
 export { generateKilnAsset, generateKilnCodeAgent, DEFAULT_KILN_AGENT_MODEL } from './generate';
 export type { GenerateKilnAssetOptions, GenerateKilnAssetResult } from './generate';

@@ -19,17 +19,33 @@
 import { Agent, TextBlock, ImageBlock, type Plugin, type Tool, type Message } from '@strands-agents/sdk';
 import { AgentSkills } from '@strands-agents/sdk/vended-plugins/skills';
 
-import { getSystemPrompt, buildUserPrompt, KILN_REFINE_DIRECTIVE, KILN_EDIT_DIRECTIVE } from '../prompt';
+import {
+  getSystemPrompt,
+  buildUserPrompt,
+  KILN_REFINE_DIRECTIVE,
+  KILN_EDIT_DIRECTIVE,
+  KILN_REFINE_DIRECTIVE_UNIFIED,
+  KILN_EDIT_DIRECTIVE_UNIFIED,
+} from '../prompt';
 import type { AssetCategory, AssetStyle } from '../prompt';
-import { makeKilnTools, makeKilnEditTools, type SubmitSink, type EditSink, type EditRecord } from './tools';
+import type { SubmitSink, EditSink, UnifiedSink, EditRecord } from './tools';
+import {
+  resolveToolSurface,
+  buildAgentTools,
+  type KilnToolSurface,
+  type RefineMode,
+} from './surface';
 import { unifiedDiff } from './diff';
 import { MetricsCollector, type AgentUsage, type KilnAgentEvent } from './hooks';
 
 /** How the agent learns Kiln conventions. */
 export type KilnKnowhow = 'inline' | 'skill';
 
-/** How a refine applies its change: whole-program re-emission, or surgical edits. */
-export type RefineMode = 'rewrite' | 'edit';
+// Tool-surface types + helpers live in ./surface so they stay testable without
+// the SDK-heavy agent loop (and so generate.test.ts's mock.module('./run') does
+// not also stub them). Re-exported here for the package's public agent API.
+export { resolveToolSurface, buildAgentTools };
+export type { KilnToolSurface, RefineMode };
 
 /** A user-supplied reference image fed to the agent as multimodal context.
  *  `base64` is the raw image bytes base64-encoded (JSON/wire-safe); `mime` is the
@@ -82,6 +98,11 @@ export interface RunKilnAgentOptions {
    *  kiln_edit/kiln_view tools so the model patches it in place. Only takes effect when
    *  `existingCode` is set (a fresh generation always rewrites). */
   refineMode?: RefineMode;
+  /** Which agent tool surface to use. Resolved at call time: this option, else
+   *  the KILN_TOOL_SURFACE env, else 'current'. The 'unified' surface is the
+   *  buffer-based draft/view/edit/validate/render/finalize six (render+screenshot
+   *  collapsed, no kiln_list_primitives). Flag-gated until a bench A/B clears it. */
+  toolSurface?: KilnToolSurface;
   /** Agent name (for tracing). Default 'kiln-agent'. */
   agentName?: string;
   /** Live agent-loop events (tool calls / model calls) for progress UIs.
@@ -135,14 +156,16 @@ function lastMessageText(message: Message | undefined): string | undefined {
  */
 export async function runKilnAgent(opts: RunKilnAgentOptions): Promise<RunKilnAgentResult> {
   const metrics = new MetricsCollector(opts.onEvent);
-  // Edit mode only engages when refining (existingCode set) AND explicitly chosen.
-  const editMode = Boolean(opts.existingCode) && opts.refineMode === 'edit';
+  const surface = resolveToolSurface(opts.toolSurface);
+  // Edit mode is a `current`-surface concept (the unified surface always uses the
+  // buffer factory, regardless of refineMode). Engages only when refining.
+  const editMode =
+    surface === 'current' && Boolean(opts.existingCode) && opts.refineMode === 'edit';
   const sink: SubmitSink = {};
   const editSink: EditSink = { edits: [] };
+  const unifiedSink: UnifiedSink = { edits: [] };
   try {
-    const tools: Tool[] = editMode
-      ? makeKilnEditTools({ seedCode: opts.existingCode!, sink: editSink })
-      : makeKilnTools(sink);
+    const tools: Tool[] = buildAgentTools(surface, opts, { sink, editSink, unifiedSink });
     const allTools: unknown[] = opts.extraTools ? [...tools, ...opts.extraTools] : tools;
 
     const plugins: Plugin[] = [];
@@ -150,19 +173,37 @@ export async function runKilnAgent(opts: RunKilnAgentOptions): Promise<RunKilnAg
     if (opts.knowhow === 'skill') {
       if (!opts.skillDir) throw new Error('runKilnAgent: knowhow="skill" requires skillDir');
       plugins.push(new AgentSkills({ skills: [opts.skillDir] }));
+      // NOTE: SKILL.md's working-loop reference still uses the current verbs; only
+      // the terminal verb in this top-level instruction is surface-aware (the
+      // unified+skill combination is a documented gap, not the prod inline path).
+      const finalize =
+        surface === 'unified'
+          ? 'then call kiln_finalize to lock in your final asset.'
+          : 'then call kiln_submit with the final code.';
       systemPrompt =
         'You generate exportable 3D game assets as Kiln code. Use the available ' +
         'skill(s) to learn the Kiln primitives and conventions, write the program, ' +
-        'validate and render it with the kiln tools, then call kiln_submit with the ' +
-        'final code.';
+        'validate and render it with the kiln tools, ' +
+        finalize;
     } else {
-      systemPrompt = getSystemPrompt('glb', opts.apiSurface ? { apiSurface: opts.apiSurface } : {});
+      systemPrompt = getSystemPrompt('glb', {
+        ...(opts.apiSurface ? { apiSurface: opts.apiSurface } : {}),
+        ...(surface === 'unified' ? { toolSurface: 'unified' as const } : {}),
+      });
     }
 
     // Refine framing: edit an existing asset on top of the unchanged conventions.
-    // Edit mode swaps in the surgical-edit directive (it supersedes the refine one).
+    // The directive variant follows the surface (unified uses the finalize-verb
+    // directives) and the refine mechanics (edit vs rewrite emphasis).
     if (opts.existingCode) {
-      const directive = editMode ? KILN_EDIT_DIRECTIVE : KILN_REFINE_DIRECTIVE;
+      const directive =
+        surface === 'unified'
+          ? opts.refineMode === 'edit'
+            ? KILN_EDIT_DIRECTIVE_UNIFIED
+            : KILN_REFINE_DIRECTIVE_UNIFIED
+          : editMode
+            ? KILN_EDIT_DIRECTIVE
+            : KILN_REFINE_DIRECTIVE;
       systemPrompt = `${directive}\n\n${systemPrompt}`;
     }
 
@@ -180,11 +221,16 @@ export async function runKilnAgent(opts: RunKilnAgentOptions): Promise<RunKilnAg
       opts.prompt?.trim() || (opts.inputImage ? 'Build a 3D game asset that matches the attached reference image.' : opts.prompt);
 
     const reviewNote =
-      '\n\nBefore submitting, call kiln_screenshot once on your final code and check ' +
-      'the six views: correct facing in Front, a clean silhouette in Right, symmetry in ' +
-      'Top, and no floating or detached parts in the 3/4 view. Fix anything that looks ' +
-      'wrong, then call the kiln_submit tool exactly once with your final, complete ' +
-      'Kiln program.';
+      surface === 'unified'
+        ? '\n\nBefore finalizing, call kiln_render once and look at the six views: correct ' +
+          'facing in Front, a clean silhouette in Right, symmetry in Top, and no floating or ' +
+          'detached parts in the 3/4 view. Fix anything that looks wrong (kiln_edit or ' +
+          'kiln_draft), then call kiln_finalize exactly once.'
+        : '\n\nBefore submitting, call kiln_screenshot once on your final code and check ' +
+          'the six views: correct facing in Front, a clean silhouette in Right, symmetry in ' +
+          'Top, and no floating or detached parts in the 3/4 view. Fix anything that looks ' +
+          'wrong, then call the kiln_submit tool exactly once with your final, complete ' +
+          'Kiln program.';
 
     const userPrompt =
       buildUserPrompt({
@@ -218,7 +264,10 @@ export async function runKilnAgent(opts: RunKilnAgentOptions): Promise<RunKilnAg
     const result = await agent.invoke(invokeArgs as never);
     metrics.recordResultUsage(result.metrics?.latestAgentInvocation?.usage);
 
-    let code = editMode ? editSink.code : sink.code;
+    // Capture: the buffer-backed surfaces (unified / edit) hold the program in
+    // their sink; the current generate surface captures via kiln_submit. Both
+    // fall back to structuredOutput then the last assistant text.
+    let code = surface === 'unified' ? unifiedSink.code : editMode ? editSink.code : sink.code;
     if (!code && result.structuredOutput) {
       const so = result.structuredOutput as { code?: unknown };
       if (typeof so.code === 'string') code = so.code;
@@ -227,11 +276,14 @@ export async function runKilnAgent(opts: RunKilnAgentOptions): Promise<RunKilnAg
     if (!code) code = lastText;
 
     const collected = metrics.readMetrics();
-    // In edit mode, attach the patch the model produced: the applied edits + a
-    // unified diff from the parent code to the final buffer (robust to a rewrite
-    // fallback, since it diffs the actual submitted code).
+    // Buffer-backed surfaces (unified or edit-mode refine) carry a surgical-edit
+    // trace; when refining (existingCode set) also attach a unified diff from the
+    // parent to the final code (robust to a draft/rewrite fallback — it diffs the
+    // actual captured code, not the edit log).
+    const emitEdits = surface === 'unified' || editMode;
+    const editsTrace = surface === 'unified' ? unifiedSink.edits : editSink.edits;
     const diff =
-      editMode && code && opts.existingCode
+      emitEdits && code && opts.existingCode
         ? unifiedDiff(opts.existingCode, code, { fromLabel: 'parent', toLabel: 'refined' })
         : undefined;
     return {
@@ -240,7 +292,7 @@ export async function runKilnAgent(opts: RunKilnAgentOptions): Promise<RunKilnAg
       steps: collected.steps,
       ...(collected.usage ? { usage: collected.usage } : {}),
       ...(lastText ? { lastText } : {}),
-      ...(editMode ? { edits: editSink.edits } : {}),
+      ...(emitEdits ? { edits: editsTrace } : {}),
       ...(diff ? { diff } : {}),
     };
   } catch (err) {
