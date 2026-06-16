@@ -45,6 +45,13 @@ export interface KilnToolDef {
    * Transports without image support just use the raw `run()` output.
    */
   media?(output: unknown): { png: Uint8Array; json: unknown } | undefined;
+  /**
+   * Like {@link media} but for tools that return MULTIPLE images in one result
+   * (kiln_screenshot_animation in perFrame mode → N frame PNGs). Transports that
+   * support image arrays attach all PNGs as separate blocks; those that don't fall
+   * back to {@link media} (a composite) or the raw output. Checked before `media`.
+   */
+  mediaMulti?(output: unknown): { pngs: Uint8Array[]; json: unknown } | undefined;
 }
 
 // =============================================================================
@@ -70,6 +77,24 @@ const renderInput = z.object({
 
 const screenshotInput = z.object({
   code: z.string().describe('Kiln source code to execute and render to a six-view image grid.'),
+});
+
+const screenshotAnimationInput = z.object({
+  code: z.string().describe('Kiln source code to execute; must define animate() returning the named clip.'),
+  clip: z
+    .string()
+    .describe('The animation clip to view, by name (e.g. "walk", "attack"). Must be one your animate() returns.'),
+  camera: z
+    .string()
+    .optional()
+    .describe(
+      'Camera angle: right (default — side profile, best for leg swing + knee bend direction), front ' +
+        '(reveals sideways/lateral motion), back, left, top, or three-quarter.',
+    ),
+  perFrame: z
+    .boolean()
+    .optional()
+    .describe('Return the frames as separate high-res images instead of one composite grid. Default false.'),
 });
 
 // =============================================================================
@@ -357,6 +382,126 @@ export const kilnRenderViewsDef: KilnToolDef = {
   inputSchema: renderInput,
   run: async (input) => runRenderViews(renderInput.parse(input)),
   media: screenshotMedia,
+};
+
+// =============================================================================
+// kiln_screenshot_animation — SEE one clip's motion (6 phase-labeled frames)
+// =============================================================================
+
+export interface KilnScreenshotAnimationResult {
+  ok: boolean;
+  clip?: string;
+  camera?: string;
+  /** Frames rendered (6). */
+  frames: number;
+  /** Phase fraction (0..1) of each frame, in order. */
+  frameTimes?: number[];
+  duration?: number;
+  /** Track targets that bind to no joint → the clip looks FROZEN. Fix the joint name. */
+  unresolvedTracks?: string[];
+  width?: number;
+  height?: number;
+  /** Composite 3x2 grid PNG, base64 (default; transports with image support strip + attach it). */
+  pngBase64?: string;
+  /** Per-frame PNGs, base64 (perFrame mode; image transports attach each separately). */
+  framesBase64?: string[];
+  /** Clip names available in the scene (set when the requested clip wasn't found). */
+  availableClips?: string[];
+  warnings: string[];
+  error?: string;
+}
+
+/**
+ * Execute Kiln code and rasterize ONE animation clip into a strip of six
+ * evenly-sampled, phase-labeled frames from one camera (pure CPU). This is the
+ * motion analogue of kiln_screenshot: it lets the agent SEE its animation and
+ * catch defects invisible in a static pose — sideways walks, reverse-bending
+ * knees, attacks that swing behind the body, and held items that don't track the
+ * hand. Never throws — build/clip failures come back as { ok:false, error }.
+ */
+async function runScreenshotAnimation(
+  input: z.infer<typeof screenshotAnimationInput>,
+): Promise<KilnScreenshotAnimationResult> {
+  try {
+    const { renderClipAnimation } = await import('../views');
+    const { root, clips } = await executeKilnCode(input.code);
+    const warnings = inspectSceneStructure(root);
+    const r = await renderClipAnimation(root, clips, {
+      clip: input.clip,
+      ...(input.camera ? { camera: input.camera } : {}),
+      ...(input.perFrame ? { perFrame: true } : {}),
+    });
+    if (!r.ok) {
+      return {
+        ok: false,
+        frames: 0,
+        warnings,
+        ...(r.error ? { error: r.error } : {}),
+        ...(r.clip ? { clip: r.clip } : {}),
+        ...(r.availableClips ? { availableClips: r.availableClips } : {}),
+      };
+    }
+    const base: KilnScreenshotAnimationResult = {
+      ok: true,
+      frames: r.frames,
+      warnings,
+      ...(r.clip ? { clip: r.clip } : {}),
+      ...(r.camera ? { camera: r.camera } : {}),
+      ...(r.frameTimes ? { frameTimes: r.frameTimes } : {}),
+      ...(r.duration != null ? { duration: r.duration } : {}),
+      ...(r.unresolvedTracks ? { unresolvedTracks: r.unresolvedTracks } : {}),
+      ...(r.width ? { width: r.width } : {}),
+      ...(r.height ? { height: r.height } : {}),
+    };
+    if (r.pngs) return { ...base, framesBase64: r.pngs.map((p) => p.toString('base64')) };
+    return { ...base, pngBase64: r.png!.toString('base64') };
+  } catch (err) {
+    return { ok: false, frames: 0, error: err instanceof Error ? err.message : String(err), warnings: [] };
+  }
+}
+
+/** Media extractor for the composite-grid result (pngBase64 → bytes + stripped JSON). */
+export function screenshotAnimationMedia(output: unknown): { png: Uint8Array; json: unknown } | undefined {
+  const o = output as KilnScreenshotAnimationResult | undefined;
+  if (!o || typeof o.pngBase64 !== 'string' || o.pngBase64.length === 0) return undefined;
+  const { pngBase64: _png, framesBase64: _frames, ...json } = o;
+  return { png: new Uint8Array(Buffer.from(o.pngBase64, 'base64')), json };
+}
+
+/** Media extractor for the perFrame result (framesBase64 → N bytes + stripped JSON). */
+export function screenshotAnimationMediaMulti(
+  output: unknown,
+): { pngs: Uint8Array[]; json: unknown } | undefined {
+  const o = output as KilnScreenshotAnimationResult | undefined;
+  if (!o || !Array.isArray(o.framesBase64) || o.framesBase64.length === 0) return undefined;
+  const { pngBase64: _png, framesBase64: _frames, ...json } = o;
+  return { pngs: o.framesBase64.map((b) => new Uint8Array(Buffer.from(b, 'base64'))), json };
+}
+
+/**
+ * The animation-feedback tool: render one clip's motion as a 6-frame strip.
+ * Exported separately and intentionally NOT in `kilnToolRegistry` (the bench
+ * baseline stays the unchanged four); the agent tool surfaces add it explicitly.
+ * Carries both `media` (grid) and `mediaMulti` (perFrame) so image transports show
+ * the right thing in either mode.
+ */
+export const kilnScreenshotAnimationDef: KilnToolDef = {
+  name: 'kiln_screenshot_animation',
+  description:
+    'SEE one animation clip move: renders the named clip as six frames sampled evenly from start to end ' +
+    '(each labeled with its phase %) from one camera, as a 3x2 grid. Use this after building an animated ' +
+    'character to verify the MOTION — a static screenshot cannot show it. Read the side (right) view to ' +
+    'check that a walk swings the legs forward and back (not splayed sideways and not sliding the body ' +
+    'sideways), that knees bend backward at the joint (not forward like a bird), that an attack swings ' +
+    'down and FORWARD through the front (not behind the back), and that a held weapon tracks the hand ' +
+    'through the swing. args: clip (required, the clip name), camera (default right; also front/back/left/' +
+    'top/three-quarter), perFrame (optional, separate high-res frames). If unresolvedTracks comes back ' +
+    'non-empty the clip targets joints that do not exist (a name mismatch) and looks frozen — fix the ' +
+    'track names. Flat-shaded CPU render; writes no files.',
+  inputSchema: screenshotAnimationInput,
+  run: async (input) => runScreenshotAnimation(screenshotAnimationInput.parse(input)),
+  media: screenshotAnimationMedia,
+  mediaMulti: screenshotAnimationMediaMulti,
 };
 
 // =============================================================================

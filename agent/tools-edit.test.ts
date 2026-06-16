@@ -89,7 +89,7 @@ test('view returns the raw buffer and a line count that tracks edits', () => {
   expect(buf.view().lines).toBe(buf.code.split('\n').length);
 });
 
-test('makeKilnEditTools exposes the seven edit-mode tools and wires the edit trace', () => {
+test('makeKilnEditTools exposes the eight edit-mode tools and wires the edit trace', () => {
   const sink: EditSink = { edits: [] };
   const tools = makeKilnEditTools({ seedCode: SEED, sink });
   expect(tools.map((t) => t.name)).toEqual([
@@ -99,6 +99,7 @@ test('makeKilnEditTools exposes the seven edit-mode tools and wires the edit tra
     'kiln_validate',
     'kiln_render',
     'kiln_screenshot',
+    'kiln_screenshot_animation',
     'kiln_submit',
   ]);
   // The sink's edit trace is the buffer's live array (shared reference).

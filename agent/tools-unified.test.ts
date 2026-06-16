@@ -61,7 +61,7 @@ describe('KilnDraftBuffer', () => {
 });
 
 describe('makeKilnUnifiedTools', () => {
-  test('exposes exactly the six unified tools in order', () => {
+  test('exposes exactly the seven unified tools in order (incl. the animation view)', () => {
     const sink: UnifiedSink = { edits: [] };
     const tools = makeKilnUnifiedTools({ sink });
     expect(tools.map((t) => t.name)).toEqual([
@@ -70,9 +70,11 @@ describe('makeKilnUnifiedTools', () => {
       'kiln_edit',
       'kiln_validate',
       'kiln_render',
+      'kiln_screenshot_animation',
       'kiln_finalize',
     ]);
-    // No legacy verbs leak into the unified surface.
+    // No legacy verbs leak into the unified surface (the static screenshot collapsed
+    // into kiln_render; only the dedicated motion view kiln_screenshot_animation is added).
     expect(tools.map((t) => t.name)).not.toContain('kiln_list_primitives');
     expect(tools.map((t) => t.name)).not.toContain('kiln_screenshot');
     expect(tools.map((t) => t.name)).not.toContain('kiln_submit');

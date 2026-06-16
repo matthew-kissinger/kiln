@@ -27,8 +27,23 @@ function freshSinks() {
 const base: ToolBuildOptions = {};
 const names = (tools: ReturnType<typeof buildAgentTools>) => tools.map((t) => t.name);
 
-const UNIFIED = ['kiln_draft', 'kiln_view', 'kiln_edit', 'kiln_validate', 'kiln_render', 'kiln_finalize'];
-const CURRENT_GEN = ['kiln_list_primitives', 'kiln_validate', 'kiln_render', 'kiln_screenshot', 'kiln_submit'];
+const UNIFIED = [
+  'kiln_draft',
+  'kiln_view',
+  'kiln_edit',
+  'kiln_validate',
+  'kiln_render',
+  'kiln_screenshot_animation',
+  'kiln_finalize',
+];
+const CURRENT_GEN = [
+  'kiln_list_primitives',
+  'kiln_validate',
+  'kiln_render',
+  'kiln_screenshot',
+  'kiln_screenshot_animation',
+  'kiln_submit',
+];
 const CURRENT_EDIT = [
   'kiln_list_primitives',
   'kiln_view',
@@ -36,6 +51,7 @@ const CURRENT_EDIT = [
   'kiln_validate',
   'kiln_render',
   'kiln_screenshot',
+  'kiln_screenshot_animation',
   'kiln_submit',
 ];
 

@@ -20,7 +20,7 @@
 import { tool, ImageBlock, JsonBlock, type Tool, type JSONValue } from '@strands-agents/sdk';
 import { z } from 'zod';
 
-import { kilnToolRegistry, kilnRenderViewsDef } from '../tools/registry';
+import { kilnToolRegistry, kilnRenderViewsDef, kilnScreenshotAnimationDef } from '../tools/registry';
 
 /** Name of the terminal tool the agent calls to record its final program. */
 export const KILN_SUBMIT_TOOL_NAME = 'kiln_submit';
@@ -43,14 +43,23 @@ const submitInput = z.object({
 });
 
 /**
- * Convert a registry `run()` output into the tool-callback return value. Defs
- * with a `media` extractor (kiln_screenshot) return [ImageBlock, JsonBlock] so
- * the model literally sees the rendered views; everything else passes the JSON
- * output through unchanged. The array of content blocks is a valid (if untyped)
- * Strands callback return — the SDK's tool-result coercion passes block arrays
- * through as-is — so it is cast past JSONValue.
+ * Convert a registry `run()` output into the tool-callback return value. Defs with
+ * a `mediaMulti` extractor (kiln_screenshot_animation in perFrame mode) return
+ * [ImageBlock×N, JsonBlock]; defs with a `media` extractor (kiln_screenshot, the
+ * animation grid) return [ImageBlock, JsonBlock] so the model literally sees the
+ * render; everything else passes the JSON output through unchanged. The array of
+ * content blocks is a valid (if untyped) Strands callback return — the SDK's
+ * tool-result coercion passes block arrays through as-is — so it is cast past
+ * JSONValue.
  */
 function toCallbackResult(def: (typeof kilnToolRegistry)[number], output: unknown): JSONValue {
+  const multi = def.mediaMulti?.(output);
+  if (multi) {
+    return [
+      ...multi.pngs.map((png) => new ImageBlock({ format: 'png', source: { bytes: png } })),
+      new JsonBlock({ json: multi.json as JSONValue }),
+    ] as unknown as JSONValue;
+  }
   const media = def.media?.(output);
   if (media) {
     return [
@@ -59,6 +68,40 @@ function toCallbackResult(def: (typeof kilnToolRegistry)[number], output: unknow
     ] as unknown as JSONValue;
   }
   return output as JSONValue;
+}
+
+/** Schema for the buffer-aware animation tool (omits `code` — it reads the working
+ *  buffer). Used by the edit + unified refine surfaces. */
+const animationBufferInput = z.object({
+  clip: z.string().describe('The animation clip to view, by name (e.g. "walk", "attack").'),
+  camera: z
+    .string()
+    .optional()
+    .describe('Camera angle: right (default), front, back, left, top, or three-quarter.'),
+  perFrame: z.boolean().optional().describe('Return separate high-res frames instead of one grid. Default false.'),
+});
+
+/** Build a buffer-aware kiln_screenshot_animation tool that runs against `getCode()`
+ *  (the working buffer) instead of a `code` argument. Same behavior as the registry
+ *  def otherwise; image transports attach the frame(s) via toCallbackResult. */
+function makeBufferAnimationTool(getCode: () => string): Tool {
+  return tool({
+    name: kilnScreenshotAnimationDef.name,
+    description: `${kilnScreenshotAnimationDef.description} Operates on your current working buffer (omit code).`,
+    inputSchema: animationBufferInput,
+    callback: async (input) => {
+      const i = input as { clip: string; camera?: string; perFrame?: boolean };
+      return toCallbackResult(
+        kilnScreenshotAnimationDef,
+        await kilnScreenshotAnimationDef.run({
+          code: getCode(),
+          clip: i.clip,
+          ...(i.camera ? { camera: i.camera } : {}),
+          ...(i.perFrame ? { perFrame: true } : {}),
+        }),
+      );
+    },
+  });
 }
 
 function toStrandsTool(def: (typeof kilnToolRegistry)[number]): Tool {
@@ -79,6 +122,9 @@ function toStrandsTool(def: (typeof kilnToolRegistry)[number]): Tool {
  */
 export function makeKilnTools(sink: SubmitSink): Tool[] {
   const kilnTools = kilnToolRegistry.map(toStrandsTool);
+  // kiln_screenshot_animation rides alongside the four registry tools (it takes a
+  // `code` arg like them) so a from-scratch animated build can SEE its motion.
+  const animationTool = toStrandsTool(kilnScreenshotAnimationDef);
   const submitTool: Tool = tool({
     name: KILN_SUBMIT_TOOL_NAME,
     description:
@@ -91,7 +137,7 @@ export function makeKilnTools(sink: SubmitSink): Tool[] {
       return { ok: true, recorded: true, bytes: input.code.length };
     },
   });
-  return [...kilnTools, submitTool];
+  return [...kilnTools, animationTool, submitTool];
 }
 
 // =============================================================================
@@ -332,6 +378,10 @@ export function makeKilnEditTools(opts: { seedCode: string; sink: EditSink }): T
       ),
   });
 
+  // Buffer-aware motion view: a refine that touches an animated character can SEE
+  // the clip move and confirm the edit didn't break it.
+  const animationTool = makeBufferAnimationTool(() => buffer.code);
+
   const submitTool: Tool = tool({
     name: KILN_SUBMIT_TOOL_NAME,
     description:
@@ -346,7 +396,7 @@ export function makeKilnEditTools(opts: { seedCode: string; sink: EditSink }): T
     },
   });
 
-  return [listTool, viewTool, editTool, validateTool, renderTool, screenshotTool, submitTool];
+  return [listTool, viewTool, editTool, validateTool, renderTool, screenshotTool, animationTool, submitTool];
 }
 
 // =============================================================================
@@ -466,6 +516,10 @@ export function makeKilnUnifiedTools(opts: { seedCode?: string; sink: UnifiedSin
       toCallbackResult(kilnRenderViewsDef, await kilnRenderViewsDef.run({ code: buffer.code })),
   });
 
+  // Buffer-aware motion view: after drafting/editing an animated character, SEE a
+  // clip move (sideways walk, reverse knee, backward swing, item not tracking).
+  const animationTool = makeBufferAnimationTool(() => buffer.code);
+
   const finalizeTool: Tool = tool({
     name: 'kiln_finalize',
     description:
@@ -480,5 +534,5 @@ export function makeKilnUnifiedTools(opts: { seedCode?: string; sink: UnifiedSin
     },
   });
 
-  return [draftTool, viewTool, editTool, validateTool, renderTool, finalizeTool];
+  return [draftTool, viewTool, editTool, validateTool, renderTool, animationTool, finalizeTool];
 }

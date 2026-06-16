@@ -41,6 +41,14 @@ export interface RasterOptions {
   size?: number;
   /** Cull triangles facing away from the camera. Default true (reveals winding bugs). */
   backfaceCull?: boolean;
+  /**
+   * Fixed world-space AABB to frame the camera to, instead of the scene's own
+   * bounds. Used by the animation grid so every sampled frame shares one framing —
+   * otherwise per-frame auto-framing re-centers the model and HIDES root travel
+   * (a sideways/forward-sliding walk would look stationary). The scene's own
+   * geometry is still drawn; only the camera center/zoom come from this box.
+   */
+  frameBounds?: { min: [number, number, number]; max: [number, number, number] };
 }
 
 const BG: [number, number, number] = [26, 26, 26]; // #1a1a1a, matches audit grid
@@ -217,18 +225,22 @@ export function rasterizeView(
   const x = normalize(cross(upHint, z));
   const y = cross(z, x);
 
+  // Framing box: a caller-supplied fixed AABB (animation grid — keeps the camera
+  // steady so root travel is visible) or the scene's own bounds (static views).
+  const frameMin = opts.frameBounds ? opts.frameBounds.min : bbox.min;
+  const frameMax = opts.frameBounds ? opts.frameBounds.max : bbox.max;
   const center: Vec3 = [
-    (bbox.min[0] + bbox.max[0]) / 2,
-    (bbox.min[1] + bbox.max[1]) / 2,
-    (bbox.min[2] + bbox.max[2]) / 2,
+    (frameMin[0] + frameMax[0]) / 2,
+    (frameMin[1] + frameMax[1]) / 2,
+    (frameMin[2] + frameMax[2]) / 2,
   ];
 
-  // Project the 8 bbox corners to find the framing extent for this view.
+  // Project the 8 framing-box corners to find the framing extent for this view.
   let ext = 1e-6;
   for (let ci = 0; ci < 8; ci++) {
-    const px = (ci & 1 ? bbox.max[0] : bbox.min[0]) - center[0];
-    const py = (ci & 2 ? bbox.max[1] : bbox.min[1]) - center[1];
-    const pz = (ci & 4 ? bbox.max[2] : bbox.min[2]) - center[2];
+    const px = (ci & 1 ? frameMax[0] : frameMin[0]) - center[0];
+    const py = (ci & 2 ? frameMax[1] : frameMin[1]) - center[1];
+    const pz = (ci & 4 ? frameMax[2] : frameMin[2]) - center[2];
     const p: Vec3 = [px, py, pz];
     ext = Math.max(ext, Math.abs(dot(p, x)), Math.abs(dot(p, y)));
   }
@@ -309,6 +321,15 @@ export function rasterizeView(
   }
 
   return out;
+}
+
+/** World-space AABB of a (possibly sandbox-created) scene's drawable geometry.
+ *  Reuses the rasterizer's own triangle collection so the box matches exactly what
+ *  gets drawn. Empty scenes report a zero box. Used by the animation grid to union
+ *  bounds across posed frames into one steady camera framing. */
+export function measureBounds(root: unknown): { min: [number, number, number]; max: [number, number, number] } {
+  const { bbox } = collectTriangles(root as DuckObject3D);
+  return { min: [...bbox.min], max: [...bbox.max] };
 }
 
 /** Fraction of non-background pixels — used by tests and occupancy checks. */

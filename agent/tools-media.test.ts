@@ -25,7 +25,7 @@ function findTool(tools: ReturnType<typeof makeKilnTools>, name: string) {
 }
 
 describe('makeKilnTools media handling', () => {
-  test('exposes the four registry tools plus kiln_submit', () => {
+  test('exposes the four registry tools plus the animation view and kiln_submit', () => {
     const sink: SubmitSink = {};
     const tools = makeKilnTools(sink);
     expect(tools.map((t) => t.name)).toEqual([
@@ -33,6 +33,7 @@ describe('makeKilnTools media handling', () => {
       'kiln_validate',
       'kiln_render',
       'kiln_screenshot',
+      'kiln_screenshot_animation',
       'kiln_submit',
     ]);
   });

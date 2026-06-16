@@ -260,6 +260,17 @@ Before kiln_submit, call kiln_screenshot and check each view deliberately:
   stave assemblies (barrels, drums) must look CLOSED — daylight through the
   wall means staves are rotated radial instead of tangent.
 If any view looks wrong, fix the code and re-screenshot before submitting.
+If this is an ANIMATED CHARACTER, also call kiln_screenshot_animation on your key clips
+before submitting — at least the walk and the main attack — from the right (side) camera,
+and check the MOTION (a static screenshot cannot):
+- Walk: legs swing forward and back in the side view (one forward while the other is back),
+  feet stepping; the body must NOT slide or sway sideways. Knees bend so the lower leg goes
+  BACK behind the thigh, never forward.
+- Attack/strike: swings down and FORWARD through the front and finishes in front — never
+  winds up or ends BEHIND the back; a held weapon stays in the hand and follows the arc.
+- Block/guard: the shield or arm comes UP toward the front — the body does not step backward.
+If unresolvedTracks comes back non-empty, the clip is frozen because a track targets a joint
+that doesn't exist — fix the joint name. Fix any motion defect and screenshot the clip again.
 </visual-qa>`;
 
 /**
@@ -288,6 +299,17 @@ After kiln_render you SEE the six views (metrics ride alongside the image). Befo
   stave assemblies (barrels, drums) must look CLOSED — daylight through the
   wall means staves are rotated radial instead of tangent.
 If any view looks wrong, fix the code (kiln_edit or kiln_draft) and re-render before finalizing.
+If this is an ANIMATED CHARACTER, also call kiln_screenshot_animation on your key clips
+before finalizing — at least the walk and the main attack — from the right (side) camera,
+and check the MOTION (the static render cannot show it):
+- Walk: legs swing forward and back in the side view (one forward while the other is back),
+  feet stepping; the body must NOT slide or sway sideways. Knees bend so the lower leg goes
+  BACK behind the thigh, never forward.
+- Attack/strike: swings down and FORWARD through the front and finishes in front — never
+  winds up or ends BEHIND the back; a held weapon stays in the hand and follows the arc.
+- Block/guard: the shield or arm comes UP toward the front — the body does not step backward.
+If unresolvedTracks comes back non-empty, the clip is frozen because a track targets a joint
+that doesn't exist — fix the joint name. Fix any motion defect and re-render the clip again.
 </visual-qa>`;
 
 export const KILN_EXAMPLES = `<example name="animated-chest">
