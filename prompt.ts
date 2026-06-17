@@ -19,7 +19,7 @@ import { listPrimitives } from './list-primitives';
 import { renderApiSection } from './prompt-api';
 
 export type RenderMode = 'glb' | 'tsl' | 'both';
-export type AssetCategory = 'character' | 'prop' | 'vfx' | 'environment';
+export type AssetCategory = 'character' | 'prop' | 'vfx' | 'environment' | 'architecture';
 export type AssetStyle = 'low-poly' | 'stylized' | 'voxel' | 'detailed' | 'realistic';
 
 // =============================================================================
@@ -792,6 +792,47 @@ export interface KilnGenerateRequest {
   exemplarCode?: string;
 }
 
+/**
+ * Category-gated guidance appended to the user prompt on fresh generation.
+ * Parallel to Kiln Studio's `composeAgentPrompt` (which carries `character`),
+ * but core-owned so it reaches EVERY consumer — CLI, batch/TIJ, bench, editor,
+ * AND the deployed agent runtime (category already crosses the AgentCore wire).
+ * Keep the two maps disjoint by category so a directive is injected exactly
+ * once: studio owns `character`; core owns `architecture`.
+ */
+export const ARCHITECTURE_CONTEXT =
+  'This is a BUILDING the player can go INSIDE. Build it HOLLOW: thin walls enclosing real ' +
+  'interior space with a floor — never a solid block. Its foundation rests flat on the ground, ' +
+  'and the main entrance faces forward so the front reads clearly.\n\n' +
+  'Give it true human architectural scale: a doorway tall and wide enough for a person to walk ' +
+  'through, windows at standing height, and a ceiling high enough to stand under with headroom. ' +
+  "The building's mass should dwarf a single doorway.\n\n" +
+  'Cut REAL openings into the walls — a doorway is an actual gap you could pass through, not a ' +
+  'panel painted on a wall; windows are inset panes or holes flush with the wall surface. Never ' +
+  'float a pane in front of a wall or bury glass inside a solid block, and never seal the entrance.\n\n' +
+  'Walls meet squarely at the corners with no gaps; give large coplanar surfaces a hair of ' +
+  'separation so they do not flicker. Cap it with a roof that matches the footprint and overhangs ' +
+  "slightly at the eaves; a pitched roof's two sides slope DOWN-AND-OUTWARD from one ridge line — " +
+  'they fall away from each other, never tilt the same way. Name the roof as its own part so the ' +
+  'engine can lift it to reveal the inside.\n\n' +
+  'Spend detail where a building reads: the roofline and eaves, a framed door, window sills or ' +
+  'mullions, a chimney, a porch or entry overhang, a foundation course, corner posts, trim — and ' +
+  'built-in fixtures (a hearth, a counter, shelving). Leave the floor space open for furniture to ' +
+  'be placed later.\n\n' +
+  'Use room(...) to build the hollow walled-and-floored shell with its doorway, wallWithOpening(...) ' +
+  'for extra doors or windows, and createRoofPlanes(...) for the pitched roof; createStairs(...) ' +
+  'makes porch steps or connects floors.';
+
+/**
+ * Per-category context appended to fresh-generation prompts by
+ * {@link buildUserPrompt}. Intentionally sparse: only categories whose guidance
+ * is owned by core live here (today just `architecture`, because its primitives
+ * are core helpers). `character` deliberately stays studio-side.
+ */
+export const CATEGORY_CONTEXT: Partial<Record<AssetCategory, string>> = {
+  architecture: ARCHITECTURE_CONTEXT,
+};
+
 export function buildUserPrompt(request: KilnGenerateRequest): string {
   const parts: string[] = [];
 
@@ -833,6 +874,11 @@ export function buildUserPrompt(request: KilnGenerateRequest): string {
     parts.push(editSections.join('\n\n'));
   } else {
     parts.push(`## Task\n\nCreate a ${request.category}: ${request.prompt}`);
+    // Category-gated guidance (fresh generation only). Studio injects character
+    // context into the prompt string before the wire; core injects the rest here
+    // so every consumer — including the deployed runtime — gets it once.
+    const categoryContext = CATEGORY_CONTEXT[request.category];
+    if (categoryContext) parts.push(`\n${categoryContext}`);
   }
 
   // Animation instructions — only for fresh generation. When editing existing code

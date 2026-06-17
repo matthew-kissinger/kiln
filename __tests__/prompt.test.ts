@@ -17,6 +17,7 @@ import {
   KILN_TSL_SYSTEM_PROMPT,
   KILN_BOTH_SYSTEM_PROMPT,
   KILN_REFINE_DIRECTIVE,
+  ARCHITECTURE_CONTEXT,
   KILN_API_SECTION,
   KILN_API_SECTION_UNIFIED,
   KILN_VISUAL_QA_UNIFIED,
@@ -100,6 +101,34 @@ describe('buildUserPrompt', () => {
     });
     expect(prompt).toContain('## Task');
     expect(prompt).toContain('Create a prop: red barrel');
+  });
+
+  test('appends the architecture directive on a fresh architecture generation', () => {
+    const prompt = buildUserPrompt({
+      prompt: 'a stone watchtower',
+      mode: 'glb',
+      category: 'architecture',
+    });
+    expect(prompt).toContain('Create a architecture: a stone watchtower');
+    expect(prompt).toContain(ARCHITECTURE_CONTEXT);
+    // Guidance comes after the task line.
+    expect(prompt.indexOf('## Task')).toBeLessThan(prompt.indexOf(ARCHITECTURE_CONTEXT));
+  });
+
+  test('does not append the architecture directive for other categories', () => {
+    const prompt = buildUserPrompt({ prompt: 'a barrel', mode: 'glb', category: 'prop' });
+    expect(prompt).not.toContain(ARCHITECTURE_CONTEXT);
+  });
+
+  test('does not append the architecture directive when refining (existingCode set)', () => {
+    const prompt = buildUserPrompt({
+      prompt: 'add a second floor',
+      mode: 'glb',
+      category: 'architecture',
+      existingCode: 'function build() { return createRoot("Tower"); }',
+    });
+    expect(prompt).not.toContain(ARCHITECTURE_CONTEXT);
+    expect(prompt).toContain('## Edit Request');
   });
 
   test('prepends an Original Request section (intent -> code -> edit order) when refining', () => {

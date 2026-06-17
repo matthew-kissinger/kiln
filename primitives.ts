@@ -744,6 +744,331 @@ export function createLadder(
 }
 
 // =============================================================================
+// Building / architecture helpers
+// =============================================================================
+//
+// Enterable buildings are HOLLOW shells: thin walls around real interior space,
+// real doorway gaps, a separable roof. These helpers make that correct-by-
+// construction so the agent cannot accidentally fill the volume, forget the
+// doorway, or mirror the roof slopes the wrong way. Openings are composed from
+// box segments (jambs + lintel + sill), never CSG — solid opaque overlaps are
+// robust where thin boolean cutters are fragile.
+
+export interface WallOpening {
+  /** 'door' reaches the floor; 'window' is inset at `sill` height. */
+  kind?: 'door' | 'window';
+  /** Center of the opening along the wall length axis (0 = centered). */
+  offset?: number;
+  /** Opening width along the wall length axis. */
+  width?: number;
+  /** Opening height. */
+  height?: number;
+  /** Window sill height above the wall base (ignored for doors). */
+  sill?: number;
+}
+
+export interface WallWithOpeningOptions {
+  /** Wall length along its run axis. */
+  length: number;
+  /** Wall height (Y). Base sits at local Y=0. */
+  height: number;
+  /** Wall thickness along the perpendicular horizontal axis. */
+  thickness: number;
+  /** Which horizontal axis the wall runs along. Default 'z'. */
+  axis?: 'x' | 'z';
+  /** A single door/window cut. Omit for a solid wall. */
+  opening?: WallOpening;
+  parent?: THREE.Object3D;
+}
+
+/**
+ * A single wall panel — optionally with one rectangular door/window cut —
+ * composed from solid box segments (two side panels + a lintel, plus a sill
+ * apron for a window). Runs along `axis`, base at local Y=0, centered on the
+ * length axis. Returns the wall container so the caller can position it.
+ */
+export function wallWithOpening(
+  name: string,
+  material: THREE.Material,
+  options: WallWithOpeningOptions,
+): THREE.Object3D {
+  const { length, height, thickness, axis = 'z', opening, parent } = options;
+  const group = new THREE.Object3D();
+  group.name = name;
+  const overlap = 0.02;
+
+  const panel = (
+    suffix: string,
+    lenStart: number,
+    lenEnd: number,
+    yLo: number,
+    yHi: number,
+  ): void => {
+    const segLen = lenEnd - lenStart;
+    const segH = yHi - yLo;
+    if (segLen <= 1e-4 || segH <= 1e-4) return;
+    const lenC = (lenStart + lenEnd) / 2;
+    const yC = (yLo + yHi) / 2;
+    const geo = axis === 'z' ? boxGeo(thickness, segH, segLen) : boxGeo(segLen, segH, thickness);
+    const pos: [number, number, number] = axis === 'z' ? [0, yC, lenC] : [lenC, yC, 0];
+    createPart(`${name}${suffix}`, geo, material, { position: pos, parent: group });
+  };
+
+  if (!opening) {
+    panel('', -length / 2, length / 2, 0, height);
+  } else {
+    const ow = opening.width ?? (opening.kind === 'window' ? 1.0 : 1.1);
+    const oh = opening.height ?? (opening.kind === 'window' ? 1.0 : 2.1);
+    const off = opening.offset ?? 0;
+    const left = off - ow / 2;
+    const right = off + ow / 2;
+    const sill = opening.kind === 'window' ? Math.max(opening.sill ?? 1.0, 0) : 0;
+    const top = Math.min(sill + oh, height);
+    panel('_L', -length / 2, left, 0, height); // full-height side panels
+    panel('_R', right, length / 2, 0, height);
+    panel('_Lintel', left - overlap, right + overlap, top, height); // above the gap
+    if (sill > 0) panel('_Sill', left - overlap, right + overlap, 0, sill); // below a window
+  }
+
+  if (parent) parent.add(group);
+  return group;
+}
+
+export interface RoomOpening extends WallOpening {
+  /** Which wall the opening cuts. `front` faces +X. */
+  wall: 'front' | 'back' | 'left' | 'right';
+}
+
+export interface RoomOptions {
+  /** Side-to-side extent along Z. */
+  width?: number;
+  /** Front-to-back extent along X (front faces +X). */
+  depth?: number;
+  /** Wall height (Y). */
+  height?: number;
+  wallThickness?: number;
+  /** Lay a floor slab. Default true. */
+  floor?: boolean;
+  floorThickness?: number;
+  /** Per-wall openings. Defaults to a centered door on the front wall, so the
+   *  room is ENTERABLE by default. */
+  openings?: RoomOpening[];
+  parent?: THREE.Object3D;
+}
+
+/**
+ * A hollow, enterable room: four thin walls + a floor, sized so a humanoid fits
+ * (defaults: 2.8m ceiling, a centered 1.1×2.1m front door). The keystone of an
+ * architecture asset — the agent builds onto/around it (roof via
+ * {@link createRoofPlanes}, fixtures as separate parts) but cannot ship a solid
+ * block or a sealed box. `front` faces +X; the floor top sits at the ground.
+ */
+export function room(
+  name: string,
+  material: THREE.Material,
+  options: RoomOptions = {},
+): { root: THREE.Object3D; walls: Record<'front' | 'back' | 'left' | 'right', THREE.Object3D>; floor: THREE.Object3D | null } {
+  const {
+    width = 4,
+    depth = 4,
+    height = 2.8,
+    wallThickness = 0.15,
+    floor = true,
+    floorThickness = 0.1,
+    parent,
+  } = options;
+  const openings = options.openings ?? [{ wall: 'front', kind: 'door' }];
+  const root = new THREE.Object3D();
+  root.name = name;
+
+  const openingFor = (wall: RoomOpening['wall']): WallOpening | undefined => {
+    const found = openings.find((op) => op.wall === wall);
+    if (!found) return undefined;
+    const { wall: _wall, ...rest } = found;
+    return rest;
+  };
+
+  const wall = (
+    suffix: string,
+    len: number,
+    axis: 'x' | 'z',
+    pos: [number, number, number],
+    which: RoomOpening['wall'],
+  ): THREE.Object3D => {
+    const op = openingFor(which);
+    const w = wallWithOpening(`${name}_Wall${suffix}`, material, {
+      length: len,
+      height,
+      thickness: wallThickness,
+      axis,
+      ...(op ? { opening: op } : {}),
+      parent: root,
+    });
+    w.position.set(...pos);
+    return w;
+  };
+
+  const walls = {
+    front: wall('Front', width, 'z', [depth / 2, 0, 0], 'front'),
+    back: wall('Back', width, 'z', [-depth / 2, 0, 0], 'back'),
+    left: wall('Left', depth, 'x', [0, 0, -width / 2], 'left'),
+    right: wall('Right', depth, 'x', [0, 0, width / 2], 'right'),
+  };
+
+  let floorObj: THREE.Object3D | null = null;
+  if (floor) {
+    floorObj = createPart(`${name}_Floor`, boxGeo(depth, floorThickness, width), material, {
+      position: [0, floorThickness / 2, 0],
+      parent: root,
+    });
+  }
+
+  if (parent) parent.add(root);
+  return { root, walls, floor: floorObj };
+}
+
+export interface RoofPlanesOptions {
+  /** Footprint extent along Z. */
+  width: number;
+  /** Footprint extent along X. */
+  depth: number;
+  /** Ridge height above the eave (local Y=0). */
+  height: number;
+  /** Eave overhang past the footprint on every side. Default 0.3. */
+  overhang?: number;
+  /** Axis the ridge line runs along; slopes fall toward the perpendicular
+   *  horizontal axis. Default 'x'. */
+  ridgeAxis?: 'x' | 'z';
+  /** Roof-plane thickness. Default 0.08. */
+  thickness?: number;
+  parent?: THREE.Object3D;
+}
+
+/**
+ * A pitched roof: two thin sloped planes meeting at one ridge and falling
+ * DOWN-AND-OUTWARD (opposite tilts — the cure for the recurring mirrored-slope
+ * defect), footprint-matched with an eave overhang. Built with the eave at
+ * local Y=0 and the ridge at Y=`height`, so the caller drops it onto the walls
+ * at Y=wallHeight. Returns a named group (e.g. `Roof`) the engine can lift to
+ * reveal the interior.
+ */
+export function createRoofPlanes(
+  name: string,
+  material: THREE.Material,
+  options: RoofPlanesOptions,
+): { root: THREE.Object3D; slopes: [THREE.Object3D, THREE.Object3D] } {
+  const { width, depth, height, overhang = 0.3, ridgeAxis = 'x', thickness = 0.08, parent } = options;
+  const group = new THREE.Object3D();
+  group.name = name;
+
+  // Half-span of the slope direction (perpendicular to the ridge) + overhang,
+  // and the ridge-direction length.
+  const halfSpan = (ridgeAxis === 'x' ? width : depth) / 2 + overhang;
+  const ridgeLen = (ridgeAxis === 'x' ? depth : width) + overhang * 2;
+  const rafterLen = Math.hypot(halfSpan, height);
+  const angle = Math.atan2(height, halfSpan);
+
+  const slopes: THREE.Object3D[] = [];
+  for (const side of [1, -1] as const) {
+    const geo =
+      ridgeAxis === 'x' ? boxGeo(ridgeLen, thickness, rafterLen) : boxGeo(rafterLen, thickness, ridgeLen);
+    const mesh = new THREE.Mesh(geo, material);
+    mesh.name = `Mesh_${name}${side > 0 ? 'A' : 'B'}`;
+    if (ridgeAxis === 'x') {
+      // Ridge along X; slopes drop toward +Z (side=+1) / -Z (side=-1).
+      mesh.position.set(0, height / 2, (side * halfSpan) / 2);
+      mesh.rotation.x = side * angle;
+    } else {
+      // Ridge along Z; slopes drop toward +X (side=+1) / -X (side=-1).
+      mesh.position.set((side * halfSpan) / 2, height / 2, 0);
+      mesh.rotation.z = -side * angle;
+    }
+    group.add(mesh);
+    slopes.push(mesh);
+  }
+
+  if (parent) parent.add(group);
+  return { root: group, slopes: [slopes[0]!, slopes[1]!] };
+}
+
+export interface StairsOptions {
+  /** Number of steps. Default 8. */
+  steps?: number;
+  /** Total vertical climb. */
+  totalRise: number;
+  /** Total horizontal run along `axis`. */
+  totalRun: number;
+  /** Tread width along the perpendicular horizontal axis. */
+  width: number;
+  /** Direction the flight climbs toward. Default 'x'. */
+  axis?: 'x' | 'z';
+  treadThickness?: number;
+  /** Add a vertical riser face under each tread. Default true. */
+  riser?: boolean;
+  parent?: THREE.Object3D;
+}
+
+/**
+ * A straight flight of stairs: box treads (with optional risers) climbing
+ * `totalRise` over `totalRun` from local origin toward +`axis`. Connects storeys
+ * (the multi-storey toggle) or makes porch/entry steps. Steps are named
+ * `Step_1..N` for engine use.
+ */
+export function createStairs(
+  name: string,
+  material: THREE.Material,
+  options: StairsOptions,
+): { root: THREE.Object3D; steps: THREE.Object3D[] } {
+  const {
+    steps = 8,
+    totalRise,
+    totalRun,
+    width,
+    axis = 'x',
+    treadThickness = 0.08,
+    riser = true,
+    parent,
+  } = options;
+  if (steps < 1) {
+    throw new Error(`createStairs("${name}"): steps must be >= 1 (got ${steps}).`);
+  }
+  if (Math.abs(totalRise) < 1e-4 || Math.abs(totalRun) < 1e-4) {
+    throw new Error(
+      `createStairs("${name}"): totalRise and totalRun must be non-zero (got rise=${totalRise}, run=${totalRun}).`,
+    );
+  }
+  const root = new THREE.Object3D();
+  root.name = name;
+  const stepRise = totalRise / steps;
+  const stepRun = totalRun / steps;
+  const stepList: THREE.Object3D[] = [];
+
+  for (let i = 0; i < steps; i++) {
+    const topY = (i + 1) * stepRise;
+    const alongC = (i + 0.5) * stepRun;
+    const treadGeo =
+      axis === 'x' ? boxGeo(stepRun, treadThickness, width) : boxGeo(width, treadThickness, stepRun);
+    const treadPos: [number, number, number] =
+      axis === 'x' ? [alongC, topY - treadThickness / 2, 0] : [0, topY - treadThickness / 2, alongC];
+    stepList.push(createPart(`${name}Step${i + 1}`, treadGeo, material, { position: treadPos, parent: root }));
+
+    if (riser) {
+      const front = i * stepRun;
+      const riserGeo =
+        axis === 'x' ? boxGeo(treadThickness, stepRise, width) : boxGeo(width, stepRise, treadThickness);
+      const riserPos: [number, number, number] =
+        axis === 'x'
+          ? [front + treadThickness / 2, topY - stepRise / 2, 0]
+          : [0, topY - stepRise / 2, front + treadThickness / 2];
+      createPart(`${name}Riser${i + 1}`, riserGeo, material, { position: riserPos, parent: root });
+    }
+  }
+
+  if (parent) parent.add(root);
+  return { root, steps: stepList };
+}
+
+// =============================================================================
 // Materials
 // =============================================================================
 
@@ -1079,7 +1404,7 @@ export function getJointNames(root: THREE.Object3D): string[] {
  */
 export function validateAsset(
   root: THREE.Object3D,
-  category: 'character' | 'prop' | 'vfx' | 'environment'
+  category: 'character' | 'prop' | 'vfx' | 'environment' | 'architecture'
 ): { valid: boolean; errors: string[]; warnings: string[] } {
   const errors: string[] = [];
   const warnings: string[] = [];
@@ -1089,6 +1414,7 @@ export function validateAsset(
     prop: { suggestedTris: 3000, suggestedMats: 6 },
     vfx: { suggestedTris: 2000, suggestedMats: 4 },
     environment: { suggestedTris: 15000, suggestedMats: 12 },
+    architecture: { suggestedTris: 15000, suggestedMats: 12 },
   };
 
   const limits = guidelines[category];
@@ -1237,6 +1563,10 @@ export function buildSandboxGlobals(
     beamBetween: wrap('beamBetween', beamBetween),
     createLadder: wrap('createLadder', createLadder),
     snapTo: wrap('snapTo', snapTo),
+    room: wrap('room', room),
+    wallWithOpening: wrap('wallWithOpening', wallWithOpening),
+    createRoofPlanes: wrap('createRoofPlanes', createRoofPlanes),
+    createStairs: wrap('createStairs', createStairs),
     gameMaterial: wrap('gameMaterial', gameMaterial),
     basicMaterial: wrap('basicMaterial', basicMaterial),
     glassMaterial: wrap('glassMaterial', glassMaterial),

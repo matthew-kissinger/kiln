@@ -95,6 +95,10 @@ export {
   beamBetween,
   createLadder,
   snapTo,
+  room,
+  wallWithOpening,
+  createRoofPlanes,
+  createStairs,
   foliageCardGeo,
   crossedQuadsGeo,
   octaGridPlane,
@@ -284,7 +288,7 @@ export {
 export interface KilnGenerateOptions {
   /** Spike supports glb only. Ignored if set otherwise. */
   mode?: 'glb';
-  category?: 'character' | 'prop' | 'vfx' | 'environment';
+  category?: 'character' | 'prop' | 'vfx' | 'environment' | 'architecture';
   style?: 'low-poly' | 'stylized' | 'voxel' | 'detailed' | 'realistic';
   referenceImageUrl?: string;
   /**

@@ -36,7 +36,7 @@ export {
   KilnEditBuffer,
   KILN_SUBMIT_TOOL_NAME,
 } from './tools';
-export type { SubmitSink, EditSink, UnifiedSink, EditRecord, EditResult } from './tools';
+export type { SubmitSink, EditSink, UnifiedSink, EditRecord, EditResult, KilnRenderCandidate } from './tools';
 
 export { unifiedDiff } from './diff';
 export type { UnifiedDiffOptions } from './diff';

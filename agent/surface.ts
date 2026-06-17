@@ -14,6 +14,7 @@ import {
   type SubmitSink,
   type EditSink,
   type UnifiedSink,
+  type KilnRenderCandidate,
 } from './tools';
 
 /** Which agent tool surface drives the loop. 'current' = today's
@@ -28,6 +29,9 @@ export type RefineMode = 'rewrite' | 'edit';
 export interface ToolBuildOptions {
   existingCode?: string;
   refineMode?: RefineMode;
+  /** Live render-candidate sink, wired into the unified surface's kiln_render.
+   *  Only the unified surface emits candidates (current/edit surfaces ignore it). */
+  onCandidate?: (c: KilnRenderCandidate) => void;
 }
 
 /** Per-run sinks for the three tool factories (only one is read, by surface). */
@@ -61,6 +65,7 @@ export function buildAgentTools(
     return makeKilnUnifiedTools({
       ...(opts.existingCode ? { seedCode: opts.existingCode } : {}),
       sink: sinks.unifiedSink,
+      ...(opts.onCandidate ? { onCandidate: opts.onCandidate } : {}),
     });
   }
   const editMode = Boolean(opts.existingCode) && opts.refineMode === 'edit';

@@ -121,6 +121,54 @@ const PRIMITIVES: PrimitiveSpec[] = [
     example:
       "createWingPair('MainWing', olive, { rootX: 0, rootY: 1.0, rootZ: 0.42, span: 2.4, rootChord: 0.9, tipChord: 0.35, sweep: 0.25, dihedral: 0.08, parent: root });",
   },
+  {
+    name: 'room',
+    signature:
+      "room(name, material, { width?, depth?, height?, wallThickness?, floor?, floorThickness?, openings?: [{ wall: 'front'|'back'|'left'|'right', kind?: 'door'|'window', offset?, width?, height?, sill? }], parent? })",
+    returns: '{ root: Object3D, walls: { front, back, left, right }, floor: Object3D | null }',
+    category: 'structure',
+    description:
+      'Builds a HOLLOW, enterable room: four thin walls + a floor, human-scaled (defaults: 2.8m ceiling, a centered 1.1x2.1m front door so it is enterable by default). `front` faces +X; the floor sits on the ground. The keystone of an architecture asset — add a roof with createRoofPlanes and fixtures as separate parts.',
+    example:
+      "const { root: hut } = room('Hut', wood, { width: 5, depth: 4, height: 2.8, openings: [{ wall: 'front', kind: 'door' }, { wall: 'right', kind: 'window' }], parent: root });",
+    promptNotes:
+      'Use for any building the player enters. Do NOT model a building as a solid block — room() guarantees real interior space and a doorway gap. Pass openings to add windows / side doors.',
+  },
+  {
+    name: 'wallWithOpening',
+    signature:
+      "wallWithOpening(name, material, { length, height, thickness, axis?: 'x'|'z', opening?: { kind?: 'door'|'window', offset?, width?, height?, sill? }, parent? })",
+    returns: 'THREE.Object3D (wall container)',
+    category: 'structure',
+    description:
+      'A single wall panel with an optional real door/window cut, composed from solid box segments (side panels + lintel + window sill) — no CSG. Base at local Y=0, centered on the run axis. Use to compose custom building layouts or interior dividing walls beyond the default room().',
+    example:
+      "wallWithOpening('Partition', plaster, { length: 4, height: 2.8, thickness: 0.12, axis: 'x', opening: { kind: 'door', offset: 0.5 }, parent: root });",
+  },
+  {
+    name: 'createRoofPlanes',
+    signature:
+      "createRoofPlanes(name, material, { width, depth, height, overhang?, ridgeAxis?: 'x'|'z', thickness?, parent? })",
+    returns: '{ root: Object3D, slopes: [Object3D, Object3D] }',
+    category: 'structure',
+    description:
+      'A pitched roof: two thin slopes meeting at one ridge and falling DOWN-AND-OUTWARD (opposite tilts — never mirrored the same way), footprint-matched with an eave overhang. Eave at local Y=0, ridge at Y=height, so position the group at Y=wallHeight. Returns a named group (e.g. `Roof`) the engine can lift to reveal the interior.',
+    example:
+      "const { root: roof } = createRoofPlanes('Roof', shingle, { width: 5, depth: 4, height: 1.6, overhang: 0.4, ridgeAxis: 'x', parent: root });\nroof.position.y = 2.8;",
+    promptNotes:
+      'The two slopes must fall AWAY from each other from the ridge — createRoofPlanes does this for you. Drop it onto the walls (position.y = wall height).',
+  },
+  {
+    name: 'createStairs',
+    signature:
+      "createStairs(name, material, { steps?, totalRise, totalRun, width, axis?: 'x'|'z', treadThickness?, riser?, parent? })",
+    returns: '{ root: Object3D, steps: Object3D[] }',
+    category: 'structure',
+    description:
+      'A straight flight of stairs: box treads (with optional risers) climbing totalRise over totalRun from local origin toward +axis. Use for porch/entry steps or to connect storeys in a multi-storey building.',
+    example:
+      "createStairs('Porch', stone, { steps: 4, totalRise: 0.6, totalRun: 1.0, width: 1.4, axis: 'x', parent: root });",
+  },
 
   // ---------------------------------------------------------------------------
   // Geometry

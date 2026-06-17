@@ -28,7 +28,7 @@ import {
   KILN_EDIT_DIRECTIVE_UNIFIED,
 } from '../prompt';
 import type { AssetCategory, AssetStyle } from '../prompt';
-import type { SubmitSink, EditSink, UnifiedSink, EditRecord } from './tools';
+import type { SubmitSink, EditSink, UnifiedSink, EditRecord, KilnRenderCandidate } from './tools';
 import {
   resolveToolSurface,
   buildAgentTools,
@@ -108,6 +108,11 @@ export interface RunKilnAgentOptions {
   /** Live agent-loop events (tool calls / model calls) for progress UIs.
    *  Best-effort: sink errors are swallowed and never fail the run. */
   onEvent?: (event: KilnAgentEvent) => void;
+  /** Live render-candidate sink (one per successful kiln_render on the unified
+   *  surface): the working buffer + its six-view image. Lets the host stream a
+   *  filmstrip of intermediate renders and let the user pick a version. Best-effort;
+   *  ignored on the current/edit surfaces. */
+  onCandidate?: (c: KilnRenderCandidate) => void;
   /** A complete Kiln program used as a style anchor for FRESH generation —
    *  rendered as "## Reference Asset" in the user prompt (ignored when
    *  existingCode is set). ~5-15k input tokens/run; cached on most providers. */

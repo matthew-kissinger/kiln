@@ -434,6 +434,22 @@ export interface UnifiedSink {
   finalized?: boolean;
 }
 
+/**
+ * A live render candidate surfaced out-of-band from the unified `kiln_render`
+ * tool: the working-buffer code at this render plus its six-view grid PNG
+ * (base64). Emitted in addition to — never instead of — what the agent sees.
+ * Consumers (the runtime/web tier) shape it into a streamed thumbnail and a
+ * rebakeable version so the user can watch the build and "pick a version".
+ */
+export interface KilnRenderCandidate {
+  /** The exact program in the working buffer at this render. */
+  code: string;
+  /** The six-view grid PNG, base64 (the same image the agent inspected). */
+  pngBase64: string;
+  /** Triangle count at this render, when known. */
+  tris?: number;
+}
+
 const draftInput = z.object({
   code: z
     .string()
@@ -447,7 +463,14 @@ const draftInput = z.object({
  * every draft/edit (so an un-finalized run still captures the work). `kiln_edit`
  * failures point at `kiln_draft` as the always-reliable rewrite escape hatch.
  */
-export function makeKilnUnifiedTools(opts: { seedCode?: string; sink: UnifiedSink }): Tool[] {
+export function makeKilnUnifiedTools(opts: {
+  seedCode?: string;
+  sink: UnifiedSink;
+  /** Best-effort sink for live render candidates (one per successful kiln_render).
+   *  Lets the host surface a filmstrip of intermediate renders + pick a version.
+   *  Never affects the agent's view; sink errors are swallowed. */
+  onCandidate?: (c: KilnRenderCandidate) => void;
+}): Tool[] {
   const buffer = new KilnDraftBuffer(opts.seedCode ?? '');
   opts.sink.edits = buffer.edits; // share the live trace
 
@@ -512,8 +535,23 @@ export function makeKilnUnifiedTools(opts: { seedCode?: string; sink: UnifiedSin
     name: 'kiln_render',
     description: kilnRenderViewsDef.description + ' Operates on your current working buffer (no argument).',
     inputSchema: viewInput,
-    callback: async () =>
-      toCallbackResult(kilnRenderViewsDef, await kilnRenderViewsDef.run({ code: buffer.code })),
+    callback: async () => {
+      const out = await kilnRenderViewsDef.run({ code: buffer.code });
+      // Out-of-band: surface a SUCCESSFUL render as a live candidate (the working
+      // buffer + the six-view image the agent just saw). Best-effort; a build
+      // failure is image-free and not a candidate. Never changes the agent's view.
+      if (opts.onCandidate) {
+        const o = out as { ok?: boolean; pngBase64?: string; tris?: number };
+        if (o.ok && o.pngBase64) {
+          try {
+            opts.onCandidate({ code: buffer.code, pngBase64: o.pngBase64, ...(o.tris != null ? { tris: o.tris } : {}) });
+          } catch {
+            // candidate sink is best-effort
+          }
+        }
+      }
+      return toCallbackResult(kilnRenderViewsDef, out);
+    },
   });
 
   // Buffer-aware motion view: after drafting/editing an animated character, SEE a

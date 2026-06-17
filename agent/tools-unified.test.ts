@@ -141,6 +141,25 @@ describe('makeKilnUnifiedTools', () => {
     expect(out.error).toBeDefined();
   });
 
+  test('kiln_render emits a render candidate (buffer code + six-view png) via onCandidate', async () => {
+    const sink: UnifiedSink = { edits: [] };
+    const got: Array<{ code: string; pngBase64: string; tris?: number }> = [];
+    const tools = makeKilnUnifiedTools({ seedCode: BOX_CODE, sink, onCandidate: (c) => got.push(c) });
+    await findTool(tools, 'kiln_render').invoke({});
+    expect(got).toHaveLength(1);
+    expect(got[0]!.code).toBe(BOX_CODE); // the exact working buffer
+    expect(got[0]!.pngBase64.length).toBeGreaterThan(0); // the same image the agent saw
+    expect(got[0]!.tris).toBeGreaterThan(0);
+  });
+
+  test('kiln_render on a broken buffer does NOT emit a candidate (image-free build)', async () => {
+    const sink: UnifiedSink = { edits: [] };
+    const got: unknown[] = [];
+    const tools = makeKilnUnifiedTools({ seedCode: 'not a kiln program (', sink, onCandidate: (c) => got.push(c) });
+    await findTool(tools, 'kiln_render').invoke({});
+    expect(got).toHaveLength(0); // a failed render has no image → no candidate
+  });
+
   test('kiln_finalize captures the buffer and marks finalized', async () => {
     const sink: UnifiedSink = { edits: [] };
     const tools = makeKilnUnifiedTools({ sink });

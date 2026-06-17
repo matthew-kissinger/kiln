@@ -26,6 +26,10 @@ import {
   beamBetween,
   createLadder,
   createWingPair,
+  room,
+  wallWithOpening,
+  createRoofPlanes,
+  createStairs,
   // geometries
   boxGeo,
   sphereGeo,
@@ -217,6 +221,127 @@ describe('attachment helpers', () => {
     expect(wings.left.position.z).toBeCloseTo(-0.45);
     expect(root.children).toContain(wings.right);
     expect(root.children).toContain(wings.left);
+  });
+});
+
+describe('building helpers', () => {
+  test('wallWithOpening: solid wall is one panel', () => {
+    const wall = wallWithOpening('S', gameMaterial(0x808080), {
+      length: 4,
+      height: 2.8,
+      thickness: 0.15,
+    });
+    expect(wall.name).toBe('S');
+    expect(wall.children.length).toBe(1);
+    expect(wall.children[0]!.name).toBe('Mesh_S');
+  });
+
+  test('wallWithOpening: a door cuts a real gap (two jambs + a lintel, no sill)', () => {
+    const wall = wallWithOpening('W', gameMaterial(0x808080), {
+      length: 4,
+      height: 2.8,
+      thickness: 0.15,
+      opening: { kind: 'door' },
+    });
+    expect(wall.children.map((c) => c.name).sort()).toEqual(['Mesh_W_L', 'Mesh_W_Lintel', 'Mesh_W_R']);
+  });
+
+  test('wallWithOpening: a window adds a sill apron under the gap', () => {
+    const wall = wallWithOpening('Win', gameMaterial(0x808080), {
+      length: 4,
+      height: 2.8,
+      thickness: 0.15,
+      opening: { kind: 'window' },
+    });
+    expect(wall.children.map((c) => c.name).sort()).toEqual([
+      'Mesh_Win_L',
+      'Mesh_Win_Lintel',
+      'Mesh_Win_R',
+      'Mesh_Win_Sill',
+    ]);
+  });
+
+  test('room: hollow shell of four walls + a floor, enterable by default', () => {
+    const root = createRoot('R');
+    const { root: hut, walls, floor } = room('Hut', gameMaterial(0x8b6f3d), {
+      width: 5,
+      depth: 4,
+      parent: root,
+    });
+    expect(hut.parent).toBe(root);
+    // 4 wall containers + 1 floor.
+    expect(hut.children.length).toBe(5);
+    expect(floor).not.toBeNull();
+    expect(floor!.name).toBe('Mesh_Hut_Floor');
+    expect(walls.front.name).toBe('Hut_WallFront');
+    // Default = a door on the front wall, so the front wall is NOT a solid slab.
+    expect(walls.front.children.length).toBe(3); // L, R, Lintel
+    // The other walls have no opening — a single solid panel each.
+    expect(walls.back.children.length).toBe(1);
+    expect(walls.left.children.length).toBe(1);
+    expect(walls.right.children.length).toBe(1);
+    // Front faces +X; left/right sit at -/+ width/2 on Z.
+    expect(walls.front.position.x).toBeCloseTo(2); // depth/2
+    expect(walls.left.position.z).toBeCloseTo(-2.5); // -width/2
+    expect(walls.right.position.z).toBeCloseTo(2.5);
+  });
+
+  test('room: openings can be placed on any wall', () => {
+    const { walls } = room('Hut', gameMaterial(0x8b6f3d), {
+      openings: [
+        { wall: 'front', kind: 'door' },
+        { wall: 'right', kind: 'window' },
+      ],
+    });
+    expect(walls.front.children.length).toBe(3); // door
+    expect(walls.right.children.length).toBe(4); // window (+ sill)
+    expect(walls.back.children.length).toBe(1); // solid
+  });
+
+  test('createRoofPlanes: two slopes fall AWAY from each other from one ridge', () => {
+    const { root, slopes } = createRoofPlanes('Roof', gameMaterial(0x6b4f2a), {
+      width: 5,
+      depth: 4,
+      height: 1.6,
+      ridgeAxis: 'x',
+    });
+    expect(root.name).toBe('Roof');
+    expect(slopes[0].name).toBe('Mesh_RoofA');
+    expect(slopes[1].name).toBe('Mesh_RoofB');
+    // Opposite tilt (NOT mirrored the same way) — the anti-defect invariant.
+    expect(slopes[0].rotation.x).not.toBeCloseTo(0);
+    expect(slopes[0].rotation.x).toBeCloseTo(-slopes[1].rotation.x);
+    // Slopes drop toward opposite Z sides; ridge centered above the eaves.
+    expect(Math.sign(slopes[0].position.z)).toBe(1);
+    expect(Math.sign(slopes[1].position.z)).toBe(-1);
+    expect(slopes[0].position.y).toBeCloseTo(0.8); // height/2
+  });
+
+  test('createStairs: named treads climb up and along; risers included', () => {
+    const { root, steps } = createStairs('Porch', gameMaterial(0x888888), {
+      steps: 4,
+      totalRise: 1.0,
+      totalRun: 2.0,
+      width: 1.2,
+      axis: 'x',
+    });
+    expect(steps.map((s) => s.name)).toEqual([
+      'Mesh_PorchStep1',
+      'Mesh_PorchStep2',
+      'Mesh_PorchStep3',
+      'Mesh_PorchStep4',
+    ]);
+    expect(steps[3]!.position.y).toBeGreaterThan(steps[0]!.position.y);
+    expect(steps[3]!.position.x).toBeGreaterThan(steps[0]!.position.x);
+    expect(root.children.length).toBe(8); // 4 treads + 4 risers
+  });
+
+  test('createStairs: rejects no steps and a degenerate flight', () => {
+    const mat = gameMaterial(0x888888);
+    expect(() => createStairs('Bad', mat, { steps: 0, totalRise: 1, totalRun: 1, width: 1 })).toThrow(
+      'steps must be >= 1',
+    );
+    expect(() => createStairs('Bad', mat, { totalRise: 0, totalRun: 1, width: 1 })).toThrow('must be non-zero');
   });
 });
 
