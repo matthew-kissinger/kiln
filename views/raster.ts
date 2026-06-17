@@ -340,3 +340,40 @@ export function coverage(rgb: Uint8Array, size: number): number {
   }
   return filled / (size * size);
 }
+
+/**
+ * Hide a named subtree from the rasterizer so a view can see past it (lift a roof,
+ * cut away a near wall). CRITICAL: `collectTriangles` culls per-MESH on `.visible`
+ * and does NOT honor ancestor-group visibility — but kiln parts/walls/roofs are
+ * nested GROUPS, so hiding only the matched group would leave its child meshes
+ * drawn. This therefore sets `.visible = false` on each matched node AND every
+ * descendant.
+ *
+ * `match` is either a string (case-insensitive exact match OR startsWith — so
+ * "Roof" also lifts "Roof_Ridge") or a predicate over the node name. Returns the
+ * number of matched subtree roots hidden (0 → nothing matched; the caller decides
+ * whether to warn). Pure helper; mutates `.visible` on the passed scene.
+ */
+export function hideNodeInScene(root: unknown, match: string | ((name: string) => boolean)): number {
+  const test =
+    typeof match === 'function'
+      ? match
+      : (name: string) => {
+          const t = match.toLowerCase();
+          const n = name.toLowerCase();
+          return n === t || n.startsWith(t);
+        };
+  let hidden = 0;
+  const r = root as DuckObject3D;
+  r.traverse?.((obj) => {
+    const node = obj as { name?: string; traverse?(cb: (o: unknown) => void): void };
+    if (!node.name || !test(node.name)) return;
+    hidden++;
+    // Flip the matched node and its whole subtree (the per-mesh cull means hiding
+    // just the group is not enough — the leaf meshes must be invisible).
+    node.traverse?.((d) => {
+      (d as { visible?: boolean }).visible = false;
+    });
+  });
+  return hidden;
+}

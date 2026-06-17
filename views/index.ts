@@ -11,7 +11,7 @@
  *   row 2: Left,  Top,   3/4
  */
 
-import { rasterizeView, measureBounds, SIX_VIEWS, type RasterOptions, type ViewSpec } from './raster';
+import { rasterizeView, measureBounds, hideNodeInScene, SIX_VIEWS, type RasterOptions, type ViewSpec } from './raster';
 import { encodePng } from './png';
 import {
   prepareClip,
@@ -23,7 +23,7 @@ import {
   type DuckClip,
 } from './pose';
 
-export { rasterizeView, measureBounds, SIX_VIEWS, coverage } from './raster';
+export { rasterizeView, measureBounds, hideNodeInScene, SIX_VIEWS, coverage } from './raster';
 export type { RasterOptions, ViewSpec } from './raster';
 export { encodePng } from './png';
 export {
@@ -280,4 +280,115 @@ export async function renderClipAnimation(
     }
   }
   return { ...baseMeta, width, height, png: encodePng(grid, width, height) };
+}
+
+// =============================================================================
+// Interior views — see INSIDE an enterable building, roof off (kiln_view_interior)
+// =============================================================================
+
+export interface InteriorGridResult extends ViewGridResult {
+  /** Roof subtree roots hidden (0 → the roof part was not named like nodeName). */
+  roofsHidden: number;
+  /** Near-wall subtree roots hidden for the eye-level cutaway (0 → not a room()). */
+  wallsHidden: number;
+}
+
+export interface InteriorGridOptions extends RasterOptions {
+  /** Name of the roof part to lift. Default 'Roof'. */
+  nodeName?: string;
+}
+
+/** Outward face normals of room() walls, by lowercased name suffix (front faces +X). */
+const ROOM_WALL_NORMALS: Array<{ suffix: string; n: [number, number, number] }> = [
+  { suffix: 'wallfront', n: [1, 0, 0] },
+  { suffix: 'wallback', n: [-1, 0, 0] },
+  { suffix: 'wallleft', n: [0, 0, -1] },
+  { suffix: 'wallright', n: [0, 0, 1] },
+];
+
+const INTERIOR_VIEWS: ViewSpec[] = [
+  { name: 'Floor plan', dir: [0, 1, 0.0001] }, // top-down, roof off
+  { name: 'Dollhouse', dir: [0.7, 0.5, 0.7] }, // 3/4 cutaway, roof off
+  { name: 'Eye-level', dir: [0.55, 0.35, 0.45] }, // low angle, roof + near walls off
+];
+
+function normalizeVec(v: [number, number, number]): [number, number, number] {
+  const len = Math.hypot(v[0], v[1], v[2]) || 1;
+  return [v[0] / len, v[1] / len, v[2] / len];
+}
+function dotVec(a: [number, number, number], b: [number, number, number]): number {
+  return a[0] * b[0] + a[1] * b[1] + a[2] * b[2];
+}
+
+/**
+ * Render an enterable building with its roof — and, for the eye-level cell, the
+ * near walls — hidden, so the agent can SEE the interior the six exterior views
+ * cannot. Three roof-off cells in one row: Floor plan (top-down, layout +
+ * walkability), Dollhouse (3/4 cutaway, fixtures sit on the floor), Eye-level
+ * (low angle through the doorway with the camera-facing walls removed, so the
+ * doorway reads as a real gap and nothing is buried inside a solid mass).
+ *
+ * MUTATES `root` (callers pass a freshly executed scene — the tool re-executes
+ * per call). Interior faces point AWAY from the camera once the lid/near walls
+ * are off, so backface culling is OFF for every cell (the exterior grid keeps it
+ * ON to reveal winding bugs).
+ */
+export async function renderInteriorGrid(
+  root: unknown,
+  opts: InteriorGridOptions = {},
+): Promise<InteriorGridResult> {
+  const size = opts.size ?? 256;
+  const labelScale = Math.max(2, Math.round(size / 80));
+
+  // Lift the roof once — persists for every cell.
+  const roofsHidden = hideNodeInScene(root, opts.nodeName ?? 'Roof');
+
+  let wallsHidden = 0;
+  const cells: Uint8Array[] = [];
+  for (const view of INTERIOR_VIEWS) {
+    if (view.name === 'Eye-level') {
+      // Cutaway: also remove the walls facing the camera so the eye looks past
+      // them onto the far wall + floor. room() names walls `<root>_Wall<Side>`.
+      const d = normalizeVec(view.dir);
+      wallsHidden = hideNodeInScene(root, (name) => {
+        const lower = name.toLowerCase();
+        for (const w of ROOM_WALL_NORMALS) {
+          if (lower.endsWith(w.suffix) && dotVec(w.n, d) > 0.2) return true;
+        }
+        return false;
+      });
+    }
+    const cell = rasterizeView(root, view.dir, { size, backfaceCull: false });
+    stampLabel(cell, size, size, labelScale, labelScale, view.name, labelScale);
+    cells.push(cell);
+  }
+
+  // Single-row grid (reuse the six-view PAD/PAD_COLOR layout).
+  const cols = INTERIOR_VIEWS.length;
+  const width = cols * size + (cols + 1) * PAD;
+  const height = size + 2 * PAD;
+  const grid = new Uint8Array(width * height * 3);
+  for (let p = 0; p < width * height; p++) {
+    grid[p * 3] = PAD_COLOR[0];
+    grid[p * 3 + 1] = PAD_COLOR[1];
+    grid[p * 3 + 2] = PAD_COLOR[2];
+  }
+  for (let i = 0; i < cells.length; i++) {
+    const x0 = PAD + i * (size + PAD);
+    const y0 = PAD;
+    for (let y = 0; y < size; y++) {
+      const src = y * size * 3;
+      const dst = ((y0 + y) * width + x0) * 3;
+      grid.set(cells[i]!.subarray(src, src + size * 3), dst);
+    }
+  }
+
+  return {
+    png: encodePng(grid, width, height),
+    width,
+    height,
+    views: INTERIOR_VIEWS.map((v) => v.name),
+    roofsHidden,
+    wallsHidden,
+  };
 }

@@ -97,6 +97,14 @@ const screenshotAnimationInput = z.object({
     .describe('Return the frames as separate high-res images instead of one composite grid. Default false.'),
 });
 
+const viewInteriorInput = z.object({
+  code: z.string().describe('Kiln source code to execute and render with the roof hidden.'),
+  nodeName: z
+    .string()
+    .optional()
+    .describe('The roof part to lift, by name (default "Roof"). Matches that node and its children.'),
+});
+
 // =============================================================================
 // kiln_list_primitives
 // =============================================================================
@@ -502,6 +510,88 @@ export const kilnScreenshotAnimationDef: KilnToolDef = {
   run: async (input) => runScreenshotAnimation(screenshotAnimationInput.parse(input)),
   media: screenshotAnimationMedia,
   mediaMulti: screenshotAnimationMediaMulti,
+};
+
+// =============================================================================
+// kiln_view_interior (unified) — see INSIDE an enterable building, roof off
+// =============================================================================
+
+export interface KilnViewInteriorResult {
+  ok: boolean;
+  /** View names in grid order: Floor plan, Dollhouse, Eye-level. */
+  views?: string[];
+  gridWidth?: number;
+  gridHeight?: number;
+  /** Roof subtree roots hidden (0 → the roof part was not named "Roof"). */
+  roofsHidden?: number;
+  /** Near-wall subtree roots removed for the eye-level cutaway (0 → not a room()). */
+  wallsHidden?: number;
+  /** The single-row grid PNG, base64 (image transports strip this and attach the bytes). */
+  pngBase64?: string;
+  warnings: string[];
+  error?: string;
+}
+
+/**
+ * Render the asset with its roof hidden so the agent can SEE the interior the six
+ * exterior views cannot (open/walkable floor, a doorway that is a real gap, fixtures
+ * on the floor, nothing buried/sealed). Three roof-off cells: Floor plan, Dollhouse,
+ * Eye-level. A build error comes back image-free ({ ok:false, error }). When the roof
+ * could not be lifted (roofsHidden === 0) the interior stays occluded — a warning tells
+ * the agent to name the roof part "Roof". Pure visual QA: does NOT run the structural
+ * inspector (the agent already gets floating/stray warnings from kiln_render). The views
+ * module is imported lazily to keep node:zlib out of the browser bundle graph.
+ */
+async function runViewInterior(input: z.infer<typeof viewInteriorInput>): Promise<KilnViewInteriorResult> {
+  try {
+    const { renderInteriorGrid } = await import('../views');
+    const { root } = await executeKilnCode(input.code);
+    const nodeName = input.nodeName ?? 'Roof';
+    const grid = await renderInteriorGrid(root, { nodeName });
+    const warnings: string[] = [];
+    if (grid.roofsHidden === 0) {
+      warnings.push(
+        `No node named "${nodeName}" was found, so the roof could not be lifted and the interior is still occluded. Name the roof group exactly "${nodeName}".`,
+      );
+    }
+    return {
+      ok: true,
+      views: grid.views,
+      gridWidth: grid.width,
+      gridHeight: grid.height,
+      roofsHidden: grid.roofsHidden,
+      wallsHidden: grid.wallsHidden,
+      pngBase64: grid.png.toString('base64'),
+      warnings,
+    };
+  } catch (err) {
+    return {
+      ok: false,
+      error: err instanceof Error ? err.message : String(err),
+      warnings: [],
+    };
+  }
+}
+
+/**
+ * The unified-surface interior-QA tool. Exported separately and intentionally NOT
+ * part of `kilnToolRegistry` (the four-tool bench baseline stays unchanged). Shares
+ * `screenshotMedia` so image transports attach the PNG bytes and strip the base64.
+ */
+export const kilnViewInteriorDef: KilnToolDef = {
+  name: 'kiln_view_interior',
+  description:
+    'SEE INSIDE an enterable building: renders it with the roof (the part named "Roof") lifted off, as a ' +
+    'three-view grid. (1) Floor plan: top-down — check the interior is open and walkable and the footprint ' +
+    'is right. (2) Dollhouse: a 3/4 cutaway — check built-in fixtures (hearth, counter, shelves) rest ON the ' +
+    'floor, not floating or sunk, and the walls enclose a real volume with headroom. (3) Eye-level: a low ' +
+    'angle looking in through the doorway with the near walls also removed — confirm the doorway is a REAL ' +
+    'gap you could walk through (not a panel) and no wall or glass is buried inside a solid mass. ' +
+    'Call this before finalizing any building. If roofsHidden comes back 0 the roof part was not named ' +
+    '"Roof" (the interior stays hidden — rename it). Flat-shaded CPU render; writes no files.',
+  inputSchema: viewInteriorInput,
+  run: async (input) => runViewInterior(viewInteriorInput.parse(input)),
+  media: screenshotMedia,
 };
 
 // =============================================================================

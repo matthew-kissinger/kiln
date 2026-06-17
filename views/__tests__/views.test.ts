@@ -1,6 +1,14 @@
 import { describe, expect, test } from 'bun:test';
 import sharp from 'sharp';
-import { coverage, rasterizeView, renderViewGrid, renderCodeViewGrid, SIX_VIEWS } from '../index';
+import {
+  coverage,
+  rasterizeView,
+  renderViewGrid,
+  renderCodeViewGrid,
+  renderInteriorGrid,
+  hideNodeInScene,
+  SIX_VIEWS,
+} from '../index';
 import { encodePng } from '../png';
 import { executeKilnCode } from '../../render';
 
@@ -147,5 +155,72 @@ describe('renderViewGrid / renderCodeViewGrid', () => {
     const { root } = await executeKilnCode(BOX_CODE);
     const result = await renderViewGrid(root, { size: 32 });
     expect(result.png.length).toBeGreaterThan(100);
+  });
+});
+
+// A roof group (named 'Roof') of child meshes — the rasterizer culls per-mesh, so
+// this proves hideNodeInScene recurses into descendants (hiding only the group would
+// leave the meshes drawn).
+const ROOF_ONLY_CODE = `
+const meta = { name: 'roof-only', category: 'architecture' };
+function build() {
+  const root = createRoot('Root');
+  createRoofPlanes('Roof', gameMaterial('#888888'), { width: 4, depth: 4, height: 1.2, parent: root });
+  return root;
+}
+`;
+
+// A hollow room (walls Shell_Wall<Side>) under a separable 'Roof' group.
+const BUILDING_CODE = `
+const meta = { name: 'hut', category: 'architecture' };
+function build() {
+  const root = createRoot('Hut');
+  const mat = gameMaterial('#caa472');
+  room('Shell', mat, { width: 4, depth: 4, height: 2.8, parent: root });
+  const roof = createRoofPlanes('Roof', mat, { width: 4, depth: 4, height: 1.2, parent: root });
+  roof.root.position.set(0, 2.8, 0);
+  return root;
+}
+`;
+
+describe('hideNodeInScene', () => {
+  test('hides the matched node AND its descendant meshes (per-mesh cull)', async () => {
+    const { root } = await executeKilnCode(ROOF_ONLY_CODE);
+    const dir: [number, number, number] = [0.7, 0.5, 0.7];
+    expect(coverage(rasterizeView(root, dir, { size: 64, backfaceCull: false }), 64)).toBeGreaterThan(0.1);
+    const hidden = hideNodeInScene(root, 'Roof');
+    expect(hidden).toBeGreaterThanOrEqual(1);
+    // If only the group's .visible flipped (not its child meshes), coverage would stay > 0.
+    expect(coverage(rasterizeView(root, dir, { size: 64, backfaceCull: false }), 64)).toBe(0);
+  });
+
+  test('returns 0 when nothing matches', async () => {
+    const { root } = await executeKilnCode(ROOF_ONLY_CODE);
+    expect(hideNodeInScene(root, 'Nonexistent')).toBe(0);
+  });
+});
+
+describe('renderInteriorGrid', () => {
+  test('returns three roof-off views with the roof + near walls hidden for a room()', async () => {
+    const { root } = await executeKilnCode(BUILDING_CODE);
+    const grid = await renderInteriorGrid(root, { size: 64 });
+    expect(grid.views).toEqual(['Floor plan', 'Dollhouse', 'Eye-level']);
+    expect(grid.roofsHidden).toBeGreaterThanOrEqual(1);
+    expect(grid.wallsHidden).toBeGreaterThanOrEqual(1); // Front + Right cut for the eye-level cell
+    expect(grid.width).toBe(3 * 64 + 4 * 4); // single row, 3 cols
+    expect(grid.height).toBe(64 + 2 * 4);
+    const meta = await sharp(grid.png).metadata();
+    expect(meta.format).toBe('png');
+    expect(meta.width).toBe(grid.width);
+    expect(meta.height).toBe(grid.height);
+  });
+
+  test('degrades gracefully on a non-building (no Roof, no walls) but still returns three views', async () => {
+    const { root } = await executeKilnCode(BOX_CODE);
+    const grid = await renderInteriorGrid(root, { size: 48 });
+    expect(grid.views).toHaveLength(3);
+    expect(grid.roofsHidden).toBe(0);
+    expect(grid.wallsHidden).toBe(0);
+    expect(grid.png.length).toBeGreaterThan(100);
   });
 });

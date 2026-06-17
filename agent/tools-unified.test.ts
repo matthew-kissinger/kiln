@@ -24,6 +24,20 @@ function build() {
 }
 `;
 
+// An enterable building: a hollow room (walls named Shell_Wall<Side>) under a
+// separable roof group named 'Roof' — the shape kiln_view_interior lifts.
+const BUILDING_CODE = `
+const meta = { name: 'test-hut', category: 'architecture' };
+function build() {
+  const root = createRoot('Hut');
+  const mat = gameMaterial('#caa472');
+  room('Shell', mat, { width: 4, depth: 4, height: 2.8, parent: root });
+  const roof = createRoofPlanes('Roof', mat, { width: 4, depth: 4, height: 1.2, parent: root });
+  roof.root.position.set(0, 2.8, 0);
+  return root;
+}
+`;
+
 function findTool(tools: ReturnType<typeof makeKilnUnifiedTools>, name: string) {
   const t = tools.find((x) => x.name === name) as
     | { invoke(input: unknown): Promise<unknown> }
@@ -61,7 +75,7 @@ describe('KilnDraftBuffer', () => {
 });
 
 describe('makeKilnUnifiedTools', () => {
-  test('exposes exactly the seven unified tools in order (incl. the animation view)', () => {
+  test('exposes exactly the eight unified tools in order (incl. the motion + interior views)', () => {
     const sink: UnifiedSink = { edits: [] };
     const tools = makeKilnUnifiedTools({ sink });
     expect(tools.map((t) => t.name)).toEqual([
@@ -71,10 +85,11 @@ describe('makeKilnUnifiedTools', () => {
       'kiln_validate',
       'kiln_render',
       'kiln_screenshot_animation',
+      'kiln_view_interior',
       'kiln_finalize',
     ]);
     // No legacy verbs leak into the unified surface (the static screenshot collapsed
-    // into kiln_render; only the dedicated motion view kiln_screenshot_animation is added).
+    // into kiln_render; only the dedicated motion + interior views are added).
     expect(tools.map((t) => t.name)).not.toContain('kiln_list_primitives');
     expect(tools.map((t) => t.name)).not.toContain('kiln_screenshot');
     expect(tools.map((t) => t.name)).not.toContain('kiln_submit');
@@ -158,6 +173,40 @@ describe('makeKilnUnifiedTools', () => {
     const tools = makeKilnUnifiedTools({ seedCode: 'not a kiln program (', sink, onCandidate: (c) => got.push(c) });
     await findTool(tools, 'kiln_render').invoke({});
     expect(got).toHaveLength(0); // a failed render has no image → no candidate
+  });
+
+  test('kiln_view_interior returns [ImageBlock, JsonBlock] for a building buffer', async () => {
+    const sink: UnifiedSink = { edits: [] };
+    const tools = makeKilnUnifiedTools({ seedCode: BUILDING_CODE, sink });
+    const out = (await findTool(tools, 'kiln_view_interior').invoke({})) as unknown[];
+    expect(Array.isArray(out)).toBe(true);
+    expect(out).toHaveLength(2);
+    expect(out[0]).toBeInstanceOf(ImageBlock);
+    expect(out[1]).toBeInstanceOf(JsonBlock);
+    const json = (out[1] as JsonBlock).json as Record<string, unknown>;
+    expect(json['ok']).toBe(true);
+    expect(json['roofsHidden']).toBeGreaterThanOrEqual(1); // the 'Roof' group was lifted
+    expect(json['wallsHidden']).toBeGreaterThanOrEqual(1); // near walls cut for the eye-level cell
+    expect('pngBase64' in json).toBe(false); // image stripped by the media extractor
+  });
+
+  test('kiln_view_interior on a broken buffer is image-free (plain JSON error)', async () => {
+    const sink: UnifiedSink = { edits: [] };
+    const tools = makeKilnUnifiedTools({ seedCode: 'not a kiln program (', sink });
+    const out = (await findTool(tools, 'kiln_view_interior').invoke({})) as { ok: boolean; error?: string };
+    expect(Array.isArray(out)).toBe(false);
+    expect(out.ok).toBe(false);
+    expect(out.error).toBeDefined();
+  });
+
+  test('kiln_view_interior warns when the roof is not named "Roof"', async () => {
+    const sink: UnifiedSink = { edits: [] };
+    const lidCode = BUILDING_CODE.replace("createRoofPlanes('Roof'", "createRoofPlanes('Lid'");
+    const tools = makeKilnUnifiedTools({ seedCode: lidCode, sink });
+    const out = (await findTool(tools, 'kiln_view_interior').invoke({})) as unknown[];
+    const json = (out[1] as JsonBlock).json as Record<string, unknown>;
+    expect(json['roofsHidden']).toBe(0); // no node named "Roof" → nothing lifted
+    expect((json['warnings'] as string[]).join(' ')).toContain('Roof');
   });
 
   test('kiln_finalize captures the buffer and marks finalized', async () => {

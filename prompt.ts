@@ -310,6 +310,16 @@ and check the MOTION (the static render cannot show it):
 - Block/guard: the shield or arm comes UP toward the front — the body does not step backward.
 If unresolvedTracks comes back non-empty, the clip is frozen because a track targets a joint
 that doesn't exist — fix the joint name. Fix any motion defect and re-render the clip again.
+If this is a BUILDING, also call kiln_view_interior before finalizing — it lifts the roof and shows
+three roof-off views the exterior six cannot, and you check the INSIDE:
+- Floor plan (top-down): the floor area is open and walkable — no solid block filling the interior,
+  no stray wall partitioning it unless intended.
+- Dollhouse (3/4 cutaway): built-in fixtures (hearth, counter, shelves) rest ON the floor, not
+  floating or sunk through it; the walls enclose a real volume with standing headroom.
+- Eye-level (looking in through the doorway, near walls removed): the doorway is a REAL gap you
+  could walk through (not a panel), and no glass or wall is buried inside a solid mass.
+If roofsHidden comes back 0 the roof was not named Roof — rename it so the tool can lift it. Fix any
+sealed, buried, or floating interior and view it again.
 </visual-qa>`;
 
 export const KILN_EXAMPLES = `<example name="animated-chest">
@@ -813,15 +823,19 @@ export const ARCHITECTURE_CONTEXT =
   'Walls meet squarely at the corners with no gaps; give large coplanar surfaces a hair of ' +
   'separation so they do not flicker. Cap it with a roof that matches the footprint and overhangs ' +
   "slightly at the eaves; a pitched roof's two sides slope DOWN-AND-OUTWARD from one ridge line — " +
-  'they fall away from each other, never tilt the same way. Name the roof as its own part so the ' +
-  'engine can lift it to reveal the inside.\n\n' +
+  'they fall away from each other, never tilt the same way. Name the roof group exactly `Roof` (its ' +
+  'own part) so the engine — and the interior view — can lift it to reveal the inside.\n\n' +
   'Spend detail where a building reads: the roofline and eaves, a framed door, window sills or ' +
   'mullions, a chimney, a porch or entry overhang, a foundation course, corner posts, trim — and ' +
   'built-in fixtures (a hearth, a counter, shelving). Leave the floor space open for furniture to ' +
   'be placed later.\n\n' +
   'Use room(...) to build the hollow walled-and-floored shell with its doorway, wallWithOpening(...) ' +
   'for extra doors or windows, and createRoofPlanes(...) for the pitched roof; createStairs(...) ' +
-  'makes porch steps or connects floors.';
+  'makes porch steps or connects floors.\n\n' +
+  'Before you finalize, call kiln_view_interior and check the roof-off views: the interior is open ' +
+  'and walkable (no solid fill, no interior wall left buried in a mass), the doorway is a real gap ' +
+  'you could pass through, and any built-in fixtures rest on the floor. Fix anything sealed, buried, ' +
+  'or floating, then view the interior again.';
 
 /**
  * Per-category context appended to fresh-generation prompts by

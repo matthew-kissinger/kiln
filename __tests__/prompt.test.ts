@@ -115,6 +115,11 @@ describe('buildUserPrompt', () => {
     expect(prompt.indexOf('## Task')).toBeLessThan(prompt.indexOf(ARCHITECTURE_CONTEXT));
   });
 
+  test('the architecture directive names the interior-QA tool + the Roof part', () => {
+    expect(ARCHITECTURE_CONTEXT).toContain('kiln_view_interior');
+    expect(ARCHITECTURE_CONTEXT).toContain('Roof');
+  });
+
   test('does not append the architecture directive for other categories', () => {
     const prompt = buildUserPrompt({ prompt: 'a barrel', mode: 'glb', category: 'prop' });
     expect(prompt).not.toContain(ARCHITECTURE_CONTEXT);
@@ -230,6 +235,11 @@ describe('unified tool surface prompt', () => {
     // The non-examples api block and the legacy verb sentence are gone.
     expect(unified).not.toContain(KILN_API_SECTION);
     expect(unified).not.toContain('Before kiln_submit, call kiln_screenshot');
+  });
+
+  test('the unified visual-qa nudges the interior view for buildings', () => {
+    expect(KILN_VISUAL_QA_UNIFIED).toContain('kiln_view_interior');
+    expect(KILN_VISUAL_QA_UNIFIED).toContain('BUILDING');
   });
 
   test('unified takes precedence over apiSurface:trimmed (which points at the removed list tool)', () => {

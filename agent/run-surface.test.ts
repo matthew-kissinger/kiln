@@ -34,6 +34,7 @@ const UNIFIED = [
   'kiln_validate',
   'kiln_render',
   'kiln_screenshot_animation',
+  'kiln_view_interior',
   'kiln_finalize',
 ];
 const CURRENT_GEN = [
@@ -56,11 +57,11 @@ const CURRENT_EDIT = [
 ];
 
 describe('buildAgentTools', () => {
-  test('unified surface -> the six buffer tools (fresh generate, empty seed)', () => {
+  test('unified surface -> the eight buffer tools (fresh generate, empty seed)', () => {
     expect(names(buildAgentTools('unified', base, freshSinks()))).toEqual(UNIFIED);
   });
 
-  test('unified surface -> the same six tools when refining (seeded buffer)', () => {
+  test('unified surface -> the same eight tools when refining (seeded buffer)', () => {
     const opts = { ...base, existingCode: 'const meta = {};', refineMode: 'edit' as const };
     expect(names(buildAgentTools('unified', opts, freshSinks()))).toEqual(UNIFIED);
   });

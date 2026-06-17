@@ -20,7 +20,12 @@
 import { tool, ImageBlock, JsonBlock, type Tool, type JSONValue } from '@strands-agents/sdk';
 import { z } from 'zod';
 
-import { kilnToolRegistry, kilnRenderViewsDef, kilnScreenshotAnimationDef } from '../tools/registry';
+import {
+  kilnToolRegistry,
+  kilnRenderViewsDef,
+  kilnScreenshotAnimationDef,
+  kilnViewInteriorDef,
+} from '../tools/registry';
 
 /** Name of the terminal tool the agent calls to record its final program. */
 export const KILN_SUBMIT_TOOL_NAME = 'kiln_submit';
@@ -558,6 +563,24 @@ export function makeKilnUnifiedTools(opts: {
   // clip move (sideways walk, reverse knee, backward swing, item not tracking).
   const animationTool = makeBufferAnimationTool(() => buffer.code);
 
+  // Buffer-aware interior view: after drafting/editing a BUILDING, SEE inside it
+  // (roof off — open floor, real doorway gap, fixtures grounded, nothing buried).
+  const interiorTool: Tool = tool({
+    name: 'kiln_view_interior',
+    description: kilnViewInteriorDef.description + ' Operates on your current working buffer (omit code).',
+    inputSchema: z.object({
+      nodeName: z
+        .string()
+        .optional()
+        .describe('The roof part to lift, by name (default "Roof").'),
+    }),
+    callback: async (input) => {
+      const n = (input as { nodeName?: string }).nodeName;
+      const out = await kilnViewInteriorDef.run({ code: buffer.code, ...(n ? { nodeName: n } : {}) });
+      return toCallbackResult(kilnViewInteriorDef, out);
+    },
+  });
+
   const finalizeTool: Tool = tool({
     name: 'kiln_finalize',
     description:
@@ -572,5 +595,5 @@ export function makeKilnUnifiedTools(opts: {
     },
   });
 
-  return [draftTool, viewTool, editTool, validateTool, renderTool, animationTool, finalizeTool];
+  return [draftTool, viewTool, editTool, validateTool, renderTool, animationTool, interiorTool, finalizeTool];
 }
