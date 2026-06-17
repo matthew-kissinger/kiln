@@ -837,14 +837,44 @@ export const ARCHITECTURE_CONTEXT =
   'you could pass through, and any built-in fixtures rest on the floor. Fix anything sealed, buried, ' +
   'or floating, then view the interior again.';
 
+/** PROP build context — make movable parts distinct and correctly hinged so they
+ *  read well statically AND can be animated about their real pivot. */
+export const PROP_CONTEXT =
+  'This is a PROP. Build any part that can move — a lid, door, drawer, hatch, wheel, gear, lever, ' +
+  'handle, or hinge — as its OWN distinct piece seated at its real hinge or axle, never fused into the ' +
+  'body. A chest or box lid hinges along its BACK TOP edge; a door swings on its side jamb; a wheel or ' +
+  'gear turns on its axle; a lever or handle pivots at its base. If you animate it, put a createPivot ' +
+  'exactly at that hinge or axle line, parent only the moving mesh under the joint, and leave the static ' +
+  'body unpivoted so just the part moves — not the whole object.';
+
+/** ENVIRONMENT build context — sway-prone pieces as separate, base-anchored parts. */
+export const ENVIRONMENT_CONTEXT =
+  'This is an ENVIRONMENT element. Build sway-prone or moving pieces — foliage, fronds, grass tufts, ' +
+  'branches, flags, banners, vines, or water — as separate parts anchored at their base. If you animate ' +
+  'them, pivot at the base or anchor (a flag at its mast edge, a frond at its stalk, grass at the ground) ' +
+  'with a gentle, looping sway; when several elements move, offset their phase so they do not all swing ' +
+  'in lockstep.';
+
+/** VFX build context — emitter-like parts driven by transform on Joint_ pivots. */
+export const VFX_CONTEXT =
+  'This is a VFX / effect asset. Build the moving or emitting elements — pulses, rings, sparks, swirls, ' +
+  'beams, or shards — as distinct parts. If you animate them, drive the motion through Joint_ pivots ' +
+  '(spin, orbit, pulse, or scale) about a sensible center, and keep every loop seamless (the end pose ' +
+  'matches the start) so it reads as a continuous effect.';
+
 /**
  * Per-category context appended to fresh-generation prompts by
- * {@link buildUserPrompt}. Intentionally sparse: only categories whose guidance
- * is owned by core live here (today just `architecture`, because its primitives
- * are core helpers). `character` deliberately stays studio-side.
+ * {@link buildUserPrompt}. Core owns every category whose guidance reaches all
+ * consumers (CLI / batch / bench / editor / the deployed runtime) — `architecture`
+ * (its primitives are core helpers) plus `prop` / `vfx` / `environment` (their
+ * moving-part rig guidance). `character` deliberately stays studio-side (the studio
+ * prepends CHARACTER_CONTEXT into the prompt string before the wire).
  */
 export const CATEGORY_CONTEXT: Partial<Record<AssetCategory, string>> = {
   architecture: ARCHITECTURE_CONTEXT,
+  prop: PROP_CONTEXT,
+  environment: ENVIRONMENT_CONTEXT,
+  vfx: VFX_CONTEXT,
 };
 
 export function buildUserPrompt(request: KilnGenerateRequest): string {

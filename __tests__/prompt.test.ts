@@ -18,6 +18,9 @@ import {
   KILN_BOTH_SYSTEM_PROMPT,
   KILN_REFINE_DIRECTIVE,
   ARCHITECTURE_CONTEXT,
+  PROP_CONTEXT,
+  ENVIRONMENT_CONTEXT,
+  VFX_CONTEXT,
   KILN_API_SECTION,
   KILN_API_SECTION_UNIFIED,
   KILN_VISUAL_QA_UNIFIED,
@@ -123,6 +126,30 @@ describe('buildUserPrompt', () => {
   test('does not append the architecture directive for other categories', () => {
     const prompt = buildUserPrompt({ prompt: 'a barrel', mode: 'glb', category: 'prop' });
     expect(prompt).not.toContain(ARCHITECTURE_CONTEXT);
+  });
+
+  test('appends the per-category rig context for prop / environment / vfx', () => {
+    const prop = buildUserPrompt({ prompt: 'a treasure chest', mode: 'glb', category: 'prop' });
+    expect(prop).toContain(PROP_CONTEXT);
+    expect(prop.indexOf('## Task')).toBeLessThan(prop.indexOf(PROP_CONTEXT));
+    const env = buildUserPrompt({ prompt: 'a palm frond', mode: 'glb', category: 'environment' });
+    expect(env).toContain(ENVIRONMENT_CONTEXT);
+    const vfx = buildUserPrompt({ prompt: 'a magic pulse ring', mode: 'glb', category: 'vfx' });
+    expect(vfx).toContain(VFX_CONTEXT);
+    // Each category gets only its own block, never another's.
+    expect(prop).not.toContain(VFX_CONTEXT);
+    expect(env).not.toContain(PROP_CONTEXT);
+  });
+
+  test('per-category rig context is dropped when refining (existingCode set)', () => {
+    const prompt = buildUserPrompt({
+      prompt: 'open the lid',
+      mode: 'glb',
+      category: 'prop',
+      existingCode: 'function build() { return createRoot("Chest"); }',
+    });
+    expect(prompt).not.toContain(PROP_CONTEXT);
+    expect(prompt).toContain('## Edit Request');
   });
 
   test('does not append the architecture directive when refining (existingCode set)', () => {

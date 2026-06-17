@@ -497,13 +497,16 @@ export const kilnScreenshotAnimationDef: KilnToolDef = {
   name: 'kiln_screenshot_animation',
   description:
     'SEE one animation clip move: renders the named clip as six frames sampled evenly from start to end ' +
-    '(each labeled with its phase %) from one camera, as a 3x2 grid. Use this after building an animated ' +
-    'character to verify the MOTION — a static screenshot cannot show it. Read the side (right) view to ' +
-    'check that a walk swings the legs forward and back (not splayed sideways and not sliding the body ' +
-    'sideways), that knees bend backward at the joint (not forward like a bird), that an attack swings ' +
-    'down and FORWARD through the front (not behind the back), and that a held weapon tracks the hand ' +
-    'through the swing. args: clip (required, the clip name), camera (default right; also front/back/left/' +
-    'top/three-quarter), perFrame (optional, separate high-res frames). If unresolvedTracks comes back ' +
+    '(each labeled with its phase %) from one camera, as a 3x2 grid. Use this after animating ANY asset to ' +
+    'verify the MOTION — a static screenshot cannot show it — whether it is a character walking, a door or ' +
+    'chest lid swinging on its hinge, a wheel/gear/turret/windmill turning on its axle, a lever or hatch ' +
+    'throwing, or a flag/frond/branch swaying. Read the side (right) view and confirm each moving part ' +
+    'travels the way it should about its OWN real pivot, and that the static base stays put. For a ' +
+    'character specifically: a walk swings the legs forward and back (not splayed sideways and not sliding ' +
+    'the body sideways), knees bend backward at the joint (not forward like a bird), an attack swings down ' +
+    'and FORWARD through the front (not behind the back), and a held weapon tracks the hand through the ' +
+    'swing. args: clip (required, the clip name), camera (default right; also front/back/left/top/' +
+    'three-quarter), perFrame (optional, separate high-res frames). If unresolvedTracks comes back ' +
     'non-empty the clip targets joints that do not exist (a name mismatch) and looks frozen — fix the ' +
     'track names. Flat-shaded CPU render; writes no files.',
   inputSchema: screenshotAnimationInput,
