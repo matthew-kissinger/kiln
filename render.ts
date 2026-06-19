@@ -12,7 +12,7 @@
 
 import * as THREE from 'three';
 import { Document, WebIO } from '@gltf-transform/core';
-import { dedup } from '@gltf-transform/functions';
+import { dedup, palette, flatten, join, weld, prune } from '@gltf-transform/functions';
 
 import {
   buildSandboxGlobals,
@@ -68,6 +68,8 @@ export interface KilnCodeMeta {
   instanceability?: InstanceabilityReport;
   /** Set if metric computation threw; the GLB is still valid. */
   metricsError?: string;
+  /** Set when an opt-in consolidation pass ran (optimize !== 'off'). */
+  optimize?: OptimizeSummary;
   [key: string]: unknown;
 }
 
@@ -437,15 +439,43 @@ export interface RenderResult {
   warnings: string[];
 }
 
+/**
+ * Bake-time material-consolidation mode (opt-in, default off).
+ *   - `off`     — today's output, byte-identical across every consumer.
+ *   - `palette` — merge distinct flat-color materials into one palette material
+ *                 + palette texture (`palette → weld → prune`). Node graph,
+ *                 named pivots, and animations are fully preserved, so it is safe
+ *                 for animated assets + Kiln City behaviors. Lifts the grade by
+ *                 collapsing the material count (the grade's primary axis).
+ *   - `full`    — `palette` plus `flatten → join` to also cut draw calls. STATIC
+ *                 assets only: auto-degrades to `palette` when the Document has
+ *                 animations or skins (flatten/join must not disturb a rig).
+ * See docs/kiln-material-consolidation-cycle.md (Move 1).
+ */
+export type OptimizeMode = 'off' | 'palette' | 'full';
+
+/** What a consolidation pass did (recorded in provenance / render.meta). */
+export interface OptimizeSummary {
+  /** The mode actually applied (may differ from the request after auto-degrade). */
+  mode: 'palette' | 'full';
+  materialsBefore: number;
+  materialsAfter: number;
+  drawsBefore: number;
+  drawsAfter: number;
+}
+
 export interface RenderSceneResult {
   /** Binary GLB bytes, platform-agnostic (Buffer-compatible in Node). */
   bytes: Uint8Array;
   tris: number;
   warnings: string[];
-  /** Post-dedup instanceability report (informational). Undefined if it threw. */
+  /** Post-dedup (and post-optimize, when enabled) instanceability report
+   *  (informational). Undefined if it threw. */
   instanceability?: InstanceabilityReport;
   /** Set if metric computation threw; bytes are still valid. */
   metricsError?: string;
+  /** Set when an opt-in consolidation pass ran (optimize !== 'off'). */
+  optimize?: OptimizeSummary;
 }
 
 export interface RenderSceneOptions {
@@ -460,6 +490,66 @@ export interface RenderSceneOptions {
   dedup?: boolean;
   /** Asset category, threaded into the instanceability grade context. */
   category?: string;
+  /**
+   * Opt-in material consolidation, applied after dedup. Defaults to the
+   * `KILN_BAKE_OPTIMIZE` env (else `off`). `off` is byte-identical to today.
+   * See {@link OptimizeMode}.
+   */
+  optimize?: OptimizeMode;
+}
+
+/** Minimum distinct material-value blocks before palette() generates a texture.
+ *  Below this it is a no-op (an asset with very few materials is already cheap). */
+const PALETTE_MIN = 5;
+
+/** Resolve the effective optimize mode: explicit option wins, else the env, else off. */
+function resolveOptimize(opt?: OptimizeMode): OptimizeMode {
+  if (opt) return opt;
+  const env = process.env['KILN_BAKE_OPTIMIZE'];
+  return env === 'palette' || env === 'full' ? env : 'off';
+}
+
+/**
+ * Run the opt-in consolidation transforms on a baked Document, in place.
+ *
+ * `palette` collapses distinct untextured flat-color materials into one palette
+ * material + a small palette texture (textured materials pass through untouched);
+ * `weld` + `prune` clean up. `full` adds `flatten → join` to also reduce draws,
+ * but ONLY for static assets — if the Document carries animations or skins it
+ * auto-degrades to `palette` so a rig is never disturbed (flatten leaves animated
+ * nodes + skeletons in place by design, and join({keepNamed:true}) never merges a
+ * named pivot, but degrading is the belt-and-braces guarantee). `prune` keeps
+ * empty leaf nodes + extras so named pivots that Kiln City behaviors target by
+ * name survive. palette groups by alpha mode, so opaque + the one glass slot stay
+ * distinct materials (transparency is never flattened into opaque).
+ *
+ * Returns what it did; throws are the caller's to handle (the GLB is otherwise
+ * valid). Pure w.r.t. inputs other than the mutated Document.
+ */
+async function consolidateMaterials(doc: Document, mode: 'palette' | 'full'): Promise<OptimizeSummary> {
+  const before = collectGlbMetrics(doc);
+  const root = doc.getRoot();
+  const animatedOrSkinned = root.listAnimations().length > 0 || root.listSkins().length > 0;
+  const effective: 'palette' | 'full' = mode === 'full' && animatedOrSkinned ? 'palette' : mode;
+
+  const steps = [palette({ min: PALETTE_MIN })];
+  if (effective === 'full') {
+    // flatten() leaves skeletons + animation-targeted nodes in place; join keeps
+    // named meshes/nodes intact so pivots survive. Both only run on static assets.
+    steps.push(flatten(), join({ keepNamed: true }));
+  }
+  steps.push(weld(), prune({ keepLeaves: true, keepExtras: true }));
+
+  await doc.transform(...steps);
+
+  const after = collectGlbMetrics(doc);
+  return {
+    mode: effective,
+    materialsBefore: before.uniqueMaterials,
+    materialsAfter: after.uniqueMaterials,
+    drawsBefore: before.drawCalls,
+    drawsAfter: after.drawCalls,
+  };
 }
 
 /**
@@ -519,13 +609,28 @@ export async function renderSceneToGLB(
     }
   }
 
-  // Instanceability metrics, measured against the post-dedup() Document so the
-  // counts reflect the GLB the runtime actually loads. Informational only —
-  // never a gate. Failure is swallowed: the GLB is still valid without it.
+  // Opt-in material consolidation (default off => byte-identical to today). Runs
+  // after dedup so palette() works on the already-merged material set. Failure is
+  // swallowed with a warning — the dedup'd GLB is still valid.
+  const optimizeMode = resolveOptimize(opts.optimize);
+  let optimize: OptimizeSummary | undefined;
+  if (optimizeMode !== 'off') {
+    try {
+      optimize = await consolidateMaterials(doc, optimizeMode);
+    } catch (err) {
+      warnings.push(`optimize (${optimizeMode}) failed: ${err instanceof Error ? err.message : String(err)}`);
+    }
+  }
+
+  // Instanceability metrics, measured against the post-dedup() (and post-optimize,
+  // when enabled) Document so the counts reflect the GLB the runtime actually
+  // loads. Informational only — never a gate. Failure is swallowed: the GLB is
+  // still valid without it. Triangle count can change under `full` (join welds
+  // primitives), so derive it from the final Document rather than the pre-bake tris.
   let instanceability: InstanceabilityReport | undefined;
   let metricsError: string | undefined;
   try {
-    const metrics: InstanceabilityMetrics = collectGlbMetrics(doc, tris);
+    const metrics: InstanceabilityMetrics = collectGlbMetrics(doc, optimize ? undefined : tris);
     instanceability = gradeInstanceability(metrics, { category: opts.category });
   } catch (err) {
     metricsError = err instanceof Error ? err.message : String(err);
@@ -534,7 +639,7 @@ export async function renderSceneToGLB(
   const io = new WebIO();
   const bytes = await io.writeBinary(doc);
 
-  return { bytes, tris, warnings, instanceability, metricsError };
+  return { bytes, tris, warnings, instanceability, metricsError, ...(optimize ? { optimize } : {}) };
 }
 
 /**
@@ -546,12 +651,13 @@ export async function renderSceneToGLB(
  *
  * Pure function: no file I/O, no globals, no WebGL.
  */
-export async function renderGLB(code: string): Promise<RenderResult> {
+export async function renderGLB(code: string, opts: { optimize?: OptimizeMode } = {}): Promise<RenderResult> {
   const { meta, root, clips, primitiveUsage } = await executeKilnCode(code);
   const scene = await renderSceneToGLB(root, {
     sceneName: meta.name || 'Scene',
     clips,
     category: typeof meta.category === 'string' ? meta.category : undefined,
+    ...(opts.optimize ? { optimize: opts.optimize } : {}),
   });
 
   return {
@@ -563,6 +669,7 @@ export async function renderGLB(code: string): Promise<RenderResult> {
       primitiveUsage,
       ...(scene.instanceability ? { instanceability: scene.instanceability } : {}),
       ...(scene.metricsError ? { metricsError: scene.metricsError } : {}),
+      ...(scene.optimize ? { optimize: scene.optimize } : {}),
     },
     warnings: scene.warnings,
   };
@@ -584,6 +691,49 @@ export async function gradeGlbBytes(
   try {
     const doc = await new WebIO().readBinary(bytes);
     return gradeInstanceability(collectGlbMetrics(doc), opts);
+  } catch {
+    return undefined;
+  }
+}
+
+/** Result of {@link optimizeGlbBytes}: the consolidated GLB + its re-graded report. */
+export interface OptimizeGlbResult {
+  /** The consolidated GLB bytes. */
+  bytes: Uint8Array;
+  /** Instanceability report recomputed on the optimized bytes. */
+  report?: InstanceabilityReport;
+  /** What the pass did. */
+  summary: OptimizeSummary;
+}
+
+/**
+ * Consolidate materials in a finished GLB, working from bytes — the web-side
+ * counterpart to {@link renderGLB}'s bake-time `optimize` option.
+ *
+ * Used by Kiln Studio: the AgentCore runtime returns an un-optimized GLB, and the
+ * web tier re-bakes it here before persisting, so consolidation reaches prod with
+ * NO wire bump / runtime change (the runtime never sees an `optimize` flag). Same
+ * `consolidateMaterials` pass + re-grade as the render path. Pure read+write:
+ * parses the GLB, transforms, re-serializes; returns `undefined` if the bytes
+ * can't be parsed or the transform throws (caller keeps the original GLB).
+ */
+export async function optimizeGlbBytes(
+  bytes: Uint8Array,
+  opts: { mode?: 'palette' | 'full'; category?: string } = {},
+): Promise<OptimizeGlbResult | undefined> {
+  const mode = opts.mode ?? 'palette';
+  try {
+    const io = new WebIO();
+    const doc = await io.readBinary(bytes);
+    const summary = await consolidateMaterials(doc, mode);
+    const outBytes = await io.writeBinary(doc);
+    let report: InstanceabilityReport | undefined;
+    try {
+      report = gradeInstanceability(collectGlbMetrics(doc), { category: opts.category });
+    } catch {
+      report = undefined;
+    }
+    return { bytes: outBytes, ...(report ? { report } : {}), summary };
   } catch {
     return undefined;
   }
