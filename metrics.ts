@@ -1,0 +1,187 @@
+/**
+ * Kiln instanceability metrics + grader.
+ *
+ * A pure, deterministic, GPU-free static analysis over a baked glTF Document.
+ * Lives in @pixel-forge/core so it can be computed at every natural point with
+ * zero deploy coupling:
+ *   - in render.ts -> render.meta for CLI / MCP / batch (never crosses the wire)
+ *   - web-side in Kiln Studio from the persisted GLB
+ *
+ * The AgentCore runtime is a pass-through transport; adding fields to its wire
+ * envelope would force a dual-image redeploy. The grade is a pure function over
+ * GLB bytes, so we never put it on the wire — we recompute it wherever the GLB
+ * already lives.
+ *
+ * NOTHING here is a hard gate. The metrics and grade are informational signals
+ * that help agents and humans understand how cheap an asset is to render at
+ * scale. They never reject, block, or fail a generation/validation/bake.
+ *
+ * See docs/kiln-instanceability-and-runtime-instancing-cycle.md.
+ */
+
+import type { Document } from '@gltf-transform/core';
+
+/**
+ * Deterministic instanceability inputs, measured against the POST-dedup() glTF
+ * Document — i.e. the GLB the runtime actually loads.
+ */
+export interface InstanceabilityMetrics {
+  /** Distinct primitive geometries uploaded to the GPU (shared meshes count once). */
+  uniqueGeometries: number;
+  /** Distinct materials after dedup(). The "expensive axis" to collapse. */
+  uniqueMaterials: number;
+  /**
+   * Naive three.js draw-call count for a single placement: for every node that
+   * references a mesh, the count of that mesh's primitives. Shared meshes
+   * referenced by N nodes contribute N times (each node is its own draw).
+   */
+  drawCalls: number;
+  /** Number of texture images in the document. */
+  textureCount: number;
+  /** True if the document contains any skin (skinned/animated character). */
+  skinned: boolean;
+  /** Count of materials with a blended alpha mode (force per-object sort). */
+  transparentMaterials: number;
+  /** Triangle total (carried through from the render pass). */
+  triangles: number;
+}
+
+export type InstanceabilityGrade = 'A' | 'B' | 'C' | 'D' | 'F';
+
+export interface InstanceabilityReport {
+  grade: InstanceabilityGrade;
+  /** One-line human summary, e.g. "B — 2 materials, 14 draw calls, opaque". */
+  summary: string;
+  /** Why the grade landed where it did (advisory bullet points). */
+  reasons: string[];
+  metrics: InstanceabilityMetrics;
+}
+
+/**
+ * Collect instanceability metrics from a baked glTF Document.
+ *
+ * Call AFTER dedup() so shared meshes/materials are already merged and the
+ * counts reflect the real GPU upload. Pass `triangles` from the render pass
+ * (countTriangles over the THREE scene) to skip re-walking accessors; omit it
+ * and the count is derived from the Document (used by the GLB-bytes path).
+ */
+export function collectGlbMetrics(doc: Document, triangles?: number): InstanceabilityMetrics {
+  const root = doc.getRoot();
+
+  const geomSet = new Set<object>();
+  const matSet = new Set<object>();
+  let drawCalls = 0;
+  let derivedTris = 0;
+
+  const primTris = (prim: import('@gltf-transform/core').Primitive): number => {
+    const idx = prim.getIndices();
+    if (idx) return Math.floor(idx.getCount() / 3);
+    const pos = prim.getAttribute('POSITION');
+    return pos ? Math.floor(pos.getCount() / 3) : 0;
+  };
+
+  // Walk every node in every scene; a node referencing a mesh issues one draw
+  // per primitive. Shared meshes (dedup-instanced) are referenced by multiple
+  // nodes and therefore counted multiple times — that's the real draw cost,
+  // and the real rendered-triangle total.
+  const visit = (node: import('@gltf-transform/core').Node): void => {
+    const mesh = node.getMesh();
+    if (mesh) {
+      for (const prim of mesh.listPrimitives()) {
+        drawCalls += 1;
+        geomSet.add(prim);
+        derivedTris += primTris(prim);
+        const mat = prim.getMaterial();
+        if (mat) matSet.add(mat);
+      }
+    }
+    for (const child of node.listChildren()) visit(child);
+  };
+  for (const scene of root.listScenes()) {
+    for (const node of scene.listChildren()) visit(node);
+  }
+
+  const transparentMaterials = root
+    .listMaterials()
+    .filter((m) => m.getAlphaMode() === 'BLEND').length;
+
+  return {
+    uniqueGeometries: geomSet.size,
+    uniqueMaterials: matSet.size,
+    drawCalls,
+    textureCount: root.listTextures().length,
+    skinned: root.listSkins().length > 0,
+    transparentMaterials,
+    triangles: triangles ?? derivedTris,
+  };
+}
+
+/**
+ * Grade instanceability A–F. Kiln-tuned, advisory only.
+ *
+ * Rubric philosophy: the cheapest-to-scale asset shares one material across
+ * shared geometry (a textbook InstancedMesh / BatchedMesh unit). The expensive,
+ * un-collapsible axis is distinct-material cardinality, so the grade is driven
+ * primarily by `uniqueMaterials`, with draw calls, transparency and texture
+ * sprawl as secondary penalties.
+ *
+ * IMPORTANT Kiln adaptation: a skinned / animated character is NOT an automatic
+ * F. Skinning only means the asset is clone-rendered rather than statically GPU-
+ * instanced — which is fine at the placement counts Kiln City sees. We note it
+ * and grade the remaining axes.
+ */
+export function gradeInstanceability(
+  metrics: InstanceabilityMetrics,
+  opts: { category?: string } = {},
+): InstanceabilityReport {
+  const reasons: string[] = [];
+  const m = metrics;
+
+  // Base grade from distinct-material cardinality (the collapsible axis).
+  let grade: InstanceabilityGrade;
+  if (m.uniqueMaterials <= 1) grade = 'A';
+  else if (m.uniqueMaterials <= 3) grade = 'B';
+  else if (m.uniqueMaterials <= 6) grade = 'C';
+  else if (m.uniqueMaterials <= 12) grade = 'D';
+  else grade = 'F';
+
+  const order: InstanceabilityGrade[] = ['A', 'B', 'C', 'D', 'F'];
+  const demote = (to: InstanceabilityGrade, why: string) => {
+    if (order.indexOf(to) > order.indexOf(grade)) {
+      grade = to;
+      reasons.push(why);
+    } else {
+      reasons.push(why);
+    }
+  };
+
+  reasons.push(
+    `${m.uniqueMaterials} material${m.uniqueMaterials === 1 ? '' : 's'}, ` +
+      `${m.uniqueGeometries} geometr${m.uniqueGeometries === 1 ? 'y' : 'ies'}, ` +
+      `${m.drawCalls} draw call${m.drawCalls === 1 ? '' : 's'}`,
+  );
+
+  // Transparency forces per-object depth sort — caps at C.
+  if (m.transparentMaterials > 0) {
+    demote('C', `${m.transparentMaterials} transparent material(s) force per-object sort`);
+  }
+
+  // Per-asset texture sprawl (un-atlased) is a scaling cost — soft penalty.
+  if (m.textureCount > 4) {
+    demote('C', `${m.textureCount} textures (consider atlasing) `.trim());
+  }
+
+  // Skinned: informational, NOT a grade penalty. Clone-rendered by design.
+  if (m.skinned) {
+    reasons.push('skinned/animated — clone-rendered (not statically GPU-instanced); fine at low counts');
+  }
+
+  if (opts.category) reasons.push(`category: ${opts.category}`);
+
+  const summary =
+    `${grade} — ${m.uniqueMaterials} mat / ${m.uniqueGeometries} geo / ${m.drawCalls} draws` +
+    (m.transparentMaterials > 0 ? ', transparent' : ', opaque') +
+    (m.skinned ? ', skinned' : '');
+
+  return { grade, summary, reasons, metrics: m };
+}

@@ -18,6 +18,12 @@ import {
   buildSandboxGlobals,
   countTriangles,
 } from './primitives';
+import {
+  collectGlbMetrics,
+  gradeInstanceability,
+  type InstanceabilityMetrics,
+  type InstanceabilityReport,
+} from './metrics';
 
 // WebIO (not NodeIO) is used for GLB serialization so the same code path
 // works in both Node and browser environments. writeBinary() only builds the
@@ -55,6 +61,13 @@ export interface KilnCodeMeta {
    * Used to drive primitive-library prioritization from real usage.
    */
   primitiveUsage?: Record<string, number>;
+  /**
+   * Instanceability metrics measured against the post-dedup() glTF Document.
+   * Informational only — never a gate. Populated by renderGLB / renderSceneToGLB.
+   */
+  instanceability?: InstanceabilityReport;
+  /** Set if metric computation threw; the GLB is still valid. */
+  metricsError?: string;
   [key: string]: unknown;
 }
 
@@ -429,6 +442,10 @@ export interface RenderSceneResult {
   bytes: Uint8Array;
   tris: number;
   warnings: string[];
+  /** Post-dedup instanceability report (informational). Undefined if it threw. */
+  instanceability?: InstanceabilityReport;
+  /** Set if metric computation threw; bytes are still valid. */
+  metricsError?: string;
 }
 
 export interface RenderSceneOptions {
@@ -441,6 +458,8 @@ export interface RenderSceneOptions {
    * to inspect raw bridge output for debugging.
    */
   dedup?: boolean;
+  /** Asset category, threaded into the instanceability grade context. */
+  category?: string;
 }
 
 /**
@@ -500,10 +519,22 @@ export async function renderSceneToGLB(
     }
   }
 
+  // Instanceability metrics, measured against the post-dedup() Document so the
+  // counts reflect the GLB the runtime actually loads. Informational only —
+  // never a gate. Failure is swallowed: the GLB is still valid without it.
+  let instanceability: InstanceabilityReport | undefined;
+  let metricsError: string | undefined;
+  try {
+    const metrics: InstanceabilityMetrics = collectGlbMetrics(doc, tris);
+    instanceability = gradeInstanceability(metrics, { category: opts.category });
+  } catch (err) {
+    metricsError = err instanceof Error ? err.message : String(err);
+  }
+
   const io = new WebIO();
   const bytes = await io.writeBinary(doc);
 
-  return { bytes, tris, warnings };
+  return { bytes, tris, warnings, instanceability, metricsError };
 }
 
 /**
@@ -520,14 +551,42 @@ export async function renderGLB(code: string): Promise<RenderResult> {
   const scene = await renderSceneToGLB(root, {
     sceneName: meta.name || 'Scene',
     clips,
+    category: typeof meta.category === 'string' ? meta.category : undefined,
   });
 
   return {
     glb: Buffer.from(scene.bytes),
     tris: scene.tris,
-    meta: { ...meta, tris: scene.tris, primitiveUsage },
+    meta: {
+      ...meta,
+      tris: scene.tris,
+      primitiveUsage,
+      ...(scene.instanceability ? { instanceability: scene.instanceability } : {}),
+      ...(scene.metricsError ? { metricsError: scene.metricsError } : {}),
+    },
     warnings: scene.warnings,
   };
+}
+
+/**
+ * Grade instanceability directly from baked GLB bytes.
+ *
+ * Used by consumers that hold a finished GLB but not its THREE scene — e.g.
+ * Kiln Studio computing the grade web-side from the persisted artifact, so the
+ * AgentCore runtime never has to (no wire bump, no runtime image rebuild). Pure
+ * read: parses the GLB, walks the post-dedup document, grades. Never throws on a
+ * valid GLB; returns undefined if the bytes can't be parsed.
+ */
+export async function gradeGlbBytes(
+  bytes: Uint8Array,
+  opts: { category?: string } = {},
+): Promise<InstanceabilityReport | undefined> {
+  try {
+    const doc = await new WebIO().readBinary(bytes);
+    return gradeInstanceability(collectGlbMetrics(doc), opts);
+  } catch {
+    return undefined;
+  }
 }
 
 // =============================================================================

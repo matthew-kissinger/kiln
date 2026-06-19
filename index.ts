@@ -12,7 +12,7 @@ import type { KilnCodeMeta } from './render';
 import { renderGLB } from './render';
 import { generateKilnCode, resolveCodegenMode } from './generate';
 
-export { renderGLB, renderSceneToGLB, inspectGeneratedAnimation } from './render';
+export { renderGLB, renderSceneToGLB, inspectGeneratedAnimation, gradeGlbBytes } from './render';
 export {
   generateKilnCode,
   editKilnCode,
@@ -29,6 +29,12 @@ export type {
   KilnGenerateCallOptions,
 } from './generate';
 export { validate, validateKilnCode } from './validation';
+export { collectGlbMetrics, gradeInstanceability } from './metrics';
+export type {
+  InstanceabilityMetrics,
+  InstanceabilityGrade,
+  InstanceabilityReport,
+} from './metrics';
 export { inspect } from './inspect';
 export type {
   InspectResult,

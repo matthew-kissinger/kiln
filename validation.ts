@@ -156,12 +156,26 @@ function estimateGeometryTris(
   }
 }
 
+// Advisory-only soft reference points, NOT limits. Raised substantially in the
+// 2026-06 instanceability cycle: the old values (character 5000 / prop 3000 /
+// vfx 2000 / environment 15000) predated the More-detail toggle and the finding
+// that triangles are not a cost driver (input tokens dominate generation cost,
+// and runtime cost is draw-calls-not-tris). These exist only so a wildly over-
+// budget asset gets a gentle informational nudge; they never gate. See
+// docs/kiln-instanceability-and-runtime-instancing-cycle.md.
 const CATEGORY_TRI_BUDGETS: Record<string, number> = {
-  character: 5000,
-  prop: 3000,
-  vfx: 2000,
-  environment: 15000,
+  character: 40000,
+  prop: 25000,
+  vfx: 15000,
+  environment: 120000,
+  vehicle: 40000,
+  weapon: 20000,
+  building: 60000,
+  architecture: 60000,
 };
+// Fallback when a category has no specific entry, so the advisory still has a
+// reference point instead of silently never firing.
+const DEFAULT_TRI_BUDGET = 40000;
 
 // =============================================================================
 // Core validator
@@ -301,14 +315,17 @@ export function validate(
     });
   }
 
-  // Tri-count advisory. Only warn; LLMs over- and under-estimate both ways.
-  if (analysis.estimatedTris > 0) {
-    const budget = opts.category ? CATEGORY_TRI_BUDGETS[opts.category] : undefined;
-    if (budget && analysis.estimatedTris > budget * 1.5) {
+  // Tri-count advisory — INFORMATIONAL ONLY, never a gate (it is a warning, so
+  // it never sets valid:false). LLMs over- and under-estimate both ways, tris
+  // are not a cost driver, and the More-detail toggle deliberately pushes tris
+  // up — so this only nudges on assets well past a generous soft reference.
+  if (analysis.estimatedTris > 0 && opts.category) {
+    const budget = CATEGORY_TRI_BUDGETS[opts.category] ?? DEFAULT_TRI_BUDGET;
+    if (analysis.estimatedTris > budget * 1.5) {
       warnings.push({
         code: 'TRI_BUDGET_EXCEEDED',
-        message: `Estimated ${analysis.estimatedTris} tris — category "${opts.category}" suggests <= ${budget}`,
-        fixHint: 'Reduce segments on cylinderGeo/sphereGeo, or drop decorative parts.',
+        message: `Estimated ${analysis.estimatedTris} tris (informational; "${opts.category}" assets typically land under ~${budget}). This is not a limit — keep the detail if the silhouette needs it.`,
+        fixHint: 'Only if the asset feels over-dense: reduce segments on cylinderGeo/sphereGeo, or drop hidden interior parts.',
       });
     }
   }

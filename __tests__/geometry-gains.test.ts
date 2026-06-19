@@ -130,9 +130,9 @@ describe('tri estimate upgrades', () => {
       { category: 'vfx' }, // 2000 budget — single counting stays silent
     );
     expect(r.valid).toBe(true);
-    // 30 spheres at 32x16 → 30 * 1024 = 30720 >> any budget → advisory fires.
+    // 50 spheres at 32x16 → 50 * 1024 = 51200 > prop budget (25000) * 1.5 → advisory fires.
     const heavy = validate(
-      wrap(`for (let i = 0; i < 30; i++) {
+      wrap(`for (let i = 0; i < 50; i++) {
         createPart('S' + i, sphereGeo(0.5, 32, 16), gameMaterial('#999999'), { parent: root });
       }`),
       { category: 'prop' },
@@ -144,10 +144,10 @@ describe('tri estimate upgrades', () => {
     const r = validate(
       wrap(`
         createPart('Gear', gearGeo({ teeth: 64 }), gameMaterial('#999999'), { parent: root }); // ~2048
-        const blob = subdivide(sphereGeo(1, 16, 12), 2); // 384 base + 384*15 growth
+        const blob = subdivide(sphereGeo(1, 16, 12), 3); // 384 base * 64 → ~24576
         createPart('Blob', blob, gameMaterial('#999999'), { parent: root });
       `),
-      { category: 'vfx' }, // budget 2000 → combined ~8200 trips the advisory
+      { category: 'vfx' }, // budget 15000 * 1.5 = 22500 → combined ~26600 trips the advisory
     );
     expect(r.warnings.some((w) => w.message.includes('tris'))).toBe(true);
   });

@@ -130,12 +130,21 @@ function runListPrimitives(input: z.infer<typeof listPrimitivesInput>): {
 // kiln_validate
 // =============================================================================
 
+/** Cheaply extract the declared category from the code's `meta` block so the
+ *  tri advisory has a reference point. The model writes `category` into meta, so
+ *  this reaches every door (CLI/MCP/studio) without threading external context. */
+function extractCategory(code: string): string | undefined {
+  const m = /category\s*:\s*['"]([^'"]+)['"]/.exec(code);
+  return m?.[1];
+}
+
 function runValidate(input: z.infer<typeof validateInput>): {
   valid: boolean;
   errors: string[];
   warnings: string[];
 } {
-  const result = validate(input.code);
+  const category = extractCategory(input.code);
+  const result = validate(input.code, category ? { category } : {});
   return {
     valid: result.valid,
     errors: result.errors,
@@ -157,6 +166,8 @@ export interface KilnRenderMetrics {
    *  bbox.min[1] dips below 0, this names the buried part so the agent can
    *  judge intent (earthworks/keels are fine; wheels/tails/missiles are not). */
   lowestPart?: { name: string; y: number };
+  /** Post-dedup instanceability grade (informational): how cheap to render at scale. */
+  instanceability?: { grade: string; summary: string };
   warnings: string[];
   error?: string;
 }
@@ -222,7 +233,7 @@ function collectSceneMetrics(root: THREE.Object3D): SceneMetrics {
  */
 async function runRender(input: z.infer<typeof renderInput>): Promise<KilnRenderMetrics> {
   try {
-    const { root, clips } = await executeKilnCode(input.code);
+    const { meta, root, clips } = await executeKilnCode(input.code);
 
     // Structural advisories (floating parts / stray planes at origin).
     const structuralWarnings = inspectSceneStructure(root);
@@ -230,7 +241,8 @@ async function runRender(input: z.infer<typeof renderInput>): Promise<KilnRender
 
     // Render to GLB bytes for the triangle count. Output is discarded — pure
     // metrics, no files written.
-    const rendered = await renderSceneToGLB(root, { clips });
+    const category = typeof meta.category === 'string' ? meta.category : undefined;
+    const rendered = await renderSceneToGLB(root, { clips, category });
 
     const warnings = [...structuralWarnings, ...rendered.warnings];
 
@@ -241,6 +253,9 @@ async function runRender(input: z.infer<typeof renderInput>): Promise<KilnRender
       materials: metrics.materials,
       bbox: metrics.bbox,
       lowestPart: metrics.lowestPart,
+      ...(rendered.instanceability
+        ? { instanceability: { grade: rendered.instanceability.grade, summary: rendered.instanceability.summary } }
+        : {}),
       warnings,
     };
   } catch (err) {
@@ -317,6 +332,8 @@ export interface KilnRenderViewsResult {
   materials?: number;
   bbox?: { min: number[]; max: number[]; size: number[] };
   lowestPart?: { name: string; y: number };
+  /** Post-dedup instanceability grade (informational): how cheap to render at scale. */
+  instanceability?: { grade: string; summary: string };
   /** View names in grid order (row-major): Front, Right, Back, Left, Top, 3/4. */
   views?: string[];
   gridWidth?: number;
@@ -340,13 +357,14 @@ export interface KilnRenderViewsResult {
 async function runRenderViews(input: z.infer<typeof renderInput>): Promise<KilnRenderViewsResult> {
   try {
     const { renderViewGrid } = await import('../views');
-    const { root, clips } = await executeKilnCode(input.code);
+    const { meta, root, clips } = await executeKilnCode(input.code);
 
     const structuralWarnings = inspectSceneStructure(root);
     const metrics = collectSceneMetrics(root);
 
     // Single execution, two consumers — both read-only on `root`.
-    const rendered = await renderSceneToGLB(root, { clips });
+    const category = typeof meta.category === 'string' ? meta.category : undefined;
+    const rendered = await renderSceneToGLB(root, { clips, category });
     const grid = await renderViewGrid(root);
 
     const warnings = [...structuralWarnings, ...rendered.warnings];
@@ -358,6 +376,9 @@ async function runRenderViews(input: z.infer<typeof renderInput>): Promise<KilnR
       materials: metrics.materials,
       bbox: metrics.bbox,
       lowestPart: metrics.lowestPart,
+      ...(rendered.instanceability
+        ? { instanceability: { grade: rendered.instanceability.grade, summary: rendered.instanceability.summary } }
+        : {}),
       views: grid.views,
       gridWidth: grid.width,
       gridHeight: grid.height,
@@ -382,7 +403,7 @@ async function runRenderViews(input: z.infer<typeof renderInput>): Promise<KilnR
 export const kilnRenderViewsDef: KilnToolDef = {
   name: 'kiln_render',
   description:
-    'Execute the current model and SEE it: returns geometry metrics (triangle count, mesh + material counts, world-space bounding box, and lowestPart — the mesh touching the lowest point, which must be intentional below Y=0 like earthworks or keels, never wheels/tails/equipment) TOGETHER with a six-view image grid. ' +
+    'Execute the current model and SEE it: returns geometry metrics (triangle count, mesh + material counts, world-space bounding box, lowestPart — the mesh touching the lowest point, which must be intentional below Y=0 like earthworks or keels, never wheels/tails/equipment, and an instanceability grade A–F — informational, how cheap to render at scale) TOGETHER with a six-view image grid. ' +
     'Row 1 = Front (camera on +X, the nose/muzzle should face you), Right (+Z, the long profile), Back (-X); ' +
     'row 2 = Left (-Z), Top (+Y, check symmetry), 3/4 perspective (check part contact and overall read). ' +
     'Use it to confirm the model builds and to verify orientation (+X forward), attachment (no floating parts), proportion, and silhouette. ' +
@@ -612,14 +633,14 @@ export const kilnToolRegistry: KilnToolDef[] = [
   {
     name: 'kiln_validate',
     description:
-      'Statically validate Kiln source code before rendering. Checks for the required `meta` const and `build()` function, `value:` keyframe typos, infinite loops, recursive build() calls, syntax errors, and triangle-budget advisories. Returns { valid, errors, warnings }. Run this to catch mistakes cheaply before kiln_render.',
+      'Statically validate Kiln source code before rendering. Checks for the required `meta` const and `build()` function, `value:` keyframe typos, infinite loops, recursive build() calls, and syntax errors. Returns { valid, errors, warnings }. Warnings are advisory only (they never make code invalid), including a soft, generous triangle-count nudge. Run this to catch mistakes cheaply before kiln_render.',
     inputSchema: validateInput,
     run: async (input) => runValidate(validateInput.parse(input)),
   },
   {
     name: 'kiln_render',
     description:
-      'Execute Kiln code and render it to an in-memory GLB, returning geometry metrics: triangle count, mesh count, material count, the world-space bounding box, and lowestPart (the mesh touching the lowest point — anything below Y=0 must be intentionally below-grade like earthworks or keels, never wheels/tails/equipment). Includes structural warnings for floating parts and stray planes left at the origin. Use this to confirm a model builds and to inspect its size and structure. Does not write any files.',
+      'Execute Kiln code and render it to an in-memory GLB, returning geometry metrics: triangle count, mesh count, material count, the world-space bounding box, lowestPart (the mesh touching the lowest point — anything below Y=0 must be intentionally below-grade like earthworks or keels, never wheels/tails/equipment), and an instanceability grade (A–F, informational: how cheap the asset is to render at scale — driven by distinct-material count; fewer shared materials grade higher). Includes structural warnings for floating parts and stray planes left at the origin. Use this to confirm a model builds and to inspect its size and structure. Does not write any files.',
     inputSchema: renderInput,
     run: async (input) => runRender(renderInput.parse(input)),
   },
