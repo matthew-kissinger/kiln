@@ -160,7 +160,14 @@ function lastMessageText(message: Message | undefined): string | undefined {
  * on `result.error` with whatever metrics were collected beforehand.
  */
 export async function runKilnAgent(opts: RunKilnAgentOptions): Promise<RunKilnAgentResult> {
-  const metrics = new MetricsCollector(opts.onEvent);
+  // Hard agent-loop cap (runaway backstop, NOT a throttle): a stuck model could
+  // otherwise loop draft/edit/render forever, re-feeding a growing transcript
+  // (input tokens scale ~linearly with step count). Default 40 — ~4x the normal
+  // run (~10 model calls) and clear of the slowest legit runs observed (~23); only
+  // catches genuine infinite loops. Env-overridable (set 0 to disable, raise for
+  // an unusually deep build).
+  const maxSteps = Number(process.env['KILN_AGENT_MAX_STEPS'] ?? 40) || 0;
+  const metrics = new MetricsCollector(opts.onEvent, maxSteps);
   const surface = resolveToolSurface(opts.toolSurface);
   // Edit mode is a `current`-surface concept (the unified surface always uses the
   // buffer factory, regardless of refineMode). Engages only when refining.
@@ -279,6 +286,19 @@ export async function runKilnAgent(opts: RunKilnAgentOptions): Promise<RunKilnAg
     }
     const lastText = lastMessageText(result.lastMessage);
     if (!code) code = lastText;
+
+    // If the loop was halted by the step cap, surface it as a clear failure
+    // rather than trying to render a half-finished buffer (bounds cost, and the
+    // gen is honestly marked failed instead of shipping a truncated asset).
+    if (metrics.wasCapped()) {
+      const collected = metrics.readMetrics();
+      return {
+        toolCalls: collected.toolCalls,
+        steps: collected.steps,
+        ...(collected.usage ? { usage: collected.usage } : {}),
+        error: `kiln agent exceeded ${maxSteps} model calls (step cap) — aborted to bound cost`,
+      };
+    }
 
     const collected = metrics.readMetrics();
     // Buffer-backed surfaces (unified or edit-mode refine) carry a surgical-edit

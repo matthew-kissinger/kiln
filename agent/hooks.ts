@@ -11,7 +11,7 @@
  * `recordResultUsage(result.metrics?.latestAgentInvocation?.usage)`, read
  * `readMetrics()`, then `detach()`.
  */
-import { type Agent, BeforeToolCallEvent, AfterModelCallEvent } from '@strands-agents/sdk';
+import { type Agent, BeforeToolCallEvent, BeforeModelCallEvent, AfterModelCallEvent } from '@strands-agents/sdk';
 
 /** Token-usage subset we surface. */
 export interface AgentUsage {
@@ -35,14 +35,23 @@ export class MetricsCollector {
   private readonly toolCalls: string[] = [];
   private steps = 0;
   private usage: AgentUsage | undefined;
+  private capped = false;
   private cleanups: Array<() => void> = [];
 
   /**
    * @param onEvent - Optional live sink, fired as the loop runs (tool calls,
    * model calls). Errors thrown by the sink are swallowed — a broken progress
    * listener must never fail a generation.
+   * @param maxSteps - Optional hard cap on model calls (agent-loop iterations).
+   * When the loop reaches this many calls, the NEXT model call is cancelled
+   * (SDK `BeforeModelCallEvent.cancel`), ending the loop with a clean stop
+   * instead of an unbounded tool/edit/render loop. A pure cost backstop — set
+   * well above normal runs (~10 calls); only catches runaways. 0/undefined = off.
    */
-  constructor(private readonly onEvent?: (event: KilnAgentEvent) => void) {}
+  constructor(
+    private readonly onEvent?: (event: KilnAgentEvent) => void,
+    private readonly maxSteps?: number,
+  ) {}
 
   private emit(event: KilnAgentEvent): void {
     if (!this.onEvent) return;
@@ -63,8 +72,25 @@ export class MetricsCollector {
       this.steps += 1;
       this.emit({ type: 'model_call', step: this.steps });
     });
+    // Hard step cap: before a model call that would exceed maxSteps, cancel it.
+    // The SDK ends the loop with stopReason 'endTurn' (no exception) — `capped`
+    // lets the caller turn that bounded stop into a clear failed generation.
+    const offCap = this.maxSteps && this.maxSteps > 0
+      ? agent.addHook(BeforeModelCallEvent, (event) => {
+          if (this.steps >= this.maxSteps!) {
+            this.capped = true;
+            event.cancel = `kiln: agent step cap reached (${this.maxSteps} model calls) — aborted to bound cost`;
+          }
+        })
+      : undefined;
     this.cleanups.push(offTool, offModel);
+    if (offCap) this.cleanups.push(offCap);
     return () => this.detach();
+  }
+
+  /** True if the loop was halted by the model-call cap (vs the model stopping). */
+  wasCapped(): boolean {
+    return this.capped;
   }
 
   /** Remove all attached hooks. Idempotent. */
