@@ -12,7 +12,14 @@
 
 import * as THREE from 'three';
 import { Document, WebIO } from '@gltf-transform/core';
-import { dedup, palette, flatten, join, weld, prune } from '@gltf-transform/functions';
+import { dedup, palette, flatten, join, weld, prune, mergeDocuments } from '@gltf-transform/functions';
+
+import {
+  buildSlotIndex,
+  chooseSlot,
+  hexToLinearRgb,
+  type SnapSlot,
+} from './palette-snap';
 
 import {
   buildSandboxGlobals,
@@ -37,6 +44,7 @@ type GtMesh = import('@gltf-transform/core').Mesh;
 type GtMaterial = import('@gltf-transform/core').Material;
 type GtBuffer = import('@gltf-transform/core').Buffer;
 type GtTexture = import('@gltf-transform/core').Texture;
+type GtScene = import('@gltf-transform/core').Scene;
 
 // Accessor.Type is typed as Record<string, AccessorType> which runs afoul of
 // noUncheckedIndexedAccess. Use the literal strings directly - same values,
@@ -737,6 +745,250 @@ export async function optimizeGlbBytes(
   } catch {
     return undefined;
   }
+}
+
+// =============================================================================
+// Palette snap (scene palettes) — web-side hard snap to a user-defined palette
+// =============================================================================
+
+/** One slot the GLB snap targets: a color + kind + optional PBR/opacity. */
+export interface SnapPaletteSlot {
+  /** sRGB hex (e.g. `#9fc9a3`). */
+  color: string;
+  /** Defaults to 'opaque'. transparent material → glass, emissive → glow. */
+  kind?: 'opaque' | 'glass' | 'glow';
+  metalness?: number;
+  roughness?: number;
+  /** Opacity for a glass slot (default 0.4). */
+  opacity?: number;
+}
+
+/** Result of {@link snapGlbToPalette}. */
+export interface SnapGlbResult {
+  /** The snapped + consolidated GLB bytes. */
+  bytes: Uint8Array;
+  /** Instanceability report recomputed on the snapped bytes. */
+  report?: InstanceabilityReport;
+  /** What the consolidation pass did. */
+  summary: OptimizeSummary;
+  /** Materials whose color was rewritten to a slot. */
+  snapped: number;
+  /** Materials left unchanged (textured / hero, or no eligible slot). */
+  skipped: number;
+}
+
+/**
+ * Hard-snap a finished GLB's materials to a user-defined palette — the bake-time,
+ * persisted counterpart of the Kiln City frontend snap. Each flat-color material's
+ * base color is rewritten to the perceptually-nearest slot (OKLab, via
+ * {@link chooseSlot}) and its PBR set from that slot, so a whole batch generated
+ * against one palette lands on exactly those colors and collapses (after
+ * `consolidateMaterials`) to ~one material per slot — "reads as one place" + a few
+ * draws. Textured / hero materials are left untouched (they carry their own color).
+ *
+ * Pure read+write (parses GLB, rewrites, re-serializes); returns `undefined` if the
+ * bytes can't be parsed or the transform throws (caller keeps the original GLB),
+ * mirroring {@link optimizeGlbBytes}.
+ */
+export async function snapGlbToPalette(
+  bytes: Uint8Array,
+  slots: readonly SnapPaletteSlot[],
+  opts: { category?: string } = {},
+): Promise<SnapGlbResult | undefined> {
+  if (slots.length === 0) return undefined;
+  try {
+    const io = new WebIO();
+    const doc = await io.readBinary(bytes);
+    const before = collectGlbMetrics(doc);
+    const idx = buildSlotIndex(slots as readonly SnapSlot[]);
+    let snapped = 0;
+    let skipped = 0;
+    for (const mat of doc.getRoot().listMaterials()) {
+      // Hero exception — never recolor a textured material (it carries its own color).
+      if (mat.getBaseColorTexture()) { skipped++; continue; }
+      const base = mat.getBaseColorFactor();
+      const emissive = mat.getEmissiveFactor();
+      const transparent = mat.getAlphaMode() === 'BLEND' || mat.getAlpha() < 0.98;
+      const slotI = chooseSlot(idx, {
+        baseLinear: [base[0], base[1], base[2]],
+        emissiveLinear: [emissive[0], emissive[1], emissive[2]],
+        transparent,
+      });
+      if (slotI === undefined) { skipped++; continue; }
+      const slot = slots[slotI]!;
+      const kind = slot.kind ?? 'opaque';
+      const [lr, lg, lb] = hexToLinearRgb(slot.color);
+      const alpha = kind === 'glass' ? (slot.opacity ?? 0.4) : 1;
+      mat.setBaseColorFactor([lr, lg, lb, alpha]);
+      mat.setMetallicFactor(slot.metalness ?? 0);
+      mat.setRoughnessFactor(slot.roughness ?? (kind === 'glass' ? 0.1 : 0.85));
+      if (kind === 'glass') mat.setAlphaMode('BLEND');
+      else if (mat.getAlphaMode() === 'BLEND') mat.setAlphaMode('OPAQUE');
+      // Glow keeps a "lit" look by emitting its slot color; clear stray emissive otherwise.
+      mat.setEmissiveFactor(kind === 'glow' ? [lr, lg, lb] : [0, 0, 0]);
+      snapped++;
+    }
+    // Snapping made many materials value-identical — dedup merges those objects first
+    // (palette() alone keeps distinct objects), then consolidate collapses further.
+    await doc.transform(dedup());
+    await consolidateMaterials(doc, 'palette');
+    // Summary spans the WHOLE snap (original → final), not just the consolidation sub-step,
+    // so provenance shows the true material collapse (e.g. 14 → 4).
+    const after = collectGlbMetrics(doc);
+    const summary: OptimizeSummary = {
+      mode: 'palette',
+      materialsBefore: before.uniqueMaterials,
+      materialsAfter: after.uniqueMaterials,
+      drawsBefore: before.drawCalls,
+      drawsAfter: after.drawCalls,
+    };
+    const outBytes = await io.writeBinary(doc);
+    let report: InstanceabilityReport | undefined;
+    try {
+      report = gradeInstanceability(after, { category: opts.category });
+    } catch {
+      report = undefined;
+    }
+    return { bytes: outBytes, ...(report ? { report } : {}), summary, snapped, skipped };
+  } catch {
+    return undefined;
+  }
+}
+
+// =============================================================================
+// Scene composition — merge N placed GLBs into one scene GLB (export)
+// =============================================================================
+
+/** One placed asset to compose into the scene: its GLB bytes + a world transform. */
+export interface SceneComposePart {
+  bytes: Uint8Array;
+  transform: {
+    /** World position [x, y, z], engine frame (+X fwd, +Y up, ground Y=0), meters. */
+    pos: [number, number, number];
+    /** Euler rotation in DEGREES, XYZ order (the Kiln/Placement convention). */
+    rotDeg: [number, number, number];
+    /** Per-axis scale. */
+    scale: [number, number, number];
+  };
+  /** Wrapper node name (e.g. an instanceId) — a debug aid in the exported file. */
+  name?: string;
+}
+
+export interface SceneComposeOptions {
+  /** glTF scene name. Default 'Scene'. */
+  sceneName?: string;
+  /** Material consolidation across the merged scene. Default 'palette' (a few draws). */
+  optimize?: OptimizeMode;
+  /** Keep each asset's animation clips. Default false (static dressing). */
+  keepAnimations?: boolean;
+}
+
+export interface SceneComposeResult {
+  /** The composed scene GLB bytes. */
+  bytes: Uint8Array;
+  tris: number;
+  /** Draw calls in the composed scene (post-optimize). */
+  draws: number;
+  /** Distinct materials in the composed scene (post-optimize). */
+  materials: number;
+  /** Per-part skip notes + transform warnings (never throws on one bad part). */
+  warnings: string[];
+}
+
+/** Euler degrees (XYZ) → a glTF quaternion [x, y, z, w] via THREE (the viewer's frame). */
+function eulerDegToQuat(deg: [number, number, number]): [number, number, number, number] {
+  const e = new THREE.Euler(
+    THREE.MathUtils.degToRad(deg[0]),
+    THREE.MathUtils.degToRad(deg[1]),
+    THREE.MathUtils.degToRad(deg[2]),
+    'XYZ',
+  );
+  const q = new THREE.Quaternion().setFromEuler(e);
+  return [q.x, q.y, q.z, q.w];
+}
+
+/**
+ * Compose N placed GLBs into a single scene GLB — the Scenes-page export primitive.
+ *
+ * Pure gltf-transform (no THREE GLTFLoader, whose texture path is browser-DOM-bound):
+ * each part's bytes are read into a Document, `mergeDocuments` copies its graph into a
+ * master Document (textures copied as bytes, lossless), and its scene roots are
+ * reparented under a fresh transform node carrying the placement's TRS. One merge per
+ * placement (a Node can't have two parents); a final `dedup()` collapses repeated
+ * blueprints (e.g. 30 identical fence posts) and `consolidateMaterials` keeps the
+ * export to a few draws. A corrupt/unreadable part becomes a warning and is skipped,
+ * never failing the whole export.
+ *
+ * Runs under Bun in the web tier (same WebIO read→transform→write path as
+ * {@link optimizeGlbBytes}). Pure: no fs / globals / WebGL.
+ */
+export async function composeSceneGLB(
+  parts: readonly SceneComposePart[],
+  opts: SceneComposeOptions = {},
+): Promise<SceneComposeResult> {
+  const warnings: string[] = [];
+  const io = new WebIO();
+  const master = new Document();
+  const masterScene = master.createScene(opts.sceneName ?? 'Scene');
+  let composed = 0;
+
+  for (let i = 0; i < parts.length; i++) {
+    const part = parts[i]!;
+    try {
+      const src = await io.readBinary(part.bytes);
+      const srcScene = src.getRoot().listScenes()[0];
+      const map = mergeDocuments(master, src);
+      const wrap = master
+        .createNode(part.name ?? `part_${i}`)
+        .setTranslation([part.transform.pos[0], part.transform.pos[1], part.transform.pos[2]])
+        .setRotation(eulerDegToQuat(part.transform.rotDeg))
+        .setScale([part.transform.scale[0], part.transform.scale[1], part.transform.scale[2]]);
+      const mergedScene = srcScene ? (map.get(srcScene) as GtScene | undefined) : undefined;
+      if (mergedScene) {
+        for (const child of mergedScene.listChildren()) wrap.addChild(child);
+        mergedScene.dispose();
+      }
+      masterScene.addChild(wrap);
+      composed++;
+    } catch (err) {
+      warnings.push(`part ${i} (${part.name ?? ''}) skipped: ${err instanceof Error ? err.message : String(err)}`);
+    }
+  }
+
+  if (composed === 0) throw new Error('composeSceneGLB: no parts could be merged');
+
+  // Static dressing has no shared timeline — drop per-asset clips unless asked to keep.
+  if (!opts.keepAnimations) {
+    for (const anim of master.getRoot().listAnimations()) anim.dispose();
+  }
+
+  try {
+    await master.transform(dedup());
+  } catch (err) {
+    warnings.push(`dedup failed: ${err instanceof Error ? err.message : String(err)}`);
+  }
+
+  const optimizeMode: OptimizeMode = opts.optimize ?? 'palette';
+  if (optimizeMode !== 'off') {
+    try {
+      await consolidateMaterials(master, optimizeMode);
+    } catch (err) {
+      warnings.push(`optimize (${optimizeMode}) failed: ${err instanceof Error ? err.message : String(err)}`);
+    }
+  }
+
+  // mergeDocuments brings each source's Buffer across, but a GLB allows ≤1 buffer.
+  // Reassign every accessor to the first buffer and drop the rest.
+  const rootBuffers = master.getRoot().listBuffers();
+  if (rootBuffers.length > 1) {
+    const main = rootBuffers[0]!;
+    for (const acc of master.getRoot().listAccessors()) acc.setBuffer(main);
+    for (let i = 1; i < rootBuffers.length; i++) rootBuffers[i]!.dispose();
+  }
+
+  const metrics = collectGlbMetrics(master);
+  const bytes = await io.writeBinary(master);
+  return { bytes, tris: metrics.triangles, draws: metrics.drawCalls, materials: metrics.uniqueMaterials, warnings };
 }
 
 // =============================================================================

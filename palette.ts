@@ -72,15 +72,30 @@ export const OPTIMIZED_PALETTE: readonly PaletteSlot[] = [
 
 /**
  * Render the authoring directive appended to the agent prompt when the
- * "Optimized palette" toggle is on. Natural-language guidance that names the
- * shared roles and instructs the model to reuse them rather than authoring a
- * unique material per part — so the asset bakes down to ~1 material (grade A/B).
+ * "Optimized palette" toggle is on (or a custom scene palette is chosen). Natural-
+ * language guidance that names the shared roles and instructs the model to reuse
+ * them rather than authoring a unique material per part — so the asset bakes down
+ * to ~1 material per role (grade A/B).
  *
- * Deterministic (pure function of {@link OPTIMIZED_PALETTE}); the kiln-studio
- * `OPTIMIZED_PALETTE_DIRECTIVE` mirror is asserted equal to this in a parity test.
+ * Pass `slots` to point the directive at a user-defined scene palette (the
+ * configurable-palettes arc); the default is the canonical {@link OPTIMIZED_PALETTE}.
+ * The glass/glow sentences adapt to whether the palette actually has such a slot, so
+ * a custom palette without transparent/emissive roles doesn't name a role that isn't
+ * there. Deterministic; the kiln-studio `OPTIMIZED_PALETTE_DIRECTIVE` mirror (no-arg
+ * call) is asserted equal to this in a parity test.
  */
-export function renderPaletteDirective(): string {
-  const lines = OPTIMIZED_PALETTE.map((s) => `- ${s.name}: ${s.use}`).join('\n');
+export function renderPaletteDirective(slots: readonly PaletteSlot[] = OPTIMIZED_PALETTE): string {
+  const lines = slots.map((s) => `- ${s.name}: ${s.use}`).join('\n');
+  const glass = slots.find((s) => s.transparent);
+  const glow = slots.find((s) => s.emissive);
+  const glassSentence = glass
+    ? `"${glass.name}" is the ONLY transparent material — use it for every window, lens, or ` +
+      'see-through part and nothing else; keep all other materials fully opaque. '
+    : 'Keep every material fully opaque (this palette has no transparent role). ';
+  const glowSentence = glow
+    ? `"${glow.name}" is the ONLY emissive material — use it for anything that should look lit ` +
+      '(lamps, fire cores, neon, magic). '
+    : '';
   return (
     '## Optimized, instanceable build\n' +
     'A game-ready asset is cheap to render in bulk when its parts SHARE materials and SHARE ' +
@@ -92,9 +107,9 @@ export function renderPaletteDirective(): string {
     `${lines}\n\n` +
     'Use FLAT SOLID COLORS for every role — no image textures, gradients, or per-part color maps. ' +
     'Flat colors are exactly what let the materials collapse into one; a textured material cannot be ' +
-    'merged. "glass" is the ONLY transparent material — use it for every window, lens, or ' +
-    'see-through part and nothing else; keep all other materials fully opaque. "glow" is the ONLY ' +
-    'emissive material — use it for anything that should look lit (lamps, fire cores, neon, magic). ' +
+    'merged. ' +
+    glassSentence +
+    glowSentence +
     'When a color you want is not named exactly, choose the closest role rather than introducing a ' +
     'new material; it is good and expected for many parts to share one role.\n\n' +
     'GEOMETRY — when the asset has repeated identical parts (wheels, windows, railings, fence posts, ' +
