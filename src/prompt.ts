@@ -36,7 +36,7 @@ Generate assets with a low-poly aesthetic:
 - No small decorative elements
 - Chunky proportions`,
 
-  'stylized': `## Style: Stylized Cartoon
+  stylized: `## Style: Stylized Cartoon
 Generate assets with a stylized cartoon aesthetic:
 - Use 12-16 segments for smoother curves
 - Exaggerated proportions (big heads, small bodies for characters)
@@ -45,7 +45,7 @@ Generate assets with a stylized cartoon aesthetic:
 - Can include small decorative details
 - Playful, whimsical shapes`,
 
-  'voxel': `## Style: Voxel
+  voxel: `## Style: Voxel
 Generate assets with a voxel/Minecraft-like aesthetic:
 - Use ONLY box geometry (boxGeo)
 - No spheres, cylinders, or curved shapes
@@ -54,7 +54,7 @@ Generate assets with a voxel/Minecraft-like aesthetic:
 - Flat shading always
 - Blocky proportions`,
 
-  'detailed': `## Style: Detailed
+  detailed: `## Style: Detailed
 Generate assets with more geometric detail:
 - Use 24-32 segments for smooth surfaces
 - Include small decorative elements (buttons, rivets, trim)
@@ -63,14 +63,14 @@ Generate assets with more geometric detail:
 - Can use metallic/roughness for PBR looks
 - Realistic proportions`,
 
-  'realistic': `## Style: Realistic
+  realistic: `## Style: Realistic
 Generate assets with realistic proportions and detail:
 - Use 32-64 segments for very smooth surfaces
 - Accurate real-world proportions
 - Multiple materials with PBR properties (metalness, roughness)
 - Include fine details (seams, edges, bevels)
 - Subtle color gradients
-- Higher triangle budgets allowed`
+- Higher triangle budgets allowed`,
 };
 
 // =============================================================================

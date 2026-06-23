@@ -173,7 +173,9 @@ export function gradeInstanceability(
 
   // Skinned: informational, NOT a grade penalty. Clone-rendered by design.
   if (m.skinned) {
-    reasons.push('skinned/animated — clone-rendered (not statically GPU-instanced); fine at low counts');
+    reasons.push(
+      'skinned/animated — clone-rendered (not statically GPU-instanced); fine at low counts',
+    );
   }
 
   if (opts.category) reasons.push(`category: ${opts.category}`);

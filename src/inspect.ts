@@ -183,7 +183,7 @@ function computeBoundingBox(root: THREE.Object3D): InspectBoundingBox {
 
 function collectAnimationTracks(
   root: THREE.Object3D,
-  clips: THREE.AnimationClip[]
+  clips: THREE.AnimationClip[],
 ): InspectAnimationTrack[] {
   const tracks: InspectAnimationTrack[] = [];
   if (clips.length === 0) return tracks;

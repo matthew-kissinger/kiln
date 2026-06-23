@@ -29,8 +29,8 @@ const worktreeRoot = path.resolve(here, '../../../../..');
 // From worktree root: .claude/worktrees/<id>/ -> main repo root is three up.
 const mainRepoRoot = path.resolve(worktreeRoot, '../../..');
 
-export const WAR_ASSETS_DIR = process.env['WAR_ASSETS_DIR']
-  ?? path.join(mainRepoRoot, 'war-assets');
+export const WAR_ASSETS_DIR =
+  process.env['WAR_ASSETS_DIR'] ?? path.join(mainRepoRoot, 'war-assets');
 
 export interface GlbFixture {
   label: 'trivial' | 'medium' | 'compound';

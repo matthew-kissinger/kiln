@@ -165,7 +165,7 @@ export function fitBradleyTerry(
   });
 
   // Strongest first; tie-break by id for determinism.
-  items.sort((a, b) => (b.strength - a.strength) || (a.id < b.id ? -1 : a.id > b.id ? 1 : 0));
+  items.sort((a, b) => b.strength - a.strength || (a.id < b.id ? -1 : a.id > b.id ? 1 : 0));
 
   return { items, iterations, converged };
 }

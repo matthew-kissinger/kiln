@@ -31,7 +31,7 @@ export type Vec3 = [number, number, number];
 // ── sRGB → linear. Matches three's SRGBToLinear (the gamma transfer function),
 //    so a slot hex yields the same linear value the GLB's linear factors carry. ──
 function srgbChannelToLinear(c: number): number {
-  return c <= 0.04045 ? c / 12.92 : Math.pow((c + 0.055) / 1.055, 2.4);
+  return c <= 0.04045 ? c / 12.92 : ((c + 0.055) / 1.055) ** 2.4;
 }
 
 /** Parse an sRGB hex (`#rrggbb` or `rrggbb`) to LINEAR RGB in [0..1]. */
@@ -51,7 +51,9 @@ export function linToOklab(r: number, g: number, b: number): Vec3 {
   const l = 0.4122214708 * r + 0.5363325363 * g + 0.0514459929 * b;
   const m = 0.2119034982 * r + 0.6806995451 * g + 0.1073969566 * b;
   const s = 0.0883024619 * r + 0.2817188376 * g + 0.6299787005 * b;
-  const l_ = Math.cbrt(l), m_ = Math.cbrt(m), s_ = Math.cbrt(s);
+  const l_ = Math.cbrt(l),
+    m_ = Math.cbrt(m),
+    s_ = Math.cbrt(s);
   return [
     0.2104542553 * l_ + 0.793617785 * m_ - 0.0040720468 * s_,
     1.9779984951 * l_ - 2.428592205 * m_ + 0.4505937099 * s_,
@@ -60,7 +62,9 @@ export function linToOklab(r: number, g: number, b: number): Vec3 {
 }
 
 const dE2 = (a: Vec3, b: Vec3): number => {
-  const dl = a[0] - b[0], da = a[1] - b[1], db = a[2] - b[2];
+  const dl = a[0] - b[0],
+    da = a[1] - b[1],
+    db = a[2] - b[2];
   return dl * dl + da * da + db * db;
 };
 // CHROMATIC distance with lightness DOWN-WEIGHTED — full OKLab over-weights L, so a
@@ -68,7 +72,9 @@ const dE2 = (a: Vec3, b: Vec3): number => {
 // GREEN. Weighting hue/chroma above L makes "what colour is it" win over "how bright".
 const L_WEIGHT_CHROMA = 0.3;
 const dE2Chroma = (a: Vec3, b: Vec3): number => {
-  const dl = a[0] - b[0], da = a[1] - b[1], db = a[2] - b[2];
+  const dl = a[0] - b[0],
+    da = a[1] - b[1],
+    db = a[2] - b[2];
   return L_WEIGHT_CHROMA * dl * dl + da * da + db * db;
 };
 const chroma = (lab: Vec3): number => Math.hypot(lab[1], lab[2]);
@@ -78,7 +84,10 @@ const chroma = (lab: Vec3): number => Math.hypot(lab[1], lab[2]);
 const REL_CHROMA_GATE = 0.04;
 const relChroma = (lab: Vec3): number => chroma(lab) / Math.max(lab[0], 0.25);
 
-interface SlotLab { i: number; lab: Vec3 }
+interface SlotLab {
+  i: number;
+  lab: Vec3;
+}
 
 /** Precomputed OKLab partition of a palette — built once per snap, reused per material. */
 export interface SlotIndex {
@@ -106,8 +115,14 @@ export function buildSlotIndex(slots: readonly SnapSlot[]): SlotIndex {
     const kind = s.kind ?? 'opaque';
     const [r, g, b] = hexToLinearRgb(s.color);
     const lab = linToOklab(r, g, b);
-    if (kind === 'glass') { glass.push(i); return; }
-    if (kind === 'glow') { glow.push({ i, lab }); return; }
+    if (kind === 'glass') {
+      glass.push(i);
+      return;
+    }
+    if (kind === 'glow') {
+      glow.push({ i, lab });
+      return;
+    }
     opaque.push({ i, lab });
     if (relChroma(lab) >= REL_CHROMA_GATE) chromatic.push({ i, lab });
     else neutral.push({ i, lab });
@@ -116,8 +131,15 @@ export function buildSlotIndex(slots: readonly SnapSlot[]): SlotIndex {
 }
 
 function nearestIn(cands: SlotLab[], lab: Vec3, dist: (a: Vec3, b: Vec3) => number): number {
-  let best = cands[0]!.i, bd = Infinity;
-  for (const c of cands) { const d = dist(c.lab, lab); if (d < bd) { bd = d; best = c.i; } }
+  let best = cands[0]!.i,
+    bd = Infinity;
+  for (const c of cands) {
+    const d = dist(c.lab, lab);
+    if (d < bd) {
+      bd = d;
+      best = c.i;
+    }
+  }
   return best;
 }
 
@@ -126,7 +148,9 @@ export function nearestOpaqueSlot(idx: SlotIndex, lin: Vec3): number | undefined
   if (idx.opaque.length === 0) return undefined;
   const lab = linToOklab(lin[0], lin[1], lin[2]);
   if (relChroma(lab) >= REL_CHROMA_GATE) {
-    return idx.chromatic.length ? nearestIn(idx.chromatic, lab, dE2Chroma) : nearestIn(idx.opaque, lab, dE2);
+    return idx.chromatic.length
+      ? nearestIn(idx.chromatic, lab, dE2Chroma)
+      : nearestIn(idx.opaque, lab, dE2);
   }
   return idx.neutral.length ? nearestIn(idx.neutral, lab, dE2) : nearestIn(idx.opaque, lab, dE2);
 }
@@ -161,11 +185,15 @@ export function chooseSlot(idx: SlotIndex, m: MaterialColor): number | undefined
     // Pick the glass slot nearest the source base color (palettes rarely have >1).
     if (idx.glass.length === 1) return idx.glass[0];
     const lab = linToOklab(m.baseLinear[0], m.baseLinear[1], m.baseLinear[2]);
-    let best = idx.glass[0]!, bd = Infinity;
+    let best = idx.glass[0]!,
+      bd = Infinity;
     for (const gi of idx.glass) {
       const [r, g, b] = hexToLinearRgb(idx.slots[gi]!.color);
       const d = dE2(linToOklab(r, g, b), lab);
-      if (d < bd) { bd = d; best = gi; }
+      if (d < bd) {
+        bd = d;
+        best = gi;
+      }
     }
     return best;
   }

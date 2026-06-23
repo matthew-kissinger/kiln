@@ -36,14 +36,26 @@ export {
   KilnEditBuffer,
   KILN_SUBMIT_TOOL_NAME,
 } from './tools';
-export type { SubmitSink, EditSink, UnifiedSink, EditRecord, EditResult, KilnRenderCandidate } from './tools';
+export type {
+  SubmitSink,
+  EditSink,
+  UnifiedSink,
+  EditRecord,
+  EditResult,
+  KilnRenderCandidate,
+} from './tools';
 
 export { unifiedDiff } from './diff';
 export type { UnifiedDiffOptions } from './diff';
 
 export { ensureStreamStart } from './stream-start';
 
-export { makeOpenRouterModel, makeKilnModel, resolveKilnAgentModel, harnessIdToAgentModelId } from './providers';
+export {
+  makeOpenRouterModel,
+  makeKilnModel,
+  resolveKilnAgentModel,
+  harnessIdToAgentModelId,
+} from './providers';
 export type {
   OpenRouterModelOptions,
   KilnAgentProvider,

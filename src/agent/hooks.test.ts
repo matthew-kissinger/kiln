@@ -5,7 +5,11 @@
  * exercises the loop without a live model.
  */
 import { describe, expect, test } from 'bun:test';
-import { BeforeToolCallEvent, BeforeModelCallEvent, AfterModelCallEvent } from '@strands-agents/sdk';
+import {
+  BeforeToolCallEvent,
+  BeforeModelCallEvent,
+  AfterModelCallEvent,
+} from '@strands-agents/sdk';
 import { MetricsCollector } from './hooks';
 
 type Cb = (event: unknown) => void;
@@ -20,7 +24,10 @@ function fakeAgent() {
       hooks.set(EventClass, arr);
       return () => {
         const cur = hooks.get(EventClass) ?? [];
-        hooks.set(EventClass, cur.filter((c) => c !== cb));
+        hooks.set(
+          EventClass,
+          cur.filter((c) => c !== cb),
+        );
       };
     },
   };

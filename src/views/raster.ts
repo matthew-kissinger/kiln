@@ -195,7 +195,7 @@ function clamp01(n: number): number {
  */
 function linearToSrgb(c: number): number {
   const v = clamp01(c);
-  return v <= 0.0031308 ? v * 12.92 : 1.055 * Math.pow(v, 1 / 2.4) - 0.055;
+  return v <= 0.0031308 ? v * 12.92 : 1.055 * v ** (1 / 2.4) - 0.055;
 }
 
 /**
@@ -205,7 +205,7 @@ function linearToSrgb(c: number): number {
 export function rasterizeView(
   root: unknown,
   dir: [number, number, number],
-  opts: RasterOptions = {}
+  opts: RasterOptions = {},
 ): Uint8Array {
   const size = opts.size ?? 256;
   const cull = opts.backfaceCull ?? true;
@@ -291,7 +291,12 @@ export function rasterizeView(
     const maxY = Math.min(size - 1, Math.ceil(Math.max(sy[0]!, sy[1]!, sy[2]!)));
     if (minX > maxX || minY > maxY) continue;
 
-    const ax = sx[0]!, ay = sy[0]!, bx2 = sx[1]!, by = sy[1]!, cx = sx[2]!, cy = sy[2]!;
+    const ax = sx[0]!,
+      ay = sy[0]!,
+      bx2 = sx[1]!,
+      by = sy[1]!,
+      cx = sx[2]!,
+      cy = sy[2]!;
     const area = (bx2 - ax) * (cy - ay) - (by - ay) * (cx - ax);
     if (Math.abs(area) < 1e-9) continue;
     const invArea = 1 / area;
@@ -327,7 +332,10 @@ export function rasterizeView(
  *  Reuses the rasterizer's own triangle collection so the box matches exactly what
  *  gets drawn. Empty scenes report a zero box. Used by the animation grid to union
  *  bounds across posed frames into one steady camera framing. */
-export function measureBounds(root: unknown): { min: [number, number, number]; max: [number, number, number] } {
+export function measureBounds(root: unknown): {
+  min: [number, number, number];
+  max: [number, number, number];
+} {
   const { bbox } = collectTriangles(root as DuckObject3D);
   return { min: [...bbox.min], max: [...bbox.max] };
 }
@@ -354,7 +362,10 @@ export function coverage(rgb: Uint8Array, size: number): number {
  * number of matched subtree roots hidden (0 → nothing matched; the caller decides
  * whether to warn). Pure helper; mutates `.visible` on the passed scene.
  */
-export function hideNodeInScene(root: unknown, match: string | ((name: string) => boolean)): number {
+export function hideNodeInScene(
+  root: unknown,
+  match: string | ((name: string) => boolean),
+): number {
   const test =
     typeof match === 'function'
       ? match

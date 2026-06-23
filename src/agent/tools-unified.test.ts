@@ -8,12 +8,7 @@
 import { describe, expect, test } from 'bun:test';
 import { ImageBlock, JsonBlock } from '@strands-agents/sdk';
 
-import {
-  KilnDraftBuffer,
-  KilnEditBuffer,
-  makeKilnUnifiedTools,
-  type UnifiedSink,
-} from './tools';
+import { KilnDraftBuffer, KilnEditBuffer, makeKilnUnifiedTools, type UnifiedSink } from './tools';
 
 const BOX_CODE = `
 const meta = { name: 'test-box', category: 'prop' };
@@ -105,7 +100,10 @@ describe('makeKilnUnifiedTools', () => {
     };
     expect(drafted.ok).toBe(true);
     expect(sink.code).toBe(BOX_CODE); // captured even before finalize
-    const viewed = (await findTool(tools, 'kiln_view').invoke({})) as { code: string; lines: number };
+    const viewed = (await findTool(tools, 'kiln_view').invoke({})) as {
+      code: string;
+      lines: number;
+    };
     expect(viewed.code).toBe(BOX_CODE);
   });
 
@@ -150,7 +148,10 @@ describe('makeKilnUnifiedTools', () => {
   test('kiln_render on a broken buffer is image-free (plain JSON error)', async () => {
     const sink: UnifiedSink = { edits: [] };
     const tools = makeKilnUnifiedTools({ seedCode: 'not a kiln program (', sink });
-    const out = (await findTool(tools, 'kiln_render').invoke({})) as { ok: boolean; error?: string };
+    const out = (await findTool(tools, 'kiln_render').invoke({})) as {
+      ok: boolean;
+      error?: string;
+    };
     expect(Array.isArray(out)).toBe(false);
     expect(out.ok).toBe(false);
     expect(out.error).toBeDefined();
@@ -159,7 +160,11 @@ describe('makeKilnUnifiedTools', () => {
   test('kiln_render emits a render candidate (buffer code + six-view png) via onCandidate', async () => {
     const sink: UnifiedSink = { edits: [] };
     const got: Array<{ code: string; pngBase64: string; tris?: number }> = [];
-    const tools = makeKilnUnifiedTools({ seedCode: BOX_CODE, sink, onCandidate: (c) => got.push(c) });
+    const tools = makeKilnUnifiedTools({
+      seedCode: BOX_CODE,
+      sink,
+      onCandidate: (c) => got.push(c),
+    });
     await findTool(tools, 'kiln_render').invoke({});
     expect(got).toHaveLength(1);
     expect(got[0]!.code).toBe(BOX_CODE); // the exact working buffer
@@ -170,7 +175,11 @@ describe('makeKilnUnifiedTools', () => {
   test('kiln_render on a broken buffer does NOT emit a candidate (image-free build)', async () => {
     const sink: UnifiedSink = { edits: [] };
     const got: unknown[] = [];
-    const tools = makeKilnUnifiedTools({ seedCode: 'not a kiln program (', sink, onCandidate: (c) => got.push(c) });
+    const tools = makeKilnUnifiedTools({
+      seedCode: 'not a kiln program (',
+      sink,
+      onCandidate: (c) => got.push(c),
+    });
     await findTool(tools, 'kiln_render').invoke({});
     expect(got).toHaveLength(0); // a failed render has no image → no candidate
   });
@@ -193,7 +202,10 @@ describe('makeKilnUnifiedTools', () => {
   test('kiln_view_interior on a broken buffer is image-free (plain JSON error)', async () => {
     const sink: UnifiedSink = { edits: [] };
     const tools = makeKilnUnifiedTools({ seedCode: 'not a kiln program (', sink });
-    const out = (await findTool(tools, 'kiln_view_interior').invoke({})) as { ok: boolean; error?: string };
+    const out = (await findTool(tools, 'kiln_view_interior').invoke({})) as {
+      ok: boolean;
+      error?: string;
+    };
     expect(Array.isArray(out)).toBe(false);
     expect(out.ok).toBe(false);
     expect(out.error).toBeDefined();

@@ -13,13 +13,7 @@
 import { describe, it, expect } from 'bun:test';
 import * as THREE from 'three';
 import { WebIO } from '@gltf-transform/core';
-import {
-  createRoot,
-  createPart,
-  boxGeo,
-  gameMaterial,
-  glassMaterial,
-} from '../primitives';
+import { createRoot, createPart, boxGeo, gameMaterial, glassMaterial } from '../primitives';
 import {
   renderSceneToGLB,
   snapGlbToPalette,
@@ -35,7 +29,10 @@ const hue = (i: number, n: number): number => new THREE.Color().setHSL(i / n, 0.
 function manyColorScene(n: number): THREE.Object3D {
   const root = createRoot('Palette');
   for (let i = 0; i < n; i++) {
-    createPart(`Box${i}`, boxGeo(1, 1, 1), gameMaterial(hue(i, n)), { position: [i * 1.5, 0, 0], parent: root });
+    createPart(`Box${i}`, boxGeo(1, 1, 1), gameMaterial(hue(i, n)), {
+      position: [i * 1.5, 0, 0],
+      parent: root,
+    });
   }
   return root;
 }
@@ -81,7 +78,9 @@ describe('palette-snap (pure)', () => {
       { color: '#aacbe0', kind: 'glass' },
       { color: '#ffd9a0', kind: 'glow' },
     ]);
-    expect(chooseSlot(idx, { baseLinear: [0.1, 0.1, 0.1], emissiveLinear: [0.8, 0.6, 0.3] })).toBe(2);
+    expect(chooseSlot(idx, { baseLinear: [0.1, 0.1, 0.1], emissiveLinear: [0.8, 0.6, 0.3] })).toBe(
+      2,
+    );
     expect(chooseSlot(idx, { baseLinear: [0.5, 0.6, 0.7], transparent: true })).toBe(1);
     expect(chooseSlot(idx, { baseLinear: [0.05, 0.05, 0.05] })).toBe(0); // opaque fallback
   });
@@ -110,11 +109,20 @@ describe('snapGlbToPalette', () => {
   it('snaps a transparent material to the glass slot (transparency preserved)', async () => {
     const root = createRoot('Glassy');
     for (let i = 0; i < 6; i++) {
-      createPart(`Wall${i}`, boxGeo(1, 1, 1), gameMaterial(hue(i, 6)), { position: [i * 1.5, 0, 0], parent: root });
+      createPart(`Wall${i}`, boxGeo(1, 1, 1), gameMaterial(hue(i, 6)), {
+        position: [i * 1.5, 0, 0],
+        parent: root,
+      });
     }
-    createPart('Window', boxGeo(1, 1, 0.05), glassMaterial(0x88ccff, { opacity: 0.4 }), { position: [0, 2, 0], parent: root });
+    createPart('Window', boxGeo(1, 1, 0.05), glassMaterial(0x88ccff, { opacity: 0.4 }), {
+      position: [0, 2, 0],
+      parent: root,
+    });
     const baked = await renderSceneToGLB(root);
-    const palWithGlass: SnapPaletteSlot[] = [...PAL, { color: '#aacbe0', kind: 'glass', opacity: 0.4 }];
+    const palWithGlass: SnapPaletteSlot[] = [
+      ...PAL,
+      { color: '#aacbe0', kind: 'glass', opacity: 0.4 },
+    ];
     const out = await snapGlbToPalette(baked.bytes, palWithGlass);
     expect(out!.report!.metrics.transparentMaterials).toBeGreaterThanOrEqual(1);
   });
@@ -133,12 +141,26 @@ describe('composeSceneGLB', () => {
 
   it('merges parts, applies transforms, and sums triangles', async () => {
     const a = await glbOf(manyColorScene(3));
-    const b = await glbOf((() => { const r = createRoot('B'); createPart('BBox', boxGeo(2, 2, 2), gameMaterial(0x4444ff), { parent: r }); return r; })());
+    const b = await glbOf(
+      (() => {
+        const r = createRoot('B');
+        createPart('BBox', boxGeo(2, 2, 2), gameMaterial(0x4444ff), { parent: r });
+        return r;
+      })(),
+    );
     const aTris = (await renderSceneToGLB(manyColorScene(3))).tris;
 
     const out = await composeSceneGLB([
-      { bytes: a, transform: { pos: [0, 0, 0], rotDeg: [0, 0, 0], scale: [1, 1, 1] }, name: 'PLACE_A' },
-      { bytes: b, transform: { pos: [10, 0, 0], rotDeg: [0, 90, 0], scale: [1, 1, 1] }, name: 'PLACE_B' },
+      {
+        bytes: a,
+        transform: { pos: [0, 0, 0], rotDeg: [0, 0, 0], scale: [1, 1, 1] },
+        name: 'PLACE_A',
+      },
+      {
+        bytes: b,
+        transform: { pos: [10, 0, 0], rotDeg: [0, 90, 0], scale: [1, 1, 1] },
+        name: 'PLACE_B',
+      },
     ]);
     expect(out.tris).toBe(aTris + 12); // a 2×2×2 box = 12 tris
     expect(out.draws).toBeGreaterThan(0);
@@ -146,7 +168,10 @@ describe('composeSceneGLB', () => {
     // The wrapper node carries the placement transform (pos + a 90° Y quaternion). Use a
     // unique name so it can't collide with a source GLB's own root node.
     const doc = await new WebIO().readBinary(out.bytes);
-    const bNode = doc.getRoot().listNodes().find((nd) => nd.getName() === 'PLACE_B');
+    const bNode = doc
+      .getRoot()
+      .listNodes()
+      .find((nd) => nd.getName() === 'PLACE_B');
     expect(bNode).toBeDefined();
     const t = bNode!.getTranslation();
     expect(t[0]).toBeCloseTo(10, 4);
@@ -156,7 +181,13 @@ describe('composeSceneGLB', () => {
   });
 
   it('dedup collapses a repeated blueprint (same GLB placed twice shares geometry)', async () => {
-    const a = await glbOf((() => { const r = createRoot('One'); createPart('Box', boxGeo(1, 1, 1), gameMaterial(0x808080), { parent: r }); return r; })());
+    const a = await glbOf(
+      (() => {
+        const r = createRoot('One');
+        createPart('Box', boxGeo(1, 1, 1), gameMaterial(0x808080), { parent: r });
+        return r;
+      })(),
+    );
     const out = await composeSceneGLB([
       { bytes: a, transform: { pos: [0, 0, 0], rotDeg: [0, 0, 0], scale: [1, 1, 1] } },
       { bytes: a, transform: { pos: [5, 0, 0], rotDeg: [0, 0, 0], scale: [1, 1, 1] } },
@@ -171,7 +202,14 @@ describe('renderPaletteDirective(slots)', () => {
   it('defaults to the canonical palette and adapts to a custom one', () => {
     expect(renderPaletteDirective()).toBe(renderPaletteDirective(OPTIMIZED_PALETTE));
     const custom = renderPaletteDirective([
-      { index: 0, name: 'siding-mint', color: '#9fc9a3', metalness: 0, roughness: 0.8, use: 'house siding' },
+      {
+        index: 0,
+        name: 'siding-mint',
+        color: '#9fc9a3',
+        metalness: 0,
+        roughness: 0.8,
+        use: 'house siding',
+      },
       { index: 1, name: 'asphalt', color: '#45454a', metalness: 0, roughness: 0.9, use: 'road' },
     ]);
     expect(custom).toContain('siding-mint: house siding');

@@ -29,7 +29,9 @@ function fakeModel(
   } as never;
 }
 
-async function drain(model: { doStream: (o: unknown) => Promise<{ stream: ReadableStream }> }): Promise<string[]> {
+async function drain(model: {
+  doStream: (o: unknown) => Promise<{ stream: ReadableStream }>;
+}): Promise<string[]> {
   const { stream } = await model.doStream({});
   const reader = stream.getReader();
   const types: string[] = [];
@@ -52,7 +54,9 @@ test('injects a leading stream-start when the provider omits it (OpenRouter shap
 });
 
 test('is a no-op when the provider already emits stream-start', async () => {
-  const wrapped = ensureStreamStart(fakeModel([{ type: 'stream-start', warnings: [] }, { type: 'finish' }]));
+  const wrapped = ensureStreamStart(
+    fakeModel([{ type: 'stream-start', warnings: [] }, { type: 'finish' }]),
+  );
   expect(await drain(wrapped as never)).toEqual(['stream-start', 'finish']);
 });
 

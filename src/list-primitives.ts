@@ -92,17 +92,19 @@ const PRIMITIVES: PrimitiveSpec[] = [
   },
   {
     name: 'snapTo',
-    signature: "snapTo(part: Object3D, host: Object3D, opts?: { axis?: 'x'|'y'|'z', overlap?: 0.02 })",
+    signature:
+      "snapTo(part: Object3D, host: Object3D, opts?: { axis?: 'x'|'y'|'z', overlap?: 0.02 })",
     returns: 'THREE.Object3D (the part, for chaining)',
     category: 'structure',
     description:
       'Translates `part` by the minimal vector that brings its bounding box into contact with `host` (plus a small overlap). The direct cure for a "Floating parts" warning — attach the part instead of eyeballing a corrective offset. No-op if they already touch.',
-    example: "const scope = createPart('Scope', cylinderXGeo(0.04, 0.04, 0.3), steel, { parent: root, position: [0.1, 0.32, 0] });\nsnapTo(scope, receiver);",
+    example:
+      "const scope = createPart('Scope', cylinderXGeo(0.04, 0.04, 0.3), steel, { parent: root, position: [0.1, 0.32, 0] });\nsnapTo(scope, receiver);",
   },
   {
     name: 'createLadder',
     signature:
-      "createLadder(name, { bottom, top, material, width?, rungCount?, railRadius?, rungRadius?, widthAxis?, parent? })",
+      'createLadder(name, { bottom, top, material, width?, rungCount?, railRadius?, rungRadius?, widthAxis?, parent? })',
     returns: '{ leftRail: Object3D, rightRail: Object3D, rungs: Object3D[] }',
     category: 'structure',
     description:
@@ -186,18 +188,15 @@ const PRIMITIVES: PrimitiveSpec[] = [
     signature: 'sphereGeo(radius: number, widthSegments?: 8, heightSegments?: 6)',
     returns: 'THREE.SphereGeometry',
     category: 'geometry',
-    description:
-      'UV sphere. Default 8x6 segments = 84 tris. Bump segments for smoother curves.',
+    description: 'UV sphere. Default 8x6 segments = 84 tris. Bump segments for smoother curves.',
     example: 'const geo = sphereGeo(0.5, 12, 8);',
   },
   {
     name: 'cylinderGeo',
-    signature:
-      'cylinderGeo(radiusTop: number, radiusBottom: number, height: number, segments?: 8)',
+    signature: 'cylinderGeo(radiusTop: number, radiusBottom: number, height: number, segments?: 8)',
     returns: 'THREE.CylinderGeometry',
     category: 'geometry',
-    description:
-      'Y-axis cylinder. Use radiusTop != radiusBottom for cones / tapered pieces.',
+    description: 'Y-axis cylinder. Use radiusTop != radiusBottom for cones / tapered pieces.',
     example: 'const geo = cylinderGeo(0.25, 0.25, 1, 12);',
   },
   {
@@ -238,8 +237,7 @@ const PRIMITIVES: PrimitiveSpec[] = [
     category: 'geometry',
     description:
       'Frame-first cylinder: position + axis specified directly, no post-hoc rotation. Use when the cylinder needs to point along a non-cardinal direction (struts inside CSG operands, antennas off a tilted surface). For cardinal axes prefer the terser cylinderXGeo / cylinderYGeo / cylinderZGeo helpers.',
-    example:
-      "const strut = cylinderOnAxis([0.5, 0.7, 0], [1, 1, 0.3], 0.05, 0.9);",
+    example: 'const strut = cylinderOnAxis([0.5, 0.7, 0], [1, 1, 0.3], 0.05, 0.9);',
   },
   {
     name: 'capsuleGeo',
@@ -254,7 +252,8 @@ const PRIMITIVES: PrimitiveSpec[] = [
     signature: 'capsuleYGeo(radius: number, height: number, segments?: 6)',
     returns: 'THREE.CapsuleGeometry',
     category: 'geometry',
-    description: 'Alias for capsuleGeo — a Y-axis capsule. Provided for symmetry with capsuleXGeo / capsuleZGeo.',
+    description:
+      'Alias for capsuleGeo — a Y-axis capsule. Provided for symmetry with capsuleXGeo / capsuleZGeo.',
     example: 'const geo = capsuleYGeo(0.1, 0.5, 6);',
   },
   {
@@ -288,7 +287,8 @@ const PRIMITIVES: PrimitiveSpec[] = [
     signature: 'coneYGeo(radius: number, height: number, segments?: 8)',
     returns: 'THREE.ConeGeometry',
     category: 'geometry',
-    description: 'Alias for coneGeo — a Y-axis cone (point +Y). Provided for symmetry with coneXGeo / coneZGeo.',
+    description:
+      'Alias for coneGeo — a Y-axis cone (point +Y). Provided for symmetry with coneXGeo / coneZGeo.',
     example: 'const geo = coneYGeo(0.3, 0.8, 8);',
   },
   {
@@ -321,8 +321,7 @@ const PRIMITIVES: PrimitiveSpec[] = [
   },
   {
     name: 'torusGeo',
-    signature:
-      'torusGeo(radius: number, tube: number, radialSegments?: 8, tubularSegments?: 12)',
+    signature: 'torusGeo(radius: number, tube: number, radialSegments?: 8, tubularSegments?: 12)',
     returns: 'THREE.TorusGeometry',
     category: 'geometry',
     description: 'Donut shape. For rings, tyres, barrel ribs.',
@@ -330,8 +329,7 @@ const PRIMITIVES: PrimitiveSpec[] = [
   },
   {
     name: 'planeGeo',
-    signature:
-      'planeGeo(width: number, height: number, widthSegments?: 1, heightSegments?: 1)',
+    signature: 'planeGeo(width: number, height: number, widthSegments?: 1, heightSegments?: 1)',
     returns: 'THREE.PlaneGeometry',
     category: 'geometry',
     description:
@@ -377,13 +375,11 @@ const PRIMITIVES: PrimitiveSpec[] = [
     category: 'geometry',
     description:
       'Atlas-ready billboard quad. UVs are pre-scaled to cover one tile of a tilesX×tilesY atlas; the consumer shader adds per-instance tile offsets at draw time.',
-    example:
-      "const card = octaGridPlane({ tilesX: 4, tilesY: 4, width: 6, height: 6 });",
+    example: 'const card = octaGridPlane({ tilesX: 4, tilesY: 4, width: 6, height: 6 });',
   },
   {
     name: 'wingGeo',
-    signature:
-      'wingGeo(opts?: { span, rootChord, tipChord, sweep, thickness, dihedral })',
+    signature: 'wingGeo(opts?: { span, rootChord, tipChord, sweep, thickness, dihedral })',
     returns: 'THREE.BufferGeometry',
     category: 'geometry',
     description:
@@ -423,9 +419,8 @@ const PRIMITIVES: PrimitiveSpec[] = [
       'gameMaterial(color, opts?: { metalness, roughness, emissive, emissiveIntensity, flatShading })',
     returns: 'THREE.MeshStandardMaterial',
     category: 'material',
-    description:
-      'Flat-shaded PBR material. Default for game-ready low-poly. Use for 95% of parts.',
-    example: "const mat = gameMaterial(0x8b7355, { roughness: 0.9 });",
+    description: 'Flat-shaded PBR material. Default for game-ready low-poly. Use for 95% of parts.',
+    example: 'const mat = gameMaterial(0x8b7355, { roughness: 0.9 });',
   },
   {
     name: 'basicMaterial',
@@ -433,14 +428,15 @@ const PRIMITIVES: PrimitiveSpec[] = [
     returns: 'THREE.MeshBasicMaterial',
     category: 'material',
     description: 'Unlit flat material. For UI / effects where lighting is baked in.',
-    example: "const mat = basicMaterial(0xffffff, { transparent: true, opacity: 0.5 });",
+    example: 'const mat = basicMaterial(0xffffff, { transparent: true, opacity: 0.5 });',
   },
   {
     name: 'glassMaterial',
     signature: 'glassMaterial(color, opts?: { opacity, roughness, metalness })',
     returns: 'THREE.MeshStandardMaterial',
     category: 'material',
-    description: 'Semi-transparent double-sided material. Panels need ~0.05 offset to avoid z-fighting.',
+    description:
+      'Semi-transparent double-sided material. Panels need ~0.05 offset to avoid z-fighting.',
     example: 'const mat = glassMaterial(0x66ccff, { opacity: 0.3 });',
   },
   {
@@ -449,7 +445,7 @@ const PRIMITIVES: PrimitiveSpec[] = [
     returns: 'THREE.MeshLambertMaterial',
     category: 'material',
     description: 'Cheaper than gameMaterial. No metalness/roughness. Use when PBR is overkill.',
-    example: "const mat = lambertMaterial(0x2a4d14, { flatShading: true });",
+    example: 'const mat = lambertMaterial(0x2a4d14, { flatShading: true });',
   },
 
   // ---------------------------------------------------------------------------
@@ -550,7 +546,7 @@ const PRIMITIVES: PrimitiveSpec[] = [
     returns: 'THREE.Object3D',
     category: 'instancing',
     description:
-      'Creates a new mesh reusing an existing part\'s geometry + material at a new transform. Cheapest way to replicate wheels / bolts / fence posts / windows. `rotation` is in DEGREES, like createPart.',
+      "Creates a new mesh reusing an existing part's geometry + material at a new transform. Cheapest way to replicate wheels / bolts / fence posts / windows. `rotation` is in DEGREES, like createPart.",
     example:
       "const wheelFL = createPart('WheelFL', wheelGeo, rubberMat, { position: [-0.8, 0.3, 1.2], parent: root });\ncreateInstance('WheelFR', wheelFL, { position: [0.8, 0.3, 1.2], parent: root });\ncreateInstance('WheelRL', wheelFL, { position: [-0.8, 0.3, -1.2], parent: root });\ncreateInstance('WheelRR', wheelFL, { position: [0.8, 0.3, -1.2], parent: root });",
   },
@@ -572,7 +568,8 @@ const PRIMITIVES: PrimitiveSpec[] = [
   },
   {
     name: 'boolDiff',
-    signature: 'await boolDiff(name: string, body: Object3D, ...cutters: Object3D[], opts?: { smooth?: false })',
+    signature:
+      'await boolDiff(name: string, body: Object3D, ...cutters: Object3D[], opts?: { smooth?: false })',
     returns: 'Promise<THREE.Mesh>',
     category: 'csg',
     description:
@@ -582,13 +579,12 @@ const PRIMITIVES: PrimitiveSpec[] = [
   },
   {
     name: 'boolIntersect',
-    signature: 'await boolIntersect(name: string, a: Object3D, b: Object3D, opts?: { smooth?: false })',
+    signature:
+      'await boolIntersect(name: string, a: Object3D, b: Object3D, opts?: { smooth?: false })',
     returns: 'Promise<THREE.Mesh>',
     category: 'csg',
-    description:
-      'Keeps only the volume where both operands overlap. Default flat shading.',
-    example:
-      "const lens = await boolIntersect('Lens', boxMesh, sphereMesh);",
+    description: 'Keeps only the volume where both operands overlap. Default flat shading.',
+    example: "const lens = await boolIntersect('Lens', boxMesh, sphereMesh);",
   },
   {
     name: 'hull',
@@ -606,8 +602,7 @@ const PRIMITIVES: PrimitiveSpec[] = [
   // ---------------------------------------------------------------------------
   {
     name: 'arrayLinear',
-    signature:
-      'arrayLinear(namePrefix, source, count, offset: [x,y,z], parent?)',
+    signature: 'arrayLinear(namePrefix, source, count, offset: [x,y,z], parent?)',
     returns: 'THREE.Object3D[]',
     category: 'arrays',
     description:
@@ -617,8 +612,7 @@ const PRIMITIVES: PrimitiveSpec[] = [
   },
   {
     name: 'arrayRadial',
-    signature:
-      "arrayRadial(namePrefix, source, count, axis?: 'x'|'y'|'z', parent?)",
+    signature: "arrayRadial(namePrefix, source, count, axis?: 'x'|'y'|'z', parent?)",
     returns: 'THREE.Object3D[]',
     category: 'arrays',
     description:
@@ -632,7 +626,7 @@ const PRIMITIVES: PrimitiveSpec[] = [
     returns: 'THREE.Object3D',
     category: 'arrays',
     description:
-      "Reflects source across the plane whose normal is `axis`. Uses negative scale (winding flip handled by viewers).",
+      'Reflects source across the plane whose normal is `axis`. Uses negative scale (winding flip handled by viewers).',
     example: "mirror('WingR', wingL, 'x', root);",
   },
 
@@ -647,7 +641,7 @@ const PRIMITIVES: PrimitiveSpec[] = [
     category: 'mesh-ops',
     description:
       'Loop subdivision. Each iteration ~4x the triangle count and smooths the surface. Non-indexed input is auto-welded via mergeVertices (weld: false to skip). Use 1 for mild smoothing, 2 for organic shapes.',
-    example: "const smoothRock = subdivide(boxGeo(1, 1, 1), 2);",
+    example: 'const smoothRock = subdivide(boxGeo(1, 1, 1), 2);',
   },
   {
     name: 'mergeVertices',
@@ -671,8 +665,7 @@ const PRIMITIVES: PrimitiveSpec[] = [
     category: 'curves',
     description:
       "Sweeps a circular profile along a path. Equivalent to Blender's Curve to Mesh node with a circle profile. Use for pipes, cables, tubular frames.",
-    example:
-      "const pipe = curveToMesh([[0,0,0],[0,1,0],[1,1,0],[1,2,0]], 0.1);",
+    example: 'const pipe = curveToMesh([[0,0,0],[0,1,0],[1,1,0],[1,2,0]], 0.1);',
   },
   {
     name: 'pipeAlongPath',
@@ -683,7 +676,7 @@ const PRIMITIVES: PrimitiveSpec[] = [
     description:
       'Path-driven swept circle with optional bend smoothing. Generalises beamBetween (point-to-point) and curveToMesh (raw spline) into one helper. bendRadius>0 inserts interpolated waypoints near interior corners so the spline reads as a rounded turn instead of pinching to the control point.',
     example:
-      "const cable = pipeAlongPath([[0, 0.5, 0], [1, 0.5, 0], [1, 0.5, 2]], 0.02, { bendRadius: 0.1 });",
+      'const cable = pipeAlongPath([[0, 0.5, 0], [1, 0.5, 0], [1, 0.5, 2]], 0.02, { bendRadius: 0.1 });',
   },
   {
     name: 'lathe',
@@ -692,8 +685,7 @@ const PRIMITIVES: PrimitiveSpec[] = [
     category: 'curves',
     description:
       'Surface of revolution. Spins a 2D profile around the Y axis. For bottles, vases, wheels, turned wood parts.',
-    example:
-      "const vase = lathe([[0.1,0],[0.3,0.5],[0.2,1],[0.1,1.2]], 16);",
+    example: 'const vase = lathe([[0.1,0],[0.3,0.5],[0.2,1],[0.1,1.2]], 16);',
   },
   {
     name: 'revolveGeo',
@@ -704,7 +696,7 @@ const PRIMITIVES: PrimitiveSpec[] = [
     description:
       'Surface of revolution with explicit axis + sweep angle. Generalises lathe — use it when you need a partial sweep (half-dome, 90° wedge) or revolution around a non-Y axis. Profile convention is identical to lathe: x = radial distance, y = position along the axis.',
     example:
-      "// Half-dome (180° sweep around +Y):\nconst quarter = [...Array(8)].map((_, i) => { const t = (i/7)*Math.PI/2; return [Math.cos(t), Math.sin(t)] as [number, number]; });\nconst dome = revolveGeo(quarter, { angle: Math.PI });",
+      '// Half-dome (180° sweep around +Y):\nconst quarter = [...Array(8)].map((_, i) => { const t = (i/7)*Math.PI/2; return [Math.cos(t), Math.sin(t)] as [number, number]; });\nconst dome = revolveGeo(quarter, { angle: Math.PI });',
   },
   {
     name: 'bezierCurve',
@@ -712,9 +704,9 @@ const PRIMITIVES: PrimitiveSpec[] = [
     returns: '[x,y,z][]',
     category: 'curves',
     description:
-      "Samples a quadratic (3 ctrl pts) or cubic (4 ctrl pts) Bézier into a point list you can feed into curveToMesh.",
+      'Samples a quadratic (3 ctrl pts) or cubic (4 ctrl pts) Bézier into a point list you can feed into curveToMesh.',
     example:
-      "const path = bezierCurve([[0,0,0],[1,2,0],[3,2,0],[4,0,0]], 24);\nconst geo = curveToMesh(path, 0.1);",
+      'const path = bezierCurve([[0,0,0],[1,2,0],[3,2,0],[4,0,0]], 24);\nconst geo = curveToMesh(path, 0.1);',
   },
 
   // ---------------------------------------------------------------------------
@@ -727,9 +719,9 @@ const PRIMITIVES: PrimitiveSpec[] = [
     returns: 'Promise<THREE.BufferGeometry>',
     category: 'uv',
     description:
-      "xatlas-based UV atlas for ANY geometry (CSG output, subdivided, deformed). Output is a packed atlas with arbitrary per-chart rotation — use for non-tileable baked textures. For directional tileable textures on box/cylinder/plane primitives, prefer the shape-aware unwraps below.",
+      'xatlas-based UV atlas for ANY geometry (CSG output, subdivided, deformed). Output is a packed atlas with arbitrary per-chart rotation — use for non-tileable baked textures. For directional tileable textures on box/cylinder/plane primitives, prefer the shape-aware unwraps below.',
     example:
-      "const unwrapped = await autoUnwrap(someCsgResult, { resolution: 1024 });\nconst mesh = new THREE.Mesh(unwrapped, bakedPbr);",
+      'const unwrapped = await autoUnwrap(someCsgResult, { resolution: 1024 });\nconst mesh = new THREE.Mesh(unwrapped, bakedPbr);',
   },
   {
     name: 'boxUnwrap',
@@ -739,7 +731,7 @@ const PRIMITIVES: PrimitiveSpec[] = [
     description:
       "Preserves BoxGeometry's built-in per-face UVs — every face maps [0,1] with consistent orientation. Use for crates/blocks with a tileable texture. Sync; no WASM cost.",
     example:
-      "const crate = boxUnwrap(boxGeo(1, 1, 1));\nconst mesh = new THREE.Mesh(crate, pbrMaterial({ albedo: planksTex }));",
+      'const crate = boxUnwrap(boxGeo(1, 1, 1));\nconst mesh = new THREE.Mesh(crate, pbrMaterial({ albedo: planksTex }));',
   },
   {
     name: 'cylinderUnwrap',
@@ -749,7 +741,7 @@ const PRIMITIVES: PrimitiveSpec[] = [
     description:
       "Preserves CylinderGeometry's built-in UVs: u wraps around the axis (horizontal texture features ring the cylinder), v runs up the height. Caps use circle-in-square. Sync; no WASM cost.",
     example:
-      "const barrel = cylinderUnwrap(cylinderGeo(0.5, 0.5, 1.2, 24));\nconst mesh = new THREE.Mesh(barrel, pbrMaterial({ albedo: bandsTex }));",
+      'const barrel = cylinderUnwrap(cylinderGeo(0.5, 0.5, 1.2, 24));\nconst mesh = new THREE.Mesh(barrel, pbrMaterial({ albedo: bandsTex }));',
   },
   {
     name: 'planeUnwrap',
@@ -757,9 +749,9 @@ const PRIMITIVES: PrimitiveSpec[] = [
     returns: 'THREE.BufferGeometry',
     category: 'uv',
     description:
-      "Projects xy-extent of the bbox to [0,1]. Use for signs/decals/posters where you want ONE readable texture and no edge-face bleeding. Sync.",
+      'Projects xy-extent of the bbox to [0,1]. Use for signs/decals/posters where you want ONE readable texture and no edge-face bleeding. Sync.',
     example:
-      "const sign = planeUnwrap(planeGeo(1, 0.6));\nconst mesh = new THREE.Mesh(sign, pbrMaterial({ albedo: kilnTextTex }));",
+      'const sign = planeUnwrap(planeGeo(1, 0.6));\nconst mesh = new THREE.Mesh(sign, pbrMaterial({ albedo: kilnTextTex }));',
   },
   {
     name: 'panelRemapV',
@@ -767,9 +759,9 @@ const PRIMITIVES: PrimitiveSpec[] = [
     returns: 'THREE.BufferGeometry',
     category: 'uv',
     description:
-      "Scales an existing UV attribute so a small mesh samples a sub-region of a SHARED texture. Replaces the broken texture.clone() pattern (Three.js Texture.clone() runs JSON.stringify on userData, mangling encoded PNG bytes — panelRemapV avoids that by remapping UVs on the geometry instead). Typical use: multi-zone albedo where v=0..0.30 is plain panel and v=0.30..1 has windows/markings — small parts call panelRemapV(unwrap(geo), 0.30) to sample only the clean strip.",
+      'Scales an existing UV attribute so a small mesh samples a sub-region of a SHARED texture. Replaces the broken texture.clone() pattern (Three.js Texture.clone() runs JSON.stringify on userData, mangling encoded PNG bytes — panelRemapV avoids that by remapping UVs on the geometry instead). Typical use: multi-zone albedo where v=0..0.30 is plain panel and v=0.30..1 has windows/markings — small parts call panelRemapV(unwrap(geo), 0.30) to sample only the clean strip.',
     example:
-      "const cowlGeo = panelRemapV(cylinderUnwrap(capsuleXGeo(0.45, 1.0)), 0.30);\nconst cowl = new THREE.Mesh(cowlGeo, bodyMat); // SAME bodyMat as fuselage, no clone needed",
+      'const cowlGeo = panelRemapV(cylinderUnwrap(capsuleXGeo(0.45, 1.0)), 0.30);\nconst cowl = new THREE.Mesh(cowlGeo, bodyMat); // SAME bodyMat as fuselage, no clone needed',
   },
 
   // ---------------------------------------------------------------------------
@@ -782,15 +774,13 @@ const PRIMITIVES: PrimitiveSpec[] = [
     category: 'textures',
     description:
       'Loads a PNG/JPG/WebP image into a Three.js Texture. Stashes the encoded bytes on userData.encoded so GLB export is lossless.',
-    example:
-      "const wood = await loadTexture('./textures/oak-albedo.png');",
+    example: "const wood = await loadTexture('./textures/oak-albedo.png');",
     promptNotes:
       'NEVER texture.clone() a loaded texture (clone() corrupts the encoded bytes and breaks GLB export). Share the same Texture object and remap UVs with panelRemapV on the smaller mesh instead.',
   },
   {
     name: 'pbrMaterial',
-    signature:
-      'pbrMaterial({ albedo?, normal?, roughness?, metalness?, emissive?, aoMap? })',
+    signature: 'pbrMaterial({ albedo?, normal?, roughness?, metalness?, emissive?, aoMap? })',
     returns: 'THREE.MeshStandardMaterial',
     category: 'material',
     description:
@@ -808,7 +798,7 @@ const PRIMITIVES: PrimitiveSpec[] = [
     returns: 'number',
     category: 'utility',
     description: 'Sums triangle count across every mesh in the subtree.',
-    example: "meta.tris = countTriangles(root);",
+    example: 'meta.tris = countTriangles(root);',
   },
   {
     name: 'countMaterials',
@@ -824,11 +814,12 @@ const PRIMITIVES: PrimitiveSpec[] = [
     returns: 'string[]',
     category: 'utility',
     description: 'All node names beginning with `Joint_`. Use to sanity-check animation targets.',
-    example: "const joints = getJointNames(root);",
+    example: 'const joints = getJointNames(root);',
   },
   {
     name: 'validateAsset',
-    signature: "validateAsset(root: Object3D, category: 'character' | 'prop' | 'vfx' | 'environment')",
+    signature:
+      "validateAsset(root: Object3D, category: 'character' | 'prop' | 'vfx' | 'environment')",
     returns: '{ valid, errors, warnings }',
     category: 'utility',
     description: 'Warns on category-appropriate triangle / material budgets.',

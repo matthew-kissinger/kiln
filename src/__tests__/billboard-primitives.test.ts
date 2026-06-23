@@ -3,13 +3,9 @@
  */
 
 import { describe, expect, test } from 'bun:test';
-import * as THREE from 'three';
+import type * as THREE from 'three';
 
-import {
-  crossedQuadsGeo,
-  foliageCardGeo,
-  octaGridPlane,
-} from '../primitives';
+import { crossedQuadsGeo, foliageCardGeo, octaGridPlane } from '../primitives';
 
 function bbox(g: THREE.BufferGeometry): { min: THREE.Vector3; max: THREE.Vector3 } {
   g.computeBoundingBox();
@@ -43,13 +39,13 @@ describe('foliageCardGeo', () => {
 describe('crossedQuadsGeo', () => {
   test('planes=2 yields 2 planes × 2 tris = 4 triangles', () => {
     const g = crossedQuadsGeo({ width: 1, height: 1, planes: 2 });
-    const tris = (g.index!.count / 3);
+    const tris = g.index!.count / 3;
     expect(tris).toBe(4);
   });
 
   test('planes=3 yields 6 triangles', () => {
     const g = crossedQuadsGeo({ width: 1, height: 1, planes: 3 });
-    const tris = (g.index!.count / 3);
+    const tris = g.index!.count / 3;
     expect(tris).toBe(6);
   });
 

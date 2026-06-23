@@ -74,7 +74,11 @@ describe('renderClipAnimation', () => {
 
   test('posing actually moves the scene — frames differ from each other', async () => {
     const { root, clips } = await executeKilnCode(WALKER);
-    const r = await renderClipAnimation(root, clips, { clip: 'walk', camera: 'right', perFrame: true });
+    const r = await renderClipAnimation(root, clips, {
+      clip: 'walk',
+      camera: 'right',
+      perFrame: true,
+    });
     expect(r.pngs).toHaveLength(6);
     // Mid-stride (frame 2, ~40%) must look different from the start pose (frame 0).
     expect(Buffer.compare(r.pngs![0]!, r.pngs![2]!)).not.toBe(0);

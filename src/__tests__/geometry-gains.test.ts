@@ -26,7 +26,10 @@ describe('snapTo', () => {
     void g; // sandbox registration sanity is covered by the parity test
     const host = new THREE.Mesh(new THREE.BoxGeometry(1, 1, 1), new THREE.MeshStandardMaterial());
     host.position.set(0, 0.5, 0);
-    const part = new THREE.Mesh(new THREE.BoxGeometry(0.2, 0.2, 0.2), new THREE.MeshStandardMaterial());
+    const part = new THREE.Mesh(
+      new THREE.BoxGeometry(0.2, 0.2, 0.2),
+      new THREE.MeshStandardMaterial(),
+    );
     part.position.set(0, 1.8, 0); // 0.7 above the host top
     const scene = new THREE.Object3D();
     scene.add(host, part);

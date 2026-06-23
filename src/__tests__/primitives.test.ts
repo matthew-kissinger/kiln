@@ -156,14 +156,10 @@ describe('createRoot / createPivot / createPart', () => {
 describe('attachment helpers', () => {
   test('beamBetween creates a named cylinder centered between endpoints', () => {
     const root = createRoot('R');
-    const beam = beamBetween(
-      'Brace',
-      [1, 0, 0],
-      [1, 2, 0],
-      0.05,
-      gameMaterial(0x333333),
-      { parent: root, segments: 6 }
-    ) as THREE.Mesh;
+    const beam = beamBetween('Brace', [1, 0, 0], [1, 2, 0], 0.05, gameMaterial(0x333333), {
+      parent: root,
+      segments: 6,
+    }) as THREE.Mesh;
 
     expect(beam.name).toBe('Mesh_Brace');
     expect(beam.parent).toBe(root);
@@ -174,9 +170,9 @@ describe('attachment helpers', () => {
   });
 
   test('beamBetween rejects zero-length beams', () => {
-    expect(() =>
-      beamBetween('Bad', [0, 0, 0], [0, 0, 0], 0.05, gameMaterial(0x333333))
-    ).toThrow('start and end must be different points');
+    expect(() => beamBetween('Bad', [0, 0, 0], [0, 0, 0], 0.05, gameMaterial(0x333333))).toThrow(
+      'start and end must be different points',
+    );
   });
 
   test('createLadder creates two continuous rails and evenly named rungs', () => {
@@ -243,7 +239,11 @@ describe('building helpers', () => {
       thickness: 0.15,
       opening: { kind: 'door' },
     });
-    expect(wall.children.map((c) => c.name).sort()).toEqual(['Mesh_W_L', 'Mesh_W_Lintel', 'Mesh_W_R']);
+    expect(wall.children.map((c) => c.name).sort()).toEqual([
+      'Mesh_W_L',
+      'Mesh_W_Lintel',
+      'Mesh_W_R',
+    ]);
   });
 
   test('wallWithOpening: a window adds a sill apron under the gap', () => {
@@ -263,7 +263,11 @@ describe('building helpers', () => {
 
   test('room: hollow shell of four walls + a floor, enterable by default', () => {
     const root = createRoot('R');
-    const { root: hut, walls, floor } = room('Hut', gameMaterial(0x8b6f3d), {
+    const {
+      root: hut,
+      walls,
+      floor,
+    } = room('Hut', gameMaterial(0x8b6f3d), {
       width: 5,
       depth: 4,
       parent: root,
@@ -338,10 +342,12 @@ describe('building helpers', () => {
 
   test('createStairs: rejects no steps and a degenerate flight', () => {
     const mat = gameMaterial(0x888888);
-    expect(() => createStairs('Bad', mat, { steps: 0, totalRise: 1, totalRun: 1, width: 1 })).toThrow(
-      'steps must be >= 1',
+    expect(() =>
+      createStairs('Bad', mat, { steps: 0, totalRise: 1, totalRun: 1, width: 1 }),
+    ).toThrow('steps must be >= 1');
+    expect(() => createStairs('Bad', mat, { totalRise: 0, totalRun: 1, width: 1 })).toThrow(
+      'must be non-zero',
     );
-    expect(() => createStairs('Bad', mat, { totalRise: 0, totalRun: 1, width: 1 })).toThrow('must be non-zero');
   });
 });
 
@@ -427,7 +433,7 @@ describe('geometry primitives produce real Three.js geometries', () => {
 
   test('cylinderOnAxis rejects zero-length normal', () => {
     expect(() => cylinderOnAxis([0, 0, 0], [0, 0, 0], 0.1, 1)).toThrow(
-      'normal must be a non-zero vector'
+      'normal must be a non-zero vector',
     );
   });
 
@@ -800,7 +806,7 @@ describe('countTriangles / countMaterials / getJointNames', () => {
     // A single triangle (3 verts, 9 floats), no index.
     geo.setAttribute(
       'position',
-      new THREE.BufferAttribute(new Float32Array([0, 0, 0, 1, 0, 0, 0, 1, 0]), 3)
+      new THREE.BufferAttribute(new Float32Array([0, 0, 0, 1, 0, 0, 0, 1, 0]), 3),
     );
     root.add(new THREE.Mesh(geo, gameMaterial(0x0)));
     expect(countTriangles(root)).toBe(1);
@@ -813,10 +819,7 @@ describe('countTriangles / countMaterials / getJointNames', () => {
 
   test('countMaterials handles arrays of materials per mesh', () => {
     const root = createRoot('R');
-    const mesh = new THREE.Mesh(
-      boxGeo(1, 1, 1),
-      [gameMaterial(0xff0000), gameMaterial(0x00ff00)]
-    );
+    const mesh = new THREE.Mesh(boxGeo(1, 1, 1), [gameMaterial(0xff0000), gameMaterial(0x00ff00)]);
     root.add(mesh);
     expect(countMaterials(root)).toBe(2);
   });
@@ -883,17 +886,43 @@ describe('buildSandboxGlobals', () => {
   test('exposes every primitive the LLM is told it can use', () => {
     const globals = buildSandboxGlobals();
     const expected = [
-      'createRoot', 'createPivot', 'createPart',
-      'beamBetween', 'createLadder', 'createWingPair',
-      'capsuleGeo', 'capsuleXGeo', 'capsuleZGeo',
-      'cylinderGeo', 'cylinderXGeo', 'cylinderZGeo',
-      'boxGeo', 'sphereGeo', 'coneGeo', 'coneXGeo', 'coneZGeo',
-      'torusGeo', 'planeGeo', 'wingGeo',
-      'gameMaterial', 'basicMaterial', 'glassMaterial', 'lambertMaterial',
-      'rotationTrack', 'positionTrack', 'scaleTrack', 'createClip',
-      'spinAnimation', 'bobbingAnimation', 'idleBreathing',
-      'countTriangles', 'countMaterials', 'getJointNames', 'validateAsset',
-      'Math', 'console',
+      'createRoot',
+      'createPivot',
+      'createPart',
+      'beamBetween',
+      'createLadder',
+      'createWingPair',
+      'capsuleGeo',
+      'capsuleXGeo',
+      'capsuleZGeo',
+      'cylinderGeo',
+      'cylinderXGeo',
+      'cylinderZGeo',
+      'boxGeo',
+      'sphereGeo',
+      'coneGeo',
+      'coneXGeo',
+      'coneZGeo',
+      'torusGeo',
+      'planeGeo',
+      'wingGeo',
+      'gameMaterial',
+      'basicMaterial',
+      'glassMaterial',
+      'lambertMaterial',
+      'rotationTrack',
+      'positionTrack',
+      'scaleTrack',
+      'createClip',
+      'spinAnimation',
+      'bobbingAnimation',
+      'idleBreathing',
+      'countTriangles',
+      'countMaterials',
+      'getJointNames',
+      'validateAsset',
+      'Math',
+      'console',
     ];
     for (const name of expected) {
       expect(globals[name]).toBeDefined();
@@ -902,10 +931,7 @@ describe('buildSandboxGlobals', () => {
 
   test('when given a usage map, tallies primitive invocations', () => {
     const usage: Record<string, number> = {};
-    const globals = buildSandboxGlobals(usage) as Record<
-      string,
-      (...a: unknown[]) => unknown
-    >;
+    const globals = buildSandboxGlobals(usage) as Record<string, (...a: unknown[]) => unknown>;
 
     // Call a spread of primitives with varying counts.
     globals.createRoot!('R');

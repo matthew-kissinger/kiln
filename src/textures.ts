@@ -64,7 +64,7 @@ export async function loadTexture(source: TextureSource): Promise<THREE.DataText
     meta.width,
     meta.height,
     THREE.RGBAFormat,
-    THREE.UnsignedByteType
+    THREE.UnsignedByteType,
   );
   tex.colorSpace = THREE.SRGBColorSpace;
   tex.needsUpdate = true;

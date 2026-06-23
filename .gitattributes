@@ -1,0 +1,5 @@
+# Normalize line endings to LF for all text; let Git detect text vs binary.
+* text=auto eol=lf
+bun.lock -diff linguist-generated=true
+*.png binary
+*.glb binary

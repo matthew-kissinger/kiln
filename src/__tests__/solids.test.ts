@@ -29,8 +29,7 @@ describe('Wave 2A: CSG primitives (manifold-3d)', () => {
 
     const merged = await boolUnion('Merged', a, b);
     expect(merged).toBeInstanceOf(THREE.Mesh);
-    const posCount = (merged.geometry.getAttribute('position') as THREE.BufferAttribute)
-      .count;
+    const posCount = (merged.geometry.getAttribute('position') as THREE.BufferAttribute).count;
     expect(posCount).toBeGreaterThan(0);
   });
 
@@ -41,9 +40,7 @@ describe('Wave 2A: CSG primitives (manifold-3d)', () => {
     const pierced = await boolDiff('Pierced', body, hole);
     // Default output is flat-shaded (non-indexed): count positions/3.
     const posCount = (pierced.geometry.getAttribute('position') as THREE.BufferAttribute).count;
-    const piercedTris = pierced.geometry.index
-      ? pierced.geometry.index.count / 3
-      : posCount / 3;
+    const piercedTris = pierced.geometry.index ? pierced.geometry.index.count / 3 : posCount / 3;
     // A pierced box has more triangles than a plain box (12).
     expect(piercedTris).toBeGreaterThan(12);
   });
@@ -76,8 +73,7 @@ describe('Wave 2A: CSG primitives (manifold-3d)', () => {
 
     const lens = await boolIntersect('Lens', a, b);
     expect(lens).toBeInstanceOf(THREE.Mesh);
-    const posCount = (lens.geometry.getAttribute('position') as THREE.BufferAttribute)
-      .count;
+    const posCount = (lens.geometry.getAttribute('position') as THREE.BufferAttribute).count;
     expect(posCount).toBeGreaterThan(0);
   });
 
@@ -99,7 +95,7 @@ describe('Wave 2A: CSG primitives (manifold-3d)', () => {
 
   it('errors clearly on invalid input', async () => {
     await expect(
-      boolUnion('X', new THREE.Mesh(boxGeo(1, 1, 1), gameMaterial(0xff0000)))
+      boolUnion('X', new THREE.Mesh(boxGeo(1, 1, 1), gameMaterial(0xff0000))),
     ).rejects.toThrow(/at least two/);
   });
 

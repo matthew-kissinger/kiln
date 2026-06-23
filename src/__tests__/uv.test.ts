@@ -10,13 +10,7 @@
 
 import { describe, it, expect } from 'bun:test';
 import * as THREE from 'three';
-import {
-  createRoot,
-  boxGeo,
-  cylinderGeo,
-  sphereGeo,
-  gameMaterial,
-} from '../primitives';
+import { createRoot, boxGeo, cylinderGeo, sphereGeo, gameMaterial } from '../primitives';
 import { autoUnwrap } from '../uv';
 import { boolDiff } from '../solids';
 import { renderSceneToGLB } from '../render';

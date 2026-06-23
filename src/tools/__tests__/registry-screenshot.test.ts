@@ -35,7 +35,9 @@ describe('kiln_screenshot', () => {
   });
 
   test('returns ok:false with the error message instead of throwing', async () => {
-    const out = (await screenshotDef().run({ code: 'not a kiln program (' })) as KilnScreenshotResult;
+    const out = (await screenshotDef().run({
+      code: 'not a kiln program (',
+    })) as KilnScreenshotResult;
     expect(out.ok).toBe(false);
     expect(out.error).toBeDefined();
     expect(out.pngBase64).toBeUndefined();

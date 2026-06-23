@@ -85,7 +85,10 @@ test('view returns the raw buffer and a line count that tracks edits', () => {
   const v = buf.view();
   expect(v.code).toBe(SEED);
   expect(v.lines).toBe(SEED.split('\n').length);
-  buf.apply({ oldString: '  return root;\n', newString: '  root.add(createPart("Lid", boxGeo(1,1,1)));\n  return root;\n' });
+  buf.apply({
+    oldString: '  return root;\n',
+    newString: '  root.add(createPart("Lid", boxGeo(1,1,1)));\n  return root;\n',
+  });
   expect(buf.view().lines).toBe(buf.code.split('\n').length);
 });
 

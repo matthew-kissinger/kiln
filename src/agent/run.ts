@@ -16,7 +16,14 @@
  * caller constructs the `model` (see provider helpers) and owns any out-of-process
  * resources (e.g. an MCP client passed via `extraTools`).
  */
-import { Agent, TextBlock, ImageBlock, type Plugin, type Tool, type Message } from '@strands-agents/sdk';
+import {
+  Agent,
+  TextBlock,
+  ImageBlock,
+  type Plugin,
+  type Tool,
+  type Message,
+} from '@strands-agents/sdk';
 import { AgentSkills } from '@strands-agents/sdk/vended-plugins/skills';
 
 import {
@@ -230,7 +237,10 @@ export async function runKilnAgent(opts: RunKilnAgentOptions): Promise<RunKilnAg
 
     // An image-only request still needs a textual anchor for prompt framing.
     const promptText =
-      opts.prompt?.trim() || (opts.inputImage ? 'Build a 3D game asset that matches the attached reference image.' : opts.prompt);
+      opts.prompt?.trim() ||
+      (opts.inputImage
+        ? 'Build a 3D game asset that matches the attached reference image.'
+        : opts.prompt);
 
     const reviewNote =
       surface === 'unified'

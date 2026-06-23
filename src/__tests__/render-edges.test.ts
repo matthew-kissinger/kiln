@@ -11,11 +11,7 @@
 import { describe, expect, test } from 'bun:test';
 import { NodeIO } from '@gltf-transform/core';
 
-import {
-  executeKilnCode,
-  renderGLB,
-  inspectGeneratedAnimation,
-} from '../render';
+import { executeKilnCode, renderGLB, inspectGeneratedAnimation } from '../render';
 
 // =============================================================================
 // executeKilnCode guard clauses
@@ -32,9 +28,9 @@ describe('executeKilnCode input validation', () => {
     // ReferenceError before the typeof check fires. Either failure
     // mode is acceptable - the contract is "code without build() does
     // not silently render".
-    await expect(
-      executeKilnCode(`const meta = { name: 'NoBuild' };`)
-    ).rejects.toThrow(/build is not defined|did not define `build`/);
+    await expect(executeKilnCode(`const meta = { name: 'NoBuild' };`)).rejects.toThrow(
+      /build is not defined|did not define `build`/,
+    );
   });
 
   test('throws when build is defined but is not a function', async () => {
@@ -42,7 +38,7 @@ describe('executeKilnCode input validation', () => {
       executeKilnCode(`
 const meta = { name: 'NotFn' };
 const build = 'not a function';
-`)
+`),
     ).rejects.toThrow(/did not define `build`/);
   });
 
@@ -51,7 +47,7 @@ const build = 'not a function';
       executeKilnCode(`
 const meta = { name: 'BadReturn' };
 function build() { return 42; }
-`)
+`),
     ).rejects.toThrow(/did not return a THREE.Object3D/);
   });
 

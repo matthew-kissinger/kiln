@@ -30,12 +30,12 @@ type XatlasApi = {
     meshObj: string,
     useNormals: boolean,
     useCoords: boolean,
-    scale: number
+    scale: number,
   ): { meshId: number } | null;
   generateAtlas(
     chartOptions: Record<string, unknown>,
     packOptions: Record<string, unknown>,
-    destroyMesh: boolean
+    destroyMesh: boolean,
   ): {
     width: number;
     height: number;
@@ -63,10 +63,12 @@ async function getXatlas(): Promise<XatlasApi> {
       const apiSpecifier = 'xatlasjs/dist/node/api.mjs';
       const xatlasSpecifier = 'xatlasjs/dist/node/xatlas.js';
       const apiMod = (await import(apiSpecifier)) as unknown as {
-        Api: (createModule: unknown) => new (
+        Api: (
+          createModule: unknown,
+        ) => new (
           onLoad: () => void,
           locateFile: unknown,
-          onProgress: unknown
+          onProgress: unknown,
         ) => XatlasApi;
       };
       const xatlasMod = (await import(xatlasSpecifier)) as unknown as {
@@ -107,7 +109,7 @@ export interface AutoUnwrapOptions {
  */
 export async function autoUnwrap(
   geometry: THREE.BufferGeometry,
-  opts: AutoUnwrapOptions = {}
+  opts: AutoUnwrapOptions = {},
 ): Promise<THREE.BufferGeometry> {
   const xa = await getXatlas();
 
@@ -136,7 +138,7 @@ export async function autoUnwrap(
     'kiln-mesh',
     useNormals,
     false,
-    1
+    1,
   );
   if (!addRes) {
     xa.destroyAtlas();
@@ -146,7 +148,7 @@ export async function autoUnwrap(
   const result = xa.generateAtlas(
     {},
     { resolution: opts.resolution ?? 1024, padding: opts.padding ?? 2 },
-    true
+    true,
   );
 
   const mesh = result.meshes[0];
@@ -158,19 +160,13 @@ export async function autoUnwrap(
   const out = new THREE.BufferGeometry();
   out.setAttribute(
     'position',
-    new THREE.BufferAttribute(new Float32Array(mesh.vertex.vertices), 3)
+    new THREE.BufferAttribute(new Float32Array(mesh.vertex.vertices), 3),
   );
   if (mesh.vertex.normals) {
-    out.setAttribute(
-      'normal',
-      new THREE.BufferAttribute(new Float32Array(mesh.vertex.normals), 3)
-    );
+    out.setAttribute('normal', new THREE.BufferAttribute(new Float32Array(mesh.vertex.normals), 3));
   }
   if (mesh.vertex.coords1) {
-    out.setAttribute(
-      'uv',
-      new THREE.BufferAttribute(new Float32Array(mesh.vertex.coords1), 2)
-    );
+    out.setAttribute('uv', new THREE.BufferAttribute(new Float32Array(mesh.vertex.coords1), 2));
   }
   if (mesh.index) {
     out.setIndex(new THREE.BufferAttribute(new Uint32Array(mesh.index), 1));

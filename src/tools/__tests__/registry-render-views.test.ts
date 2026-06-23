@@ -49,7 +49,9 @@ describe('kilnRenderViewsDef (unified kiln_render)', () => {
   });
 
   test('build failure is image-free: ok:false, error set, no pngBase64', async () => {
-    const out = (await kilnRenderViewsDef.run({ code: 'not a kiln program (' })) as KilnRenderViewsResult;
+    const out = (await kilnRenderViewsDef.run({
+      code: 'not a kiln program (',
+    })) as KilnRenderViewsResult;
     expect(out.ok).toBe(false);
     expect(out.error).toBeDefined();
     expect(out.pngBase64).toBeUndefined();

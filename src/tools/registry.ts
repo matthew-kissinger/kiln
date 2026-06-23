@@ -63,7 +63,7 @@ const listPrimitivesInput = z.object({
     .string()
     .optional()
     .describe(
-      'Optional category filter: geometry, material, structure, animation, utility, instancing, csg, arrays, mesh-ops, curves, uv, textures.'
+      'Optional category filter: geometry, material, structure, animation, utility, instancing, csg, arrays, mesh-ops, curves, uv, textures.',
     ),
 });
 
@@ -80,10 +80,14 @@ const screenshotInput = z.object({
 });
 
 const screenshotAnimationInput = z.object({
-  code: z.string().describe('Kiln source code to execute; must define animate() returning the named clip.'),
+  code: z
+    .string()
+    .describe('Kiln source code to execute; must define animate() returning the named clip.'),
   clip: z
     .string()
-    .describe('The animation clip to view, by name (e.g. "walk", "attack"). Must be one your animate() returns.'),
+    .describe(
+      'The animation clip to view, by name (e.g. "walk", "attack"). Must be one your animate() returns.',
+    ),
   camera: z
     .string()
     .optional()
@@ -94,7 +98,9 @@ const screenshotAnimationInput = z.object({
   perFrame: z
     .boolean()
     .optional()
-    .describe('Return the frames as separate high-res images instead of one composite grid. Default false.'),
+    .describe(
+      'Return the frames as separate high-res images instead of one composite grid. Default false.',
+    ),
 });
 
 const viewInteriorInput = z.object({
@@ -102,7 +108,9 @@ const viewInteriorInput = z.object({
   nodeName: z
     .string()
     .optional()
-    .describe('The roof part to lift, by name (default "Roof"). Matches that node and its children.'),
+    .describe(
+      'The roof part to lift, by name (default "Roof"). Matches that node and its children.',
+    ),
 });
 
 // =============================================================================
@@ -115,9 +123,7 @@ function runListPrimitives(input: z.infer<typeof listPrimitivesInput>): {
 } {
   const all = listPrimitives();
   const category = input.category?.trim().toLowerCase();
-  const primitives = category
-    ? all.filter((p) => p.category.toLowerCase() === category)
-    : all;
+  const primitives = category ? all.filter((p) => p.category.toLowerCase() === category) : all;
 
   const text = primitives
     .map((p) => `${p.signature} -> ${p.returns}\n  ${p.description}\n  e.g. ${p.example}`)
@@ -254,7 +260,12 @@ async function runRender(input: z.infer<typeof renderInput>): Promise<KilnRender
       bbox: metrics.bbox,
       lowestPart: metrics.lowestPart,
       ...(rendered.instanceability
-        ? { instanceability: { grade: rendered.instanceability.grade, summary: rendered.instanceability.summary } }
+        ? {
+            instanceability: {
+              grade: rendered.instanceability.grade,
+              summary: rendered.instanceability.summary,
+            },
+          }
         : {}),
       warnings,
     };
@@ -289,7 +300,9 @@ export interface KilnScreenshotResult {
  * The renderer is imported lazily so the views module (node:zlib) never enters
  * the browser bundle graph.
  */
-async function runScreenshot(input: z.infer<typeof screenshotInput>): Promise<KilnScreenshotResult> {
+async function runScreenshot(
+  input: z.infer<typeof screenshotInput>,
+): Promise<KilnScreenshotResult> {
   try {
     const { renderViewGrid } = await import('../views');
     const { root } = await executeKilnCode(input.code);
@@ -377,7 +390,12 @@ async function runRenderViews(input: z.infer<typeof renderInput>): Promise<KilnR
       bbox: metrics.bbox,
       lowestPart: metrics.lowestPart,
       ...(rendered.instanceability
-        ? { instanceability: { grade: rendered.instanceability.grade, summary: rendered.instanceability.summary } }
+        ? {
+            instanceability: {
+              grade: rendered.instanceability.grade,
+              summary: rendered.instanceability.summary,
+            },
+          }
         : {}),
       views: grid.views,
       gridWidth: grid.width,
@@ -485,12 +503,19 @@ async function runScreenshotAnimation(
     if (r.pngs) return { ...base, framesBase64: r.pngs.map((p) => p.toString('base64')) };
     return { ...base, pngBase64: r.png!.toString('base64') };
   } catch (err) {
-    return { ok: false, frames: 0, error: err instanceof Error ? err.message : String(err), warnings: [] };
+    return {
+      ok: false,
+      frames: 0,
+      error: err instanceof Error ? err.message : String(err),
+      warnings: [],
+    };
   }
 }
 
 /** Media extractor for the composite-grid result (pngBase64 → bytes + stripped JSON). */
-export function screenshotAnimationMedia(output: unknown): { png: Uint8Array; json: unknown } | undefined {
+export function screenshotAnimationMedia(
+  output: unknown,
+): { png: Uint8Array; json: unknown } | undefined {
   const o = output as KilnScreenshotAnimationResult | undefined;
   if (!o || typeof o.pngBase64 !== 'string' || o.pngBase64.length === 0) return undefined;
   const { pngBase64: _png, framesBase64: _frames, ...json } = o;
@@ -566,7 +591,9 @@ export interface KilnViewInteriorResult {
  * inspector (the agent already gets floating/stray warnings from kiln_render). The views
  * module is imported lazily to keep node:zlib out of the browser bundle graph.
  */
-async function runViewInterior(input: z.infer<typeof viewInteriorInput>): Promise<KilnViewInteriorResult> {
+async function runViewInterior(
+  input: z.infer<typeof viewInteriorInput>,
+): Promise<KilnViewInteriorResult> {
   try {
     const { renderInteriorGrid } = await import('../views');
     const { root } = await executeKilnCode(input.code);

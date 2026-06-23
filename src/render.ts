@@ -12,19 +12,19 @@
 
 import * as THREE from 'three';
 import { Document, WebIO } from '@gltf-transform/core';
-import { dedup, palette, flatten, join, weld, prune, mergeDocuments } from '@gltf-transform/functions';
-
 import {
-  buildSlotIndex,
-  chooseSlot,
-  hexToLinearRgb,
-  type SnapSlot,
-} from './palette-snap';
+  dedup,
+  palette,
+  flatten,
+  join,
+  weld,
+  prune,
+  mergeDocuments,
+} from '@gltf-transform/functions';
 
-import {
-  buildSandboxGlobals,
-  countTriangles,
-} from './primitives';
+import { buildSlotIndex, chooseSlot, hexToLinearRgb, type SnapSlot } from './palette-snap';
+
+import { buildSandboxGlobals, countTriangles } from './primitives';
 import {
   collectGlbMetrics,
   gradeInstanceability,
@@ -121,17 +121,16 @@ export async function executeKilnCode(code: string): Promise<ExecutedKilnCode> {
 
   const fn = new Function(
     ...globalNames,
-    `${normalized}\nreturn { meta: typeof meta !== 'undefined' ? meta : {}, build, animate: typeof animate !== 'undefined' ? animate : null };`
+    `${normalized}\nreturn { meta: typeof meta !== 'undefined' ? meta : {}, build, animate: typeof animate !== 'undefined' ? animate : null };`,
   );
 
   const { meta, build, animate } = fn(...globalValues) as {
     meta: KilnCodeMeta;
     build: () => THREE.Object3D | Promise<THREE.Object3D>;
     animate:
-      | ((root: THREE.Object3D) =>
-          | THREE.AnimationClip[]
-          | undefined
-          | Promise<THREE.AnimationClip[] | undefined>)
+      | ((
+          root: THREE.Object3D,
+        ) => THREE.AnimationClip[] | undefined | Promise<THREE.AnimationClip[] | undefined>)
       | null;
   };
 
@@ -162,7 +161,7 @@ function bridgeMaterial(
   doc: Document,
   threeMat: THREE.Material,
   cache: Map<THREE.Material, GtMaterial>,
-  textureCache: Map<THREE.Texture, GtTexture>
+  textureCache: Map<THREE.Texture, GtTexture>,
 ): GtMaterial {
   const cached = cache.get(threeMat);
   if (cached) return cached;
@@ -227,7 +226,12 @@ function bridgeMaterial(
     }
   } else if (matFlags.isMeshBasicMaterial) {
     const basicMat = threeMat as THREE.MeshBasicMaterial;
-    mat.setBaseColorFactor([basicMat.color.r, basicMat.color.g, basicMat.color.b, basicMat.opacity]);
+    mat.setBaseColorFactor([
+      basicMat.color.r,
+      basicMat.color.g,
+      basicMat.color.b,
+      basicMat.opacity,
+    ]);
     mat.setRoughnessFactor(1.0);
     mat.setMetallicFactor(0.0);
   }
@@ -247,7 +251,7 @@ function bridgeMaterial(
 function bridgeTexture(
   doc: Document,
   threeTex: THREE.Texture,
-  cache: Map<THREE.Texture, GtTexture>
+  cache: Map<THREE.Texture, GtTexture>,
 ): GtTexture | null {
   const cached = cache.get(threeTex);
   if (cached) return cached;
@@ -269,7 +273,7 @@ function bridgeGeometry(
   buf: GtBuffer,
   geometry: THREE.BufferGeometry,
   material: GtMaterial,
-  meshName: string
+  meshName: string,
 ): GtMesh {
   if (!geometry.getAttribute('normal')) {
     geometry.computeVertexNormals();
@@ -281,10 +285,11 @@ function bridgeGeometry(
   if (posAttr) {
     prim.setAttribute(
       'POSITION',
-      doc.createAccessor(meshName + '_pos')
+      doc
+        .createAccessor(meshName + '_pos')
         .setArray(new Float32Array(posAttr.array))
         .setType(TYPE_VEC3)
-        .setBuffer(buf)
+        .setBuffer(buf),
     );
   }
 
@@ -292,10 +297,11 @@ function bridgeGeometry(
   if (normAttr) {
     prim.setAttribute(
       'NORMAL',
-      doc.createAccessor(meshName + '_norm')
+      doc
+        .createAccessor(meshName + '_norm')
         .setArray(new Float32Array(normAttr.array))
         .setType(TYPE_VEC3)
-        .setBuffer(buf)
+        .setBuffer(buf),
     );
   }
 
@@ -303,20 +309,22 @@ function bridgeGeometry(
   if (uvAttr) {
     prim.setAttribute(
       'TEXCOORD_0',
-      doc.createAccessor(meshName + '_uv')
+      doc
+        .createAccessor(meshName + '_uv')
         .setArray(new Float32Array(uvAttr.array))
         .setType(TYPE_VEC2)
-        .setBuffer(buf)
+        .setBuffer(buf),
     );
   }
 
   const indexAttr = geometry.getIndex();
   if (indexAttr) {
     prim.setIndices(
-      doc.createAccessor(meshName + '_idx')
+      doc
+        .createAccessor(meshName + '_idx')
         .setArray(new Uint16Array(indexAttr.array))
         .setType(TYPE_SCALAR)
-        .setBuffer(buf)
+        .setBuffer(buf),
     );
   }
 
@@ -330,7 +338,7 @@ function bridgeNode(
   matCache: Map<THREE.Material, GtMaterial>,
   nodeMap: Map<string, GtNode>,
   meshCache: Map<string, GtMesh>,
-  texCache: Map<THREE.Texture, GtTexture>
+  texCache: Map<THREE.Texture, GtTexture>,
 ): GtNode {
   const gtNode = doc.createNode(threeObj.name || undefined);
 
@@ -378,7 +386,7 @@ function bridgeAnimations(
   buf: GtBuffer,
   clips: THREE.AnimationClip[],
   nodeMap: Map<string, GtNode>,
-  warnings: string[]
+  warnings: string[],
 ): void {
   for (const clip of clips) {
     const anim = doc.createAnimation(clip.name);
@@ -410,22 +418,26 @@ function bridgeAnimations(
         continue;
       }
 
-      const inputAcc = doc.createAccessor(clip.name + '_' + nodeName + '_input')
+      const inputAcc = doc
+        .createAccessor(clip.name + '_' + nodeName + '_input')
         .setArray(new Float32Array(track.times))
         .setType(TYPE_SCALAR)
         .setBuffer(buf);
 
-      const outputAcc = doc.createAccessor(clip.name + '_' + nodeName + '_output')
+      const outputAcc = doc
+        .createAccessor(clip.name + '_' + nodeName + '_output')
         .setArray(new Float32Array(track.values))
         .setType(valueType)
         .setBuffer(buf);
 
-      const sampler = doc.createAnimationSampler()
+      const sampler = doc
+        .createAnimationSampler()
         .setInput(inputAcc)
         .setOutput(outputAcc)
         .setInterpolation('LINEAR');
 
-      const channel = doc.createAnimationChannel()
+      const channel = doc
+        .createAnimationChannel()
         .setTargetNode(targetNode)
         .setTargetPath(targetPath)
         .setSampler(sampler);
@@ -534,7 +546,10 @@ function resolveOptimize(opt?: OptimizeMode): OptimizeMode {
  * Returns what it did; throws are the caller's to handle (the GLB is otherwise
  * valid). Pure w.r.t. inputs other than the mutated Document.
  */
-async function consolidateMaterials(doc: Document, mode: 'palette' | 'full'): Promise<OptimizeSummary> {
+async function consolidateMaterials(
+  doc: Document,
+  mode: 'palette' | 'full',
+): Promise<OptimizeSummary> {
   const before = collectGlbMetrics(doc);
   const root = doc.getRoot();
   const animatedOrSkinned = root.listAnimations().length > 0 || root.listSkins().length > 0;
@@ -576,7 +591,7 @@ async function consolidateMaterials(doc: Document, mode: 'palette' | 'full'): Pr
  */
 export async function renderSceneToGLB(
   root: THREE.Object3D,
-  opts: RenderSceneOptions = {}
+  opts: RenderSceneOptions = {},
 ): Promise<RenderSceneResult> {
   const clips = opts.clips ?? [];
   const warnings: string[] = [];
@@ -626,7 +641,9 @@ export async function renderSceneToGLB(
     try {
       optimize = await consolidateMaterials(doc, optimizeMode);
     } catch (err) {
-      warnings.push(`optimize (${optimizeMode}) failed: ${err instanceof Error ? err.message : String(err)}`);
+      warnings.push(
+        `optimize (${optimizeMode}) failed: ${err instanceof Error ? err.message : String(err)}`,
+      );
     }
   }
 
@@ -647,7 +664,14 @@ export async function renderSceneToGLB(
   const io = new WebIO();
   const bytes = await io.writeBinary(doc);
 
-  return { bytes, tris, warnings, instanceability, metricsError, ...(optimize ? { optimize } : {}) };
+  return {
+    bytes,
+    tris,
+    warnings,
+    instanceability,
+    metricsError,
+    ...(optimize ? { optimize } : {}),
+  };
 }
 
 /**
@@ -659,7 +683,10 @@ export async function renderSceneToGLB(
  *
  * Pure function: no file I/O, no globals, no WebGL.
  */
-export async function renderGLB(code: string, opts: { optimize?: OptimizeMode } = {}): Promise<RenderResult> {
+export async function renderGLB(
+  code: string,
+  opts: { optimize?: OptimizeMode } = {},
+): Promise<RenderResult> {
   const { meta, root, clips, primitiveUsage } = await executeKilnCode(code);
   const scene = await renderSceneToGLB(root, {
     sceneName: meta.name || 'Scene',
@@ -805,7 +832,10 @@ export async function snapGlbToPalette(
     let skipped = 0;
     for (const mat of doc.getRoot().listMaterials()) {
       // Hero exception — never recolor a textured material (it carries its own color).
-      if (mat.getBaseColorTexture()) { skipped++; continue; }
+      if (mat.getBaseColorTexture()) {
+        skipped++;
+        continue;
+      }
       const base = mat.getBaseColorFactor();
       const emissive = mat.getEmissiveFactor();
       const transparent = mat.getAlphaMode() === 'BLEND' || mat.getAlpha() < 0.98;
@@ -814,7 +844,10 @@ export async function snapGlbToPalette(
         emissiveLinear: [emissive[0], emissive[1], emissive[2]],
         transparent,
       });
-      if (slotI === undefined) { skipped++; continue; }
+      if (slotI === undefined) {
+        skipped++;
+        continue;
+      }
       const slot = slots[slotI]!;
       const kind = slot.kind ?? 'opaque';
       const [lr, lg, lb] = hexToLinearRgb(slot.color);
@@ -951,7 +984,9 @@ export async function composeSceneGLB(
       masterScene.addChild(wrap);
       composed++;
     } catch (err) {
-      warnings.push(`part ${i} (${part.name ?? ''}) skipped: ${err instanceof Error ? err.message : String(err)}`);
+      warnings.push(
+        `part ${i} (${part.name ?? ''}) skipped: ${err instanceof Error ? err.message : String(err)}`,
+      );
     }
   }
 
@@ -973,7 +1008,9 @@ export async function composeSceneGLB(
     try {
       await consolidateMaterials(master, optimizeMode);
     } catch (err) {
-      warnings.push(`optimize (${optimizeMode}) failed: ${err instanceof Error ? err.message : String(err)}`);
+      warnings.push(
+        `optimize (${optimizeMode}) failed: ${err instanceof Error ? err.message : String(err)}`,
+      );
     }
   }
 
@@ -988,7 +1025,13 @@ export async function composeSceneGLB(
 
   const metrics = collectGlbMetrics(master);
   const bytes = await io.writeBinary(master);
-  return { bytes, tris: metrics.triangles, draws: metrics.drawCalls, materials: metrics.uniqueMaterials, warnings };
+  return {
+    bytes,
+    tris: metrics.triangles,
+    draws: metrics.drawCalls,
+    materials: metrics.uniqueMaterials,
+    warnings,
+  };
 }
 
 // =============================================================================
@@ -1006,7 +1049,7 @@ export async function composeSceneGLB(
  */
 export function inspectGeneratedAnimation(
   root: THREE.Object3D,
-  clips: THREE.AnimationClip[]
+  clips: THREE.AnimationClip[],
 ): string[] {
   const warnings: string[] = [];
   if (clips.length === 0) return warnings;
@@ -1028,13 +1071,13 @@ export function inspectGeneratedAnimation(
 
       if (!nodeNames.has(nodeName)) {
         warnings.push(
-          `Animation track "${clip.name}:${track.name}" targets unknown node "${nodeName}" — rename the pivot or fix the track`
+          `Animation track "${clip.name}:${track.name}" targets unknown node "${nodeName}" — rename the pivot or fix the track`,
         );
       }
 
       if (!['position', 'quaternion', 'scale'].includes(property)) {
         warnings.push(
-          `Animation track "${clip.name}:${track.name}" uses unsupported property "${property}"`
+          `Animation track "${clip.name}:${track.name}" uses unsupported property "${property}"`,
         );
       }
     }
@@ -1265,16 +1308,18 @@ export function settleContacts(
 
     // Close the gap plus a small overlap along the dominant gap axis.
     const delta = pick.gap.clone();
-    const dominant = (['x', 'y', 'z'] as const).reduce((d, axis) =>
-      Math.abs(delta[axis]) > Math.abs(delta[d]) ? axis : d,
-    'x' as 'x' | 'y' | 'z');
+    const dominant = (['x', 'y', 'z'] as const).reduce(
+      (d, axis) => (Math.abs(delta[axis]) > Math.abs(delta[d]) ? axis : d),
+      'x' as 'x' | 'y' | 'z',
+    );
     delta[dominant] += Math.sign(delta[dominant]) * overlap;
 
     // Find the named object and move it, converting the world delta into the
     // parent's local space (handles rotated/scaled ancestors).
     let target: THREE.Object3D | undefined;
     root.traverse((obj) => {
-      if (!target && obj.name === pick!.stats.name && (obj as { isMesh?: boolean }).isMesh) target = obj;
+      if (!target && obj.name === pick!.stats.name && (obj as { isMesh?: boolean }).isMesh)
+        target = obj;
     });
     if (!target) break;
     const parent = target.parent ?? root;

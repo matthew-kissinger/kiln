@@ -106,7 +106,11 @@ describe('generateKilnAsset', () => {
   });
 
   test('throws when the agent returns an error', async () => {
-    runImpl = async () => ({ error: 'stream ended without completing a message', toolCalls: [], steps: 0 });
+    runImpl = async () => ({
+      error: 'stream ended without completing a message',
+      toolCalls: [],
+      steps: 0,
+    });
     await expect(generateKilnAsset({ prompt: 'x' })).rejects.toThrow(/stream ended/);
   });
 

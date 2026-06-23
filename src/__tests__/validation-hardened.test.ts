@@ -221,7 +221,10 @@ describe('kiln validation — tri budget advisory', () => {
   test('warns when a prop exceeds its tri budget', () => {
     // 20x sphereGeo(1, 32, 32) -> 20 * 2048 = 40960 tris, dwarfs prop 3000.
     const geo = Array.from({ length: 20 })
-      .map(() => '  createPart(\'S\' + Math.random(), sphereGeo(1, 32, 32), gameMaterial(0xff0000), { parent: root });')
+      .map(
+        () =>
+          "  createPart('S' + Math.random(), sphereGeo(1, 32, 32), gameMaterial(0xff0000), { parent: root });",
+      )
       .join('\n');
     const r = validate(
       `
@@ -232,7 +235,7 @@ ${geo}
   return root;
 }
 `,
-      { category: 'prop' }
+      { category: 'prop' },
     );
     expect(r.valid).toBe(true);
     expect(r.warnings.some((w) => w.code === 'TRI_BUDGET_EXCEEDED')).toBe(true);
@@ -276,19 +279,29 @@ function build() {
 
   test('flags a numeric radian triple with the degree equivalent', () => {
     const w = radianWarnings(
-      wrap(`createPart('Grip', boxGeo(1, 1, 1), gameMaterial(0x333333), { rotation: [0, 0, 0.785], parent: root });`)
+      wrap(
+        `createPart('Grip', boxGeo(1, 1, 1), gameMaterial(0x333333), { rotation: [0, 0, 0.785], parent: root });`,
+      ),
     );
     expect(w.length).toBe(1);
     expect(w[0]!.message).toContain('[0, 0, 0.785]');
     expect(w[0]!.message).toContain('[0, 0, 45]');
     expect(w[0]!.line).toBeDefined();
     // Advisory only — the program is still valid.
-    expect(validate(wrap(`createPart('G', boxGeo(1,1,1), gameMaterial(0x333333), { rotation: [0, 0, 0.785], parent: root });`)).valid).toBe(true);
+    expect(
+      validate(
+        wrap(
+          `createPart('G', boxGeo(1,1,1), gameMaterial(0x333333), { rotation: [0, 0, 0.785], parent: root });`,
+        ),
+      ).valid,
+    ).toBe(true);
   });
 
   test('flags Math.PI expressions (the -Math.PI/2 fin case)', () => {
     const w = radianWarnings(
-      wrap(`createPart('Fin', wingGeo({ span: 3 }), gameMaterial(0x445522), { rotation: [-Math.PI / 2, 0, 0], parent: root });`)
+      wrap(
+        `createPart('Fin', wingGeo({ span: 3 }), gameMaterial(0x445522), { rotation: [-Math.PI / 2, 0, 0], parent: root });`,
+      ),
     );
     expect(w.length).toBe(1);
     expect(w[0]!.message).toContain('RADIANS');
@@ -297,16 +310,25 @@ function build() {
   test('does NOT flag the rad-to-deg conversion idiom (a * 180 / Math.PI)', () => {
     const w = radianWarnings(
       wrap(`const a = 0.5;
-  createPart('Blade', boxGeo(0.06, 1.7, 0.27), gameMaterial(0x111111), { rotation: [a * 180 / Math.PI, 0, 0], parent: root });`)
+  createPart('Blade', boxGeo(0.06, 1.7, 0.27), gameMaterial(0x111111), { rotation: [a * 180 / Math.PI, 0, 0], parent: root });`),
     );
     expect(w).toEqual([]);
   });
 
   test('does NOT flag degree-style values', () => {
-    const cases = ['[0, 0, 90]', '[0, 0, -15]', '[0, 0, 28.6]', '[0, 45, 0.5]', '[0, 0, 0]', '[0, 0, 1]'];
+    const cases = [
+      '[0, 0, 90]',
+      '[0, 0, -15]',
+      '[0, 0, 28.6]',
+      '[0, 45, 0.5]',
+      '[0, 0, 0]',
+      '[0, 0, 1]',
+    ];
     for (const rot of cases) {
       const w = radianWarnings(
-        wrap(`createPart('P', boxGeo(1, 1, 1), gameMaterial(0x333333), { rotation: ${rot}, parent: root });`)
+        wrap(
+          `createPart('P', boxGeo(1, 1, 1), gameMaterial(0x333333), { rotation: ${rot}, parent: root });`,
+        ),
       );
       expect(w).toEqual([]);
     }
@@ -315,7 +337,7 @@ function build() {
   test('stays quiet on dynamic expressions it cannot read', () => {
     const w = radianWarnings(
       wrap(`const tilt = 17;
-  createPart('P', boxGeo(1, 1, 1), gameMaterial(0x333333), { rotation: [0, 0, tilt], parent: root });`)
+  createPart('P', boxGeo(1, 1, 1), gameMaterial(0x333333), { rotation: [0, 0, tilt], parent: root });`),
     );
     expect(w).toEqual([]);
   });
@@ -324,7 +346,7 @@ function build() {
     const w = radianWarnings(
       wrap(`const src = createPart('W', cylinderZGeo(0.5, 0.5, 0.3), gameMaterial(0x222222), { parent: root });
   createInstance('W2', src, { position: [1, 0, 0], rotation: [0, 1.57, 0], parent: root });
-  rotationTrack('Joint_X', [{ time: 0, rotation: [0, 0, 0] }, { time: 1, rotation: [0, 0, 0.5] }]);`)
+  rotationTrack('Joint_X', [{ time: 0, rotation: [0, 0, 0] }, { time: 1, rotation: [0, 0, 0.5] }]);`),
     );
     expect(w.length).toBe(1);
     expect(w[0]!.message).toContain('createInstance');

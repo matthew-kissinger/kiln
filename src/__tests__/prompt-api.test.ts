@@ -22,11 +22,7 @@ import {
   renderPrimitivesMarkdown,
   renderSkillQuickReference,
 } from '../prompt-api';
-import {
-  KILN_SYSTEM_PROMPT,
-  KILN_SYSTEM_PROMPT_SECTIONS,
-  KILN_API_SECTION,
-} from '../prompt';
+import { KILN_SYSTEM_PROMPT, KILN_SYSTEM_PROMPT_SECTIONS, KILN_API_SECTION } from '../prompt';
 import { buildSandboxGlobals } from '../primitives';
 
 const REPO_ROOT = resolve(dirname(fileURLToPath(import.meta.url)), '../../../../..');

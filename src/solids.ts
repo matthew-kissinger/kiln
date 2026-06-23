@@ -52,7 +52,11 @@ async function getManifoldModule(): Promise<ManifoldToplevel> {
  * Convert a Three.js Mesh/Object3D to a Manifold Mesh (world-space).
  * Flattens any scene subtree into a single merged manifold.
  */
-function threeToManifold(src: THREE.Object3D, ManifoldCls: typeof Manifold, MeshCls: typeof Mesh): Manifold {
+function threeToManifold(
+  src: THREE.Object3D,
+  ManifoldCls: typeof Manifold,
+  MeshCls: typeof Mesh,
+): Manifold {
   src.updateMatrixWorld(true);
 
   const positions: number[] = [];
@@ -117,7 +121,7 @@ function manifoldToThree(
   m: Manifold,
   material: THREE.Material,
   name: string,
-  opts: { smooth?: boolean } = {}
+  opts: { smooth?: boolean } = {},
 ): THREE.Mesh {
   const mesh = m.getMesh();
   const numProp = mesh.numProp;
@@ -157,16 +161,17 @@ function manifoldToThree(
  * Detects a plain object with `smooth` that's NOT an Object3D, so calls
  * like `boolUnion('X', a, b, { smooth: true })` still type-check.
  */
-function splitPartsAndOpts(
-  parts: Array<THREE.Object3D | { smooth?: boolean }>
-): { parts: THREE.Object3D[]; opts: { smooth?: boolean } } {
+function splitPartsAndOpts(parts: Array<THREE.Object3D | { smooth?: boolean }>): {
+  parts: THREE.Object3D[];
+  opts: { smooth?: boolean };
+} {
   if (parts.length === 0) return { parts: [], opts: {} };
   const last = parts[parts.length - 1];
   if (
     last &&
     typeof last === 'object' &&
     !(last as { isObject3D?: boolean }).isObject3D &&
-    ('smooth' in last)
+    'smooth' in last
   ) {
     return {
       parts: parts.slice(0, -1) as THREE.Object3D[],
@@ -206,10 +211,7 @@ interface KilnRange {
  * The metadata is consumed by future click-to-inspect UI; the GLB exporter
  * ignores it (gltf-transform doesn't serialise userData).
  */
-function combineRangesFromCsgInputs(
-  parts: THREE.Object3D[],
-  outputTris: number
-): KilnRange[] {
+function combineRangesFromCsgInputs(parts: THREE.Object3D[], outputTris: number): KilnRange[] {
   const inputs: Array<{ name: string; weight: number }> = [];
   for (const part of parts) {
     part.traverse((child) => {
@@ -241,9 +243,7 @@ function combineRangesFromCsgInputs(
   for (let i = 0; i < inputs.length; i++) {
     const isLast = i === inputs.length - 1;
     const weight = inputs[i]!.weight;
-    const count = isLast
-      ? outputTris - offset
-      : Math.floor((weight / totalWeight) * outputTris);
+    const count = isLast ? outputTris - offset : Math.floor((weight / totalWeight) * outputTris);
     out.push({ name: inputs[i]!.name, start: offset, count });
     offset += count;
   }
@@ -253,9 +253,7 @@ function combineRangesFromCsgInputs(
 /** Stamp `kilnRanges` on the result mesh's geometry from its CSG inputs. */
 function tagCsgOutput(result: THREE.Mesh, parts: THREE.Object3D[]): void {
   const idx = result.geometry.getIndex();
-  const tris = idx
-    ? idx.count / 3
-    : (result.geometry.getAttribute('position')?.count ?? 0) / 3;
+  const tris = idx ? idx.count / 3 : (result.geometry.getAttribute('position')?.count ?? 0) / 3;
   const ranges = combineRangesFromCsgInputs(parts, Math.floor(tris));
   result.geometry.userData = {
     ...(result.geometry.userData ?? {}),
@@ -319,8 +317,7 @@ export async function boolDiff(
   const mod = await getManifoldModule();
   const bodyM = threeToManifold(body, mod.Manifold, mod.Mesh);
   const cutterM = cutters.map((c) => threeToManifold(c, mod.Manifold, mod.Mesh));
-  const cutterUnion =
-    cutterM.length === 1 ? (cutterM[0] as Manifold) : mod.Manifold.union(cutterM);
+  const cutterUnion = cutterM.length === 1 ? (cutterM[0] as Manifold) : mod.Manifold.union(cutterM);
   const result = bodyM.subtract(cutterUnion);
   const mat = materialOf(body, new THREE.MeshStandardMaterial());
   const mesh = manifoldToThree(result, mat, `Mesh_${name}`, opts);
@@ -342,7 +339,7 @@ export async function boolIntersect(
   name: string,
   a: THREE.Object3D,
   b: THREE.Object3D,
-  opts: { smooth?: boolean } = {}
+  opts: { smooth?: boolean } = {},
 ): Promise<THREE.Mesh> {
   const mod = await getManifoldModule();
   const aM = threeToManifold(a, mod.Manifold, mod.Mesh);

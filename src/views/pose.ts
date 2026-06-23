@@ -137,13 +137,25 @@ function slerpFlat(
   o1: number,
   t: number,
 ): void {
-  const x0 = src0[o0]!, y0 = src0[o0 + 1]!, z0 = src0[o0 + 2]!, w0 = src0[o0 + 3]!;
-  const x1 = src1[o1]!, y1 = src1[o1 + 1]!, z1 = src1[o1 + 2]!, w1 = src1[o1 + 3]!;
+  const x0 = src0[o0]!,
+    y0 = src0[o0 + 1]!,
+    z0 = src0[o0 + 2]!,
+    w0 = src0[o0 + 3]!;
+  const x1 = src1[o1]!,
+    y1 = src1[o1 + 1]!,
+    z1 = src1[o1 + 2]!,
+    w1 = src1[o1 + 3]!;
   let cos = x0 * x1 + y0 * y1 + z0 * z1 + w0 * w1;
-  let bx = x1, by = y1, bz = z1, bw = w1;
+  let bx = x1,
+    by = y1,
+    bz = z1,
+    bw = w1;
   if (cos < 0) {
     cos = -cos;
-    bx = -x1; by = -y1; bz = -z1; bw = -w1;
+    bx = -x1;
+    by = -y1;
+    bz = -z1;
+    bw = -w1;
   }
   let s0: number, s1: number;
   if (cos > 0.9995) {
@@ -198,7 +210,8 @@ function sampleTrack(track: PreparedTrack, t: number, out: number[]): void {
     out[2] = quatTmp[2]!;
     out[3] = quatTmp[3]!;
   } else {
-    for (let s = 0; s < stride; s++) out[s] = values[o0 + s]! + (values[o1 + s]! - values[o0 + s]!) * a;
+    for (let s = 0; s < stride; s++)
+      out[s] = values[o0 + s]! + (values[o1 + s]! - values[o0 + s]!) * a;
   }
 }
 

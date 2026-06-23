@@ -3,7 +3,7 @@
  */
 
 import { describe, it, expect } from 'bun:test';
-import * as THREE from 'three';
+import type * as THREE from 'three';
 import { boxGeo, cylinderGeo, planeGeo } from '../primitives';
 import { boxUnwrap, cylinderUnwrap, planeUnwrap } from '../uv-shapes';
 

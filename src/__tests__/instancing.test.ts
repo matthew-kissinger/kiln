@@ -84,7 +84,12 @@ describe('Wave 1B: instancing primitives', () => {
     };
     const buildIndependent = () => {
       const r = createRoot('Independent');
-      const coords: Array<[number, number]> = [[-0.8, 1.2], [0.8, 1.2], [-0.8, -1.2], [0.8, -1.2]];
+      const coords: Array<[number, number]> = [
+        [-0.8, 1.2],
+        [0.8, 1.2],
+        [-0.8, -1.2],
+        [0.8, -1.2],
+      ];
       coords.forEach(([x, z], i) => {
         createPart(`W${i}`, cylinderGeo(0.4, 0.4, 0.2, 16), gameMaterial(0x1a1a1a), {
           position: [x, 0.3, z],

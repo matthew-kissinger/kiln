@@ -3,7 +3,7 @@
  */
 
 import { describe, it, expect } from 'bun:test';
-import * as THREE from 'three';
+import type * as THREE from 'three';
 import { gearGeo, bladeGeo } from '../gears';
 
 function bbox(geo: THREE.BufferGeometry) {

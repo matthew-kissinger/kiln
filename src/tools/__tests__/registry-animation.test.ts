@@ -33,7 +33,10 @@ function animate(root) {
 
 describe('kilnScreenshotAnimationDef', () => {
   test('grid mode: returns metrics + a base64 grid PNG', async () => {
-    const out = (await kilnScreenshotAnimationDef.run({ code: WALKER, clip: 'walk' })) as KilnScreenshotAnimationResult;
+    const out = (await kilnScreenshotAnimationDef.run({
+      code: WALKER,
+      clip: 'walk',
+    })) as KilnScreenshotAnimationResult;
     expect(out.ok).toBe(true);
     expect(out.clip).toBe('walk');
     expect(out.camera).toBe('Right'); // default camera
@@ -71,7 +74,10 @@ describe('kilnScreenshotAnimationDef', () => {
   });
 
   test('a build failure is image-free (ok:false, no png)', async () => {
-    const out = (await kilnScreenshotAnimationDef.run({ code: 'not valid (', clip: 'walk' })) as KilnScreenshotAnimationResult;
+    const out = (await kilnScreenshotAnimationDef.run({
+      code: 'not valid (',
+      clip: 'walk',
+    })) as KilnScreenshotAnimationResult;
     expect(out.ok).toBe(false);
     expect(out.error).toBeDefined();
     expect(out.pngBase64).toBeUndefined();
@@ -79,7 +85,10 @@ describe('kilnScreenshotAnimationDef', () => {
   });
 
   test('an unknown clip reports the available clips, no image', async () => {
-    const out = (await kilnScreenshotAnimationDef.run({ code: WALKER, clip: 'jump' })) as KilnScreenshotAnimationResult;
+    const out = (await kilnScreenshotAnimationDef.run({
+      code: WALKER,
+      clip: 'jump',
+    })) as KilnScreenshotAnimationResult;
     expect(out.ok).toBe(false);
     expect(out.availableClips).toEqual(['walk']);
     expect(out.pngBase64).toBeUndefined();

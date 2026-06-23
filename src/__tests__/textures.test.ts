@@ -6,11 +6,7 @@ import { describe, it, expect } from 'bun:test';
 import * as THREE from 'three';
 import sharp from 'sharp';
 import { NodeIO } from '@gltf-transform/core';
-import {
-  createRoot,
-  boxGeo,
-  gameMaterial,
-} from '../primitives';
+import { createRoot, boxGeo, gameMaterial } from '../primitives';
 import { loadTexture, pbrMaterial } from '../textures';
 import { autoUnwrap } from '../uv';
 import { renderSceneToGLB } from '../render';

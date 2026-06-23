@@ -79,7 +79,10 @@ describe('rasterizeView', () => {
     // long profile fills the frame width while the end-on view leaves the
     // cell mostly square — compare aspect by occupied-row/col extents.
     const occupiedAspect = (rgb: Uint8Array, size: number): number => {
-      let minX = size, maxX = -1, minY = size, maxY = -1;
+      let minX = size,
+        maxX = -1,
+        minY = size,
+        maxY = -1;
       for (let y = 0; y < size; y++) {
         for (let x = 0; x < size; x++) {
           const i = (y * size + x) * 3;
@@ -187,7 +190,9 @@ describe('hideNodeInScene', () => {
   test('hides the matched node AND its descendant meshes (per-mesh cull)', async () => {
     const { root } = await executeKilnCode(ROOF_ONLY_CODE);
     const dir: [number, number, number] = [0.7, 0.5, 0.7];
-    expect(coverage(rasterizeView(root, dir, { size: 64, backfaceCull: false }), 64)).toBeGreaterThan(0.1);
+    expect(
+      coverage(rasterizeView(root, dir, { size: 64, backfaceCull: false }), 64),
+    ).toBeGreaterThan(0.1);
     const hidden = hideNodeInScene(root, 'Roof');
     expect(hidden).toBeGreaterThanOrEqual(1);
     // If only the group's .visible flipped (not its child meshes), coverage would stay > 0.

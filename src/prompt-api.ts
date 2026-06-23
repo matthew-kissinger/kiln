@@ -22,10 +22,7 @@ const CATEGORY_HEADERS: Array<[PrimitiveSpec['category'], string]> = [
   ['material', '// Materials'],
   ['instancing', '// Instancing (share geometry+material; smaller GLBs)'],
   ['arrays', '// Arrays (replicate a source part)'],
-  [
-    'csg',
-    '// CSG / Boolean (async — using any of these requires `async function build()`)',
-  ],
+  ['csg', '// CSG / Boolean (async — using any of these requires `async function build()`)'],
   ['mesh-ops', '// Mesh ops'],
   ['curves', '// Curves'],
   ['uv', '// UV unwrapping'],
@@ -70,7 +67,10 @@ function renderPrimitiveLines(p: PrimitiveSpec, includeExamples = false): string
     // kiln_list_primitives tool's only extra signal). Collapse internal newlines
     // in multi-line examples (snapTo/createPart) to one logical line so the
     // section stays scannable; wrapComment re-wraps long ones at WRAP columns.
-    const collapsed = p.example.replace(/\s*\n\s*/g, ' ').replace(/\s{2,}/g, ' ').trim();
+    const collapsed = p.example
+      .replace(/\s*\n\s*/g, ' ')
+      .replace(/\s{2,}/g, ' ')
+      .trim();
     lines.push(...wrapComment(`e.g. ${collapsed}`, '  '));
   }
   return lines;

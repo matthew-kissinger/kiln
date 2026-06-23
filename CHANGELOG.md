@@ -29,14 +29,28 @@ Initial extraction of the Kiln 3D engine from `pixel-forge/packages/core/src/kil
 - `xatlasjs` — UV atlas in `autoUnwrap` (`await import('xatlasjs/dist/node/...')`).
 
 ### Tests
-- 38 source test files ported. Live agent tests gated behind `KILN_SPIKE_LIVE=1`
-  (off in CI). Dropped: the 6 OUT-module test suites, `deps-smoke` (old dep set), and
-  `spike`/`top-level-generate` (tested the deleted barrel `generate()` wrapper).
+- 36 source test files ported (382 pass / 2 skip / 0 fail offline). Live agent tests
+  gated behind `KILN_SPIKE_LIVE=1` (off in CI). Dropped: the 6 OUT-module test suites,
+  `deps-smoke` (old dep set), `spike`/`top-level-generate` (tested the deleted barrel
+  `generate()` wrapper), and `companions`/`refactor-validation` (tested the legacy
+  `generate.ts` companion aliases `kiln.editCode`/`kiln.refactor`, also pruned).
+- Provider SDKs (`@anthropic-ai/sdk`, `@google/genai`, `openai`, `ai`,
+  `@aws-sdk/client-bedrock-runtime`) are **devDependencies only** — needed to exercise
+  the multi-provider `makeKilnModel` factory in `providers.test.ts`; they never enter
+  runtime `dependencies`. The kiln-glb skill-drift gate is `skipIf`-guarded (the skill
+  lives outside the engine repo).
+
+### Tooling
+- **Biome 2.5.1** adopted (lint + format). Source formatted to Biome style (single
+  quotes, 2-space, 100-col); `bun run lint` is green. A baseline of 19 stylistic
+  warnings (`noExplicitAny`/`useTemplate`/`useOptionalChain`/`noGlobalIsFinite`/…) is
+  left visible for a hardening pass; `noNonNullAssertion`/`useLiteralKeys` are off and
+  `useIterableCallbackReturn` is warn (all idiomatic in the extracted code).
 
 ### Follow-ups (deliberately deferred from WS0 — see ../plan/03-standards-harness.md)
+- Burn down the 19 Biome warnings + re-promote `useIterableCallbackReturn` to error.
 - Tighten `tsconfig` (`exactOptionalPropertyTypes`); currently mirrors pixel-forge core
   for a zero-drift green typecheck.
-- Add Biome lint config.
 - Consider `tsup` `dist` build + Vitest golden-image render harness (engine ships TS
   source today for drop-in parity with how Studio consumes core).
 - Rename the live-test gate `KILN_SPIKE_LIVE` → `KILN_LIVE`.

@@ -67,10 +67,7 @@ export interface ValidationResult {
  * "your asset is likely to blow the category budget" warning before a render
  * is attempted. Exact numbers come from Three.js's own primitive builders.
  */
-function estimateGeometryTris(
-  name: string,
-  args: readonly acorn.Expression[]
-): number | null {
+function estimateGeometryTris(name: string, args: readonly acorn.Expression[]): number | null {
   function asNum(node: acorn.Expression | undefined): number | null {
     if (!node) return null;
     if (node.type === 'Literal' && typeof node.value === 'number') return node.value;
@@ -187,10 +184,7 @@ const DEFAULT_TRI_BUDGET = 40000;
  * @param code      raw JS string as returned by the LLM
  * @param opts      optional hints the validator can use for richer checks
  */
-export function validate(
-  code: string,
-  opts: { category?: string } = {}
-): ValidationResult {
+export function validate(code: string, opts: { category?: string } = {}): ValidationResult {
   const issues: ValidationIssue[] = [];
   const warnings: ValidationIssue[] = [];
 
@@ -221,7 +215,8 @@ export function validate(
     issues.push({
       code: 'HAS_EXPORT',
       message: 'Contains export statements — just define meta, build, animate',
-      fixHint: 'Remove `export` keywords; the sandbox evaluator picks up `meta` and `build` by name.',
+      fixHint:
+        'Remove `export` keywords; the sandbox evaluator picks up `meta` and `build` by name.',
       line: findLineOf(normalized, /^\s*export\s+/m),
     });
   }
@@ -234,7 +229,8 @@ export function validate(
     issues.push({
       code: 'KEYFRAME_VALUE_KEY',
       message: 'Uses `value:` in keyframes — must use `rotation:` or `position:` instead',
-      fixHint: 'In every `{ time, value: [...] }` change `value:` to `rotation:` (degrees) or `position:`.',
+      fixHint:
+        'In every `{ time, value: [...] }` change `value:` to `rotation:` (degrees) or `position:`.',
       line: lineOfIndex(normalized, valueMatch.index),
     });
   }
@@ -325,7 +321,8 @@ export function validate(
       warnings.push({
         code: 'TRI_BUDGET_EXCEEDED',
         message: `Estimated ${analysis.estimatedTris} tris (informational; "${opts.category}" assets typically land under ~${budget}). This is not a limit — keep the detail if the silhouette needs it.`,
-        fixHint: 'Only if the asset feels over-dense: reduce segments on cylinderGeo/sphereGeo, or drop hidden interior parts.',
+        fixHint:
+          'Only if the asset feels over-dense: reduce segments on cylinderGeo/sphereGeo, or drop hidden interior parts.',
       });
     }
   }
@@ -353,10 +350,7 @@ export const validateKilnCode = validate;
 // Internals
 // =============================================================================
 
-function toResult(
-  issues: ValidationIssue[],
-  warnings: ValidationIssue[]
-): ValidationResult {
+function toResult(issues: ValidationIssue[], warnings: ValidationIssue[]): ValidationResult {
   return {
     valid: issues.length === 0,
     errors: issues.map((i) => i.message),
@@ -432,7 +426,7 @@ function analyzeRotationUnits(ast: acorn.Program, source: string): RotationSmell
 function classifyRotationArray(
   arr: acorn.ArrayExpression,
   fn: string,
-  source: string
+  source: string,
 ): RotationSmell | null {
   const rendered = () => {
     const text = source.slice(arr.start, arr.end).replace(/\s+/g, ' ');
@@ -550,10 +544,7 @@ function analyzeTopLevel(ast: acorn.Program): TopLevelStructure {
   };
 
   for (const stmt of ast.body) {
-    if (
-      stmt.type === 'VariableDeclaration' &&
-      (stmt.kind === 'const' || stmt.kind === 'let')
-    ) {
+    if (stmt.type === 'VariableDeclaration' && (stmt.kind === 'const' || stmt.kind === 'let')) {
       for (const decl of stmt.declarations) {
         if (decl.id.type === 'Identifier' && decl.id.name === 'meta') {
           out.hasMetaConst = true;
@@ -563,7 +554,7 @@ function analyzeTopLevel(ast: acorn.Program): TopLevelStructure {
                 p.type === 'Property' &&
                 !p.computed &&
                 ((p.key.type === 'Identifier' && p.key.name === 'name') ||
-                  (p.key.type === 'Literal' && p.key.value === 'name'))
+                  (p.key.type === 'Literal' && p.key.value === 'name')),
             );
           }
         }
@@ -645,9 +636,9 @@ function analyzeBody(ast: acorn.Program): BodyAnalysis {
               const nArg = node.arguments[1];
               const n = Math.min(
                 4, // cap: beyond 4 iterations the estimate is noise anyway
-                (nArg && nArg.type === 'Literal' && typeof nArg.value === 'number' ? nArg.value : 1),
+                nArg && nArg.type === 'Literal' && typeof nArg.value === 'number' ? nArg.value : 1,
               );
-              est = base * (Math.pow(4, Math.max(0, n)) - 1);
+              est = base * (4 ** Math.max(0, n) - 1);
             }
           }
         }
@@ -683,10 +674,7 @@ function loopMultiplier(ancestors: readonly acorn.Node[]): number {
   return Math.min(mult, 4096);
 }
 
-function insideFunctionNamed(
-  ancestors: readonly acorn.AnyNode[],
-  name: string
-): boolean {
+function insideFunctionNamed(ancestors: readonly acorn.AnyNode[], name: string): boolean {
   for (let i = ancestors.length - 1; i >= 0; i--) {
     const node = ancestors[i];
     if (!node) continue;

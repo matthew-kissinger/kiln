@@ -32,14 +32,23 @@ const hue = (i: number, n: number): number => new THREE.Color().setHSL(i / n, 0.
 function manyColorScene(n: number): THREE.Object3D {
   const root = createRoot('Palette');
   for (let i = 0; i < n; i++) {
-    createPart(`Box${i}`, boxGeo(1, 1, 1), gameMaterial(hue(i, n)), { position: [i * 1.5, 0, 0], parent: root });
+    createPart(`Box${i}`, boxGeo(1, 1, 1), gameMaterial(hue(i, n)), {
+      position: [i * 1.5, 0, 0],
+      parent: root,
+    });
   }
   return root;
 }
 
 async function nodeNamesOf(bytes: Uint8Array): Promise<Set<string>> {
   const doc = await new WebIO().readBinary(bytes);
-  return new Set(doc.getRoot().listNodes().map((nd) => nd.getName()).filter(Boolean));
+  return new Set(
+    doc
+      .getRoot()
+      .listNodes()
+      .map((nd) => nd.getName())
+      .filter(Boolean),
+  );
 }
 
 describe('optimize=off (byte-stable)', () => {
@@ -71,7 +80,10 @@ describe('optimize=palette (material collapse)', () => {
   it('keeps transparency separate — glass is never merged into opaque', async () => {
     const root = createRoot('Glassy');
     for (let i = 0; i < 8; i++) {
-      createPart(`Wall${i}`, boxGeo(1, 1, 1), gameMaterial(hue(i, 8)), { position: [i * 1.5, 0, 0], parent: root });
+      createPart(`Wall${i}`, boxGeo(1, 1, 1), gameMaterial(hue(i, 8)), {
+        position: [i * 1.5, 0, 0],
+        parent: root,
+      });
     }
     createPart('Window', boxGeo(1, 1, 0.05), glassMaterial(0x88ccff, { opacity: 0.4 }), {
       position: [0, 2, 0],
@@ -87,12 +99,18 @@ describe('optimize=palette (material collapse)', () => {
     const root = createRoot('Rig');
     // A named pivot carrying a moving part (the realistic Kiln City case)...
     const lid = createPivot('Lid', [0, 1, 0], root);
-    createPart('LidPanel', boxGeo(0.9, 0.1, 0.9), gameMaterial(0x886644), { position: [0, 0.2, 0], parent: lid });
+    createPart('LidPanel', boxGeo(0.9, 0.1, 0.9), gameMaterial(0x886644), {
+      position: [0, 0.2, 0],
+      parent: lid,
+    });
     // ...and a named empty pivot (a leaf the behavior could still reference).
     createPivot('Marker', [0, 2, 0], root);
     // Pad with distinct materials so palette actually runs.
     for (let i = 0; i < 8; i++) {
-      createPart(`Body${i}`, boxGeo(1, 1, 1), gameMaterial(hue(i, 8)), { position: [i * 1.5, -2, 0], parent: root });
+      createPart(`Body${i}`, boxGeo(1, 1, 1), gameMaterial(hue(i, 8)), {
+        position: [i * 1.5, -2, 0],
+        parent: root,
+      });
     }
 
     const after = await renderSceneToGLB(root, { optimize: 'palette' });
@@ -107,7 +125,10 @@ describe('optimize=full (static-only; auto-degrade on animation)', () => {
     const root = createRoot('Spinner');
     const hub = createPivot('Spin', [0, 1, 0], root);
     for (let i = 0; i < 8; i++) {
-      createPart(`Blade${i}`, boxGeo(0.2, 0.05, 1.2), gameMaterial(hue(i, 8)), { position: [0, 0, 0], parent: hub });
+      createPart(`Blade${i}`, boxGeo(0.2, 0.05, 1.2), gameMaterial(hue(i, 8)), {
+        position: [0, 0, 0],
+        parent: hub,
+      });
     }
     const track = new THREE.QuaternionKeyframeTrack(
       'Joint_Spin.quaternion',
@@ -145,8 +166,12 @@ describe('optimizeGlbBytes (web-side path)', () => {
 
   it('an instanced scene keeps shared geometry through consolidation', async () => {
     const root = createRoot('Fence');
-    const post = createPart('Post0', boxGeo(0.1, 1, 0.1), gameMaterial(0x8a5a2b), { position: [0, 0.5, 0], parent: root });
-    for (let i = 1; i < 10; i++) createInstance(`Post${i}`, post, { position: [i * 0.5, 0.5, 0], parent: root });
+    const post = createPart('Post0', boxGeo(0.1, 1, 0.1), gameMaterial(0x8a5a2b), {
+      position: [0, 0.5, 0],
+      parent: root,
+    });
+    for (let i = 1; i < 10; i++)
+      createInstance(`Post${i}`, post, { position: [i * 0.5, 0.5, 0], parent: root });
     const baked = await renderSceneToGLB(root);
     expect(baked.instanceability!.metrics.uniqueGeometries).toBe(1);
     const opt = await optimizeGlbBytes(baked.bytes, { mode: 'palette' });

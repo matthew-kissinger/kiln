@@ -37,7 +37,7 @@ export function arrayLinear(
   source: THREE.Object3D,
   count: number,
   offset: [number, number, number],
-  parent?: THREE.Object3D
+  parent?: THREE.Object3D,
 ): THREE.Object3D[] {
   const out: THREE.Object3D[] = [];
   // Source is already at some position; clones start at offset 1.
@@ -67,7 +67,7 @@ export function arrayRadial(
   source: THREE.Object3D,
   count: number,
   axis: 'x' | 'y' | 'z' = 'y',
-  parent?: THREE.Object3D
+  parent?: THREE.Object3D,
 ): THREE.Object3D[] {
   const out: THREE.Object3D[] = [];
   const basePos = source.position.clone();
@@ -94,7 +94,7 @@ export function arrayRadial(
         position: [rotated.x, rotated.y, rotated.z],
         rotation: eulerDeg,
         parent,
-      })
+      }),
     );
   }
   return out;
@@ -112,7 +112,7 @@ export function mirror(
   name: string,
   source: THREE.Object3D,
   axis: 'x' | 'y' | 'z',
-  parent?: THREE.Object3D
+  parent?: THREE.Object3D,
 ): THREE.Object3D {
   const sourcePos = source.position.toArray() as [number, number, number];
   const pos: [number, number, number] = [
@@ -157,7 +157,7 @@ export function mirror(
  */
 export function mergeVertices(
   geometry: THREE.BufferGeometry,
-  opts: { tolerance?: number; positionOnly?: boolean } | number = {}
+  opts: { tolerance?: number; positionOnly?: boolean } | number = {},
 ): THREE.BufferGeometry {
   // Legacy numeric second-arg still works: mergeVertices(geo, 1e-4)
   const { tolerance = 1e-4, positionOnly = false } =
@@ -171,7 +171,7 @@ export function mergeVertices(
   if (!pos) return geometry;
   stripped.setAttribute(
     'position',
-    new THREE.BufferAttribute(new Float32Array(pos.array), pos.itemSize, pos.normalized)
+    new THREE.BufferAttribute(new Float32Array(pos.array), pos.itemSize, pos.normalized),
   );
   if (geometry.index) {
     stripped.setIndex(new THREE.BufferAttribute(new Uint32Array(geometry.index.array), 1));
@@ -202,7 +202,7 @@ export function subdivide(
     preserveEdges?: boolean;
     flatOnly?: boolean;
     weld?: boolean;
-  } = {}
+  } = {},
 ): THREE.BufferGeometry {
   const { weld = true, ...subOpts } = opts;
   // Subdivision wants position-only adjacency. Weld shared corners so
@@ -235,7 +235,7 @@ export function curveToMesh(
   radius: number,
   tubularSegments = 32,
   radialSegments = 8,
-  closed = false
+  closed = false,
 ): THREE.BufferGeometry {
   const vectors = points.map((p) => new THREE.Vector3(p[0], p[1], p[2]));
   const curve = new THREE.CatmullRomCurve3(vectors, closed);
@@ -249,10 +249,7 @@ export function curveToMesh(
  * @param profile — array of [x, y] points; x is radial distance, y is height
  * @param segments — radial segments (default 12)
  */
-export function lathe(
-  profile: Array<[number, number]>,
-  segments = 12
-): THREE.BufferGeometry {
+export function lathe(profile: Array<[number, number]>, segments = 12): THREE.BufferGeometry {
   const points2d = profile.map((p) => new THREE.Vector2(p[0], p[1]));
   return new THREE.LatheGeometry(points2d, segments);
 }
@@ -289,7 +286,7 @@ export function revolveGeo(
     angle?: number;
     axis?: [number, number, number];
     segments?: number;
-  } = {}
+  } = {},
 ): THREE.BufferGeometry {
   const { angle = Math.PI * 2, axis = [0, 1, 0], segments = 12 } = options;
   const points2d = profile.map((p) => new THREE.Vector2(p[0], p[1]));
@@ -340,19 +337,12 @@ export function pipeAlongPath(
     closed?: boolean;
     tubularSegments?: number;
     radialSegments?: number;
-  } = {}
+  } = {},
 ): THREE.BufferGeometry {
-  const {
-    bendRadius = 0,
-    closed = false,
-    tubularSegments = 32,
-    radialSegments = 8,
-  } = options;
+  const { bendRadius = 0, closed = false, tubularSegments = 32, radialSegments = 8 } = options;
 
   if (points.length < 2) {
-    throw new Error(
-      `pipeAlongPath: need at least 2 points (got ${points.length}).`
-    );
+    throw new Error(`pipeAlongPath: need at least 2 points (got ${points.length}).`);
   }
 
   let pathPoints = points;
@@ -400,7 +390,7 @@ export function pipeAlongPath(
  */
 export function bezierCurve(
   controlPoints: Array<[number, number, number]>,
-  samples = 32
+  samples = 32,
 ): Array<[number, number, number]> {
   const vecs = controlPoints.map((p) => new THREE.Vector3(p[0], p[1], p[2]));
   let curve: THREE.Curve<THREE.Vector3>;

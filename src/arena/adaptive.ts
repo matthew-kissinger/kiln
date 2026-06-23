@@ -100,9 +100,7 @@ export function pickNextPair(
       const uncertainty = (stdErrOf(a) + stdErrOf(b)) / stdErrScale;
 
       const informativeness =
-        closenessWeight * closeness +
-        uncertaintyWeight * uncertainty -
-        repeatPenalty * seen;
+        closenessWeight * closeness + uncertaintyWeight * uncertainty - repeatPenalty * seen;
 
       // Tie-break deterministically: earlier (a,b) in sorted order wins.
       if (informativeness > bestScore) {

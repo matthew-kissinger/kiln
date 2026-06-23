@@ -40,7 +40,8 @@ export function ensureStreamStart(model: LanguageModelV3): LanguageModelV3 {
           let injected = false;
           const guard = new TransformStream<LanguageModelV3StreamPart, LanguageModelV3StreamPart>({
             transform(chunk, ctrl) {
-              if (!injected && chunk.type !== 'stream-start') ctrl.enqueue({ type: 'stream-start', warnings: [] });
+              if (!injected && chunk.type !== 'stream-start')
+                ctrl.enqueue({ type: 'stream-start', warnings: [] });
               injected = true;
               ctrl.enqueue(chunk);
             },

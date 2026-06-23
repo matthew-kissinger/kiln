@@ -11,7 +11,12 @@
  * `recordResultUsage(result.metrics?.latestAgentInvocation?.usage)`, read
  * `readMetrics()`, then `detach()`.
  */
-import { type Agent, BeforeToolCallEvent, BeforeModelCallEvent, AfterModelCallEvent } from '@strands-agents/sdk';
+import {
+  type Agent,
+  BeforeToolCallEvent,
+  BeforeModelCallEvent,
+  AfterModelCallEvent,
+} from '@strands-agents/sdk';
 
 /** Token-usage subset we surface. */
 export interface AgentUsage {
@@ -75,14 +80,15 @@ export class MetricsCollector {
     // Hard step cap: before a model call that would exceed maxSteps, cancel it.
     // The SDK ends the loop with stopReason 'endTurn' (no exception) — `capped`
     // lets the caller turn that bounded stop into a clear failed generation.
-    const offCap = this.maxSteps && this.maxSteps > 0
-      ? agent.addHook(BeforeModelCallEvent, (event) => {
-          if (this.steps >= this.maxSteps!) {
-            this.capped = true;
-            event.cancel = `kiln: agent step cap reached (${this.maxSteps} model calls) — aborted to bound cost`;
-          }
-        })
-      : undefined;
+    const offCap =
+      this.maxSteps && this.maxSteps > 0
+        ? agent.addHook(BeforeModelCallEvent, (event) => {
+            if (this.steps >= this.maxSteps!) {
+              this.capped = true;
+              event.cancel = `kiln: agent step cap reached (${this.maxSteps} model calls) — aborted to bound cost`;
+            }
+          })
+        : undefined;
     this.cleanups.push(offTool, offModel);
     if (offCap) this.cleanups.push(offCap);
     return () => this.detach();

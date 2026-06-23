@@ -198,8 +198,8 @@ describe('revolveGeo', () => {
           [1, 0],
           [1, 1],
         ],
-        { axis: [0, 0, 0] }
-      )
+        { axis: [0, 0, 0] },
+      ),
     ).toThrow('axis must be a non-zero vector');
   });
 });
@@ -220,7 +220,7 @@ describe('pipeAlongPath', () => {
         [0, 0, 0],
         [0, 1, 0],
       ],
-      0.05
+      0.05,
     );
     const b = bbox(pipe);
     expect(b.y).toBeCloseTo(1, 1);
@@ -236,7 +236,7 @@ describe('pipeAlongPath', () => {
         [1, 0, 0],
         [1, 1, 0],
       ],
-      0.05
+      0.05,
     );
     const b = bbox(pipe);
     expect(b.x).toBeGreaterThan(0.9);

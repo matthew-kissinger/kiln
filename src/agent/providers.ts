@@ -106,7 +106,11 @@ function resolveAnthropicThinking(
   const raw = fromDesc ?? trimmedEnv('KILN_THINKING');
   if (raw == null || raw === '' || raw === 0) return undefined;
   const asNum =
-    typeof raw === 'number' ? raw : /^\d+$/.test(String(raw).trim()) ? Number.parseInt(String(raw).trim(), 10) : undefined;
+    typeof raw === 'number'
+      ? raw
+      : /^\d+$/.test(String(raw).trim())
+        ? Number.parseInt(String(raw).trim(), 10)
+        : undefined;
   if (asNum !== undefined) {
     if (!Number.isFinite(asNum) || asNum <= 0) return undefined;
     return {
@@ -139,9 +143,16 @@ export function makeKilnModel(desc: KilnModelDescriptor, opts: MakeKilnModelOpti
       });
     }
     case 'openai':
-      return new OpenAIModel({ api: 'chat', modelId: desc.model, ...(maxTokens != null ? { maxTokens } : {}) });
+      return new OpenAIModel({
+        api: 'chat',
+        modelId: desc.model,
+        ...(maxTokens != null ? { maxTokens } : {}),
+      });
     case 'google':
-      return new GoogleModel({ modelId: desc.model, apiKey: opts.apiKey ?? trimmedEnv('GEMINI_API_KEY') });
+      return new GoogleModel({
+        modelId: desc.model,
+        apiKey: opts.apiKey ?? trimmedEnv('GEMINI_API_KEY'),
+      });
     case 'bedrock':
       return new BedrockModel({
         modelId: desc.model,
@@ -196,8 +207,10 @@ export function resolveKilnAgentModel(modelId: string): KilnModelDescriptor {
   }
   // A slash with no explicit prefix is an OpenRouter `vendor/model` id.
   if (id.includes('/')) return { provider: 'openrouter', model: id };
-  if (id.startsWith('gemini-') || id.startsWith('imagen-')) return { provider: 'google', model: id };
-  if (id.startsWith('gpt-') || id.startsWith('o3') || id.startsWith('o4')) return { provider: 'openai', model: id };
+  if (id.startsWith('gemini-') || id.startsWith('imagen-'))
+    return { provider: 'google', model: id };
+  if (id.startsWith('gpt-') || id.startsWith('o3') || id.startsWith('o4'))
+    return { provider: 'openai', model: id };
   // Default: Anthropic (claude-*).
   return { provider: 'anthropic', model: id };
 }

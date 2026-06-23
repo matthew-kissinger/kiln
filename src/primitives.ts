@@ -43,7 +43,7 @@ export function createRoot(name: string): THREE.Object3D {
 export function createPivot(
   name: string,
   position: [number, number, number] = [0, 0, 0],
-  parent?: THREE.Object3D
+  parent?: THREE.Object3D,
 ): THREE.Object3D {
   const pivot = new THREE.Object3D();
   pivot.name = `Joint_${name}`;
@@ -69,17 +69,18 @@ export function createPart(
     scale?: [number, number, number];
     pivot?: boolean; // Wrap in pivot for animation
     parent?: THREE.Object3D;
-  } = {}
+  } = {},
 ): THREE.Object3D {
   const mesh = new THREE.Mesh(geometry, material);
   mesh.name = `Mesh_${name}`;
 
   if (options.position) mesh.position.set(...options.position);
-  if (options.rotation) mesh.rotation.set(
-    THREE.MathUtils.degToRad(options.rotation[0]),
-    THREE.MathUtils.degToRad(options.rotation[1]),
-    THREE.MathUtils.degToRad(options.rotation[2]),
-  );
+  if (options.rotation)
+    mesh.rotation.set(
+      THREE.MathUtils.degToRad(options.rotation[0]),
+      THREE.MathUtils.degToRad(options.rotation[1]),
+      THREE.MathUtils.degToRad(options.rotation[2]),
+    );
   if (options.scale) mesh.scale.set(...options.scale);
 
   if (options.pivot) {
@@ -100,29 +101,17 @@ export function createPart(
 // Common Shapes (game-ready low-poly)
 // =============================================================================
 
-export function capsuleGeo(
-  radius: number,
-  height: number,
-  segments = 6
-): THREE.CapsuleGeometry {
+export function capsuleGeo(radius: number, height: number, segments = 6): THREE.CapsuleGeometry {
   return new THREE.CapsuleGeometry(radius, height, 2, segments);
 }
 
-export function capsuleXGeo(
-  radius: number,
-  length: number,
-  segments = 6
-): THREE.CapsuleGeometry {
+export function capsuleXGeo(radius: number, length: number, segments = 6): THREE.CapsuleGeometry {
   const geo = capsuleGeo(radius, length, segments);
   geo.rotateZ(-Math.PI / 2);
   return geo;
 }
 
-export function capsuleZGeo(
-  radius: number,
-  length: number,
-  segments = 6
-): THREE.CapsuleGeometry {
+export function capsuleZGeo(radius: number, length: number, segments = 6): THREE.CapsuleGeometry {
   const geo = capsuleGeo(radius, length, segments);
   geo.rotateX(Math.PI / 2);
   return geo;
@@ -132,7 +121,7 @@ export function cylinderGeo(
   radiusTop: number,
   radiusBottom: number,
   height: number,
-  segments = 8
+  segments = 8,
 ): THREE.CylinderGeometry {
   return new THREE.CylinderGeometry(radiusTop, radiusBottom, height, segments);
 }
@@ -141,7 +130,7 @@ export function cylinderXGeo(
   radiusTop: number,
   radiusBottom: number,
   length: number,
-  segments = 8
+  segments = 8,
 ): THREE.CylinderGeometry {
   const geo = cylinderGeo(radiusTop, radiusBottom, length, segments);
   geo.rotateZ(-Math.PI / 2);
@@ -152,52 +141,36 @@ export function cylinderZGeo(
   radiusTop: number,
   radiusBottom: number,
   length: number,
-  segments = 8
+  segments = 8,
 ): THREE.CylinderGeometry {
   const geo = cylinderGeo(radiusTop, radiusBottom, length, segments);
   geo.rotateX(Math.PI / 2);
   return geo;
 }
 
-export function boxGeo(
-  width: number,
-  height: number,
-  depth: number
-): THREE.BoxGeometry {
+export function boxGeo(width: number, height: number, depth: number): THREE.BoxGeometry {
   return new THREE.BoxGeometry(width, height, depth);
 }
 
 export function sphereGeo(
   radius: number,
   widthSegments = 8,
-  heightSegments = 6
+  heightSegments = 6,
 ): THREE.SphereGeometry {
   return new THREE.SphereGeometry(radius, widthSegments, heightSegments);
 }
 
-export function coneGeo(
-  radius: number,
-  height: number,
-  segments = 8
-): THREE.ConeGeometry {
+export function coneGeo(radius: number, height: number, segments = 8): THREE.ConeGeometry {
   return new THREE.ConeGeometry(radius, height, segments);
 }
 
-export function coneXGeo(
-  radius: number,
-  length: number,
-  segments = 8
-): THREE.ConeGeometry {
+export function coneXGeo(radius: number, length: number, segments = 8): THREE.ConeGeometry {
   const geo = coneGeo(radius, length, segments);
   geo.rotateZ(-Math.PI / 2);
   return geo;
 }
 
-export function coneZGeo(
-  radius: number,
-  length: number,
-  segments = 8
-): THREE.ConeGeometry {
+export function coneZGeo(radius: number, length: number, segments = 8): THREE.ConeGeometry {
   const geo = coneGeo(radius, length, segments);
   geo.rotateX(Math.PI / 2);
   return geo;
@@ -230,7 +203,7 @@ export function cylinderOnAxis(
   normal: Vec3Tuple,
   radiusBottom: number,
   height: number,
-  options: { radiusTop?: number; segments?: number } = {}
+  options: { radiusTop?: number; segments?: number } = {},
 ): THREE.CylinderGeometry {
   const radiusTop = options.radiusTop ?? radiusBottom;
   const segments = options.segments ?? 8;
@@ -240,16 +213,13 @@ export function cylinderOnAxis(
   const len = n.length();
   if (len < 1e-6) {
     throw new Error(
-      `cylinderOnAxis: normal must be a non-zero vector (got [${normal.join(',')}]).`
+      `cylinderOnAxis: normal must be a non-zero vector (got [${normal.join(',')}]).`,
     );
   }
   n.divideScalar(len);
 
   // Quaternion from Y to normal.
-  const q = new THREE.Quaternion().setFromUnitVectors(
-    new THREE.Vector3(0, 1, 0),
-    n
-  );
+  const q = new THREE.Quaternion().setFromUnitVectors(new THREE.Vector3(0, 1, 0), n);
   geo.applyQuaternion(q);
   geo.translate(center[0], center[1], center[2]);
   return geo;
@@ -272,7 +242,7 @@ export function taperConeGeo(
   radiusTop: number,
   height: number,
   axis: 'x' | 'y' | 'z' = 'y',
-  segments = 8
+  segments = 8,
 ): THREE.CylinderGeometry {
   const geo = new THREE.CylinderGeometry(radiusTop, radiusBottom, height, segments);
   if (axis === 'x') geo.rotateZ(-Math.PI / 2);
@@ -284,7 +254,7 @@ export function torusGeo(
   radius: number,
   tube: number,
   radialSegments = 8,
-  tubularSegments = 12
+  tubularSegments = 12,
 ): THREE.TorusGeometry {
   return new THREE.TorusGeometry(radius, tube, radialSegments, tubularSegments);
 }
@@ -293,7 +263,7 @@ export function planeGeo(
   width: number,
   height: number,
   widthSegments = 1,
-  heightSegments = 1
+  heightSegments = 1,
 ): THREE.PlaneGeometry {
   return new THREE.PlaneGeometry(width, height, widthSegments, heightSegments);
 }
@@ -319,11 +289,7 @@ export function planeGeo(
  * });
  * ```
  */
-export function decalBox(
-  width: number,
-  height: number,
-  depth: number = 0.01,
-): THREE.BoxGeometry {
+export function decalBox(width: number, height: number, depth: number = 0.01): THREE.BoxGeometry {
   const d = Math.max(depth, 0.002);
   return new THREE.BoxGeometry(width, height, d);
 }
@@ -392,10 +358,7 @@ export function crossedQuadsGeo(opts: CrossedQuadsOptions = {}): THREE.BufferGeo
 
   // Merge into one BufferGeometry — deterministic + cheaper at draw time.
   const out = new THREE.BufferGeometry();
-  const posCount = geometries.reduce(
-    (sum, g) => sum + (g.attributes.position?.count ?? 0),
-    0,
-  );
+  const posCount = geometries.reduce((sum, g) => sum + (g.attributes.position?.count ?? 0), 0);
   const positions = new Float32Array(posCount * 3);
   const normals = new Float32Array(posCount * 3);
   const uvs = new Float32Array(posCount * 2);
@@ -513,23 +476,69 @@ export function wingGeo(options: WingGeometryOptions = {}): THREE.BufferGeometry
   const halfThickness = thickness / 2;
 
   const vertices = new Float32Array([
-    rootLead, halfThickness, 0,
-    rootTrail, halfThickness, 0,
-    tipLead, dihedral + halfThickness, span,
-    tipTrail, dihedral + halfThickness, span,
-    rootLead, -halfThickness, 0,
-    rootTrail, -halfThickness, 0,
-    tipLead, dihedral - halfThickness, span,
-    tipTrail, dihedral - halfThickness, span,
+    rootLead,
+    halfThickness,
+    0,
+    rootTrail,
+    halfThickness,
+    0,
+    tipLead,
+    dihedral + halfThickness,
+    span,
+    tipTrail,
+    dihedral + halfThickness,
+    span,
+    rootLead,
+    -halfThickness,
+    0,
+    rootTrail,
+    -halfThickness,
+    0,
+    tipLead,
+    dihedral - halfThickness,
+    span,
+    tipTrail,
+    dihedral - halfThickness,
+    span,
   ]);
 
   const indices = [
-    0, 3, 2, 0, 1, 3, // top
-    4, 6, 7, 4, 7, 5, // bottom
-    0, 2, 6, 0, 6, 4, // leading edge
-    1, 5, 7, 1, 7, 3, // trailing edge
-    0, 4, 5, 0, 5, 1, // root cap
-    2, 3, 7, 2, 7, 6, // tip cap
+    0,
+    3,
+    2,
+    0,
+    1,
+    3, // top
+    4,
+    6,
+    7,
+    4,
+    7,
+    5, // bottom
+    0,
+    2,
+    6,
+    0,
+    6,
+    4, // leading edge
+    1,
+    5,
+    7,
+    1,
+    7,
+    3, // trailing edge
+    0,
+    4,
+    5,
+    0,
+    5,
+    1, // root cap
+    2,
+    3,
+    7,
+    2,
+    7,
+    6, // tip cap
   ];
 
   const geo = new THREE.BufferGeometry();
@@ -550,7 +559,7 @@ export interface WingPairOptions extends WingGeometryOptions {
 export function createWingPair(
   name: string,
   material: THREE.Material,
-  options: WingPairOptions
+  options: WingPairOptions,
 ): { right: THREE.Object3D; left: THREE.Object3D } {
   const { parent, rootX = 0, rootY = 0, rootZ, ...wingOptions } = options;
   const rightGeo = wingGeo(wingOptions);
@@ -581,7 +590,7 @@ export function beamBetween(
   end: Vec3Tuple,
   radius: number,
   material: THREE.Material,
-  options: BeamBetweenOptions = {}
+  options: BeamBetweenOptions = {},
 ): THREE.Object3D {
   const a = new THREE.Vector3(...start);
   const b = new THREE.Vector3(...end);
@@ -594,16 +603,10 @@ export function beamBetween(
     );
   }
 
-  const mesh = new THREE.Mesh(
-    cylinderGeo(radius, radius, length, options.segments ?? 8),
-    material
-  );
+  const mesh = new THREE.Mesh(cylinderGeo(radius, radius, length, options.segments ?? 8), material);
   mesh.name = `Mesh_${name}`;
   mesh.position.copy(a.add(b).multiplyScalar(0.5));
-  mesh.quaternion.setFromUnitVectors(
-    new THREE.Vector3(0, 1, 0),
-    direction.normalize()
-  );
+  mesh.quaternion.setFromUnitVectors(new THREE.Vector3(0, 1, 0), direction.normalize());
 
   if (options.parent) options.parent.add(mesh);
   return mesh;
@@ -680,7 +683,7 @@ export interface LadderOptions {
 
 export function createLadder(
   name: string,
-  options: LadderOptions
+  options: LadderOptions,
 ): { leftRail: THREE.Object3D; rightRail: THREE.Object3D; rungs: THREE.Object3D[] } {
   const {
     bottom,
@@ -698,9 +701,7 @@ export function createLadder(
   const bottomVec = new THREE.Vector3(...bottom);
   const topVec = new THREE.Vector3(...top);
   const offset =
-    widthAxis === 'x'
-      ? new THREE.Vector3(width / 2, 0, 0)
-      : new THREE.Vector3(0, 0, width / 2);
+    widthAxis === 'x' ? new THREE.Vector3(width / 2, 0, 0) : new THREE.Vector3(0, 0, width / 2);
 
   const leftBottom = bottomVec.clone().sub(offset);
   const leftTop = topVec.clone().sub(offset);
@@ -713,7 +714,7 @@ export function createLadder(
     vectorToTuple(leftTop),
     railRadius,
     material,
-    { parent, segments }
+    { parent, segments },
   );
   const rightRail = beamBetween(
     `${name}RightRail`,
@@ -721,7 +722,7 @@ export function createLadder(
     vectorToTuple(rightTop),
     railRadius,
     material,
-    { parent, segments }
+    { parent, segments },
   );
 
   const rungs: THREE.Object3D[] = [];
@@ -735,8 +736,8 @@ export function createLadder(
         vectorToTuple(center.clone().add(offset)),
         rungRadius,
         material,
-        { parent, segments }
-      )
+        { parent, segments },
+      ),
     );
   }
 
@@ -867,7 +868,11 @@ export function room(
   name: string,
   material: THREE.Material,
   options: RoomOptions = {},
-): { root: THREE.Object3D; walls: Record<'front' | 'back' | 'left' | 'right', THREE.Object3D>; floor: THREE.Object3D | null } {
+): {
+  root: THREE.Object3D;
+  walls: Record<'front' | 'back' | 'left' | 'right', THREE.Object3D>;
+  floor: THREE.Object3D | null;
+} {
   const {
     width = 4,
     depth = 4,
@@ -957,7 +962,15 @@ export function createRoofPlanes(
   material: THREE.Material,
   options: RoofPlanesOptions,
 ): { root: THREE.Object3D; slopes: [THREE.Object3D, THREE.Object3D] } {
-  const { width, depth, height, overhang = 0.3, ridgeAxis = 'x', thickness = 0.08, parent } = options;
+  const {
+    width,
+    depth,
+    height,
+    overhang = 0.3,
+    ridgeAxis = 'x',
+    thickness = 0.08,
+    parent,
+  } = options;
   const group = new THREE.Object3D();
   group.name = name;
 
@@ -971,7 +984,9 @@ export function createRoofPlanes(
   const slopes: THREE.Object3D[] = [];
   for (const side of [1, -1] as const) {
     const geo =
-      ridgeAxis === 'x' ? boxGeo(ridgeLen, thickness, rafterLen) : boxGeo(rafterLen, thickness, ridgeLen);
+      ridgeAxis === 'x'
+        ? boxGeo(ridgeLen, thickness, rafterLen)
+        : boxGeo(rafterLen, thickness, ridgeLen);
     const mesh = new THREE.Mesh(geo, material);
     mesh.name = `Mesh_${name}${side > 0 ? 'A' : 'B'}`;
     if (ridgeAxis === 'x') {
@@ -1047,15 +1062,23 @@ export function createStairs(
     const topY = (i + 1) * stepRise;
     const alongC = (i + 0.5) * stepRun;
     const treadGeo =
-      axis === 'x' ? boxGeo(stepRun, treadThickness, width) : boxGeo(width, treadThickness, stepRun);
+      axis === 'x'
+        ? boxGeo(stepRun, treadThickness, width)
+        : boxGeo(width, treadThickness, stepRun);
     const treadPos: [number, number, number] =
-      axis === 'x' ? [alongC, topY - treadThickness / 2, 0] : [0, topY - treadThickness / 2, alongC];
-    stepList.push(createPart(`${name}Step${i + 1}`, treadGeo, material, { position: treadPos, parent: root }));
+      axis === 'x'
+        ? [alongC, topY - treadThickness / 2, 0]
+        : [0, topY - treadThickness / 2, alongC];
+    stepList.push(
+      createPart(`${name}Step${i + 1}`, treadGeo, material, { position: treadPos, parent: root }),
+    );
 
     if (riser) {
       const front = i * stepRun;
       const riserGeo =
-        axis === 'x' ? boxGeo(treadThickness, stepRise, width) : boxGeo(width, stepRise, treadThickness);
+        axis === 'x'
+          ? boxGeo(treadThickness, stepRise, width)
+          : boxGeo(width, stepRise, treadThickness);
       const riserPos: [number, number, number] =
         axis === 'x'
           ? [front + treadThickness / 2, topY - stepRise / 2, 0]
@@ -1080,7 +1103,7 @@ export function gameMaterial(
     emissive?: number | string;
     emissiveIntensity?: number;
     flatShading?: boolean;
-  } = {}
+  } = {},
 ): THREE.MeshStandardMaterial {
   return new THREE.MeshStandardMaterial({
     color,
@@ -1094,7 +1117,7 @@ export function gameMaterial(
 
 export function basicMaterial(
   color: number | string,
-  options: { transparent?: boolean; opacity?: number } = {}
+  options: { transparent?: boolean; opacity?: number } = {},
 ): THREE.MeshBasicMaterial {
   return new THREE.MeshBasicMaterial({
     color,
@@ -1105,7 +1128,7 @@ export function basicMaterial(
 
 export function glassMaterial(
   color: number | string,
-  options: { opacity?: number; roughness?: number; metalness?: number } = {}
+  options: { opacity?: number; roughness?: number; metalness?: number } = {},
 ): THREE.MeshStandardMaterial {
   return new THREE.MeshStandardMaterial({
     color,
@@ -1119,7 +1142,7 @@ export function glassMaterial(
 
 export function lambertMaterial(
   color: number | string,
-  options: { flatShading?: boolean; emissive?: number | string } = {}
+  options: { flatShading?: boolean; emissive?: number | string } = {},
 ): THREE.MeshLambertMaterial {
   return new THREE.MeshLambertMaterial({
     color,
@@ -1146,7 +1169,7 @@ function threeInterpolation(mode?: TrackInterpolation): THREE.InterpolationModes
 export function rotationTrack(
   jointName: string,
   keyframes: Array<{ time: number; rotation: [number, number, number] }>,
-  interpolation?: TrackInterpolation
+  interpolation?: TrackInterpolation,
 ): THREE.QuaternionKeyframeTrack {
   const times: number[] = [];
   const values: number[] = [];
@@ -1158,7 +1181,7 @@ export function rotationTrack(
     euler.set(
       THREE.MathUtils.degToRad(kf.rotation[0]),
       THREE.MathUtils.degToRad(kf.rotation[1]),
-      THREE.MathUtils.degToRad(kf.rotation[2])
+      THREE.MathUtils.degToRad(kf.rotation[2]),
     );
     quat.setFromEuler(euler);
     values.push(quat.x, quat.y, quat.z, quat.w);
@@ -1168,14 +1191,14 @@ export function rotationTrack(
     `${jointName}.quaternion`,
     times,
     values,
-    threeInterpolation(interpolation)
+    threeInterpolation(interpolation),
   );
 }
 
 export function positionTrack(
   jointName: string,
   keyframes: Array<{ time: number; position: [number, number, number] }>,
-  interpolation?: TrackInterpolation
+  interpolation?: TrackInterpolation,
 ): THREE.VectorKeyframeTrack {
   const times: number[] = [];
   const values: number[] = [];
@@ -1189,14 +1212,14 @@ export function positionTrack(
     `${jointName}.position`,
     times,
     values,
-    threeInterpolation(interpolation)
+    threeInterpolation(interpolation),
   );
 }
 
 export function scaleTrack(
   jointName: string,
   keyframes: Array<{ time: number; scale: [number, number, number] }>,
-  interpolation?: TrackInterpolation
+  interpolation?: TrackInterpolation,
 ): THREE.VectorKeyframeTrack {
   const times: number[] = [];
   const values: number[] = [];
@@ -1210,14 +1233,14 @@ export function scaleTrack(
     `${jointName}.scale`,
     times,
     values,
-    threeInterpolation(interpolation)
+    threeInterpolation(interpolation),
   );
 }
 
 export function createClip(
   name: string,
   duration: number,
-  tracks: THREE.KeyframeTrack[]
+  tracks: THREE.KeyframeTrack[],
 ): THREE.AnimationClip {
   return new THREE.AnimationClip(name, duration, tracks);
 }
@@ -1226,11 +1249,7 @@ export function createClip(
 // Common Animation Patterns
 // =============================================================================
 
-export function idleBreathing(
-  bodyJoint: string,
-  duration = 2,
-  amount = 0.02
-): THREE.AnimationClip {
+export function idleBreathing(bodyJoint: string, duration = 2, amount = 0.02): THREE.AnimationClip {
   const y = 0;
   return createClip('Idle', duration, [
     positionTrack(bodyJoint, [
@@ -1244,7 +1263,7 @@ export function idleBreathing(
 export function bobbingAnimation(
   rootName: string,
   duration = 2,
-  height = 0.1
+  height = 0.1,
 ): THREE.AnimationClip {
   return createClip('Bob', duration, [
     positionTrack(rootName, [
@@ -1258,12 +1277,11 @@ export function bobbingAnimation(
 export function spinAnimation(
   jointName: string,
   duration = 2,
-  axis: 'x' | 'y' | 'z' = 'y'
+  axis: 'x' | 'y' | 'z' = 'y',
 ): THREE.AnimationClip {
   const rotation: [number, number, number] = [0, 0, 0];
   const idx = axis === 'x' ? 0 : axis === 'y' ? 1 : 2;
-  const rotations: Array<{ time: number; rotation: [number, number, number] }> =
-    [];
+  const rotations: Array<{ time: number; rotation: [number, number, number] }> = [];
 
   for (let i = 0; i <= 4; i++) {
     const r: [number, number, number] = [...rotation];
@@ -1320,7 +1338,7 @@ export function createInstance(
     rotation?: [number, number, number];
     scale?: [number, number, number];
     parent?: THREE.Object3D;
-  } = {}
+  } = {},
 ): THREE.Object3D {
   // Duck-typed `.isMesh` — sandbox-created meshes belong to a different
   // module realm than this file's THREE import. See render.ts comment.
@@ -1331,9 +1349,7 @@ export function createInstance(
     : (source.children.find(isMesh) as THREE.Mesh | undefined);
 
   if (!sourceMesh) {
-    throw new Error(
-      `createInstance("${name}"): source "${source.name}" has no Mesh to clone from`
-    );
+    throw new Error(`createInstance("${name}"): source "${source.name}" has no Mesh to clone from`);
   }
 
   const mesh = new THREE.Mesh(sourceMesh.geometry, sourceMesh.material);
@@ -1344,7 +1360,7 @@ export function createInstance(
     mesh.rotation.set(
       THREE.MathUtils.degToRad(options.rotation[0]),
       THREE.MathUtils.degToRad(options.rotation[1]),
-      THREE.MathUtils.degToRad(options.rotation[2])
+      THREE.MathUtils.degToRad(options.rotation[2]),
     );
   if (options.scale) mesh.scale.set(...options.scale);
 
@@ -1404,7 +1420,7 @@ export function getJointNames(root: THREE.Object3D): string[] {
  */
 export function validateAsset(
   root: THREE.Object3D,
-  category: 'character' | 'prop' | 'vfx' | 'environment' | 'architecture'
+  category: 'character' | 'prop' | 'vfx' | 'environment' | 'architecture',
 ): { valid: boolean; errors: string[]; warnings: string[] } {
   const errors: string[] = [];
   const warnings: string[] = [];
@@ -1442,9 +1458,7 @@ export function validateAsset(
  * so render.ts can stash it into `render.meta.primitiveUsage` for
  * downstream analysis. When omitted, wrapping is skipped (zero overhead).
  */
-export function buildSandboxGlobals(
-  usage?: Record<string, number>
-): Record<string, unknown> {
+export function buildSandboxGlobals(usage?: Record<string, number>): Record<string, unknown> {
   // CSG ops remain lazy at their own call sites, so importing the wrapper here
   // is safe for Node ESM builds and still avoids manifold WASM init unless used.
 
@@ -1482,9 +1496,7 @@ export function buildSandboxGlobals(
   let _kilnCallSeq = 0;
   const stampKilnRange = (name: string, geo: THREE.BufferGeometry) => {
     const idx = geo.getIndex();
-    const triCount = idx
-      ? idx.count / 3
-      : (geo.getAttribute('position')?.count ?? 0) / 3;
+    const triCount = idx ? idx.count / 3 : (geo.getAttribute('position')?.count ?? 0) / 3;
     const callId = ++_kilnCallSeq;
     geo.userData = {
       ...(geo.userData ?? {}),
@@ -1498,10 +1510,7 @@ export function buildSandboxGlobals(
     };
   };
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const cacheGeo = <F extends (...args: any[]) => THREE.BufferGeometry>(
-    name: string,
-    fn: F
-  ): F => {
+  const cacheGeo = <F extends (...args: any[]) => THREE.BufferGeometry>(name: string, fn: F): F => {
     const memoFn = (...args: Parameters<F>): THREE.BufferGeometry => {
       let key: string;
       try {
@@ -1527,10 +1536,8 @@ export function buildSandboxGlobals(
   // still ticks the usage counter so the telemetry reflects what the
   // agent wrote, not what was recomputed.
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const wrapGeo = <F extends (...args: any[]) => THREE.BufferGeometry>(
-    name: string,
-    fn: F
-  ): F => wrap(name, cacheGeo(name, fn));
+  const wrapGeo = <F extends (...args: any[]) => THREE.BufferGeometry>(name: string, fn: F): F =>
+    wrap(name, cacheGeo(name, fn));
 
   return {
     createRoot: wrap('createRoot', createRoot),
@@ -1617,6 +1624,7 @@ export function buildSandboxGlobals(
     // THREE namespace is exposed so agents can `new THREE.Mesh(geo, mat)`
     // as operands to CSG and other ops that expect Object3D inputs.
     THREE,
-    Math, console,
+    Math,
+    console,
   };
 }

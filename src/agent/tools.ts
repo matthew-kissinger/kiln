@@ -83,7 +83,10 @@ const animationBufferInput = z.object({
     .string()
     .optional()
     .describe('Camera angle: right (default), front, back, left, top, or three-quarter.'),
-  perFrame: z.boolean().optional().describe('Return separate high-res frames instead of one grid. Default false.'),
+  perFrame: z
+    .boolean()
+    .optional()
+    .describe('Return separate high-res frames instead of one grid. Default false.'),
 });
 
 /** Build a buffer-aware kiln_screenshot_animation tool that runs against `getCode()`
@@ -236,7 +239,10 @@ export class KilnDraftBuffer {
       return { ok: false, error: 'oldString must not be empty.' };
     }
     if (oldString === newString) {
-      return { ok: false, error: 'oldString and newString are identical - there is nothing to change.' };
+      return {
+        ok: false,
+        error: 'oldString and newString are identical - there is nothing to change.',
+      };
     }
 
     const occurrences = this.buf.split(oldString).length - 1;
@@ -361,7 +367,9 @@ export function makeKilnEditTools(opts: { seedCode: string; sink: EditSink }): T
     description: `${validateDef.description} Omit code to validate the current working buffer.`,
     inputSchema: bufferCodeInput,
     callback: async (input) =>
-      (await validateDef.run({ code: (input as { code?: string }).code ?? buffer.code })) as JSONValue,
+      (await validateDef.run({
+        code: (input as { code?: string }).code ?? buffer.code,
+      })) as JSONValue,
   });
 
   const renderTool: Tool = tool({
@@ -369,7 +377,9 @@ export function makeKilnEditTools(opts: { seedCode: string; sink: EditSink }): T
     description: `${renderDef.description} Omit code to render the current working buffer.`,
     inputSchema: bufferCodeInput,
     callback: async (input) =>
-      (await renderDef.run({ code: (input as { code?: string }).code ?? buffer.code })) as JSONValue,
+      (await renderDef.run({
+        code: (input as { code?: string }).code ?? buffer.code,
+      })) as JSONValue,
   });
 
   const screenshotTool: Tool = tool({
@@ -397,11 +407,25 @@ export function makeKilnEditTools(opts: { seedCode: string; sink: EditSink }): T
     callback: (input) => {
       const code = (input as { code?: string }).code ?? buffer.code;
       opts.sink.code = code;
-      return { ok: true, recorded: true, bytes: code.length, edits: buffer.edits.length } as JSONValue;
+      return {
+        ok: true,
+        recorded: true,
+        bytes: code.length,
+        edits: buffer.edits.length,
+      } as JSONValue;
     },
   });
 
-  return [listTool, viewTool, editTool, validateTool, renderTool, screenshotTool, animationTool, submitTool];
+  return [
+    listTool,
+    viewTool,
+    editTool,
+    validateTool,
+    renderTool,
+    screenshotTool,
+    animationTool,
+    submitTool,
+  ];
 }
 
 // =============================================================================
@@ -516,7 +540,9 @@ export function makeKilnUnifiedTools(opts: {
       '{ ok, occurrences, newBytes } or { ok:false, error, hint }.',
     inputSchema: editInput,
     callback: (input) => {
-      const r = buffer.apply(input as { oldString: string; newString: string; replaceAll?: boolean });
+      const r = buffer.apply(
+        input as { oldString: string; newString: string; replaceAll?: boolean },
+      );
       if (r.ok) {
         opts.sink.code = buffer.code; // capture the live buffer even if finalize is skipped
         return r as JSONValue;
@@ -538,7 +564,8 @@ export function makeKilnUnifiedTools(opts: {
 
   const renderTool: Tool = tool({
     name: 'kiln_render',
-    description: kilnRenderViewsDef.description + ' Operates on your current working buffer (no argument).',
+    description:
+      kilnRenderViewsDef.description + ' Operates on your current working buffer (no argument).',
     inputSchema: viewInput,
     callback: async () => {
       const out = await kilnRenderViewsDef.run({ code: buffer.code });
@@ -549,7 +576,11 @@ export function makeKilnUnifiedTools(opts: {
         const o = out as { ok?: boolean; pngBase64?: string; tris?: number };
         if (o.ok && o.pngBase64) {
           try {
-            opts.onCandidate({ code: buffer.code, pngBase64: o.pngBase64, ...(o.tris != null ? { tris: o.tris } : {}) });
+            opts.onCandidate({
+              code: buffer.code,
+              pngBase64: o.pngBase64,
+              ...(o.tris != null ? { tris: o.tris } : {}),
+            });
           } catch {
             // candidate sink is best-effort
           }
@@ -567,16 +598,17 @@ export function makeKilnUnifiedTools(opts: {
   // (roof off — open floor, real doorway gap, fixtures grounded, nothing buried).
   const interiorTool: Tool = tool({
     name: 'kiln_view_interior',
-    description: kilnViewInteriorDef.description + ' Operates on your current working buffer (omit code).',
+    description:
+      kilnViewInteriorDef.description + ' Operates on your current working buffer (omit code).',
     inputSchema: z.object({
-      nodeName: z
-        .string()
-        .optional()
-        .describe('The roof part to lift, by name (default "Roof").'),
+      nodeName: z.string().optional().describe('The roof part to lift, by name (default "Roof").'),
     }),
     callback: async (input) => {
       const n = (input as { nodeName?: string }).nodeName;
-      const out = await kilnViewInteriorDef.run({ code: buffer.code, ...(n ? { nodeName: n } : {}) });
+      const out = await kilnViewInteriorDef.run({
+        code: buffer.code,
+        ...(n ? { nodeName: n } : {}),
+      });
       return toCallbackResult(kilnViewInteriorDef, out);
     },
   });
@@ -591,9 +623,23 @@ export function makeKilnUnifiedTools(opts: {
     callback: () => {
       opts.sink.code = buffer.code;
       opts.sink.finalized = true;
-      return { ok: true, recorded: true, bytes: buffer.code.length, edits: buffer.edits.length } as JSONValue;
+      return {
+        ok: true,
+        recorded: true,
+        bytes: buffer.code.length,
+        edits: buffer.edits.length,
+      } as JSONValue;
     },
   });
 
-  return [draftTool, viewTool, editTool, validateTool, renderTool, animationTool, interiorTool, finalizeTool];
+  return [
+    draftTool,
+    viewTool,
+    editTool,
+    validateTool,
+    renderTool,
+    animationTool,
+    interiorTool,
+    finalizeTool,
+  ];
 }

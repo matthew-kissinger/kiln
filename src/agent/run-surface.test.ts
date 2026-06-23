@@ -9,11 +9,7 @@
  */
 import { describe, expect, test } from 'bun:test';
 
-import {
-  buildAgentTools,
-  resolveToolSurface,
-  type ToolBuildOptions,
-} from './surface';
+import { buildAgentTools, resolveToolSurface, type ToolBuildOptions } from './surface';
 import type { SubmitSink, EditSink, UnifiedSink } from './tools';
 
 function freshSinks() {

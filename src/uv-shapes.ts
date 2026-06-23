@@ -102,7 +102,7 @@ export function planeUnwrap(geo: THREE.BufferGeometry): THREE.BufferGeometry {
  */
 export function panelRemapV(
   geo: THREE.BufferGeometry,
-  vScale = 0.30,
+  vScale = 0.3,
   vOffset = 0,
   uScale = 1,
   uOffset = 0,

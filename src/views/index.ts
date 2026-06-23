@@ -11,7 +11,14 @@
  *   row 2: Left,  Top,   3/4
  */
 
-import { rasterizeView, measureBounds, hideNodeInScene, SIX_VIEWS, type RasterOptions, type ViewSpec } from './raster';
+import {
+  rasterizeView,
+  measureBounds,
+  hideNodeInScene,
+  SIX_VIEWS,
+  type RasterOptions,
+  type ViewSpec,
+} from './raster';
 import { encodePng } from './png';
 import {
   prepareClip,
@@ -54,7 +61,7 @@ export interface ViewGridOptions extends RasterOptions {
 /** Render a (possibly sandbox-created) Three.js scene root into the 3x2 grid. */
 export async function renderViewGrid(
   root: unknown,
-  opts: ViewGridOptions = {}
+  opts: ViewGridOptions = {},
 ): Promise<ViewGridResult> {
   const size = opts.size ?? 256;
   const views = opts.views ?? SIX_VIEWS;
@@ -94,7 +101,7 @@ export async function renderViewGrid(
 /** Execute a Kiln program and render its scene into the 3x2 grid. */
 export async function renderCodeViewGrid(
   code: string,
-  opts: ViewGridOptions = {}
+  opts: ViewGridOptions = {},
 ): Promise<ViewGridResult> {
   const { executeKilnCode } = await import('../render');
   const { root } = await executeKilnCode(code);
@@ -127,8 +134,13 @@ const ANIM_CAMERA_ALIASES: Record<string, string> = {
 };
 
 function resolveCamera(name?: string): ViewSpec {
-  const key = (name ?? 'right').trim().toLowerCase().replace(/[_\s]+/g, '-');
-  return ANIM_CAMERAS[key] ?? ANIM_CAMERAS[ANIM_CAMERA_ALIASES[key] ?? ''] ?? ANIM_CAMERAS['right']!;
+  const key = (name ?? 'right')
+    .trim()
+    .toLowerCase()
+    .replace(/[_\s]+/g, '-');
+  return (
+    ANIM_CAMERAS[key] ?? ANIM_CAMERAS[ANIM_CAMERA_ALIASES[key] ?? ''] ?? ANIM_CAMERAS['right']!
+  );
 }
 
 export interface AnimationViewOptions extends RasterOptions {
@@ -189,7 +201,13 @@ export async function renderClipAnimation(
   const cam = resolveCamera(opts.camera);
 
   if (!clips || clips.length === 0) {
-    return { ok: false, frames: 0, frameTimes: [], error: 'this asset has no animation clips', availableClips: [] };
+    return {
+      ok: false,
+      frames: 0,
+      frameTimes: [],
+      error: 'this asset has no animation clips',
+      availableClips: [],
+    };
   }
   // Resolve the requested clip by name; default to the first when none is named.
   const requested = opts.clip?.trim();
