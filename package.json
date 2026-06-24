@@ -18,7 +18,9 @@
     "./prompt-api": "./src/prompt-api.ts",
     "./list-primitives": "./src/list-primitives.ts",
     "./metrics": "./src/metrics.ts",
-    "./inspect": "./src/inspect.ts"
+    "./inspect": "./src/inspect.ts",
+    "./composer": "./src/composer/index.ts",
+    "./composer/agent": "./src/composer/agent/index.ts"
   },
   "files": [
     "src/**/*.ts",
