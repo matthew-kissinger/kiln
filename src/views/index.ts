@@ -33,6 +33,8 @@ import {
 export { rasterizeView, measureBounds, hideNodeInScene, SIX_VIEWS, coverage } from './raster';
 export type { RasterOptions, ViewSpec } from './raster';
 export { encodePng } from './png';
+export { rasterizeComposedScene, SCENE_VIEWS } from './scene-raster';
+export type { ComposedPart, ComposedSceneRasterResult } from './scene-raster';
 export {
   prepareClip,
   poseSceneAtTime,

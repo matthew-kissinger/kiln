@@ -1,0 +1,240 @@
+/**
+ * `runKilnComposer` — the scene-composition counterpart to `runKilnAgent`.
+ *
+ * Drives any Strands `Model` through the `scene_*` tool loop: the agent discovers
+ * the fixed asset catalog, lays out / places / refines a structured scene model,
+ * renders it through the host `SceneRenderPort` to SEE the result, and finalizes.
+ * Reuses the asset-gen `MetricsCollector` (tool/step/usage + the runaway step cap)
+ * and `unifiedDiff` (the refine patch artifact). The `@strands-agents/sdk`
+ * dependency lives ONLY here on `@kiln/engine/composer/agent` — the composer core
+ * (model / dsl / overlap / layout / render-port) never imports it.
+ *
+ * Never throws: failures come back on `result.error` with whatever the sink
+ * captured beforehand (a step-capped or erroring run still returns its partial
+ * program + placements).
+ */
+import { Agent, type Message, type Tool } from '@strands-agents/sdk';
+
+import { unifiedDiff } from '../../agent/diff';
+import { type AgentUsage, type KilnAgentEvent, MetricsCollector } from '../../agent/hooks';
+import { serialize } from '../dsl';
+import { flatGround, type GroundSampler } from '../ground';
+import {
+  type CatalogEntry,
+  type Placement,
+  PlacementModel,
+  type PlacementProvenance,
+  type SceneModelJSON,
+} from '../model';
+import type { OverlapViolation } from '../overlap';
+import type { SceneRenderPort } from '../render-port';
+import { buildComposerUserPrompt, COMPOSER_SYSTEM_PROMPT } from './prompt';
+import { type ComposerSink, makeSceneComposerTools, type SceneRenderCandidate } from './tools';
+
+export interface RunKilnComposerOptions {
+  /** A constructed Strands `Model` instance (provider-agnostic). */
+  model: unknown;
+  /** Natural-language description of the scene to compose. */
+  prompt: string;
+  /** The selectable asset catalog (generationId + asset-local bbox). The agent may
+   *  ONLY place these. Optional when `seedScene` already carries a catalog. */
+  catalog?: CatalogEntry[];
+  /** Host renderer: placements (+ optional cameras) → PNG(s). Injected so the
+   *  composer core stays THREE-free; tests pass a stub returning a fixed PNG. */
+  render: SceneRenderPort;
+  /** Display name for the scene (used in framing + the serialized program). */
+  sceneName?: string;
+  /** Terrain sampler. Default flat ground at y=0; a heightmap drops in unchanged. */
+  ground?: GroundSampler;
+  /** Deterministic layout seed. Default 1. */
+  seed?: number;
+  /** Refine an existing scene: seed the model from this JSON and frame the run as
+   *  an edit (its serialized program is shown as the starting point, and the result
+   *  carries a unified diff from it). Extra `catalog` entries are merged in. */
+  seedScene?: SceneModelJSON;
+  /** Agent name (for tracing). Default 'kiln-composer'. */
+  agentName?: string;
+  /** Live agent-loop events (tool/model calls) for progress UIs. Best-effort. */
+  onEvent?: (event: KilnAgentEvent) => void;
+  /** Live render candidates (one per successful scene_render) for a filmstrip. */
+  onCandidate?: (c: SceneRenderCandidate) => void;
+  /** Extra tools to expose (e.g. a Strands McpClient). */
+  extraTools?: unknown[];
+}
+
+export interface RunKilnComposerResult {
+  /** The final serialized scene program (the diffable, version-controlled artifact). */
+  program?: string;
+  /** The structured scene model JSON (machine round-trip / persistence). */
+  scene?: SceneModelJSON;
+  /** The evaluated world placements the renderer/runtime consume. */
+  placements?: Placement[];
+  /** instanceId → provenance (generationId + statement + optional source prompt). */
+  provenance?: Record<string, PlacementProvenance>;
+  /** Any unresolved footprint overlaps at finalize (surfaced, never dropped). */
+  overlaps?: OverlapViolation[];
+  /** Whether the agent called scene_finalize. */
+  finalized: boolean;
+  /** Every tool the model called, in order. */
+  toolCalls: string[];
+  /** Number of model calls (agent-loop iterations). */
+  steps: number;
+  /** Best-effort token usage. */
+  usage?: AgentUsage;
+  /** The last assistant text (fallback / diagnostics). */
+  lastText?: string;
+  /** When refining (seedScene set): a unified diff from the parent program. */
+  diff?: string;
+  /** Error message if the run threw or was step-capped. */
+  error?: string;
+}
+
+function lastMessageText(message: Message | undefined): string | undefined {
+  if (!message) return undefined;
+  const parts: string[] = [];
+  for (const block of message.content) {
+    if ((block as { type?: string }).type === 'textBlock') {
+      const t = (block as { text?: string }).text;
+      if (typeof t === 'string') parts.push(t);
+    }
+  }
+  const joined = parts.join('\n').trim();
+  return joined.length ? joined : undefined;
+}
+
+/** Build the model from a fresh catalog or a seeded scene (merging extra catalog). */
+function buildModel(opts: RunKilnComposerOptions): PlacementModel {
+  const ground = opts.ground ?? flatGround(0);
+  if (opts.seedScene) {
+    const m = PlacementModel.fromJSON(opts.seedScene, ground);
+    for (const e of opts.catalog ?? []) m.registerAsset(e);
+    return m;
+  }
+  return new PlacementModel(opts.sceneName ?? 'Scene', {
+    ground,
+    ...(opts.seed != null ? { seed: opts.seed } : {}),
+    catalog: opts.catalog ?? [],
+  });
+}
+
+/**
+ * Run one scene-composition session end-to-end. Never throws — failures are
+ * returned on `result.error` with whatever the sink captured beforehand.
+ */
+export async function runKilnComposer(
+  opts: RunKilnComposerOptions,
+): Promise<RunKilnComposerResult> {
+  // Runaway backstop (NOT a throttle): a stuck model could loop place/render
+  // forever, re-feeding a growing transcript. Default 60 — composition takes more
+  // tool turns than a single asset (many placements + renders). Env-overridable
+  // (0 disables); shares the asset-gen knob name for one place to tune.
+  const maxSteps = Number(process.env['KILN_AGENT_MAX_STEPS'] ?? 60) || 0;
+  const metrics = new MetricsCollector(opts.onEvent, maxSteps);
+  const model = buildModel(opts);
+  const parentProgram = opts.seedScene ? serialize(model) : undefined;
+  const sink: ComposerSink = {};
+
+  try {
+    const tools: Tool[] = makeSceneComposerTools({
+      model,
+      render: opts.render,
+      sink,
+      ...(opts.onCandidate ? { onCandidate: opts.onCandidate } : {}),
+    });
+    const allTools: unknown[] = opts.extraTools ? [...tools, ...opts.extraTools] : tools;
+
+    const agent = new Agent({
+      model: opts.model as never,
+      systemPrompt: COMPOSER_SYSTEM_PROMPT,
+      tools: allTools as never,
+      name: opts.agentName ?? 'kiln-composer',
+    });
+    metrics.attach(agent);
+
+    const catalogLines = model
+      .catalogList()
+      .map((e) => `- ${e.name ?? e.generationId} — ${e.size[0]}×${e.size[1]}×${e.size[2]}`)
+      .join('\n');
+
+    const userPrompt = buildComposerUserPrompt({
+      prompt: opts.prompt,
+      ...(opts.sceneName ? { sceneName: opts.sceneName } : {}),
+      ...(catalogLines ? { catalogSummary: catalogLines } : {}),
+      ...(parentProgram ? { existingProgram: parentProgram } : {}),
+    });
+
+    const result = await agent.invoke(userPrompt as never);
+    metrics.recordResultUsage(result.metrics?.latestAgentInvocation?.usage);
+    const lastText = lastMessageText(result.lastMessage);
+
+    // Halted by the step cap: surface a clear failure but still return the partial
+    // scene the sink captured (continuous autosave), so the host can show progress.
+    if (metrics.wasCapped()) {
+      const collected = metrics.readMetrics();
+      return {
+        ...sceneFields(sink, model),
+        finalized: sink.finalized ?? false,
+        toolCalls: collected.toolCalls,
+        steps: collected.steps,
+        ...(collected.usage ? { usage: collected.usage } : {}),
+        ...(lastText ? { lastText } : {}),
+        error: `kiln composer exceeded ${maxSteps} model calls (step cap) — aborted to bound cost`,
+      };
+    }
+
+    const collected = metrics.readMetrics();
+    const program = sink.program;
+    const diff =
+      parentProgram && program
+        ? unifiedDiff(parentProgram, program, { fromLabel: 'parent', toLabel: 'refined' })
+        : undefined;
+
+    return {
+      ...sceneFields(sink, model),
+      finalized: sink.finalized ?? false,
+      toolCalls: collected.toolCalls,
+      steps: collected.steps,
+      ...(collected.usage ? { usage: collected.usage } : {}),
+      ...(lastText ? { lastText } : {}),
+      ...(diff ? { diff } : {}),
+    };
+  } catch (err) {
+    const collected = metrics.readMetrics();
+    return {
+      ...sceneFields(sink, model),
+      finalized: sink.finalized ?? false,
+      toolCalls: collected.toolCalls,
+      steps: collected.steps,
+      ...(collected.usage ? { usage: collected.usage } : {}),
+      error: err instanceof Error ? err.message : String(err),
+    };
+  } finally {
+    metrics.detach();
+  }
+}
+
+/** The scene payload fields, from the sink when present (the agent built something)
+ *  else evaluated fresh from the model (so even a no-tool run returns a valid scene). */
+function sceneFields(
+  sink: ComposerSink,
+  model: PlacementModel,
+): Pick<RunKilnComposerResult, 'program' | 'scene' | 'placements' | 'provenance' | 'overlaps'> {
+  const program = sink.program ?? serialize(model);
+  if (sink.placements) {
+    return {
+      program,
+      scene: model.toJSON(),
+      placements: sink.placements,
+      ...(sink.provenance ? { provenance: sink.provenance } : {}),
+      ...(sink.overlaps ? { overlaps: sink.overlaps } : {}),
+    };
+  }
+  const ev = model.placements();
+  return {
+    program,
+    scene: model.toJSON(),
+    placements: ev.placements,
+    provenance: ev.provenance,
+    overlaps: ev.overlaps,
+  };
+}
