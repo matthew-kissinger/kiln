@@ -3,6 +3,20 @@
 All notable changes to `@kiln/engine`. This is a **private** package; semver is tracked
 for the consuming app's lockfile + tarball provenance, not public npm releases.
 
+## [Unreleased]
+
+### Added — scene composer (`@kiln/engine/composer`, `/composer/agent`)
+A THREE-free scene-composition surface: a `PlacementModel` single-source-of-truth with a
+small scene DSL (`scene()`/`asset()`), terrain-agnostic hierarchy-aware layout, an overlap
+validator (MTV resolution), a ground sampler, and a `SceneRenderPort`; plus the Strands
+agent loop (`runKilnComposer`, 14 `scene_*` tools) isolated under `/composer/agent` so the
+SDK never leaks into the pure core. Transcript compaction collapses to `serialize(model)`
+past a threshold (the externalized model IS the state), with a soft step-cap backstop and a
+`scene_layout`-first prompt so large many-asset scenes converge. ~990 lines of new tests.
+
+> Studio consumes this via the committed `@kiln/engine` 0.1.0 tarball (the surface landed
+> without a version bump); bump to 0.2.0 + re-`sync:engine` when a release is cut.
+
 ## [0.1.0] — 2026-06-23
 
 Initial extraction of the Kiln 3D engine from `pixel-forge/packages/core/src/kiln`
