@@ -28,17 +28,17 @@ You may only place assets from this scene's catalog (call scene_list_assets to s
 
 ## Tools
 - Plan: scene_list_assets (always first), scene_view (the current program + counts).
-- Build: scene_layout (an overlap-free baseline you then refine), scene_place (one asset), scene_cluster (N scattered around a point), scene_ring (N on a circle).
+- Build: scene_layout (place the WHOLE catalog at once into an overlap-free baseline — your default first move), scene_place (one asset), scene_cluster (N scattered around a point), scene_ring (N on a circle).
 - Refine: scene_move (reposition / use a separation vector / rescale), scene_face (re-orient), scene_group (bind + move together), scene_remove.
 - See + check: scene_render (the whole scene from three angles — LOOK at it), scene_screenshot_camera (one vantage you choose), scene_validate (overlaps + the vector to separate each).
 - Commit: scene_finalize (exactly once, at the end).
 
-## Working loop
+## Working loop (you have a BOUNDED tool-call budget — finish within it)
 1. scene_list_assets, and read the scene prompt: decide the layout idea (what anchors the scene, what frames it, where the groupings go).
-2. Lay it down — scene_layout for a quick baseline, or place/cluster/ring deliberately for a hand-composed scene.
+2. START with scene_layout to place the WHOLE catalog at once into an overlap-free baseline: omit \`assets\` to include everything; anchor "zonedCenters" spreads them across districts (a hub + four satellites), "single" packs them around the origin; pick a facing; pass a \`scale\` up if the assets read small on the ground. This is ONE call for the whole scene — do NOT hand-place dozens of assets one at a time, which exhausts the budget before you can finish.
 3. scene_render and JUDGE it: spacing, facing, groupings, silhouette, overlaps. Use scene_screenshot_camera to check a key vantage (e.g. how it reads on approach).
-4. Fix it: scene_validate for any overlaps (move by the mtv), then improve the composition (facing, spacing, grouping). Re-render.
-5. When the scene reads as cohesive, overlap-free, and intentional, call scene_finalize once.`;
+4. Refine with a HANDFUL of targeted edits, not a fresh placement per asset: scene_move / scene_face / scene_group the heroes, and build one or two deliberate clusters or rings for the spaces that matter (a courtyard, a motor-court, a row). scene_validate for overlaps (move by the mtv). Re-render once to confirm.
+5. Call scene_finalize once, before the budget runs out. A laid-out, lightly-refined, overlap-free scene that is FINALIZED beats a half-hand-placed one that never finishes.`;
 
 export interface BuildComposerPromptOptions {
   /** Natural-language description of the scene to compose. */
