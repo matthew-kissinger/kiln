@@ -19,3 +19,6 @@ export type { ComposerSink, MakeComposerToolsOptions, SceneRenderCandidate } fro
 
 export { buildComposerUserPrompt, COMPOSER_SYSTEM_PROMPT } from './prompt';
 export type { BuildComposerPromptOptions } from './prompt';
+
+export { SceneCompactionManager } from './compaction';
+export type { SceneCompactionConfig, SceneCompactionInfo } from './compaction';

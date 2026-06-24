@@ -27,7 +27,16 @@ export interface AgentUsage {
 /** A live agent-loop event, emitted as the loop runs (for progress UIs). */
 export type KilnAgentEvent =
   | { type: 'tool'; tool: string; step: number }
-  | { type: 'model_call'; step: number };
+  | { type: 'model_call'; step: number }
+  | {
+      /** The composer compacted its transcript (state lives in the scene model, not
+       *  the history) — surfaced so a progress UI can show the loop staying lean. */
+      type: 'compaction';
+      step: number;
+      messagesBefore: number;
+      placements: number;
+      overlaps: number;
+    };
 
 /** The agent-loop-derived metrics this collector produces. */
 export interface CollectedMetrics {

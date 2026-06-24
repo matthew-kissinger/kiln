@@ -17,6 +17,7 @@ import { Agent, type Message, type Tool } from '@strands-agents/sdk';
 
 import { unifiedDiff } from '../../agent/diff';
 import { type AgentUsage, type KilnAgentEvent, MetricsCollector } from '../../agent/hooks';
+import { SceneCompactionManager } from './compaction';
 import { serialize } from '../dsl';
 import { flatGround, type GroundSampler } from '../ground';
 import {
@@ -85,7 +86,11 @@ export interface RunKilnComposerResult {
   lastText?: string;
   /** When refining (seedScene set): a unified diff from the parent program. */
   diff?: string;
-  /** Error message if the run threw or was step-capped. */
+  /** True when the run hit the step cap before the agent called scene_finalize. NOT
+   *  an error — the returned scene is the agent's best effort (layout + whatever
+   *  refinement fit the budget); the host can persist it and flag it unfinalized. */
+  capped?: boolean;
+  /** Error message if the run THREW (a real failure). A step-cap is `capped`, not this. */
   error?: string;
 }
 
@@ -125,10 +130,14 @@ export async function runKilnComposer(
   opts: RunKilnComposerOptions,
 ): Promise<RunKilnComposerResult> {
   // Runaway backstop (NOT a throttle): a stuck model could loop place/render
-  // forever, re-feeding a growing transcript. Default 60 — composition takes more
-  // tool turns than a single asset (many placements + renders). Env-overridable
-  // (0 disables); shares the asset-gen knob name for one place to tune.
-  const maxSteps = Number(process.env['KILN_AGENT_MAX_STEPS'] ?? 60) || 0;
+  // forever. Default 80 — compaction (below) keeps each step cheap regardless of how
+  // long the run gets, so the cap is a far-back safety net, not the primary stop; the
+  // agent should finalize well before it. Env-overridable (0 disables); shares the
+  // asset-gen knob name for one place to tune.
+  const maxSteps = Number(process.env['KILN_AGENT_MAX_STEPS'] ?? 80) || 0;
+  // Compact the transcript once it grows past this many messages: the scene state
+  // lives in the model, so the history is disposable working memory. Env-tunable.
+  const compactAt = Number(process.env['KILN_COMPOSER_COMPACT_AT'] ?? 24) || 0;
   const metrics = new MetricsCollector(opts.onEvent, maxSteps);
   const model = buildModel(opts);
   const parentProgram = opts.seedScene ? serialize(model) : undefined;
@@ -143,11 +152,22 @@ export async function runKilnComposer(
     });
     const allTools: unknown[] = opts.extraTools ? [...tools, ...opts.extraTools] : tools;
 
+    // Keep the loop lean + convergent: collapse the transcript to the live program
+    // once it bloats (state is in the model, not the history) and nudge toward finalize.
+    const compaction = new SceneCompactionManager({
+      model,
+      taskRecap: opts.sceneName ? `${opts.sceneName} — ${opts.prompt}` : opts.prompt,
+      ...(compactAt ? { maxMessages: compactAt } : {}),
+      onCompact: (info) =>
+        opts.onEvent?.({ type: 'compaction', step: metrics.readMetrics().steps, ...info }),
+    });
+
     const agent = new Agent({
       model: opts.model as never,
       systemPrompt: COMPOSER_SYSTEM_PROMPT,
       tools: allTools as never,
       name: opts.agentName ?? 'kiln-composer',
+      conversationManager: compaction,
     });
     metrics.attach(agent);
 
@@ -167,18 +187,20 @@ export async function runKilnComposer(
     metrics.recordResultUsage(result.metrics?.latestAgentInvocation?.usage);
     const lastText = lastMessageText(result.lastMessage);
 
-    // Halted by the step cap: surface a clear failure but still return the partial
-    // scene the sink captured (continuous autosave), so the host can show progress.
+    // Halted by the step cap: a SOFT stop, not a failure. Return the scene the sink
+    // captured (continuous autosave: layout + whatever refinement fit the budget) with
+    // `capped` set so the host can persist it and flag it unfinalized — discarding a
+    // fully laid-out scene just because the agent over-refined would waste the work.
     if (metrics.wasCapped()) {
       const collected = metrics.readMetrics();
       return {
         ...sceneFields(sink, model),
         finalized: sink.finalized ?? false,
+        capped: true,
         toolCalls: collected.toolCalls,
         steps: collected.steps,
         ...(collected.usage ? { usage: collected.usage } : {}),
         ...(lastText ? { lastText } : {}),
-        error: `kiln composer exceeded ${maxSteps} model calls (step cap) — aborted to bound cost`,
       };
     }
 
