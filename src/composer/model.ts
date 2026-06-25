@@ -43,6 +43,26 @@ export interface CatalogEntry {
 
 export type Role = 'hero' | 'support' | 'fill';
 
+/** Scene-level terrain/sky theme id — mirrors Studio's GroundThemeId (kept local so
+ *  the engine carries no studio dependency; compose.ts casts across the wire). */
+export type SceneGroundTheme =
+  | 'meadow'
+  | 'desert'
+  | 'egypt'
+  | 'plaza'
+  | 'snow'
+  | 'arctic'
+  | 'edo'
+  | 'night'
+  | 'studio';
+
+/** Scene atmosphere backdrop — mirrors Studio's SceneBackdrop. */
+export interface SceneBackdropSpec {
+  kind: 'mushroom-cloud' | 'sun-disc' | 'aurora' | 'fuji';
+  pos?: Vec3;
+  scale?: number;
+}
+
 /** One evaluated instance: a generation placed in the world, linked to its statement. */
 export interface Placement {
   instanceId: string;
@@ -118,6 +138,10 @@ export interface SceneModelJSON {
   seed: number;
   catalog: CatalogEntry[];
   statements: Statement[];
+  /** Scene-level ground/sky theme the agent chose (scene_set_environment). */
+  environment?: SceneGroundTheme;
+  /** Scene-level atmosphere backdrop the agent chose (scene_set_backdrop). */
+  backdrop?: SceneBackdropSpec;
 }
 
 export interface PlaceArgs {
@@ -199,6 +223,8 @@ export class PlacementModel {
   private readonly byAlias = new Map<string, Statement>();
   private seq = 0;
   private groupSeq = 0;
+  private env?: SceneGroundTheme;
+  private bg?: SceneBackdropSpec;
 
   constructor(
     name: string,
@@ -432,6 +458,20 @@ export class PlacementModel {
     return this.stmts;
   }
 
+  /** Scene-level theme/backdrop (not placements) — set once, early. */
+  setEnvironment(ground: SceneGroundTheme): void {
+    this.env = ground;
+  }
+  setBackdrop(b: SceneBackdropSpec): void {
+    this.bg = b;
+  }
+  environment(): SceneGroundTheme | undefined {
+    return this.env;
+  }
+  sceneBackdrop(): SceneBackdropSpec | undefined {
+    return this.bg;
+  }
+
   // ── evaluate ────────────────────────────────────────────────────────────────
 
   /** Expand every statement to world placements, then gate on footprint overlap. */
@@ -530,6 +570,8 @@ export class PlacementModel {
         seed: this.seed,
         catalog: [...this.catalog.values()],
         statements: this.stmts,
+        ...(this.env ? { environment: this.env } : {}),
+        ...(this.bg ? { backdrop: this.bg } : {}),
       }),
     );
   }
@@ -547,6 +589,8 @@ export class PlacementModel {
       if (Number.isFinite(n)) maxSeq = Math.max(maxSeq, n);
     }
     m.seq = maxSeq;
+    if (j.environment) m.env = j.environment;
+    if (j.backdrop) m.bg = j.backdrop;
     return m;
   }
 }

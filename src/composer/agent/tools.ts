@@ -13,12 +13,12 @@
  * `tool()`. No THREE — rendering is the injected host port. Errors are in-band
  * `{ ok:false, error, hint }` (tools never throw at the model).
  *
- * Surface (14): read — scene_list_assets, scene_view, scene_validate,
+ * Surface (16): read — scene_list_assets, scene_view, scene_validate,
  * scene_render, scene_screenshot_camera · mutate — scene_layout, scene_place,
  * scene_cluster, scene_ring, scene_move, scene_face, scene_group, scene_remove ·
- * commit — scene_finalize. (Extends the design doc's 12 with scene_cluster /
- * scene_ring so the agent can author the grouping primitives the program already
- * serializes.)
+ * theme — scene_set_environment, scene_set_backdrop · commit — scene_finalize.
+ * (Extends the design doc's 12 with scene_cluster / scene_ring so the agent can
+ * author the grouping primitives the program already serializes.)
  */
 import { ImageBlock, JsonBlock, type JSONValue, type Tool, tool } from '@strands-agents/sdk';
 import { z } from 'zod';
@@ -62,6 +62,19 @@ const roleEnum = z.enum(['hero', 'support', 'fill']);
 /** center (face the scene origin) · out (face away) · [x,z] (face a point) · degrees. */
 const facing = z.union([z.literal('center'), z.literal('out'), vec2, z.number()]);
 const empty = z.object({});
+/** Scene-level ground/sky theme ids + atmosphere backdrop kinds (mirror Studio). */
+const groundThemeEnum = z.enum([
+  'meadow',
+  'desert',
+  'egypt',
+  'plaza',
+  'snow',
+  'arctic',
+  'edo',
+  'night',
+  'studio',
+]);
+const backdropKindEnum = z.enum(['mushroom-cloud', 'sun-disc', 'aurora', 'fuji']);
 
 // ── render-result → content blocks ────────────────────────────────────────────
 
@@ -569,6 +582,62 @@ export function makeSceneComposerTools(opts: MakeComposerToolsOptions): Tool[] {
     },
   });
 
+  const setEnvironmentTool: Tool = tool({
+    name: 'scene_set_environment',
+    description:
+      "Set the scene's ground + sky THEME (terrain colour, sun, fog) — a scene-level choice, not a " +
+      'placement. Match it to the setting: "edo" for a Japanese / Edo castle-town scene (warm earth ' +
+      'ground, soft hanami sky), "desert"/"egypt" for arid, "snow"/"arctic" for cold, "meadow" for ' +
+      'green, "plaza"/"studio"/"night" for neutral or dark. Call it once, early. Does not affect ' +
+      'placements or overlaps.',
+    inputSchema: z.object({
+      ground: groundThemeEnum.describe('The ground/sky theme id.'),
+    }),
+    callback: (input) => {
+      const i = input as { ground: z.infer<typeof groundThemeEnum> };
+      model.setEnvironment(i.ground);
+      const ev = capture();
+      return {
+        ok: true,
+        environment: i.ground,
+        placements: ev.placements.length,
+        overlaps: ev.overlaps.length,
+      } as JSONValue;
+    },
+  });
+
+  const setBackdropTool: Tool = tool({
+    name: 'scene_set_backdrop',
+    description:
+      'Set ONE atmosphere backdrop rendered as a sky billboard on the horizon (not a placed asset): ' +
+      '"fuji" a snow-capped Mt. Fuji (use it for a Japanese / Edo scene), "sun-disc" a low sun, ' +
+      '"aurora" northern lights, "mushroom-cloud". Place it far behind the composition on the view ' +
+      'axis (default pos [0, 20, -160]); scale it up to dominate the skyline. Optional — omit if no ' +
+      'backdrop fits. Call it once, early.',
+    inputSchema: z.object({
+      kind: backdropKindEnum.describe('The backdrop kind.'),
+      pos: vec3.optional().describe('Base position [x,y,z] on the horizon (default [0,20,-160]).'),
+      scale: z.number().optional().describe('Visual scale multiplier (default 1).'),
+    }),
+    callback: (input) => {
+      const i = input as {
+        kind: z.infer<typeof backdropKindEnum>;
+        pos?: [number, number, number];
+        scale?: number;
+      };
+      // Default pos so the persisted backdrop always satisfies Studio's required pos field.
+      const pos: [number, number, number] = i.pos ?? [0, 20, -160];
+      model.setBackdrop({ kind: i.kind, pos, ...(i.scale != null ? { scale: i.scale } : {}) });
+      const ev = capture();
+      return {
+        ok: true,
+        backdrop: { kind: i.kind, pos, ...(i.scale != null ? { scale: i.scale } : {}) },
+        placements: ev.placements.length,
+        overlaps: ev.overlaps.length,
+      } as JSONValue;
+    },
+  });
+
   const finalizeTool: Tool = tool({
     name: 'scene_finalize',
     description:
@@ -603,6 +672,8 @@ export function makeSceneComposerTools(opts: MakeComposerToolsOptions): Tool[] {
     faceTool,
     groupTool,
     removeTool,
+    setEnvironmentTool,
+    setBackdropTool,
     finalizeTool,
   ];
 }
