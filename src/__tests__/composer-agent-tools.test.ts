@@ -104,7 +104,11 @@ describe('surface', () => {
     const json = model.toJSON();
     expect(json.environment).toBe('edo');
     expect(json.backdrop).toEqual({ kind: 'fuji', pos: [0, 20, -160], scale: 2 });
-    expect(PlacementModel.fromJSON(json).sceneBackdrop()).toEqual({ kind: 'fuji', pos: [0, 20, -160], scale: 2 });
+    expect(PlacementModel.fromJSON(json).sceneBackdrop()).toEqual({
+      kind: 'fuji',
+      pos: [0, 20, -160],
+      scale: 2,
+    });
   });
 });
 
