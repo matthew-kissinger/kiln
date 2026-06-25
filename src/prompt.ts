@@ -82,7 +82,9 @@ export const KILN_PROMPT_HEADER = `You are an expert procedural 3D asset generat
 CRITICAL: NO import/export statements. Code runs in a sandbox with primitives as globals.`;
 
 export const KILN_FILE_FORMAT = `<file-format>
-const meta = { name: "AssetName", category: "prop" };
+const meta = { name: "AssetName", category: "prop", role: "prop" };
+// role = how the asset sits in a scene (drives composition layout). One of:
+// "ground" | "building" | "wonder" | "poi" | "prop" | "fill" | "vehicle".
 
 // build() may be sync OR async. Mark it async if you use any CSG op
 // (boolUnion / boolDiff / boolIntersect / hull) because those await WASM.

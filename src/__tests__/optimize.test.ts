@@ -178,3 +178,30 @@ describe('optimizeGlbBytes (web-side path)', () => {
     expect(opt!.report!.metrics.uniqueGeometries).toBe(1); // instancing preserved
   });
 });
+
+describe('optimize=auto (grade-aware, the default grade-lift lever)', () => {
+  it('consolidates a material-sprawl asset (>= PALETTE_MIN) and lifts the grade', async () => {
+    const after = await renderSceneToGLB(manyColorScene(14), { optimize: 'auto' });
+    expect(after.optimize).toBeDefined();
+    expect(after.optimize!.mode).toBe('palette');
+    expect(after.optimize!.materialsAfter).toBeLessThanOrEqual(2);
+    expect(['A', 'B']).toContain(after.instanceability!.grade);
+  });
+
+  it('is a byte-stable no-op on a lean asset (< PALETTE_MIN materials)', async () => {
+    const off = await renderSceneToGLB(manyColorScene(3), { optimize: 'off' });
+    const auto = await renderSceneToGLB(manyColorScene(3), { optimize: 'auto' });
+    expect(auto.optimize).toBeUndefined();
+    expect(Buffer.from(off.bytes).equals(Buffer.from(auto.bytes))).toBe(true);
+  });
+
+  it('optimizeGlbBytes mode:auto consolidates a heavy GLB and skips a lean one', async () => {
+    const heavy = await renderSceneToGLB(manyColorScene(14));
+    const opt = await optimizeGlbBytes(heavy.bytes, { mode: 'auto' });
+    expect(opt).toBeDefined();
+    expect(['A', 'B']).toContain(opt!.report!.grade);
+
+    const lean = await renderSceneToGLB(manyColorScene(3));
+    expect(await optimizeGlbBytes(lean.bytes, { mode: 'auto' })).toBeUndefined();
+  });
+});
