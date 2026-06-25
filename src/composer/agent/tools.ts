@@ -13,10 +13,10 @@
  * `tool()`. No THREE — rendering is the injected host port. Errors are in-band
  * `{ ok:false, error, hint }` (tools never throw at the model).
  *
- * Surface (16): read — scene_list_assets, scene_view, scene_validate,
+ * Surface (17): read — scene_list_assets, scene_view, scene_validate,
  * scene_render, scene_screenshot_camera · mutate — scene_layout, scene_place,
  * scene_cluster, scene_ring, scene_move, scene_face, scene_group, scene_remove ·
- * theme — scene_set_environment, scene_set_backdrop · commit — scene_finalize.
+ * theme — scene_set_environment, scene_set_backdrop, scene_paint · commit — scene_finalize.
  * (Extends the design doc's 12 with scene_cluster / scene_ring so the agent can
  * author the grouping primitives the program already serializes.)
  */
@@ -24,7 +24,13 @@ import { ImageBlock, JsonBlock, type JSONValue, type Tool, tool } from '@strands
 import { z } from 'zod';
 
 import { serialize } from '../dsl';
-import type { EvalResult, Placement, PlacementModel, PlacementProvenance } from '../model';
+import type {
+  EvalResult,
+  Placement,
+  PlacementModel,
+  PlacementProvenance,
+  ScenePaintZoneSpec,
+} from '../model';
 import type { OverlapViolation } from '../overlap';
 import type { SceneRenderPort, SceneRenderResult } from '../render-port';
 
@@ -75,6 +81,34 @@ const groundThemeEnum = z.enum([
   'studio',
 ]);
 const backdropKindEnum = z.enum(['mushroom-cloud', 'sun-disc', 'aurora', 'fuji']);
+const paintKindEnum = z.enum([
+  'grass',
+  'concrete',
+  'asphalt',
+  'sand',
+  'flagstone',
+  'snow',
+  'ice',
+  'gravel',
+  'stone-path',
+]);
+const paintShape = z.union([
+  z.object({
+    type: z.literal('rect'),
+    x: z.number(),
+    z: z.number(),
+    hx: z.number(),
+    hz: z.number(),
+  }),
+  z.object({
+    type: z.literal('strip'),
+    axis: z.enum(['x', 'z']),
+    offset: z.number(),
+    half: z.number(),
+    from: z.number(),
+    to: z.number(),
+  }),
+]);
 
 // ── render-result → content blocks ────────────────────────────────────────────
 
@@ -638,6 +672,41 @@ export function makeSceneComposerTools(opts: MakeComposerToolsOptions): Tool[] {
     },
   });
 
+  const paintTool: Tool = tool({
+    name: 'scene_paint',
+    description:
+      'PAINT the ground to match your layout — flat zones drawn onto the terrain (NOT placed ' +
+      'assets), so the town reads as built on purpose. Pass the full set of zones at once; this ' +
+      'REPLACES any previous paint. Coordinates are the same [x,z] world units you place assets in. ' +
+      'Kinds: stone-path (a paved avenue/courtyard), gravel (raked garden), flagstone, concrete, ' +
+      'sand, grass, asphalt, snow, ice. Two shapes: a "strip" is a long band — ' +
+      '{ type:"strip", axis:"x"|"z", offset:<the fixed cross-axis coord>, half:<half-width>, ' +
+      'from:<start along axis>, to:<end along axis> } — use it for the central avenue (e.g. a ' +
+      'stone-path strip down the axis from the entrance gate to the hero); a "rect" is a patch — ' +
+      '{ type:"rect", x, z, hx:<half-x>, hz:<half-z> } — use it for a market plaza or a garden. ' +
+      'Author a few deliberate zones (an avenue + a plaza or two), sized to span the assets they sit ' +
+      'under. Call once, after you have placed the buildings so the paint lines up.',
+    inputSchema: z.object({
+      zones: z
+        .array(
+          z.object({ kind: paintKindEnum, shape: paintShape, laneLine: z.boolean().optional() }),
+        )
+        .max(24)
+        .describe('The full set of ground-paint zones (replaces any previous paint).'),
+    }),
+    callback: (input) => {
+      const i = input as { zones: ScenePaintZoneSpec[] };
+      model.setPaint(i.zones);
+      const ev = capture();
+      return {
+        ok: true,
+        paintZones: i.zones.length,
+        placements: ev.placements.length,
+        overlaps: ev.overlaps.length,
+      } as JSONValue;
+    },
+  });
+
   const finalizeTool: Tool = tool({
     name: 'scene_finalize',
     description:
@@ -674,6 +743,7 @@ export function makeSceneComposerTools(opts: MakeComposerToolsOptions): Tool[] {
     removeTool,
     setEnvironmentTool,
     setBackdropTool,
+    paintTool,
     finalizeTool,
   ];
 }

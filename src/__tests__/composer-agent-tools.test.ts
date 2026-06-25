@@ -63,7 +63,7 @@ function call(tools: Tool[], name: string, input: unknown = {}): Promise<AnyResu
 }
 
 describe('surface', () => {
-  test('exposes the 16 scene_* tools by name', () => {
+  test('exposes the 17 scene_* tools by name', () => {
     const { tools } = setup();
     const names = tools.map((t) => t.name).sort();
     expect(names).toEqual(
@@ -83,6 +83,7 @@ describe('surface', () => {
         'scene_remove',
         'scene_set_environment',
         'scene_set_backdrop',
+        'scene_paint',
         'scene_finalize',
       ].sort(),
     );

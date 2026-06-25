@@ -37,11 +37,12 @@ Every cluster / ring instance and every laid-out asset counts toward a hard 200-
 ## Scene theme + atmosphere (scene-level, not placements)
 - scene_set_environment sets the ground + sky THEME (terrain colour, sun, fog). Allowed: meadow, desert, egypt, plaza, snow, arctic, edo, night, studio. Match it to the setting — use "edo" for a Japanese / Edo castle-town scene.
 - scene_set_backdrop adds ONE horizon billboard. Allowed: mushroom-cloud, sun-disc, aurora, fuji. Use "fuji" (Mt. Fuji) for a Japanese / Edo scene; place it far behind the composition on the view axis (e.g. pos [0, 20, -160]) and scale it up to own the skyline. Optional — omit if none fits.
-- Set both EARLY (right after scene_list_assets), once each. They don't affect placement or overlaps.
+- scene_paint draws flat ground zones to MATCH your layout (a paved avenue, a market plaza) — kinds like stone-path, gravel, flagstone. Author it AFTER placing the buildings (so it lines up): a stone-path strip down the central axis from the entrance to the hero, plus a rect plaza or two. This is what makes the ground read as authored, not a blank field.
+- Set environment + backdrop EARLY (right after scene_list_assets); paint LATE (after the layout exists). None of them affect placement or overlaps.
 
 ## Tools
 - Plan: scene_list_assets (always first), scene_view (the current program + counts).
-- Theme: scene_set_environment (ground/sky theme), scene_set_backdrop (one horizon billboard) — scene-level, set early, optional.
+- Theme: scene_set_environment (ground/sky theme), scene_set_backdrop (one horizon billboard) — set early; scene_paint (paved avenue / plaza zones) — set late, after placing. All scene-level, optional.
 - Build: scene_layout (place the WHOLE catalog at once into an overlap-free baseline — your default first move), scene_place (one asset), scene_cluster (N scattered around a point), scene_ring (N on a circle).
 - Refine: scene_move (reposition / use a separation vector / rescale), scene_face (re-orient), scene_group (bind + move together), scene_remove.
 - See + check: scene_render (the whole scene from three angles — LOOK at it), scene_screenshot_camera (one vantage you choose), scene_validate (overlaps + the vector to separate each).
@@ -51,7 +52,7 @@ Every cluster / ring instance and every laid-out asset counts toward a hard 200-
 1. scene_list_assets, and read the scene prompt: decide the layout idea (what anchors the scene, what frames it, where the groupings go). Then set the theme: scene_set_environment (and scene_set_backdrop if one fits the setting).
 2. START with scene_layout to place the WHOLE catalog at once into an overlap-free baseline: omit \`assets\` to include everything; anchor "zonedCenters" spreads them across districts (a hub + four satellites), "single" packs them around the origin; pick a facing; pass a \`scale\` up if the assets read small on the ground. This is ONE call for the whole scene — do NOT hand-place dozens of assets one at a time, which exhausts the budget before you can finish.
 3. scene_render and JUDGE it: spacing, facing, groupings, silhouette, overlaps. Use scene_screenshot_camera to check a key vantage (e.g. how it reads on approach).
-4. Refine with a HANDFUL of targeted edits, not a fresh placement per asset: scene_move / scene_face / scene_group the heroes, and build one or two deliberate clusters or rings for the spaces that matter (a courtyard, a motor-court, a row). scene_validate for overlaps (move by the mtv). Re-render once to confirm.
+4. Refine with a HANDFUL of targeted edits, not a fresh placement per asset: scene_move / scene_face / scene_group the heroes, and build one or two deliberate clusters or rings for the spaces that matter (a courtyard, a motor-court, a row). Then scene_paint the ground to match (an avenue strip + a plaza). scene_validate for overlaps (move by the mtv). Re-render once to confirm.
 5. Call scene_finalize once, before the budget runs out. A laid-out, lightly-refined, overlap-free scene that is FINALIZED beats a half-hand-placed one that never finishes.`;
 
 export interface BuildComposerPromptOptions {
