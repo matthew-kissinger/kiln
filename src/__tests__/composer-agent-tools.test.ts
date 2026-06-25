@@ -63,7 +63,7 @@ function call(tools: Tool[], name: string, input: unknown = {}): Promise<AnyResu
 }
 
 describe('surface', () => {
-  test('exposes the 14 scene_* tools by name', () => {
+  test('exposes the 16 scene_* tools by name', () => {
     const { tools } = setup();
     const names = tools.map((t) => t.name).sort();
     expect(names).toEqual(
@@ -81,9 +81,29 @@ describe('surface', () => {
         'scene_face',
         'scene_group',
         'scene_remove',
+        'scene_set_environment',
+        'scene_set_backdrop',
         'scene_finalize',
       ].sort(),
     );
+  });
+
+  test('scene_set_environment + scene_set_backdrop set scene-level theme on the model', async () => {
+    const { model, tools } = setup();
+    const env = await call(tools, 'scene_set_environment', { ground: 'edo' });
+    expect(env.ok).toBe(true);
+    expect(env.environment).toBe('edo');
+    expect(model.environment()).toBe('edo');
+
+    const bg = await call(tools, 'scene_set_backdrop', { kind: 'fuji', scale: 2 });
+    expect(bg.ok).toBe(true);
+    expect(model.sceneBackdrop()).toEqual({ kind: 'fuji', pos: [0, 20, -160], scale: 2 });
+
+    // Both round-trip through the model JSON (so compose.ts reads them off result.scene).
+    const json = model.toJSON();
+    expect(json.environment).toBe('edo');
+    expect(json.backdrop).toEqual({ kind: 'fuji', pos: [0, 20, -160], scale: 2 });
+    expect(PlacementModel.fromJSON(json).sceneBackdrop()).toEqual({ kind: 'fuji', pos: [0, 20, -160], scale: 2 });
   });
 });
 
