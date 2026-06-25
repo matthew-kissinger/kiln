@@ -63,6 +63,26 @@ export interface SceneBackdropSpec {
   scale?: number;
 }
 
+/** A painted ground zone — mirrors Studio's ScenePaintShape/ScenePaintZone. A `rect`
+ *  is a finite patch (a plaza); a `strip` is a long axis-aligned band (an avenue). */
+export type ScenePaintShapeSpec =
+  | { type: 'rect'; x: number; z: number; hx: number; hz: number }
+  | { type: 'strip'; axis: 'x' | 'z'; offset: number; half: number; from: number; to: number };
+export interface ScenePaintZoneSpec {
+  kind:
+    | 'grass'
+    | 'concrete'
+    | 'asphalt'
+    | 'sand'
+    | 'flagstone'
+    | 'snow'
+    | 'ice'
+    | 'gravel'
+    | 'stone-path';
+  shape: ScenePaintShapeSpec;
+  laneLine?: boolean;
+}
+
 /** One evaluated instance: a generation placed in the world, linked to its statement. */
 export interface Placement {
   instanceId: string;
@@ -142,6 +162,8 @@ export interface SceneModelJSON {
   environment?: SceneGroundTheme;
   /** Scene-level atmosphere backdrop the agent chose (scene_set_backdrop). */
   backdrop?: SceneBackdropSpec;
+  /** Painted ground zones the agent authored (scene_paint), aligned to the layout. */
+  paint?: ScenePaintZoneSpec[];
 }
 
 export interface PlaceArgs {
@@ -225,6 +247,7 @@ export class PlacementModel {
   private groupSeq = 0;
   private env?: SceneGroundTheme;
   private bg?: SceneBackdropSpec;
+  private groundPaint?: ScenePaintZoneSpec[];
 
   constructor(
     name: string,
@@ -471,6 +494,12 @@ export class PlacementModel {
   sceneBackdrop(): SceneBackdropSpec | undefined {
     return this.bg;
   }
+  setPaint(zones: ScenePaintZoneSpec[]): void {
+    this.groundPaint = zones;
+  }
+  paint(): ScenePaintZoneSpec[] | undefined {
+    return this.groundPaint;
+  }
 
   // ── evaluate ────────────────────────────────────────────────────────────────
 
@@ -572,6 +601,7 @@ export class PlacementModel {
         statements: this.stmts,
         ...(this.env ? { environment: this.env } : {}),
         ...(this.bg ? { backdrop: this.bg } : {}),
+        ...(this.groundPaint?.length ? { paint: this.groundPaint } : {}),
       }),
     );
   }
@@ -591,6 +621,7 @@ export class PlacementModel {
     m.seq = maxSeq;
     if (j.environment) m.env = j.environment;
     if (j.backdrop) m.bg = j.backdrop;
+    if (j.paint?.length) m.groundPaint = j.paint;
     return m;
   }
 }
