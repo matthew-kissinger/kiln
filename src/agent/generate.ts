@@ -193,7 +193,9 @@ export async function generateKilnAsset(
     throw new Error(`Kiln agent generation failed: ${agent.error ?? 'agent produced no code'}`);
   }
 
-  const render = await renderGLB(agent.code);
+  // Grade-aware consolidation by default: lifts material-sprawl heroes from
+  // grade C/D/F to A/B, byte-stable on already-lean assets (M1a, plan/05 §3.1).
+  const render = await renderGLB(agent.code, { optimize: 'auto' });
 
   // Best-effort views artifact: what the vision loop / review UIs show.
   // Never fails the run — a rasterizer error just drops the sidecar.

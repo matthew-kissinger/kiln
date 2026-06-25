@@ -124,6 +124,8 @@ describe('render.meta carries the instanceability report', () => {
     const res = await renderGLB(code);
     expect(res.meta.instanceability).toBeDefined();
     expect(res.meta.instanceability!.grade).toBe('A');
+    // tier is auto-filled to mirror the grade (M1d).
+    expect(res.meta.tier).toBe('A');
     expect(res.meta.metricsError).toBeUndefined();
   });
 });

@@ -28,6 +28,7 @@ import { buildSandboxGlobals, countTriangles } from './primitives';
 import {
   collectGlbMetrics,
   gradeInstanceability,
+  type InstanceabilityGrade,
   type InstanceabilityMetrics,
   type InstanceabilityReport,
 } from './metrics';
@@ -59,9 +60,19 @@ const TYPE_VEC4: AccessorTypeStr = 'VEC4';
 // Execution
 // =============================================================================
 
+/**
+ * Scene-placement role the agent declares in its `meta` block. Drives composer
+ * layout (wonders anchor + scale up, fill scatters, ground is the base, vehicles
+ * snap to roads) and Kiln City density budgeting. Semantic — cannot be recomputed
+ * from GLB bytes, so it travels in provenance. See plan/05-product-depth.md §3.4.
+ */
+export type AssetRole = 'ground' | 'building' | 'wonder' | 'poi' | 'prop' | 'fill' | 'vehicle';
+
 export interface KilnCodeMeta {
   name?: string;
   category?: string;
+  /** Scene-placement role (agent-declared). Drives composer layout + city budgeting. */
+  role?: AssetRole;
   tris?: number;
   /**
    * Count of primitive invocations from the agent-generated build() call.
@@ -74,6 +85,11 @@ export interface KilnCodeMeta {
    * Informational only — never a gate. Populated by renderGLB / renderSceneToGLB.
    */
   instanceability?: InstanceabilityReport;
+  /**
+   * Convenience copy of {@link KilnCodeMeta.instanceability}.grade (A–F),
+   * auto-filled at bake so consumers read the tier without re-deriving it.
+   */
+  tier?: InstanceabilityGrade;
   /** Set if metric computation threw; the GLB is still valid. */
   metricsError?: string;
   /** Set when an opt-in consolidation pass ran (optimize !== 'off'). */
@@ -462,6 +478,11 @@ export interface RenderResult {
 /**
  * Bake-time material-consolidation mode (opt-in, default off).
  *   - `off`     — today's output, byte-identical across every consumer.
+ *   - `auto`    — grade-aware: runs `palette` only when it would actually act
+ *                 (>= PALETTE_MIN distinct materials — i.e. the asset is grade
+ *                 C/D/F from material sprawl); below that it is a no-op, byte-
+ *                 identical to `off`. The default grade-lift lever for the agent
+ *                 path: lean assets stay untouched, sprawling heroes collapse.
  *   - `palette` — merge distinct flat-color materials into one palette material
  *                 + palette texture (`palette → weld → prune`). Node graph,
  *                 named pivots, and animations are fully preserved, so it is safe
@@ -472,7 +493,7 @@ export interface RenderResult {
  *                 animations or skins (flatten/join must not disturb a rig).
  * See docs/kiln-material-consolidation-cycle.md (Move 1).
  */
-export type OptimizeMode = 'off' | 'palette' | 'full';
+export type OptimizeMode = 'off' | 'auto' | 'palette' | 'full';
 
 /** What a consolidation pass did (recorded in provenance / render.meta). */
 export interface OptimizeSummary {
@@ -526,7 +547,7 @@ const PALETTE_MIN = 5;
 function resolveOptimize(opt?: OptimizeMode): OptimizeMode {
   if (opt) return opt;
   const env = process.env['KILN_BAKE_OPTIMIZE'];
-  return env === 'palette' || env === 'full' ? env : 'off';
+  return env === 'auto' || env === 'palette' || env === 'full' ? env : 'off';
 }
 
 /**
@@ -633,16 +654,23 @@ export async function renderSceneToGLB(
   }
 
   // Opt-in material consolidation (default off => byte-identical to today). Runs
-  // after dedup so palette() works on the already-merged material set. Failure is
+  // after dedup so palette() works on the already-merged material set. `auto` is
+  // grade-aware: it consolidates only when palette() would actually act
+  // (>= PALETTE_MIN materials), so lean assets stay byte-stable. Failure is
   // swallowed with a warning — the dedup'd GLB is still valid.
   const optimizeMode = resolveOptimize(opts.optimize);
+  let effectiveOptimize: 'off' | 'palette' | 'full' =
+    optimizeMode === 'auto' ? 'off' : optimizeMode;
+  if (optimizeMode === 'auto' && collectGlbMetrics(doc, tris).uniqueMaterials >= PALETTE_MIN) {
+    effectiveOptimize = 'palette';
+  }
   let optimize: OptimizeSummary | undefined;
-  if (optimizeMode !== 'off') {
+  if (effectiveOptimize !== 'off') {
     try {
-      optimize = await consolidateMaterials(doc, optimizeMode);
+      optimize = await consolidateMaterials(doc, effectiveOptimize);
     } catch (err) {
       warnings.push(
-        `optimize (${optimizeMode}) failed: ${err instanceof Error ? err.message : String(err)}`,
+        `optimize (${effectiveOptimize}) failed: ${err instanceof Error ? err.message : String(err)}`,
       );
     }
   }
@@ -702,7 +730,9 @@ export async function renderGLB(
       ...meta,
       tris: scene.tris,
       primitiveUsage,
-      ...(scene.instanceability ? { instanceability: scene.instanceability } : {}),
+      ...(scene.instanceability
+        ? { instanceability: scene.instanceability, tier: scene.instanceability.grade }
+        : {}),
       ...(scene.metricsError ? { metricsError: scene.metricsError } : {}),
       ...(scene.optimize ? { optimize: scene.optimize } : {}),
     },
@@ -754,12 +784,23 @@ export interface OptimizeGlbResult {
  */
 export async function optimizeGlbBytes(
   bytes: Uint8Array,
-  opts: { mode?: 'palette' | 'full'; category?: string } = {},
+  opts: { mode?: OptimizeMode; category?: string } = {},
 ): Promise<OptimizeGlbResult | undefined> {
-  const mode = opts.mode ?? 'palette';
+  const requested = opts.mode ?? 'palette';
   try {
     const io = new WebIO();
     const doc = await io.readBinary(bytes);
+    // `auto` is grade-aware: consolidate only when palette() would act
+    // (>= PALETTE_MIN materials); a no-op auto (or an explicit `off`) returns
+    // undefined so the caller simply keeps the original bytes unchanged.
+    if (requested === 'off') return undefined;
+    let mode: 'palette' | 'full';
+    if (requested === 'auto') {
+      if (collectGlbMetrics(doc).uniqueMaterials < PALETTE_MIN) return undefined;
+      mode = 'palette';
+    } else {
+      mode = requested;
+    }
     const summary = await consolidateMaterials(doc, mode);
     const outBytes = await io.writeBinary(doc);
     let report: InstanceabilityReport | undefined;
@@ -1004,12 +1045,17 @@ export async function composeSceneGLB(
   }
 
   const optimizeMode: OptimizeMode = opts.optimize ?? 'palette';
-  if (optimizeMode !== 'off') {
+  let effectiveOptimize: 'off' | 'palette' | 'full' =
+    optimizeMode === 'auto' ? 'off' : optimizeMode;
+  if (optimizeMode === 'auto' && collectGlbMetrics(master).uniqueMaterials >= PALETTE_MIN) {
+    effectiveOptimize = 'palette';
+  }
+  if (effectiveOptimize !== 'off') {
     try {
-      await consolidateMaterials(master, optimizeMode);
+      await consolidateMaterials(master, effectiveOptimize);
     } catch (err) {
       warnings.push(
-        `optimize (${optimizeMode}) failed: ${err instanceof Error ? err.message : String(err)}`,
+        `optimize (${effectiveOptimize}) failed: ${err instanceof Error ? err.message : String(err)}`,
       );
     }
   }
