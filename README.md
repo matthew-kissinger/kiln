@@ -17,6 +17,21 @@ pipeline** — just the text-to-GLB engine Kiln Studio runs in production.
 > for local dev, CI, and both Docker images — NOT a path-link (`file:../kiln` hits a Windows
 > `EPERM` copying native deps). See `../plan/`.
 
+## External Access Boundary
+
+Do not expose this engine package, its raw tool surface, or its composer harness directly to external
+users. The approved private developer interface lives in the sibling `kiln-studio` repo:
+
+- Studio `/v1` is the product contract for REST, SDK, and future AgentCore Gateway MCP tools.
+- Studio owns `DeveloperClient` auth, scopes, quotas, audit, S3/Dynamo ownership, and artifact URLs.
+- The generation AgentCore Runtime and this engine stay private execution infrastructure.
+- Product-level tools may expose asset/pack/scene planning, validation, generation, composition, and
+  downloads, but not raw `kiln_render`, `kiln_screenshot`, `scene_place`, `scene_render`,
+  `scene_finalize`, transcripts, storage keys, or provider keys.
+
+For current access and distribution decisions, see
+`../kiln-studio/docs/launch/11-private-developer-platform-prod-handoff.md`.
+
 ## Install
 
 ```bash
