@@ -100,7 +100,12 @@ const trimmedEnv = (k: string): string | undefined => {
  * minimum of 1024, interleaved beta added). Unset / 0 / '' → undefined, i.e.
  * send nothing and take the API default.
  */
+function isAnthropicAdaptiveOnlyModel(model: string): boolean {
+  return /^claude-sonnet-5(?:-|$)/.test(model);
+}
+
 function resolveAnthropicThinking(
+  model: string,
   fromDesc?: string | number,
 ): { params: Record<string, unknown>; betas?: string[] } | undefined {
   const raw = fromDesc ?? trimmedEnv('KILN_THINKING');
@@ -113,6 +118,10 @@ function resolveAnthropicThinking(
         : undefined;
   if (asNum !== undefined) {
     if (!Number.isFinite(asNum) || asNum <= 0) return undefined;
+    // Sonnet 5 has adaptive thinking on by default and rejects manual
+    // extended-thinking budgets. Do not let a global KILN_THINKING number make
+    // this model fail before the first tool call.
+    if (isAnthropicAdaptiveOnlyModel(model)) return undefined;
     return {
       params: { thinking: { type: 'enabled', budget_tokens: Math.max(1024, Math.floor(asNum)) } },
       betas: ['interleaved-thinking-2025-05-14'],
@@ -134,7 +143,7 @@ export function makeKilnModel(desc: KilnModelDescriptor, opts: MakeKilnModelOpti
   const maxTokens = desc.maxTokens;
   switch (desc.provider) {
     case 'anthropic': {
-      const thinking = resolveAnthropicThinking(desc.thinking);
+      const thinking = resolveAnthropicThinking(desc.model, desc.thinking);
       return new AnthropicModel({
         modelId: desc.model,
         ...(maxTokens != null ? { maxTokens } : {}),

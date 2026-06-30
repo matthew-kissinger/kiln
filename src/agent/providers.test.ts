@@ -148,6 +148,14 @@ describe('makeKilnModel', () => {
       expect(cfg['betas']).toEqual(['interleaved-thinking-2025-05-14']);
     });
 
+    test('Sonnet 5 ignores numeric thinking budgets because it is adaptive-only', () => {
+      const cfg = getCfg(
+        makeKilnModel({ provider: 'anthropic', model: 'claude-sonnet-5', thinking: 8000 }),
+      );
+      expect(cfg['params']).toBeUndefined();
+      expect(cfg['betas']).toBeUndefined();
+    });
+
     test('env keyword/number applies (numbers floored to 1024); descriptor 0 forces default; google ignores it', () => {
       const prev = process.env['KILN_THINKING'];
       try {

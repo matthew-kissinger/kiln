@@ -5,10 +5,17 @@ for the consuming app's lockfile + tarball provenance, not public npm releases.
 
 ## [Unreleased]
 
+## [0.1.1] — 2026-06-30
+
 ### Documentation
 - Clarified that `@kiln/engine` remains private execution infrastructure. External developer access
   is mediated by Studio `/v1`, private SDK/skills, and future AgentCore Gateway product tools rather
   than direct engine, raw Forge, or composer harness exposure.
+
+### Changed
+- Treat native `claude-sonnet-5` as adaptive-only for Anthropic thinking controls: numeric
+  `KILN_THINKING` budgets are ignored for this model so the agent harness does not send
+  manual extended-thinking params that Sonnet 5 rejects.
 
 ### Added — scene composer (`@kiln/engine/composer`, `/composer/agent`)
 A THREE-free scene-composition surface: a `PlacementModel` single-source-of-truth with a
