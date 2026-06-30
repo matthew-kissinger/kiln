@@ -5,6 +5,11 @@ for the consuming app's lockfile + tarball provenance, not public npm releases.
 
 ## [Unreleased]
 
+### Documentation
+- Clarified that `@kiln/engine` remains private execution infrastructure. External developer access
+  is mediated by Studio `/v1`, private SDK/skills, and future AgentCore Gateway product tools rather
+  than direct engine, raw Forge, or composer harness exposure.
+
 ### Added — scene composer (`@kiln/engine/composer`, `/composer/agent`)
 A THREE-free scene-composition surface: a `PlacementModel` single-source-of-truth with a
 small scene DSL (`scene()`/`asset()`), terrain-agnostic hierarchy-aware layout, an overlap
