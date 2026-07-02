@@ -5,14 +5,13 @@
  * bridge providers like OpenRouter) through a tool loop where it discovers Kiln
  * primitives, validates and renders its program with the shared kiln tools, then
  * submits the final code via the terminal `kiln_submit` tool. This is the
- * "interact with Kiln through tools" path — distinct from the legacy emit-and-
- * parse `generate.ts` / `llm` paths, which stay intact.
+ * "interact with Kiln through tools" path — the engine's codegen foundation.
  *
  * Know-how is supplied by either an inline system prompt (`getSystemPrompt`) or
  * the kiln-glb SKILL.md via the Strands `AgentSkills` plugin — the task prompt
  * itself should stay natural language and NOT bake in conventions.
  *
- * Pure orchestration over @pixel-forge/core primitives + @strands-agents/sdk. The
+ * Pure orchestration over @kiln/engine primitives + @strands-agents/sdk. The
  * caller constructs the `model` (see provider helpers) and owns any out-of-process
  * resources (e.g. an MCP client passed via `extraTools`).
  */
@@ -108,7 +107,8 @@ export interface RunKilnAgentOptions {
   /** Which agent tool surface to use. Resolved at call time: this option, else
    *  the KILN_TOOL_SURFACE env, else 'current'. The 'unified' surface is the
    *  buffer-based draft/view/edit/validate/render/finalize six (render+screenshot
-   *  collapsed, no kiln_list_primitives). Flag-gated until a bench A/B clears it. */
+   *  collapsed, no kiln_list_primitives) — the surface Kiln Studio runs in prod
+   *  (KILN_TOOL_SURFACE=unified); 'current' remains the library default. */
   toolSurface?: KilnToolSurface;
   /** Agent name (for tracing). Default 'kiln-agent'. */
   agentName?: string;

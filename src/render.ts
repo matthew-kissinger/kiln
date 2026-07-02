@@ -335,10 +335,14 @@ function bridgeGeometry(
 
   const indexAttr = geometry.getIndex();
   if (indexAttr) {
+    // Uint16 holds indices up to 65535; a geometry with more vertices needs
+    // Uint32 indices or the values silently wrap (corrupt GLB). gltf-transform
+    // derives componentType (5123 vs 5125) from the typed-array class.
+    const IndexArray = posAttr && posAttr.count > 65535 ? Uint32Array : Uint16Array;
     prim.setIndices(
       doc
         .createAccessor(meshName + '_idx')
-        .setArray(new Uint16Array(indexAttr.array))
+        .setArray(new IndexArray(indexAttr.array))
         .setType(TYPE_SCALAR)
         .setBuffer(buf),
     );
@@ -540,8 +544,10 @@ export interface RenderSceneOptions {
 }
 
 /** Minimum distinct material-value blocks before palette() generates a texture.
- *  Below this it is a no-op (an asset with very few materials is already cheap). */
-const PALETTE_MIN = 5;
+ *  Below this it is a no-op (an asset with very few materials is already cheap).
+ *  Aligned with the instanceability rubric: grade B tops out at 3 materials, so
+ *  the first grade-C count (4) must trigger `auto` consolidation. */
+const PALETTE_MIN = 4;
 
 /** Resolve the effective optimize mode: explicit option wins, else the env, else off. */
 function resolveOptimize(opt?: OptimizeMode): OptimizeMode {

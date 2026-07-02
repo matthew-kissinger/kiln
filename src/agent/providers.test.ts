@@ -119,6 +119,22 @@ describe('makeKilnModel', () => {
     expect(m).toBeTruthy();
   });
 
+  test('passes a BYOK apiKey through to the anthropic and openai clients', () => {
+    const clientKey = (m: unknown): unknown =>
+      (m as { _client?: { apiKey?: unknown } })._client?.apiKey;
+    expect(
+      clientKey(
+        makeKilnModel(
+          { provider: 'anthropic', model: 'claude-opus-4-8' },
+          { apiKey: 'byok-anthropic' },
+        ),
+      ),
+    ).toBe('byok-anthropic');
+    expect(
+      clientKey(makeKilnModel({ provider: 'openai', model: 'gpt-5.5' }, { apiKey: 'byok-openai' })),
+    ).toBe('byok-openai');
+  });
+
   describe('anthropic thinking control (KILN_THINKING)', () => {
     const getCfg = (m: unknown): Record<string, unknown> =>
       (m as { getConfig(): Record<string, unknown> }).getConfig();

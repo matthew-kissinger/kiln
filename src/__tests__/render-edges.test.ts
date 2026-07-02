@@ -9,9 +9,11 @@
  */
 
 import { describe, expect, test } from 'bun:test';
-import { NodeIO } from '@gltf-transform/core';
+import { Accessor, NodeIO } from '@gltf-transform/core';
+import * as THREE from 'three';
 
-import { executeKilnCode, renderGLB, inspectGeneratedAnimation } from '../render';
+import { boxGeo, createPart, createRoot, gameMaterial } from '../primitives';
+import { executeKilnCode, renderGLB, renderSceneToGLB, inspectGeneratedAnimation } from '../render';
 
 // =============================================================================
 // executeKilnCode guard clauses
@@ -207,6 +209,40 @@ function animate() {
     // But surfaces the warning both from inspectGeneratedAnimation and
     // the bridge's own "target not found - skipped" path.
     expect(r.warnings.some((w) => w.includes('Joint_DoesNotExist'))).toBe(true);
+  });
+});
+
+// =============================================================================
+// Index componentType selection (Uint16 vs Uint32)
+// =============================================================================
+
+describe('bridgeGeometry index componentType', () => {
+  test('a >65,535-vertex geometry roundtrips with UNSIGNED_INT indices intact', async () => {
+    const root = createRoot('BigMesh');
+    // 256x256 segments -> 257^2 = 66,049 vertices, past the Uint16 ceiling.
+    const geo = new THREE.PlaneGeometry(1, 1, 256, 256);
+    createPart('Big', geo, gameMaterial(0x8899aa), { parent: root });
+
+    const { bytes } = await renderSceneToGLB(root, { dedup: false });
+    const doc = await new NodeIO().readBinary(bytes);
+    const idx = doc.getRoot().listMeshes()[0]?.listPrimitives()[0]?.getIndices();
+    expect(idx?.getComponentType()).toBe(Accessor.ComponentType.UNSIGNED_INT);
+
+    // The top vertex index survives (a Uint16 write would wrap 66048 -> 512).
+    const arr = idx?.getArray();
+    let max = 0;
+    if (arr) for (const v of arr) max = Math.max(max, v);
+    expect(max).toBe(66049 - 1);
+  });
+
+  test('a small geometry keeps compact UNSIGNED_SHORT indices', async () => {
+    const root = createRoot('SmallMesh');
+    createPart('Small', boxGeo(1, 1, 1), gameMaterial(0x8899aa), { parent: root });
+
+    const { bytes } = await renderSceneToGLB(root, { dedup: false });
+    const doc = await new NodeIO().readBinary(bytes);
+    const idx = doc.getRoot().listMeshes()[0]?.listPrimitives()[0]?.getIndices();
+    expect(idx?.getComponentType()).toBe(Accessor.ComponentType.UNSIGNED_SHORT);
   });
 });
 
