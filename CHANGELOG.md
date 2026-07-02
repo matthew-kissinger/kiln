@@ -5,6 +5,39 @@ for the consuming app's lockfile + tarball provenance, not public npm releases.
 
 ## [Unreleased]
 
+## [0.3.0] — 2026-07-02
+
+### Added
+- **Generation-loop transcript compaction (default on).** Before every model call,
+  `runKilnAgent` now strips the image out of each SUPERSEDED render tool result
+  (kiln_render / kiln_screenshot / kiln_view_interior / animation strips), swapping it for
+  a short text placeholder — only the newest render image rides each request. The prune is
+  surgical, unlike the composer's whole-transcript collapse: no messages are added or
+  removed, toolUseIds are untouched (tool-use/tool-result pairing stays valid on every
+  provider), and the JSON metrics half of each result survives. This was the biggest
+  input-token/cost lever in a multi-render run — previously every render image rode ALL
+  later model calls. Opt out per run with `imageCompaction: 'off'`. New helpers exported
+  from `agent`: `pruneStaleRenderImages`, `installRenderImageCompaction`,
+  `STALE_RENDER_PLACEHOLDER`.
+- **M1b grade-aware refine loop (plan/05 §3.2, default on).** After the model finalizes,
+  the run bakes + grades the program exactly as the shipped artifact will be graded
+  (grade-aware `auto` consolidation, matching `generateKilnAsset` and the Studio web-tier
+  re-bake). If it still grades below B for a consolidation-fixable reason — material
+  sprawl (>3 distinct) or texture sprawl (>4), never a transparency-only demotion (glass
+  caps at C by design) — and the step budget leaves headroom, ONE bounded feedback turn
+  (grade, material count, offending material list, consolidation directive) is fed back;
+  the refined program is kept only if its grade actually improves. Opt out with
+  `gradeRefine: 'off'`. Emits a `grade_refine` progress event; token usage now accumulates
+  across the extra invoke. New helpers exported from `agent`: `assessProgramGrade`,
+  `shouldGradeRefine`, `buildGradeRefineMessage`, `gradeRank`.
+
+### Fixed
+- **Step-cap abort no longer discards a rendered program.** A run halted by the model-call
+  cap used to return only an error, throwing away the working-buffer program the sink
+  already held. If the captured program renders, the run now returns it with the new
+  `RunKilnAgentResult.capped: true` flag (mirrors the composer's `capped` semantics); a
+  cap with nothing renderable is still an `error`.
+
 ## [0.2.0] — 2026-07-02
 
 The release cut the 0.1.1 composer note promised: formally versions the scene composer
