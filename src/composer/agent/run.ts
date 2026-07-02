@@ -173,7 +173,11 @@ export async function runKilnComposer(
 
     const catalogLines = model
       .catalogList()
-      .map((e) => `- ${e.name ?? e.generationId} — ${e.size[0]}×${e.size[1]}×${e.size[2]}`)
+      .map((e) => {
+        // Role/tier at a glance (M3) — the same fields scene_list_assets returns.
+        const traits = [e.role, e.tier ? `tier ${e.tier}` : undefined].filter(Boolean).join(', ');
+        return `- ${e.name ?? e.generationId} — ${e.size[0]}×${e.size[1]}×${e.size[2]}${traits ? ` (${traits})` : ''}`;
+      })
       .join('\n');
 
     const userPrompt = buildComposerUserPrompt({
