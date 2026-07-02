@@ -17,6 +17,8 @@
  * - {@link ensureStreamStart} — the OpenRouter/Vercel-bridge stream fix
  * - {@link makeOpenRouterModel} — build an OpenRouter Strands model with the fix
  * - {@link MetricsCollector}  — per-loop tool/step/usage metrics via hooks
+ * - {@link installRenderImageCompaction} — prune superseded render images from the transcript
+ * - {@link assessProgramGrade} / {@link shouldGradeRefine} — M1b grade-aware refine helpers
  */
 export { runKilnAgent } from './run';
 export type { RunKilnAgentOptions, RunKilnAgentResult, KilnKnowhow, KilnInputImage } from './run';
@@ -46,6 +48,27 @@ export type {
 
 export { unifiedDiff } from './diff';
 export type { UnifiedDiffOptions } from './diff';
+
+export {
+  pruneStaleRenderImages,
+  installRenderImageCompaction,
+  STALE_RENDER_PLACEHOLDER,
+} from './compaction';
+export type { PruneImagesResult, RenderImageCompactionOptions } from './compaction';
+
+export {
+  assessProgramGrade,
+  shouldGradeRefine,
+  buildGradeRefineMessage,
+  gradeRank,
+  GRADE_REFINE_TARGET,
+  GRADE_REFINE_MIN_HEADROOM,
+} from './grade-refine';
+export type {
+  ProgramGradeAssessment,
+  GradeRefineTrigger,
+  GradeRefineMessageArgs,
+} from './grade-refine';
 
 export { ensureStreamStart } from './stream-start';
 
