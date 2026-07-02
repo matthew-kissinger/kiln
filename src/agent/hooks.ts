@@ -36,6 +36,14 @@ export type KilnAgentEvent =
       messagesBefore: number;
       placements: number;
       overlaps: number;
+    }
+  | {
+      /** M1b: the finalized program graded below B for a consolidation-fixable
+       *  reason, and one bounded grade-refine turn is being fed back to the model. */
+      type: 'grade_refine';
+      step: number;
+      grade: string;
+      materials: number;
     };
 
 /** The agent-loop-derived metrics this collector produces. */
@@ -120,12 +128,19 @@ export class MetricsCollector {
     this.cleanups = [];
   }
 
-  /** Record token usage from the AgentResult after invoke completes. */
+  /** Record token usage from the AgentResult after an invoke completes.
+   *  Accumulates across calls — a grade-refine pass is a SECOND invoke on the
+   *  same agent, and `latestAgentInvocation.usage` is per-invocation, so the
+   *  run's usage is the sum. Single-invoke callers are unaffected. */
   recordResultUsage(usage: AgentUsage | undefined): void {
     if (!usage) return;
-    const next: AgentUsage = {};
-    if (typeof usage.inputTokens === 'number') next.inputTokens = usage.inputTokens;
-    if (typeof usage.outputTokens === 'number') next.outputTokens = usage.outputTokens;
+    const next: AgentUsage = { ...this.usage };
+    if (typeof usage.inputTokens === 'number') {
+      next.inputTokens = (next.inputTokens ?? 0) + usage.inputTokens;
+    }
+    if (typeof usage.outputTokens === 'number') {
+      next.outputTokens = (next.outputTokens ?? 0) + usage.outputTokens;
+    }
     if (next.inputTokens !== undefined || next.outputTokens !== undefined) this.usage = next;
   }
 
