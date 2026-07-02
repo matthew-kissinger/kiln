@@ -146,6 +146,7 @@ export function makeKilnModel(desc: KilnModelDescriptor, opts: MakeKilnModelOpti
       const thinking = resolveAnthropicThinking(desc.model, desc.thinking);
       return new AnthropicModel({
         modelId: desc.model,
+        ...(opts.apiKey ? { apiKey: opts.apiKey } : {}),
         ...(maxTokens != null ? { maxTokens } : {}),
         ...(thinking ? { params: thinking.params } : {}),
         ...(thinking?.betas ? { betas: thinking.betas } : {}),
@@ -155,6 +156,7 @@ export function makeKilnModel(desc: KilnModelDescriptor, opts: MakeKilnModelOpti
       return new OpenAIModel({
         api: 'chat',
         modelId: desc.model,
+        ...(opts.apiKey ? { apiKey: opts.apiKey } : {}),
         ...(maxTokens != null ? { maxTokens } : {}),
       });
     case 'google':

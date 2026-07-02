@@ -1,11 +1,10 @@
 /**
- * `@pixel-forge/core/kiln/agent` — the agnostic, tool-driven Kiln codegen
- * foundation (validated in packages/kiln-bench, folded into core 2026-06).
+ * `@kiln/engine/agent` — the agnostic, tool-driven Kiln codegen foundation
+ * (validated in the pixel-forge kiln-bench harness, folded in 2026-06).
  *
- * This is an ADDITIVE surface: it does not replace the legacy emit-and-parse
- * `generate.ts` / `llm` paths. It is isolated on its own subpath export so the
- * `@strands-agents/sdk` dependency does not leak into the rest of core — import
- * from `@pixel-forge/core/kiln/agent` only when you want the agent loop.
+ * Isolated on its own subpath export so the `@strands-agents/sdk` dependency
+ * does not leak into the rest of the engine — import from `@kiln/engine/agent`
+ * only when you want the agent loop.
  *
  * - {@link runKilnAgent}      — drive any Strands Model through the kiln tool loop
  * - {@link generateKilnAsset} — model id -> tool loop -> rendered GLB (the default codegen engine)

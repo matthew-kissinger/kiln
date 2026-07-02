@@ -5,6 +5,36 @@ for the consuming app's lockfile + tarball provenance, not public npm releases.
 
 ## [Unreleased]
 
+## [0.2.0] — 2026-07-02
+
+The release cut the 0.1.1 composer note promised: formally versions the scene composer
+surface (`@kiln/engine/composer`, `/composer/agent` — shipped in 0.1.x without a bump)
+plus the fixes below.
+
+### Fixed
+- **`auto` consolidation now fires on 4-material assets.** `PALETTE_MIN` dropped 5 → 4,
+  aligning the trigger with the instanceability rubric (grade B tops out at 3 materials,
+  so 4 is the first grade-C count). Previously a 4-material asset graded C and `auto`
+  never consolidated it.
+- **Uint32 indices for >65,535-vertex geometry.** `bridgeGeometry` always wrote
+  `Uint16Array` indices, silently wrapping values past 65,535 (corrupt GLB). It now
+  selects `Uint32Array` when the vertex count exceeds the Uint16 ceiling; the GLB
+  writer emits the matching `componentType` (5125).
+- **BYOK `apiKey` reaches Anthropic/OpenAI.** `makeKilnModel` dropped `opts.apiKey` on
+  the `anthropic` and `openai` branches (only google/openrouter passed it through), so
+  BYOK silently fell back to the provider env vars.
+
+### Changed
+- Comments in `agent/tools.ts` / `agent/run.ts` updated: the `unified` tool surface is
+  the production surface (Kiln Studio runs `KILN_TOOL_SURFACE=unified`), no longer
+  "flag-gated until a bench A/B clears it"; `current` remains the library default.
+
+### Housekeeping
+- Added the missing `LICENSE` file (MIT, already declared in `package.json`).
+- Rewrote the stale `@pixel-forge/core` module headers (`metrics.ts`, `agent/index.ts`,
+  `agent/run.ts`, `palette.ts`) to the `@kiln/engine` reality and removed dangling
+  references to files that do not exist in this repo.
+
 ## [0.1.1] — 2026-06-30
 
 ### Documentation
@@ -26,8 +56,8 @@ SDK never leaks into the pure core. Transcript compaction collapses to `serializ
 past a threshold (the externalized model IS the state), with a soft step-cap backstop and a
 `scene_layout`-first prompt so large many-asset scenes converge. ~990 lines of new tests.
 
-> Studio consumes this via the committed `@kiln/engine` 0.1.0 tarball (the surface landed
-> without a version bump); bump to 0.2.0 + re-`sync:engine` when a release is cut.
+> The surface landed without a version bump (Studio consumed it via the committed
+> `@kiln/engine` 0.1.0 tarball); formally versioned by the 0.2.0 release above.
 
 ## [0.1.0] — 2026-06-23
 

@@ -5,18 +5,18 @@
  *
  * PURE DATA + a text helper. NO `three`, NO node, NO gltf-transform imports — so
  * it is browser-safe and can be consumed anywhere (the leaf subpath
- * `@pixel-forge/core/kiln/palette`) without dragging runtime code into a bundle.
+ * `@kiln/engine/palette`) without dragging runtime code into a bundle.
  *
- * Why it lives in core: the palette is the shared contract both the authoring
- * prompt (instruct the model to build against these roles) and a later bake-time
- * shared-palette texture (Phase C) target. The slot SET + ORDER are stable so the
- * future texture is deterministic; the implementer may tune individual color /
- * metalness / roughness values without breaking that contract.
+ * Why it lives in the engine: the palette is the shared contract both the
+ * authoring prompt (instruct the model to build against these roles) and a later
+ * bake-time shared-palette texture (Phase C) target. The slot SET + ORDER are
+ * stable so the future texture is deterministic; the implementer may tune
+ * individual color / metalness / roughness values without breaking that contract.
  *
- * The rendered directive string is mirrored verbatim in
- * `@pixel-forge/kiln-studio/shared` as `OPTIMIZED_PALETTE_DIRECTIVE` (so that
- * import-free, browser-critical module stays dependency-free); a parity test in
- * kiln-studio asserts the two never drift. See docs/kiln-material-consolidation-cycle.md.
+ * The rendered directive string is mirrored verbatim in Kiln Studio's `shared/`
+ * module as `OPTIMIZED_PALETTE_DIRECTIVE` (so that import-free, browser-critical
+ * module stays dependency-free); a parity test in kiln-studio asserts the two
+ * never drift.
  */
 
 /** One material role in the canonical palette. A PBR spec the directive names and

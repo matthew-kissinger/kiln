@@ -2,7 +2,7 @@
  * Kiln instanceability metrics + grader.
  *
  * A pure, deterministic, GPU-free static analysis over a baked glTF Document.
- * Lives in @pixel-forge/core so it can be computed at every natural point with
+ * Lives in @kiln/engine so it can be computed at every natural point with
  * zero deploy coupling:
  *   - in render.ts -> render.meta for CLI / MCP / batch (never crosses the wire)
  *   - web-side in Kiln Studio from the persisted GLB
@@ -15,8 +15,6 @@
  * NOTHING here is a hard gate. The metrics and grade are informational signals
  * that help agents and humans understand how cheap an asset is to render at
  * scale. They never reject, block, or fail a generation/validation/bake.
- *
- * See docs/kiln-instanceability-and-runtime-instancing-cycle.md.
  */
 
 import type { Document } from '@gltf-transform/core';

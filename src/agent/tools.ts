@@ -11,11 +11,11 @@
  * latter's coexistence with a full tool set is provider-dependent; a submit tool
  * is unambiguous and works across every provider.
  *
- * Three factories: {@link makeKilnTools} (the default `current` generate surface),
- * {@link makeKilnEditTools} (the `current` surgical-refine surface), and
- * {@link makeKilnUnifiedTools} (the buffer-based 6-tool `unified` surface, gated
- * behind KILN_TOOL_SURFACE='unified'). The first two stay byte-identical so the
- * bench baseline and production default do not move.
+ * Three factories: {@link makeKilnTools} (the library-default `current` generate
+ * surface), {@link makeKilnEditTools} (the `current` surgical-refine surface), and
+ * {@link makeKilnUnifiedTools} (the buffer-based 6-tool `unified` surface, selected
+ * via KILN_TOOL_SURFACE='unified' — what Kiln Studio runs in prod). The first two
+ * stay byte-identical so the bench baseline does not move.
  */
 import { tool, ImageBlock, JsonBlock, type Tool, type JSONValue } from '@strands-agents/sdk';
 import { z } from 'zod';
@@ -447,9 +447,9 @@ export function makeKilnEditTools(opts: { seedCode: string; sink: EditSink }): T
 // buffer; refine seeds the parent's code. `kiln_list_primitives` is dropped — the
 // primitive catalog (incl. examples) lives in the cached system prompt instead.
 //
-// Selected only when the flag is on; the legacy `makeKilnTools` /
-// `makeKilnEditTools` surfaces stay byte-identical for the default `current`
-// surface and the bench baseline.
+// Selected via KILN_TOOL_SURFACE='unified' — the production surface for Kiln
+// Studio. The legacy `makeKilnTools` / `makeKilnEditTools` surfaces stay
+// byte-identical for the library-default `current` surface and the bench baseline.
 
 /**
  * A mutable sink the unified tools write into. Create one per run with

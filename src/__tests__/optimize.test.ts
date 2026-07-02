@@ -188,6 +188,18 @@ describe('optimize=auto (grade-aware, the default grade-lift lever)', () => {
     expect(['A', 'B']).toContain(after.instanceability!.grade);
   });
 
+  it('consolidates a 4-material asset (grade C floor) to grade B or better', async () => {
+    const before = await renderSceneToGLB(manyColorScene(4));
+    expect(before.instanceability!.grade).toBe('C'); // 4 materials — first C count
+
+    const after = await renderSceneToGLB(manyColorScene(4), { optimize: 'auto' });
+    expect(after.optimize).toBeDefined();
+    expect(after.optimize!.mode).toBe('palette');
+    expect(after.optimize!.materialsBefore).toBe(4);
+    expect(after.optimize!.materialsAfter).toBeLessThanOrEqual(3);
+    expect(['A', 'B']).toContain(after.instanceability!.grade);
+  });
+
   it('is a byte-stable no-op on a lean asset (< PALETTE_MIN materials)', async () => {
     const off = await renderSceneToGLB(manyColorScene(3), { optimize: 'off' });
     const auto = await renderSceneToGLB(manyColorScene(3), { optimize: 'auto' });
