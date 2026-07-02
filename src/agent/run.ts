@@ -43,6 +43,13 @@ import {
 } from './surface';
 import { unifiedDiff } from './diff';
 import { MetricsCollector, type AgentUsage, type KilnAgentEvent } from './hooks';
+import { installRenderImageCompaction } from './compaction';
+import {
+  assessProgramGrade,
+  buildGradeRefineMessage,
+  gradeRank,
+  shouldGradeRefine,
+} from './grade-refine';
 
 /** How the agent learns Kiln conventions. */
 export type KilnKnowhow = 'inline' | 'skill';
@@ -128,6 +135,20 @@ export interface RunKilnAgentOptions {
    *  the initial message becomes a [TextBlock, ImageBlock] pair and the prompt notes
    *  that a reference image is attached. Works for fresh gen AND refine. */
   inputImage?: KilnInputImage;
+  /** Transcript image compaction. 'latest' (default) prunes each superseded render
+   *  image out of its tool result before every model call (a short placeholder takes
+   *  its place; the JSON metrics half survives, and tool-use/result pairing is never
+   *  touched) so only the newest render image rides each request — the biggest
+   *  input-token lever in a multi-render run. 'off' keeps the full image history. */
+  imageCompaction?: 'latest' | 'off';
+  /** M1b grade-aware refine (plan/05 §3.2). 'auto' (default): after the model
+   *  finalizes, the program is baked + graded exactly as the final artifact will be
+   *  (grade-aware `auto` consolidation); if it still grades below B for a
+   *  consolidation-fixable reason (material/texture sprawl — never a transparency-only
+   *  demotion) and the step budget allows, ONE bounded feedback turn asks the model to
+   *  consolidate, and the refined program is kept only if its grade improves.
+   *  'off' skips the check (no extra model turn, no assessment bake). */
+  gradeRefine?: 'auto' | 'off';
 }
 
 export interface RunKilnAgentResult {
@@ -145,6 +166,10 @@ export interface RunKilnAgentResult {
   edits?: EditRecord[];
   /** In edit mode, a unified diff from the parent code to the final buffer. */
   diff?: string;
+  /** True when the run hit the step cap but the sink held a program that renders —
+   *  the code is the salvaged best effort instead of a discarded run. A cap with
+   *  nothing renderable is still an `error`. */
+  capped?: boolean;
   /** Error message if the run threw. */
   error?: string;
 }
@@ -234,6 +259,13 @@ export async function runKilnAgent(opts: RunKilnAgentOptions): Promise<RunKilnAg
       name: opts.agentName ?? 'kiln-agent',
     });
     metrics.attach(agent);
+    // Transcript compaction (default on): before every model call, strip the image
+    // out of each superseded render tool result so only the newest render image
+    // rides the request. Pairing-safe — messages and toolUseIds are untouched;
+    // only media INSIDE older tool results is swapped for a text placeholder.
+    if ((opts.imageCompaction ?? 'latest') === 'latest') {
+      installRenderImageCompaction(agent);
+    }
 
     // An image-only request still needs a textual anchor for prompt framing.
     const promptText =
@@ -286,28 +318,102 @@ export async function runKilnAgent(opts: RunKilnAgentOptions): Promise<RunKilnAg
     const result = await agent.invoke(invokeArgs as never);
     metrics.recordResultUsage(result.metrics?.latestAgentInvocation?.usage);
 
+    // The sink-captured program for the active surface (a REAL program, unlike
+    // the structuredOutput/lastText fallbacks below) — the only code the step-cap
+    // salvage and the grade-refine pass are allowed to act on.
+    const readSinkCode = (): string | undefined =>
+      surface === 'unified' ? unifiedSink.code : editMode ? editSink.code : sink.code;
+
     // Capture: the buffer-backed surfaces (unified / edit) hold the program in
     // their sink; the current generate surface captures via kiln_submit. Both
     // fall back to structuredOutput then the last assistant text.
-    let code = surface === 'unified' ? unifiedSink.code : editMode ? editSink.code : sink.code;
+    let code = readSinkCode();
     if (!code && result.structuredOutput) {
       const so = result.structuredOutput as { code?: unknown };
       if (typeof so.code === 'string') code = so.code;
     }
-    const lastText = lastMessageText(result.lastMessage);
+    let lastText = lastMessageText(result.lastMessage);
     if (!code) code = lastText;
 
-    // If the loop was halted by the step cap, surface it as a clear failure
-    // rather than trying to render a half-finished buffer (bounds cost, and the
-    // gen is honestly marked failed instead of shipping a truncated asset).
+    let capped = false;
     if (metrics.wasCapped()) {
-      const collected = metrics.readMetrics();
-      return {
-        toolCalls: collected.toolCalls,
-        steps: collected.steps,
-        ...(collected.usage ? { usage: collected.usage } : {}),
-        error: `kiln agent exceeded ${maxSteps} model calls (step cap) — aborted to bound cost`,
-      };
+      // Step-cap salvage: a cap used to discard the whole run, throwing away a
+      // program the sink already held. If the captured program renders, return
+      // it flagged `capped` (an honest best effort); only a cap with nothing
+      // renderable stays a hard failure.
+      const captured = readSinkCode();
+      const salvage = captured ? await assessProgramGrade(captured) : undefined;
+      if (!salvage?.ok) {
+        const collected = metrics.readMetrics();
+        return {
+          toolCalls: collected.toolCalls,
+          steps: collected.steps,
+          ...(collected.usage ? { usage: collected.usage } : {}),
+          error: `kiln agent exceeded ${maxSteps} model calls (step cap) — aborted to bound cost`,
+        };
+      }
+      capped = true;
+      code = captured;
+    } else if ((opts.gradeRefine ?? 'auto') === 'auto') {
+      // M1b grade-aware refine (plan/05 §3.2): bake + grade the finalized program
+      // exactly as the final artifact will be graded (auto consolidation). If it
+      // still lands below B for a consolidation-fixable reason and the budget
+      // allows, feed ONE bounded feedback turn back; keep the refined program
+      // only if its grade actually improves.
+      const captured = readSinkCode();
+      if (captured && code === captured) {
+        const assess = await assessProgramGrade(captured);
+        const trigger = {
+          mode: 'auto' as const,
+          report: assess.report,
+          steps: metrics.readMetrics().steps,
+          maxSteps,
+        };
+        if (assess.ok && assess.report && shouldGradeRefine(trigger)) {
+          const report = assess.report;
+          if (opts.onEvent) {
+            try {
+              opts.onEvent({
+                type: 'grade_refine',
+                step: trigger.steps,
+                grade: report.grade,
+                materials: report.metrics.uniqueMaterials,
+              });
+            } catch {
+              // progress sinks are best-effort
+            }
+          }
+          const feedback = buildGradeRefineMessage({
+            report,
+            ...(assess.materialLabels ? { materialLabels: assess.materialLabels } : {}),
+            finalizeVerb: surface === 'unified' ? 'kiln_finalize' : 'kiln_submit',
+            editHint:
+              surface === 'unified'
+                ? 'kiln_edit for targeted swaps (or kiln_draft to rewrite)'
+                : editMode
+                  ? 'kiln_edit for targeted swaps'
+                  : 'rewrite the program with the consolidated materials',
+          });
+          try {
+            const refineResult = await agent.invoke(feedback);
+            metrics.recordResultUsage(refineResult.metrics?.latestAgentInvocation?.usage);
+            lastText = lastMessageText(refineResult.lastMessage) ?? lastText;
+            const refined = readSinkCode();
+            if (refined && refined !== captured) {
+              const reassess = await assessProgramGrade(refined);
+              if (
+                reassess.ok &&
+                reassess.report &&
+                gradeRank(reassess.report.grade) < gradeRank(report.grade)
+              ) {
+                code = refined;
+              }
+            }
+          } catch {
+            // the refine turn is best-effort — the original finalized program stands
+          }
+        }
+      }
     }
 
     const collected = metrics.readMetrics();
@@ -329,6 +435,7 @@ export async function runKilnAgent(opts: RunKilnAgentOptions): Promise<RunKilnAg
       ...(lastText ? { lastText } : {}),
       ...(emitEdits ? { edits: editsTrace } : {}),
       ...(diff ? { diff } : {}),
+      ...(capped ? { capped: true } : {}),
     };
   } catch (err) {
     const collected = metrics.readMetrics();
