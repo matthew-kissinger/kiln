@@ -153,7 +153,7 @@ describe('optimizeGlbBytes (web-side path)', () => {
 
     const opt = await optimizeGlbBytes(baked.bytes, { mode: 'palette', category: 'prop' });
     expect(opt).toBeDefined();
-    expect(opt!.summary.materialsAfter).toBeLessThan(opt!.summary.materialsBefore);
+    expect(opt!.summary!.materialsAfter).toBeLessThan(opt!.summary!.materialsBefore);
     expect(['A', 'B']).toContain(opt!.report!.grade);
     // The returned bytes are a valid GLB.
     const names = await nodeNamesOf(opt!.bytes);

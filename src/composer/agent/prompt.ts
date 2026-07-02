@@ -24,6 +24,8 @@ You may only place assets from this scene's catalog (call scene_list_assets to s
 - Facing carries meaning. Turn heroes toward the viewer or a focal point; turn rows and walls to frame a space; face a ring inward or outward on purpose.
 - Group what belongs together. A market row, a courtyard, a camp, a motor-court — build it from a cluster/ring or a group so it moves and reads as one unit.
 - Use roles: hero (anchors the scene), support (frames + structures it), fill (density + texture).
+- Catalog assets may carry an authored role (wonder/building/poi/prop/fill/vehicle/ground) and a quality tier (A-F) — scene_list_assets shows them. Placement roles default from the asset role automatically (wonder/poi → hero, fill → fill), so trust the defaults and override only with intent. Scale WONDERS UP (1.5-2.5x) so they own the skyline; keep fill near 1x.
+- Budget by tier: A/B assets can repeat freely; place D/F-tier assets sparingly (a few per scene) and never as the hero — they read rough up close.
 - Depth and rhythm beat symmetry. Vary distances; avoid a flat even grid unless the scene is literally a grid.
 
 ## Fill a believable place — reuse heavily, repeat architecture
