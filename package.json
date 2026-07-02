@@ -1,7 +1,7 @@
 {
   "name": "@kiln/engine",
   "private": true,
-  "version": "0.3.0",
+  "version": "0.4.0",
   "description": "Kiln 3D engine — text-to-GLB codegen agent loop, deterministic CPU render/rasterizer, primitive/CSG library, palette + instanceability grading, and pairwise ranking arena. Extracted from pixel-forge.",
   "license": "MIT",
   "author": "Matthew Kissinger",
@@ -39,6 +39,7 @@
   },
   "dependencies": {
     "@gltf-transform/core": "^4.4.0",
+    "@gltf-transform/extensions": "^4.4.0",
     "@gltf-transform/functions": "^4.4.0",
     "@openrouter/ai-sdk-provider": "^2.9.1",
     "@types/three": "^0.184.1",

@@ -6,6 +6,7 @@
       "name": "@kiln/engine",
       "dependencies": {
         "@gltf-transform/core": "^4.4.0",
+        "@gltf-transform/extensions": "^4.4.0",
         "@gltf-transform/functions": "^4.4.0",
         "@openrouter/ai-sdk-provider": "^2.9.1",
         "@types/three": "^0.184.1",

@@ -81,14 +81,30 @@ export function collectGlbMetrics(doc: Document, triangles?: number): Instanceab
   // Walk every node in every scene; a node referencing a mesh issues one draw
   // per primitive. Shared meshes (dedup-instanced) are referenced by multiple
   // nodes and therefore counted multiple times — that's the real draw cost,
-  // and the real rendered-triangle total.
+  // and the real rendered-triangle total. A node batched by the M1c pass
+  // (EXT_mesh_gpu_instancing) is ONE draw per primitive but renders N copies,
+  // so its triangles multiply by the instance count while drawCalls stay 1 —
+  // exactly what a supporting GPU does with it.
+  const instanceCopies = (node: import('@gltf-transform/core').Node): number => {
+    const ext = node.getExtension('EXT_mesh_gpu_instancing') as {
+      getAttribute?: (name: string) => { getCount(): number } | null;
+    } | null;
+    if (!ext) return 1;
+    return (
+      ext.getAttribute?.('TRANSLATION')?.getCount() ??
+      ext.getAttribute?.('ROTATION')?.getCount() ??
+      ext.getAttribute?.('SCALE')?.getCount() ??
+      1
+    );
+  };
   const visit = (node: import('@gltf-transform/core').Node): void => {
     const mesh = node.getMesh();
     if (mesh) {
+      const copies = instanceCopies(node);
       for (const prim of mesh.listPrimitives()) {
         drawCalls += 1;
         geomSet.add(prim);
-        derivedTris += primTris(prim);
+        derivedTris += primTris(prim) * copies;
         const mat = prim.getMaterial();
         if (mat) matSet.add(mat);
       }

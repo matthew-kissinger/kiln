@@ -34,14 +34,43 @@ export interface Bbox {
   max: Vec3;
 }
 
+/** Asset-role taxonomy — mirrors the engine render meta's `AssetRole` (kept as a
+ *  local union so the composer stays dependency-light; compose hosts cast across). */
+export type CatalogAssetRole =
+  | 'ground'
+  | 'building'
+  | 'wonder'
+  | 'poi'
+  | 'prop'
+  | 'fill'
+  | 'vehicle';
+
+/** A–F instanceability grade — mirrors metrics' InstanceabilityGrade. */
+export type CatalogTier = 'A' | 'B' | 'C' | 'D' | 'F';
+
 export interface CatalogEntry {
   generationId: string;
   bbox: Bbox;
   name?: string;
   tags?: string[];
+  /** Agent-declared asset role (M1d) — drives role-aware layout defaults. */
+  role?: CatalogAssetRole;
+  /** Instanceability grade of the asset (A–F) — drives density budgeting. */
+  tier?: CatalogTier;
 }
 
 export type Role = 'hero' | 'support' | 'fill';
+
+/** Default composer placement role for an asset role (M3 §4.1): wonders and
+ *  points-of-interest anchor (hero — extra clearance, scene centre), fill
+ *  scatters to the outskirts, everything else frames as support. Undefined
+ *  when the asset carries no role (caller falls back to its own default). */
+export function placementRoleForAsset(role: CatalogAssetRole | undefined): Role | undefined {
+  if (!role) return undefined;
+  if (role === 'wonder' || role === 'poi') return 'hero';
+  if (role === 'fill') return 'fill';
+  return 'support';
+}
 
 /** Scene-level terrain/sky theme id — mirrors Studio's GroundThemeId (kept local so
  *  the engine carries no studio dependency; compose.ts casts across the wire). */
@@ -264,11 +293,20 @@ export class PlacementModel {
     this.catalog.set(entry.generationId, entry);
   }
 
-  /** The selectable catalog (id, name, footprint, tags). */
-  catalogList(): Array<{ generationId: string; name?: string; size: Vec3; tags?: string[] }> {
+  /** The selectable catalog (id, name, footprint, tags, role/tier when known). */
+  catalogList(): Array<{
+    generationId: string;
+    name?: string;
+    size: Vec3;
+    tags?: string[];
+    role?: CatalogAssetRole;
+    tier?: CatalogTier;
+  }> {
     return [...this.catalog.values()].map((e) => ({
       generationId: e.generationId,
       ...(e.name ? { name: e.name } : {}),
+      ...(e.role ? { role: e.role } : {}),
+      ...(e.tier ? { tier: e.tier } : {}),
       size: [
         r1(e.bbox.max[0] - e.bbox.min[0]),
         r1(e.bbox.max[1] - e.bbox.min[1]),
@@ -313,6 +351,12 @@ export class PlacementModel {
     return this.byAlias.get(target) ?? this.stmts.find((s) => s.stmtId === target);
   }
 
+  /** Role-aware default (M3): explicit agent role wins, else the catalog asset's
+   *  role maps to a placement role (wonder/poi → hero, fill → fill), else `fallback`. */
+  private defaultRole(generationId: string, explicit: Role | undefined, fallback: Role): Role {
+    return explicit ?? placementRoleForAsset(this.catalog.get(generationId)?.role) ?? fallback;
+  }
+
   // ── add ops (return the new alias; throw on unknown asset) ──────────────────
 
   addPlace(generationId: string, a: PlaceArgs): string {
@@ -323,7 +367,7 @@ export class PlacementModel {
       stmtId: this.nextStmtId(),
       alias,
       generationId,
-      role: a.role ?? 'support',
+      role: this.defaultRole(generationId, a.role, 'support'),
       scale: a.scale ?? 1,
       at: [a.at[0], a.at[1]],
       face: a.face ?? 'center',
@@ -344,7 +388,7 @@ export class PlacementModel {
       stmtId: this.nextStmtId(),
       alias,
       generationId,
-      role: a.role ?? 'support',
+      role: this.defaultRole(generationId, a.role, 'support'),
       scale: a.scale ?? 1,
       at: [a.pos[0], a.pos[2]],
       face: a.rotYDeg,
@@ -363,7 +407,7 @@ export class PlacementModel {
       stmtId: this.nextStmtId(),
       alias,
       generationId,
-      role: a.role ?? 'fill',
+      role: this.defaultRole(generationId, a.role, 'fill'),
       scale: a.scale ?? 1,
       around: [a.around[0], a.around[1]],
       count: Math.max(1, Math.floor(a.count)),
@@ -382,7 +426,7 @@ export class PlacementModel {
       stmtId: this.nextStmtId(),
       alias,
       generationId,
-      role: a.role ?? 'support',
+      role: this.defaultRole(generationId, a.role, 'support'),
       scale: a.scale ?? 1,
       center: [a.center[0], a.center[1]],
       count: Math.max(1, Math.floor(a.count)),
@@ -404,7 +448,10 @@ export class PlacementModel {
         localMin: e.bbox.min,
         localMax: e.bbox.max,
         scale: a.scale ?? 1,
-        role: a.role ?? 'support',
+        // Per-asset role-aware default (M3): an explicit layout role applies to
+        // all, else each asset's catalog role decides (wonders anchor, fill
+        // scatters) — the dogfood's "scale/hierarchy" fix, now automatic.
+        role: this.defaultRole(g, a.role, 'support'),
         ...(a.anchor === 'zonedCenters' ? { zone: zones[i % zones.length]!.id } : {}),
       };
     });

@@ -12,8 +12,10 @@
 
 import * as THREE from 'three';
 import { Document, WebIO } from '@gltf-transform/core';
+import { EXTMeshGPUInstancing } from '@gltf-transform/extensions';
 import {
   dedup,
+  instance,
   palette,
   flatten,
   join,
@@ -38,6 +40,14 @@ import {
 // GLB byte stream in memory - it never reads URIs - so the fetch/fs gap
 // between WebIO and NodeIO is irrelevant on the write side. This lets the
 // editor's exportGLB() and headless renderGLB() share one bridge.
+
+/** Engine-standard glTF IO: WebIO with the extensions Kiln GLBs may carry.
+ *  EXT_mesh_gpu_instancing must be REGISTERED on the read side or a re-read
+ *  (grade-from-bytes, optimize-from-bytes, palette snap) would silently drop
+ *  the instancing a prior bake emitted — the batch node would collapse to a
+ *  single copy. Write-side registration is harmless (the extension instance
+ *  travels on the Document). */
+const engineIO = (): WebIO => new WebIO().registerExtensions([EXTMeshGPUInstancing]);
 
 // Gltf-transform type aliases for local readability.
 type GtNode = import('@gltf-transform/core').Node;
@@ -94,6 +104,8 @@ export interface KilnCodeMeta {
   metricsError?: string;
   /** Set when an opt-in consolidation pass ran (optimize !== 'off'). */
   optimize?: OptimizeSummary;
+  /** Set when the GPU-instancing pass created batches (M1c — perf, not grade). */
+  instancing?: InstancingSummary;
   [key: string]: unknown;
 }
 
@@ -509,6 +521,27 @@ export interface OptimizeSummary {
   drawsAfter: number;
 }
 
+/**
+ * GPU-instancing pass mode (M1c — a PERF/filesize lever, NOT a grade lever; the
+ * A–F grade keys on material count and is unchanged by instancing):
+ *   - `off`  — never run the pass.
+ *   - `auto` — run only for `role: 'fill'` assets (high-repetition scatter is
+ *              where batching pays; hero/vehicle assets keep their node graph).
+ *   - `on`   — always attempt (still skipped for animated/skinned docs and
+ *              assets with `Joint_*` pivots — see {@link applyGpuInstancing}).
+ */
+export type InstanceMode = 'off' | 'auto' | 'on';
+
+/** What a GPU-instancing pass did (recorded in provenance / render.meta). */
+export interface InstancingSummary {
+  /** Instanced batch nodes created (one per shared mesh). */
+  batches: number;
+  /** Total node copies folded into those batches. */
+  instances: number;
+  drawsBefore: number;
+  drawsAfter: number;
+}
+
 export interface RenderSceneResult {
   /** Binary GLB bytes, platform-agnostic (Buffer-compatible in Node). */
   bytes: Uint8Array;
@@ -521,6 +554,8 @@ export interface RenderSceneResult {
   metricsError?: string;
   /** Set when an opt-in consolidation pass ran (optimize !== 'off'). */
   optimize?: OptimizeSummary;
+  /** Set when the GPU-instancing pass created batches (instance !== 'off'). */
+  instancing?: InstancingSummary;
 }
 
 export interface RenderSceneOptions {
@@ -541,6 +576,15 @@ export interface RenderSceneOptions {
    * See {@link OptimizeMode}.
    */
   optimize?: OptimizeMode;
+  /**
+   * GPU-instancing pass (EXT_mesh_gpu_instancing) for repeated geometry,
+   * applied between dedup and optimize (the upstream-canonical order:
+   * dedup → instance → palette). Defaults to the `KILN_BAKE_INSTANCE` env
+   * (else `auto`, which only acts for `role: 'fill'`). See {@link InstanceMode}.
+   */
+  instance?: InstanceMode;
+  /** Agent-declared asset role — drives the `instance: 'auto'` gate. */
+  role?: AssetRole;
 }
 
 /** Minimum distinct material-value blocks before palette() generates a texture.
@@ -554,6 +598,81 @@ function resolveOptimize(opt?: OptimizeMode): OptimizeMode {
   if (opt) return opt;
   const env = process.env['KILN_BAKE_OPTIMIZE'];
   return env === 'auto' || env === 'palette' || env === 'full' ? env : 'off';
+}
+
+/** Minimum nodes sharing one mesh before the instancing pass batches them.
+ *  The gltf-transform default (5) — below that the extension's byte overhead
+ *  and loader bookkeeping outweigh the draw savings. */
+const INSTANCE_MIN = 5;
+
+/** Resolve the effective instance mode: explicit option wins, else the env, else auto. */
+function resolveInstance(opt?: InstanceMode): InstanceMode {
+  if (opt) return opt;
+  const env = process.env['KILN_BAKE_INSTANCE'];
+  return env === 'off' || env === 'auto' || env === 'on' ? env : 'auto';
+}
+
+/** True when any node carries a `Joint*` name — the Kiln City runtime targets
+ *  those pivots by NAME (wheel spin/steer rigs), and instance() drops per-node
+ *  names when it folds nodes into a batch. Such assets are never instanced. */
+function hasJointPivots(doc: Document): boolean {
+  return doc
+    .getRoot()
+    .listNodes()
+    .some((n) => /^joint[_-]/i.test(n.getName()));
+}
+
+/**
+ * Run the opt-in GPU-instancing pass (M1c) on a baked Document, in place.
+ *
+ * Emits `EXT_mesh_gpu_instancing` batches for meshes referenced by
+ * >= {@link INSTANCE_MIN} nodes (colonnades, fence runs, container stacks),
+ * cutting draw calls + bytes at city scale. **Perf/filesize only — the A–F
+ * grade keys on material count and does not move.** Runs after dedup (which
+ * links duplicate meshes so sharing is detectable) and before palette()
+ * (the upstream-canonical dedup → instance → palette order; join() skips
+ * instanced nodes by design so `full` stays safe).
+ *
+ * Skipped (returns undefined) when:
+ *   - mode is `off`, or `auto` and the role is not `'fill'`;
+ *   - the Document carries animations or skins (the library no-ops on
+ *     animated docs; skinned nodes are excluded per-mesh — we skip whole);
+ *   - any node is named `Joint*` (city behaviors target pivots by name);
+ *   - no mesh crosses the threshold (nothing to batch).
+ */
+async function applyGpuInstancing(
+  doc: Document,
+  mode: InstanceMode,
+  role: AssetRole | undefined,
+): Promise<InstancingSummary | undefined> {
+  if (mode === 'off') return undefined;
+  if (mode === 'auto' && role !== 'fill') return undefined;
+  const root = doc.getRoot();
+  if (root.listAnimations().length > 0 || root.listSkins().length > 0) return undefined;
+  if (hasJointPivots(doc)) return undefined;
+
+  const before = collectGlbMetrics(doc);
+  await doc.transform(instance({ min: INSTANCE_MIN }));
+
+  let batches = 0;
+  let instances = 0;
+  for (const node of root.listNodes()) {
+    const ext = node.getExtension('EXT_mesh_gpu_instancing') as {
+      getAttribute?: (name: string) => { getCount(): number } | null;
+    } | null;
+    if (!ext) continue;
+    batches += 1;
+    // Identity channels are disposed by the library, so read whichever survives.
+    instances +=
+      ext.getAttribute?.('TRANSLATION')?.getCount() ??
+      ext.getAttribute?.('ROTATION')?.getCount() ??
+      ext.getAttribute?.('SCALE')?.getCount() ??
+      0;
+  }
+  if (batches === 0) return undefined;
+
+  const after = collectGlbMetrics(doc);
+  return { batches, instances, drawsBefore: before.drawCalls, drawsAfter: after.drawCalls };
 }
 
 /**
@@ -659,6 +778,17 @@ export async function renderSceneToGLB(
     }
   }
 
+  // Opt-in GPU-instancing pass (M1c) — dedup → instance → palette is the
+  // upstream-canonical order (dedup links duplicate meshes so sharing is
+  // detectable; join() skips instanced nodes so `full` stays safe). Perf/bytes
+  // only; the grade does not move. Failure is swallowed with a warning.
+  let instancing: InstancingSummary | undefined;
+  try {
+    instancing = await applyGpuInstancing(doc, resolveInstance(opts.instance), opts.role);
+  } catch (err) {
+    warnings.push(`instance transform failed: ${err instanceof Error ? err.message : String(err)}`);
+  }
+
   // Opt-in material consolidation (default off => byte-identical to today). Runs
   // after dedup so palette() works on the already-merged material set. `auto` is
   // grade-aware: it consolidates only when palette() would actually act
@@ -689,13 +819,19 @@ export async function renderSceneToGLB(
   let instanceability: InstanceabilityReport | undefined;
   let metricsError: string | undefined;
   try {
-    const metrics: InstanceabilityMetrics = collectGlbMetrics(doc, optimize ? undefined : tris);
+    // Derive tris from the Document when a transform reshaped it (join welds
+    // primitives; instancing folds N nodes into one batch whose tris the
+    // instance-aware counter multiplies back out).
+    const metrics: InstanceabilityMetrics = collectGlbMetrics(
+      doc,
+      optimize || instancing ? undefined : tris,
+    );
     instanceability = gradeInstanceability(metrics, { category: opts.category });
   } catch (err) {
     metricsError = err instanceof Error ? err.message : String(err);
   }
 
-  const io = new WebIO();
+  const io = engineIO();
   const bytes = await io.writeBinary(doc);
 
   return {
@@ -705,6 +841,7 @@ export async function renderSceneToGLB(
     instanceability,
     metricsError,
     ...(optimize ? { optimize } : {}),
+    ...(instancing ? { instancing } : {}),
   };
 }
 
@@ -719,14 +856,16 @@ export async function renderSceneToGLB(
  */
 export async function renderGLB(
   code: string,
-  opts: { optimize?: OptimizeMode } = {},
+  opts: { optimize?: OptimizeMode; instance?: InstanceMode } = {},
 ): Promise<RenderResult> {
   const { meta, root, clips, primitiveUsage } = await executeKilnCode(code);
   const scene = await renderSceneToGLB(root, {
     sceneName: meta.name || 'Scene',
     clips,
     category: typeof meta.category === 'string' ? meta.category : undefined,
+    role: meta.role,
     ...(opts.optimize ? { optimize: opts.optimize } : {}),
+    ...(opts.instance ? { instance: opts.instance } : {}),
   });
 
   return {
@@ -741,6 +880,7 @@ export async function renderGLB(
         : {}),
       ...(scene.metricsError ? { metricsError: scene.metricsError } : {}),
       ...(scene.optimize ? { optimize: scene.optimize } : {}),
+      ...(scene.instancing ? { instancing: scene.instancing } : {}),
     },
     warnings: scene.warnings,
   };
@@ -760,7 +900,7 @@ export async function gradeGlbBytes(
   opts: { category?: string } = {},
 ): Promise<InstanceabilityReport | undefined> {
   try {
-    const doc = await new WebIO().readBinary(bytes);
+    const doc = await engineIO().readBinary(bytes);
     return gradeInstanceability(collectGlbMetrics(doc), opts);
   } catch {
     return undefined;
@@ -773,8 +913,10 @@ export interface OptimizeGlbResult {
   bytes: Uint8Array;
   /** Instanceability report recomputed on the optimized bytes. */
   report?: InstanceabilityReport;
-  /** What the pass did. */
-  summary: OptimizeSummary;
+  /** What the consolidation pass did (absent when only instancing applied). */
+  summary?: OptimizeSummary;
+  /** What the GPU-instancing pass did (absent when it was off / skipped / no-op). */
+  instancing?: InstancingSummary;
 }
 
 /**
@@ -790,24 +932,35 @@ export interface OptimizeGlbResult {
  */
 export async function optimizeGlbBytes(
   bytes: Uint8Array,
-  opts: { mode?: OptimizeMode; category?: string } = {},
+  opts: { mode?: OptimizeMode; category?: string; instance?: InstanceMode; role?: AssetRole } = {},
 ): Promise<OptimizeGlbResult | undefined> {
   const requested = opts.mode ?? 'palette';
   try {
-    const io = new WebIO();
+    const io = engineIO();
     const doc = await io.readBinary(bytes);
-    // `auto` is grade-aware: consolidate only when palette() would act
-    // (>= PALETTE_MIN materials); a no-op auto (or an explicit `off`) returns
-    // undefined so the caller simply keeps the original bytes unchanged.
-    if (requested === 'off') return undefined;
-    let mode: 'palette' | 'full';
-    if (requested === 'auto') {
-      if (collectGlbMetrics(doc).uniqueMaterials < PALETTE_MIN) return undefined;
-      mode = 'palette';
-    } else {
-      mode = requested;
+    // GPU-instancing first (dedup already ran at bake; instance → palette is the
+    // canonical order). Defaults OFF here — this is the web-tier re-bake seam, and
+    // the caller opts in per-asset (Studio passes instance:'auto' + the record's
+    // role, so only fill assets are batched — same gate as the render path).
+    let instancing: InstancingSummary | undefined;
+    if (opts.instance && opts.instance !== 'off') {
+      instancing = await applyGpuInstancing(doc, opts.instance, opts.role);
     }
-    const summary = await consolidateMaterials(doc, mode);
+    // `auto` is grade-aware: consolidate only when palette() would act
+    // (>= PALETTE_MIN materials); a no-op auto (or an explicit `off`) keeps
+    // the original bytes unchanged — unless instancing acted, in which case
+    // the instanced bytes are still worth persisting.
+    let summary: OptimizeSummary | undefined;
+    let mode: 'palette' | 'full' | undefined;
+    if (requested !== 'off') {
+      if (requested === 'auto') {
+        if (collectGlbMetrics(doc).uniqueMaterials >= PALETTE_MIN) mode = 'palette';
+      } else {
+        mode = requested;
+      }
+    }
+    if (mode) summary = await consolidateMaterials(doc, mode);
+    if (!summary && !instancing) return undefined;
     const outBytes = await io.writeBinary(doc);
     let report: InstanceabilityReport | undefined;
     try {
@@ -815,7 +968,12 @@ export async function optimizeGlbBytes(
     } catch {
       report = undefined;
     }
-    return { bytes: outBytes, ...(report ? { report } : {}), summary };
+    return {
+      bytes: outBytes,
+      ...(report ? { report } : {}),
+      ...(summary ? { summary } : {}),
+      ...(instancing ? { instancing } : {}),
+    };
   } catch {
     return undefined;
   }
@@ -871,7 +1029,7 @@ export async function snapGlbToPalette(
 ): Promise<SnapGlbResult | undefined> {
   if (slots.length === 0) return undefined;
   try {
-    const io = new WebIO();
+    const io = engineIO();
     const doc = await io.readBinary(bytes);
     const before = collectGlbMetrics(doc);
     const idx = buildSlotIndex(slots as readonly SnapSlot[]);
@@ -1007,7 +1165,9 @@ export async function composeSceneGLB(
   opts: SceneComposeOptions = {},
 ): Promise<SceneComposeResult> {
   const warnings: string[] = [];
-  const io = new WebIO();
+  // engineIO so a part that carries EXT_mesh_gpu_instancing keeps its batches
+  // through the merge (mergeDocuments copies the extension onto the master).
+  const io = engineIO();
   const master = new Document();
   const masterScene = master.createScene(opts.sceneName ?? 'Scene');
   let composed = 0;

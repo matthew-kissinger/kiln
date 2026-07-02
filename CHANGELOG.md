@@ -5,6 +5,34 @@ for the consuming app's lockfile + tarball provenance, not public npm releases.
 
 ## [Unreleased]
 
+## [0.4.0] — 2026-07-02
+
+### Added
+- **M1c GPU-instancing pass (plan/05 §3.3).** `renderSceneToGLB`/`renderGLB` gain an
+  `instance: 'off' | 'auto' | 'on'` option (default `auto` = only `role: 'fill'` assets)
+  and `optimizeGlbBytes` gains `{ instance, role }` — the web-tier re-bake seam, so the
+  pass reaches prod with no wire change. Repeated geometry (>= 5 nodes sharing one mesh
+  after dedup) is rewritten to `EXT_mesh_gpu_instancing` batches in the upstream-canonical
+  `dedup → instance → palette` order, cutting draw calls + bytes for fence runs /
+  colonnades / container stacks. **Perf/filesize only — the A–F grade keys on material
+  count and does not move** (tests assert grade + triangle parity). Skipped for
+  animated/skinned docs and any asset carrying `Joint*` pivot names (Kiln City targets
+  those by name). Results are recorded as `InstancingSummary` (`meta.instancing`,
+  `RenderSceneResult.instancing`, `OptimizeGlbResult.instancing` — and
+  `OptimizeGlbResult.summary` is now optional: an instancing-only pass has no
+  consolidation summary). All engine glTF IO now registers `EXTMeshGPUInstancing`
+  (new dep `@gltf-transform/extensions`) so re-reads (grade-from-bytes,
+  optimize-from-bytes, palette snap, scene export merge) preserve the batches, and
+  `collectGlbMetrics` is instance-aware (an instanced node counts one draw but N× its
+  triangles — exactly what a supporting GPU renders).
+- **M3 composer role/tier awareness (plan/05 §4.1).** `CatalogEntry` gains optional
+  `role` (`CatalogAssetRole` — the M1d asset taxonomy) + `tier` (A–F); `catalogList()`
+  (and therefore `scene_list_assets`) surfaces them. Placement roles now DEFAULT from
+  the catalog asset's role via `placementRoleForAsset` (wonder/poi → hero, fill → fill,
+  else support) in `place`/`placeExact`/`cluster`/`ring`/`layout` — an explicit agent
+  role still wins. The composer system prompt teaches the mapping, wonder scale-up, and
+  D/F-tier density budgeting.
+
 ## [0.3.0] — 2026-07-02
 
 ### Added
