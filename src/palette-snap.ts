@@ -24,7 +24,15 @@ export interface SnapSlot {
   color: string;
   /** Defaults to 'opaque'. transparent→glass, emissive→glow. */
   kind?: SnapSlotKind;
+  /** Optional PBR values applied by material-bake callers. */
+  metalness?: number;
+  roughness?: number;
+  /** Opacity for glass slots. */
+  opacity?: number;
 }
+
+/** Public palette slot shape shared by GLB snapping and CPU preview snapping. */
+export type SnapPaletteSlot = SnapSlot;
 
 export type Vec3 = [number, number, number];
 

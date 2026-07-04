@@ -24,7 +24,13 @@ import {
   mergeDocuments,
 } from '@gltf-transform/functions';
 
-import { buildSlotIndex, chooseSlot, hexToLinearRgb, type SnapSlot } from './palette-snap';
+import {
+  buildSlotIndex,
+  chooseSlot,
+  hexToLinearRgb,
+  type SnapSlot,
+  type SnapPaletteSlot,
+} from './palette-snap';
 
 import { buildSandboxGlobals, countTriangles } from './primitives';
 import {
@@ -77,6 +83,7 @@ const TYPE_VEC4: AccessorTypeStr = 'VEC4';
  * from GLB bytes, so it travels in provenance. See plan/05-product-depth.md §3.4.
  */
 export type AssetRole = 'ground' | 'building' | 'wonder' | 'poi' | 'prop' | 'fill' | 'vehicle';
+export type { SnapPaletteSlot } from './palette-snap';
 
 export interface KilnCodeMeta {
   name?: string;
@@ -982,18 +989,6 @@ export async function optimizeGlbBytes(
 // =============================================================================
 // Palette snap (scene palettes) — web-side hard snap to a user-defined palette
 // =============================================================================
-
-/** One slot the GLB snap targets: a color + kind + optional PBR/opacity. */
-export interface SnapPaletteSlot {
-  /** sRGB hex (e.g. `#9fc9a3`). */
-  color: string;
-  /** Defaults to 'opaque'. transparent material → glass, emissive → glow. */
-  kind?: 'opaque' | 'glass' | 'glow';
-  metalness?: number;
-  roughness?: number;
-  /** Opacity for a glass slot (default 0.4). */
-  opacity?: number;
-}
 
 /** Result of {@link snapGlbToPalette}. */
 export interface SnapGlbResult {

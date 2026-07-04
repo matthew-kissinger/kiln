@@ -22,7 +22,12 @@ import {
 } from '../render';
 import { collectGlbMetrics } from '../metrics';
 import { hexToLinearRgb, buildSlotIndex, chooseSlot } from '../palette-snap';
-import { renderPaletteDirective, OPTIMIZED_PALETTE } from '../palette';
+import {
+  renderPaletteDirective,
+  OPTIMIZED_PALETTE,
+  GENERAL_RENDER_PALETTE,
+  paletteToSnapSlots,
+} from '../palette';
 
 const hue = (i: number, n: number): number => new THREE.Color().setHSL(i / n, 0.7, 0.5).getHex();
 
@@ -83,6 +88,20 @@ describe('palette-snap (pure)', () => {
     );
     expect(chooseSlot(idx, { baseLinear: [0.5, 0.6, 0.7], transparent: true })).toBe(1);
     expect(chooseSlot(idx, { baseLinear: [0.05, 0.05, 0.05] })).toBe(0); // opaque fallback
+  });
+
+  it('general render palette keeps dark foliage green and bark brown', () => {
+    const slots = paletteToSnapSlots(GENERAL_RENDER_PALETTE);
+    const idx = buildSlotIndex(slots);
+    const pickName = (hex: string): string | undefined => {
+      const slotI = chooseSlot(idx, { baseLinear: hexToLinearRgb(hex) });
+      return slotI === undefined ? undefined : GENERAL_RENDER_PALETTE[slotI]?.name;
+    };
+
+    expect(pickName('#2d5a27')).toBe('leaf-dark');
+    expect(pickName('#35503a')).toBe('leaf-dark');
+    expect(pickName('#556b2f')).toBe('leaf-olive');
+    expect(pickName('#4a3424')).toBe('bark');
   });
 });
 
