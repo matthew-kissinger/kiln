@@ -29,6 +29,13 @@ import {
   stampLabel,
   type DuckClip,
 } from './pose';
+import {
+  buildSlotIndex,
+  chooseSlot,
+  hexToLinearRgb,
+  type SnapPaletteSlot,
+  type Vec3,
+} from '../palette-snap';
 
 export { rasterizeView, measureBounds, hideNodeInScene, SIX_VIEWS, coverage } from './raster';
 export type { RasterOptions, ViewSpec } from './raster';
@@ -48,6 +55,120 @@ export {
 const PAD = 4;
 const PAD_COLOR: [number, number, number] = [10, 11, 13];
 
+interface DuckColor {
+  r: number;
+  g: number;
+  b: number;
+}
+
+interface DuckMaterial {
+  color?: DuckColor;
+  emissive?: DuckColor;
+  emissiveIntensity?: number;
+  transparent?: boolean;
+  opacity?: number;
+  metalness?: number;
+  roughness?: number;
+  map?: unknown;
+  vertexColors?: boolean;
+}
+
+interface DuckMesh {
+  isMesh?: boolean;
+  material?: DuckMaterial | DuckMaterial[];
+}
+
+interface DuckObject3D {
+  traverse?: (cb: (obj: DuckMesh) => void) => void;
+}
+
+export interface ScenePaletteSnapResult {
+  snapped: number;
+  skipped: number;
+}
+
+function setLinearColor(color: DuckColor | undefined, rgb: Vec3): void {
+  if (!color) return;
+  color.r = rgb[0];
+  color.g = rgb[1];
+  color.b = rgb[2];
+}
+
+function snapMaterialToPalette(
+  mat: DuckMaterial,
+  slots: readonly SnapPaletteSlot[],
+  idx: ReturnType<typeof buildSlotIndex>,
+): boolean | undefined {
+  if (!mat.color) return undefined;
+  if (mat.map || mat.vertexColors) return false;
+
+  const emissive =
+    mat.emissive && (mat.emissiveIntensity ?? 1) > 0
+      ? ([
+          mat.emissive.r * (mat.emissiveIntensity ?? 1),
+          mat.emissive.g * (mat.emissiveIntensity ?? 1),
+          mat.emissive.b * (mat.emissiveIntensity ?? 1),
+        ] as Vec3)
+      : undefined;
+  const slotI = chooseSlot(idx, {
+    baseLinear: [mat.color.r, mat.color.g, mat.color.b],
+    ...(emissive ? { emissiveLinear: emissive } : {}),
+    transparent: mat.transparent === true || (mat.opacity !== undefined && mat.opacity < 0.98),
+  });
+  if (slotI === undefined) return false;
+
+  const slot = slots[slotI]!;
+  const kind = slot.kind ?? 'opaque';
+  const rgb = hexToLinearRgb(slot.color);
+  setLinearColor(mat.color, rgb);
+  if (mat.metalness !== undefined) mat.metalness = slot.metalness ?? 0;
+  if (mat.roughness !== undefined)
+    mat.roughness = slot.roughness ?? (kind === 'glass' ? 0.1 : 0.85);
+
+  if (kind === 'glass') {
+    mat.transparent = true;
+    mat.opacity = slot.opacity ?? 0.4;
+  } else {
+    if (mat.transparent !== undefined) mat.transparent = false;
+    if (mat.opacity !== undefined) mat.opacity = 1;
+  }
+
+  if (mat.emissive) {
+    if (kind === 'glow') {
+      setLinearColor(mat.emissive, rgb);
+      mat.emissiveIntensity = Math.max(mat.emissiveIntensity ?? 1, 1);
+    } else {
+      setLinearColor(mat.emissive, [0, 0, 0]);
+      if (mat.emissiveIntensity !== undefined) mat.emissiveIntensity = 0;
+    }
+  }
+  return true;
+}
+
+/** Snap flat-color scene materials to a palette before CPU preview rasterization. */
+export function snapSceneToPalette(
+  root: unknown,
+  slots: readonly SnapPaletteSlot[],
+): ScenePaletteSnapResult {
+  if (slots.length === 0) return { snapped: 0, skipped: 0 };
+  const traverse = (root as DuckObject3D | undefined)?.traverse;
+  if (!traverse) return { snapped: 0, skipped: 0 };
+
+  const idx = buildSlotIndex(slots);
+  let snapped = 0;
+  let skipped = 0;
+  traverse.call(root, (obj: DuckMesh) => {
+    if (!obj.isMesh || !obj.material) return;
+    const materials = Array.isArray(obj.material) ? obj.material : [obj.material];
+    for (const mat of materials) {
+      const didSnap = snapMaterialToPalette(mat, slots, idx);
+      if (didSnap === true) snapped++;
+      else if (didSnap === false) skipped++;
+    }
+  });
+  return { snapped, skipped };
+}
+
 export interface ViewGridResult {
   png: Buffer;
   width: number;
@@ -58,6 +179,8 @@ export interface ViewGridResult {
 
 export interface ViewGridOptions extends RasterOptions {
   views?: ViewSpec[];
+  /** Snap flat-color materials before rasterization. Mutates the provided scene root. */
+  snapPalette?: readonly SnapPaletteSlot[];
 }
 
 /** Render a (possibly sandbox-created) Three.js scene root into the 3x2 grid. */
@@ -67,6 +190,7 @@ export async function renderViewGrid(
 ): Promise<ViewGridResult> {
   const size = opts.size ?? 256;
   const views = opts.views ?? SIX_VIEWS;
+  if (opts.snapPalette?.length) snapSceneToPalette(root, opts.snapPalette);
   const cols = 3;
   const rows = Math.ceil(views.length / cols);
   const width = cols * size + (cols + 1) * PAD;

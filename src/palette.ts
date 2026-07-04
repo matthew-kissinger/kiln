@@ -19,6 +19,8 @@
  * never drift.
  */
 
+import type { SnapPaletteSlot } from './palette-snap';
+
 /** One material role in the canonical palette. A PBR spec the directive names and
  *  a future shared palette texture bakes from. */
 export interface PaletteSlot {
@@ -43,7 +45,7 @@ export interface PaletteSlot {
 }
 
 /**
- * The canonical 19-slot palette covering war / city / fantasy / sci-fi / organic /
+ * The canonical 22-slot palette covering war / city / fantasy / sci-fi / organic /
  * character domains. Stable order; values are tunable. `glass` is the only
  * transparent slot and `glow` the only emissive — keeping the alpha-mode story
  * simple (opaque everything + the one glass slot).
@@ -204,7 +206,51 @@ export const OPTIMIZED_PALETTE: readonly PaletteSlot[] = [
     emissive: true,
     use: 'lamps, neon, fire cores, vfx — the ONE emissive slot',
   },
+  {
+    index: 19,
+    name: 'leaf-dark',
+    color: '#2f5a2a',
+    metalness: 0.0,
+    roughness: 0.9,
+    use: 'dark evergreen leaves, shadowed foliage, conifers',
+  },
+  {
+    index: 20,
+    name: 'leaf-olive',
+    color: '#586a30',
+    metalness: 0.0,
+    roughness: 0.9,
+    use: 'olive foliage, dry leaves, canvas greens',
+  },
+  {
+    index: 21,
+    name: 'bark',
+    color: '#46301f',
+    metalness: 0.0,
+    roughness: 0.85,
+    use: 'tree bark, dark roots, rough brown wood',
+  },
 ];
+
+/**
+ * Default snap target for optimized/theme render policy. It aliases the canonical
+ * optimized palette so GLBs and CPU previews share one material-color contract when
+ * a caller explicitly chooses palette coherence over faithful source colors.
+ */
+export const GENERAL_RENDER_PALETTE: readonly PaletteSlot[] = OPTIMIZED_PALETTE;
+
+/** Convert authoring palette slots into the snap shape used by GLB + CPU preview bakes. */
+export function paletteToSnapSlots(
+  slots: readonly PaletteSlot[] = GENERAL_RENDER_PALETTE,
+): SnapPaletteSlot[] {
+  return slots.map((s) => ({
+    color: s.color,
+    kind: s.transparent ? 'glass' : s.emissive ? 'glow' : 'opaque',
+    metalness: s.metalness,
+    roughness: s.roughness,
+    ...(s.opacity !== undefined ? { opacity: s.opacity } : {}),
+  }));
+}
 
 /**
  * Render the authoring directive appended to the agent prompt when the

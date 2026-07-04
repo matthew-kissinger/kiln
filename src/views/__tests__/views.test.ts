@@ -8,15 +8,27 @@ import {
   renderInteriorGrid,
   hideNodeInScene,
   SIX_VIEWS,
+  snapSceneToPalette,
 } from '../index';
 import { encodePng } from '../png';
 import { executeKilnCode } from '../../render';
+import { GENERAL_RENDER_PALETTE, paletteToSnapSlots } from '../../palette';
+import { hexToLinearRgb } from '../../palette-snap';
 
 const BOX_CODE = `
 const meta = { name: 'test-box', category: 'prop' };
 function build() {
   const root = createRoot('Root');
   createPart('Mesh_Box', boxGeo(1, 1, 1), gameMaterial('#ff0000'), { parent: root, position: [0, 0.5, 0] });
+  return root;
+}
+`;
+
+const DARK_FOLIAGE_CODE = `
+const meta = { name: 'dark-foliage', category: 'environment' };
+function build() {
+  const root = createRoot('Root');
+  createPart('Mesh_Leaf', boxGeo(1, 1, 1), gameMaterial('#2d5a27'), { parent: root, position: [0, 0.5, 0] });
   return root;
 }
 `;
@@ -158,6 +170,29 @@ describe('renderViewGrid / renderCodeViewGrid', () => {
     const { root } = await executeKilnCode(BOX_CODE);
     const result = await renderViewGrid(root, { size: 32 });
     expect(result.png.length).toBeGreaterThan(100);
+  });
+
+  test('snapSceneToPalette applies the general render palette before CPU previews', async () => {
+    const { root } = await executeKilnCode(DARK_FOLIAGE_CODE);
+    const snap = snapSceneToPalette(root, paletteToSnapSlots(GENERAL_RENDER_PALETTE));
+    expect(snap.snapped).toBe(1);
+    expect(snap.skipped).toBe(0);
+
+    let color: { r: number; g: number; b: number } | undefined;
+    (
+      root as {
+        traverse: (
+          cb: (obj: { isMesh?: boolean; material?: { color?: typeof color } }) => void,
+        ) => void;
+      }
+    ).traverse((obj) => {
+      if (obj.isMesh && obj.material?.color) color = obj.material.color;
+    });
+
+    const expected = hexToLinearRgb('#2f5a2a');
+    expect(color?.r).toBeCloseTo(expected[0], 5);
+    expect(color?.g).toBeCloseTo(expected[1], 5);
+    expect(color?.b).toBeCloseTo(expected[2], 5);
   });
 });
 
