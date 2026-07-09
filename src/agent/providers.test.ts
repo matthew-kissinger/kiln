@@ -32,6 +32,10 @@ describe('resolveKilnAgentModel', () => {
       provider: 'openrouter',
       model: 'anthropic/claude-opus-4.8',
     });
+    expect(resolveKilnAgentModel('meta:muse-spark-1.1')).toEqual({
+      provider: 'meta',
+      model: 'muse-spark-1.1',
+    });
   });
 
   test('a bare vendor/model slash id is OpenRouter', () => {
@@ -73,7 +77,7 @@ describe('resolveKilnAgentModel', () => {
 
 describe('makeKilnModel', () => {
   const saved: Record<string, string | undefined> = {};
-  const KEYS = ['GEMINI_API_KEY', 'ANTHROPIC_API_KEY', 'OPENAI_API_KEY', 'OPENROUTER_API_KEY'];
+  const KEYS = ['GEMINI_API_KEY', 'ANTHROPIC_API_KEY', 'OPENAI_API_KEY', 'OPENROUTER_API_KEY', 'MODEL_API_KEY'];
 
   beforeAll(() => {
     for (const k of KEYS) {
@@ -109,6 +113,10 @@ describe('makeKilnModel', () => {
     expect(makeKilnModel({ provider: 'openrouter', model: 'x-ai/grok-4.3' }).constructor.name).toBe(
       'VercelModel',
     );
+    expect(
+      makeKilnModel({ provider: 'meta', model: 'muse-spark-1.1', maxTokens: 4096 }).constructor
+        .name,
+    ).toBe('OpenAIModel');
   });
 
   test('accepts a BYOK apiKey override for the google path', () => {
@@ -133,6 +141,25 @@ describe('makeKilnModel', () => {
     expect(
       clientKey(makeKilnModel({ provider: 'openai', model: 'gpt-5.5' }, { apiKey: 'byok-openai' })),
     ).toBe('byok-openai');
+    expect(
+      clientKey(
+        makeKilnModel({ provider: 'meta', model: 'muse-spark-1.1' }, { apiKey: 'byok-meta' }),
+      ),
+    ).toBe('byok-meta');
+  });
+
+  test('meta uses the Meta base URL and explicit Responses params', () => {
+    const model = makeKilnModel({ provider: 'meta', model: 'muse-spark-1.1', maxTokens: 4096 });
+    const cfg = (model as unknown as { getConfig(): Record<string, unknown> }).getConfig();
+    expect(cfg['modelId']).toBe('muse-spark-1.1');
+    expect(cfg['maxTokens']).toBe(4096);
+    expect(cfg['params']).toEqual({
+      reasoning: { effort: 'low' },
+      parallel_tool_calls: false,
+    });
+    expect((model as { _client?: { baseURL?: string } })._client?.baseURL).toBe(
+      'https://api.meta.ai/v1',
+    );
   });
 
   describe('anthropic thinking control (KILN_THINKING)', () => {

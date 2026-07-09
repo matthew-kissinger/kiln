@@ -7,6 +7,8 @@
  * (`VercelModel`) wrapping a `LanguageModelV3` from `@openrouter/ai-sdk-provider`
  * — with {@link ensureStreamStart} restoring the spec-required leading
  * `stream-start` part the OpenRouter provider omits (see stream-start.ts).
+ * Meta Model API is OpenAI-compatible, but stays its own provider family for
+ * honest provenance and key/pricing separation.
  */
 import { VercelModel } from '@strands-agents/sdk/models/vercel';
 import { AnthropicModel } from '@strands-agents/sdk/models/anthropic';
@@ -49,7 +51,7 @@ export function makeOpenRouterModel(opts: OpenRouterModelOptions): Model {
 // =============================================================================
 
 /** Strands-native provider vocabulary for the Kiln agent loop. */
-export type KilnAgentProvider = 'anthropic' | 'openai' | 'google' | 'bedrock' | 'openrouter';
+export type KilnAgentProvider = 'anthropic' | 'openai' | 'google' | 'bedrock' | 'openrouter' | 'meta';
 
 /**
  * Minimal model descriptor `makeKilnModel` needs. Structurally compatible with
@@ -92,6 +94,17 @@ const trimmedEnv = (k: string): string | undefined => {
   const v = process.env[k];
   return v && v.trim() ? v.trim() : undefined;
 };
+
+const META_MODEL_API_BASE_URL = 'https://api.meta.ai/v1';
+
+function metaApiKey(opts: MakeKilnModelOptions): string | undefined {
+  return (
+    opts.apiKey ??
+    trimmedEnv('MODEL_API_KEY') ??
+    trimmedEnv('META_MODEL_API_KEY') ??
+    trimmedEnv('META_API_KEY')
+  );
+}
 
 /**
  * Resolve the Anthropic thinking control: per-call descriptor wins, else the
@@ -136,6 +149,7 @@ function resolveAnthropicThinking(
  * Construct a Strands `Model` from a provider+model descriptor — the agnostic
  * factory the whole Kiln agent path builds on. Native providers (Anthropic /
  * OpenAI / Google / Bedrock) construct directly from their model subpath;
+ * Meta uses Strands' OpenAI-compatible Responses adapter against Meta's base URL;
  * OpenRouter goes through the Vercel bridge ({@link makeOpenRouterModel} +
  * `ensureStreamStart`).
  */
@@ -170,6 +184,22 @@ export function makeKilnModel(desc: KilnModelDescriptor, opts: MakeKilnModelOpti
         region: opts.region ?? trimmedEnv('AWS_REGION') ?? 'us-west-2',
         ...(maxTokens != null ? { maxTokens } : {}),
       });
+    case 'meta': {
+      const apiKey = metaApiKey(opts);
+      if (!apiKey) {
+        throw new Error('Meta Model API key is required. Set MODEL_API_KEY, META_MODEL_API_KEY, or META_API_KEY.');
+      }
+      return new OpenAIModel({
+        modelId: desc.model,
+        apiKey,
+        clientConfig: { baseURL: META_MODEL_API_BASE_URL },
+        params: {
+          reasoning: { effort: trimmedEnv('KILN_META_REASONING') ?? 'low' },
+          parallel_tool_calls: false,
+        },
+        ...(maxTokens != null ? { maxTokens } : {}),
+      });
+    }
     case 'openrouter':
       return makeOpenRouterModel({
         modelId: desc.model,
@@ -199,6 +229,7 @@ export function makeKilnModel(desc: KilnModelDescriptor, opts: MakeKilnModelOpti
  *   claude-opus-4-8                 -> { anthropic,  claude-opus-4-8 }
  *   gpt-5.5                         -> { openai,     gpt-5.5 }
  *   x-ai/grok-4.3                   -> { openrouter, x-ai/grok-4.3 }
+ *   meta:muse-spark-1.1             -> { meta,       muse-spark-1.1 }
  */
 export function resolveKilnAgentModel(modelId: string): KilnModelDescriptor {
   const id = modelId.trim();
@@ -211,7 +242,8 @@ export function resolveKilnAgentModel(modelId: string): KilnModelDescriptor {
       prefix === 'openai' ||
       prefix === 'google' ||
       prefix === 'bedrock' ||
-      prefix === 'openrouter'
+      prefix === 'openrouter' ||
+      prefix === 'meta'
     ) {
       return { provider: prefix, model: rest };
     }
@@ -242,7 +274,7 @@ export function harnessIdToAgentModelId(id: string): string | null {
   const trimmed = id.trim();
   if (!trimmed) return null;
   // Already a Strands-form id (provider:model) — pass through untouched.
-  if (/^(anthropic|openai|google|bedrock|openrouter):/.test(trimmed)) return trimmed;
+  if (/^(anthropic|openai|google|bedrock|openrouter|meta):/.test(trimmed)) return trimmed;
   // OpenRouter `vendor/model` slashes route the same on both paths.
   if (trimmed.includes('/')) return `openrouter:${trimmed}`;
   if (trimmed.startsWith('claude-')) return `anthropic:${trimmed}`;
