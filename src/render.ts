@@ -40,6 +40,52 @@ import {
   type InstanceabilityMetrics,
   type InstanceabilityReport,
 } from './metrics';
+import {
+  cloneSemanticMetadataV1,
+  createAssetIntentV1,
+  createSemanticMetadataV1,
+  isAssetCategory,
+  KILN_SEMANTIC_EXTRAS_KEY,
+  validateSemanticMetadataV1,
+  type AssetCategory,
+  type AssetIntentV1,
+} from './contracts';
+import {
+  assertFinalGlbValid,
+  GltfValidationError,
+  validateFinalGlbBytes,
+  type KhronosGltfValidationReport,
+} from './qa/gltf';
+import {
+  appendFinalGltfQa,
+  appendMaterialMetricsQa,
+  appendRuntimeCostQa,
+  AssetQaBlockedError,
+  runDeterministicSceneQa,
+} from './qa/run';
+import { appendFinalVfxGlbQa } from './qa/breadth-final';
+import type { AssetQaReportV1 } from './qa/types';
+import {
+  collectMaterialMetricsV1,
+  evaluateMaterialBudgetV1,
+  materialBudgetProfileForQaProfile,
+  type MaterialMetricsV1,
+} from './material-metrics';
+import {
+  collectMaterialRecipeApplications,
+  type MaterialRecipeApplicationProvenanceV1,
+} from './material-recipe-runtime';
+import {
+  collectMaterialResourceProvenance,
+  type MaterialResourceProvenanceV1,
+} from './material-resources';
+import {
+  captureCharacterDiagnosticViews,
+  type CharacterCapturedDiagnosticV1,
+} from './views/character-capture';
+import { captureVehicleDiagnosticViews, type VehicleCapturedDiagnosticV1 } from './views/vehicle';
+
+export type CapturedDiagnosticV1 = CharacterCapturedDiagnosticV1 | VehicleCapturedDiagnosticV1;
 
 // WebIO (not NodeIO) is used for GLB serialization so the same code path
 // works in both Node and browser environments. writeBinary() only builds the
@@ -210,6 +256,7 @@ function bridgeMaterial(
     isMeshStandardMaterial?: boolean;
     isMeshLambertMaterial?: boolean;
     isMeshBasicMaterial?: boolean;
+    isSpriteMaterial?: boolean;
   };
   if (matFlags.isMeshStandardMaterial) {
     const stdMat = threeMat as THREE.MeshStandardMaterial;
@@ -219,7 +266,10 @@ function bridgeMaterial(
     if (stdMat.emissive) {
       mat.setEmissiveFactor([stdMat.emissive.r, stdMat.emissive.g, stdMat.emissive.b]);
     }
-    if (stdMat.transparent) {
+    if (stdMat.alphaTest > 0) {
+      mat.setAlphaMode('MASK');
+      mat.setAlphaCutoff(stdMat.alphaTest);
+    } else if (stdMat.transparent) {
       mat.setAlphaMode('BLEND');
     }
     if (stdMat.side === THREE.DoubleSide) {
@@ -237,6 +287,11 @@ function bridgeMaterial(
     // metallic + roughness live in one glTF texture (R=unused, G=rough, B=metal).
     // If the agent used separate Three.js maps we emit the roughness one as
     // the combined channel — the common case is a single combined map anyway.
+    if (stdMat.roughnessMap && stdMat.metalnessMap && stdMat.roughnessMap !== stdMat.metalnessMap) {
+      throw new TypeError(
+        `Material ${JSON.stringify(threeMat.name || '(unnamed)')} uses separate roughness/metalness textures. Pack G=roughness/B=metalness before export.`,
+      );
+    }
     const mrSource = stdMat.roughnessMap ?? stdMat.metalnessMap;
     if (mrSource) {
       const t = bridgeTexture(doc, mrSource, textureCache);
@@ -269,6 +324,38 @@ function bridgeMaterial(
     ]);
     mat.setRoughnessFactor(1.0);
     mat.setMetallicFactor(0.0);
+  } else if (matFlags.isSpriteMaterial) {
+    const spriteMat = threeMat as THREE.SpriteMaterial;
+    mat.setBaseColorFactor([
+      spriteMat.color.r,
+      spriteMat.color.g,
+      spriteMat.color.b,
+      spriteMat.opacity,
+    ]);
+    mat.setRoughnessFactor(1.0);
+    mat.setMetallicFactor(0.0);
+  }
+
+  // Material alpha/sidedness is shared across Three.js material families.
+  // Keep this after the family-specific PBR mapping so SpriteMaterial and
+  // MeshBasic/Lambert materials cannot pass scene QA and then become opaque or
+  // single-sided in the GLB bridge.
+  const common = threeMat as THREE.Material & {
+    alphaTest?: number;
+    transparent?: boolean;
+    opacity?: number;
+    map?: THREE.Texture | null;
+  };
+  if ((common.alphaTest ?? 0) > 0) {
+    mat.setAlphaMode('MASK');
+    mat.setAlphaCutoff(common.alphaTest ?? 0.5);
+  } else if (common.transparent || (common.opacity ?? 1) < 1) {
+    mat.setAlphaMode('BLEND');
+  }
+  if (threeMat.side === THREE.DoubleSide) mat.setDoubleSided(true);
+  if (common.map && !mat.getBaseColorTexture()) {
+    const texture = bridgeTexture(doc, common.map, textureCache);
+    if (texture) mat.setBaseColorTexture(texture);
   }
 
   cache.set(threeMat, mat);
@@ -352,6 +439,18 @@ function bridgeGeometry(
     );
   }
 
+  const tangentAttr = geometry.getAttribute('tangent') as THREE.BufferAttribute | undefined;
+  if (tangentAttr?.itemSize === 4) {
+    prim.setAttribute(
+      'TANGENT',
+      doc
+        .createAccessor(meshName + '_tangent')
+        .setArray(new Float32Array(tangentAttr.array))
+        .setType(TYPE_VEC4)
+        .setBuffer(buf),
+    );
+  }
+
   const indexAttr = geometry.getIndex();
   if (indexAttr) {
     // Uint16 holds indices up to 65535; a geometry with more vertices needs
@@ -381,6 +480,55 @@ function bridgeNode(
 ): GtNode {
   const gtNode = doc.createNode(threeObj.name || undefined);
 
+  // Only the versioned Kiln semantic payload is promoted from Three.js
+  // userData into glTF extras. Arbitrary userData can contain encoded textures
+  // and other non-JSON values, so exporting it wholesale is intentionally
+  // forbidden. A malformed reserved payload is an authoring error rather than
+  // something the bridge may silently drop.
+  const semanticValue = threeObj.userData[KILN_SEMANTIC_EXTRAS_KEY];
+  let semanticForExport = semanticValue;
+  if ((threeObj as THREE.Object3D & { isSprite?: boolean }).isSprite) {
+    // glTF has no native Sprite primitive. The bridge emits a quad below and
+    // stamps the actual Three.js spherical-facing behavior as a portable
+    // semantic so a runtime consumer can reconstruct it deterministically.
+    if (semanticValue === undefined) {
+      semanticForExport = createSemanticMetadataV1({
+        roles: ['vfx.facing.camera-spherical', 'vfx.effect.surface.card'],
+      });
+    } else {
+      const existing = validateSemanticMetadataV1(semanticValue);
+      if (existing.valid && existing.value) {
+        semanticForExport = {
+          ...cloneSemanticMetadataV1(existing.value),
+          roles: [
+            // The exporter owns the runtime truth for Sprite facing. Drop any
+            // contradictory model-authored facing self-report before stamping
+            // the actual spherical behavior.
+            ...existing.value.roles.filter((role) => !role.startsWith('vfx.facing.')),
+            'vfx.facing.camera-spherical',
+            ...(existing.value.roles.some((role) => role.startsWith('vfx.effect.surface'))
+              ? []
+              : ['vfx.effect.surface.card']),
+          ],
+        };
+      }
+    }
+  }
+  if (semanticForExport !== undefined) {
+    const semantic = validateSemanticMetadataV1(semanticForExport);
+    if (!semantic.valid || !semantic.value) {
+      const detail = semantic.issues
+        .map((issue) => `${issue.path || '<root>'}: ${issue.message}`)
+        .join('; ');
+      throw new TypeError(
+        `Invalid ${KILN_SEMANTIC_EXTRAS_KEY} on node ${threeObj.name || '<unnamed>'}: ${detail}`,
+      );
+    }
+    gtNode.setExtras({
+      [KILN_SEMANTIC_EXTRAS_KEY]: cloneSemanticMetadataV1(semantic.value),
+    });
+  }
+
   gtNode.setTranslation([threeObj.position.x, threeObj.position.y, threeObj.position.z]);
   gtNode.setRotation([
     threeObj.quaternion.x,
@@ -403,6 +551,28 @@ function bridgeNode(
     let gtMesh = meshCache.get(cacheKey);
     if (!gtMesh) {
       gtMesh = bridgeGeometry(doc, buf, threeMesh.geometry, gtMat, threeMesh.name || 'mesh');
+      meshCache.set(cacheKey, gtMesh);
+    }
+    gtNode.setMesh(gtMesh);
+  } else if ((threeObj as THREE.Object3D & { isSprite?: boolean }).isSprite) {
+    const sprite = threeObj as THREE.Sprite;
+    const threeMat = sprite.material;
+    const gtMat = bridgeMaterial(doc, threeMat, matCache, texCache);
+    // Unit XY quad matches Three.js Sprite scale semantics. Non-default center
+    // and material rotation are baked into the quad; camera-facing remains an
+    // explicit semantic runtime behavior on the exported node.
+    const centerX = sprite.center?.x ?? 0.5;
+    const centerY = sprite.center?.y ?? 0.5;
+    const rotation = sprite.material.rotation ?? 0;
+    const cacheKey = `kiln-sprite-quad:${centerX}:${centerY}:${rotation}__${threeMat.uuid}`;
+    let gtMesh = meshCache.get(cacheKey);
+    if (!gtMesh) {
+      const geometry = new THREE.PlaneGeometry(1, 1);
+      if (centerX !== 0.5 || centerY !== 0.5) {
+        geometry.translate(0.5 - centerX, 0.5 - centerY, 0);
+      }
+      if (rotation !== 0) geometry.rotateZ(rotation);
+      gtMesh = bridgeGeometry(doc, buf, geometry, gtMat, sprite.name || 'sprite-quad');
       meshCache.set(cacheKey, gtMesh);
     }
     gtNode.setMesh(gtMesh);
@@ -484,6 +654,11 @@ function bridgeAnimations(
       anim.addSampler(sampler);
       anim.addChannel(channel);
     }
+
+    // Never serialize an empty Animation object: Khronos correctly reports
+    // EMPTY_ENTITY as an error. Advisory-only unresolved tracks are skipped;
+    // explicit required tracks have already been blocked by deterministic QA.
+    if (anim.listChannels().length === 0) anim.dispose();
   }
 }
 
@@ -496,6 +671,11 @@ export interface RenderResult {
   tris: number;
   meta: KilnCodeMeta;
   warnings: string[];
+  /** Automatic category diagnostics captured from the exact final source scene. */
+  diagnosticViews?: CapturedDiagnosticV1[];
+  materialMetrics?: MaterialMetricsV1;
+  materialRecipeApplications?: MaterialRecipeApplicationProvenanceV1[];
+  materialResourceProvenance?: MaterialResourceProvenanceV1[];
 }
 
 /**
@@ -554,6 +734,10 @@ export interface RenderSceneResult {
   bytes: Uint8Array;
   tris: number;
   warnings: string[];
+  /** Official Khronos report for these exact post-transform bytes. */
+  gltfValidation: KhronosGltfValidationReport;
+  /** Five-signal deterministic report for the exact scene and final bytes. */
+  qaReport: AssetQaReportV1;
   /** Post-dedup (and post-optimize, when enabled) instanceability report
    *  (informational). Undefined if it threw. */
   instanceability?: InstanceabilityReport;
@@ -563,6 +747,11 @@ export interface RenderSceneResult {
   optimize?: OptimizeSummary;
   /** Set when the GPU-instancing pass created batches (instance !== 'off'). */
   instancing?: InstancingSummary;
+  /** Category captures selected only by trusted intent from the exact source scene. */
+  diagnosticViews?: CapturedDiagnosticV1[];
+  materialMetrics?: MaterialMetricsV1;
+  materialRecipeApplications?: MaterialRecipeApplicationProvenanceV1[];
+  materialResourceProvenance?: MaterialResourceProvenanceV1[];
 }
 
 export interface RenderSceneOptions {
@@ -577,6 +766,8 @@ export interface RenderSceneOptions {
   dedup?: boolean;
   /** Asset category, threaded into the instanceability grade context. */
   category?: string;
+  /** Full closure-owned intent. Authoritative over category when supplied. */
+  intent?: AssetIntentV1;
   /**
    * Opt-in material consolidation, applied after dedup. Defaults to the
    * `KILN_BAKE_OPTIMIZE` env (else `off`). `off` is byte-identical to today.
@@ -688,13 +879,12 @@ async function applyGpuInstancing(
  * `palette` collapses distinct untextured flat-color materials into one palette
  * material + a small palette texture (textured materials pass through untouched);
  * `weld` + `prune` clean up. `full` adds `flatten → join` to also reduce draws,
- * but ONLY for static assets — if the Document carries animations or skins it
- * auto-degrades to `palette` so a rig is never disturbed (flatten leaves animated
- * nodes + skeletons in place by design, and join({keepNamed:true}) never merges a
- * named pivot, but degrading is the belt-and-braces guarantee). `prune` keeps
- * empty leaf nodes + extras so named pivots that Kiln City behaviors target by
- * name survive. palette groups by alpha mode, so opaque + the one glass slot stay
- * distinct materials (transparency is never flattened into opaque).
+ * but ONLY for static, semantics-free assets — animations, skins, or any reserved
+ * semantic extras auto-degrade to `palette` so a rig, portal-clearance node,
+ * socket, or separable role is never flattened away. `prune` keeps empty leaf
+ * nodes + extras so named pivots that Kiln City behaviors target by name survive.
+ * palette groups by alpha mode, so opaque + the one glass slot stay distinct
+ * materials (transparency is never flattened into opaque).
  *
  * Returns what it did; throws are the caller's to handle (the GLB is otherwise
  * valid). Pure w.r.t. inputs other than the mutated Document.
@@ -706,15 +896,27 @@ async function consolidateMaterials(
   const before = collectGlbMetrics(doc);
   const root = doc.getRoot();
   const animatedOrSkinned = root.listAnimations().length > 0 || root.listSkins().length > 0;
-  const effective: 'palette' | 'full' = mode === 'full' && animatedOrSkinned ? 'palette' : mode;
+  const semanticGraph = root
+    .listNodes()
+    .some((node) => node.getExtras()[KILN_SEMANTIC_EXTRAS_KEY] !== undefined);
+  const effective: 'palette' | 'full' =
+    mode === 'full' && (animatedOrSkinned || semanticGraph) ? 'palette' : mode;
 
   const steps = [palette({ min: PALETTE_MIN })];
   if (effective === 'full') {
-    // flatten() leaves skeletons + animation-targeted nodes in place; join keeps
-    // named meshes/nodes intact so pivots survive. Both only run on static assets.
+    // flatten() leaves skeletons + animation-targeted nodes in place, but it may
+    // remove empty semantic clearance/socket nodes even when prune keeps leaves
+    // and extras. Full therefore runs only on static, semantics-free graphs.
     steps.push(flatten(), join({ keepNamed: true }));
   }
-  steps.push(weld(), prune({ keepLeaves: true, keepExtras: true }));
+  // A solid texture can be semantically meaningful in more than one slot (for
+  // example the same unnamed bytes used as base color, normal, and packed MR).
+  // gltf-transform's default solid-texture pruning folds base/MR pixels into
+  // factors but retains the normal binding, corrupting that shared-slot case
+  // while remaining validator-clean. Preserve authored textures across every
+  // material rebake; palette-generated textures and ordinary dead resources are
+  // still cleaned normally.
+  steps.push(weld(), prune({ keepLeaves: true, keepExtras: true, keepSolidTextures: true }));
 
   await doc.transform(...steps);
 
@@ -749,6 +951,14 @@ export async function renderSceneToGLB(
   const clips = opts.clips ?? [];
   const warnings: string[] = [];
   const tris = countTriangles(root);
+  const intent =
+    opts.intent ??
+    createAssetIntentV1({
+      category: isAssetCategory(opts.category) ? opts.category : 'prop',
+    });
+  const trustedCategory = intent.category;
+  const materialRecipeApplications = collectMaterialRecipeApplications(root);
+  const materialResourceProvenance = collectMaterialResourceProvenance(root);
 
   // Runtime-aware joint-name validation (follow-up #6 from the W1.1 spike
   // report). Walk the scene graph + animation tracks and surface any track
@@ -758,7 +968,12 @@ export async function renderSceneToGLB(
   // pivot" hint is first; the bridge also emits a briefer "target not
   // found - skipped" for each unresolved track (kept for compatibility).
   for (const w of inspectGeneratedAnimation(root, clips)) warnings.push(w);
-  for (const w of inspectSceneStructure(root)) warnings.push(w);
+  for (const w of inspectSceneStructure(root, { category: trustedCategory })) warnings.push(w);
+
+  const sceneQaReport = runDeterministicSceneQa({ intent, scene: root, clips });
+  if (sceneQaReport.disposition === 'block') {
+    throw new AssetQaBlockedError(sceneQaReport, 'scene');
+  }
 
   const doc = new Document();
   const buf = doc.createBuffer();
@@ -833,22 +1048,95 @@ export async function renderSceneToGLB(
       doc,
       optimize || instancing ? undefined : tris,
     );
-    instanceability = gradeInstanceability(metrics, { category: opts.category });
+    instanceability = gradeInstanceability(metrics, { category: trustedCategory });
   } catch (err) {
     metricsError = err instanceof Error ? err.message : String(err);
   }
 
+  let materialMetrics: MaterialMetricsV1 | undefined;
+  let materialBudgetWarnings = [] as ReturnType<typeof evaluateMaterialBudgetV1>;
+  try {
+    materialMetrics = collectMaterialMetricsV1(doc);
+    const tier = /(?:^|\.)hero(?:\.|$)/i.test(intent.qaProfile)
+      ? 'hero'
+      : /(?:^|\.)background(?:\.|$)/i.test(intent.qaProfile)
+        ? 'background'
+        : 'standard';
+    materialBudgetWarnings = evaluateMaterialBudgetV1(materialMetrics, {
+      profile: materialBudgetProfileForQaProfile(intent.qaProfile),
+      tier,
+    });
+  } catch (error) {
+    warnings.push(
+      `material metrics failed: ${error instanceof Error ? error.message : String(error)}`,
+    );
+  }
+
   const io = engineIO();
   const bytes = await io.writeBinary(doc);
+  const gltfValidation = await validateFinalGlbBytes(bytes);
+  const finalGltfReport = appendFinalGltfQa(intent, sceneQaReport, gltfValidation);
+  const runtimeQaReport = appendRuntimeCostQa(
+    intent,
+    finalGltfReport,
+    instanceability,
+    metricsError,
+  );
+  const materialQaReport = materialMetrics
+    ? appendMaterialMetricsQa(intent, runtimeQaReport, materialMetrics, materialBudgetWarnings)
+    : runtimeQaReport;
+  const qaReport = await appendFinalVfxGlbQa(intent, materialQaReport, bytes);
+  if (qaReport.disposition === 'block') {
+    throw new AssetQaBlockedError(qaReport, 'final-glb', gltfValidation);
+  }
+  for (const issue of gltfValidation.issues.messages) {
+    if (issue.severity !== 1) continue;
+    warnings.push(
+      `glTF ${issue.code}${issue.pointer ? ` at ${issue.pointer}` : ''}: ${issue.message}`,
+    );
+  }
+
+  let diagnosticViews: CapturedDiagnosticV1[] | undefined;
+  if (intent.category === 'character' && intent.character) {
+    try {
+      const findings = Object.values(qaReport.dimensions).flatMap(
+        (dimension) => dimension.findings,
+      );
+      diagnosticViews = await captureCharacterDiagnosticViews(
+        root,
+        clips,
+        intent.character,
+        findings,
+      );
+    } catch (error) {
+      warnings.push(
+        `character diagnostic capture failed: ${error instanceof Error ? error.message : String(error)}`,
+      );
+    }
+  } else if (intent.category === 'vehicle' && intent.vehicle) {
+    try {
+      diagnosticViews = captureVehicleDiagnosticViews(root, intent);
+    } catch (error) {
+      warnings.push(
+        `vehicle diagnostic capture failed: ${error instanceof Error ? error.message : String(error)}`,
+      );
+    }
+  }
 
   return {
     bytes,
     tris,
     warnings,
+    gltfValidation,
+    qaReport,
     instanceability,
     metricsError,
     ...(optimize ? { optimize } : {}),
     ...(instancing ? { instancing } : {}),
+    ...(diagnosticViews ? { diagnosticViews } : {}),
+    ...(materialMetrics ? { materialMetrics } : {}),
+    ...(materialRecipeApplications.length ? { materialRecipeApplications } : {}),
+    ...(materialResourceProvenance.length ? { materialResourceProvenance } : {}),
   };
 }
 
@@ -863,23 +1151,33 @@ export async function renderSceneToGLB(
  */
 export async function renderGLB(
   code: string,
-  opts: { optimize?: OptimizeMode; instance?: InstanceMode } = {},
+  opts: {
+    optimize?: OptimizeMode;
+    instance?: InstanceMode;
+    intent?: AssetIntentV1;
+    category?: AssetCategory;
+  } = {},
 ): Promise<RenderResult> {
   const { meta, root, clips, primitiveUsage } = await executeKilnCode(code);
+  const requestedCategory = opts.intent?.category ?? opts.category;
   const scene = await renderSceneToGLB(root, {
     sceneName: meta.name || 'Scene',
     clips,
-    category: typeof meta.category === 'string' ? meta.category : undefined,
+    ...(requestedCategory ? { category: requestedCategory } : {}),
+    ...(opts.intent ? { intent: opts.intent } : {}),
     role: meta.role,
     ...(opts.optimize ? { optimize: opts.optimize } : {}),
     ...(opts.instance ? { instance: opts.instance } : {}),
   });
 
+  const { category: modelCategory, ...modelMeta } = meta;
   return {
     glb: Buffer.from(scene.bytes),
     tris: scene.tris,
     meta: {
-      ...meta,
+      ...modelMeta,
+      ...(modelCategory !== undefined ? { modelCategory } : {}),
+      ...(requestedCategory ? { category: requestedCategory } : {}),
       tris: scene.tris,
       primitiveUsage,
       ...(scene.instanceability
@@ -888,8 +1186,18 @@ export async function renderGLB(
       ...(scene.metricsError ? { metricsError: scene.metricsError } : {}),
       ...(scene.optimize ? { optimize: scene.optimize } : {}),
       ...(scene.instancing ? { instancing: scene.instancing } : {}),
+      gltfValidation: scene.gltfValidation,
+      qaReport: scene.qaReport,
     },
     warnings: scene.warnings,
+    ...(scene.diagnosticViews ? { diagnosticViews: scene.diagnosticViews } : {}),
+    ...(scene.materialMetrics ? { materialMetrics: scene.materialMetrics } : {}),
+    ...(scene.materialRecipeApplications
+      ? { materialRecipeApplications: scene.materialRecipeApplications }
+      : {}),
+    ...(scene.materialResourceProvenance
+      ? { materialResourceProvenance: scene.materialResourceProvenance }
+      : {}),
   };
 }
 
@@ -924,6 +1232,8 @@ export interface OptimizeGlbResult {
   summary?: OptimizeSummary;
   /** What the GPU-instancing pass did (absent when it was off / skipped / no-op). */
   instancing?: InstancingSummary;
+  /** Official Khronos report for the exact rebaked bytes. */
+  gltfValidation: KhronosGltfValidationReport;
 }
 
 /**
@@ -969,6 +1279,7 @@ export async function optimizeGlbBytes(
     if (mode) summary = await consolidateMaterials(doc, mode);
     if (!summary && !instancing) return undefined;
     const outBytes = await io.writeBinary(doc);
+    const gltfValidation = await assertFinalGlbValid(outBytes);
     let report: InstanceabilityReport | undefined;
     try {
       report = gradeInstanceability(collectGlbMetrics(doc), { category: opts.category });
@@ -977,11 +1288,13 @@ export async function optimizeGlbBytes(
     }
     return {
       bytes: outBytes,
+      gltfValidation,
       ...(report ? { report } : {}),
       ...(summary ? { summary } : {}),
       ...(instancing ? { instancing } : {}),
     };
-  } catch {
+  } catch (error) {
+    if (error instanceof GltfValidationError) throw error;
     return undefined;
   }
 }
@@ -1002,6 +1315,8 @@ export interface SnapGlbResult {
   snapped: number;
   /** Materials left unchanged (textured / hero, or no eligible slot). */
   skipped: number;
+  /** Official Khronos report for the exact palette-rebaked bytes. */
+  gltfValidation: KhronosGltfValidationReport;
 }
 
 /**
@@ -1076,14 +1391,23 @@ export async function snapGlbToPalette(
       drawsAfter: after.drawCalls,
     };
     const outBytes = await io.writeBinary(doc);
+    const gltfValidation = await assertFinalGlbValid(outBytes);
     let report: InstanceabilityReport | undefined;
     try {
       report = gradeInstanceability(after, { category: opts.category });
     } catch {
       report = undefined;
     }
-    return { bytes: outBytes, ...(report ? { report } : {}), summary, snapped, skipped };
-  } catch {
+    return {
+      bytes: outBytes,
+      ...(report ? { report } : {}),
+      summary,
+      snapped,
+      skipped,
+      gltfValidation,
+    };
+  } catch (error) {
+    if (error instanceof GltfValidationError) throw error;
     return undefined;
   }
 }
@@ -1126,6 +1450,8 @@ export interface SceneComposeResult {
   materials: number;
   /** Per-part skip notes + transform warnings (never throws on one bad part). */
   warnings: string[];
+  /** Official Khronos report for the exact composed bytes. */
+  gltfValidation: KhronosGltfValidationReport;
 }
 
 /** Euler degrees (XYZ) → a glTF quaternion [x, y, z, w] via THREE (the viewer's frame). */
@@ -1232,12 +1558,20 @@ export async function composeSceneGLB(
 
   const metrics = collectGlbMetrics(master);
   const bytes = await io.writeBinary(master);
+  const gltfValidation = await assertFinalGlbValid(bytes, 'scene.glb');
+  for (const issue of gltfValidation.issues.messages) {
+    if (issue.severity !== 1) continue;
+    warnings.push(
+      `glTF ${issue.code}${issue.pointer ? ` at ${issue.pointer}` : ''}: ${issue.message}`,
+    );
+  }
   return {
     bytes,
     tris: metrics.triangles,
     draws: metrics.drawCalls,
     materials: metrics.uniqueMaterials,
     warnings,
+    gltfValidation,
   };
 }
 

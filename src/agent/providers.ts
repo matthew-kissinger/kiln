@@ -51,7 +51,13 @@ export function makeOpenRouterModel(opts: OpenRouterModelOptions): Model {
 // =============================================================================
 
 /** Strands-native provider vocabulary for the Kiln agent loop. */
-export type KilnAgentProvider = 'anthropic' | 'openai' | 'google' | 'bedrock' | 'openrouter' | 'meta';
+export type KilnAgentProvider =
+  | 'anthropic'
+  | 'openai'
+  | 'google'
+  | 'bedrock'
+  | 'openrouter'
+  | 'meta';
 
 /**
  * Minimal model descriptor `makeKilnModel` needs. Structurally compatible with
@@ -187,7 +193,9 @@ export function makeKilnModel(desc: KilnModelDescriptor, opts: MakeKilnModelOpti
     case 'meta': {
       const apiKey = metaApiKey(opts);
       if (!apiKey) {
-        throw new Error('Meta Model API key is required. Set MODEL_API_KEY, META_MODEL_API_KEY, or META_API_KEY.');
+        throw new Error(
+          'Meta Model API key is required. Set MODEL_API_KEY, META_MODEL_API_KEY, or META_API_KEY.',
+        );
       }
       return new OpenAIModel({
         modelId: desc.model,

@@ -10,12 +10,64 @@
  */
 
 import * as THREE from 'three';
+import { createJointChain } from './character';
+import {
+  createGableEndPanel,
+  createGableRoof,
+  createGableShell,
+  createRoofPlanes as createRoofPlanesExplicit,
+  createRoofSurfaceLayout,
+} from './architecture';
 import * as gears from './gears';
 import * as ops from './ops';
 import * as solids from './solids';
 import * as textures from './textures';
+import { materialRecipe } from './material-recipe-runtime';
+import { createVehicleFrame, createWheelAssembly, createWheelGeometrySet } from './vehicle';
+import {
+  stampSemanticMetadataV1,
+  type AssetCategory,
+  type SemanticMetadataV1,
+  type SemanticMetadataV1Input,
+} from './contracts';
 import * as uv from './uv';
 import * as uvShapes from './uv-shapes';
+
+export {
+  createGableEndPanel,
+  createGableRoof,
+  createGableShell,
+  createRoofSurfaceLayout,
+} from './architecture';
+export type {
+  GableEndPanelOptions,
+  GableRoofOptions,
+  GableShellOptions,
+  RoofFaceFrame,
+  RoofSurfaceLayoutOptions,
+} from './architecture';
+export { createJointChain } from './character';
+export type {
+  CreateJointChainOptionsV1,
+  JointChainResultV1,
+  JointChainSegmentV1,
+} from './character';
+export {
+  createVehicleFrame,
+  createWheelAssembly,
+  createWheelGeometrySet,
+} from './vehicle';
+export { materialRecipe } from './material-recipe-runtime';
+export type { ApplyMaterialRecipeOptions } from './material-recipe-runtime';
+export type { MaterialRecipeId, MaterialRecipeOverridesV1 } from './material-recipes';
+export type {
+  VehicleFrameOptions,
+  VehicleFrameResult,
+  WheelAssemblyOptions,
+  WheelAssemblyResult,
+  WheelGeometrySet,
+  WheelMaterialSet,
+} from './vehicle';
 
 type Vec3Tuple = [number, number, number];
 
@@ -69,6 +121,9 @@ export function createPart(
     scale?: [number, number, number];
     pivot?: boolean; // Wrap in pivot for animation
     parent?: THREE.Object3D;
+    /** Versioned roles/relationships/local frames/sockets stamped on the returned
+     * helper node and preserved in glTF node extras. */
+    semantic?: SemanticMetadataV1 | SemanticMetadataV1Input;
   } = {},
 ): THREE.Object3D {
   const mesh = new THREE.Mesh(geometry, material);
@@ -90,10 +145,12 @@ export function createPart(
     mesh.position.set(0, 0, 0); // Reset - pivot controls position
     if (options.position) pivot.position.set(...options.position);
     if (options.parent) options.parent.add(pivot);
+    if (options.semantic) stampSemanticMetadataV1(pivot, options.semantic);
     return pivot; // Return the pivot (the animatable node)
   }
 
   if (options.parent) options.parent.add(mesh);
+  if (options.semantic) stampSemanticMetadataV1(mesh, options.semantic);
   return mesh; // Return the mesh
 }
 
@@ -324,6 +381,7 @@ export function foliageCardGeo(opts: FoliageCardOptions = {}): THREE.PlaneGeomet
   const geom = new THREE.PlaneGeometry(w, h);
   // Shift so the pivot offset becomes the local origin.
   geom.translate(0, h * (0.5 - yPivot), 0);
+  geom.userData['kilnGeometryRole'] = 'foliageCard';
   return geom;
 }
 
@@ -388,6 +446,7 @@ export function crossedQuadsGeo(opts: CrossedQuadsOptions = {}): THREE.BufferGeo
   out.setAttribute('normal', new THREE.BufferAttribute(normals, 3));
   out.setAttribute('uv', new THREE.BufferAttribute(uvs, 2));
   out.setIndex(indices);
+  out.userData['kilnGeometryRole'] = 'foliageCard';
   return out;
 }
 
@@ -962,48 +1021,22 @@ export function createRoofPlanes(
   material: THREE.Material,
   options: RoofPlanesOptions,
 ): { root: THREE.Object3D; slopes: [THREE.Object3D, THREE.Object3D] } {
-  const {
-    width,
-    depth,
-    height,
-    overhang = 0.3,
-    ridgeAxis = 'x',
-    thickness = 0.08,
-    parent,
-  } = options;
-  const group = new THREE.Object3D();
-  group.name = name;
-
-  // Half-span of the slope direction (perpendicular to the ridge) + overhang,
-  // and the ridge-direction length.
-  const halfSpan = (ridgeAxis === 'x' ? width : depth) / 2 + overhang;
-  const ridgeLen = (ridgeAxis === 'x' ? depth : width) + overhang * 2;
-  const rafterLen = Math.hypot(halfSpan, height);
-  const angle = Math.atan2(height, halfSpan);
-
-  const slopes: THREE.Object3D[] = [];
-  for (const side of [1, -1] as const) {
-    const geo =
-      ridgeAxis === 'x'
-        ? boxGeo(ridgeLen, thickness, rafterLen)
-        : boxGeo(rafterLen, thickness, ridgeLen);
-    const mesh = new THREE.Mesh(geo, material);
-    mesh.name = `Mesh_${name}${side > 0 ? 'A' : 'B'}`;
-    if (ridgeAxis === 'x') {
-      // Ridge along X; slopes drop toward +Z (side=+1) / -Z (side=-1).
-      mesh.position.set(0, height / 2, (side * halfSpan) / 2);
-      mesh.rotation.x = side * angle;
-    } else {
-      // Ridge along Z; slopes drop toward +X (side=+1) / -X (side=-1).
-      mesh.position.set((side * halfSpan) / 2, height / 2, 0);
-      mesh.rotation.z = -side * angle;
-    }
-    group.add(mesh);
-    slopes.push(mesh);
+  const result = createRoofPlanesExplicit(name, material, options);
+  result.slopes[0].name = `Mesh_${name}A`;
+  result.slopes[1].name = `Mesh_${name}B`;
+  for (let index = 0; index < result.slopes.length; index++) {
+    const normal = new THREE.Vector3().setFromMatrixColumn(result.faces[index]!.localToRoof, 1);
+    result.slopes[index]!.position.addScaledVector(normal, (options.thickness ?? 0.08) / 2);
   }
-
-  if (parent) parent.add(group);
-  return { root: group, slopes: [slopes[0]!, slopes[1]!] };
+  // Preserve the legacy, opposite-sign X Euler readout for ridge-X callers.
+  // The explicit face frame reverses the negative face's ridge tangent to stay
+  // right-handed, whose equivalent default Euler representation differs by PI.
+  if ((options.ridgeAxis ?? 'x') === 'x') {
+    const halfRun = options.width / 2 + (options.overhang ?? 0.3);
+    const angle = Math.atan2(options.height, halfRun);
+    result.slopes[1].rotation.set(-angle, Math.PI, 0);
+  }
+  return result;
 }
 
 export interface StairsOptions {
@@ -1384,6 +1417,10 @@ export function countTriangles(root: THREE.Object3D): number {
         const position = geometry.getAttribute('position');
         if (position) count += position.count / 3;
       }
+    } else if ((child as { isSprite?: boolean }).isSprite) {
+      // The canonical GLB bridge materializes every Three.js Sprite as one
+      // semantic camera-facing quad.
+      count += 2;
     }
   });
   return Math.floor(count);
@@ -1395,10 +1432,14 @@ export function countMaterials(root: THREE.Object3D): number {
     if ((child as { isMesh?: boolean }).isMesh) {
       const meshChild = child as THREE.Mesh;
       if (Array.isArray(meshChild.material)) {
-        meshChild.material.forEach((m) => materials.add(m));
+        meshChild.material.forEach((material) => {
+          materials.add(material);
+        });
       } else {
         materials.add(meshChild.material);
       }
+    } else if ((child as { isSprite?: boolean }).isSprite) {
+      materials.add((child as THREE.Sprite).material);
     }
   });
   return materials.size;
@@ -1420,7 +1461,7 @@ export function getJointNames(root: THREE.Object3D): string[] {
  */
 export function validateAsset(
   root: THREE.Object3D,
-  category: 'character' | 'prop' | 'vfx' | 'environment' | 'architecture',
+  category: AssetCategory,
 ): { valid: boolean; errors: string[]; warnings: string[] } {
   const errors: string[] = [];
   const warnings: string[] = [];
@@ -1431,6 +1472,8 @@ export function validateAsset(
     vfx: { suggestedTris: 2000, suggestedMats: 4 },
     environment: { suggestedTris: 15000, suggestedMats: 12 },
     architecture: { suggestedTris: 15000, suggestedMats: 12 },
+    vegetation: { suggestedTris: 12000, suggestedMats: 8 },
+    vehicle: { suggestedTris: 20000, suggestedMats: 10 },
   };
 
   const limits = guidelines[category];
@@ -1542,6 +1585,10 @@ export function buildSandboxGlobals(usage?: Record<string, number>): Record<stri
   return {
     createRoot: wrap('createRoot', createRoot),
     createPivot: wrap('createPivot', createPivot),
+    createJointChain: wrap('createJointChain', createJointChain),
+    createVehicleFrame: wrap('createVehicleFrame', createVehicleFrame),
+    createWheelGeometrySet: wrap('createWheelGeometrySet', createWheelGeometrySet),
+    createWheelAssembly: wrap('createWheelAssembly', createWheelAssembly),
     createPart: wrap('createPart', createPart),
     capsuleGeo: wrapGeo('capsuleGeo', capsuleGeo),
     capsuleXGeo: wrapGeo('capsuleXGeo', capsuleXGeo),
@@ -1573,8 +1620,13 @@ export function buildSandboxGlobals(usage?: Record<string, number>): Record<stri
     room: wrap('room', room),
     wallWithOpening: wrap('wallWithOpening', wallWithOpening),
     createRoofPlanes: wrap('createRoofPlanes', createRoofPlanes),
+    createGableRoof: wrap('createGableRoof', createGableRoof),
+    createGableEndPanel: wrap('createGableEndPanel', createGableEndPanel),
+    createGableShell: wrap('createGableShell', createGableShell),
+    createRoofSurfaceLayout: wrap('createRoofSurfaceLayout', createRoofSurfaceLayout),
     createStairs: wrap('createStairs', createStairs),
     gameMaterial: wrap('gameMaterial', gameMaterial),
+    materialRecipe: wrap('materialRecipe', materialRecipe),
     basicMaterial: wrap('basicMaterial', basicMaterial),
     glassMaterial: wrap('glassMaterial', glassMaterial),
     lambertMaterial: wrap('lambertMaterial', lambertMaterial),
@@ -1617,6 +1669,7 @@ export function buildSandboxGlobals(usage?: Record<string, number>): Record<stri
     // Textures + PBR (loadTexture is async)
     loadTexture: wrap('loadTexture', textures.loadTexture),
     pbrMaterial: wrap('pbrMaterial', textures.pbrMaterial),
+    foliageMaterial: wrap('foliageMaterial', textures.foliageMaterial),
     countTriangles: wrap('countTriangles', countTriangles),
     countMaterials: wrap('countMaterials', countMaterials),
     getJointNames: wrap('getJointNames', getJointNames),

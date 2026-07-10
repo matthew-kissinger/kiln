@@ -6,6 +6,7 @@
  * loop (generate.test.ts) does not also stub these helpers.
  */
 import type { Tool } from '@strands-agents/sdk';
+import type { AssetCategory, AssetIntentV1 } from '../contracts';
 
 import {
   makeKilnTools,
@@ -29,6 +30,10 @@ export type RefineMode = 'rewrite' | 'edit';
 export interface ToolBuildOptions {
   existingCode?: string;
   refineMode?: RefineMode;
+  /** Trusted request category captured outside generated source. */
+  category?: AssetCategory;
+  /** Full trusted request intent; authoritative over `category` when present. */
+  intent?: AssetIntentV1;
   /** Live render-candidate sink, wired into the unified surface's kiln_render.
    *  Only the unified surface emits candidates (current/edit surfaces ignore it). */
   onCandidate?: (c: KilnRenderCandidate) => void;
@@ -61,15 +66,24 @@ export function buildAgentTools(
   opts: ToolBuildOptions,
   sinks: AgentSinks,
 ): Tool[] {
+  const trustedContext = {
+    ...(opts.intent ? { intent: opts.intent } : {}),
+    ...(opts.category ? { category: opts.category } : {}),
+  };
   if (surface === 'unified') {
     return makeKilnUnifiedTools({
       ...(opts.existingCode ? { seedCode: opts.existingCode } : {}),
       sink: sinks.unifiedSink,
       ...(opts.onCandidate ? { onCandidate: opts.onCandidate } : {}),
+      ...trustedContext,
     });
   }
   const editMode = Boolean(opts.existingCode) && opts.refineMode === 'edit';
   return editMode
-    ? makeKilnEditTools({ seedCode: opts.existingCode!, sink: sinks.editSink })
-    : makeKilnTools(sinks.sink);
+    ? makeKilnEditTools({
+        seedCode: opts.existingCode!,
+        sink: sinks.editSink,
+        ...trustedContext,
+      })
+    : makeKilnTools(sinks.sink, trustedContext);
 }

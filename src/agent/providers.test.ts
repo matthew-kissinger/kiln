@@ -77,7 +77,13 @@ describe('resolveKilnAgentModel', () => {
 
 describe('makeKilnModel', () => {
   const saved: Record<string, string | undefined> = {};
-  const KEYS = ['GEMINI_API_KEY', 'ANTHROPIC_API_KEY', 'OPENAI_API_KEY', 'OPENROUTER_API_KEY', 'MODEL_API_KEY'];
+  const KEYS = [
+    'GEMINI_API_KEY',
+    'ANTHROPIC_API_KEY',
+    'OPENAI_API_KEY',
+    'OPENROUTER_API_KEY',
+    'MODEL_API_KEY',
+  ];
 
   beforeAll(() => {
     for (const k of KEYS) {

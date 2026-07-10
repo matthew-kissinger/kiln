@@ -15,6 +15,7 @@
  */
 import { WebIO } from '@gltf-transform/core';
 
+import type { AssetCategory, AssetIntentV1 } from '../contracts';
 import type { InstanceabilityGrade, InstanceabilityReport } from '../metrics';
 import { renderGLB } from '../render';
 
@@ -80,9 +81,12 @@ async function listMaterialLabels(glb: Uint8Array): Promise<string[]> {
  * so the refine trigger keys on the grade the asset actually ships with.
  * Deterministic CPU work; never throws.
  */
-export async function assessProgramGrade(code: string): Promise<ProgramGradeAssessment> {
+export async function assessProgramGrade(
+  code: string,
+  opts: { intent?: AssetIntentV1; category?: AssetCategory } = {},
+): Promise<ProgramGradeAssessment> {
   try {
-    const render = await renderGLB(code, { optimize: 'auto' });
+    const render = await renderGLB(code, { optimize: 'auto', ...opts });
     const report = render.meta.instanceability;
     // Metrics computation failing is non-fatal everywhere else — same here: the
     // program is valid, there is just no grade signal to act on.

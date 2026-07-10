@@ -5,6 +5,21 @@ exports[`system prompt embeds the generated catalog api section snapshot (review
 createRoot(name: string)  // Creates the root Object3D for an asset. Call first in build().
 createPivot(name: string, position?: [x, y, z], parent?: Object3D)
   // Creates an empty pivot node for skeletal animation. Name is auto-prefixed with \`Joint_\`.
+createJointChain(name, segments: { role, offset, aliases?, side?, localForwardAxis?, localBendAxis?, endEffector?, contact? }[], opts?: { parent?, parentRole? })
+  // Creates one body-plan-neutral deterministic Joint_* chain with explicit parent edges, rest
+  // frames, local axes, end effectors, contacts, and semantic metadata.
+  // NOTE: Use only the resolved body-plan graph. Offsets are local to the previous joint;
+  // contact end effectors must land at world Y=0.
+createVehicleFrame(name, opts?: { chassis?, axles?, seats?, contacts?, steering?, propulsion?, parent? })
+  // Creates a canonical +X-forward/+Y-up/+Z-right vehicle frame with typed semantic sockets for
+  // chassis, support, steering, and propulsion.
+  // NOTE: Generated vehicles keep +X as front. Boats and other non-wheeled subtypes use
+  // declared support/propulsion sockets, not wheel rules.
+createWheelAssembly(name, { tire, rim, hub? }, { radius, width, side, index, position?, rimRadius?, hubRadius?, steering?, loadBearing?, geometries?, parent? })
+  // Creates one axle-centered wheel pivot containing concentric tire/rim/hub roles, a contact
+  // marker, +Z spin frame, and optional steering pivot.
+  // NOTE: Keep tire, rim, and hub descendants concentric at the axle pivot. Reuse one geometry
+  // set across matching wheels.
 createPart(name, geometry, material, opts?: { position, rotation: [xDeg, yDeg, zDeg], scale, pivot, parent })
   // Creates a mesh, optionally wrapped in a pivot, and attaches it to \`opts.parent\`. \`rotation\`
   // is in DEGREES (like rotationTrack), NOT radians: [0, 0, 90] is a quarter turn; [0, 0, 1.57]
@@ -45,6 +60,26 @@ createRoofPlanes(name, material, { width, depth, height, overhang?, ridgeAxis?: 
   // (e.g. \`Roof\`) the engine can lift to reveal the interior.
   // NOTE: The two slopes must fall AWAY from each other from the ridge — createRoofPlanes does
   // this for you. Drop it onto the walls (position.y = wall height).
+createGableRoof(name, material, { spanX, spanZ, rise?, pitchDegrees?, overhang?, ridgeAxis?: 'x'|'z', thickness?, parent? })
+  // Explicit-axis gable roof using unambiguous footprint spans. Each face owns a rigid frame
+  // with ridge tangent, outward normal, downhill direction, ridge/eave endpoints, dimensions,
+  // and a live local-to-world transform.
+  // NOTE: Prefer this over width/depth roof math. ridgeAxis is the direction of the ridge; roof
+  // panels run along each returned face downhill direction.
+createGableEndPanel(name, material, { span, rise, thickness?, ridgeAxis?: 'x'|'z', side?: 'positive'|'negative', openings?: [{ id?, offset?, bottom?, width, height }], parent? })
+  // Exact thick triangular end closure for a gable roof, with optional rectangular openings cut
+  // from the geometry and semantic boundary metadata.
+createGableShell(name, { wall, roof, floor?, gable? }, { spanX, spanZ, wallHeight?, rise?, pitchDegrees?, overhang?, ridgeAxis?: 'x'|'z', thickness?, wallThickness?, floorThickness?, closedEnds?, enterable?, openings?, gableOpenings?, parent? })
+  // Closed-by-default, correct-by-construction gable building: hollow room, floor, two opposing
+  // roof slopes, two complete gable ends, and a real front doorway when enterable.
+  // NOTE: Use for complete gable buildings. It stamps wall, floor, slope, gable, opening,
+  // adjacency, coverage, and separability semantics for deterministic QA and roof-off views.
+createRoofSurfaceLayout(name, material, { face, kind: 'panels'|'shingles'|'seams'|'corrugations', parent?, panelWidth?, rowHeight?, spacing?, thickness? })
+  // Places roof-local panels, shingles, seams, or corrugations from a returned RoofFaceFrame,
+  // so repeated elements run ridge-to-eave for either ridge axis without manual Euler
+  // rotations.
+  // NOTE: Always pass the face object returned by createGableRoof/createGableShell. Never infer
+  // the panel rotation from world axes.
 createStairs(name, material, { steps?, totalRise, totalRun, width, axis?: 'x'|'z', treadThickness?, riser?, parent? })
   // A straight flight of stairs: box treads (with optional risers) climbing totalRise over
   // totalRun from local origin toward +axis. Use for porch/entry steps or to connect storeys in
@@ -129,17 +164,29 @@ bladeGeo(opts?: { length?: 1.5, baseWidth?: 0.1, thickness?: 0.015, tipLength?: 
 // Materials
 gameMaterial(color, opts?: { metalness, roughness, emissive, emissiveIntensity, flatShading })
   // Flat-shaded PBR material. Default for game-ready low-poly. Use for 95% of parts.
+await materialRecipe(recipeId, overrides?: { baseColor?, roughness?, metalness?, opacity?, alphaCutoff?, doubleSided?, emissiveColor?, emissiveIntensity?, textureResources? })
+  // Resolves a versioned portable
+  // bark/leaf/wood/stone/rubber/painted-metal/cloth/skin/glass/emissive recipe to standard glTF
+  // PBR.
+  // NOTE: Use only listed kiln.material.*.v1 IDs and approved kiln.texture.* resource IDs. Leaf
+  // is MASK, glass is BLEND, and host file paths are forbidden.
 basicMaterial(color, opts?: { transparent, opacity })
   // Unlit flat material. For UI / effects where lighting is baked in.
 glassMaterial(color, opts?: { opacity, roughness, metalness })
   // Semi-transparent double-sided material. Panels need ~0.05 offset to avoid z-fighting.
 lambertMaterial(color, opts?: { flatShading, emissive })
   // Cheaper than gameMaterial. No metalness/roughness. Use when PBR is overkill.
-pbrMaterial({ albedo?, normal?, roughness?, metalness?, emissive?, aoMap? })
-  // Full PBR material. Each slot can be a hex color/scalar or a Texture loaded via loadTexture.
-  // Exports as glTF pbrMetallicRoughness.
+pbrMaterial({ albedo?, normal?, roughness?, metalness?, metallicRoughness?, emissive?, aoMap?, alphaMode?, alphaCutoff?, doubleSided? })
+  // Portable glTF PBR material. Use an explicit packed metallicRoughness texture (G=roughness,
+  // B=metalness); separate data maps are rejected instead of silently dropping a channel.
+  // Supports OPAQUE/MASK/BLEND and double-sided output.
+foliageMaterial(albedo, { alphaCutoff?, roughness?, doubleSided? })
+  // Portable foliage material that defaults to glTF MASK, cutoff 0.5, rough nonmetal, and
+  // double-sided. Use an alpha-bearing albedo texture.
 
 // Instancing (share geometry+material; smaller GLBs)
+createWheelGeometrySet(radius: number, width: number)
+  // Creates one reusable +Z-axle tire/rim/hub geometry set for instanced wheel assemblies.
 cloneGeometry(geo: BufferGeometry)
   // Returns the same geometry reference. Use it as a signal that you are intentionally sharing
   // geometry across multiple parts; gltf-transform dedupes on export.
@@ -228,9 +275,10 @@ panelRemapV(geo, vScale=0.30, vOffset=0, uScale=1, uOffset=0)
   // only the clean strip.
 
 // Textures (loadTexture is async)
-await loadTexture(source: string | Buffer | Uint8Array)
-  // Loads a PNG/JPG/WebP image into a Three.js Texture. Stashes the encoded bytes on
-  // userData.encoded so GLB export is lossless.
+await loadTexture(source, { usage?: 'albedo'|'emissive'|'normal'|'roughness'|'metalness'|'metallicRoughness'|'occlusion', name? })
+  // Loads a PNG/JPG/WebP image with explicit slot usage. Albedo/emissive preview as sRGB;
+  // normal/roughness/metalness/occlusion are linear data. Stashes encoded bytes and QA metadata
+  // for lossless GLB export.
   // NOTE: NEVER texture.clone() a loaded texture (clone() corrupts the encoded bytes and breaks
   // GLB export). Share the same Texture object and remap UVs with panelRemapV on the smaller
   // mesh instead.
@@ -254,7 +302,7 @@ spinAnimation(jointName: string, duration?: 2, axis?: 'x' | 'y' | 'z')
 countTriangles(root: Object3D)  // Sums triangle count across every mesh in the subtree.
 countMaterials(root: Object3D)  // Unique material count (by reference) across the subtree.
 getJointNames(root: Object3D)  // All node names beginning with \`Joint_\`. Use to sanity-check animation targets.
-validateAsset(root: Object3D, category: 'character' | 'prop' | 'vfx' | 'environment')
+validateAsset(root: Object3D, category: 'character' | 'prop' | 'vfx' | 'environment' | 'architecture' | 'vegetation' | 'vehicle')
   // Warns on category-appropriate triangle / material budgets."
 `;
 
@@ -265,6 +313,29 @@ createRoot(name: string)  // Creates the root Object3D for an asset. Call first 
 createPivot(name: string, position?: [x, y, z], parent?: Object3D)
   // Creates an empty pivot node for skeletal animation. Name is auto-prefixed with \`Joint_\`.
   // e.g. const hip = createPivot('Hip', [0, 1, 0], root);
+createJointChain(name, segments: { role, offset, aliases?, side?, localForwardAxis?, localBendAxis?, endEffector?, contact? }[], opts?: { parent?, parentRole? })
+  // Creates one body-plan-neutral deterministic Joint_* chain with explicit parent edges, rest
+  // frames, local axes, end effectors, contacts, and semantic metadata.
+  // NOTE: Use only the resolved body-plan graph. Offsets are local to the previous joint;
+  // contact end effectors must land at world Y=0.
+  // e.g. const leg = createJointChain('LegL', [{ role: 'hip.left', offset: [0, 1, -0.2], side:
+  // 'left' }, { role: 'knee.left', offset: [0, -0.5, 0], side: 'left' }, { role: 'ankle.left',
+  // offset: [0, -0.5, 0], side: 'left', endEffector: true, contact: true }], { parent: root });
+createVehicleFrame(name, opts?: { chassis?, axles?, seats?, contacts?, steering?, propulsion?, parent? })
+  // Creates a canonical +X-forward/+Y-up/+Z-right vehicle frame with typed semantic sockets for
+  // chassis, support, steering, and propulsion.
+  // NOTE: Generated vehicles keep +X as front. Boats and other non-wheeled subtypes use
+  // declared support/propulsion sockets, not wheel rules.
+  // e.g. const frame = createVehicleFrame('CarFrame', { axles: [{ id: 'front', position: [1.2,
+  // 0.45, 0] }, { id: 'rear', position: [-1.2, 0.45, 0] }], parent: root });
+createWheelAssembly(name, { tire, rim, hub? }, { radius, width, side, index, position?, rimRadius?, hubRadius?, steering?, loadBearing?, geometries?, parent? })
+  // Creates one axle-centered wheel pivot containing concentric tire/rim/hub roles, a contact
+  // marker, +Z spin frame, and optional steering pivot.
+  // NOTE: Keep tire, rim, and hub descendants concentric at the axle pivot. Reuse one geometry
+  // set across matching wheels.
+  // e.g. createWheelAssembly('FrontLeft', { tire: rubber, rim: metal }, { radius: 0.45, width:
+  // 0.22, side: 'left', index: 'front', position: [1.2, 0.45, -0.9], steering: true,
+  // geometries: wheelGeo, parent: frame.root });
 createPart(name, geometry, material, opts?: { position, rotation: [xDeg, yDeg, zDeg], scale, pivot, parent })
   // Creates a mesh, optionally wrapped in a pivot, and attaches it to \`opts.parent\`. \`rotation\`
   // is in DEGREES (like rotationTrack), NOT radians: [0, 0, 90] is a quarter turn; [0, 0, 1.57]
@@ -321,6 +392,34 @@ createRoofPlanes(name, material, { width, depth, height, overhang?, ridgeAxis?: 
   // this for you. Drop it onto the walls (position.y = wall height).
   // e.g. const { root: roof } = createRoofPlanes('Roof', shingle, { width: 5, depth: 4, height:
   // 1.6, overhang: 0.4, ridgeAxis: 'x', parent: root }); roof.position.y = 2.8;
+createGableRoof(name, material, { spanX, spanZ, rise?, pitchDegrees?, overhang?, ridgeAxis?: 'x'|'z', thickness?, parent? })
+  // Explicit-axis gable roof using unambiguous footprint spans. Each face owns a rigid frame
+  // with ridge tangent, outward normal, downhill direction, ridge/eave endpoints, dimensions,
+  // and a live local-to-world transform.
+  // NOTE: Prefer this over width/depth roof math. ridgeAxis is the direction of the ridge; roof
+  // panels run along each returned face downhill direction.
+  // e.g. const roof = createGableRoof('Roof', shingles, { spanX: 8, spanZ: 5, pitchDegrees: 35,
+  // overhang: 0.35, ridgeAxis: 'x', parent: root });
+createGableEndPanel(name, material, { span, rise, thickness?, ridgeAxis?: 'x'|'z', side?: 'positive'|'negative', openings?: [{ id?, offset?, bottom?, width, height }], parent? })
+  // Exact thick triangular end closure for a gable roof, with optional rectangular openings cut
+  // from the geometry and semantic boundary metadata.
+  // e.g. createGableEndPanel('FrontGable', siding, { span: 5, rise: 1.8, ridgeAxis: 'x', side:
+  // 'positive', parent: root });
+createGableShell(name, { wall, roof, floor?, gable? }, { spanX, spanZ, wallHeight?, rise?, pitchDegrees?, overhang?, ridgeAxis?: 'x'|'z', thickness?, wallThickness?, floorThickness?, closedEnds?, enterable?, openings?, gableOpenings?, parent? })
+  // Closed-by-default, correct-by-construction gable building: hollow room, floor, two opposing
+  // roof slopes, two complete gable ends, and a real front doorway when enterable.
+  // NOTE: Use for complete gable buildings. It stamps wall, floor, slope, gable, opening,
+  // adjacency, coverage, and separability semantics for deterministic QA and roof-off views.
+  // e.g. const house = createGableShell('House', { wall: plaster, roof: shingles }, { spanX: 8,
+  // spanZ: 5, wallHeight: 2.8, pitchDegrees: 35, ridgeAxis: 'x', parent: root });
+createRoofSurfaceLayout(name, material, { face, kind: 'panels'|'shingles'|'seams'|'corrugations', parent?, panelWidth?, rowHeight?, spacing?, thickness? })
+  // Places roof-local panels, shingles, seams, or corrugations from a returned RoofFaceFrame,
+  // so repeated elements run ridge-to-eave for either ridge axis without manual Euler
+  // rotations.
+  // NOTE: Always pass the face object returned by createGableRoof/createGableShell. Never infer
+  // the panel rotation from world axes.
+  // e.g. for (const face of roof.faces) createRoofSurfaceLayout('Panels_' + face.side, metal, {
+  // face, kind: 'panels', parent: roof.root });
 createStairs(name, material, { steps?, totalRise, totalRun, width, axis?: 'x'|'z', treadThickness?, riser?, parent? })
   // A straight flight of stairs: box treads (with optional risers) climbing totalRise over
   // totalRun from local origin toward +axis. Use for porch/entry steps or to connect storeys in
@@ -408,13 +507,15 @@ decalBox(width: number, height: number, depth?: 0.01)
 foliageCardGeo(opts?: { width?, height?, yPivot?: 0..1 })
   // Single-quad foliage card with a configurable Y pivot. yPivot=0 plants the quad on the
   // ground. Pair with an alpha-tested material and a leaf/plant sprite.
-  // e.g. const quad = foliageCardGeo({ width: 4, height: 6, yPivot: 0 });
-  // createPart('Mesh_Fern', quad, gameMaterial(0x3a6b2e), { parent: root });
+  // e.g. const leaves = await loadTexture('./fern.png', { usage: 'albedo' }); const quad =
+  // foliageCardGeo({ width: 4, height: 6, yPivot: 0 }); createPart('Mesh_Fern', quad,
+  // foliageMaterial(leaves), { parent: root });
 crossedQuadsGeo(opts?: { width?, height?, planes?: 2 | 3, yPivot? })
   // Cross-billboard bush primitive: 2 or 3 planes intersecting along the Y axis. Reads as a
   // dense plant from any angle, cheaper than real geometry.
-  // e.g. const bush = crossedQuadsGeo({ width: 2, height: 2, planes: 3 });
-  // createPart('Mesh_Bush', bush, gameMaterial(0x2f4a1a), { parent: root });
+  // e.g. const leaves = await loadTexture('./bush.png', { usage: 'albedo' }); const bush =
+  // crossedQuadsGeo({ width: 2, height: 2, planes: 3 }); createPart('Mesh_Bush', bush,
+  // foliageMaterial(leaves), { parent: root });
 octaGridPlane({ tilesX, tilesY, width?, height?, yPivot? })
   // Atlas-ready billboard quad. UVs are pre-scaled to cover one tile of a tilesX×tilesY atlas;
   // the consumer shader adds per-instance tile offsets at draw time.
@@ -439,6 +540,13 @@ bladeGeo(opts?: { length?: 1.5, baseWidth?: 0.1, thickness?: 0.015, tipLength?: 
 gameMaterial(color, opts?: { metalness, roughness, emissive, emissiveIntensity, flatShading })
   // Flat-shaded PBR material. Default for game-ready low-poly. Use for 95% of parts.
   // e.g. const mat = gameMaterial(0x8b7355, { roughness: 0.9 });
+await materialRecipe(recipeId, overrides?: { baseColor?, roughness?, metalness?, opacity?, alphaCutoff?, doubleSided?, emissiveColor?, emissiveIntensity?, textureResources? })
+  // Resolves a versioned portable
+  // bark/leaf/wood/stone/rubber/painted-metal/cloth/skin/glass/emissive recipe to standard glTF
+  // PBR.
+  // NOTE: Use only listed kiln.material.*.v1 IDs and approved kiln.texture.* resource IDs. Leaf
+  // is MASK, glass is BLEND, and host file paths are forbidden.
+  // e.g. const bark = await materialRecipe('kiln.material.bark.v1', { baseColor: '#6b4328' });
 basicMaterial(color, opts?: { transparent, opacity })
   // Unlit flat material. For UI / effects where lighting is baked in.
   // e.g. const mat = basicMaterial(0xffffff, { transparent: true, opacity: 0.5 });
@@ -448,13 +556,22 @@ glassMaterial(color, opts?: { opacity, roughness, metalness })
 lambertMaterial(color, opts?: { flatShading, emissive })
   // Cheaper than gameMaterial. No metalness/roughness. Use when PBR is overkill.
   // e.g. const mat = lambertMaterial(0x2a4d14, { flatShading: true });
-pbrMaterial({ albedo?, normal?, roughness?, metalness?, emissive?, aoMap? })
-  // Full PBR material. Each slot can be a hex color/scalar or a Texture loaded via loadTexture.
-  // Exports as glTF pbrMetallicRoughness.
+pbrMaterial({ albedo?, normal?, roughness?, metalness?, metallicRoughness?, emissive?, aoMap?, alphaMode?, alphaCutoff?, doubleSided? })
+  // Portable glTF PBR material. Use an explicit packed metallicRoughness texture (G=roughness,
+  // B=metalness); separate data maps are rejected instead of silently dropping a channel.
+  // Supports OPAQUE/MASK/BLEND and double-sided output.
   // e.g. const wood = await loadTexture('./oak.png'); const crate = pbrMaterial({ albedo: wood,
   // roughness: 0.85, metalness: 0 });
+foliageMaterial(albedo, { alphaCutoff?, roughness?, doubleSided? })
+  // Portable foliage material that defaults to glTF MASK, cutoff 0.5, rough nonmetal, and
+  // double-sided. Use an alpha-bearing albedo texture.
+  // e.g. const leaves = await loadTexture('./leaf.png', { usage: 'albedo' }); const mat =
+  // foliageMaterial(leaves, { alphaCutoff: 0.45 });
 
 // Instancing (share geometry+material; smaller GLBs)
+createWheelGeometrySet(radius: number, width: number)
+  // Creates one reusable +Z-axle tire/rim/hub geometry set for instanced wheel assemblies.
+  // e.g. const wheelGeo = createWheelGeometrySet(0.45, 0.22);
 cloneGeometry(geo: BufferGeometry)
   // Returns the same geometry reference. Use it as a signal that you are intentionally sharing
   // geometry across multiple parts; gltf-transform dedupes on export.
@@ -587,13 +704,14 @@ panelRemapV(geo, vScale=0.30, vOffset=0, uScale=1, uOffset=0)
   // = new THREE.Mesh(cowlGeo, bodyMat); // SAME bodyMat as fuselage, no clone needed
 
 // Textures (loadTexture is async)
-await loadTexture(source: string | Buffer | Uint8Array)
-  // Loads a PNG/JPG/WebP image into a Three.js Texture. Stashes the encoded bytes on
-  // userData.encoded so GLB export is lossless.
+await loadTexture(source, { usage?: 'albedo'|'emissive'|'normal'|'roughness'|'metalness'|'metallicRoughness'|'occlusion', name? })
+  // Loads a PNG/JPG/WebP image with explicit slot usage. Albedo/emissive preview as sRGB;
+  // normal/roughness/metalness/occlusion are linear data. Stashes encoded bytes and QA metadata
+  // for lossless GLB export.
   // NOTE: NEVER texture.clone() a loaded texture (clone() corrupts the encoded bytes and breaks
   // GLB export). Share the same Texture object and remap UVs with panelRemapV on the smaller
   // mesh instead.
-  // e.g. const wood = await loadTexture('./textures/oak-albedo.png');
+  // e.g. const wood = await loadTexture('./textures/oak-albedo.png', { usage: 'albedo' });
 
 // Animation — keyframes use "rotation"/"position"/"scale" keys, NOT "value"
 rotationTrack(jointName: string, keyframes: Array<{ time, rotation: [xDeg, yDeg, zDeg] }>, interp?: 'LINEAR' | 'STEP')
@@ -627,7 +745,7 @@ countMaterials(root: Object3D)  // Unique material count (by reference) across t
   // e.g. const mats = countMaterials(root);
 getJointNames(root: Object3D)  // All node names beginning with \`Joint_\`. Use to sanity-check animation targets.
   // e.g. const joints = getJointNames(root);
-validateAsset(root: Object3D, category: 'character' | 'prop' | 'vfx' | 'environment')
+validateAsset(root: Object3D, category: 'character' | 'prop' | 'vfx' | 'environment' | 'architecture' | 'vegetation' | 'vehicle')
   // Warns on category-appropriate triangle / material budgets.
   // e.g. const v = validateAsset(root, 'prop');"
 `;

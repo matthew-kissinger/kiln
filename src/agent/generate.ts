@@ -14,8 +14,9 @@
  * non-agent `kiln` module must import it lazily (dynamic `import()`), so the
  * `@strands-agents/sdk` dependency never enters the browser/editor bundle graph.
  */
-import { renderGLB, type KilnCodeMeta } from '../render';
-import type { AssetCategory, AssetStyle } from '../prompt';
+import { renderGLB, type KilnCodeMeta, type RenderResult } from '../render';
+import type { AssetStyle } from '../prompt';
+import { createAssetIntentV1, type AssetCategory, type AssetIntentV1 } from '../contracts';
 import { runKilnAgent, type RefineMode, type KilnKnowhow, type KilnInputImage } from './run';
 import {
   makeKilnModel,
@@ -42,6 +43,8 @@ export interface GenerateKilnAssetOptions {
   apiKey?: string;
   /** Asset category (drives prompt framing). Default 'prop'. */
   category?: AssetCategory;
+  /** Full closure-owned intent. Authoritative over category when supplied. */
+  intent?: AssetIntentV1;
   /** Optional style template (low-poly / stylized / voxel / detailed / realistic). */
   style?: AssetStyle;
   /** Ask the model for an animate() function too. Default false (static). */
@@ -94,6 +97,11 @@ export interface GenerateKilnAssetResult {
   diff?: string;
   /** Six-view grid PNG of the final asset (only when `captureViews` was set and the render succeeded). */
   views?: Buffer;
+  /** Automatic trusted character skeleton/motion captures, when applicable. */
+  diagnosticViews?: NonNullable<RenderResult['diagnosticViews']>;
+  materialRecipeApplications?: NonNullable<RenderResult['materialRecipeApplications']>;
+  materialResourceProvenance?: NonNullable<RenderResult['materialResourceProvenance']>;
+  materialMetrics?: NonNullable<RenderResult['materialMetrics']>;
 }
 
 /**
@@ -107,6 +115,7 @@ export interface GenerateKilnAssetResult {
 export async function generateKilnCodeAgent(opts: {
   prompt: string;
   category?: AssetCategory;
+  intent?: AssetIntentV1;
   style?: AssetStyle;
   includeAnimation?: boolean;
   existingCode?: string;
@@ -130,11 +139,13 @@ export async function generateKilnCodeAgent(opts: {
     DEFAULT_KILN_AGENT_MODEL;
   const desc = resolveKilnAgentModel(modelId);
   const model = makeKilnModel(desc);
+  const intent = opts.intent ?? createAssetIntentV1({ category: opts.category ?? 'prop' });
 
   const agent = await runKilnAgent({
     model,
     prompt: opts.prompt,
-    category: opts.category ?? 'prop',
+    category: intent.category,
+    intent,
     includeAnimation: opts.includeAnimation ?? false,
     ...(opts.style ? { style: opts.style } : {}),
     ...(opts.existingCode ? { existingCode: opts.existingCode } : {}),
@@ -172,11 +183,13 @@ export async function generateKilnAsset(
     DEFAULT_KILN_AGENT_MODEL;
   const desc: KilnModelDescriptor = resolveKilnAgentModel(modelId);
   const model = makeKilnModel(desc, opts.apiKey ? { apiKey: opts.apiKey } : {});
+  const intent = opts.intent ?? createAssetIntentV1({ category: opts.category ?? 'prop' });
 
   const agent = await runKilnAgent({
     model,
     prompt: opts.prompt,
-    category: opts.category ?? 'prop',
+    category: intent.category,
+    intent,
     knowhow: opts.knowhow ?? 'inline',
     includeAnimation: opts.includeAnimation ?? false,
     ...(opts.style ? { style: opts.style } : {}),
@@ -195,7 +208,7 @@ export async function generateKilnAsset(
 
   // Grade-aware consolidation by default: lifts material-sprawl heroes from
   // grade C/D/F to A/B, byte-stable on already-lean assets (M1a, plan/05 §3.1).
-  const render = await renderGLB(agent.code, { optimize: 'auto' });
+  const render = await renderGLB(agent.code, { optimize: 'auto', intent });
 
   // Best-effort views artifact: what the vision loop / review UIs show.
   // Never fails the run — a rasterizer error just drops the sidecar.
@@ -222,5 +235,13 @@ export async function generateKilnAsset(
     ...(agent.edits ? { edits: agent.edits } : {}),
     ...(agent.diff ? { diff: agent.diff } : {}),
     ...(views ? { views } : {}),
+    ...(render.diagnosticViews ? { diagnosticViews: render.diagnosticViews } : {}),
+    ...(render.materialRecipeApplications
+      ? { materialRecipeApplications: render.materialRecipeApplications }
+      : {}),
+    ...(render.materialResourceProvenance
+      ? { materialResourceProvenance: render.materialResourceProvenance }
+      : {}),
+    ...(render.materialMetrics ? { materialMetrics: render.materialMetrics } : {}),
   };
 }
