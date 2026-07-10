@@ -7,7 +7,7 @@
  */
 import { createHash } from 'node:crypto';
 
-import { WebIO } from '@gltf-transform/core';
+import { WebIO, type Texture, type TextureInfo } from '@gltf-transform/core';
 import { beforeAll, describe, expect, test } from 'bun:test';
 import sharp from 'sharp';
 import * as THREE from 'three';
@@ -68,6 +68,7 @@ interface ArmMeasurement {
   glbBytes: number;
   glbSha256: string;
   repeatGlbSha256: string;
+  semanticSha256: string;
   byteStable: boolean;
 }
 
@@ -81,6 +82,8 @@ interface UvMeasurement {
   rebakeValidatorWarnings: number;
   initialGlbSha256: string;
   rebakedGlbSha256: string;
+  initialSemanticSha256: string;
+  rebakedSemanticSha256: string;
   texturedMaterials: number;
 }
 
@@ -185,6 +188,269 @@ const sha256 = (value: string | Uint8Array): string =>
 
 function canonicalJson(value: unknown): string {
   return `${JSON.stringify(value, null, 2)}\n`;
+}
+
+const SEMANTIC_NUMBER_SCALE = 1_000_000;
+
+function canonicalNumber(value: number): number {
+  const rounded = Math.round(value * SEMANTIC_NUMBER_SCALE) / SEMANTIC_NUMBER_SCALE;
+  return Object.is(rounded, -0) ? 0 : rounded;
+}
+
+function canonicalValue(value: unknown): unknown {
+  if (typeof value === 'number') return canonicalNumber(value);
+  if (Array.isArray(value)) return value.map(canonicalValue);
+  if (value && typeof value === 'object') {
+    return Object.fromEntries(
+      Object.entries(value as Record<string, unknown>)
+        .sort(([left], [right]) => left.localeCompare(right))
+        .map(([key, entry]) => [key, canonicalValue(entry)]),
+    );
+  }
+  return value;
+}
+
+function canonicalNumericArray(values: ArrayLike<number> | null): number[] | null {
+  return values ? Array.from(values, canonicalNumber) : null;
+}
+
+function refIndex<T extends object>(
+  indices: ReadonlyMap<T, number>,
+  value: T | null,
+): number | null {
+  if (!value) return null;
+  const index = indices.get(value);
+  if (index === undefined)
+    throw new Error('Canonical glTF fingerprint found an unregistered reference.');
+  return index;
+}
+
+function glbJson(bytes: Uint8Array): Record<string, unknown> {
+  if (bytes.byteLength < 20)
+    throw new Error('Canonical glTF fingerprint requires a GLB container.');
+  const view = new DataView(bytes.buffer, bytes.byteOffset, bytes.byteLength);
+  if (view.getUint32(0, true) !== 0x46546c67 || view.getUint32(16, true) !== 0x4e4f534a) {
+    throw new Error('Canonical glTF fingerprint requires a GLB with a JSON first chunk.');
+  }
+  const jsonLength = view.getUint32(12, true);
+  if (20 + jsonLength > bytes.byteLength)
+    throw new Error('Canonical glTF fingerprint found a truncated JSON chunk.');
+  return JSON.parse(
+    new TextDecoder().decode(bytes.subarray(20, 20 + jsonLength)).trimEnd(),
+  ) as Record<string, unknown>;
+}
+
+function assertNoDeclaredExtensions(bytes: Uint8Array): void {
+  const json = glbJson(bytes);
+  const declaration = (key: 'extensionsUsed' | 'extensionsRequired'): string[] => {
+    const value = json[key];
+    if (value === undefined) return [];
+    if (!Array.isArray(value) || value.some((entry) => typeof entry !== 'string')) {
+      throw new Error(`Canonical glTF fingerprint found malformed ${key}.`);
+    }
+    return value;
+  };
+  const nested: string[] = [];
+  const visit = (value: unknown): void => {
+    if (Array.isArray(value)) {
+      for (const entry of value) visit(entry);
+      return;
+    }
+    if (!value || typeof value !== 'object') return;
+    for (const [key, entry] of Object.entries(value as Record<string, unknown>)) {
+      if (key === 'extensions') {
+        if (!entry || typeof entry !== 'object' || Array.isArray(entry)) {
+          throw new Error('Canonical glTF fingerprint found a malformed nested extensions object.');
+        }
+        nested.push(...Object.keys(entry as Record<string, unknown>));
+      }
+      visit(entry);
+    }
+  };
+  visit(json);
+  const names = [
+    ...declaration('extensionsUsed'),
+    ...declaration('extensionsRequired'),
+    ...nested,
+  ].sort();
+  if (names.length) {
+    throw new Error(
+      `Canonical glTF fingerprint does not support extensions: ${[...new Set(names)].join(', ')}`,
+    );
+  }
+}
+
+function glbJsonFixture(json: Record<string, unknown>): Uint8Array {
+  const encoded = new TextEncoder().encode(JSON.stringify(json));
+  const jsonLength = Math.ceil(encoded.byteLength / 4) * 4;
+  const bytes = new Uint8Array(20 + jsonLength);
+  bytes.fill(0x20, 20);
+  bytes.set(encoded, 20);
+  const view = new DataView(bytes.buffer);
+  view.setUint32(0, 0x46546c67, true);
+  view.setUint32(4, 2, true);
+  view.setUint32(8, bytes.byteLength, true);
+  view.setUint32(12, jsonLength, true);
+  view.setUint32(16, 0x4e4f534a, true);
+  return bytes;
+}
+
+/**
+ * Fingerprints decoded glTF meaning rather than container bytes. Raw GLBs remain byte-repeatable
+ * within one runtime (asserted separately), but JSON float formatting and encoded PNG bytes are not
+ * portable identities across libm/image-codec builds. This projection keeps every property used by
+ * the roof gate: hierarchy/TRS/extras, PBR materials, primitive topology/accessors, and decoded
+ * texture pixels. Numbers are quantized below the gate's 1e-5 geometric tolerance.
+ */
+async function canonicalSemanticGlbSha256(bytes: Uint8Array): Promise<string> {
+  assertNoDeclaredExtensions(bytes);
+  const document = await new WebIO().readBinary(bytes);
+  const root = document.getRoot();
+  if (root.listAnimations().length || root.listCameras().length || root.listSkins().length) {
+    throw new Error(
+      'Roof-gate semantic fingerprint must be extended before animated, camera, or skinned fixtures are added.',
+    );
+  }
+
+  const scenes = root.listScenes();
+  const nodes = root.listNodes();
+  const meshes = root.listMeshes();
+  const materials = root.listMaterials();
+  const textures = root.listTextures();
+  const accessors = root.listAccessors();
+  const sceneIndices = new Map(scenes.map((value, index) => [value, index]));
+  const nodeIndices = new Map(nodes.map((value, index) => [value, index]));
+  const meshIndices = new Map(meshes.map((value, index) => [value, index]));
+  const materialIndices = new Map(materials.map((value, index) => [value, index]));
+  const textureIndices = new Map(textures.map((value, index) => [value, index]));
+  const accessorIndices = new Map(accessors.map((value, index) => [value, index]));
+
+  const textureUse = (texture: Texture | null, info: TextureInfo | null) =>
+    texture
+      ? {
+          texture: refIndex(textureIndices, texture),
+          texCoord: info?.getTexCoord() ?? 0,
+          magFilter: info?.getMagFilter() ?? null,
+          minFilter: info?.getMinFilter() ?? null,
+          wrapS: info?.getWrapS() ?? null,
+          wrapT: info?.getWrapT() ?? null,
+        }
+      : null;
+
+  const canonicalTextures = await Promise.all(
+    textures.map(async (texture) => {
+      const image = texture.getImage();
+      if (!image) throw new Error('Canonical glTF fingerprint requires embedded texture bytes.');
+      if (texture.getMimeType() !== 'image/png') {
+        throw new Error(
+          `Canonical glTF fingerprint supports lossless image/png only, not ${texture.getMimeType() || 'unknown'}.`,
+        );
+      }
+      const decoded = await sharp(Buffer.from(image))
+        .ensureAlpha()
+        .raw()
+        .toBuffer({ resolveWithObject: true });
+      return {
+        name: texture.getName(),
+        mimeType: texture.getMimeType(),
+        uri: texture.getURI(),
+        pixels: {
+          width: decoded.info.width,
+          height: decoded.info.height,
+          channels: decoded.info.channels,
+          sha256: sha256(new Uint8Array(decoded.data)),
+        },
+        extras: canonicalValue(texture.getExtras()),
+      };
+    }),
+  );
+
+  const fingerprint = {
+    schemaVersion: 1,
+    defaultScene: refIndex(sceneIndices, root.getDefaultScene()),
+    scenes: scenes.map((scene) => ({
+      name: scene.getName(),
+      children: scene.listChildren().map((node) => refIndex(nodeIndices, node)),
+      extras: canonicalValue(scene.getExtras()),
+    })),
+    nodes: nodes.map((node) => ({
+      name: node.getName(),
+      translation: canonicalNumericArray(node.getTranslation()),
+      rotation: canonicalNumericArray(node.getRotation()),
+      scale: canonicalNumericArray(node.getScale()),
+      weights: canonicalNumericArray(node.getWeights()),
+      children: node.listChildren().map((child) => refIndex(nodeIndices, child)),
+      mesh: refIndex(meshIndices, node.getMesh()),
+      extras: canonicalValue(node.getExtras()),
+    })),
+    meshes: meshes.map((mesh) => ({
+      name: mesh.getName(),
+      weights: canonicalNumericArray(mesh.getWeights()),
+      extras: canonicalValue(mesh.getExtras()),
+      primitives: mesh.listPrimitives().map((primitive) => ({
+        mode: primitive.getMode(),
+        material: refIndex(materialIndices, primitive.getMaterial()),
+        indices: refIndex(accessorIndices, primitive.getIndices()),
+        attributes: primitive
+          .listSemantics()
+          .slice()
+          .sort()
+          .map((semantic) => [
+            semantic,
+            refIndex(accessorIndices, primitive.getAttribute(semantic)),
+          ]),
+        targets: primitive.listTargets().map((target) =>
+          target
+            .listSemantics()
+            .slice()
+            .sort()
+            .map((semantic) => [
+              semantic,
+              refIndex(accessorIndices, target.getAttribute(semantic)),
+            ]),
+        ),
+        extras: canonicalValue(primitive.getExtras()),
+      })),
+    })),
+    materials: materials.map((material) => ({
+      name: material.getName(),
+      baseColorFactor: canonicalNumericArray(material.getBaseColorFactor()),
+      metallicFactor: canonicalNumber(material.getMetallicFactor()),
+      roughnessFactor: canonicalNumber(material.getRoughnessFactor()),
+      emissiveFactor: canonicalNumericArray(material.getEmissiveFactor()),
+      alphaMode: material.getAlphaMode(),
+      alphaCutoff: canonicalNumber(material.getAlphaCutoff()),
+      doubleSided: material.getDoubleSided(),
+      normalScale: canonicalNumber(material.getNormalScale()),
+      occlusionStrength: canonicalNumber(material.getOcclusionStrength()),
+      baseColorTexture: textureUse(
+        material.getBaseColorTexture(),
+        material.getBaseColorTextureInfo(),
+      ),
+      metallicRoughnessTexture: textureUse(
+        material.getMetallicRoughnessTexture(),
+        material.getMetallicRoughnessTextureInfo(),
+      ),
+      normalTexture: textureUse(material.getNormalTexture(), material.getNormalTextureInfo()),
+      occlusionTexture: textureUse(
+        material.getOcclusionTexture(),
+        material.getOcclusionTextureInfo(),
+      ),
+      emissiveTexture: textureUse(material.getEmissiveTexture(), material.getEmissiveTextureInfo()),
+      extras: canonicalValue(material.getExtras()),
+    })),
+    textures: canonicalTextures,
+    accessors: accessors.map((accessor) => ({
+      name: accessor.getName(),
+      type: accessor.getType(),
+      componentType: accessor.getComponentType(),
+      normalized: accessor.getNormalized(),
+      count: accessor.getCount(),
+      values: canonicalNumericArray(accessor.getArray()),
+      extras: canonicalValue(accessor.getExtras()),
+    })),
+  };
+  return sha256(canonicalJson(fingerprint));
 }
 
 function semantic<T extends THREE.Object3D>(
@@ -614,11 +880,14 @@ async function measureRoofArm(spec: RoofGateCase, armName: Arm): Promise<ArmMeas
     glbBytes: first.bytes.byteLength,
     glbSha256: sha256(first.bytes),
     repeatGlbSha256: sha256(repeat.bytes),
+    semanticSha256: await canonicalSemanticGlbSha256(first.bytes),
     byteStable: sha256(first.bytes) === sha256(repeat.bytes),
   };
 }
 
-async function directionalPatternMaterial(): Promise<THREE.MeshStandardMaterial> {
+async function directionalPatternMaterial(
+  compressionLevel = 9,
+): Promise<THREE.MeshStandardMaterial> {
   const width = 2;
   const height = 4;
   const rows = [
@@ -634,7 +903,7 @@ async function directionalPatternMaterial(): Promise<THREE.MeshStandardMaterial>
   const encoded = await sharp(Buffer.from(pixels), {
     raw: { width, height, channels: 4 },
   })
-    .png({ compressionLevel: 9 })
+    .png({ compressionLevel })
     .toBuffer();
   const texture = await loadTexture(new Uint8Array(encoded), {
     usage: 'albedo',
@@ -792,6 +1061,8 @@ async function measureUvCase(
     rebakeValidatorWarnings: rebaked.gltfValidation.issues.numWarnings,
     initialGlbSha256: sha256(initial.bytes),
     rebakedGlbSha256: sha256(rebaked.bytes),
+    initialSemanticSha256: await canonicalSemanticGlbSha256(initial.bytes),
+    rebakedSemanticSha256: await canonicalSemanticGlbSha256(rebaked.bytes),
     texturedMaterials: Math.min(
       initialInspection.texturedMaterials,
       rebakedInspection.texturedMaterials,
@@ -818,6 +1089,53 @@ beforeAll(async () => {
 }, 40_000);
 
 describe('W8 G-ROOF-EXPAND provider-free gate', () => {
+  test('canonical semantic identity ignores codec bytes and sub-tolerance jitter but catches geometry changes', async () => {
+    const makeFixture = async (compressionLevel: number, x: number) => {
+      const root = new THREE.Group();
+      root.name = 'Semantic_Fingerprint_Fixture';
+      root.position.x = x;
+      const mesh = new THREE.Mesh(
+        new THREE.BoxGeometry(2, 1, 3),
+        await directionalPatternMaterial(compressionLevel),
+      );
+      mesh.name = 'Mesh_Semantic_Fingerprint';
+      root.add(mesh);
+      return renderSceneToGLB(root, { optimize: 'off' });
+    };
+    const compact = await makeFixture(9, 0);
+    const fast = await makeFixture(1, 0.0000004);
+    const moved = await makeFixture(9, 0.00002);
+    expect(sha256(compact.bytes)).not.toBe(sha256(fast.bytes));
+    expect(await canonicalSemanticGlbSha256(compact.bytes)).toBe(
+      await canonicalSemanticGlbSha256(fast.bytes),
+    );
+    expect(await canonicalSemanticGlbSha256(compact.bytes)).not.toBe(
+      await canonicalSemanticGlbSha256(moved.bytes),
+    );
+    await expect(
+      canonicalSemanticGlbSha256(
+        glbJsonFixture({
+          asset: { version: '2.0' },
+          extensionsUsed: ['KHR_materials_clearcoat'],
+          materials: [{ extensions: { KHR_materials_clearcoat: { clearcoatFactor: 1 } } }],
+        }),
+      ),
+    ).rejects.toThrow(/KHR_materials_clearcoat/);
+    await expect(
+      canonicalSemanticGlbSha256(
+        glbJsonFixture({ asset: { version: '2.0' }, extensionsUsed: 'KHR_materials_clearcoat' }),
+      ),
+    ).rejects.toThrow(/malformed extensionsUsed/);
+    await expect(
+      canonicalSemanticGlbSha256(
+        glbJsonFixture({
+          asset: { version: '2.0' },
+          materials: [{ extensions: { KHR_materials_clearcoat: { clearcoatFactor: 1 } } }],
+        }),
+      ),
+    ).rejects.toThrow(/KHR_materials_clearcoat/);
+  });
+
   test('fixed shed/hip candidate fixtures do not beat correct freeform controls', () => {
     const baselinePasses = baselineRoof.filter((entry) => entry.structuralPass).length;
     const candidatePasses = candidateRoof.filter((entry) => entry.structuralPass).length;
@@ -870,8 +1188,9 @@ describe('W8 G-ROOF-EXPAND provider-free gate', () => {
 
   test('pins the complete negative gate report', () => {
     const report = {
-      schemaVersion: 1,
+      schemaVersion: 2,
       experimentId: 'kiln.architecture.roof-expansion.provider-free.v1',
+      artifactIdentity: 'kiln.decoded-gltf-semantic.v1',
       providerCalls: 0,
       publicHelperMinimumLift: PUBLIC_HELPER_MINIMUM_LIFT,
       scaffold: {
@@ -895,17 +1214,50 @@ describe('W8 G-ROOF-EXPAND provider-free gate', () => {
       gate: 'closed',
       gateReason:
         'Neither P2 candidate improves the fixed deterministic pass rate over the existing public surface; no public API expansion is justified.',
-      artifactSha256: [...baselineRoof, ...candidateRoof].map((entry) => entry.glbSha256),
-      uvArtifactSha256: uv.flatMap((entry) => [entry.initialGlbSha256, entry.rebakedGlbSha256]),
+      artifactSemanticSha256: [...baselineRoof, ...candidateRoof].map(
+        (entry) => entry.semanticSha256,
+      ),
+      uvArtifactSemanticSha256: uv.flatMap((entry) => [
+        entry.initialSemanticSha256,
+        entry.rebakedSemanticSha256,
+      ]),
     } as const;
-    expect(sha256(canonicalJson(report.artifactSha256))).toBe(
-      'ca879d9107e2e750a7e9e61fba1d8ebc098e6390c774f47c4cddf1e61e7236ea',
+    expect(report.artifactSemanticSha256).toEqual([
+      'a210322f7a1a0073fddb7f7c48b0288442d5ec6b98c33032db72f66d9b740e34',
+      '12e028d767f2d1e19ab64113f952deb6a56367271286911fee7be26ff03c5852',
+      '029687b67413db72ece48fba6c8f85114814afa8c8deebd235ddb25db1b0e6ef',
+      '670872b2b0bd62a0fb355fb61ef268e12a29d15bcf8ca09bcb7f9f1037e20cb9',
+      '600e7c4c1f34d8b728f694eae03ece435c7966729e3b9674593869b7b10473a5',
+      'a4e76914d66511dbad26fd36f46f25691d44c6a1574c0fa0d8faaecb83d19f66',
+      '2577c71fb6f46f27610d3acd686bad4f7611ad02e2a107b90e05e795b4e5958b',
+      '3519cec73addc4dcdc0e6b79950fc9f0b507a4b8f0a33ea781d11be629d6a26b',
+      '6247086fccc059579dbdfc96cb2ccefceed306c8b50ab245c66ba4034b82aa8c',
+      '7fc30d3390625c99294ca0a244938cc68485964bb7c63eb26e49f281fc15dcae',
+      'cc646b14c11a4a4b26de45245d8fa922787dd2c26879992a757b31f523b34bbe',
+      'b87f86e1004c6b6ef7ac266ee94c2e2e996bc1294bade8f3bb3a4ea6aa7d9900',
+      'bba5d72fbe0f52be853dd3c2ad7b3aceb9cbeec3de4aa9a8087a488bac7d59d3',
+      'ecbeb7f9d9244e9b8445b82b1e210975f7575743235be7ce7a7e627e39706b55',
+      '16f536684cdf91f1194cb308495dfc3a25c5254b43c8099f48101043014eaa16',
+      '12b51a2e37c7f81465f8124e8f9079bb61398bb23d1190d24c1559d8e8938a51',
+    ]);
+    expect(report.uvArtifactSemanticSha256).toEqual([
+      'dab3f0f17bda49ed1801b88529a1b221e179b71700d8859b95b19cdcfe2c392b',
+      'd415e2749d00e6ae04711ab3c2306ef4cd67e5b3aacfbda1a689a9955f880829',
+      '76069a8313069ad54c3a5cf45f6879792971dcf0083f06d5f914e0619ac2a873',
+      '140a97a58f0e90d906e2cdf641e3f737b688c63ee936782ee773135620e7792c',
+      '7a3d6847eed2298432b55858b708bd2918bd1e710308d11f45dd784a145ec183',
+      'e691c37018c29c04dae64b0e1e9149cbcb4f8daacba97caab72e5f8bfc617809',
+      '65f2a3b650cad6d3a2547b4f76c39b5f713313f90ade1244783e5e0db97041c8',
+      '7e7c17826e5ccb64eaea56e4192748ecffaac71153ecc0af00db1005cfe35962',
+    ]);
+    expect(sha256(canonicalJson(report.artifactSemanticSha256))).toBe(
+      '820b282c4bf970f2a13e2c83291456e645ef9c0f93d7d11083d07cd3c86112f3',
     );
-    expect(sha256(canonicalJson(report.uvArtifactSha256))).toBe(
-      'b2f1b1f2d950ca0c7c550a18a5aaf6d1e696c9a1938dac682870b44aa47c8300',
+    expect(sha256(canonicalJson(report.uvArtifactSemanticSha256))).toBe(
+      '89f915d17dd4d763cd2681018c01dab6312b77509e6a14c7d36fb67595cae393',
     );
     expect(sha256(canonicalJson(report))).toBe(
-      '782b8ed3bec42c7c4e90eb8d1739d588412a4c3b326adf6a8a44942757f6b559',
+      '6c8faff90464ab635f31b9bac1984d189c98dabc9b6c51ee30370af1c290483f',
     );
   });
 });
