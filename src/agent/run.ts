@@ -34,6 +34,7 @@ import {
   KILN_EDIT_DIRECTIVE_UNIFIED,
 } from '../prompt';
 import type { AssetCategory, AssetStyle } from '../prompt';
+import type { AssetIntentV1 } from '../contracts';
 import type { SubmitSink, EditSink, UnifiedSink, EditRecord, KilnRenderCandidate } from './tools';
 import {
   resolveToolSurface,
@@ -85,6 +86,8 @@ export interface RunKilnAgentOptions {
   prompt: string;
   /** Asset category (drives prompt framing). Default 'prop'. */
   category?: AssetCategory;
+  /** Full closure-owned intent. Authoritative over category when supplied. */
+  intent?: AssetIntentV1;
   /** Optional style template (low-poly / stylized / voxel / detailed / realistic) injected into the user prompt. */
   style?: AssetStyle;
   /** Know-how source: inline system prompt (default) or the kiln-glb skill. */
@@ -201,6 +204,11 @@ export async function runKilnAgent(opts: RunKilnAgentOptions): Promise<RunKilnAg
   const maxSteps = Number(process.env['KILN_AGENT_MAX_STEPS'] ?? 40) || 0;
   const metrics = new MetricsCollector(opts.onEvent, maxSteps);
   const surface = resolveToolSurface(opts.toolSurface);
+  const trustedCategory = opts.intent?.category ?? opts.category ?? 'prop';
+  const gradeAssessmentOptions = {
+    category: trustedCategory,
+    ...(opts.intent ? { intent: opts.intent } : {}),
+  };
   // Edit mode is a `current`-surface concept (the unified surface always uses the
   // buffer factory, regardless of refineMode). Engages only when refining.
   const editMode =
@@ -209,7 +217,11 @@ export async function runKilnAgent(opts: RunKilnAgentOptions): Promise<RunKilnAg
   const editSink: EditSink = { edits: [] };
   const unifiedSink: UnifiedSink = { edits: [] };
   try {
-    const tools: Tool[] = buildAgentTools(surface, opts, { sink, editSink, unifiedSink });
+    const tools: Tool[] = buildAgentTools(
+      surface,
+      { ...opts, category: trustedCategory },
+      { sink, editSink, unifiedSink },
+    );
     const allTools: unknown[] = opts.extraTools ? [...tools, ...opts.extraTools] : tools;
 
     const plugins: Plugin[] = [];
@@ -290,7 +302,8 @@ export async function runKilnAgent(opts: RunKilnAgentOptions): Promise<RunKilnAg
       buildUserPrompt({
         prompt: promptText,
         mode: 'glb',
-        category: opts.category ?? 'prop',
+        category: trustedCategory,
+        ...(opts.intent ? { intent: opts.intent } : {}),
         includeAnimation: opts.includeAnimation ?? false,
         ...(opts.style ? { style: opts.style } : {}),
         ...(opts.existingCode ? { existingCode: opts.existingCode } : {}),
@@ -342,7 +355,9 @@ export async function runKilnAgent(opts: RunKilnAgentOptions): Promise<RunKilnAg
       // it flagged `capped` (an honest best effort); only a cap with nothing
       // renderable stays a hard failure.
       const captured = readSinkCode();
-      const salvage = captured ? await assessProgramGrade(captured) : undefined;
+      const salvage = captured
+        ? await assessProgramGrade(captured, gradeAssessmentOptions)
+        : undefined;
       if (!salvage?.ok) {
         const collected = metrics.readMetrics();
         return {
@@ -362,7 +377,7 @@ export async function runKilnAgent(opts: RunKilnAgentOptions): Promise<RunKilnAg
       // only if its grade actually improves.
       const captured = readSinkCode();
       if (captured && code === captured) {
-        const assess = await assessProgramGrade(captured);
+        const assess = await assessProgramGrade(captured, gradeAssessmentOptions);
         const trigger = {
           mode: 'auto' as const,
           report: assess.report,
@@ -400,7 +415,7 @@ export async function runKilnAgent(opts: RunKilnAgentOptions): Promise<RunKilnAg
             lastText = lastMessageText(refineResult.lastMessage) ?? lastText;
             const refined = readSinkCode();
             if (refined && refined !== captured) {
-              const reassess = await assessProgramGrade(refined);
+              const reassess = await assessProgramGrade(refined, gradeAssessmentOptions);
               if (
                 reassess.ok &&
                 reassess.report &&

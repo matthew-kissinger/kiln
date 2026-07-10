@@ -29,6 +29,7 @@ import {
   stampLabel,
   type DuckClip,
 } from './pose';
+import { hideArchitectureRoofInScene } from './architecture';
 import {
   buildSlotIndex,
   chooseSlot,
@@ -40,8 +41,60 @@ import {
 export { rasterizeView, measureBounds, hideNodeInScene, SIX_VIEWS, coverage } from './raster';
 export type { RasterOptions, ViewSpec } from './raster';
 export { encodePng } from './png';
+export {
+  ARCHITECTURE_ROOF_ROLE_PREFIXES,
+  hasArchitectureRoofRole,
+  hideArchitectureRoofInScene,
+  selectArchitectureRoofNodes,
+} from './architecture';
+export type {
+  ArchitectureRoofSelection,
+  ArchitectureRoofSelectionMode,
+  ArchitectureViewNode,
+} from './architecture';
 export { rasterizeComposedScene, SCENE_VIEWS } from './scene-raster';
 export type { ComposedPart, ComposedSceneRasterResult } from './scene-raster';
+export {
+  GENERIC_DIAGNOSTIC_BUFFER_IDS,
+  GENERIC_DIAGNOSTIC_CAMERAS,
+  GENERIC_DIAGNOSTIC_REQUESTS,
+  planDiagnosticViews,
+  renderDiagnosticView,
+  renderDiagnosticViews,
+} from './diagnostic';
+export {
+  CHARACTER_MOTION_DIAGNOSTIC_PHASES,
+  buildCharacterDiagnosticDescriptor,
+  planCharacterDiagnosticRequests,
+} from './character';
+export type {
+  CharacterDiagnosticDescriptorV1,
+  CharacterDiagnosticEdgeV1,
+  CharacterDiagnosticJointV1,
+  CharacterDiagnosticRequestV1,
+} from './character';
+export {
+  captureVehicleDiagnosticViews,
+  createVehicleDiagnosticOverlay,
+  describeVehicleDiagnostics,
+} from './vehicle';
+export type {
+  VehicleCapturedDiagnosticV1,
+  VehicleDiagnosticAxleV1,
+  VehicleDiagnosticDescriptorV1,
+  VehicleDiagnosticViewV1,
+  VehicleDiagnosticWheelV1,
+} from './vehicle';
+export type {
+  CategoryDiagnosticVariant,
+  DiagnosticCameraSpec,
+  DiagnosticOverlayRegion,
+  DiagnosticRenderOptions,
+  DiagnosticViewFrame,
+  DiagnosticViewPlanV1,
+  DiagnosticViewRequest,
+  GenericDiagnosticBufferId,
+} from './diagnostic';
 export {
   prepareClip,
   poseSceneAtTime,
@@ -484,8 +537,12 @@ export async function renderInteriorGrid(
   const size = opts.size ?? 256;
   const labelScale = Math.max(2, Math.round(size / 80));
 
-  // Lift the roof once — persists for every cell.
-  const roofsHidden = hideNodeInScene(root, opts.nodeName ?? 'Roof');
+  // Lift the roof once — persists for every cell. Explicit nodeName remains an
+  // opt-in compatibility override; ordinary architecture views are semantic
+  // first with a narrow historical-name fallback.
+  const roofsHidden = opts.nodeName
+    ? hideNodeInScene(root, opts.nodeName)
+    : hideArchitectureRoofInScene(root).nodes.length;
 
   let wallsHidden = 0;
   const cells: Uint8Array[] = [];

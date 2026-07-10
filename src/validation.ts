@@ -165,6 +165,7 @@ const CATEGORY_TRI_BUDGETS: Record<string, number> = {
   prop: 25000,
   vfx: 15000,
   environment: 120000,
+  vegetation: 40000,
   vehicle: 40000,
   weapon: 20000,
   building: 60000,

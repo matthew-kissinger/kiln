@@ -21,10 +21,12 @@ import { tool, ImageBlock, JsonBlock, type Tool, type JSONValue } from '@strands
 import { z } from 'zod';
 
 import {
-  kilnToolRegistry,
-  kilnRenderViewsDef,
-  kilnScreenshotAnimationDef,
-  kilnViewInteriorDef,
+  createKilnToolRegistry,
+  createKilnRenderViewsDef,
+  createKilnScreenshotAnimationDef,
+  createKilnViewInteriorDef,
+  type KilnToolContext,
+  type KilnToolDef,
 } from '../tools/registry';
 
 /** Name of the terminal tool the agent calls to record its final program. */
@@ -57,7 +59,7 @@ const submitInput = z.object({
  * tool-result coercion passes block arrays through as-is — so it is cast past
  * JSONValue.
  */
-function toCallbackResult(def: (typeof kilnToolRegistry)[number], output: unknown): JSONValue {
+function toCallbackResult(def: KilnToolDef, output: unknown): JSONValue {
   const multi = def.mediaMulti?.(output);
   if (multi) {
     return [
@@ -92,16 +94,16 @@ const animationBufferInput = z.object({
 /** Build a buffer-aware kiln_screenshot_animation tool that runs against `getCode()`
  *  (the working buffer) instead of a `code` argument. Same behavior as the registry
  *  def otherwise; image transports attach the frame(s) via toCallbackResult. */
-function makeBufferAnimationTool(getCode: () => string): Tool {
+function makeBufferAnimationTool(getCode: () => string, def: KilnToolDef): Tool {
   return tool({
-    name: kilnScreenshotAnimationDef.name,
-    description: `${kilnScreenshotAnimationDef.description} Operates on your current working buffer (omit code).`,
+    name: def.name,
+    description: `${def.description} Operates on your current working buffer (omit code).`,
     inputSchema: animationBufferInput,
     callback: async (input) => {
       const i = input as { clip: string; camera?: string; perFrame?: boolean };
       return toCallbackResult(
-        kilnScreenshotAnimationDef,
-        await kilnScreenshotAnimationDef.run({
+        def,
+        await def.run({
           code: getCode(),
           clip: i.clip,
           ...(i.camera ? { camera: i.camera } : {}),
@@ -112,7 +114,7 @@ function makeBufferAnimationTool(getCode: () => string): Tool {
   });
 }
 
-function toStrandsTool(def: (typeof kilnToolRegistry)[number]): Tool {
+function toStrandsTool(def: KilnToolDef): Tool {
   return tool({
     name: def.name,
     description: def.description,
@@ -128,11 +130,11 @@ function toStrandsTool(def: (typeof kilnToolRegistry)[number]): Tool {
  *
  * @param sink - Receives the submitted final code. Read `sink.code` after invoke.
  */
-export function makeKilnTools(sink: SubmitSink): Tool[] {
-  const kilnTools = kilnToolRegistry.map(toStrandsTool);
+export function makeKilnTools(sink: SubmitSink, context: KilnToolContext = {}): Tool[] {
+  const kilnTools = createKilnToolRegistry(context).map(toStrandsTool);
   // kiln_screenshot_animation rides alongside the four registry tools (it takes a
   // `code` arg like them) so a from-scratch animated build can SEE its motion.
-  const animationTool = toStrandsTool(kilnScreenshotAnimationDef);
+  const animationTool = toStrandsTool(createKilnScreenshotAnimationDef(context));
   const submitTool: Tool = tool({
     name: KILN_SUBMIT_TOOL_NAME,
     description:
@@ -323,12 +325,16 @@ const submitEditInput = z.object({
  * `sink.edits`; `sink.code` tracks the latest buffer (so an un-submitted run
  * still captures the edits).
  */
-export function makeKilnEditTools(opts: { seedCode: string; sink: EditSink }): Tool[] {
+export function makeKilnEditTools(
+  opts: { seedCode: string; sink: EditSink } & KilnToolContext,
+): Tool[] {
   const buffer = new KilnDraftBuffer(opts.seedCode);
   opts.sink.edits = buffer.edits; // share the live trace
+  const registry = createKilnToolRegistry(opts);
+  const animationDef = createKilnScreenshotAnimationDef(opts);
 
-  const find = (name: string): (typeof kilnToolRegistry)[number] => {
-    const def = kilnToolRegistry.find((d) => d.name === name);
+  const find = (name: string): KilnToolDef => {
+    const def = registry.find((d) => d.name === name);
     if (!def) throw new Error(`makeKilnEditTools: missing registry tool ${name}`);
     return def;
   };
@@ -395,7 +401,7 @@ export function makeKilnEditTools(opts: { seedCode: string; sink: EditSink }): T
 
   // Buffer-aware motion view: a refine that touches an animated character can SEE
   // the clip move and confirm the edit didn't break it.
-  const animationTool = makeBufferAnimationTool(() => buffer.code);
+  const animationTool = makeBufferAnimationTool(() => buffer.code, animationDef);
 
   const submitTool: Tool = tool({
     name: KILN_SUBMIT_TOOL_NAME,
@@ -492,19 +498,25 @@ const draftInput = z.object({
  * every draft/edit (so an un-finalized run still captures the work). `kiln_edit`
  * failures point at `kiln_draft` as the always-reliable rewrite escape hatch.
  */
-export function makeKilnUnifiedTools(opts: {
-  seedCode?: string;
-  sink: UnifiedSink;
-  /** Best-effort sink for live render candidates (one per successful kiln_render).
-   *  Lets the host surface a filmstrip of intermediate renders + pick a version.
-   *  Never affects the agent's view; sink errors are swallowed. */
-  onCandidate?: (c: KilnRenderCandidate) => void;
-}): Tool[] {
+export function makeKilnUnifiedTools(
+  opts: {
+    seedCode?: string;
+    sink: UnifiedSink;
+    /** Best-effort sink for live render candidates (one per successful kiln_render).
+     *  Lets the host surface a filmstrip of intermediate renders + pick a version.
+     *  Never affects the agent's view; sink errors are swallowed. */
+    onCandidate?: (c: KilnRenderCandidate) => void;
+  } & KilnToolContext,
+): Tool[] {
   const buffer = new KilnDraftBuffer(opts.seedCode ?? '');
   opts.sink.edits = buffer.edits; // share the live trace
 
-  const validateDef = kilnToolRegistry.find((d) => d.name === 'kiln_validate');
+  const registry = createKilnToolRegistry(opts);
+  const validateDef = registry.find((d) => d.name === 'kiln_validate');
   if (!validateDef) throw new Error('makeKilnUnifiedTools: missing registry tool kiln_validate');
+  const renderViewsDef = createKilnRenderViewsDef(opts);
+  const animationDef = createKilnScreenshotAnimationDef(opts);
+  const interiorDef = createKilnViewInteriorDef(opts);
 
   const draftTool: Tool = tool({
     name: 'kiln_draft',
@@ -564,11 +576,10 @@ export function makeKilnUnifiedTools(opts: {
 
   const renderTool: Tool = tool({
     name: 'kiln_render',
-    description:
-      kilnRenderViewsDef.description + ' Operates on your current working buffer (no argument).',
+    description: `${renderViewsDef.description} Operates on your current working buffer (no argument).`,
     inputSchema: viewInput,
     callback: async () => {
-      const out = await kilnRenderViewsDef.run({ code: buffer.code });
+      const out = await renderViewsDef.run({ code: buffer.code });
       // Out-of-band: surface a SUCCESSFUL render as a live candidate (the working
       // buffer + the six-view image the agent just saw). Best-effort; a build
       // failure is image-free and not a candidate. Never changes the agent's view.
@@ -586,30 +597,29 @@ export function makeKilnUnifiedTools(opts: {
           }
         }
       }
-      return toCallbackResult(kilnRenderViewsDef, out);
+      return toCallbackResult(renderViewsDef, out);
     },
   });
 
   // Buffer-aware motion view: after drafting/editing an animated character, SEE a
   // clip move (sideways walk, reverse knee, backward swing, item not tracking).
-  const animationTool = makeBufferAnimationTool(() => buffer.code);
+  const animationTool = makeBufferAnimationTool(() => buffer.code, animationDef);
 
   // Buffer-aware interior view: after drafting/editing a BUILDING, SEE inside it
   // (roof off — open floor, real doorway gap, fixtures grounded, nothing buried).
   const interiorTool: Tool = tool({
     name: 'kiln_view_interior',
-    description:
-      kilnViewInteriorDef.description + ' Operates on your current working buffer (omit code).',
+    description: `${interiorDef.description} Operates on your current working buffer (omit code).`,
     inputSchema: z.object({
       nodeName: z.string().optional().describe('The roof part to lift, by name (default "Roof").'),
     }),
     callback: async (input) => {
       const n = (input as { nodeName?: string }).nodeName;
-      const out = await kilnViewInteriorDef.run({
+      const out = await interiorDef.run({
         code: buffer.code,
         ...(n ? { nodeName: n } : {}),
       });
-      return toCallbackResult(kilnViewInteriorDef, out);
+      return toCallbackResult(interiorDef, out);
     },
   });
 
