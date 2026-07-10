@@ -193,6 +193,9 @@ function canonicalJson(value: unknown): string {
 const SEMANTIC_NUMBER_SCALE = 1_000_000;
 
 function canonicalNumber(value: number): number {
+  if (!Number.isFinite(value)) {
+    throw new Error('Canonical glTF fingerprint rejects non-finite numeric values.');
+  }
   const rounded = Math.round(value * SEMANTIC_NUMBER_SCALE) / SEMANTIC_NUMBER_SCALE;
   return Object.is(rounded, -0) ? 0 : rounded;
 }
@@ -1090,6 +1093,8 @@ beforeAll(async () => {
 
 describe('W8 G-ROOF-EXPAND provider-free gate', () => {
   test('canonical semantic identity ignores codec bytes and sub-tolerance jitter but catches geometry changes', async () => {
+    expect(() => canonicalNumber(Number.NaN)).toThrow(/non-finite/);
+    expect(() => canonicalNumber(Number.POSITIVE_INFINITY)).toThrow(/non-finite/);
     const makeFixture = async (compressionLevel: number, x: number) => {
       const root = new THREE.Group();
       root.name = 'Semantic_Fingerprint_Fixture';
