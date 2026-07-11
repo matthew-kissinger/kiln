@@ -21,6 +21,40 @@ import type { LanguageModelV3 } from '@ai-sdk/provider';
 
 import { ensureStreamStart } from './stream-start';
 
+/** OpenRouter's unified reasoning control (@openrouter/ai-sdk-provider chat setting):
+ *  an effort keyword or a hard reasoning-token budget. Passed straight through to
+ *  the provider, which translates per upstream vendor (Anthropic adaptive thinking,
+ *  OpenAI reasoning_effort, ...). */
+export type OpenRouterReasoning =
+  | { effort: 'xhigh' | 'high' | 'medium' | 'low' | 'minimal' | 'none' }
+  | { max_tokens: number };
+
+const OPENROUTER_EFFORTS = new Set(['xhigh', 'high', 'medium', 'low', 'minimal', 'none']);
+
+/**
+ * Map the Kiln descriptor `thinking` control onto OpenRouter's reasoning setting.
+ * Keywords pass through ('max' — an Anthropic-vocabulary level OpenRouter's type
+ * doesn't carry — maps to 'xhigh'); positive numbers become a reasoning token
+ * budget (floored to 1024, matching the Anthropic legacy floor). Unset / 0 / ''
+ * or an unknown keyword → undefined (send nothing; the OpenRouter/upstream
+ * default applies — which for Claude Opus 4.8 means reasoning OFF, same as the
+ * native path).
+ */
+export function resolveOpenRouterReasoning(
+  thinking?: string | number,
+): OpenRouterReasoning | undefined {
+  if (thinking == null || thinking === '' || thinking === 0) return undefined;
+  if (typeof thinking === 'number') {
+    if (!Number.isFinite(thinking) || thinking <= 0) return undefined;
+    return { max_tokens: Math.max(1024, Math.floor(thinking)) };
+  }
+  const raw = thinking.trim().toLowerCase();
+  if (/^\d+$/.test(raw)) return resolveOpenRouterReasoning(Number.parseInt(raw, 10));
+  const effort = raw === 'max' ? 'xhigh' : raw;
+  if (!OPENROUTER_EFFORTS.has(effort)) return undefined;
+  return { effort: effort as Extract<OpenRouterReasoning, { effort: string }>['effort'] };
+}
+
 export interface OpenRouterModelOptions {
   /** OpenRouter model id, e.g. 'x-ai/grok-4.3'. */
   modelId: string;
@@ -28,6 +62,8 @@ export interface OpenRouterModelOptions {
   apiKey?: string;
   /** Max output tokens. */
   maxTokens?: number;
+  /** Unified reasoning control (effort keyword or token budget). */
+  reasoning?: OpenRouterReasoning;
 }
 
 /**
@@ -36,7 +72,12 @@ export interface OpenRouterModelOptions {
  */
 export function makeOpenRouterModel(opts: OpenRouterModelOptions): Model {
   const openrouter = createOpenRouter({ apiKey: opts.apiKey ?? process.env['OPENROUTER_API_KEY'] });
-  const provider = ensureStreamStart(openrouter.chat(opts.modelId) as LanguageModelV3);
+  const provider = ensureStreamStart(
+    openrouter.chat(
+      opts.modelId,
+      opts.reasoning ? { reasoning: opts.reasoning } : {},
+    ) as LanguageModelV3,
+  );
   return new VercelModel({
     provider,
     ...(opts.maxTokens != null ? { maxTokens: opts.maxTokens } : {}),
@@ -51,7 +92,13 @@ export function makeOpenRouterModel(opts: OpenRouterModelOptions): Model {
 // =============================================================================
 
 /** Strands-native provider vocabulary for the Kiln agent loop. */
-export type KilnAgentProvider = 'anthropic' | 'openai' | 'google' | 'bedrock' | 'openrouter' | 'meta';
+export type KilnAgentProvider =
+  | 'anthropic'
+  | 'openai'
+  | 'google'
+  | 'bedrock'
+  | 'openrouter'
+  | 'meta';
 
 /**
  * Minimal model descriptor `makeKilnModel` needs. Structurally compatible with
@@ -65,7 +112,10 @@ export interface KilnModelDescriptor {
   /** Output-token budget; applied to anthropic/openai/bedrock (GoogleModel uses its own default). */
   maxTokens?: number;
   /**
-   * Anthropic thinking control (anthropic provider only; others ignore it).
+   * Reasoning/thinking control. Honored by the `anthropic` provider (shapes
+   * below) and by `openrouter` (mapped onto OpenRouter's unified `reasoning`
+   * setting via {@link resolveOpenRouterReasoning} — so OpenRouter-hosted Claude
+   * twins behave like the native transport). Other providers ignore it.
    *
    * - Effort keyword (`'low' | 'medium' | 'high'`, passed through verbatim) →
    *   `thinking: {type:'adaptive'}` + `output_config: {effort}` — the
@@ -114,7 +164,11 @@ function metaApiKey(opts: MakeKilnModelOptions): string | undefined {
  * send nothing and take the API default.
  */
 function isAnthropicAdaptiveOnlyModel(model: string): boolean {
-  return /^claude-sonnet-5(?:-|$)/.test(model);
+  // Every model that REJECTS the legacy `thinking: {type:'enabled', budget_tokens}`
+  // shape with a 400: Sonnet 5, Fable 5 / Mythos 5 (thinking always-on; verified
+  // live 2026-06-11), and Opus 4.7/4.8 (budget_tokens removed — Anthropic migration
+  // guide). Pre-adaptive models (Sonnet/Haiku 4.5 and older) still take the number.
+  return /^claude-(sonnet-5|fable-5|mythos-5|opus-4-[78])(?:-|$)/.test(model);
 }
 
 function resolveAnthropicThinking(
@@ -187,7 +241,9 @@ export function makeKilnModel(desc: KilnModelDescriptor, opts: MakeKilnModelOpti
     case 'meta': {
       const apiKey = metaApiKey(opts);
       if (!apiKey) {
-        throw new Error('Meta Model API key is required. Set MODEL_API_KEY, META_MODEL_API_KEY, or META_API_KEY.');
+        throw new Error(
+          'Meta Model API key is required. Set MODEL_API_KEY, META_MODEL_API_KEY, or META_API_KEY.',
+        );
       }
       return new OpenAIModel({
         modelId: desc.model,
@@ -200,12 +256,19 @@ export function makeKilnModel(desc: KilnModelDescriptor, opts: MakeKilnModelOpti
         ...(maxTokens != null ? { maxTokens } : {}),
       });
     }
-    case 'openrouter':
+    case 'openrouter': {
+      // The same descriptor `thinking` control the anthropic case honors, mapped
+      // onto OpenRouter's unified reasoning setting — so an OpenRouter-hosted
+      // Claude (e.g. anthropic/claude-opus-4.8) gets its thinking turned on just
+      // like the native transport would.
+      const reasoning = resolveOpenRouterReasoning(desc.thinking);
       return makeOpenRouterModel({
         modelId: desc.model,
         ...(opts.apiKey ? { apiKey: opts.apiKey } : {}),
         ...(maxTokens != null ? { maxTokens } : {}),
+        ...(reasoning ? { reasoning } : {}),
       });
+    }
     default: {
       const exhaustive: never = desc.provider;
       throw new Error(`Unsupported Kiln agent provider: ${String(exhaustive)}`);
