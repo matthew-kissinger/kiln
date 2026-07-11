@@ -137,7 +137,8 @@ describe('renderGLB animation track bridging', () => {
 const meta = { name: 'PosTrack' };
 function build() {
   const root = createRoot('PosTrack');
-  createPivot('Body', [0, 0, 0], root);
+  const body = createPivot('Body', [0, 0, 0], root);
+  createPart('BodyMesh', boxGeo(0.2, 0.2, 0.2), gameMaterial(0x888888), { parent: body });
   return root;
 }
 function animate() {
@@ -165,7 +166,8 @@ function animate() {
 const meta = { name: 'ScaleTrack' };
 function build() {
   const root = createRoot('ScaleTrack');
-  createPivot('Body', [0, 0, 0], root);
+  const body = createPivot('Body', [0, 0, 0], root);
+  createPart('BodyMesh', boxGeo(0.2, 0.2, 0.2), gameMaterial(0x888888), { parent: body });
   return root;
 }
 function animate() {
@@ -191,7 +193,8 @@ function animate() {
 const meta = { name: 'Missing' };
 function build() {
   const root = createRoot('Missing');
-  createPivot('Body', [0, 0, 0], root);
+  const body = createPivot('Body', [0, 0, 0], root);
+  createPart('BodyMesh', boxGeo(0.2, 0.2, 0.2), gameMaterial(0x888888), { parent: body });
   return root;
 }
 function animate() {

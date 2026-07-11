@@ -6,8 +6,14 @@
 import { describe, expect, test } from 'bun:test';
 import * as THREE from 'three';
 import { buildSandboxGlobals, snapTo } from '../primitives';
-import { executeKilnCode, inspectSceneStructure, settleContacts } from '../render';
+import {
+  executeKilnCode,
+  inspectSceneStructure,
+  renderSceneToGLB,
+  settleContacts,
+} from '../render';
 import { validate } from '../validation';
+import { createAssetIntentV1 } from '../contracts';
 
 const FLOATER_CODE = `
 const meta = { name: 'floaty', category: 'prop' };
@@ -91,6 +97,43 @@ describe('orientation advisory', () => {
     expect(w2.some((w) => w.includes('Orientation'))).toBe(false);
     // No category → no orientation check at all.
     expect(inspectSceneStructure(sideways.root).some((w) => w.includes('Orientation'))).toBe(false);
+  });
+
+  test('intent-only render uses the trusted vehicle profile for inspection and runtime cost', async () => {
+    const sideways = await executeKilnCode(`
+      const meta = { name: 'sideways', category: 'prop' };
+      function build() {
+        const root = createRoot('Root');
+        const frame = createVehicleFrame('VehicleFrame', {
+          axles: [{ id: 'front', position: [0.3, 0.35, 0] }, { id: 'rear', position: [-0.3, 0.35, 0] }],
+          parent: root,
+        });
+        createPart('Mesh_Hull', boxGeo(0.8, 0.5, 3.0), gameMaterial('#445544'), { parent: frame.root, position: [0, 0.5, 0] });
+        const rubber = gameMaterial('#111111', { roughness: 0.95 });
+        const metal = gameMaterial('#888888', { metalness: 0.8 });
+        const geometries = createWheelGeometrySet(0.35, 0.18);
+        for (const [index, x] of [['front', 0.3], ['rear', -0.3]]) {
+          for (const [side, z] of [['left', -1.6], ['right', 1.6]]) {
+            createWheelAssembly(index + side, { tire: rubber, rim: metal }, {
+              radius: 0.35, width: 0.18, side, index,
+              position: [x, 0.35, z], steering: index === 'front', geometries, parent: frame.root,
+            });
+          }
+        }
+        return root;
+      }
+    `);
+    const rendered = await renderSceneToGLB(sideways.root, {
+      intent: createAssetIntentV1({ category: 'vehicle' }),
+    });
+
+    expect(rendered.warnings.some((warning) => warning.includes('Orientation'))).toBe(true);
+    expect(rendered.qaReport.category).toBe('vehicle');
+    expect(rendered.qaReport.dimensions.runtimeCost.status).toBe('pass');
+    expect(rendered.qaReport.dimensions.runtimeCost.metrics?.['instanceabilityGrade']).toBe(
+      rendered.instanceability?.grade,
+    );
+    expect(rendered.qaReport.dimensions.exportIntegrity.metrics?.['gltfErrors']).toBe(0);
   });
 });
 

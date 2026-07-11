@@ -17,9 +17,17 @@
 
 import { listPrimitives } from './list-primitives';
 import { renderApiSection } from './prompt-api';
+import { KILN_ASSET_FRAME, type AssetCategory, type AssetIntentV1 } from './contracts';
+import { characterBodyPlanRecipe } from './character';
+import { MATERIAL_RECIPE_PROMPT_CONTEXT_V1 } from './material-recipe-prompt';
+import { vegetationSubtypePromptContext } from './vegetation-prompt';
+import { vehicleSubtypeRecipe } from './vehicle';
+import { renderAssetScopePrompt, renderVfxBreadthPrompt } from './breadth-prompt';
+import { buildPropEnvironmentSemanticGuidance } from './qa/prop-environment-prompt';
+
+export type { AssetCategory } from './contracts';
 
 export type RenderMode = 'glb' | 'tsl' | 'both';
-export type AssetCategory = 'character' | 'prop' | 'vfx' | 'environment' | 'architecture';
 export type AssetStyle = 'low-poly' | 'stylized' | 'voxel' | 'detailed' | 'realistic';
 
 // =============================================================================
@@ -110,10 +118,10 @@ function animate(root) {         // optional
 
 export const KILN_COORDINATE_CONTRACT = `<coordinate-contract>
 World coordinates are strict:
-- +X = forward / nose / muzzle direction
-- +Y = up
-- +Z = asset right side
-- Ground rests at Y=0
+- ${KILN_ASSET_FRAME.forward} = forward / nose / muzzle direction
+- ${KILN_ASSET_FRAME.up} = up
+- ${KILN_ASSET_FRAME.right} = asset right side
+- Ground rests at Y=${KILN_ASSET_FRAME.groundY}
 
 Vehicles, aircraft, weapons, boats, and buildings must follow this frame. If a
 part points forward, build it along +X. If a part spans left/right, build it
@@ -782,6 +790,8 @@ export interface KilnGenerateRequest {
   prompt: string;
   mode: RenderMode;
   category: AssetCategory;
+  /** Closure-owned normalized intent; used only for resolved, category-specific guidance. */
+  intent?: AssetIntentV1;
   style?: AssetStyle;
   budget?: AssetBudget;
   includeAnimation?: boolean;
@@ -812,32 +822,96 @@ export interface KilnGenerateRequest {
  * Keep the two maps disjoint by category so a directive is injected exactly
  * once: studio owns `character`; core owns `architecture`.
  */
-export const ARCHITECTURE_CONTEXT =
-  'This is a BUILDING the player can go INSIDE. Build it HOLLOW: thin walls enclosing real ' +
-  'interior space with a floor — never a solid block. Its foundation rests flat on the ground, ' +
-  'and the main entrance faces forward so the front reads clearly.\n\n' +
-  'Give it true human architectural scale: a doorway tall and wide enough for a person to walk ' +
-  'through, windows at standing height, and a ceiling high enough to stand under with headroom. ' +
-  "The building's mass should dwarf a single doorway.\n\n" +
-  'Cut REAL openings into the walls — a doorway is an actual gap you could pass through, not a ' +
-  'panel painted on a wall; windows are inset panes or holes flush with the wall surface. Never ' +
-  'float a pane in front of a wall or bury glass inside a solid block, and never seal the entrance.\n\n' +
-  'Walls meet squarely at the corners with no gaps; give large coplanar surfaces a hair of ' +
-  'separation so they do not flicker. Cap it with a roof that matches the footprint and overhangs ' +
-  "slightly at the eaves; a pitched roof's two sides slope DOWN-AND-OUTWARD from one ridge line — " +
-  'they fall away from each other, never tilt the same way. Name the roof group exactly `Roof` (its ' +
-  'own part) so the engine — and the interior view — can lift it to reveal the inside.\n\n' +
-  'Spend detail where a building reads: the roofline and eaves, a framed door, window sills or ' +
-  'mullions, a chimney, a porch or entry overhang, a foundation course, corner posts, trim — and ' +
-  'built-in fixtures (a hearth, a counter, shelving). Leave the floor space open for furniture to ' +
-  'be placed later.\n\n' +
-  'Use room(...) to build the hollow walled-and-floored shell with its doorway, wallWithOpening(...) ' +
-  'for extra doors or windows, and createRoofPlanes(...) for the pitched roof; createStairs(...) ' +
-  'makes porch steps or connects floors.\n\n' +
-  'Before you finalize, call kiln_view_interior and check the roof-off views: the interior is open ' +
-  'and walkable (no solid fill, no interior wall left buried in a mass), the doorway is a real gap ' +
-  'you could pass through, and any built-in fixtures rest on the floor. Fix anything sealed, buried, ' +
-  'or floating, then view the interior again.';
+/** Complete executable architecture programs embedded only in fresh architecture requests. */
+export const ARCHITECTURE_RIDGE_X_SCAFFOLD = `const meta = { name: 'RidgeXHouse', category: 'architecture' };
+function build() {
+  const root = createRoot('RidgeXHouse');
+  const wall = gameMaterial(0xd8c4a0, { roughness: 0.9 });
+  const roof = gameMaterial(0x7a3e35, { roughness: 0.82 });
+  const shell = createGableShell('House', { wall, roof }, {
+    spanX: 8, spanZ: 6, wallHeight: 3, rise: 1.6, overhang: 0.4,
+    ridgeAxis: 'x', closedEnds: true, enterable: true, parent: root,
+    openings: [{ id: 'front-door', wall: 'front', kind: 'door', width: 1.1, height: 2.1 }],
+  });
+  for (const face of shell.roof.faces) {
+    createRoofSurfaceLayout('RoofPanels_' + face.side, roof, {
+      face, kind: 'panels', panelWidth: 0.8, parent: shell.roof.root,
+    });
+  }
+  return root;
+}`;
+
+export const ARCHITECTURE_RIDGE_Z_SCAFFOLD = `const meta = { name: 'RidgeZHouse', category: 'architecture' };
+function build() {
+  const root = createRoot('RidgeZHouse');
+  const wall = gameMaterial(0xc9b895, { roughness: 0.92 });
+  const roof = gameMaterial(0x40566e, { roughness: 0.8 });
+  const shell = createGableShell('House', { wall, roof }, {
+    spanX: 7, spanZ: 10, wallHeight: 3.2, rise: 1.8, overhang: 0.45,
+    ridgeAxis: 'z', closedEnds: true, enterable: true, parent: root,
+    openings: [{ id: 'front-door', wall: 'front', kind: 'door', width: 1.2, height: 2.2 }],
+  });
+  for (const face of shell.roof.faces) {
+    createRoofSurfaceLayout('RoofPanels_' + face.side, roof, {
+      face, kind: 'panels', panelWidth: 0.8, parent: shell.roof.root,
+    });
+  }
+  return root;
+}`;
+
+export const ARCHITECTURE_PANEL_DIRECTION_ANTI_EXAMPLE = `// WRONG: stepping panels along face.ridgeTangent turns their long dimension along the ridge
+// and leaves open strips from ridge to eave. Do not hand-place or rotate roof panels this way.
+// CORRECT: pass the owned face frame to createRoofSurfaceLayout; it repeats panel widths along
+// the ridge while every panel's long dimension runs downhill from ridge to eave.
+createRoofSurfaceLayout('RoofPanels', roofMaterial, {
+  face, kind: 'panels', panelWidth: 0.8, parent: face.roofRoot,
+});`;
+
+export const ARCHITECTURE_CONTEXT = `This is a BUILDING the player can go INSIDE. Build it HOLLOW: thin walls enclosing real
+interior space with a floor — never a solid block. Its foundation rests flat on the ground,
+and the main entrance faces forward so the front reads clearly.
+
+Give it true human architectural scale: a doorway tall and wide enough for a person to walk
+through, windows at standing height, and a ceiling high enough to stand under with headroom.
+The building's mass should dwarf a single doorway.
+
+Cut REAL openings into the walls — a doorway is an actual gap you could pass through, not a
+panel painted on a wall; windows are inset panes or holes flush with the wall surface. Never
+float a pane in front of a wall or bury glass inside a solid block, and never seal the entrance.
+
+Walls meet squarely at the corners with no gaps. Prefer createGableShell(...) for a hollow floor,
+four walls with real openings, a separable Roof assembly, two correctly opposed slopes, and closed
+gable ends. Set ridgeAxis explicitly from the requested +X/+Z frame. Use createRoofSurfaceLayout(...)
+with each returned face instead of guessing Euler rotations or panel directions.
+
+## Correct scaffold — ridge along +X
+
+\`\`\`js
+${ARCHITECTURE_RIDGE_X_SCAFFOLD}
+\`\`\`
+
+## Correct scaffold — ridge along +Z
+
+\`\`\`js
+${ARCHITECTURE_RIDGE_Z_SCAFFOLD}
+\`\`\`
+
+## Roof-panel direction anti-example
+
+\`\`\`js
+${ARCHITECTURE_PANEL_DIRECTION_ANTI_EXAMPLE}
+\`\`\`
+
+Spend detail where a building reads: the roofline and eaves, a framed door, window sills or
+mullions, a chimney, a porch or entry overhang, a foundation course, corner posts, trim — and
+built-in fixtures (a hearth, a counter, shelving). Leave the floor space open for furniture to
+be placed later. room(...), wallWithOpening(...), createRoofPlanes(...), and createStairs(...)
+remain compatibility helpers for non-gable or custom construction.
+
+Before you finalize, call kiln_view_interior and check the roof-off views: the interior is open
+and walkable (no solid fill, no interior wall left buried in a mass), the doorway is a real gap
+you could pass through, and any built-in fixtures rest on the floor. Fix anything sealed, buried,
+or floating, then view the interior again.`;
 
 /** PROP build context — make movable parts distinct and correctly hinged so they
  *  read well statically AND can be animated about their real pivot. */
@@ -856,6 +930,24 @@ export const ENVIRONMENT_CONTEXT =
   'them, pivot at the base or anchor (a flag at its mast edge, a frond at its stalk, grass at the ground) ' +
   'with a gentle, looping sway; when several elements move, offset their phase so they do not all swing ' +
   'in lockstep.';
+
+/** VEG-018 organic construction guidance. Branch/canopy/frond experiments are
+ * deliberately absent: until their gates pass, vegetation uses existing primitives. */
+export const VEGETATION_CONTEXT = `This is a STANDALONE VEGETATION asset in the canonical +Y-up frame.
+Build only the requested plant or fungus: do not add a terrain disk, soil mound, rocks, pot, planter,
+grass skirt, or display plate unless the request explicitly includes it. Add semantic roles for the
+trunk/stem/root support, canopy or foliage clusters, and one vegetation.contact.ground marker at
+asset-local Y=0. Prefer a nonrendering local frame on the support mesh, for example
+\`semantic: { roles: ['vegetation.trunk', 'vegetation.contact.ground'], frames:
+[{ id: 'ground-contact', translation: [0, -trunkHeight / 2, 0], rotation: [0, 0, 0, 1] }] }\`.
+Seat visible support material on that plane without floating or burying it.
+
+Use the current general primitives for branches, canopy masses/cards, and fronds. Keep every branch
+or frond base embedded into its parent, decrease branch radii toward tips, and verify foliage from
+front, right, top, and three-quarter views. Deliberately bare/dead growth has no missing-foliage
+requirement. In portable PBR/textured modes, use two to six restrained foliage value roles (for
+example cooler inner leaves and slightly lighter outer leaves); in flatOptimized mode, keep one
+coherent foliage role so material consolidation remains intentional.`;
 
 /** VFX build context — emitter-like parts driven by transform on Joint_ pivots. */
 export const VFX_CONTEXT =
@@ -876,6 +968,7 @@ export const CATEGORY_CONTEXT: Partial<Record<AssetCategory, string>> = {
   architecture: ARCHITECTURE_CONTEXT,
   prop: PROP_CONTEXT,
   environment: ENVIRONMENT_CONTEXT,
+  vegetation: VEGETATION_CONTEXT,
   vfx: VFX_CONTEXT,
 };
 
@@ -925,6 +1018,56 @@ export function buildUserPrompt(request: KilnGenerateRequest): string {
     // so every consumer — including the deployed runtime — gets it once.
     const categoryContext = CATEGORY_CONTEXT[request.category];
     if (categoryContext) parts.push(`\n${categoryContext}`);
+    if (request.intent) {
+      parts.push(
+        `\n## Resolved Asset Scope\n${renderAssetScopePrompt(request.intent.scope, request.intent.modular)}`,
+      );
+      const semanticGuidance = buildPropEnvironmentSemanticGuidance(request.intent);
+      if (semanticGuidance) parts.push(`\n${semanticGuidance}`);
+    }
+    if (request.category === 'character' && request.intent?.character) {
+      const character = request.intent.character;
+      const clips = character.clips.length
+        ? character.clips.map((clip) => `${clip.name}:${clip.playback}`).join(', ')
+        : 'none requested';
+      parts.push(
+        `\n## Resolved Character Contract\n${characterBodyPlanRecipe(character.bodyPlan)}\n` +
+          `Grounded: ${character.grounded}; locomotion: ${character.locomotion}; gait: ${character.gait}; ` +
+          `root motion: ${character.rootMotion}; clips: ${clips}; held item: ` +
+          `${character.heldItem.required ? `required at ${character.heldItem.attachmentRole}` : 'none'}.`,
+      );
+    }
+    if (request.category === 'vehicle' && request.intent?.vehicle) {
+      const vehicle = request.intent.vehicle;
+      parts.push(
+        `\n## Resolved Vehicle Contract\n${vehicleSubtypeRecipe(vehicle)}\n` +
+          `Wheel assemblies: ${vehicle.wheelCount}; axles: ${vehicle.axleCount}; steering: ` +
+          `${vehicle.steering}; animation assemblies: ` +
+          `${vehicle.animationAssemblies.join(', ') || 'none requested'}.`,
+      );
+    }
+    if (request.category === 'vegetation' && request.intent?.vegetation) {
+      const vegetation = request.intent.vegetation;
+      const materialGuidance =
+        request.intent.material.mode === 'flatOptimized'
+          ? 'Use one coherent foliage value role.'
+          : 'Use two to six restrained foliage value roles and evaluate material coherence separately from structure.';
+      parts.push(
+        `\n## Resolved Vegetation Contract\nGrowth form: ${vegetation.subtype}; state: ` +
+          `${vegetation.growthState}; canopy profile: ${vegetation.canopyProfile}; standalone: ` +
+          `${vegetation.standalone}; grounded: ${vegetation.grounded}. ${materialGuidance}`,
+      );
+      parts.push(vegetationSubtypePromptContext(request.intent));
+    }
+    if (request.category === 'vfx' && request.intent?.vfx) {
+      parts.push(`\n## Resolved VFX Contract\n${renderVfxBreadthPrompt(request.intent.vfx)}`);
+    }
+    if (
+      request.intent?.material.mode === 'pbrRecipe' ||
+      request.intent?.material.mode === 'texturedHero'
+    ) {
+      parts.push(`\n${MATERIAL_RECIPE_PROMPT_CONTEXT_V1}`);
+    }
   }
 
   // Animation instructions — only for fresh generation. When editing existing code
