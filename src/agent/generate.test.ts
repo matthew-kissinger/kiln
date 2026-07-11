@@ -8,6 +8,7 @@
  * (`pixelforge gen glb`) covers the LLM half.
  */
 import { test, expect, describe, mock, beforeAll, afterAll } from 'bun:test';
+import { createAssetIntentV1 } from '../contracts';
 
 // A real, minimal, valid Kiln program (mirrors render-edges.test.ts). renderGLB
 // executes this for real to prove the engine wires the agent's code into a GLB.
@@ -19,6 +20,10 @@ function build() {
   return root;
 }
 `;
+const FALSE_PROP_CODE = CANNED_CODE.replace(
+  "const meta = { name: 'TestBox' };",
+  "const meta = { name: 'TestBox', category: 'prop' };",
+);
 
 // Mutable impl the mocked runKilnAgent delegates to (set per test).
 let runImpl: (opts: Record<string, unknown>) => Promise<Record<string, unknown>>;
@@ -103,6 +108,33 @@ describe('generateKilnAsset', () => {
     expect(captured?.['existingCode']).toBeTruthy();
     expect(captured?.['refineMode']).toBe('edit');
     expect(captured?.['originalPrompt']).toBe('a tower');
+  });
+
+  test('full intent is authoritative through agent options and final render', async () => {
+    let captured: Record<string, unknown> | undefined;
+    runImpl = async (opts) => {
+      captured = opts;
+      return { code: FALSE_PROP_CODE, toolCalls: ['kiln_submit'], steps: 1 };
+    };
+    const intent = createAssetIntentV1({ category: 'environment', subtype: 'set-piece' });
+
+    const result = await generateKilnAsset({
+      prompt: 'a compact car',
+      category: 'vehicle',
+      intent,
+    });
+
+    expect(captured?.['category']).toBe('environment');
+    expect(captured?.['intent']).toBe(intent);
+    expect(result.meta.category).toBe('environment');
+    expect(result.meta.modelCategory).toBe('prop');
+    const qaReport = result.meta.qaReport as {
+      category: string;
+      dimensions: { runtimeCost: { status: string; metrics?: Record<string, unknown> } };
+    };
+    expect(qaReport.category).toBe('environment');
+    expect(qaReport.dimensions.runtimeCost.status).toBe('pass');
+    expect(qaReport.dimensions.runtimeCost.metrics?.['instanceabilityGrade']).toBeDefined();
   });
 
   test('throws when the agent returns an error', async () => {

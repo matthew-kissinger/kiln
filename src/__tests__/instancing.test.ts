@@ -195,7 +195,11 @@ describe('M1c: GPU-instancing pass (instance option)', () => {
   });
 
   it('animated docs and Joint_* pivots are never instanced', async () => {
-    const spin = new THREE.NumberKeyframeTrack('Post0.position[y]', [0, 1], [0.6, 0.8]);
+    const spin = new THREE.VectorKeyframeTrack(
+      'Mesh_Post0.position',
+      [0, 1],
+      [0, 0.6, 0, 0, 0.8, 0],
+    );
     const clip = new THREE.AnimationClip('bob', 1, [spin]);
     const animated = await renderSceneToGLB(fenceScene(10), { instance: 'on', clips: [clip] });
     expect(animated.instancing).toBeUndefined();

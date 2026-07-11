@@ -18,17 +18,30 @@ import {
   KILN_BOTH_SYSTEM_PROMPT,
   KILN_REFINE_DIRECTIVE,
   ARCHITECTURE_CONTEXT,
+  ARCHITECTURE_RIDGE_X_SCAFFOLD,
+  ARCHITECTURE_RIDGE_Z_SCAFFOLD,
+  ARCHITECTURE_PANEL_DIRECTION_ANTI_EXAMPLE,
   PROP_CONTEXT,
   ENVIRONMENT_CONTEXT,
+  VEGETATION_CONTEXT,
   VFX_CONTEXT,
   KILN_API_SECTION,
   KILN_API_SECTION_UNIFIED,
   KILN_VISUAL_QA_UNIFIED,
   KILN_REFINE_DIRECTIVE_UNIFIED,
   KILN_EDIT_DIRECTIVE_UNIFIED,
+  KILN_COORDINATE_CONTRACT,
 } from '../prompt';
+import { KILN_ASSET_FRAME, createAssetIntentV1 } from '../contracts';
 
 describe('getSystemPrompt', () => {
+  test('coordinate prompt derives from the canonical engine frame', () => {
+    expect(KILN_COORDINATE_CONTRACT).toContain(`${KILN_ASSET_FRAME.forward} = forward`);
+    expect(KILN_COORDINATE_CONTRACT).toContain(`${KILN_ASSET_FRAME.up} = up`);
+    expect(KILN_COORDINATE_CONTRACT).toContain(`${KILN_ASSET_FRAME.right} = asset right`);
+    expect(KILN_COORDINATE_CONTRACT).toContain(`Y=${KILN_ASSET_FRAME.groundY}`);
+  });
+
   test('returns the GLB prompt for mode=glb', () => {
     expect(getSystemPrompt('glb')).toBe(KILN_SYSTEM_PROMPT);
   });
@@ -123,9 +136,42 @@ describe('buildUserPrompt', () => {
     expect(ARCHITECTURE_CONTEXT).toContain('Roof');
   });
 
+  test('architecture context carries exactly one executable scaffold per ridge axis and one panel anti-example', () => {
+    expect(ARCHITECTURE_CONTEXT.split(ARCHITECTURE_RIDGE_X_SCAFFOLD)).toHaveLength(2);
+    expect(ARCHITECTURE_CONTEXT.split(ARCHITECTURE_RIDGE_Z_SCAFFOLD)).toHaveLength(2);
+    expect(ARCHITECTURE_CONTEXT.split(ARCHITECTURE_PANEL_DIRECTION_ANTI_EXAMPLE)).toHaveLength(2);
+    expect(ARCHITECTURE_RIDGE_X_SCAFFOLD).toContain("ridgeAxis: 'x'");
+    expect(ARCHITECTURE_RIDGE_Z_SCAFFOLD).toContain("ridgeAxis: 'z'");
+    expect(ARCHITECTURE_PANEL_DIRECTION_ANTI_EXAMPLE).toContain('WRONG:');
+    expect(ARCHITECTURE_PANEL_DIRECTION_ANTI_EXAMPLE).toContain('ridge to eave');
+  });
+
   test('does not append the architecture directive for other categories', () => {
     const prompt = buildUserPrompt({ prompt: 'a barrel', mode: 'glb', category: 'prop' });
     expect(prompt).not.toContain(ARCHITECTURE_CONTEXT);
+    expect(prompt).not.toContain(ARCHITECTURE_RIDGE_X_SCAFFOLD);
+    expect(prompt).not.toContain(ARCHITECTURE_RIDGE_Z_SCAFFOLD);
+  });
+
+  test('CHAR-031 injects only the resolved character body-plan recipe', () => {
+    const dog = buildUserPrompt({
+      prompt: 'a dog',
+      mode: 'glb',
+      category: 'character',
+      intent: createAssetIntentV1({ category: 'character', subtype: 'quadruped' }),
+    });
+    expect(dog).toContain('Resolved body plan: QUADRUPED');
+    expect(dog).not.toContain('Resolved body plan: BIPED');
+    expect(dog).not.toContain('Resolved body plan: SERPENTINE');
+
+    const serpent = buildUserPrompt({
+      prompt: 'a serpent',
+      mode: 'glb',
+      category: 'character',
+      intent: createAssetIntentV1({ category: 'character', subtype: 'serpentine' }),
+    });
+    expect(serpent).toContain('Resolved body plan: SERPENTINE');
+    expect(serpent.toLowerCase()).not.toContain('knee');
   });
 
   test('appends the per-category rig context for prop / environment / vfx', () => {
@@ -139,6 +185,80 @@ describe('buildUserPrompt', () => {
     // Each category gets only its own block, never another's.
     expect(prop).not.toContain(VFX_CONTEXT);
     expect(env).not.toContain(PROP_CONTEXT);
+  });
+
+  test('injects trusted W7 scope, modular grid, and VFX contracts into fresh prompts only', () => {
+    const modularIntent = createAssetIntentV1({
+      category: 'environment',
+      subtype: 'modular-wall',
+      scope: { scope: 'modularSet', explicit: true },
+      modular: { grid: [2, 1, 2], units: 'm' },
+    });
+    const modular = buildUserPrompt({
+      prompt: 'a modular stone wall kit',
+      mode: 'glb',
+      category: 'environment',
+      intent: modularIntent,
+    });
+    expect(modular).toContain('## Resolved Asset Scope');
+    expect(modular).toContain('trusted 2x1x2 m grid');
+    expect(modular).toContain('reciprocal compatibleTypes');
+    expect(modular).toContain('explicit allowedRotationsDegrees');
+    expect(modular).toContain('Do not encode the grid in arbitrary userData');
+
+    const vfxIntent = createAssetIntentV1({ category: 'vfx', subtype: 'billboard' });
+    const vfx = buildUserPrompt({
+      prompt: 'soft smoke billboard',
+      mode: 'glb',
+      category: 'vfx',
+      intent: vfxIntent,
+    });
+    expect(vfx).toContain('## Resolved VFX Contract');
+    expect(vfx).toContain('portability=portable');
+    expect(vfx).toContain('mode=camera-spherical');
+    expect(vfx).toContain('real alpha data');
+    expect(vfx).toContain('vfx.effect.surface.<card|beam|trail|volume|core>');
+
+    const refine = buildUserPrompt({
+      prompt: 'make the stones darker',
+      mode: 'glb',
+      category: 'environment',
+      intent: modularIntent,
+      existingCode: 'function build() { return createRoot("WallKit"); }',
+    });
+    expect(refine).not.toContain('## Resolved Asset Scope');
+    expect(refine).not.toContain('trusted 2x1x2 m grid');
+  });
+
+  test('VEG-018 injects only resolved vegetation structure and material-mode guidance', () => {
+    const rich = buildUserPrompt({
+      prompt: 'a lush oak',
+      mode: 'glb',
+      category: 'vegetation',
+      intent: createAssetIntentV1({
+        category: 'vegetation',
+        vegetation: { subtype: 'tree', growthState: 'lush' },
+        material: { mode: 'pbrRecipe' },
+      }),
+    });
+    expect(rich).toContain(VEGETATION_CONTEXT);
+    expect(rich).toContain('Growth form: tree; state: lush; canopy profile: broadleaf');
+    expect(rich).toContain('two to six restrained foliage value roles');
+    expect(rich).toContain("materialRecipe('kiln.material.leaf.v1'");
+    expect(rich).not.toContain('taperedBranchGeo');
+
+    const optimized = buildUserPrompt({
+      prompt: 'an optimized shrub',
+      mode: 'glb',
+      category: 'vegetation',
+      intent: createAssetIntentV1({
+        category: 'vegetation',
+        vegetation: { subtype: 'shrub' },
+        material: { mode: 'flatOptimized' },
+      }),
+    });
+    expect(optimized).toContain('Use one coherent foliage value role.');
+    expect(optimized).not.toContain('## Portable material recipes');
   });
 
   test('per-category rig context is dropped when refining (existingCode set)', () => {
@@ -160,6 +280,8 @@ describe('buildUserPrompt', () => {
       existingCode: 'function build() { return createRoot("Tower"); }',
     });
     expect(prompt).not.toContain(ARCHITECTURE_CONTEXT);
+    expect(prompt).not.toContain(ARCHITECTURE_RIDGE_X_SCAFFOLD);
+    expect(prompt).not.toContain(ARCHITECTURE_RIDGE_Z_SCAFFOLD);
     expect(prompt).toContain('## Edit Request');
   });
 

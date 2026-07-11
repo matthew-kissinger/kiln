@@ -120,6 +120,7 @@ describe('snapGlbToPalette', () => {
     expect(out!.report!.metrics.uniqueMaterials).toBeLessThanOrEqual(PAL.length);
     expect(out!.summary.materialsAfter).toBeLessThan(out!.summary.materialsBefore);
     expect(out!.report!.grade).not.toBe('F');
+    expect(out!.gltfValidation.issues.numErrors).toBe(0);
     // valid GLB out
     const doc = await new WebIO().readBinary(out!.bytes);
     expect(doc.getRoot().listNodes().length).toBeGreaterThan(0);

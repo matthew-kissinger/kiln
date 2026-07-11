@@ -23,6 +23,8 @@ import * as THREE from 'three';
 import { validate } from '../validation';
 import { executeKilnCode, inspectSceneStructure, renderSceneToGLB } from '../render';
 import { listPrimitives, type PrimitiveSpec } from '../list-primitives';
+import type { AssetCategory, AssetIntentV1 } from '../contracts';
+import type { AssetQaReportV1 } from '../qa';
 
 // =============================================================================
 // Tool definition contract
@@ -52,6 +54,21 @@ export interface KilnToolDef {
    * back to {@link media} (a composite) or the raw output. Checked before `media`.
    */
   mediaMulti?(output: unknown): { pngs: Uint8Array[]; json: unknown } | undefined;
+}
+
+/**
+ * Host-owned context captured by tool closures. This object is never part of a
+ * model-facing input schema, so generated source cannot select its own category
+ * or QA profile. An intent, when present, is authoritative over the convenience
+ * category field.
+ */
+export interface KilnToolContext {
+  intent?: AssetIntentV1;
+  category?: AssetCategory;
+}
+
+function trustedCategory(context: KilnToolContext): AssetCategory | undefined {
+  return context.intent?.category ?? context.category;
 }
 
 // =============================================================================
@@ -136,20 +153,15 @@ function runListPrimitives(input: z.infer<typeof listPrimitivesInput>): {
 // kiln_validate
 // =============================================================================
 
-/** Cheaply extract the declared category from the code's `meta` block so the
- *  tri advisory has a reference point. The model writes `category` into meta, so
- *  this reaches every door (CLI/MCP/studio) without threading external context. */
-function extractCategory(code: string): string | undefined {
-  const m = /category\s*:\s*['"]([^'"]+)['"]/.exec(code);
-  return m?.[1];
-}
-
-function runValidate(input: z.infer<typeof validateInput>): {
+function runValidate(
+  input: z.infer<typeof validateInput>,
+  context: KilnToolContext,
+): {
   valid: boolean;
   errors: string[];
   warnings: string[];
 } {
-  const category = extractCategory(input.code);
+  const category = trustedCategory(context);
   const result = validate(input.code, category ? { category } : {});
   return {
     valid: result.valid,
@@ -174,6 +186,8 @@ export interface KilnRenderMetrics {
   lowestPart?: { name: string; y: number };
   /** Post-dedup instanceability grade (informational): how cheap to render at scale. */
   instanceability?: { grade: string; summary: string };
+  /** Structured deterministic report; five dimensions remain separate. */
+  qaReport?: AssetQaReportV1;
   warnings: string[];
   error?: string;
 }
@@ -237,18 +251,25 @@ function collectSceneMetrics(root: THREE.Object3D): SceneMetrics {
  * Execute Kiln code, render it to an in-memory GLB, and report metrics.
  * Never writes files; never throws — failures come back as { ok:false, error }.
  */
-async function runRender(input: z.infer<typeof renderInput>): Promise<KilnRenderMetrics> {
+async function runRender(
+  input: z.infer<typeof renderInput>,
+  context: KilnToolContext,
+): Promise<KilnRenderMetrics> {
   try {
-    const { meta, root, clips } = await executeKilnCode(input.code);
+    const { root, clips } = await executeKilnCode(input.code);
+    const category = trustedCategory(context);
 
     // Structural advisories (floating parts / stray planes at origin).
-    const structuralWarnings = inspectSceneStructure(root);
+    const structuralWarnings = inspectSceneStructure(root, { category });
     const metrics = collectSceneMetrics(root);
 
     // Render to GLB bytes for the triangle count. Output is discarded — pure
     // metrics, no files written.
-    const category = typeof meta.category === 'string' ? meta.category : undefined;
-    const rendered = await renderSceneToGLB(root, { clips, category });
+    const rendered = await renderSceneToGLB(root, {
+      clips,
+      ...(category ? { category } : {}),
+      ...(context.intent ? { intent: context.intent } : {}),
+    });
 
     const warnings = [...structuralWarnings, ...rendered.warnings];
 
@@ -268,6 +289,7 @@ async function runRender(input: z.infer<typeof renderInput>): Promise<KilnRender
           }
         : {}),
       warnings,
+      qaReport: rendered.qaReport,
     };
   } catch (err) {
     return {
@@ -302,11 +324,12 @@ export interface KilnScreenshotResult {
  */
 async function runScreenshot(
   input: z.infer<typeof screenshotInput>,
+  context: KilnToolContext,
 ): Promise<KilnScreenshotResult> {
   try {
     const { renderViewGrid } = await import('../views');
     const { root } = await executeKilnCode(input.code);
-    const warnings = inspectSceneStructure(root);
+    const warnings = inspectSceneStructure(root, { category: trustedCategory(context) });
     const grid = await renderViewGrid(root);
     return {
       ok: true,
@@ -347,6 +370,8 @@ export interface KilnRenderViewsResult {
   lowestPart?: { name: string; y: number };
   /** Post-dedup instanceability grade (informational): how cheap to render at scale. */
   instanceability?: { grade: string; summary: string };
+  /** Structured deterministic report; five dimensions remain separate. */
+  qaReport?: AssetQaReportV1;
   /** View names in grid order (row-major): Front, Right, Back, Left, Top, 3/4. */
   views?: string[];
   gridWidth?: number;
@@ -367,17 +392,24 @@ export interface KilnRenderViewsResult {
  * The views module is imported lazily (node:zlib) to keep it out of the browser
  * bundle graph.
  */
-async function runRenderViews(input: z.infer<typeof renderInput>): Promise<KilnRenderViewsResult> {
+async function runRenderViews(
+  input: z.infer<typeof renderInput>,
+  context: KilnToolContext,
+): Promise<KilnRenderViewsResult> {
   try {
     const { renderViewGrid } = await import('../views');
-    const { meta, root, clips } = await executeKilnCode(input.code);
+    const { root, clips } = await executeKilnCode(input.code);
+    const category = trustedCategory(context);
 
-    const structuralWarnings = inspectSceneStructure(root);
+    const structuralWarnings = inspectSceneStructure(root, { category });
     const metrics = collectSceneMetrics(root);
 
     // Single execution, two consumers — both read-only on `root`.
-    const category = typeof meta.category === 'string' ? meta.category : undefined;
-    const rendered = await renderSceneToGLB(root, { clips, category });
+    const rendered = await renderSceneToGLB(root, {
+      clips,
+      ...(category ? { category } : {}),
+      ...(context.intent ? { intent: context.intent } : {}),
+    });
     const grid = await renderViewGrid(root);
 
     const warnings = [...structuralWarnings, ...rendered.warnings];
@@ -402,6 +434,7 @@ async function runRenderViews(input: z.infer<typeof renderInput>): Promise<KilnR
       gridHeight: grid.height,
       pngBase64: grid.png.toString('base64'),
       warnings,
+      qaReport: rendered.qaReport,
     };
   } catch (err) {
     return {
@@ -418,18 +451,26 @@ async function runRenderViews(input: z.infer<typeof renderInput>): Promise<KilnR
  * stays the four-tool bench baseline). Shares `screenshotMedia` so transports
  * with image support attach the PNG bytes and strip the base64 from the JSON.
  */
-export const kilnRenderViewsDef: KilnToolDef = {
-  name: 'kiln_render',
-  description:
-    'Execute the current model and SEE it: returns geometry metrics (triangle count, mesh + material counts, world-space bounding box, lowestPart — the mesh touching the lowest point, which must be intentional below Y=0 like earthworks or keels, never wheels/tails/equipment, and an instanceability grade A–F — informational, how cheap to render at scale) TOGETHER with a six-view image grid. ' +
-    'Row 1 = Front (camera on +X, the nose/muzzle should face you), Right (+Z, the long profile), Back (-X); ' +
-    'row 2 = Left (-Z), Top (+Y, check symmetry), 3/4 perspective (check part contact and overall read). ' +
-    'Use it to confirm the model builds and to verify orientation (+X forward), attachment (no floating parts), proportion, and silhouette. ' +
-    'If the build fails you get an error and NO image — fix the code and render again. Flat-shaded CPU render; writes no files.',
-  inputSchema: renderInput,
-  run: async (input) => runRenderViews(renderInput.parse(input)),
-  media: screenshotMedia,
-};
+const KILN_RENDER_VIEWS_DESCRIPTION =
+  'Execute the current model and SEE it: returns geometry metrics (triangle count, mesh + material counts, world-space bounding box, lowestPart — the mesh touching the lowest point, which must be intentional below Y=0 like earthworks or keels, never wheels/tails/equipment, and an instanceability grade A–F — informational, how cheap to render at scale) TOGETHER with a six-view image grid. ' +
+  'Row 1 = Front (camera on +X, the nose/muzzle should face you), Right (+Z, the long profile), Back (-X); ' +
+  'row 2 = Left (-Z), Top (+Y, check symmetry), 3/4 perspective (check part contact and overall read). ' +
+  'Use it to confirm the model builds and to verify orientation (+X forward), attachment (no floating parts), proportion, and silhouette. ' +
+  'If the build fails you get an error and NO image — fix the code and render again. Flat-shaded CPU render; writes no files.';
+
+/** Create the unified render/view definition with host-owned QA context. */
+export function createKilnRenderViewsDef(context: KilnToolContext = {}): KilnToolDef {
+  return {
+    name: 'kiln_render',
+    description: KILN_RENDER_VIEWS_DESCRIPTION,
+    inputSchema: renderInput,
+    run: async (input) => runRenderViews(renderInput.parse(input), context),
+    media: screenshotMedia,
+  };
+}
+
+/** Neutral compatibility export. It never reads category from generated source. */
+export const kilnRenderViewsDef: KilnToolDef = createKilnRenderViewsDef();
 
 // =============================================================================
 // kiln_screenshot_animation — SEE one clip's motion (6 phase-labeled frames)
@@ -468,11 +509,12 @@ export interface KilnScreenshotAnimationResult {
  */
 async function runScreenshotAnimation(
   input: z.infer<typeof screenshotAnimationInput>,
+  context: KilnToolContext,
 ): Promise<KilnScreenshotAnimationResult> {
   try {
     const { renderClipAnimation } = await import('../views');
     const { root, clips } = await executeKilnCode(input.code);
-    const warnings = inspectSceneStructure(root);
+    const warnings = inspectSceneStructure(root, { category: trustedCategory(context) });
     const r = await renderClipAnimation(root, clips, {
       clip: input.clip,
       ...(input.camera ? { camera: input.camera } : {}),
@@ -539,27 +581,35 @@ export function screenshotAnimationMediaMulti(
  * Carries both `media` (grid) and `mediaMulti` (perFrame) so image transports show
  * the right thing in either mode.
  */
-export const kilnScreenshotAnimationDef: KilnToolDef = {
-  name: 'kiln_screenshot_animation',
-  description:
-    'SEE one animation clip move: renders the named clip as six frames sampled evenly from start to end ' +
-    '(each labeled with its phase %) from one camera, as a 3x2 grid. Use this after animating ANY asset to ' +
-    'verify the MOTION — a static screenshot cannot show it — whether it is a character walking, a door or ' +
-    'chest lid swinging on its hinge, a wheel/gear/turret/windmill turning on its axle, a lever or hatch ' +
-    'throwing, or a flag/frond/branch swaying. Read the side (right) view and confirm each moving part ' +
-    'travels the way it should about its OWN real pivot, and that the static base stays put. For a ' +
-    'character specifically: a walk swings the legs forward and back (not splayed sideways and not sliding ' +
-    'the body sideways), knees bend backward at the joint (not forward like a bird), an attack swings down ' +
-    'and FORWARD through the front (not behind the back), and a held weapon tracks the hand through the ' +
-    'swing. args: clip (required, the clip name), camera (default right; also front/back/left/top/' +
-    'three-quarter), perFrame (optional, separate high-res frames). If unresolvedTracks comes back ' +
-    'non-empty the clip targets joints that do not exist (a name mismatch) and looks frozen — fix the ' +
-    'track names. Flat-shaded CPU render; writes no files.',
-  inputSchema: screenshotAnimationInput,
-  run: async (input) => runScreenshotAnimation(screenshotAnimationInput.parse(input)),
-  media: screenshotAnimationMedia,
-  mediaMulti: screenshotAnimationMediaMulti,
-};
+const KILN_SCREENSHOT_ANIMATION_DESCRIPTION =
+  'SEE one animation clip move: renders the named clip as six frames sampled evenly from start to end ' +
+  '(each labeled with its phase %) from one camera, as a 3x2 grid. Use this after animating ANY asset to ' +
+  'verify the MOTION — a static screenshot cannot show it — whether it is a character walking, a door or ' +
+  'chest lid swinging on its hinge, a wheel/gear/turret/windmill turning on its axle, a lever or hatch ' +
+  'throwing, or a flag/frond/branch swaying. Read the side (right) view and confirm each moving part ' +
+  'travels the way it should about its OWN real pivot, and that the static base stays put. For a ' +
+  'character specifically: a walk swings the legs forward and back (not splayed sideways and not sliding ' +
+  'the body sideways), knees bend backward at the joint (not forward like a bird), an attack swings down ' +
+  'and FORWARD through the front (not behind the back), and a held weapon tracks the hand through the ' +
+  'swing. args: clip (required, the clip name), camera (default right; also front/back/left/top/' +
+  'three-quarter), perFrame (optional, separate high-res frames). If unresolvedTracks comes back ' +
+  'non-empty the clip targets joints that do not exist (a name mismatch) and looks frozen — fix the ' +
+  'track names. Flat-shaded CPU render; writes no files.';
+
+/** Create an animation-view definition with host-owned QA context. */
+export function createKilnScreenshotAnimationDef(context: KilnToolContext = {}): KilnToolDef {
+  return {
+    name: 'kiln_screenshot_animation',
+    description: KILN_SCREENSHOT_ANIMATION_DESCRIPTION,
+    inputSchema: screenshotAnimationInput,
+    run: async (input) => runScreenshotAnimation(screenshotAnimationInput.parse(input), context),
+    media: screenshotAnimationMedia,
+    mediaMulti: screenshotAnimationMediaMulti,
+  };
+}
+
+/** Neutral compatibility export. It never reads category from generated source. */
+export const kilnScreenshotAnimationDef: KilnToolDef = createKilnScreenshotAnimationDef();
 
 // =============================================================================
 // kiln_view_interior (unified) — see INSIDE an enterable building, roof off
@@ -588,18 +638,19 @@ export interface KilnViewInteriorResult {
  * Eye-level. A build error comes back image-free ({ ok:false, error }). When the roof
  * could not be lifted (roofsHidden === 0) the interior stays occluded — a warning tells
  * the agent to name the roof part "Roof". Pure visual QA: does NOT run the structural
- * inspector (the agent already gets floating/stray warnings from kiln_render). The views
- * module is imported lazily to keep node:zlib out of the browser bundle graph.
+ * inspector uses the same host-owned category as every other view path. The views module
+ * is imported lazily to keep node:zlib out of the browser bundle graph.
  */
 async function runViewInterior(
   input: z.infer<typeof viewInteriorInput>,
+  context: KilnToolContext,
 ): Promise<KilnViewInteriorResult> {
   try {
     const { renderInteriorGrid } = await import('../views');
     const { root } = await executeKilnCode(input.code);
     const nodeName = input.nodeName ?? 'Roof';
     const grid = await renderInteriorGrid(root, { nodeName });
-    const warnings: string[] = [];
+    const warnings = inspectSceneStructure(root, { category: trustedCategory(context) });
     if (grid.roofsHidden === 0) {
       warnings.push(
         `No node named "${nodeName}" was found, so the roof could not be lifted and the interior is still occluded. Name the roof group exactly "${nodeName}".`,
@@ -629,58 +680,76 @@ async function runViewInterior(
  * part of `kilnToolRegistry` (the four-tool bench baseline stays unchanged). Shares
  * `screenshotMedia` so image transports attach the PNG bytes and strip the base64.
  */
-export const kilnViewInteriorDef: KilnToolDef = {
-  name: 'kiln_view_interior',
-  description:
-    'SEE INSIDE an enterable building: renders it with the roof (the part named "Roof") lifted off, as a ' +
-    'three-view grid. (1) Floor plan: top-down — check the interior is open and walkable and the footprint ' +
-    'is right. (2) Dollhouse: a 3/4 cutaway — check built-in fixtures (hearth, counter, shelves) rest ON the ' +
-    'floor, not floating or sunk, and the walls enclose a real volume with headroom. (3) Eye-level: a low ' +
-    'angle looking in through the doorway with the near walls also removed — confirm the doorway is a REAL ' +
-    'gap you could walk through (not a panel) and no wall or glass is buried inside a solid mass. ' +
-    'Call this before finalizing any building. If roofsHidden comes back 0 the roof part was not named ' +
-    '"Roof" (the interior stays hidden — rename it). Flat-shaded CPU render; writes no files.',
-  inputSchema: viewInteriorInput,
-  run: async (input) => runViewInterior(viewInteriorInput.parse(input)),
-  media: screenshotMedia,
-};
+const KILN_VIEW_INTERIOR_DESCRIPTION =
+  'SEE INSIDE an enterable building: renders it with the roof (the part named "Roof") lifted off, as a ' +
+  'three-view grid. (1) Floor plan: top-down — check the interior is open and walkable and the footprint ' +
+  'is right. (2) Dollhouse: a 3/4 cutaway — check built-in fixtures (hearth, counter, shelves) rest ON the ' +
+  'floor, not floating or sunk, and the walls enclose a real volume with headroom. (3) Eye-level: a low ' +
+  'angle looking in through the doorway with the near walls also removed — confirm the doorway is a REAL ' +
+  'gap you could walk through (not a panel) and no wall or glass is buried inside a solid mass. ' +
+  'Call this before finalizing any building. If roofsHidden comes back 0 the roof part was not named ' +
+  '"Roof" (the interior stays hidden — rename it). Flat-shaded CPU render; writes no files.';
+
+/** Create the interior-view definition with host-owned QA context. */
+export function createKilnViewInteriorDef(context: KilnToolContext = {}): KilnToolDef {
+  return {
+    name: 'kiln_view_interior',
+    description: KILN_VIEW_INTERIOR_DESCRIPTION,
+    inputSchema: viewInteriorInput,
+    run: async (input) => runViewInterior(viewInteriorInput.parse(input), context),
+    media: screenshotMedia,
+  };
+}
+
+/** Neutral compatibility export. It never reads category from generated source. */
+export const kilnViewInteriorDef: KilnToolDef = createKilnViewInteriorDef();
 
 // =============================================================================
 // Registry
 // =============================================================================
 
-export const kilnToolRegistry: KilnToolDef[] = [
-  {
-    name: 'kiln_list_primitives',
-    description:
-      'List the Kiln sandbox primitives available to generated 3D code: geometry helpers (boxGeo, cylinderXGeo, capsuleGeo, ...), materials (gameMaterial, glassMaterial, ...), structure (createRoot, createPart, createPivot), animation, CSG, arrays, UV, and textures. Call this before writing Kiln code to discover exact signatures and idiomatic usage. Optionally filter by category.',
-    inputSchema: listPrimitivesInput,
-    run: async (input) => runListPrimitives(listPrimitivesInput.parse(input)),
-  },
-  {
-    name: 'kiln_validate',
-    description:
-      'Statically validate Kiln source code before rendering. Checks for the required `meta` const and `build()` function, `value:` keyframe typos, infinite loops, recursive build() calls, and syntax errors. Returns { valid, errors, warnings }. Warnings are advisory only (they never make code invalid), including a soft, generous triangle-count nudge. Run this to catch mistakes cheaply before kiln_render.',
-    inputSchema: validateInput,
-    run: async (input) => runValidate(validateInput.parse(input)),
-  },
-  {
-    name: 'kiln_render',
-    description:
-      'Execute Kiln code and render it to an in-memory GLB, returning geometry metrics: triangle count, mesh count, material count, the world-space bounding box, lowestPart (the mesh touching the lowest point — anything below Y=0 must be intentionally below-grade like earthworks or keels, never wheels/tails/equipment), and an instanceability grade (A–F, informational: how cheap the asset is to render at scale — driven by distinct-material count; fewer shared materials grade higher). Includes structural warnings for floating parts and stray planes left at the origin. Use this to confirm a model builds and to inspect its size and structure. Does not write any files.',
-    inputSchema: renderInput,
-    run: async (input) => runRender(renderInput.parse(input)),
-  },
-  {
-    name: 'kiln_screenshot',
-    description:
-      'Render Kiln code to a six-view image grid so you can SEE the asset: ' +
-      'row 1 = Front (camera on +X, the nose/muzzle should face you), Right (+Z, the long profile), Back (-X); ' +
-      'row 2 = Left (-Z), Top (+Y, check symmetry), 3/4 perspective (check part contact and overall read). ' +
-      'Use it to verify orientation (+X forward), attachment (no floating parts), and silhouette before submitting. ' +
-      'If a view looks wrong, fix the code and screenshot again. Flat-shaded CPU render; does not write files.',
-    inputSchema: screenshotInput,
-    run: async (input) => runScreenshot(screenshotInput.parse(input)),
-    media: screenshotMedia,
-  },
-];
+/**
+ * Create the four-tool baseline registry with trusted host context captured in
+ * every validate/render/view closure. Tool schemas remain byte-for-byte neutral:
+ * the model cannot provide or override this context.
+ */
+export function createKilnToolRegistry(context: KilnToolContext = {}): KilnToolDef[] {
+  return [
+    {
+      name: 'kiln_list_primitives',
+      description:
+        'List the Kiln sandbox primitives available to generated 3D code: geometry helpers (boxGeo, cylinderXGeo, capsuleGeo, ...), materials (gameMaterial, glassMaterial, ...), structure (createRoot, createPart, createPivot), animation, CSG, arrays, UV, and textures. Call this before writing Kiln code to discover exact signatures and idiomatic usage. Optionally filter by category.',
+      inputSchema: listPrimitivesInput,
+      run: async (input) => runListPrimitives(listPrimitivesInput.parse(input)),
+    },
+    {
+      name: 'kiln_validate',
+      description:
+        'Statically validate Kiln source code before rendering. Checks for the required `meta` const and `build()` function, `value:` keyframe typos, infinite loops, recursive build() calls, and syntax errors. Returns { valid, errors, warnings }. Warnings are advisory only (they never make code invalid), including a soft, generous triangle-count nudge. Run this to catch mistakes cheaply before kiln_render.',
+      inputSchema: validateInput,
+      run: async (input) => runValidate(validateInput.parse(input), context),
+    },
+    {
+      name: 'kiln_render',
+      description:
+        'Execute Kiln code and render it to an in-memory GLB, returning geometry metrics: triangle count, mesh count, material count, the world-space bounding box, lowestPart (the mesh touching the lowest point — anything below Y=0 must be intentionally below-grade like earthworks or keels, never wheels/tails/equipment), and an instanceability grade (A–F, informational: how cheap to render at scale — driven by distinct-material count; fewer shared materials grade higher). Includes structural warnings for floating parts and stray planes left at the origin. Use this to confirm a model builds and to inspect its size and structure. Does not write any files.',
+      inputSchema: renderInput,
+      run: async (input) => runRender(renderInput.parse(input), context),
+    },
+    {
+      name: 'kiln_screenshot',
+      description:
+        'Render Kiln code to a six-view image grid so you can SEE the asset: ' +
+        'row 1 = Front (camera on +X, the nose/muzzle should face you), Right (+Z, the long profile), Back (-X); ' +
+        'row 2 = Left (-Z), Top (+Y, check symmetry), 3/4 perspective (check part contact and overall read). ' +
+        'Use it to verify orientation (+X forward), attachment (no floating parts), and silhouette before submitting. ' +
+        'If a view looks wrong, fix the code and screenshot again. Flat-shaded CPU render; does not write files.',
+      inputSchema: screenshotInput,
+      run: async (input) => runScreenshot(screenshotInput.parse(input), context),
+      media: screenshotMedia,
+    },
+  ];
+}
+
+/** Neutral compatibility registry. It never reads category from generated source. */
+export const kilnToolRegistry: KilnToolDef[] = createKilnToolRegistry();

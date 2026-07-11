@@ -12,9 +12,36 @@ import * as THREE from 'three';
 
 export type TextureSource = string | Buffer | Uint8Array;
 
+export const TEXTURE_USAGES = [
+  'albedo',
+  'emissive',
+  'normal',
+  'roughness',
+  'metalness',
+  'metallicRoughness',
+  'occlusion',
+] as const;
+
+export type TextureUsage = (typeof TEXTURE_USAGES)[number];
+
+export interface TextureLoadOptions {
+  /** glTF material slot this image will occupy. Defaults to albedo for compatibility. */
+  usage?: TextureUsage;
+  /** Optional stable texture name used by QA/provenance. */
+  name?: string;
+}
+
 export interface EncodedTextureData {
   mime: 'image/png' | 'image/jpeg' | 'image/webp';
   bytes: Uint8Array;
+}
+
+export interface KilnTextureMetadata {
+  usage: TextureUsage;
+  colorSpace: 'srgb' | 'linear';
+  width: number;
+  height: number;
+  hasAlpha: boolean;
 }
 
 /**
@@ -30,7 +57,10 @@ export interface EncodedTextureData {
  * const wood = await loadTexture('./textures/oak-albedo.png');
  * const barrel = new THREE.Mesh(unwrapped, pbrMaterial({ albedo: wood }));
  */
-export async function loadTexture(source: TextureSource): Promise<THREE.DataTexture> {
+export async function loadTexture(
+  source: TextureSource,
+  opts: TextureLoadOptions = {},
+): Promise<THREE.DataTexture> {
   let bytes: Uint8Array;
   if (typeof source === 'string') {
     const fs = await import('node:fs');
@@ -66,7 +96,17 @@ export async function loadTexture(source: TextureSource): Promise<THREE.DataText
     THREE.RGBAFormat,
     THREE.UnsignedByteType,
   );
-  tex.colorSpace = THREE.SRGBColorSpace;
+  const usage = opts.usage ?? 'albedo';
+  const colorSpace = usage === 'albedo' || usage === 'emissive' ? 'srgb' : 'linear';
+  let hasAlpha = false;
+  for (let offset = 3; offset < data.length; offset += 4) {
+    if ((data[offset] ?? 255) < 255) {
+      hasAlpha = true;
+      break;
+    }
+  }
+  tex.colorSpace = colorSpace === 'srgb' ? THREE.SRGBColorSpace : THREE.NoColorSpace;
+  if (opts.name) tex.name = opts.name;
   tex.needsUpdate = true;
   tex.wrapS = THREE.RepeatWrapping;
   tex.wrapT = THREE.RepeatWrapping;
@@ -78,6 +118,15 @@ export async function loadTexture(source: TextureSource): Promise<THREE.DataText
     mime,
     bytes,
   } satisfies EncodedTextureData;
+  (tex.userData as Record<string, unknown>)['kilnTexture'] = {
+    usage,
+    colorSpace,
+    width: meta.width,
+    height: meta.height,
+    // `sharp.metadata().hasAlpha` only means that an alpha channel exists. QA
+    // needs the stronger signal: at least one pixel is actually translucent.
+    hasAlpha,
+  } satisfies KilnTextureMetadata;
 
   return tex;
 }
@@ -117,10 +166,12 @@ export interface PbrMaterialOptions {
   albedo?: number | string | THREE.Texture;
   /** Normal map Texture. */
   normal?: THREE.Texture;
-  /** Roughness: scalar [0,1] or Texture (R channel). */
+  /** Roughness scalar [0,1], or the same packed texture supplied for metalness. */
   roughness?: number | THREE.Texture;
-  /** Metalness: scalar [0,1] or Texture (R channel). */
+  /** Metalness scalar [0,1], or the same packed texture supplied for roughness. */
   metalness?: number | THREE.Texture;
+  /** Explicit glTF metallic-roughness texture: G=roughness, B=metalness. */
+  metallicRoughness?: THREE.Texture;
   /** Emissive: hex color or Texture. */
   emissive?: number | string | THREE.Texture;
   /** Emissive intensity multiplier. */
@@ -129,6 +180,29 @@ export interface PbrMaterialOptions {
   aoMap?: THREE.Texture;
   /** AO intensity [0,1]. Default 1. */
   aoMapIntensity?: number;
+  /** Portable glTF alpha mode. Defaults to opaque. */
+  alphaMode?: 'opaque' | 'mask' | 'blend';
+  /** Alpha cutoff for mask mode. Defaults to 0.5; invalid outside [0,1]. */
+  alphaCutoff?: number;
+  /** Render both sides of the surface. Defaults false. */
+  doubleSided?: boolean;
+}
+
+function textureMetadata(texture: THREE.Texture): KilnTextureMetadata | undefined {
+  return (texture.userData as Record<string, unknown>)['kilnTexture'] as
+    | KilnTextureMetadata
+    | undefined;
+}
+
+function requireTextureUsage(texture: THREE.Texture, usage: TextureUsage): void {
+  const meta = textureMetadata(texture);
+  if (meta && meta.usage !== usage) {
+    throw new TypeError(
+      `Texture ${JSON.stringify(texture.name || '(unnamed)')} was loaded for ${meta.usage}, not ${usage}.`,
+    );
+  }
+  texture.colorSpace =
+    usage === 'albedo' || usage === 'emissive' ? THREE.SRGBColorSpace : THREE.NoColorSpace;
 }
 
 /**
@@ -148,31 +222,58 @@ export function pbrMaterial(opts: PbrMaterialOptions = {}): THREE.MeshStandardMa
     !!(v as { isTexture?: boolean } | null)?.isTexture;
 
   if (isTex(opts.albedo)) {
+    requireTextureUsage(opts.albedo, 'albedo');
     mat.map = opts.albedo;
     mat.color = new THREE.Color(0xffffff);
   } else if (opts.albedo !== undefined) {
     mat.color = new THREE.Color(opts.albedo as number | string);
   }
 
-  if (opts.normal) mat.normalMap = opts.normal;
+  if (opts.normal) {
+    requireTextureUsage(opts.normal, 'normal');
+    mat.normalMap = opts.normal;
+  }
 
-  if (isTex(opts.roughness)) {
-    mat.roughnessMap = opts.roughness;
-    mat.roughness = 1;
-  } else if (opts.roughness !== undefined) {
+  const roughnessTexture = isTex(opts.roughness) ? opts.roughness : undefined;
+  const metalnessTexture = isTex(opts.metalness) ? opts.metalness : undefined;
+  if (opts.metallicRoughness && (roughnessTexture || metalnessTexture)) {
+    throw new TypeError(
+      'Use metallicRoughness for the packed G/B map; do not also pass texture-valued roughness/metalness.',
+    );
+  }
+  if (roughnessTexture && metalnessTexture && roughnessTexture !== metalnessTexture) {
+    throw new TypeError(
+      'Separate roughness and metalness textures are ambiguous in glTF. Pack G=roughness/B=metalness and pass metallicRoughness.',
+    );
+  }
+  if ((roughnessTexture && !metalnessTexture) || (!roughnessTexture && metalnessTexture)) {
+    throw new TypeError(
+      'A texture-valued roughness or metalness must be the same packed G/B texture in both slots, or use metallicRoughness.',
+    );
+  }
+  const packedMr = opts.metallicRoughness ?? roughnessTexture;
+  if (packedMr) {
+    requireTextureUsage(packedMr, 'metallicRoughness');
+    mat.roughnessMap = packedMr;
+    mat.metalnessMap = packedMr;
+  }
+
+  if (typeof opts.roughness === 'number') {
     mat.roughness = opts.roughness as number;
+  } else if (packedMr) {
+    mat.roughness = 1;
   } else {
     mat.roughness = 0.8;
   }
 
-  if (isTex(opts.metalness)) {
-    mat.metalnessMap = opts.metalness;
-    mat.metalness = 1;
-  } else if (opts.metalness !== undefined) {
+  if (typeof opts.metalness === 'number') {
     mat.metalness = opts.metalness as number;
+  } else if (packedMr) {
+    mat.metalness = 1;
   }
 
   if (isTex(opts.emissive)) {
+    requireTextureUsage(opts.emissive, 'emissive');
     mat.emissiveMap = opts.emissive;
     mat.emissive = new THREE.Color(0xffffff);
   } else if (opts.emissive !== undefined) {
@@ -182,8 +283,62 @@ export function pbrMaterial(opts: PbrMaterialOptions = {}): THREE.MeshStandardMa
     mat.emissiveIntensity = opts.emissiveIntensity;
   }
 
-  if (opts.aoMap) mat.aoMap = opts.aoMap;
+  if (opts.aoMap) {
+    requireTextureUsage(opts.aoMap, 'occlusion');
+    mat.aoMap = opts.aoMap;
+  }
   if (opts.aoMapIntensity !== undefined) mat.aoMapIntensity = opts.aoMapIntensity;
 
+  const alphaMode = opts.alphaMode ?? 'opaque';
+  if (alphaMode !== 'opaque' && alphaMode !== 'mask' && alphaMode !== 'blend') {
+    throw new TypeError('alphaMode must be one of "opaque", "mask", or "blend".');
+  }
+  if (opts.doubleSided !== undefined && typeof opts.doubleSided !== 'boolean') {
+    throw new TypeError('doubleSided must be a boolean when provided.');
+  }
+  if (opts.alphaCutoff !== undefined && alphaMode !== 'mask') {
+    throw new TypeError('alphaCutoff is valid only when alphaMode is "mask".');
+  }
+  if (
+    opts.alphaCutoff !== undefined &&
+    (!Number.isFinite(opts.alphaCutoff) || opts.alphaCutoff < 0 || opts.alphaCutoff > 1)
+  ) {
+    throw new RangeError('alphaCutoff must be a finite number in [0,1].');
+  }
+  if (alphaMode === 'mask') {
+    mat.alphaTest = opts.alphaCutoff ?? 0.5;
+    mat.transparent = false;
+  } else if (alphaMode === 'blend') {
+    mat.alphaTest = 0;
+    mat.transparent = true;
+  }
+  if (opts.doubleSided) mat.side = THREE.DoubleSide;
+  (mat.userData as Record<string, unknown>)['kilnMaterial'] = {
+    alphaMode,
+    ...(alphaMode === 'mask' ? { alphaCutoff: mat.alphaTest } : {}),
+    doubleSided: opts.doubleSided === true,
+  };
+
   return mat;
+}
+
+export interface FoliageMaterialOptions {
+  alphaCutoff?: number;
+  roughness?: number;
+  doubleSided?: boolean;
+}
+
+/** Portable foliage material: glTF MASK + cutoff + double-sided by default. */
+export function foliageMaterial(
+  albedo: number | string | THREE.Texture,
+  opts: FoliageMaterialOptions = {},
+): THREE.MeshStandardMaterial {
+  return pbrMaterial({
+    albedo,
+    roughness: opts.roughness ?? 0.9,
+    metalness: 0,
+    alphaMode: 'mask',
+    alphaCutoff: opts.alphaCutoff ?? 0.5,
+    doubleSided: opts.doubleSided ?? true,
+  });
 }

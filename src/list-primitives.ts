@@ -67,6 +67,55 @@ const PRIMITIVES: PrimitiveSpec[] = [
     example: "const hip = createPivot('Hip', [0, 1, 0], root);",
   },
   {
+    name: 'createJointChain',
+    signature:
+      'createJointChain(name, segments: { role, offset, aliases?, side?, localForwardAxis?, localBendAxis?, endEffector?, contact? }[], opts?: { parent?, parentRole? })',
+    returns: '{ root, end, nodes, byRole, descriptors }',
+    category: 'structure',
+    description:
+      'Creates one body-plan-neutral deterministic Joint_* chain with explicit parent edges, rest frames, local axes, end effectors, contacts, and semantic metadata.',
+    example:
+      "const leg = createJointChain('LegL', [{ role: 'hip.left', offset: [0, 1, -0.2], side: 'left' }, { role: 'knee.left', offset: [0, -0.5, 0], side: 'left' }, { role: 'ankle.left', offset: [0, -0.5, 0], side: 'left', endEffector: true, contact: true }], { parent: root });",
+    promptNotes:
+      'Use only the resolved body-plan graph. Offsets are local to the previous joint; contact end effectors must land at world Y=0.',
+  },
+  {
+    name: 'createVehicleFrame',
+    signature:
+      'createVehicleFrame(name, opts?: { chassis?, axles?, seats?, contacts?, steering?, propulsion?, parent? })',
+    returns: '{ root, chassis, axles, seats, contacts, steering, propulsion }',
+    category: 'structure',
+    description:
+      'Creates a canonical +X-forward/+Y-up/+Z-right vehicle frame with typed semantic sockets for chassis, support, steering, and propulsion.',
+    example:
+      "const frame = createVehicleFrame('CarFrame', { axles: [{ id: 'front', position: [1.2, 0.45, 0] }, { id: 'rear', position: [-1.2, 0.45, 0] }], parent: root });",
+    promptNotes:
+      'Generated vehicles keep +X as front. Boats and other non-wheeled subtypes use declared support/propulsion sockets, not wheel rules.',
+  },
+  {
+    name: 'createWheelGeometrySet',
+    signature: 'createWheelGeometrySet(radius: number, width: number)',
+    returns: '{ tire, rim, hub } shared THREE.BufferGeometry set',
+    category: 'instancing',
+    description:
+      'Creates one reusable +Z-axle tire/rim/hub geometry set for instanced wheel assemblies.',
+    example: 'const wheelGeo = createWheelGeometrySet(0.45, 0.22);',
+  },
+  {
+    name: 'createWheelAssembly',
+    signature:
+      'createWheelAssembly(name, { tire, rim, hub? }, { radius, width, side, index, position?, rimRadius?, hubRadius?, steering?, loadBearing?, geometries?, parent? })',
+    returns:
+      '{ root, steeringPivot?, spinPivot, tire, rim, hub, contact, radius, width, side, index, spinAxis }',
+    category: 'structure',
+    description:
+      'Creates one axle-centered wheel pivot containing concentric tire/rim/hub roles, a contact marker, +Z spin frame, and optional steering pivot.',
+    example:
+      "createWheelAssembly('FrontLeft', { tire: rubber, rim: metal }, { radius: 0.45, width: 0.22, side: 'left', index: 'front', position: [1.2, 0.45, -0.9], steering: true, geometries: wheelGeo, parent: frame.root });",
+    promptNotes:
+      'Keep tire, rim, and hub descendants concentric at the axle pivot. Reuse one geometry set across matching wheels.',
+  },
+  {
     name: 'createPart',
     signature:
       'createPart(name, geometry, material, opts?: { position, rotation: [xDeg, yDeg, zDeg], scale, pivot, parent })',
@@ -159,6 +208,57 @@ const PRIMITIVES: PrimitiveSpec[] = [
       "const { root: roof } = createRoofPlanes('Roof', shingle, { width: 5, depth: 4, height: 1.6, overhang: 0.4, ridgeAxis: 'x', parent: root });\nroof.position.y = 2.8;",
     promptNotes:
       'The two slopes must fall AWAY from each other from the ridge — createRoofPlanes does this for you. Drop it onto the walls (position.y = wall height).',
+  },
+  {
+    name: 'createGableRoof',
+    signature:
+      "createGableRoof(name, material, { spanX, spanZ, rise?, pitchDegrees?, overhang?, ridgeAxis?: 'x'|'z', thickness?, parent? })",
+    returns:
+      '{ root, slopes: [Object3D, Object3D], faces: [RoofFaceFrame, RoofFaceFrame], rise, pitchDegrees }',
+    category: 'structure',
+    description:
+      'Explicit-axis gable roof using unambiguous footprint spans. Each face owns a rigid frame with ridge tangent, outward normal, downhill direction, ridge/eave endpoints, dimensions, and a live local-to-world transform.',
+    example:
+      "const roof = createGableRoof('Roof', shingles, { spanX: 8, spanZ: 5, pitchDegrees: 35, overhang: 0.35, ridgeAxis: 'x', parent: root });",
+    promptNotes:
+      'Prefer this over width/depth roof math. ridgeAxis is the direction of the ridge; roof panels run along each returned face downhill direction.',
+  },
+  {
+    name: 'createGableEndPanel',
+    signature:
+      "createGableEndPanel(name, material, { span, rise, thickness?, ridgeAxis?: 'x'|'z', side?: 'positive'|'negative', openings?: [{ id?, offset?, bottom?, width, height }], parent? })",
+    returns: '{ root, geometry, openings }',
+    category: 'structure',
+    description:
+      'Exact thick triangular end closure for a gable roof, with optional rectangular openings cut from the geometry and semantic boundary metadata.',
+    example:
+      "createGableEndPanel('FrontGable', siding, { span: 5, rise: 1.8, ridgeAxis: 'x', side: 'positive', parent: root });",
+  },
+  {
+    name: 'createGableShell',
+    signature:
+      "createGableShell(name, { wall, roof, floor?, gable? }, { spanX, spanZ, wallHeight?, rise?, pitchDegrees?, overhang?, ridgeAxis?: 'x'|'z', thickness?, wallThickness?, floorThickness?, closedEnds?, enterable?, openings?, gableOpenings?, parent? })",
+    returns: '{ root, walls, floor, roof, gables, openings }',
+    category: 'structure',
+    description:
+      'Closed-by-default, correct-by-construction gable building: hollow room, floor, two opposing roof slopes, two complete gable ends, and a real front doorway when enterable.',
+    example:
+      "const house = createGableShell('House', { wall: plaster, roof: shingles }, { spanX: 8, spanZ: 5, wallHeight: 2.8, pitchDegrees: 35, ridgeAxis: 'x', parent: root });",
+    promptNotes:
+      'Use for complete gable buildings. It stamps wall, floor, slope, gable, opening, adjacency, coverage, and separability semantics for deterministic QA and roof-off views.',
+  },
+  {
+    name: 'createRoofSurfaceLayout',
+    signature:
+      "createRoofSurfaceLayout(name, material, { face, kind: 'panels'|'shingles'|'seams'|'corrugations', parent?, panelWidth?, rowHeight?, spacing?, thickness? })",
+    returns: '{ root, items: Object3D[] }',
+    category: 'structure',
+    description:
+      'Places roof-local panels, shingles, seams, or corrugations from a returned RoofFaceFrame, so repeated elements run ridge-to-eave for either ridge axis without manual Euler rotations.',
+    example:
+      "for (const face of roof.faces) createRoofSurfaceLayout('Panels_' + face.side, metal, { face, kind: 'panels', parent: roof.root });",
+    promptNotes:
+      'Always pass the face object returned by createGableRoof/createGableShell. Never infer the panel rotation from world axes.',
   },
   {
     name: 'createStairs',
@@ -356,7 +456,7 @@ const PRIMITIVES: PrimitiveSpec[] = [
     description:
       'Single-quad foliage card with a configurable Y pivot. yPivot=0 plants the quad on the ground. Pair with an alpha-tested material and a leaf/plant sprite.',
     example:
-      "const quad = foliageCardGeo({ width: 4, height: 6, yPivot: 0 });\ncreatePart('Mesh_Fern', quad, gameMaterial(0x3a6b2e), { parent: root });",
+      "const leaves = await loadTexture('./fern.png', { usage: 'albedo' });\nconst quad = foliageCardGeo({ width: 4, height: 6, yPivot: 0 });\ncreatePart('Mesh_Fern', quad, foliageMaterial(leaves), { parent: root });",
   },
   {
     name: 'crossedQuadsGeo',
@@ -366,7 +466,7 @@ const PRIMITIVES: PrimitiveSpec[] = [
     description:
       'Cross-billboard bush primitive: 2 or 3 planes intersecting along the Y axis. Reads as a dense plant from any angle, cheaper than real geometry.',
     example:
-      "const bush = crossedQuadsGeo({ width: 2, height: 2, planes: 3 });\ncreatePart('Mesh_Bush', bush, gameMaterial(0x2f4a1a), { parent: root });",
+      "const leaves = await loadTexture('./bush.png', { usage: 'albedo' });\nconst bush = crossedQuadsGeo({ width: 2, height: 2, planes: 3 });\ncreatePart('Mesh_Bush', bush, foliageMaterial(leaves), { parent: root });",
   },
   {
     name: 'octaGridPlane',
@@ -421,6 +521,19 @@ const PRIMITIVES: PrimitiveSpec[] = [
     category: 'material',
     description: 'Flat-shaded PBR material. Default for game-ready low-poly. Use for 95% of parts.',
     example: 'const mat = gameMaterial(0x8b7355, { roughness: 0.9 });',
+  },
+  {
+    name: 'materialRecipe',
+    signature:
+      'await materialRecipe(recipeId, overrides?: { baseColor?, roughness?, metalness?, opacity?, alphaCutoff?, doubleSided?, emissiveColor?, emissiveIntensity?, textureResources? })',
+    returns: 'Promise<THREE.MeshStandardMaterial>',
+    category: 'material',
+    description:
+      'Resolves a versioned portable bark/leaf/wood/stone/rubber/painted-metal/cloth/skin/glass/emissive recipe to standard glTF PBR.',
+    example:
+      "const bark = await materialRecipe('kiln.material.bark.v1', { baseColor: '#6b4328' });",
+    promptNotes:
+      'Use only listed kiln.material.*.v1 IDs and approved kiln.texture.* resource IDs. Leaf is MASK, glass is BLEND, and host file paths are forbidden.',
   },
   {
     name: 'basicMaterial',
@@ -769,24 +882,36 @@ const PRIMITIVES: PrimitiveSpec[] = [
   // ---------------------------------------------------------------------------
   {
     name: 'loadTexture',
-    signature: 'await loadTexture(source: string | Buffer | Uint8Array)',
+    signature:
+      "await loadTexture(source, { usage?: 'albedo'|'emissive'|'normal'|'roughness'|'metalness'|'metallicRoughness'|'occlusion', name? })",
     returns: 'Promise<THREE.DataTexture>',
     category: 'textures',
     description:
-      'Loads a PNG/JPG/WebP image into a Three.js Texture. Stashes the encoded bytes on userData.encoded so GLB export is lossless.',
-    example: "const wood = await loadTexture('./textures/oak-albedo.png');",
+      'Loads a PNG/JPG/WebP image with explicit slot usage. Albedo/emissive preview as sRGB; normal/roughness/metalness/occlusion are linear data. Stashes encoded bytes and QA metadata for lossless GLB export.',
+    example: "const wood = await loadTexture('./textures/oak-albedo.png', { usage: 'albedo' });",
     promptNotes:
       'NEVER texture.clone() a loaded texture (clone() corrupts the encoded bytes and breaks GLB export). Share the same Texture object and remap UVs with panelRemapV on the smaller mesh instead.',
   },
   {
     name: 'pbrMaterial',
-    signature: 'pbrMaterial({ albedo?, normal?, roughness?, metalness?, emissive?, aoMap? })',
+    signature:
+      'pbrMaterial({ albedo?, normal?, roughness?, metalness?, metallicRoughness?, emissive?, aoMap?, alphaMode?, alphaCutoff?, doubleSided? })',
     returns: 'THREE.MeshStandardMaterial',
     category: 'material',
     description:
-      'Full PBR material. Each slot can be a hex color/scalar or a Texture loaded via loadTexture. Exports as glTF pbrMetallicRoughness.',
+      'Portable glTF PBR material. Use an explicit packed metallicRoughness texture (G=roughness, B=metalness); separate data maps are rejected instead of silently dropping a channel. Supports OPAQUE/MASK/BLEND and double-sided output.',
     example:
       "const wood = await loadTexture('./oak.png');\nconst crate = pbrMaterial({ albedo: wood, roughness: 0.85, metalness: 0 });",
+  },
+  {
+    name: 'foliageMaterial',
+    signature: 'foliageMaterial(albedo, { alphaCutoff?, roughness?, doubleSided? })',
+    returns: 'THREE.MeshStandardMaterial',
+    category: 'material',
+    description:
+      'Portable foliage material that defaults to glTF MASK, cutoff 0.5, rough nonmetal, and double-sided. Use an alpha-bearing albedo texture.',
+    example:
+      "const leaves = await loadTexture('./leaf.png', { usage: 'albedo' });\nconst mat = foliageMaterial(leaves, { alphaCutoff: 0.45 });",
   },
 
   // ---------------------------------------------------------------------------
@@ -819,7 +944,7 @@ const PRIMITIVES: PrimitiveSpec[] = [
   {
     name: 'validateAsset',
     signature:
-      "validateAsset(root: Object3D, category: 'character' | 'prop' | 'vfx' | 'environment')",
+      "validateAsset(root: Object3D, category: 'character' | 'prop' | 'vfx' | 'environment' | 'architecture' | 'vegetation' | 'vehicle')",
     returns: '{ valid, errors, warnings }',
     category: 'utility',
     description: 'Warns on category-appropriate triangle / material budgets.',
