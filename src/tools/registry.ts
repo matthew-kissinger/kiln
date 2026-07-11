@@ -705,6 +705,125 @@ export function createKilnViewInteriorDef(context: KilnToolContext = {}): KilnTo
 export const kilnViewInteriorDef: KilnToolDef = createKilnViewInteriorDef();
 
 // =============================================================================
+// kiln_inspect (unified) — part-framed close-up of one suspect region
+// =============================================================================
+
+const inspectInput = z.object({
+  code: z.string().describe('Kiln source code to execute and inspect.'),
+  part: z
+    .string()
+    .optional()
+    .describe(
+      'The part to frame, by node name from your program (case-insensitive; substring match as a ' +
+        'fallback). Omit to frame the whole asset.',
+    ),
+  view: z
+    .string()
+    .optional()
+    .describe('Camera angle: front, right, back, left, top, or three-quarter (default).'),
+  zoom: z
+    .number()
+    .optional()
+    .describe(
+      'Padding multiplier around the part bounds, clamped to 1-4. Default 1.2; raise it to see ' +
+        'more surrounding context.',
+    ),
+});
+
+export interface KilnInspectResult {
+  ok: boolean;
+  /** Resolved part name that was framed (absent when the whole asset was framed). */
+  part?: string;
+  view?: string;
+  zoom?: number;
+  /** One line stating what was framed and from which view. */
+  framed?: string;
+  width?: number;
+  height?: number;
+  /** The close-up PNG, base64 (image transports strip this and attach the bytes). */
+  pngBase64?: string;
+  /** Part names available for framing (set when the requested part was not found). */
+  availableParts?: string[];
+  error?: string;
+}
+
+/**
+ * Execute Kiln code and render ONE view framed to a named part's world bounds
+ * (the part and its descendants), so the agent can see a suspect region at
+ * full-image detail instead of one grid cell. An unresolved part name is not an
+ * error thrown at the loop — it comes back as { ok:false, availableParts } so
+ * the model can retry by name. The views module is imported lazily (node:zlib)
+ * to keep it out of the browser bundle graph.
+ */
+async function runInspect(input: z.infer<typeof inspectInput>): Promise<KilnInspectResult> {
+  try {
+    const { renderInspectView } = await import('../views/inspect');
+    const { root } = await executeKilnCode(input.code);
+    const r = renderInspectView(root, {
+      ...(input.part !== undefined ? { part: input.part } : {}),
+      ...(input.view !== undefined ? { view: input.view } : {}),
+      ...(input.zoom !== undefined ? { zoom: input.zoom } : {}),
+    });
+    if (!r.ok) {
+      return {
+        ok: false,
+        view: r.view,
+        zoom: r.zoom,
+        error: r.error,
+        availableParts: r.availableParts,
+      };
+    }
+    const framed = r.part
+      ? `Framed part "${r.part}" (with its descendants) from the ${r.view} view at zoom ${r.zoom}.`
+      : `Framed the whole asset from the ${r.view} view.`;
+    return {
+      ok: true,
+      ...(r.part ? { part: r.part } : {}),
+      view: r.view,
+      zoom: r.zoom,
+      framed,
+      width: r.width,
+      height: r.height,
+      pngBase64: r.png.toString('base64'),
+    };
+  } catch (err) {
+    return { ok: false, error: err instanceof Error ? err.message : String(err) };
+  }
+}
+
+/**
+ * The unified-surface close-up tool. Exported separately and intentionally NOT
+ * part of `kilnToolRegistry` (the four-tool bench baseline stays unchanged). No
+ * host context: it renders pixels only — no validation or category-aware QA.
+ * Shares `screenshotMedia` so image transports attach the PNG bytes and strip
+ * the base64.
+ */
+const KILN_INSPECT_DESCRIPTION =
+  'ZOOM IN on one part: renders a single 512x512 close-up framed to the named part (the node name ' +
+  'you gave createPart, matched case-insensitively with a substring fallback) and its descendants, ' +
+  'from one camera. Use it after kiln_render reveals a suspect region — a floating part, a bad ' +
+  'joint, a wrong proportion — to see fine detail one grid cell cannot show. args: part (omit to ' +
+  'frame the whole asset in one large view), view (front/right/back/left/top/three-quarter, ' +
+  'default three-quarter), zoom (padding multiplier around the part bounds, 1 = tight crop up to ' +
+  '4 = wide context, default 1.2). If the part name does not resolve you get the list of available ' +
+  'part names back — pick one and retry. Surrounding geometry stays visible and can occlude the ' +
+  'part; pick a different view if blocked. Flat-shaded CPU render; writes no files.';
+
+/** Create the close-up inspection definition. */
+export function createKilnInspectDef(): KilnToolDef {
+  return {
+    name: 'kiln_inspect',
+    description: KILN_INSPECT_DESCRIPTION,
+    inputSchema: inspectInput,
+    run: async (input) => runInspect(inspectInput.parse(input)),
+    media: screenshotMedia,
+  };
+}
+
+/** Neutral compatibility export. It never reads category from generated source. */
+export const kilnInspectDef: KilnToolDef = createKilnInspectDef();
+
+// =============================================================================
 // Registry
 // =============================================================================
 

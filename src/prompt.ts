@@ -309,6 +309,10 @@ After kiln_render you SEE the six views (metrics ride alongside the image). Befo
   stave assemblies (barrels, drums) must look CLOSED — daylight through the
   wall means staves are rotated radial instead of tangent.
 If any view looks wrong, fix the code (kiln_edit or kiln_draft) and re-render before finalizing.
+If a view reveals a suspect REGION — a floating part, a bad joint, a wrong proportion — call
+kiln_inspect with that part's name for a single framed close-up before editing; prefer it over
+re-reading the whole grid for fine detail. An unresolved name returns the list of part names to
+retry with.
 If this is an ANIMATED CHARACTER, also call kiln_screenshot_animation on your key clips
 before finalizing — at least the walk and the main attack — from the right (side) camera,
 and check the MOTION (the static render cannot show it):

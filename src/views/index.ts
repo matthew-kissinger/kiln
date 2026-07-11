@@ -6,7 +6,9 @@
  * rasterizer in ./raster.ts. This is what the agent sees via the
  * kiln_screenshot tool and what ships as the views.png artifact.
  *
- * Grid order (stated in tool text instead of baked-in labels):
+ * Grid order (H-30: now ALSO stamped into each cell as a label + axis gnomon,
+ * matching the animation/interior grids — grid-confusion literature shows
+ * text-only layout descriptions silently fail):
  *   row 1: Front, Right, Back
  *   row 2: Left,  Top,   3/4
  */
@@ -236,12 +238,84 @@ export interface ViewGridOptions extends RasterOptions {
   snapPalette?: readonly SnapPaletteSlot[];
 }
 
+// H-30: kiln-frame axis gnomon colors (+X fwd red, +Y up green, +Z right blue).
+const GNOMON_AXES: Array<{
+  label: string;
+  axis: [number, number, number];
+  color: [number, number, number];
+}> = [
+  { label: 'X', axis: [1, 0, 0], color: [235, 80, 70] },
+  { label: 'Y', axis: [0, 1, 0], color: [90, 205, 90] },
+  { label: 'Z', axis: [0, 0, 1], color: [90, 145, 245] },
+];
+
+/**
+ * Stamp a small world-axis gnomon into a rasterized cell (bottom-left corner),
+ * using the SAME camera basis as rasterizeView so the arrows are exact
+ * (3DAxisPrompt: ticked/annotated axes measurably improve VLM 3D localization).
+ * Axes nearly perpendicular to the image plane (projected length < 0.25) are
+ * skipped — only in-plane axes disambiguate a view.
+ */
+export function stampAxisGnomon(rgb: Uint8Array, size: number, viewDir: readonly number[]): void {
+  // rasterizeView's basis, duplicated deliberately (raster.ts keeps it private).
+  const zl = Math.hypot(viewDir[0]!, viewDir[1]!, viewDir[2]!) || 1;
+  const z = [viewDir[0]! / zl, viewDir[1]! / zl, viewDir[2]! / zl] as const;
+  const up = Math.abs(z[1]) > 0.99 ? ([0, 0, -1] as const) : ([0, 1, 0] as const);
+  const cx = [
+    up[1] * z[2] - up[2] * z[1],
+    up[2] * z[0] - up[0] * z[2],
+    up[0] * z[1] - up[1] * z[0],
+  ];
+  const xl = Math.hypot(cx[0]!, cx[1]!, cx[2]!) || 1;
+  const bx = [cx[0]! / xl, cx[1]! / xl, cx[2]! / xl] as const;
+  const by = [
+    z[1] * bx[2] - z[2] * bx[1],
+    z[2] * bx[0] - z[0] * bx[2],
+    z[0] * bx[1] - z[1] * bx[0],
+  ] as const;
+
+  const len = Math.max(12, Math.round(size * 0.055));
+  // Inset the origin by the arrow length so leftward/downward projections
+  // (e.g. +Z in the Front view) aren't clipped at the cell edge.
+  const ox = len + 10;
+  const oy = size - len - 10;
+  for (const { label, axis, color } of GNOMON_AXES) {
+    const dx = axis[0] * bx[0] + axis[1] * bx[1] + axis[2] * bx[2];
+    const dy = axis[0] * by[0] + axis[1] * by[1] + axis[2] * by[2];
+    if (Math.hypot(dx, dy) < 0.25) continue;
+    const ex = ox + dx * len;
+    const ey = oy - dy * len; // screen y is flipped vs the camera's up
+    const steps = Math.ceil(Math.hypot(ex - ox, ey - oy));
+    for (let s = 0; s <= steps; s++) {
+      const px = Math.round(ox + ((ex - ox) * s) / steps);
+      const py = Math.round(oy + ((ey - oy) * s) / steps);
+      for (let ty = 0; ty < 2; ty++) {
+        for (let tx = 0; tx < 2; tx++) {
+          const x = px + tx;
+          const y = py + ty;
+          if (x < 0 || y < 0 || x >= size || y >= size) continue;
+          const p = (y * size + x) * 3;
+          rgb[p] = color[0];
+          rgb[p + 1] = color[1];
+          rgb[p + 2] = color[2];
+        }
+      }
+    }
+    stampLabel(rgb, size, size, Math.round(ex) + 2, Math.round(ey) - 6, label, 1);
+  }
+}
+
 /** Render a (possibly sandbox-created) Three.js scene root into the 3x2 grid. */
 export async function renderViewGrid(
   root: unknown,
   opts: ViewGridOptions = {},
 ): Promise<ViewGridResult> {
-  const size = opts.size ?? 256;
+  // H-31: 384px cells (was 256). Measured input-image cost of the full grid:
+  // Anthropic ~w*h/750 tokens => 1168x780 ≈ 1,215 tok (vs 784x524 ≈ 548) —
+  // negligible against 32-64K reasoning budgets; 512 would double it again for
+  // marginal legibility gain at typical asset scales. Candidate thumbnails
+  // downscale separately (Studio thumbnailFor), unaffected.
+  const size = opts.size ?? 384;
   const views = opts.views ?? SIX_VIEWS;
   if (opts.snapPalette?.length) snapSceneToPalette(root, opts.snapPalette);
   const cols = 3;
@@ -256,8 +330,13 @@ export async function renderViewGrid(
     grid[i * 3 + 2] = PAD_COLOR[2];
   }
 
+  const labelScale = Math.max(2, Math.round(size / 96));
   for (let vi = 0; vi < views.length; vi++) {
     const cell = rasterizeView(root, views[vi]!.dir, { size, backfaceCull: opts.backfaceCull });
+    // H-30: stamp the view name + axis gnomon into the cell (small, corner-
+    // anchored, away from the centered silhouette — SeeAct caveat).
+    stampLabel(cell, size, size, labelScale, labelScale, views[vi]!.name, labelScale);
+    stampAxisGnomon(cell, size, views[vi]!.dir);
     const col = vi % cols;
     const row = Math.floor(vi / cols);
     const x0 = PAD + col * (size + PAD);
