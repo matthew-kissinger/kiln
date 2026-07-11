@@ -1,0 +1,188 @@
+/**
+ * Part-framed close-up rendering for the Kiln vision loop (kiln_inspect).
+ *
+ * Renders ONE orthographic view of an executed scene, framed to a named part's
+ * world bounds (the part and its descendants) instead of the whole asset, so
+ * the agent can inspect a suspect region — a joint, a contact point, a
+ * proportion — at full-image detail instead of one grid cell. Part selection is
+ * name-driven by design (the model authored the names via createPart), NOT a
+ * free camera: an unresolved name comes back with the list of available part
+ * names so the model can retry. Surrounding geometry stays visible (and may
+ * occlude the part from some angles), matching the diagnostic views'
+ * focus-bounds framing model (see ./diagnostic.ts).
+ */
+
+import { rasterizeView, measureBounds } from './raster';
+import { encodePng } from './png';
+
+/** Square close-up size in pixels — one big view, not a grid cell. */
+export const INSPECT_SIZE = 512;
+export const INSPECT_DEFAULT_ZOOM = 1.2;
+export const INSPECT_MIN_ZOOM = 1;
+export const INSPECT_MAX_ZOOM = 4;
+/** Cap on the part-name listing returned for an unresolved part. */
+export const INSPECT_MAX_PART_NAMES = 40;
+
+/** Camera names accepted by kiln_inspect (same directions as the six-view grid). */
+const INSPECT_CAMERAS: Record<string, [number, number, number]> = {
+  front: [1, 0, 0],
+  right: [0, 0, 1],
+  back: [-1, 0, 0],
+  left: [0, 0, -1],
+  top: [0, 1, 0.0001],
+  'three-quarter': [0.7, 0.5, 0.7],
+};
+
+/** Minimal duck-typed view of a (possibly cross-realm) scene node. */
+interface DuckNamedNode {
+  name?: string;
+  updateMatrixWorld?(force?: boolean): void;
+  traverse?(cb: (obj: unknown) => void): void;
+}
+
+export interface InspectViewOptions {
+  /** Part to frame, by node name (case-insensitive exact match, then substring).
+   *  Omit to frame the whole asset. */
+  part?: string;
+  /** Camera angle: front, right, back, left, top, or three-quarter (default).
+   *  Unknown names fall back to three-quarter. */
+  view?: string;
+  /** Padding multiplier around the framed bounds, clamped to 1..4. Default 1.2. */
+  zoom?: number;
+  /** Square output size in pixels. Default {@link INSPECT_SIZE}. */
+  size?: number;
+}
+
+export type InspectViewResult =
+  | {
+      ok: true;
+      /** Resolved node name that was framed (absent when the whole asset was framed). */
+      part?: string;
+      /** Resolved camera name. */
+      view: string;
+      /** Effective (clamped) padding multiplier. */
+      zoom: number;
+      width: number;
+      height: number;
+      png: Buffer;
+    }
+  | {
+      ok: false;
+      view: string;
+      zoom: number;
+      error: string;
+      /** Named nodes available for framing (deduped, scene order, capped). */
+      availableParts: string[];
+    };
+
+/** Named scene nodes in traversal (scene) order, deduped, capped. */
+export function listPartNames(root: unknown, cap = INSPECT_MAX_PART_NAMES): string[] {
+  const names: string[] = [];
+  const seen = new Set<string>();
+  (root as DuckNamedNode).traverse?.((obj) => {
+    const name = (obj as DuckNamedNode).name?.trim();
+    if (!name || seen.has(name) || names.length >= cap) return;
+    seen.add(name);
+    names.push(name);
+  });
+  return names;
+}
+
+/** First node whose name matches `part` case-insensitively — exact before substring. */
+function findPartNode(root: unknown, part: string): DuckNamedNode | undefined {
+  const query = part.trim().toLowerCase();
+  if (!query) return undefined;
+  let exact: DuckNamedNode | undefined;
+  let partial: DuckNamedNode | undefined;
+  (root as DuckNamedNode).traverse?.((obj) => {
+    const node = obj as DuckNamedNode;
+    const name = node.name?.trim().toLowerCase();
+    if (!name) return;
+    if (!exact && name === query) exact = node;
+    else if (!partial && name.includes(query)) partial = node;
+  });
+  return exact ?? partial;
+}
+
+type Bounds = { min: [number, number, number]; max: [number, number, number] };
+
+/** Grow a bounds box about its center by `factor` (the zoom padding). */
+function expandBounds(b: Bounds, factor: number): Bounds {
+  const min: [number, number, number] = [0, 0, 0];
+  const max: [number, number, number] = [0, 0, 0];
+  for (let a = 0; a < 3; a++) {
+    const center = (b.min[a]! + b.max[a]!) / 2;
+    const half = ((b.max[a]! - b.min[a]!) / 2) * factor;
+    min[a] = center - half;
+    max[a] = center + half;
+  }
+  return { min, max };
+}
+
+/** The all-zero sentinel measureBounds returns for a triangle-free subtree. */
+function isEmptyBounds(b: Bounds): boolean {
+  return b.min.every((v) => v === 0) && b.max.every((v) => v === 0);
+}
+
+/**
+ * Render one close-up view framed to a named part's world bounds (or the whole
+ * asset when no part is given). Never throws on a bad part name — that comes
+ * back as { ok:false, availableParts } so the agent loop can retry by name.
+ */
+export function renderInspectView(root: unknown, opts: InspectViewOptions = {}): InspectViewResult {
+  const size = opts.size ?? INSPECT_SIZE;
+  const viewKey = (opts.view ?? 'three-quarter').trim().toLowerCase();
+  const view = viewKey in INSPECT_CAMERAS ? viewKey : 'three-quarter';
+  const zoom = Math.min(
+    INSPECT_MAX_ZOOM,
+    Math.max(INSPECT_MIN_ZOOM, opts.zoom ?? INSPECT_DEFAULT_ZOOM),
+  );
+
+  // World matrices must be current before measuring a subtree in isolation
+  // (measureBounds on a child composes from its parent's matrixWorld).
+  (root as DuckNamedNode).updateMatrixWorld?.(true);
+
+  let part: string | undefined;
+  let bounds: Bounds;
+  const requested = opts.part?.trim();
+  if (requested) {
+    const node = findPartNode(root, requested);
+    if (!node) {
+      return {
+        ok: false,
+        view,
+        zoom,
+        error: `no part named "${requested}" in the scene`,
+        availableParts: listPartNames(root),
+      };
+    }
+    const b = measureBounds(node);
+    if (isEmptyBounds(b)) {
+      return {
+        ok: false,
+        view,
+        zoom,
+        error: `part "${node.name}" has no visible geometry to frame`,
+        availableParts: listPartNames(root),
+      };
+    }
+    part = node.name!.trim();
+    bounds = b;
+  } else {
+    bounds = measureBounds(root);
+  }
+
+  const rgb = rasterizeView(root, INSPECT_CAMERAS[view]!, {
+    size,
+    frameBounds: expandBounds(bounds, zoom),
+  });
+  return {
+    ok: true,
+    ...(part ? { part } : {}),
+    view,
+    zoom,
+    width: size,
+    height: size,
+    png: encodePng(rgb, size, size),
+  };
+}

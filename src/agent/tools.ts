@@ -22,6 +22,7 @@ import { z } from 'zod';
 
 import {
   createKilnToolRegistry,
+  createKilnInspectDef,
   createKilnRenderViewsDef,
   createKilnScreenshotAnimationDef,
   createKilnViewInteriorDef,
@@ -491,6 +492,25 @@ const draftInput = z.object({
     .describe('The complete Kiln program (defines `meta` + `build()`, optional `animate()`).'),
 });
 
+/** Schema for the buffer-aware close-up tool (omits `code` — it reads the working buffer). */
+const inspectBufferInput = z.object({
+  part: z
+    .string()
+    .optional()
+    .describe(
+      'The part to frame, by node name (case-insensitive; substring match as a fallback). ' +
+        'Omit to frame the whole asset.',
+    ),
+  view: z
+    .string()
+    .optional()
+    .describe('Camera angle: front, right, back, left, top, or three-quarter (default).'),
+  zoom: z
+    .number()
+    .optional()
+    .describe('Padding multiplier around the part bounds, clamped to 1-4. Default 1.2.'),
+});
+
 /**
  * Build the unified 6-tool surface over a working buffer seeded with `seedCode`
  * (empty for generate, the parent's code for refine). The buffer's live edit
@@ -601,6 +621,25 @@ export function makeKilnUnifiedTools(
     },
   });
 
+  // Buffer-aware close-up: after kiln_render flags a suspect region, frame ONE
+  // view to that part's bounds for detail a grid cell cannot show.
+  const inspectDef = createKilnInspectDef();
+  const inspectTool: Tool = tool({
+    name: 'kiln_inspect',
+    description: `${inspectDef.description} Operates on your current working buffer (no code argument).`,
+    inputSchema: inspectBufferInput,
+    callback: async (input) => {
+      const i = input as { part?: string; view?: string; zoom?: number };
+      const out = await inspectDef.run({
+        code: buffer.code,
+        ...(i.part !== undefined ? { part: i.part } : {}),
+        ...(i.view !== undefined ? { view: i.view } : {}),
+        ...(i.zoom !== undefined ? { zoom: i.zoom } : {}),
+      });
+      return toCallbackResult(inspectDef, out);
+    },
+  });
+
   // Buffer-aware motion view: after drafting/editing an animated character, SEE a
   // clip move (sideways walk, reverse knee, backward swing, item not tracking).
   const animationTool = makeBufferAnimationTool(() => buffer.code, animationDef);
@@ -648,6 +687,7 @@ export function makeKilnUnifiedTools(
     editTool,
     validateTool,
     renderTool,
+    inspectTool,
     animationTool,
     interiorTool,
     finalizeTool,

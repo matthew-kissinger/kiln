@@ -260,7 +260,10 @@ export function planFrameTimes(duration: number, count: number): number[] {
 // Tiny bitmap label stamp (annotate each frame with its phase)
 // =============================================================================
 
-// 3x5 glyphs (msb = leftmost column), only the chars the phase labels need.
+// 3x5 glyphs (msb = leftmost column). Digits + % for phase labels; H-30 added
+// the uppercase alphabet so view-name labels (FRONT/.../3/4, Eye-level, gnomon
+// axis letters) render as real text — letters previously fell through to the
+// blank space glyph, leaving unreadable backdrop boxes.
 const GLYPHS: Record<string, number[]> = {
   '0': [0b111, 0b101, 0b101, 0b101, 0b111],
   '1': [0b010, 0b110, 0b010, 0b010, 0b111],
@@ -274,6 +277,35 @@ const GLYPHS: Record<string, number[]> = {
   '9': [0b111, 0b101, 0b111, 0b001, 0b111],
   '%': [0b101, 0b001, 0b010, 0b100, 0b101],
   ' ': [0, 0, 0, 0, 0],
+  A: [0b010, 0b101, 0b111, 0b101, 0b101],
+  B: [0b110, 0b101, 0b110, 0b101, 0b110],
+  C: [0b011, 0b100, 0b100, 0b100, 0b011],
+  D: [0b110, 0b101, 0b101, 0b101, 0b110],
+  E: [0b111, 0b100, 0b110, 0b100, 0b111],
+  F: [0b111, 0b100, 0b110, 0b100, 0b100],
+  G: [0b011, 0b100, 0b101, 0b101, 0b011],
+  H: [0b101, 0b101, 0b111, 0b101, 0b101],
+  I: [0b111, 0b010, 0b010, 0b010, 0b111],
+  J: [0b001, 0b001, 0b001, 0b101, 0b010],
+  K: [0b101, 0b101, 0b110, 0b101, 0b101],
+  L: [0b100, 0b100, 0b100, 0b100, 0b111],
+  M: [0b101, 0b111, 0b111, 0b101, 0b101],
+  N: [0b101, 0b111, 0b111, 0b111, 0b101],
+  O: [0b010, 0b101, 0b101, 0b101, 0b010],
+  P: [0b110, 0b101, 0b110, 0b100, 0b100],
+  Q: [0b010, 0b101, 0b101, 0b010, 0b001],
+  R: [0b110, 0b101, 0b110, 0b101, 0b101],
+  S: [0b011, 0b100, 0b010, 0b001, 0b110],
+  T: [0b111, 0b010, 0b010, 0b010, 0b010],
+  U: [0b101, 0b101, 0b101, 0b101, 0b111],
+  V: [0b101, 0b101, 0b101, 0b101, 0b010],
+  W: [0b101, 0b101, 0b101, 0b111, 0b101],
+  X: [0b101, 0b101, 0b010, 0b101, 0b101],
+  Y: [0b101, 0b101, 0b010, 0b010, 0b010],
+  Z: [0b111, 0b001, 0b010, 0b100, 0b111],
+  '/': [0b001, 0b001, 0b010, 0b100, 0b100],
+  '-': [0b000, 0b000, 0b111, 0b000, 0b000],
+  '.': [0b000, 0b000, 0b000, 0b000, 0b010],
 };
 
 const LABEL_FG: [number, number, number] = [255, 224, 64]; // amber, reads on dark + lit faces
@@ -314,7 +346,7 @@ export function stampLabel(
   // Glyphs.
   let cx = x0 + pad;
   const cy = y0 + pad;
-  for (const ch of text) {
+  for (const ch of text.toUpperCase()) {
     const glyph = GLYPHS[ch] ?? GLYPHS[' ']!;
     for (let row = 0; row < 5; row++) {
       const bits = glyph[row]!;

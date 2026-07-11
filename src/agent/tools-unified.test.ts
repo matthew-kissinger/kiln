@@ -19,6 +19,17 @@ function build() {
 }
 `;
 
+// Two named parts under one root — the shape kiln_inspect frames by name.
+const TWO_PART_CODE = `
+const meta = { name: 'test-hammer', category: 'prop' };
+function build() {
+  const root = createRoot('Hammer');
+  createPart('Handle', boxGeo(0.2, 1.2, 0.2), gameMaterial('#8a5a2b'), { parent: root, position: [0, 0.6, 0] });
+  createPart('Head', boxGeo(0.6, 0.3, 0.3), gameMaterial('#9aa0a6'), { parent: root, position: [0, 1.35, 0] });
+  return root;
+}
+`;
+
 // An enterable building: a hollow room (walls named Shell_Wall<Side>) under a
 // separable roof group named 'Roof' — the shape kiln_view_interior lifts.
 const BUILDING_CODE = `
@@ -70,7 +81,7 @@ describe('KilnDraftBuffer', () => {
 });
 
 describe('makeKilnUnifiedTools', () => {
-  test('exposes exactly the eight unified tools in order (incl. the motion + interior views)', () => {
+  test('exposes exactly the nine unified tools in order (incl. the close-up, motion + interior views)', () => {
     const sink: UnifiedSink = { edits: [] };
     const tools = makeKilnUnifiedTools({ sink });
     expect(tools.map((t) => t.name)).toEqual([
@@ -79,6 +90,7 @@ describe('makeKilnUnifiedTools', () => {
       'kiln_edit',
       'kiln_validate',
       'kiln_render',
+      'kiln_inspect',
       'kiln_screenshot_animation',
       'kiln_view_interior',
       'kiln_finalize',
@@ -182,6 +194,54 @@ describe('makeKilnUnifiedTools', () => {
     });
     await findTool(tools, 'kiln_render').invoke({});
     expect(got).toHaveLength(0); // a failed render has no image → no candidate
+  });
+
+  test('kiln_inspect frames a named part: [ImageBlock, JsonBlock] and the text names part + view', async () => {
+    const sink: UnifiedSink = { edits: [] };
+    const tools = makeKilnUnifiedTools({ seedCode: TWO_PART_CODE, sink });
+    const out = (await findTool(tools, 'kiln_inspect').invoke({ part: 'head' })) as unknown[];
+    expect(Array.isArray(out)).toBe(true);
+    expect(out).toHaveLength(2);
+    expect(out[0]).toBeInstanceOf(ImageBlock);
+    expect(out[1]).toBeInstanceOf(JsonBlock);
+    const json = (out[1] as JsonBlock).json as Record<string, unknown>;
+    expect(json['ok']).toBe(true);
+    // createPart prefixes mesh names: 'head' resolves (case-insensitive substring)
+    // to the true scene-node name, which is what the model retries with.
+    expect(json['part']).toBe('Mesh_Head');
+    expect(json['view']).toBe('three-quarter'); // the default camera
+    expect(json['framed']).toContain('Mesh_Head');
+    expect(json['framed']).toContain('three-quarter');
+    expect(json['width']).toBe(512);
+    expect('pngBase64' in json).toBe(false); // image stripped by the media extractor
+  });
+
+  test('kiln_inspect on an unknown part returns the part list without throwing (image-free)', async () => {
+    const sink: UnifiedSink = { edits: [] };
+    const tools = makeKilnUnifiedTools({ seedCode: TWO_PART_CODE, sink });
+    const out = (await findTool(tools, 'kiln_inspect').invoke({ part: 'Blade' })) as {
+      ok: boolean;
+      error?: string;
+      availableParts?: string[];
+    };
+    expect(Array.isArray(out)).toBe(false); // no image on a miss
+    expect(out.ok).toBe(false);
+    expect(out.error).toContain('Blade');
+    expect(out.availableParts).toContain('Mesh_Handle');
+    expect(out.availableParts).toContain('Mesh_Head');
+  });
+
+  test('kiln_inspect with no part frames the whole asset in one view', async () => {
+    const sink: UnifiedSink = { edits: [] };
+    const tools = makeKilnUnifiedTools({ seedCode: TWO_PART_CODE, sink });
+    const out = (await findTool(tools, 'kiln_inspect').invoke({ view: 'front' })) as unknown[];
+    expect(Array.isArray(out)).toBe(true);
+    expect(out[0]).toBeInstanceOf(ImageBlock);
+    const json = (out[1] as JsonBlock).json as Record<string, unknown>;
+    expect(json['ok']).toBe(true);
+    expect('part' in json).toBe(false); // nothing singled out — whole-asset framing
+    expect(json['view']).toBe('front');
+    expect(json['framed']).toContain('whole asset');
   });
 
   test('kiln_view_interior returns [ImageBlock, JsonBlock] for a building buffer', async () => {
