@@ -150,4 +150,48 @@ describe('generateKilnAsset', () => {
     runImpl = async () => ({ toolCalls: ['kiln_validate'], steps: 1 });
     await expect(generateKilnAsset({ prompt: 'x' })).rejects.toThrow(/no code/);
   });
+
+  test('H-10: a salvaged-on-error run (code + error + salvaged) renders instead of throwing', async () => {
+    runImpl = async () => ({
+      code: CANNED_CODE,
+      toolCalls: ['kiln_draft', 'kiln_render'],
+      steps: 12,
+      salvaged: 'error',
+      error: 'MaxTokensError: the model hit its maximum token output limit',
+    });
+
+    const r = await generateKilnAsset({ prompt: 'a crate' });
+
+    // The salvaged program was rendered for real, flagged honestly.
+    expect(r.glb.byteLength).toBeGreaterThan(500);
+    expect(r.salvaged).toBe('error');
+    expect(r.salvageError).toMatch(/MaxTokensError/);
+    expect(r.warnings.some((w) => w.includes('salvaged best effort'))).toBe(true);
+  });
+
+  test('H-10: a step-cap salvage threads salvaged without a salvageError', async () => {
+    runImpl = async () => ({
+      code: CANNED_CODE,
+      toolCalls: ['kiln_draft', 'kiln_render'],
+      steps: 40,
+      capped: true,
+      salvaged: 'step-cap',
+    });
+
+    const r = await generateKilnAsset({ prompt: 'a crate' });
+
+    expect(r.salvaged).toBe('step-cap');
+    expect(r.salvageError).toBeUndefined();
+    expect(r.warnings.some((w) => w.includes('step cap'))).toBe(true);
+  });
+
+  test('H-10: an UNSALVAGED error with leftover code still throws (no silent bypass)', async () => {
+    runImpl = async () => ({
+      code: CANNED_CODE,
+      toolCalls: ['kiln_draft'],
+      steps: 2,
+      error: 'provider returned 500',
+    });
+    await expect(generateKilnAsset({ prompt: 'x' })).rejects.toThrow(/provider returned 500/);
+  });
 });

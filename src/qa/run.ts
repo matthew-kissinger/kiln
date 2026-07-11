@@ -10,7 +10,7 @@ import { PROP_QA_RULES } from './prop';
 import { ENVIRONMENT_QA_RULES } from './environment';
 import { W7_BREADTH_QA_RULES } from './breadth';
 import { withDerivedW7BreadthEvidence } from './breadth-evidence';
-import { QaRegistry, type QaRulePolicy } from './registry';
+import { QaRegistry, type QaRuleMode, type QaRulePolicy } from './registry';
 import {
   createAssetQaReportV1,
   type AssetQaReportV1,
@@ -182,6 +182,32 @@ export function appendMaterialMetricsQa(
     blendedSurfaceAreaRatio: materialMetrics.blendedSurfaceAreaRatio,
   };
   return createAssetQaReportV1(intent, { findings, evaluatedDimensions, metrics });
+}
+
+/**
+ * Ops kill switch (H-40): `KILN_QA_MODE=observe|off` overrides every rule's
+ * default mode, feeding the registry's otherwise-unfed {@link QaRulePolicy}.
+ * DOWNGRADE-ONLY by design: 'observe'/'off' are always authorized, while
+ * 'warn'/'enforce' would throw mid-render on rules whose promotion evidence
+ * doesn't authorize them — promotion stays a code change, not an env flip.
+ * Unset or an unrecognized value = ship defaults (exact rules at enforce).
+ */
+export function qaPolicyFromEnv(
+  env: Record<string, string | undefined> = process.env,
+): QaRulePolicy {
+  const mode = env['KILN_QA_MODE'];
+  return mode === 'observe' || mode === 'off' ? { defaultMode: mode as QaRuleMode } : {};
+}
+
+/**
+ * Whether a `disposition: 'block'` QA report may abort a render. False under
+ * `KILN_QA_MODE=observe|off` — the emergency downgrade for a misfiring rule in
+ * prod: reports still record block dispositions (telemetry stays honest), but
+ * the render completes with a warning instead of throwing.
+ */
+export function qaBlockingEnabled(env: Record<string, string | undefined> = process.env): boolean {
+  const mode = env['KILN_QA_MODE'];
+  return mode !== 'observe' && mode !== 'off';
 }
 
 export class AssetQaBlockedError extends Error {

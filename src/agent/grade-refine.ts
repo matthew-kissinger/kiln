@@ -17,6 +17,7 @@ import { WebIO } from '@gltf-transform/core';
 
 import type { AssetCategory, AssetIntentV1 } from '../contracts';
 import type { InstanceabilityGrade, InstanceabilityReport } from '../metrics';
+import { AssetQaBlockedError } from '../qa/run';
 import { renderGLB } from '../render';
 
 /** Grades at or above this never trigger a refine turn. */
@@ -38,6 +39,11 @@ export function gradeRank(grade: string): number {
 export interface ProgramGradeAssessment {
   /** False when the program failed to execute/bake (error carries why). */
   ok: boolean;
+  /** True when the program EXECUTES AND RENDERS but enforce-mode QA rejected
+   *  the result (`AssetQaBlockedError`) — distinct from a broken program, so
+   *  salvage callers can surface the block reason instead of a render error
+   *  (and `KILN_QA_MODE=observe` revives salvage entirely). */
+  qaBlocked?: boolean;
   /** The post-`auto`-consolidation instanceability report, when computable. */
   report?: InstanceabilityReport;
   /** Human-readable labels for the baked GLB's distinct materials (name when
@@ -94,7 +100,11 @@ export async function assessProgramGrade(
     const materialLabels = await listMaterialLabels(new Uint8Array(render.glb));
     return { ok: true, report, ...(materialLabels.length ? { materialLabels } : {}) };
   } catch (err) {
-    return { ok: false, error: err instanceof Error ? err.message : String(err) };
+    return {
+      ok: false,
+      ...(err instanceof AssetQaBlockedError ? { qaBlocked: true } : {}),
+      error: err instanceof Error ? err.message : String(err),
+    };
   }
 }
 
