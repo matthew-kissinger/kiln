@@ -8,7 +8,7 @@
  * keys so native construction never touches the network).
  */
 import { test, expect, describe, beforeAll, afterAll } from 'bun:test';
-import { resolveKilnAgentModel, makeKilnModel } from './providers';
+import { resolveKilnAgentModel, makeKilnModel, resolveOpenRouterReasoning } from './providers';
 
 describe('resolveKilnAgentModel', () => {
   test('explicit provider prefixes win and keep the model id intact', () => {
@@ -77,7 +77,13 @@ describe('resolveKilnAgentModel', () => {
 
 describe('makeKilnModel', () => {
   const saved: Record<string, string | undefined> = {};
-  const KEYS = ['GEMINI_API_KEY', 'ANTHROPIC_API_KEY', 'OPENAI_API_KEY', 'OPENROUTER_API_KEY', 'MODEL_API_KEY'];
+  const KEYS = [
+    'GEMINI_API_KEY',
+    'ANTHROPIC_API_KEY',
+    'OPENAI_API_KEY',
+    'OPENROUTER_API_KEY',
+    'MODEL_API_KEY',
+  ];
 
   beforeAll(() => {
     for (const k of KEYS) {
@@ -148,6 +154,38 @@ describe('makeKilnModel', () => {
     ).toBe('byok-meta');
   });
 
+  describe('openrouter reasoning control (thinking → unified reasoning)', () => {
+    test('effort keywords pass through; max maps to xhigh (OpenRouter vocabulary)', () => {
+      expect(resolveOpenRouterReasoning('high')).toEqual({ effort: 'high' });
+      expect(resolveOpenRouterReasoning('xhigh')).toEqual({ effort: 'xhigh' });
+      expect(resolveOpenRouterReasoning('max')).toEqual({ effort: 'xhigh' });
+      expect(resolveOpenRouterReasoning(' HIGH ')).toEqual({ effort: 'high' });
+    });
+
+    test('numbers become a reasoning token budget floored to 1024', () => {
+      expect(resolveOpenRouterReasoning(8000)).toEqual({ max_tokens: 8000 });
+      expect(resolveOpenRouterReasoning(512)).toEqual({ max_tokens: 1024 });
+      expect(resolveOpenRouterReasoning('8000')).toEqual({ max_tokens: 8000 });
+    });
+
+    test('unset / 0 / empty / unknown keywords send nothing', () => {
+      expect(resolveOpenRouterReasoning(undefined)).toBeUndefined();
+      expect(resolveOpenRouterReasoning(0)).toBeUndefined();
+      expect(resolveOpenRouterReasoning('')).toBeUndefined();
+      expect(resolveOpenRouterReasoning('ultra')).toBeUndefined();
+    });
+
+    test('an OpenRouter-hosted Claude with thinking still constructs the Vercel bridge', () => {
+      const m = makeKilnModel({
+        provider: 'openrouter',
+        model: 'anthropic/claude-opus-4.8',
+        maxTokens: 64000,
+        thinking: 'high',
+      });
+      expect(m.constructor.name).toBe('VercelModel');
+    });
+  });
+
   test('meta uses the Meta base URL and explicit Responses params', () => {
     const model = makeKilnModel({ provider: 'meta', model: 'muse-spark-1.1', maxTokens: 4096 });
     const cfg = (model as unknown as { getConfig(): Record<string, unknown> }).getConfig();
@@ -185,18 +223,23 @@ describe('makeKilnModel', () => {
 
     test('numeric budget maps to the legacy enabled shape + interleaved beta (pre-adaptive models)', () => {
       const cfg = getCfg(
-        makeKilnModel({ provider: 'anthropic', model: 'claude-opus-4-8', thinking: 8000 }),
+        makeKilnModel({ provider: 'anthropic', model: 'claude-haiku-4-5', thinking: 8000 }),
       );
       expect(cfg['params']).toEqual({ thinking: { type: 'enabled', budget_tokens: 8000 } });
       expect(cfg['betas']).toEqual(['interleaved-thinking-2025-05-14']);
     });
 
-    test('Sonnet 5 ignores numeric thinking budgets because it is adaptive-only', () => {
-      const cfg = getCfg(
-        makeKilnModel({ provider: 'anthropic', model: 'claude-sonnet-5', thinking: 8000 }),
-      );
-      expect(cfg['params']).toBeUndefined();
-      expect(cfg['betas']).toBeUndefined();
+    test('adaptive-only models ignore numeric thinking budgets (budget_tokens 400s on them)', () => {
+      for (const model of [
+        'claude-sonnet-5',
+        'claude-fable-5',
+        'claude-opus-4-8',
+        'claude-opus-4-7',
+      ]) {
+        const cfg = getCfg(makeKilnModel({ provider: 'anthropic', model, thinking: 8000 }));
+        expect(cfg['params']).toBeUndefined();
+        expect(cfg['betas']).toBeUndefined();
+      }
     });
 
     test('env keyword/number applies (numbers floored to 1024); descriptor 0 forces default; google ignores it', () => {
@@ -210,7 +253,7 @@ describe('makeKilnModel', () => {
         });
 
         process.env['KILN_THINKING'] = '512';
-        const floored = getCfg(makeKilnModel({ provider: 'anthropic', model: 'claude-opus-4-8' }));
+        const floored = getCfg(makeKilnModel({ provider: 'anthropic', model: 'claude-haiku-4-5' }));
         expect(floored['params']).toEqual({ thinking: { type: 'enabled', budget_tokens: 1024 } });
 
         const off = getCfg(
