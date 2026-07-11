@@ -61,6 +61,8 @@ import {
   appendMaterialMetricsQa,
   appendRuntimeCostQa,
   AssetQaBlockedError,
+  qaBlockingEnabled,
+  qaPolicyFromEnv,
   runDeterministicSceneQa,
 } from './qa/run';
 import { appendFinalVfxGlbQa } from './qa/breadth-final';
@@ -970,9 +972,11 @@ export async function renderSceneToGLB(
   for (const w of inspectGeneratedAnimation(root, clips)) warnings.push(w);
   for (const w of inspectSceneStructure(root, { category: trustedCategory })) warnings.push(w);
 
-  const sceneQaReport = runDeterministicSceneQa({ intent, scene: root, clips });
+  const sceneQaReport = runDeterministicSceneQa({ intent, scene: root, clips }, qaPolicyFromEnv());
   if (sceneQaReport.disposition === 'block') {
-    throw new AssetQaBlockedError(sceneQaReport, 'scene');
+    const blocked = new AssetQaBlockedError(sceneQaReport, 'scene');
+    if (qaBlockingEnabled()) throw blocked;
+    warnings.push(`${blocked.message} — block suppressed by KILN_QA_MODE`);
   }
 
   const doc = new Document();
@@ -1087,7 +1091,9 @@ export async function renderSceneToGLB(
     : runtimeQaReport;
   const qaReport = await appendFinalVfxGlbQa(intent, materialQaReport, bytes);
   if (qaReport.disposition === 'block') {
-    throw new AssetQaBlockedError(qaReport, 'final-glb', gltfValidation);
+    const blocked = new AssetQaBlockedError(qaReport, 'final-glb', gltfValidation);
+    if (qaBlockingEnabled()) throw blocked;
+    warnings.push(`${blocked.message} — block suppressed by KILN_QA_MODE`);
   }
   for (const issue of gltfValidation.issues.messages) {
     if (issue.severity !== 1) continue;

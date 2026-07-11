@@ -95,6 +95,11 @@ export interface GenerateKilnAssetResult {
   edits?: EditRecord[];
   /** Edit-mode refine: a unified diff from the parent code to the final buffer. */
   diff?: string;
+  /** Set when the program is a salvaged best effort rather than a clean
+   *  finalize: 'step-cap' or 'error' (H-10; see RunKilnAgentResult.salvaged). */
+  salvaged?: 'step-cap' | 'error';
+  /** The original agent-loop failure when `salvaged === 'error'`. */
+  salvageError?: string;
   /** Six-view grid PNG of the final asset (only when `captureViews` was set and the render succeeded). */
   views?: Buffer;
   /** Automatic trusted character skeleton/motion captures, when applicable. */
@@ -202,7 +207,9 @@ export async function generateKilnAsset(
     ...(opts.inputImage ? { inputImage: opts.inputImage } : {}),
   });
 
-  if (agent.error || !agent.code) {
+  // A salvaged run carries BOTH code and the original error (H-10) — only a
+  // run with no renderable program (or an unsalvaged failure) is fatal.
+  if (!agent.code || (agent.error && !agent.salvaged)) {
     throw new Error(`Kiln agent generation failed: ${agent.error ?? 'agent produced no code'}`);
   }
 
@@ -222,11 +229,20 @@ export async function generateKilnAsset(
     }
   }
 
+  const warnings = [...(render.warnings ?? [])];
+  if (agent.salvaged) {
+    warnings.push(
+      agent.salvaged === 'error'
+        ? `salvaged best effort: agent loop threw (${agent.error ?? 'unknown error'}) but the sink held a renderable program`
+        : 'salvaged best effort: agent hit the step cap with a renderable program in the sink',
+    );
+  }
+
   return {
     code: agent.code,
     glb: render.glb,
     meta: render.meta,
-    warnings: [...(render.warnings ?? [])],
+    warnings,
     toolCalls: agent.toolCalls,
     steps: agent.steps,
     ...(agent.usage ? { usage: agent.usage } : {}),
@@ -234,6 +250,8 @@ export async function generateKilnAsset(
     model: desc.model,
     ...(agent.edits ? { edits: agent.edits } : {}),
     ...(agent.diff ? { diff: agent.diff } : {}),
+    ...(agent.salvaged ? { salvaged: agent.salvaged } : {}),
+    ...(agent.salvaged && agent.error ? { salvageError: agent.error } : {}),
     ...(views ? { views } : {}),
     ...(render.diagnosticViews ? { diagnosticViews: render.diagnosticViews } : {}),
     ...(render.materialRecipeApplications

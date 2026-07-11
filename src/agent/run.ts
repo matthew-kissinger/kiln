@@ -173,6 +173,12 @@ export interface RunKilnAgentResult {
    *  the code is the salvaged best effort instead of a discarded run. A cap with
    *  nothing renderable is still an `error`. */
   capped?: boolean;
+  /** How the returned program was salvaged, when it is a best effort rather
+   *  than a clean finalize: 'step-cap' (hit the model-call cap; `capped` is the
+   *  legacy alias) or 'error' (the loop THREW — MaxTokensError is the canonical
+   *  case — after the sink already held a renderable program; `error` carries
+   *  the original failure). H-10: salvage-on-error. */
+  salvaged?: 'step-cap' | 'error';
   /** Error message if the run threw. */
   error?: string;
 }
@@ -360,11 +366,16 @@ export async function runKilnAgent(opts: RunKilnAgentOptions): Promise<RunKilnAg
         : undefined;
       if (!salvage?.ok) {
         const collected = metrics.readMetrics();
+        // A QA-blocked program is not a broken program — say so (the block
+        // reason is actionable; a generic step-cap error is not).
+        const qaNote = salvage?.qaBlocked
+          ? ` (best-effort program rendered but was QA-blocked: ${salvage.error ?? 'unknown blocker'})`
+          : '';
         return {
           toolCalls: collected.toolCalls,
           steps: collected.steps,
           ...(collected.usage ? { usage: collected.usage } : {}),
-          error: `kiln agent exceeded ${maxSteps} model calls (step cap) — aborted to bound cost`,
+          error: `kiln agent exceeded ${maxSteps} model calls (step cap) — aborted to bound cost${qaNote}`,
         };
       }
       capped = true;
@@ -450,16 +461,39 @@ export async function runKilnAgent(opts: RunKilnAgentOptions): Promise<RunKilnAg
       ...(lastText ? { lastText } : {}),
       ...(emitEdits ? { edits: editsTrace } : {}),
       ...(diff ? { diff } : {}),
-      ...(capped ? { capped: true } : {}),
+      ...(capped ? { capped: true, salvaged: 'step-cap' as const } : {}),
     };
   } catch (err) {
     const collected = metrics.readMetrics();
-    return {
+    const message = err instanceof Error ? err.message : String(err);
+    const base = {
       toolCalls: collected.toolCalls,
       steps: collected.steps,
       ...(collected.usage ? { usage: collected.usage } : {}),
-      error: err instanceof Error ? err.message : String(err),
     };
+    // Salvage-on-error (H-10): a thrown error used to discard a program the
+    // sink already held — and MaxTokensError, the canonical throw here, is
+    // exactly what a too-tight token budget produces. Same predicate as the
+    // step-cap path: if the captured program renders, return it flagged
+    // `salvaged:'error'` with the original failure preserved. A QA-blocked
+    // program stays a failure (it renders, but enforce-mode policy is not
+    // silently bypassed) with the block reason surfaced; anything else stays
+    // a hard failure.
+    const captured =
+      surface === 'unified' ? unifiedSink.code : editMode ? editSink.code : sink.code;
+    if (captured) {
+      const salvage = await assessProgramGrade(captured, gradeAssessmentOptions);
+      if (salvage.ok) {
+        return { ...base, code: captured, salvaged: 'error' as const, error: message };
+      }
+      if (salvage.qaBlocked) {
+        return {
+          ...base,
+          error: `${message} (best-effort program rendered but was QA-blocked: ${salvage.error ?? 'unknown blocker'})`,
+        };
+      }
+    }
+    return { ...base, error: message };
   } finally {
     metrics.detach();
   }
