@@ -11,7 +11,7 @@
  */
 
 import * as THREE from 'three';
-import { Document, WebIO } from '@gltf-transform/core';
+import { Document, WebIO, getBounds } from '@gltf-transform/core';
 import { EXTMeshGPUInstancing } from '@gltf-transform/extensions';
 import {
   dedup,
@@ -102,6 +102,32 @@ export type CapturedDiagnosticV1 = CharacterCapturedDiagnosticV1 | VehicleCaptur
  *  single copy. Write-side registration is harmless (the extension instance
  *  travels on the Document). */
 const engineIO = (): WebIO => new WebIO().registerExtensions([EXTMeshGPUInstancing]);
+
+/**
+ * World-space AABB of a stored GLB, computed from its bytes alone — node
+ * transforms applied over the (spec-required) POSITION accessor bounds. No
+ * model-authored code is executed: this exists so consumers that only hold the
+ * artifact (e.g. Kiln Studio's compose catalog fallback, H-41) never need
+ * `executeKilnCode` to recover a footprint. Caveat: EXT_mesh_gpu_instancing
+ * copies are not expanded (the batch node contributes its single-copy bounds);
+ * records new enough to be instanced also persist `metrics.bbox`, so the
+ * from-bytes path is a legacy-record fallback. Returns undefined for a GLB with
+ * no measurable geometry.
+ */
+export async function measureGlbBounds(
+  bytes: Uint8Array,
+): Promise<{ min: [number, number, number]; max: [number, number, number] } | undefined> {
+  const doc = await engineIO().readBinary(bytes);
+  const root = doc.getRoot();
+  const scene = root.getDefaultScene() ?? root.listScenes()[0];
+  if (!scene) return undefined;
+  const { min, max } = getBounds(scene);
+  if (!min.every(Number.isFinite) || !max.every(Number.isFinite)) return undefined;
+  return {
+    min: [min[0]!, min[1]!, min[2]!],
+    max: [max[0]!, max[1]!, max[2]!],
+  };
+}
 
 // Gltf-transform type aliases for local readability.
 type GtNode = import('@gltf-transform/core').Node;

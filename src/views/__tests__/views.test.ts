@@ -172,6 +172,27 @@ describe('renderViewGrid / renderCodeViewGrid', () => {
     expect(result.png.length).toBeGreaterThan(100);
   });
 
+  test('H-33: KILN_GRID_VARIANT=rear-quarter swaps the 3/4 cell; unknown values are ignored', async () => {
+    const saved = process.env['KILN_GRID_VARIANT'];
+    try {
+      process.env['KILN_GRID_VARIANT'] = 'rear-quarter';
+      const rear = await renderCodeViewGrid(BOX_CODE, { size: 32 });
+      expect(rear.views).toEqual(['Front', 'Right', 'Back', 'Left', 'Top', '3/4 Rear']);
+
+      process.env['KILN_GRID_VARIANT'] = 'not-a-variant';
+      const fallback = await renderCodeViewGrid(BOX_CODE, { size: 32 });
+      expect(fallback.views).toEqual(['Front', 'Right', 'Back', 'Left', 'Top', '3/4']);
+
+      // Explicit opts.views always wins over the env.
+      process.env['KILN_GRID_VARIANT'] = 'rear-quarter';
+      const explicit = await renderCodeViewGrid(BOX_CODE, { size: 32, views: SIX_VIEWS });
+      expect(explicit.views).toEqual(['Front', 'Right', 'Back', 'Left', 'Top', '3/4']);
+    } finally {
+      if (saved === undefined) delete process.env['KILN_GRID_VARIANT'];
+      else process.env['KILN_GRID_VARIANT'] = saved;
+    }
+  });
+
   test('snapSceneToPalette applies the general render palette before CPU previews', async () => {
     const { root } = await executeKilnCode(DARK_FOLIAGE_CODE);
     const snap = snapSceneToPalette(root, paletteToSnapSlots(GENERAL_RENDER_PALETTE));

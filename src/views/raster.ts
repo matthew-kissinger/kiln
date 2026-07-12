@@ -36,6 +36,28 @@ export const SIX_VIEWS: ViewSpec[] = [
   { name: '3/4', dir: [0.7, 0.5, 0.7] },
 ];
 
+/**
+ * H-33 arm: the same grid with the single 3/4 swapped to the opposite-rear
+ * azimuth, so features the front-quarter cell always occludes (rear fascia,
+ * tail geometry, the back of a spoiler) get one perspective cell.
+ */
+export const SIX_VIEWS_REAR_QUARTER: ViewSpec[] = [
+  ...SIX_VIEWS.slice(0, 5),
+  { name: '3/4 Rear', dir: [-0.7, 0.5, -0.7] },
+];
+
+/** Named six-view grid variants (H-33). 'default' keeps the shipped front-quarter grid. */
+export type ViewGridVariant = 'default' | 'rear-quarter';
+
+/**
+ * Resolve a grid-variant name (typically the `KILN_GRID_VARIANT` env) to its
+ * view set. Unknown / unset names fall back to {@link SIX_VIEWS} so a stale or
+ * mistyped env can never change what the agent sees.
+ */
+export function resolveGridViews(variant?: string): ViewSpec[] {
+  return variant?.trim().toLowerCase() === 'rear-quarter' ? SIX_VIEWS_REAR_QUARTER : SIX_VIEWS;
+}
+
 export interface RasterOptions {
   /** Square output size in pixels per view. Default 256. */
   size?: number;

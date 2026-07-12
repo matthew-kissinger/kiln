@@ -175,6 +175,30 @@ describe('makeKilnModel', () => {
       expect(resolveOpenRouterReasoning('ultra')).toBeUndefined();
     });
 
+    test('A7 clamp: numeric budgets cap at 50% of the completion budget', () => {
+      // reasoning == completion budget would guarantee zero visible text.
+      expect(resolveOpenRouterReasoning(32000, 32000)).toEqual({ max_tokens: 16000 });
+      // Already under half: untouched.
+      expect(resolveOpenRouterReasoning(8000, 64000)).toEqual({ max_tokens: 8000 });
+      // Completion budget too small to host even the 1024 floor at ≤50%: off.
+      expect(resolveOpenRouterReasoning(4096, 1500)).toBeUndefined();
+      // No completion budget known: legacy pass-through.
+      expect(resolveOpenRouterReasoning(32000)).toEqual({ max_tokens: 32000 });
+    });
+
+    test("A7 clamp: high/xhigh downgrade to medium when OpenRouter's ~80% translation would starve visible output", () => {
+      // The cycle-2 step-1 deaths: Sonnet 4.6 twin at 32K + 'high' → ~6.4K visible.
+      expect(resolveOpenRouterReasoning('high', 32000)).toEqual({ effort: 'medium' });
+      expect(resolveOpenRouterReasoning('xhigh', 16000)).toEqual({ effort: 'medium' });
+      // The 64K/48K twins keep 'high' (visible remainder ≥ 8192) — the live
+      // config that put Fable 5 / Sonnet 5 in the #1 tie group stays untouched.
+      expect(resolveOpenRouterReasoning('high', 64000)).toEqual({ effort: 'high' });
+      expect(resolveOpenRouterReasoning('high', 48000)).toEqual({ effort: 'high' });
+      // medium/low are never rewritten.
+      expect(resolveOpenRouterReasoning('medium', 16000)).toEqual({ effort: 'medium' });
+      expect(resolveOpenRouterReasoning('low', 16000)).toEqual({ effort: 'low' });
+    });
+
     test('an OpenRouter-hosted Claude with thinking still constructs the Vercel bridge', () => {
       const m = makeKilnModel({
         provider: 'openrouter',
@@ -198,6 +222,45 @@ describe('makeKilnModel', () => {
     expect((model as { _client?: { baseURL?: string } })._client?.baseURL).toBe(
       'https://api.meta.ai/v1',
     );
+  });
+
+  describe('google thinking + budget (B1/H-43)', () => {
+    const getCfg = (m: unknown): Record<string, unknown> =>
+      (m as { getConfig(): Record<string, unknown> }).getConfig();
+
+    test('descriptor maxTokens + thinking flow into the Gemini generationConfig params', () => {
+      const cfg = getCfg(
+        makeKilnModel({
+          provider: 'google',
+          model: 'gemini-3.5-flash',
+          maxTokens: 65536,
+          thinking: 'high',
+        }),
+      );
+      expect(cfg['params']).toEqual({
+        maxOutputTokens: 65536,
+        thinkingConfig: { thinkingLevel: 'high' },
+      });
+    });
+
+    test('a bare descriptor sends no params — the pre-knob API-default behavior', () => {
+      const cfg = getCfg(makeKilnModel({ provider: 'google', model: 'gemini-3.5-flash' }));
+      expect(cfg['params']).toBeUndefined();
+    });
+
+    test('xhigh/max collapse to high; numbers and unknown keywords are ignored', () => {
+      const level = (thinking: string | number) =>
+        (
+          getCfg(makeKilnModel({ provider: 'google', model: 'gemini-3.5-flash', thinking }))[
+            'params'
+          ] as { thinkingConfig?: { thinkingLevel?: string } } | undefined
+        )?.thinkingConfig?.thinkingLevel;
+      expect(level('xhigh')).toBe('high');
+      expect(level('max')).toBe('high');
+      expect(level('medium')).toBe('medium');
+      expect(level(8000)).toBeUndefined();
+      expect(level('ultra')).toBeUndefined();
+    });
   });
 
   describe('anthropic thinking control (KILN_THINKING)', () => {

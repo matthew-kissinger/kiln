@@ -17,7 +17,7 @@ import {
   rasterizeView,
   measureBounds,
   hideNodeInScene,
-  SIX_VIEWS,
+  resolveGridViews,
   type RasterOptions,
   type ViewSpec,
 } from './raster';
@@ -40,8 +40,16 @@ import {
   type Vec3,
 } from '../palette-snap';
 
-export { rasterizeView, measureBounds, hideNodeInScene, SIX_VIEWS, coverage } from './raster';
-export type { RasterOptions, ViewSpec } from './raster';
+export {
+  rasterizeView,
+  measureBounds,
+  hideNodeInScene,
+  SIX_VIEWS,
+  SIX_VIEWS_REAR_QUARTER,
+  resolveGridViews,
+  coverage,
+} from './raster';
+export type { RasterOptions, ViewSpec, ViewGridVariant } from './raster';
 export { encodePng } from './png';
 export {
   ARCHITECTURE_ROOF_ROLE_PREFIXES,
@@ -316,7 +324,11 @@ export async function renderViewGrid(
   // marginal legibility gain at typical asset scales. Candidate thumbnails
   // downscale separately (Studio thumbnailFor), unaffected.
   const size = opts.size ?? 384;
-  const views = opts.views ?? SIX_VIEWS;
+  // H-33: the default view set is env-selectable (KILN_GRID_VARIANT=rear-quarter
+  // swaps the 3/4 cell to the opposite-rear azimuth) so a bench arm can flip the
+  // grid per-process without any wire or tool-schema change. Explicit opts.views
+  // always wins; unset/unknown env keeps SIX_VIEWS.
+  const views = opts.views ?? resolveGridViews(process.env['KILN_GRID_VARIANT']);
   if (opts.snapPalette?.length) snapSceneToPalette(root, opts.snapPalette);
   const cols = 3;
   const rows = Math.ceil(views.length / cols);
