@@ -5,6 +5,47 @@ for the consuming app's lockfile + tarball provenance, not public npm releases.
 
 ## [Unreleased]
 
+## [0.6.0] — 2026-07-12
+
+### Added
+- **`measureGlbBounds(bytes)` (H-41).** World-space AABB straight from stored GLB
+  bytes (WebIO + `getBounds`, EXT_mesh_gpu_instancing registered) so consumers that
+  only hold the artifact never need `executeKilnCode` to recover a footprint —
+  Kiln Studio's compose catalog drops its execute-model-code bbox fallback on this.
+- **Six-grid rear-quarter variant (H-33 arm).** `SIX_VIEWS_REAR_QUARTER` swaps the
+  3/4 cell to the opposite-rear azimuth (`[-0.7, 0.5, -0.7]`, labeled `3/4 Rear`);
+  `resolveGridViews(variant)` + the `KILN_GRID_VARIANT=rear-quarter` env select it
+  as the `renderViewGrid` default per-process — no wire or tool-schema change.
+  Explicit `opts.views` always wins; unknown env values fall back to `SIX_VIEWS`.
+- **Gemini thinking + budget knob (H-43/B1).** The `google` provider now forwards
+  `KilnModelDescriptor.maxTokens` → `generationConfig.maxOutputTokens` and effort
+  keywords → `thinkingConfig.thinkingLevel` ('xhigh'/'max' collapse to 'high';
+  numbers ignored; the KILN_THINKING env stays Anthropic-only). A bare descriptor
+  still sends nothing — Gemini API defaults (65,536 output, dynamic thinking) are
+  preserved unless a consumer opts in. NOTE for consumers: registry rows that
+  carried a decorative Google `maxTokens` now BIND — set them to the intended
+  ceiling before upgrading.
+
+### Changed
+- **OpenRouter reasoning clamp (A7).** `resolveOpenRouterReasoning(thinking,
+  maxTokens?)` now bounds reasoning by the completion budget: numeric budgets cap
+  at 50% of `maxTokens` (dropped entirely when even the 1024 floor exceeds that
+  half), and 'high'/'xhigh' downgrade to 'medium' when OpenRouter's ~80%
+  translation would leave < 8,192 visible tokens (the cycle-2 step-1 MaxTokens
+  deaths: a 32K model at 'high' kept only ~6.4K for visible output). 64K/48K
+  configurations are untouched.
+- **QA-blocked render errors are actionable (H-40(3)).** `AssetQaBlockedError`'s
+  message now spells out each blocker's human message + authored `repairText`
+  (first 6, then a count) instead of bare rule codes — this string is exactly what
+  the agent reads when a mid-loop `kiln_render` is QA-blocked, and what the
+  salvage path records for QA-blocked step-cap programs.
+
+### Measured
+- **Per-render QA cost (H-40(4), `scripts/qa-cost-bench.ts`):** registry rules add
+  1–10 ms p95 per render across all five category fixtures; Khronos validation
+  (unconditional, both modes) adds 1–4 ms p95. Two orders of magnitude under the
+  1.5 s follow-up threshold — mid-loop QA stays on unconditionally.
+
 ## [0.4.0] — 2026-07-02
 
 ### Added

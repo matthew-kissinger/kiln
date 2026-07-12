@@ -210,6 +210,9 @@ export function qaBlockingEnabled(env: Record<string, string | undefined> = proc
   return mode !== 'observe' && mode !== 'off';
 }
 
+/** Blockers spelled out in full per message; the rest collapse to a count. */
+const MAX_DETAILED_BLOCKERS = 6;
+
 export class AssetQaBlockedError extends Error {
   readonly report: AssetQaReportV1;
   readonly stage: 'scene' | 'final-glb';
@@ -223,9 +226,21 @@ export class AssetQaBlockedError extends Error {
     const blockers = Object.values(report.dimensions)
       .flatMap((dimension) => dimension.findings)
       .filter((finding) => finding.disposition === 'block');
-    super(
-      `Asset QA blocked at ${stage}: ${blockers.map((finding) => finding.code).join(', ') || 'unknown blocker'}`,
-    );
+    // H-40(3): this message IS what the agent reads when a mid-loop render is
+    // QA-blocked (kiln_render catches and returns { ok:false, error: message }),
+    // so each blocker carries its human message + authored repairText — bare
+    // rule codes give the model nothing to act on.
+    const detailed = blockers
+      .slice(0, MAX_DETAILED_BLOCKERS)
+      .map(
+        (finding) =>
+          `${finding.code}: ${finding.message}${finding.repairText ? ` FIX: ${finding.repairText}` : ''}`,
+      );
+    const overflow =
+      blockers.length > MAX_DETAILED_BLOCKERS
+        ? ` (+${blockers.length - MAX_DETAILED_BLOCKERS} more blockers)`
+        : '';
+    super(`Asset QA blocked at ${stage}: ${detailed.join(' | ') || 'unknown blocker'}${overflow}`);
     this.name = 'AssetQaBlockedError';
     this.report = report;
     this.stage = stage;

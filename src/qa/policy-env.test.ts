@@ -59,6 +59,24 @@ describe('KILN_QA_MODE render-path integration', () => {
     await expect(renderGLB(ZERO_SCALE_CODE, { intent })).rejects.toThrow(AssetQaBlockedError);
   });
 
+  test('H-40(3): the blocked-render message carries the finding message + authored repairText', async () => {
+    // This message is exactly what the agent reads mid-loop (kiln_render returns
+    // { ok:false, error: err.message }) — bare rule codes would leave the model
+    // guessing what to fix.
+    delete process.env['KILN_QA_MODE'];
+    const intent = createAssetIntentV1({ category: 'prop' });
+    const err = await renderGLB(ZERO_SCALE_CODE, { intent }).then(
+      () => undefined,
+      (e: unknown) => e,
+    );
+    expect(err).toBeInstanceOf(AssetQaBlockedError);
+    const message = (err as AssetQaBlockedError).message;
+    expect(message).toMatch(/Asset QA blocked/);
+    expect(message).toContain('UNIVERSAL_ZERO_SCALE_RENDERABLE');
+    expect(message).toContain('has zero scale');
+    expect(message).toContain('FIX: Use a finite non-zero scale');
+  });
+
   test('the same program completes under KILN_QA_MODE=observe', async () => {
     process.env['KILN_QA_MODE'] = 'observe';
     const intent = createAssetIntentV1({ category: 'prop' });

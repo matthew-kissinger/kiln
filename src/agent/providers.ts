@@ -32,6 +32,17 @@ export type OpenRouterReasoning =
 const OPENROUTER_EFFORTS = new Set(['xhigh', 'high', 'medium', 'low', 'minimal', 'none']);
 
 /**
+ * OpenRouter's documented effort→budget translation for budget-based upstreams
+ * (Anthropic et al.): xhigh/high ≈ 80% of max_tokens, medium ≈ 50%, low ≈ 20%.
+ * At 80%, a 32K-budget model keeps only ~6.4K visible tokens per turn — below
+ * what a first-turn Kiln program needs, which is how the cycle-2 OR twins died
+ * at step 1 with "maximum token limit, unrecoverable" (2026-07-11 postmortem).
+ * When the visible remainder under 'high' would fall below this floor, the
+ * effort is downgraded to 'medium' (reasoning ≤ 50% of the completion budget).
+ */
+const MIN_VISIBLE_OUTPUT_TOKENS = 8192;
+
+/**
  * Map the Kiln descriptor `thinking` control onto OpenRouter's reasoning setting.
  * Keywords pass through ('max' — an Anthropic-vocabulary level OpenRouter's type
  * doesn't carry — maps to 'xhigh'); positive numbers become a reasoning token
@@ -39,19 +50,44 @@ const OPENROUTER_EFFORTS = new Set(['xhigh', 'high', 'medium', 'low', 'minimal',
  * or an unknown keyword → undefined (send nothing; the OpenRouter/upstream
  * default applies — which for Claude Opus 4.8 means reasoning OFF, same as the
  * native path).
+ *
+ * When `maxTokens` (the completion budget) is known, reasoning is clamped so it
+ * can never consume the whole turn: numeric budgets cap at 50% of maxTokens
+ * (or are dropped entirely when even the 1024 floor would exceed that half),
+ * and 'xhigh'/'high' downgrade to 'medium' when OpenRouter's ~80% translation
+ * would leave fewer than {@link MIN_VISIBLE_OUTPUT_TOKENS} visible tokens.
  */
 export function resolveOpenRouterReasoning(
   thinking?: string | number,
+  maxTokens?: number,
 ): OpenRouterReasoning | undefined {
   if (thinking == null || thinking === '' || thinking === 0) return undefined;
+  const halfBudget =
+    maxTokens != null && Number.isFinite(maxTokens) && maxTokens > 0
+      ? Math.floor(maxTokens / 2)
+      : undefined;
   if (typeof thinking === 'number') {
     if (!Number.isFinite(thinking) || thinking <= 0) return undefined;
-    return { max_tokens: Math.max(1024, Math.floor(thinking)) };
+    const budget = Math.max(1024, Math.floor(thinking));
+    if (halfBudget === undefined) return { max_tokens: budget };
+    // A completion budget too small to host even the 1024 reasoning floor at
+    // ≤50% means reasoning off beats a guaranteed truncated turn.
+    if (halfBudget < 1024) return undefined;
+    return { max_tokens: Math.min(budget, halfBudget) };
   }
   const raw = thinking.trim().toLowerCase();
-  if (/^\d+$/.test(raw)) return resolveOpenRouterReasoning(Number.parseInt(raw, 10));
-  const effort = raw === 'max' ? 'xhigh' : raw;
+  if (/^\d+$/.test(raw)) return resolveOpenRouterReasoning(Number.parseInt(raw, 10), maxTokens);
+  let effort = raw === 'max' ? 'xhigh' : raw;
   if (!OPENROUTER_EFFORTS.has(effort)) return undefined;
+  if (
+    (effort === 'xhigh' || effort === 'high') &&
+    maxTokens != null &&
+    Number.isFinite(maxTokens) &&
+    maxTokens > 0 &&
+    maxTokens * 0.2 < MIN_VISIBLE_OUTPUT_TOKENS
+  ) {
+    effort = 'medium';
+  }
   return { effort: effort as Extract<OpenRouterReasoning, { effort: string }>['effort'] };
 }
 
@@ -109,13 +145,17 @@ export interface KilnModelDescriptor {
   provider: KilnAgentProvider;
   /** Concrete model id passed to the underlying SDK (e.g. 'gemini-3.5-flash'). */
   model: string;
-  /** Output-token budget; applied to anthropic/openai/bedrock (GoogleModel uses its own default). */
+  /** Output-token budget; applied to anthropic/openai/bedrock/google (Gemini's
+   *  API default is 65,536 — omit to keep it) and to openrouter (where it also
+   *  bounds the reasoning clamp in {@link resolveOpenRouterReasoning}). */
   maxTokens?: number;
   /**
    * Reasoning/thinking control. Honored by the `anthropic` provider (shapes
-   * below) and by `openrouter` (mapped onto OpenRouter's unified `reasoning`
+   * below), by `openrouter` (mapped onto OpenRouter's unified `reasoning`
    * setting via {@link resolveOpenRouterReasoning} — so OpenRouter-hosted Claude
-   * twins behave like the native transport). Other providers ignore it.
+   * twins behave like the native transport), and by `google` (effort keywords
+   * map to Gemini `thinkingConfig.thinkingLevel`; numbers are ignored). Other
+   * providers ignore it.
    *
    * - Effort keyword (`'low' | 'medium' | 'high'`, passed through verbatim) →
    *   `thinking: {type:'adaptive'}` + `output_config: {effort}` — the
@@ -169,6 +209,24 @@ function isAnthropicAdaptiveOnlyModel(model: string): boolean {
   // live 2026-06-11), and Opus 4.7/4.8 (budget_tokens removed — Anthropic migration
   // guide). Pre-adaptive models (Sonnet/Haiku 4.5 and older) still take the number.
   return /^claude-(sonnet-5|fable-5|mythos-5|opus-4-[78])(?:-|$)/.test(model);
+}
+
+/**
+ * Map the descriptor `thinking` control onto Gemini's `thinkingConfig.thinkingLevel`
+ * vocabulary ('low' | 'medium' | 'high'). 'xhigh'/'max' collapse to 'high';
+ * numbers and unknown keywords → undefined (send nothing — Gemini's dynamic
+ * thinking default applies, which is what every Google row ran before this knob
+ * existed). Deliberately does NOT read KILN_THINKING: that env is Anthropic
+ * vocabulary and history — only an explicit per-model config reaches Gemini.
+ */
+function resolveGoogleThinkingLevel(
+  fromDesc?: string | number,
+): 'low' | 'medium' | 'high' | undefined {
+  if (fromDesc == null || typeof fromDesc === 'number') return undefined;
+  const raw = fromDesc.trim().toLowerCase();
+  if (raw === 'xhigh' || raw === 'max') return 'high';
+  if (raw === 'low' || raw === 'medium' || raw === 'high') return raw;
+  return undefined;
 }
 
 function resolveAnthropicThinking(
@@ -227,11 +285,22 @@ export function makeKilnModel(desc: KilnModelDescriptor, opts: MakeKilnModelOpti
         ...(opts.apiKey ? { apiKey: opts.apiKey } : {}),
         ...(maxTokens != null ? { maxTokens } : {}),
       });
-    case 'google':
+    case 'google': {
+      // H-43/B1: forward the descriptor budget + thinking level into the Gemini
+      // generationConfig (GoogleModel spreads `params` into the request config).
+      // Only descriptor-explicit thinking applies — the KILN_THINKING env stays
+      // Anthropic-only so a global env flip can't perturb Gemini defaults.
+      const thinkingLevel = resolveGoogleThinkingLevel(desc.thinking);
+      const googleParams = {
+        ...(maxTokens != null ? { maxOutputTokens: maxTokens } : {}),
+        ...(thinkingLevel ? { thinkingConfig: { thinkingLevel } } : {}),
+      };
       return new GoogleModel({
         modelId: desc.model,
         apiKey: opts.apiKey ?? trimmedEnv('GEMINI_API_KEY'),
+        ...(Object.keys(googleParams).length > 0 ? { params: googleParams } : {}),
       });
+    }
     case 'bedrock':
       return new BedrockModel({
         modelId: desc.model,
@@ -260,8 +329,10 @@ export function makeKilnModel(desc: KilnModelDescriptor, opts: MakeKilnModelOpti
       // The same descriptor `thinking` control the anthropic case honors, mapped
       // onto OpenRouter's unified reasoning setting — so an OpenRouter-hosted
       // Claude (e.g. anthropic/claude-opus-4.8) gets its thinking turned on just
-      // like the native transport would.
-      const reasoning = resolveOpenRouterReasoning(desc.thinking);
+      // like the native transport would. maxTokens rides along so reasoning can
+      // never start with a budget ≥ the completion budget (the cycle-2 step-1
+      // MaxTokens deaths).
+      const reasoning = resolveOpenRouterReasoning(desc.thinking, maxTokens);
       return makeOpenRouterModel({
         modelId: desc.model,
         ...(opts.apiKey ? { apiKey: opts.apiKey } : {}),
