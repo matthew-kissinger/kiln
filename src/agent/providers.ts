@@ -20,6 +20,7 @@ import { createOpenRouter } from '@openrouter/ai-sdk-provider';
 import type { LanguageModelV3 } from '@ai-sdk/provider';
 
 import { ensureStreamStart } from './stream-start';
+import { splitToolResultImages } from './split-tool-result-images';
 
 /** OpenRouter's unified reasoning control (@openrouter/ai-sdk-provider chat setting):
  *  an effort keyword or a hard reasoning-token budget. Passed straight through to
@@ -100,6 +101,12 @@ export interface OpenRouterModelOptions {
   maxTokens?: number;
   /** Unified reasoning control (effort keyword or token budget). */
   reasoning?: OpenRouterReasoning;
+  /** Move tool-result images to a follow-up user message instead of leaving
+   *  them inline (see split-tool-result-images.ts). Together's hosting of
+   *  Thinking Machines' Inkling rejects images embedded in a `tool` message
+   *  outright; other OpenRouter models don't need this. Model-scoped by the
+   *  caller (see the 'openrouter' case below), default false. */
+  splitToolResultImages?: boolean;
 }
 
 /**
@@ -108,12 +115,13 @@ export interface OpenRouterModelOptions {
  */
 export function makeOpenRouterModel(opts: OpenRouterModelOptions): Model {
   const openrouter = createOpenRouter({ apiKey: opts.apiKey ?? process.env['OPENROUTER_API_KEY'] });
-  const provider = ensureStreamStart(
+  let provider = ensureStreamStart(
     openrouter.chat(
       opts.modelId,
       opts.reasoning ? { reasoning: opts.reasoning } : {},
     ) as LanguageModelV3,
   );
+  if (opts.splitToolResultImages) provider = splitToolResultImages(provider);
   return new VercelModel({
     provider,
     ...(opts.maxTokens != null ? { maxTokens: opts.maxTokens } : {}),
@@ -338,6 +346,9 @@ export function makeKilnModel(desc: KilnModelDescriptor, opts: MakeKilnModelOpti
         ...(opts.apiKey ? { apiKey: opts.apiKey } : {}),
         ...(maxTokens != null ? { maxTokens } : {}),
         ...(reasoning ? { reasoning } : {}),
+        // Together's Inkling hosting rejects images embedded in a tool-result
+        // message (verified live 2026-07-19) — see split-tool-result-images.ts.
+        ...(desc.model === 'thinkingmachines/inkling' ? { splitToolResultImages: true } : {}),
       });
     }
     default: {
