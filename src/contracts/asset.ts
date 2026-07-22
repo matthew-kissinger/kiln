@@ -206,8 +206,22 @@ export interface VehicleIntentV1Input {
   animationAssemblies?: readonly string[];
 }
 
-export const ARCHITECTURE_ROOF_TYPES = ['gable', 'shed', 'hip', 'flat', 'none', 'custom'] as const;
+export const ARCHITECTURE_ROOF_TYPES = [
+  'gable',
+  'shed',
+  'hip',
+  'dome',
+  'flat',
+  'none',
+  'custom',
+] as const;
 export type ArchitectureRoofType = (typeof ARCHITECTURE_ROOF_TYPES)[number];
+
+export const ARCHITECTURE_INTERIOR_MODES = ['none', 'shell', 'navigable'] as const;
+export type ArchitectureInteriorMode = (typeof ARCHITECTURE_INTERIOR_MODES)[number];
+
+export const ARCHITECTURE_ROOF_MODES = ['auto', 'fixed', 'removable', 'none'] as const;
+export type ArchitectureRoofMode = (typeof ARCHITECTURE_ROOF_MODES)[number];
 
 export const ARCHITECTURE_SCALE_MODES = ['realistic', 'stylized'] as const;
 export type ArchitectureScaleMode = (typeof ARCHITECTURE_SCALE_MODES)[number];
@@ -243,7 +257,14 @@ export interface ArchitectureRoofIntentV1 {
 /** Trusted, category-specific architecture requirements. */
 export interface ArchitectureIntentV1 {
   subtype: string;
+  /** Legacy compatibility projection; true exactly for navigable interiors. */
   enterable: boolean;
+  /** Requested above-ground storeys. Deterministic architecture QA supports one through five. */
+  storeyCount: number;
+  /** Whether the asset has no interior, a visible shell, or a traversable interior. */
+  interiorMode: ArchitectureInteriorMode;
+  /** Roof ownership/removal policy, independent from the geometric roof profile. */
+  roofMode: ArchitectureRoofMode;
   footprint: ArchitectureFootprintV1;
   wallHeight: number;
   scaleMode: ArchitectureScaleMode;
@@ -254,7 +275,11 @@ export interface ArchitectureIntentV1 {
 
 export interface ArchitectureIntentV1Input {
   subtype?: string;
+  /** @deprecated Prefer interiorMode; retained for persisted/request compatibility. */
   enterable?: boolean;
+  storeyCount?: number;
+  interiorMode?: ArchitectureInteriorMode;
+  roofMode?: ArchitectureRoofMode;
   footprint?: Partial<Omit<ArchitectureFootprintV1, 'units'>> & { units?: 'm' };
   wallHeight?: number;
   scaleMode?: ArchitectureScaleMode;
@@ -974,6 +999,54 @@ function validateArchitecture(
     });
     valid = false;
   }
+  // These fields were added to schema v1 after the original architecture
+  // contract shipped. Missing values retain legacy semantics at read time;
+  // newly normalized intents always emit all three fields.
+  if (
+    value.storeyCount !== undefined &&
+    (typeof value.storeyCount !== 'number' ||
+      !Number.isInteger(value.storeyCount) ||
+      value.storeyCount < 1 ||
+      value.storeyCount > 5)
+  ) {
+    issues.push({
+      code: 'INVALID_ARCHITECTURE_STOREY_COUNT',
+      path: 'architecture.storeyCount',
+      message: 'architecture.storeyCount must be an integer from 1 through 5.',
+    });
+    valid = false;
+  }
+  if (
+    value.interiorMode !== undefined &&
+    !isEnumValue(ARCHITECTURE_INTERIOR_MODES, value.interiorMode)
+  ) {
+    issues.push({
+      code: 'INVALID_ARCHITECTURE_INTERIOR_MODE',
+      path: 'architecture.interiorMode',
+      message: `architecture.interiorMode must be one of ${ARCHITECTURE_INTERIOR_MODES.join(', ')}.`,
+    });
+    valid = false;
+  }
+  if (value.roofMode !== undefined && !isEnumValue(ARCHITECTURE_ROOF_MODES, value.roofMode)) {
+    issues.push({
+      code: 'INVALID_ARCHITECTURE_ROOF_MODE',
+      path: 'architecture.roofMode',
+      message: `architecture.roofMode must be one of ${ARCHITECTURE_ROOF_MODES.join(', ')}.`,
+    });
+    valid = false;
+  }
+  if (
+    isEnumValue(ARCHITECTURE_INTERIOR_MODES, value.interiorMode) &&
+    typeof value.enterable === 'boolean' &&
+    value.enterable !== (value.interiorMode === 'navigable')
+  ) {
+    issues.push({
+      code: 'ARCHITECTURE_INTERIOR_ENTERABLE_MISMATCH',
+      path: 'architecture.enterable',
+      message: 'architecture.enterable must be true exactly when interiorMode is "navigable".',
+    });
+    valid = false;
+  }
   if (!isEnumValue(ARCHITECTURE_SCALE_MODES, value.scaleMode)) {
     issues.push({
       code: 'INVALID_ARCHITECTURE_SCALE_MODE',
@@ -1032,6 +1105,7 @@ function validateArchitecture(
       valid = false;
     }
     const flat = roof.type === 'flat' || roof.type === 'none';
+    const dome = roof.type === 'dome';
     if (
       typeof roof.rise !== 'number' ||
       !Number.isFinite(roof.rise) ||
@@ -1049,14 +1123,15 @@ function validateArchitecture(
     if (
       typeof roof.pitchDegrees !== 'number' ||
       !Number.isFinite(roof.pitchDegrees) ||
-      (flat ? roof.pitchDegrees !== 0 : roof.pitchDegrees <= 0 || roof.pitchDegrees >= 89)
+      (flat || dome ? roof.pitchDegrees !== 0 : roof.pitchDegrees <= 0 || roof.pitchDegrees >= 89)
     ) {
       issues.push({
         code: 'INVALID_ARCHITECTURE_ROOF_PITCH',
         path: 'architecture.roof.pitchDegrees',
-        message: flat
-          ? 'Flat or absent roofs must have zero pitch.'
-          : 'Pitched roofs must have a pitch greater than 0 and less than 89 degrees.',
+        message:
+          flat || dome
+            ? 'Flat, absent, or dome roofs must have zero planar pitch.'
+            : 'Pitched roofs must have a pitch greater than 0 and less than 89 degrees.',
       });
       valid = false;
     }
@@ -1079,6 +1154,7 @@ function validateArchitecture(
 
     if (
       !flat &&
+      !dome &&
       isRecord(value.footprint) &&
       typeof value.footprint.spanX === 'number' &&
       typeof value.footprint.spanZ === 'number' &&
@@ -1098,6 +1174,17 @@ function validateArchitecture(
         });
         valid = false;
       }
+    }
+    if (
+      isEnumValue(ARCHITECTURE_ROOF_MODES, value.roofMode) &&
+      (value.roofMode === 'none') !== (roof.type === 'none')
+    ) {
+      issues.push({
+        code: 'ARCHITECTURE_ROOF_MODE_TYPE_MISMATCH',
+        path: 'architecture.roofMode',
+        message: 'roofMode and roof.type must both be "none", or both describe a present roof.',
+      });
+      valid = false;
     }
   }
 
@@ -1239,6 +1326,18 @@ export function validateAssetIntentV1(value: unknown): ContractValidationResult<
         code: 'ARCHITECTURE_ENTERABLE_CAPABILITY_MISMATCH',
         path: 'capabilities',
         message: 'The enterable capability must exactly match architecture.enterable.',
+      });
+    }
+    if (
+      isRecord(value.architecture) &&
+      isEnumValue(ARCHITECTURE_INTERIOR_MODES, value.architecture.interiorMode) &&
+      Array.isArray(value.capabilities) &&
+      value.capabilities.includes('navigable') !== (value.architecture.interiorMode === 'navigable')
+    ) {
+      issues.push({
+        code: 'ARCHITECTURE_NAVIGABLE_CAPABILITY_MISMATCH',
+        path: 'capabilities',
+        message: 'The navigable capability must exactly match architecture.interiorMode.',
       });
     }
   } else if (value.architecture !== undefined) {
@@ -1457,23 +1556,33 @@ function normalizeArchitectureIntent(input: AssetIntentV1Input): ArchitectureInt
   const ridgeAxis = architecture.roof?.ridgeAxis ?? 'x';
   const roofType = architecture.roof?.type ?? 'gable';
   const flat = roofType === 'flat' || roofType === 'none';
+  const dome = roofType === 'dome';
   const halfRun = (ridgeAxis === 'x' ? spanZ : spanX) / 2;
   const suppliedRise = architecture.roof?.rise;
   const suppliedPitch = architecture.roof?.pitchDegrees;
-  const pitchDegrees = flat
-    ? (suppliedPitch ?? 0)
-    : (suppliedPitch ??
-      (suppliedRise !== undefined && halfRun > 0
-        ? Math.atan2(suppliedRise, halfRun) / THREE_DEGREES
-        : 30));
+  const pitchDegrees =
+    flat || dome
+      ? (suppliedPitch ?? 0)
+      : (suppliedPitch ??
+        (suppliedRise !== undefined && halfRun > 0
+          ? Math.atan2(suppliedRise, halfRun) / THREE_DEGREES
+          : 30));
   const rise = flat
     ? (suppliedRise ?? 0)
-    : (suppliedRise ?? Math.tan(pitchDegrees * THREE_DEGREES) * halfRun);
-  const enterable = architecture.enterable ?? true;
+    : dome
+      ? (suppliedRise ?? Math.min(spanX, spanZ) / 2)
+      : (suppliedRise ?? Math.tan(pitchDegrees * THREE_DEGREES) * halfRun);
+  const interiorMode =
+    architecture.interiorMode ?? (architecture.enterable === false ? 'none' : 'navigable');
+  const enterable = architecture.enterable ?? interiorMode === 'navigable';
+  const roofMode = architecture.roofMode ?? (roofType === 'none' ? 'none' : 'auto');
 
   return {
     subtype: architecture.subtype ?? input.subtype ?? 'building',
     enterable,
+    storeyCount: architecture.storeyCount ?? 1,
+    interiorMode,
+    roofMode,
     footprint: { spanX, spanZ, units: 'm' },
     wallHeight: architecture.wallHeight ?? input.bounds?.y ?? 2.8,
     scaleMode: architecture.scaleMode ?? 'realistic',
@@ -1835,6 +1944,8 @@ export function createAssetIntentV1(input: AssetIntentV1Input): AssetIntentV1 {
   const capabilities = [...(input.capabilities ?? [])];
   if (architecture?.enterable && !capabilities.includes('enterable'))
     capabilities.push('enterable');
+  if (architecture?.interiorMode === 'navigable' && !capabilities.includes('navigable'))
+    capabilities.push('navigable');
   if (character?.grounded && !capabilities.includes('grounded')) capabilities.push('grounded');
   if (vehicle?.supportPolicy === 'grounded' && !capabilities.includes('grounded')) {
     capabilities.push('grounded');

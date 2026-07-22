@@ -44,6 +44,10 @@ const CANONICAL_ARCHITECTURE_CODES = Object.freeze([
   'ARCH_RIDGE_GAP',
   'ARCH_ENVELOPE_GAP',
   'ARCH_BLOCKED_PORTAL',
+  'ARCH_STOREY_COUNT',
+  'ARCH_INTERIOR_MODE',
+  'ARCH_ROOF_MODE',
+  'ARCH_DOME_PROFILE',
 ]);
 
 function semantic<T extends THREE.Object3D>(node: T, role: string): T {
@@ -413,6 +417,180 @@ function buildPorchIntersectionControl(): ArchitectureCorpusPayload {
   return payload;
 }
 
+function buildStoreyControl(builtStoreys: 1 | 2): ArchitectureCorpusPayload {
+  const root = new THREE.Group();
+  root.name = `ArchitectureStoreys_${builtStoreys}`;
+  const material = new THREE.MeshStandardMaterial({ color: 0xb9a17d });
+  for (let index = 1; index <= builtStoreys; index++) {
+    part(
+      root,
+      `Floor_${index}`,
+      new THREE.BoxGeometry(6, 0.12, 4),
+      material,
+      `floor.storey.${index}`,
+      [0, (index - 1) * 3, 0],
+    );
+  }
+  root.updateMatrixWorld(true);
+  return {
+    intent: createAssetIntentV1({
+      category: 'architecture',
+      architecture: {
+        storeyCount: 2,
+        interiorMode: 'none',
+        roofMode: 'none',
+        roof: { type: 'none' },
+      },
+    }),
+    scene: root,
+  };
+}
+
+function buildInteriorShellControl(hasShell: boolean): ArchitectureCorpusPayload {
+  const root = new THREE.Group();
+  root.name = hasShell ? 'ArchitectureInteriorShellControl' : 'ArchitectureInteriorShellMissing';
+  part(
+    root,
+    'WallFront',
+    new THREE.BoxGeometry(0.15, 3, 4),
+    new THREE.MeshStandardMaterial({ color: 0xb9a17d }),
+    'wall.front',
+    [3, 1.5, 0],
+  );
+  if (hasShell) {
+    const interior = semantic(new THREE.Group(), 'architecture.interior.shell');
+    interior.name = 'InteriorShell';
+    interior.scale.set(5.7, 2.8, 3.7);
+    interior.position.y = 1.5;
+    root.add(interior);
+  }
+  root.updateMatrixWorld(true);
+  return {
+    intent: createAssetIntentV1({
+      category: 'architecture',
+      architecture: {
+        interiorMode: 'shell',
+        roofMode: 'none',
+        roof: { type: 'none' },
+      },
+    }),
+    scene: root,
+  };
+}
+
+function buildRemovableRoofControl(separable: boolean): ArchitectureCorpusPayload {
+  const root = new THREE.Group();
+  root.name = separable ? 'ArchitectureRemovableRoofControl' : 'ArchitectureRemovableRoofFixed';
+  const roof = new THREE.Mesh(
+    new THREE.BoxGeometry(6.4, 0.15, 4.4),
+    new THREE.MeshStandardMaterial({ color: 0x59616d }),
+  );
+  roof.name = 'Roof';
+  roof.position.y = 3;
+  stampSemanticMetadataV1(roof, {
+    roles: ['roof.assembly'],
+    ...(separable
+      ? {
+          relationships: [
+            {
+              kind: 'separable-from',
+              target: 'architecture.shell',
+              targetType: 'role' as const,
+            },
+          ],
+        }
+      : {}),
+  });
+  root.add(roof);
+  root.updateMatrixWorld(true);
+  return {
+    intent: createAssetIntentV1({
+      category: 'architecture',
+      architecture: {
+        interiorMode: 'none',
+        roofMode: 'removable',
+        roof: { type: 'flat' },
+      },
+    }),
+    scene: root,
+  };
+}
+
+function buildRotundaControl(radiusScale: 0.5 | 1): ArchitectureCorpusPayload {
+  const radius = 4;
+  const wallHeight = 4;
+  const root = semantic(new THREE.Group(), 'architecture.shell.rotunda');
+  root.name = radiusScale === 1 ? 'RotundaDomeControl' : 'UndersizedRotundaDome';
+  part(
+    root,
+    'RotundaDrum',
+    new THREE.CylinderGeometry(radius, radius, wallHeight, 24, 1, true),
+    new THREE.MeshStandardMaterial({ color: 0xb9a17d, side: THREE.DoubleSide }),
+    'wall.rotunda',
+    [0, wallHeight / 2, 0],
+  );
+  const dome = part(
+    root,
+    'Dome',
+    new THREE.SphereGeometry(radius, 24, 12, 0, Math.PI * 2, 0, Math.PI / 2),
+    new THREE.MeshStandardMaterial({ color: 0x8d8a82 }),
+    'roof.dome',
+    [0, wallHeight, 0],
+  );
+  dome.scale.set(radiusScale, 1, radiusScale);
+  root.updateMatrixWorld(true);
+  return {
+    intent: createAssetIntentV1({
+      category: 'architecture',
+      subtype: 'rotunda',
+      architecture: {
+        storeyCount: 1,
+        interiorMode: 'none',
+        roofMode: 'fixed',
+        footprint: { spanX: radius * 2, spanZ: radius * 2 },
+        wallHeight,
+        roof: {
+          type: 'dome',
+          rise: radius,
+          pitchDegrees: 0,
+          overhang: 0,
+          closedEnds: false,
+        },
+      },
+    }),
+    scene: root,
+  };
+}
+
+function reciprocal(
+  failureId: string,
+  controlId: string,
+  description: string,
+  code: string,
+  failureBuild: () => ArchitectureCorpusPayload,
+  controlBuild: () => ArchitectureCorpusPayload,
+): readonly [ArchitectureCorpusDescriptor, ArchitectureCorpusDescriptor] {
+  return [
+    {
+      id: failureId,
+      kind: 'failure',
+      pairId: controlId,
+      description,
+      expectedPrimaryCode: code,
+      forbiddenCodes: [],
+      build: failureBuild,
+    },
+    {
+      id: controlId,
+      kind: 'control',
+      pairId: failureId,
+      description: `Known-good reciprocal control for ${description}`,
+      forbiddenCodes: CANONICAL_ARCHITECTURE_CODES,
+      build: controlBuild,
+    },
+  ];
+}
+
 const failure = (
   id: string,
   pairId: string,
@@ -540,6 +718,38 @@ export const ARCHITECTURE_REGRESSION_CORPUS = Object.freeze([
     'clear-box-portal-control',
     'sealed-enterable-box',
     'Equivalent architecture has a real exterior-to-interior clearance prism.',
+  ),
+  ...reciprocal(
+    'storey-count-mismatch',
+    'storey-count-control',
+    'A two-storey request exposes only one portable floor.storey role.',
+    'ARCH_STOREY_COUNT',
+    () => buildStoreyControl(1),
+    () => buildStoreyControl(2),
+  ),
+  ...reciprocal(
+    'interior-shell-missing',
+    'interior-shell-control',
+    'interiorMode=shell has no portable semantic interior shell volume.',
+    'ARCH_INTERIOR_MODE',
+    () => buildInteriorShellControl(false),
+    () => buildInteriorShellControl(true),
+  ),
+  ...reciprocal(
+    'removable-roof-fixed',
+    'removable-roof-control',
+    'A removable roof request exposes a roof assembly without separable-from semantics.',
+    'ARCH_ROOF_MODE',
+    () => buildRemovableRoofControl(false),
+    () => buildRemovableRoofControl(true),
+  ),
+  ...reciprocal(
+    'undersized-rotunda-dome',
+    'rotunda-dome-control',
+    'A declared rotunda dome covers only half of its requested circular footprint.',
+    'ARCH_DOME_PROFILE',
+    () => buildRotundaControl(0.5),
+    () => buildRotundaControl(1),
   ),
   {
     id: 'valid-large-overhang',
