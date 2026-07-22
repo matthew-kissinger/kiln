@@ -38,7 +38,12 @@ For current access and distribution decisions, see
 bun install
 bun run typecheck   # tsc --noEmit
 bun run test        # bun test (offline; live agent tests gated behind KILN_SPIKE_LIVE=1)
+bun run test:coverage # LCOV report plus the checked coverage ratchet
 ```
+
+The reliability baseline is **95.38% functions / 91.80% lines**. CI enforces
+non-regression ratchets of 92% functions and 91% lines and uploads `coverage/lcov.info`.
+Threshold decreases require an explicit measured rationale.
 
 ## Subpath exports
 

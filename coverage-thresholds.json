@@ -1,0 +1,10 @@
+{
+  "measuredBaseline": {
+    "functions": 95.38,
+    "lines": 91.80
+  },
+  "thresholds": {
+    "functions": 92,
+    "lines": 91
+  }
+}
