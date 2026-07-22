@@ -1,6 +1,9 @@
 import { describe, expect, test } from 'bun:test';
 
 import {
+  ARCHITECTURE_INTERIOR_MODES,
+  ARCHITECTURE_ROOF_MODES,
+  ARCHITECTURE_ROOF_TYPES,
   ASSET_CATEGORIES,
   KILN_ASSET_FRAME,
   createAssetIntentV1,
@@ -247,6 +250,93 @@ describe('asset contracts', () => {
     expect(validateAssetIntentV1(wheeledBoat).issues.map((issue) => issue.code)).toContain(
       'VEHICLE_WHEEL_POLICY_MISMATCH',
     );
+  });
+
+  test('normalizes the architecture lifecycle contract while preserving legacy enterable input', () => {
+    expect(ARCHITECTURE_INTERIOR_MODES).toEqual(['none', 'shell', 'navigable']);
+    expect(ARCHITECTURE_ROOF_MODES).toEqual(['auto', 'fixed', 'removable', 'none']);
+    expect(ARCHITECTURE_ROOF_TYPES).toContain('dome');
+
+    const legacy = createAssetIntentV1({
+      category: 'architecture',
+      architecture: { enterable: true },
+    });
+    expect(legacy.architecture).toMatchObject({
+      enterable: true,
+      storeyCount: 1,
+      interiorMode: 'navigable',
+      roofMode: 'auto',
+    });
+    expect(legacy.capabilities).toEqual(expect.arrayContaining(['enterable', 'navigable']));
+
+    const shell = createAssetIntentV1({
+      category: 'architecture',
+      architecture: {
+        storeyCount: 5,
+        interiorMode: 'shell',
+        roofMode: 'removable',
+      },
+    });
+    expect(shell.architecture).toMatchObject({
+      enterable: false,
+      storeyCount: 5,
+      interiorMode: 'shell',
+      roofMode: 'removable',
+    });
+    expect(shell.capabilities).not.toContain('enterable');
+    expect(shell.capabilities).not.toContain('navigable');
+    expect(validateAssetIntentV1(shell).valid).toBe(true);
+  });
+
+  test('normalizes dome/rotunda intent and rejects invalid architecture lifecycle values', () => {
+    const rotunda = createAssetIntentV1({
+      category: 'architecture',
+      subtype: 'rotunda',
+      architecture: {
+        storeyCount: 1,
+        interiorMode: 'navigable',
+        roofMode: 'fixed',
+        roof: { type: 'dome', rise: 5.5, pitchDegrees: 0, closedEnds: false },
+      },
+    });
+    expect(rotunda.architecture).toMatchObject({
+      subtype: 'rotunda',
+      storeyCount: 1,
+      interiorMode: 'navigable',
+      roofMode: 'fixed',
+      roof: { type: 'dome', rise: 5.5, pitchDegrees: 0 },
+    });
+    expect(validateAssetIntentV1(rotunda).valid).toBe(true);
+
+    for (const architecture of [
+      { ...rotunda.architecture!, storeyCount: 0 },
+      { ...rotunda.architecture!, storeyCount: 6 },
+      { ...rotunda.architecture!, storeyCount: 1.5 },
+      { ...rotunda.architecture!, interiorMode: 'decorative' },
+      { ...rotunda.architecture!, roofMode: 'hinged' },
+      { ...rotunda.architecture!, enterable: false },
+      {
+        ...rotunda.architecture!,
+        roofMode: 'none',
+        roof: { ...rotunda.architecture!.roof, type: 'dome' },
+      },
+    ]) {
+      expect(validateAssetIntentV1({ ...rotunda, architecture }).valid).toBe(false);
+    }
+  });
+
+  test('continues to validate pre-lifecycle architecture v1 payloads using legacy semantics', () => {
+    const current = createAssetIntentV1({
+      category: 'architecture',
+      architecture: { enterable: false, roof: { type: 'none' } },
+    });
+    const {
+      storeyCount: _storeys,
+      interiorMode: _interior,
+      roofMode: _roofMode,
+      ...legacy
+    } = current.architecture!;
+    expect(validateAssetIntentV1({ ...current, architecture: legacy }).valid).toBe(true);
   });
 
   test('normalizes a complete architecture intent with consistent pitch, rise, and portal clearance', () => {

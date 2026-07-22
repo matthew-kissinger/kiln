@@ -28,6 +28,10 @@ const canonicalCodes = new Set([
   'ARCH_RIDGE_GAP',
   'ARCH_ENVELOPE_GAP',
   'ARCH_BLOCKED_PORTAL',
+  'ARCH_STOREY_COUNT',
+  'ARCH_INTERIOR_MODE',
+  'ARCH_ROOF_MODE',
+  'ARCH_DOME_PROFILE',
 ]);
 
 function canonicalHelperShell(ridgeAxis: 'x' | 'z' = 'x') {
@@ -98,6 +102,22 @@ describe('ARCH-019 executable reciprocal architecture corpus', () => {
       for (const forbidden of descriptor.forbiddenCodes) expect(codes).not.toContain(forbidden);
     });
   }
+
+  test('freezes lifecycle and rotunda adversaries with reciprocal controls', () => {
+    const ids = ARCHITECTURE_REGRESSION_CORPUS.map((fixture) => fixture.id);
+    expect(ids).toEqual(
+      expect.arrayContaining([
+        'storey-count-mismatch',
+        'storey-count-control',
+        'interior-shell-missing',
+        'interior-shell-control',
+        'removable-roof-fixed',
+        'removable-roof-control',
+        'undersized-rotunda-dome',
+        'rotunda-dome-control',
+      ]),
+    );
+  });
 
   test('covers every observed architecture failure with a reciprocal control', () => {
     const byId = new Map(ARCHITECTURE_REGRESSION_CORPUS.map((fixture) => [fixture.id, fixture]));
@@ -263,6 +283,146 @@ describe('ARCH-010–016 validator policy', () => {
     const findings = evaluateArchitectureQa({ intent, scene });
     expect(findings.some((finding) => finding.code === 'ARCH_MISSING_ROOF_ROLES')).toBe(true);
     expect(findings.every((finding) => finding.disposition !== 'block')).toBe(true);
+  });
+
+  test('enforces requested multi-storey count from portable floor.storey roles', () => {
+    const scene = new THREE.Group();
+    scene.name = 'TwoStoreyFixture';
+    const material = new THREE.MeshStandardMaterial();
+    for (const [index, y] of [
+      [1, 0],
+      [2, 3],
+    ] as const) {
+      const floor = stampSemanticMetadataV1(
+        new THREE.Mesh(new THREE.BoxGeometry(5, 0.12, 4), material),
+        { roles: [`floor.storey.${index}`] },
+      );
+      floor.name = `Floor_${index}`;
+      floor.position.y = y;
+      scene.add(floor);
+    }
+    const intent = createAssetIntentV1({
+      category: 'architecture',
+      architecture: {
+        storeyCount: 2,
+        interiorMode: 'none',
+        roofMode: 'none',
+        roof: { type: 'none' },
+      },
+    });
+    expect(evaluateArchitectureQa({ intent, scene }).map((finding) => finding.code)).not.toContain(
+      'ARCH_STOREY_COUNT',
+    );
+    scene.remove(scene.getObjectByName('Floor_2')!);
+    const finding = evaluateArchitectureQa({ intent, scene }).find(
+      (candidate) => candidate.code === 'ARCH_STOREY_COUNT',
+    );
+    expect(finding).toMatchObject({
+      disposition: 'block',
+      measurement: { actual: 1, expected: 2, threshold: 2 },
+    });
+  });
+
+  test('requires measurable shell evidence exactly when interiorMode is shell', () => {
+    const scene = new THREE.Group();
+    scene.name = 'InteriorShellFixture';
+    const intent = createAssetIntentV1({
+      category: 'architecture',
+      architecture: {
+        interiorMode: 'shell',
+        roofMode: 'none',
+        roof: { type: 'none' },
+      },
+    });
+    expect(evaluateArchitectureQa({ intent, scene }).map((finding) => finding.code)).toContain(
+      'ARCH_INTERIOR_MODE',
+    );
+    const shell = stampSemanticMetadataV1(new THREE.Group(), {
+      roles: ['architecture.interior.shell'],
+    });
+    shell.name = 'InteriorShell';
+    scene.add(shell);
+    expect(evaluateArchitectureQa({ intent, scene }).map((finding) => finding.code)).not.toContain(
+      'ARCH_INTERIOR_MODE',
+    );
+  });
+
+  test('requires removable roofs to own a portable separable-from relationship', () => {
+    const scene = new THREE.Group();
+    scene.name = 'RemovableRoofFixture';
+    const roof = stampSemanticMetadataV1(
+      new THREE.Mesh(new THREE.BoxGeometry(5, 0.15, 4), new THREE.MeshStandardMaterial()),
+      {
+        roles: ['roof.assembly'],
+        relationships: [
+          { kind: 'separable-from', target: 'architecture.shell', targetType: 'role' },
+        ],
+      },
+    );
+    roof.name = 'Roof';
+    roof.position.y = 3;
+    scene.add(roof);
+    const intent = createAssetIntentV1({
+      category: 'architecture',
+      architecture: {
+        interiorMode: 'none',
+        roofMode: 'removable',
+        roof: { type: 'flat' },
+      },
+    });
+    expect(evaluateArchitectureQa({ intent, scene }).map((finding) => finding.code)).not.toContain(
+      'ARCH_ROOF_MODE',
+    );
+    stampSemanticMetadataV1(roof, { roles: ['roof.assembly'] });
+    const finding = evaluateArchitectureQa({ intent, scene }).find(
+      (candidate) => candidate.code === 'ARCH_ROOF_MODE',
+    );
+    expect(finding?.measurement).toMatchObject({
+      name: 'removableRoofRelationshipCount',
+      actual: 0,
+      threshold: 1,
+    });
+  });
+
+  test('supports a Pantheon-like rotunda dome and rejects undersized dome coverage', () => {
+    const scene = stampSemanticMetadataV1(new THREE.Group(), {
+      roles: ['architecture.shell.rotunda'],
+    });
+    scene.name = 'RotundaFixture';
+    const dome = stampSemanticMetadataV1(
+      new THREE.Mesh(
+        new THREE.SphereGeometry(4, 16, 8, 0, Math.PI * 2, 0, Math.PI / 2),
+        new THREE.MeshStandardMaterial(),
+      ),
+      { roles: ['roof.dome'] },
+    );
+    dome.name = 'Dome';
+    dome.position.y = 4;
+    scene.add(dome);
+    const intent = createAssetIntentV1({
+      category: 'architecture',
+      subtype: 'rotunda',
+      architecture: {
+        interiorMode: 'none',
+        roofMode: 'fixed',
+        footprint: { spanX: 8, spanZ: 8 },
+        wallHeight: 4,
+        roof: { type: 'dome', rise: 4, pitchDegrees: 0, overhang: 0, closedEnds: false },
+      },
+    });
+    expect(evaluateArchitectureQa({ intent, scene }).map((finding) => finding.code)).not.toContain(
+      'ARCH_DOME_PROFILE',
+    );
+    dome.scale.set(0.5, 1, 0.5);
+    scene.updateMatrixWorld(true);
+    const finding = evaluateArchitectureQa({ intent, scene }).find(
+      (candidate) => candidate.code === 'ARCH_DOME_PROFILE',
+    );
+    expect(finding?.measurement).toMatchObject({
+      name: 'minimumDomeCoverageRatio',
+      actual: 0.5,
+      threshold: 0.9,
+    });
   });
 
   test('explicit stylized scale suppresses every realistic scale-band warning', () => {

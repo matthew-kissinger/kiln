@@ -1,6 +1,10 @@
 import * as THREE from 'three';
 
-import { readSemanticMetadataV1FromExtras, type ArchitectureIntentV1 } from '../contracts';
+import {
+  readSemanticMetadataV1FromExtras,
+  type ArchitectureIntentV1,
+  type SemanticRelationshipV1,
+} from '../contracts';
 import { withArchitectureRepair } from './architecture-repairs';
 import { conformancePromotionAuthorization, KILN_ENGINE_QA_OWNER, type QaRule } from './registry';
 import type { QaContext, QaFinding } from './types';
@@ -24,6 +28,7 @@ interface ArchitecturePart {
   nodeName: string;
   nodePath: string;
   directRoles: readonly string[];
+  directRelationships: readonly SemanticRelationshipV1[];
   roles: readonly string[];
   isMesh: boolean;
   bounds: Bounds3;
@@ -74,8 +79,8 @@ const boundsFinite = (bounds: Bounds3): boolean => Number.isFinite(bounds.min.x)
 
 const extent = (bounds: Bounds3, axis: Axis): number => bounds.max[axis] - bounds.min[axis];
 
-function semanticRoles(node: THREE.Object3D): readonly string[] {
-  return readSemanticMetadataV1FromExtras(node.userData)?.roles ?? [];
+function semanticMetadata(node: THREE.Object3D) {
+  return readSemanticMetadataV1FromExtras(node.userData);
 }
 
 function markerBounds(matrix: THREE.Matrix4): Bounds3 {
@@ -178,7 +183,9 @@ function collectArchitectureEvidence(scene: unknown): ArchitectureSceneEvidence 
     siblingIndex: number,
     inheritedRoles: readonly string[],
   ): void => {
-    const directRoles = semanticRoles(node);
+    const metadata = semanticMetadata(node);
+    const directRoles = metadata?.roles ?? [];
+    const directRelationships = metadata?.relationships ?? [];
     directRoles.forEach((role) => {
       allRoles.add(role);
     });
@@ -202,6 +209,7 @@ function collectArchitectureEvidence(scene: unknown): ArchitectureSceneEvidence 
         nodeName: node.name || node.type,
         nodePath,
         directRoles,
+        directRelationships,
         roles,
         isMesh,
         ...evidence,
@@ -950,6 +958,175 @@ function portalFindings(
   ];
 }
 
+function storeyFindings(
+  context: QaContext,
+  architecture: ArchitectureIntentV1,
+  evidence: ArchitectureSceneEvidence,
+): QaFinding[] {
+  const requested = architecture.storeyCount ?? 1;
+  const indexes = new Set<number>();
+  for (const role of evidence.semanticRoles) {
+    const match = /^(?:architecture\.)?floor\.storey\.(\d+)$/.exec(role);
+    if (match) indexes.add(Number(match[1]));
+  }
+  // A single legacy floor remains a valid one-storey control. Exact counting is
+  // required once a multi-storey request is made or indexed floor evidence is claimed.
+  if (requested === 1 && indexes.size === 0) return [];
+  const actual = indexes.size;
+  if (actual === requested) return [];
+  return [
+    architectureFinding(context, {
+      code: 'ARCH_STOREY_COUNT',
+      disposition: 'block',
+      message: `Requested ${requested} storeys but found ${actual} distinct portable floor.storey.<index> roles.`,
+      affected: { node: evidence.root.name || 'architecture-root' },
+      measurement: {
+        name: 'semanticStoreyCount',
+        actual,
+        expected: requested,
+        threshold: requested,
+      },
+      viewHints: ['architecture.cutaway.dollhouse', 'generic.top.semantic-overlay'],
+      repairText:
+        'Add or remove only the requested floor levels, stamp each level once as floor.storey.<1-5>, and keep stairs and clearances aligned between consecutive levels.',
+    }),
+  ];
+}
+
+function interiorModeFindings(
+  context: QaContext,
+  architecture: ArchitectureIntentV1,
+  evidence: ArchitectureSceneEvidence,
+): QaFinding[] {
+  const mode = architecture.interiorMode ?? (architecture.enterable ? 'navigable' : 'none');
+  const interiorEvidence = evidence.parts.filter((part) =>
+    part.roles.some(
+      (role) => role === 'architecture.interior.shell' || role.startsWith('interior.'),
+    ),
+  );
+  const valid =
+    mode === 'shell'
+      ? interiorEvidence.length > 0
+      : mode !== 'none' || interiorEvidence.length === 0;
+  if (valid) return [];
+  return [
+    architectureFinding(context, {
+      code: 'ARCH_INTERIOR_MODE',
+      disposition: 'block',
+      message:
+        mode === 'shell'
+          ? 'interiorMode=shell requires a portable architecture.interior.shell semantic volume.'
+          : 'interiorMode=none conflicts with semantic interior geometry.',
+      affected: {
+        node: interiorEvidence[0]?.nodeName ?? evidence.root.name ?? 'architecture-root',
+        nodePath: interiorEvidence[0]?.nodePath,
+      },
+      measurement: {
+        name: 'semanticInteriorShellCount',
+        actual: interiorEvidence.length,
+        expected: mode === 'shell' ? '>= 1' : 0,
+        threshold: mode === 'shell' ? 1 : 0,
+      },
+      viewHints: ['architecture.cutaway.dollhouse', 'architecture.floor-plan'],
+      repairText:
+        mode === 'shell'
+          ? 'Add one non-rendering architecture.interior.shell volume matching the usable inner envelope; do not fake the interior with a painted exterior face.'
+          : 'Remove the unrequested interior semantic volume or change trusted intent to shell/navigable before generation.',
+    }),
+  ];
+}
+
+function roofModeFindings(
+  context: QaContext,
+  architecture: ArchitectureIntentV1,
+  evidence: ArchitectureSceneEvidence,
+): QaFinding[] {
+  const mode = architecture.roofMode ?? (architecture.roof.type === 'none' ? 'none' : 'auto');
+  if (mode === 'auto') return [];
+  const roofParts = evidence.parts.filter((part) => hasRolePrefix(part, 'roof.'));
+  const removableRelationships = roofParts.flatMap((part) =>
+    part.directRelationships.filter((relationship) => relationship.kind === 'separable-from'),
+  );
+  const present = roofParts.length > 0;
+  const valid =
+    mode === 'none'
+      ? !present
+      : mode === 'fixed'
+        ? present && removableRelationships.length === 0
+        : present && removableRelationships.length > 0;
+  if (valid) return [];
+  const measurement =
+    mode === 'removable'
+      ? {
+          name: 'removableRoofRelationshipCount',
+          actual: removableRelationships.length,
+          expected: '>= 1',
+          threshold: 1,
+        }
+      : {
+          name: 'semanticRoofPartCount',
+          actual: roofParts.length,
+          expected: mode === 'none' ? 0 : '>= 1',
+          threshold: mode === 'none' ? 0 : 1,
+        };
+  return [
+    architectureFinding(context, {
+      code: 'ARCH_ROOF_MODE',
+      disposition: 'block',
+      message: `roofMode=${mode} conflicts with ${roofParts.length} semantic roof parts and ${removableRelationships.length} separable-from relationships.`,
+      affected: {
+        node: roofParts[0]?.nodeName ?? evidence.root.name ?? 'architecture-root',
+        nodePath: roofParts[0]?.nodePath,
+      },
+      measurement,
+      viewHints: ['generic.top.semantic-overlay', 'architecture.cutaway.dollhouse'],
+      repairText:
+        'Match trusted roofMode exactly: omit all roof.* roles for none, keep fixed roofs attached, or stamp one roof assembly with a separable-from relationship for removable.',
+    }),
+  ];
+}
+
+function domeFindings(
+  context: QaContext,
+  architecture: ArchitectureIntentV1,
+  evidence: ArchitectureSceneEvidence,
+): QaFinding[] {
+  const requested =
+    architecture.roof.type === 'dome' ||
+    /(?:^|[. _-])rotunda(?:$|[. _-])/i.test(architecture.subtype);
+  if (!requested) return [];
+  const dome = aggregate(
+    evidence.parts.filter(
+      (part) => part.isMesh && (hasRole(part, 'roof.dome') || hasRole(part, 'roof.surface.dome')),
+    ),
+  );
+  const spanXCoverage = dome ? extent(dome.bounds, 'x') / architecture.footprint.spanX : 0;
+  const spanZCoverage = dome ? extent(dome.bounds, 'z') / architecture.footprint.spanZ : 0;
+  const riseCoverage = dome ? extent(dome.bounds, 'y') / architecture.roof.rise : 0;
+  const minimumCoverage = Math.min(spanXCoverage, spanZCoverage, riseCoverage);
+  if (minimumCoverage >= 0.9) return [];
+  return [
+    architectureFinding(context, {
+      code: 'ARCH_DOME_PROFILE',
+      disposition: 'block',
+      message: `The semantic rotunda dome covers ${(spanXCoverage * 100).toFixed(1)}% X, ${(spanZCoverage * 100).toFixed(1)}% Z, and ${(riseCoverage * 100).toFixed(1)}% of declared rise.`,
+      affected: {
+        node: dome?.parts[0]?.nodeName ?? evidence.root.name ?? 'architecture-root',
+        nodePath: dome?.parts[0]?.nodePath,
+      },
+      measurement: {
+        name: 'minimumDomeCoverageRatio',
+        actual: minimumCoverage,
+        expected: '>= 0.9',
+        threshold: 0.9,
+      },
+      viewHints: ['generic.top.semantic-overlay', 'architecture.cutaway.dollhouse'],
+      repairText:
+        'Rebuild the roof.dome hemisphere to cover the declared circular rotunda footprint and rise; preserve any intentional oculus as a bounded opening rather than shrinking the whole dome.',
+    }),
+  ];
+}
+
 interface ScaleBand {
   code: string;
   label: string;
@@ -1099,6 +1276,10 @@ export function evaluateArchitectureQa(context: QaContext): readonly QaFinding[]
   const evidence = collectArchitectureEvidence(context.scene);
   if (!evidence) return [];
   return [
+    ...storeyFindings(context, architecture, evidence),
+    ...interiorModeFindings(context, architecture, evidence),
+    ...roofModeFindings(context, architecture, evidence),
+    ...domeFindings(context, architecture, evidence),
     ...roofFindings(context, architecture, evidence),
     ...endFindings(context, architecture, evidence),
     ...envelopeFindings(context, architecture, evidence),
@@ -1116,7 +1297,7 @@ export const ARCHITECTURE_QA_RULE: QaRule = {
   promotion: conformancePromotionAuthorization(
     'architecture-qa-v1',
     'src/qa/architecture.test.ts',
-    'd83b6f3696455bb8c14bb4d36fa61e9470314af75959cb20b6da8da76c83e3da',
+    'e5ad1245240f1244c592849df2977c74d26e535dffebc9ad5a2adf6db743d573',
   ),
   defaultMode: 'enforce',
   evaluate: (context) =>
