@@ -70,6 +70,22 @@ Runtime: `three`, `@gltf-transform/*`, `manifold-3d` (CSG, WASM), `three-subdivi
 `@strands-agents/sdk` + `@ai-sdk/provider` — is an **optional peer**: install it only
 when you use `@kiln/engine/agent`.
 
+### `@ai-sdk/provider` is pinned to v3 by Strands, not by us
+
+Do not bump `@ai-sdk/provider` to v4 or `@openrouter/ai-sdk-provider` to v3. The blocker is
+`@strands-agents/sdk`: every version through **1.11.1** peers `@ai-sdk/provider@^3.0.0`, and its
+`VercelModel` — which every OpenRouter model here is wrapped in — is typed against
+`LanguageModelV3`. A type cast does not help, because Strands emits V3 shapes at *runtime*:
+`vercel.js` sends `{type: 'file', data: <bare bytes>}` where V4 expects `{type: 'data', data}`, and
+`{type: 'file-data', ...}`, which does not exist in V4 at all.
+
+`@ai-sdk/provider` v4 itself is purely additive, and our only real code change would be one string
+(`'file-data'` → `'file'`) in three files — which is exactly why this looks deceptively easy. Stay on
+`@openrouter/ai-sdk-provider@2.10.0` until Strands ships v4 support.
+
+Note also that the `ai` package is an unused devDependency here; the engine imports it nowhere, so
+"migrate `ai` v6 → v7" is not the task it appears to be.
+
 ## Determinism
 
 Render/rasterizer compute paths are deterministic — no `Date.now()` / `Math.random()` —
