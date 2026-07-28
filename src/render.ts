@@ -49,6 +49,8 @@ import {
   validateSemanticMetadataV1,
   type AssetCategory,
   type AssetIntentV1,
+  type IntegrationAssetRole,
+  type IntegrationManifestV1,
 } from './contracts';
 import {
   assertFinalGlbValid,
@@ -156,8 +158,93 @@ const TYPE_VEC4: AccessorTypeStr = 'VEC4';
  * snap to roads) and Kiln City density budgeting. Semantic — cannot be recomputed
  * from GLB bytes, so it travels in provenance. See plan/05-product-depth.md §3.4.
  */
-export type AssetRole = 'ground' | 'building' | 'wonder' | 'poi' | 'prop' | 'fill' | 'vehicle';
+export type AssetRole = IntegrationAssetRole;
 export type { SnapPaletteSlot } from './palette-snap';
+
+const GROUND_CONTACT_TOLERANCE = 0.02;
+
+function ensureDefaultScene(doc: Document): GtScene | undefined {
+  const root = doc.getRoot();
+  const scene = root.getDefaultScene() ?? root.listScenes()[0];
+  if (scene && !root.getDefaultScene()) root.setDefaultScene(scene);
+  return scene;
+}
+
+async function sha256Hex(bytes: Uint8Array): Promise<string> {
+  const digest = await globalThis.crypto.subtle.digest('SHA-256', new Uint8Array(bytes).buffer);
+  return [...new Uint8Array(digest)].map((value) => value.toString(16).padStart(2, '0')).join('');
+}
+
+/** Inspect finished bytes without executing model-authored source code. */
+export async function inspectGlbIntegration(
+  bytes: Uint8Array,
+  opts: {
+    requestedRole?: IntegrationAssetRole;
+    assessedRole?: IntegrationAssetRole;
+    validation?: KhronosGltfValidationReport;
+  } = {},
+): Promise<IntegrationManifestV1 | undefined> {
+  const doc = await engineIO().readBinary(bytes);
+  const root = doc.getRoot();
+  const explicitDefault = root.getDefaultScene();
+  const scene = explicitDefault ?? root.listScenes()[0];
+  if (!scene) return undefined;
+
+  const { min, max } = getBounds(scene);
+  const finiteBounds = min.every(Number.isFinite) && max.every(Number.isFinite);
+  if (!finiteBounds) return undefined;
+  const metrics = collectGlbMetrics(doc);
+  const validation = opts.validation ?? (await validateFinalGlbBytes(bytes));
+  const scenes = root.listScenes();
+  const minTuple: [number, number, number] = [min[0]!, min[1]!, min[2]!];
+  const maxTuple: [number, number, number] = [max[0]!, max[1]!, max[2]!];
+  const minY = minTuple[1];
+
+  return {
+    schemaVersion: 'kiln.integration-manifest.v1',
+    analyzerVersion: 1,
+    artifactSha256: await sha256Hex(bytes),
+    units: 'm',
+    axes: { forward: '+X', up: '+Y', right: '+Z' },
+    bounds: {
+      min: minTuple,
+      max: maxTuple,
+      size: [maxTuple[0] - minTuple[0], maxTuple[1] - minTuple[1], maxTuple[2] - minTuple[2]],
+      center: [
+        (minTuple[0] + maxTuple[0]) / 2,
+        (minTuple[1] + maxTuple[1]) / 2,
+        (minTuple[2] + maxTuple[2]) / 2,
+      ],
+    },
+    pivot: { convention: 'author-origin', position: [0, 0, 0] },
+    ground: {
+      groundY: 0,
+      contactTolerance: GROUND_CONTACT_TOLERANCE,
+      minY,
+      offsetToGround: -minY,
+      grounded: Math.abs(minY) <= GROUND_CONTACT_TOLERANCE,
+    },
+    defaultScene: { index: scenes.indexOf(scene), name: scene.getName() },
+    ...(opts.requestedRole ? { requestedRole: opts.requestedRole } : {}),
+    ...(opts.assessedRole ? { assessedRole: opts.assessedRole } : {}),
+    renderMetrics: {
+      triangles: metrics.triangles,
+      drawCalls: metrics.drawCalls,
+      uniqueGeometries: metrics.uniqueGeometries,
+      uniqueMaterials: metrics.uniqueMaterials,
+      textureCount: metrics.textureCount,
+      transparentMaterials: metrics.transparentMaterials,
+      skinned: metrics.skinned,
+    },
+    structuralQa: {
+      hasDefaultScene: explicitDefault !== null,
+      finiteBounds,
+      validatorErrors: validation.issues.numErrors,
+      validatorWarnings: validation.issues.numWarnings,
+    },
+    visualQa: 'not_assessed',
+  };
+}
 
 export interface KilnCodeMeta {
   name?: string;
@@ -704,6 +791,7 @@ export interface RenderResult {
   materialMetrics?: MaterialMetricsV1;
   materialRecipeApplications?: MaterialRecipeApplicationProvenanceV1[];
   materialResourceProvenance?: MaterialResourceProvenanceV1[];
+  integrationManifest: IntegrationManifestV1;
 }
 
 /**
@@ -780,6 +868,7 @@ export interface RenderSceneResult {
   materialMetrics?: MaterialMetricsV1;
   materialRecipeApplications?: MaterialRecipeApplicationProvenanceV1[];
   materialResourceProvenance?: MaterialResourceProvenanceV1[];
+  integrationManifest: IntegrationManifestV1;
 }
 
 export interface RenderSceneOptions {
@@ -1013,7 +1102,8 @@ export async function renderSceneToGLB(
   const nodeMap = new Map<string, GtNode>();
 
   const rootNode = bridgeNode(doc, buf, root, matCache, nodeMap, meshCache, texCache);
-  doc.createScene(opts.sceneName ?? 'Scene').addChild(rootNode);
+  const gltfScene = doc.createScene(opts.sceneName ?? 'Scene').addChild(rootNode);
+  doc.getRoot().setDefaultScene(gltfScene);
 
   if (clips.length > 0) {
     bridgeAnimations(doc, buf, clips, nodeMap, warnings);
@@ -1103,6 +1193,7 @@ export async function renderSceneToGLB(
   }
 
   const io = engineIO();
+  ensureDefaultScene(doc);
   const bytes = await io.writeBinary(doc);
   const gltfValidation = await validateFinalGlbBytes(bytes);
   const finalGltfReport = appendFinalGltfQa(intent, sceneQaReport, gltfValidation);
@@ -1127,6 +1218,12 @@ export async function renderSceneToGLB(
       `glTF ${issue.code}${issue.pointer ? ` at ${issue.pointer}` : ''}: ${issue.message}`,
     );
   }
+
+  const integrationManifest = await inspectGlbIntegration(bytes, {
+    ...(opts.role ? { requestedRole: opts.role } : {}),
+    validation: gltfValidation,
+  });
+  if (!integrationManifest) throw new Error('renderSceneToGLB: final GLB has no measurable scene');
 
   let diagnosticViews: CapturedDiagnosticV1[] | undefined;
   if (intent.category === 'character' && intent.character) {
@@ -1169,6 +1266,7 @@ export async function renderSceneToGLB(
     ...(materialMetrics ? { materialMetrics } : {}),
     ...(materialRecipeApplications.length ? { materialRecipeApplications } : {}),
     ...(materialResourceProvenance.length ? { materialResourceProvenance } : {}),
+    integrationManifest,
   };
 }
 
@@ -1230,6 +1328,7 @@ export async function renderGLB(
     ...(scene.materialResourceProvenance
       ? { materialResourceProvenance: scene.materialResourceProvenance }
       : {}),
+    integrationManifest: scene.integrationManifest,
   };
 }
 
@@ -1310,6 +1409,7 @@ export async function optimizeGlbBytes(
     }
     if (mode) summary = await consolidateMaterials(doc, mode);
     if (!summary && !instancing) return undefined;
+    ensureDefaultScene(doc);
     const outBytes = await io.writeBinary(doc);
     const gltfValidation = await assertFinalGlbValid(outBytes);
     let report: InstanceabilityReport | undefined;
@@ -1422,6 +1522,7 @@ export async function snapGlbToPalette(
       drawsBefore: before.drawCalls,
       drawsAfter: after.drawCalls,
     };
+    ensureDefaultScene(doc);
     const outBytes = await io.writeBinary(doc);
     const gltfValidation = await assertFinalGlbValid(outBytes);
     let report: InstanceabilityReport | undefined;
@@ -1523,6 +1624,7 @@ export async function composeSceneGLB(
   const io = engineIO();
   const master = new Document();
   const masterScene = master.createScene(opts.sceneName ?? 'Scene');
+  master.getRoot().setDefaultScene(masterScene);
   let composed = 0;
 
   for (let i = 0; i < parts.length; i++) {
@@ -1589,6 +1691,7 @@ export async function composeSceneGLB(
   }
 
   const metrics = collectGlbMetrics(master);
+  ensureDefaultScene(master);
   const bytes = await io.writeBinary(master);
   const gltfValidation = await assertFinalGlbValid(bytes, 'scene.glb');
   for (const issue of gltfValidation.issues.messages) {

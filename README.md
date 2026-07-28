@@ -60,7 +60,16 @@ The engine ships TypeScript source (Bun/tsx transpile on the fly); consume by su
 | `@kiln/engine/primitives` | the 70+ primitive/helper registry |
 | `@kiln/engine/prompt`, `/prompt-api`, `/list-primitives` | system-prompt generation + catalog |
 | `@kiln/engine/metrics`, `/inspect` | instanceability grade + scene-structure analysis |
+| `@kiln/engine/contracts` | browser-safe asset and integration contracts, including `IntegrationManifestV1` |
 | `@kiln/engine/composer`, `/composer/agent` | THREE-free scene-composition core (placement model, layout, overlap, DSL) + its Strands agent loop (`runKilnComposer`) |
+
+Finished renders include `integrationManifest`, a versioned sidecar with the artifact
+hash, metres/+Y-up axes, bounds, grounding offset, selected default scene, role, render
+metrics, and structural QA. Consumers that only have GLB bytes can derive the same
+sidecar with `inspectGlbIntegration(bytes)` from `@kiln/engine/render`; the inspection
+path parses the artifact and never executes model-authored source code. Visual quality
+remains explicitly `not_assessed` until a browser QA loop evaluates the asset in its
+actual scene.
 
 ## Dependencies
 
