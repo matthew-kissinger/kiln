@@ -5,6 +5,19 @@ for the consuming app's lockfile + tarball provenance, not public npm releases.
 
 ## [Unreleased]
 
+### Added
+- **Browser-safe GLB integration manifest.** Every `renderGLB` / `renderSceneToGLB`
+  result now carries `kiln.integration-manifest.v1`: artifact SHA-256, metre/+Y-up
+  coordinate semantics, world bounds, ground offset, role, render metrics, and
+  structural-validator counts. `inspectGlbIntegration(bytes)` derives the same
+  contract from finished bytes without executing model-authored source.
+
+### Fixed
+- **Explicit default scenes on exported GLBs.** Generated and composed artifacts now
+  set the glTF default scene, and optimize/palette rewrites repair legacy files whose
+  first scene existed without being selected. Consumers no longer have to guess which
+  scene to mount.
+
 ## [0.6.0] — 2026-07-12
 
 ### Added
