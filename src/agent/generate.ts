@@ -107,6 +107,7 @@ export interface GenerateKilnAssetResult {
   materialRecipeApplications?: NonNullable<RenderResult['materialRecipeApplications']>;
   materialResourceProvenance?: NonNullable<RenderResult['materialResourceProvenance']>;
   materialMetrics?: NonNullable<RenderResult['materialMetrics']>;
+  integrationManifest: RenderResult['integrationManifest'];
 }
 
 /**
@@ -261,5 +262,6 @@ export async function generateKilnAsset(
       ? { materialResourceProvenance: render.materialResourceProvenance }
       : {}),
     ...(render.materialMetrics ? { materialMetrics: render.materialMetrics } : {}),
+    integrationManifest: render.integrationManifest,
   };
 }
