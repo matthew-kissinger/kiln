@@ -194,9 +194,9 @@ export async function generateKilnCodeAgent(opts: {
   };
 }
 
-const DEFAULT_VIEW_RENDER_TIMEOUT_MS = 8000;
+export const DEFAULT_VIEW_RENDER_TIMEOUT_MS = 8000;
 
-type PortViewsOutcome =
+export type PortViewsOutcome =
   | { ok: true; png: Buffer; rendererId: string }
   | { ok: false; reason: string };
 
@@ -209,11 +209,15 @@ type PortViewsOutcome =
  * port, ok:false, timeout, missing rendererId, undecodable or mismatched PNGs —
  * returns `{ ok: false, reason }` so the caller degrades to the CPU rasterizer
  * instead of failing the generation.
+ *
+ * Exported as the single owner of the degrade policy: hosts that assemble their
+ * own generation pipeline (rather than calling generateKilnAsset) route their
+ * produced GLB through this same shell instead of re-implementing it.
  */
-async function captureViewsViaPort(
+export async function captureViewsViaPort(
   port: PbrRenderPort,
-  glb: Buffer,
-  timeoutMs: number,
+  glb: Buffer | Uint8Array,
+  timeoutMs: number = DEFAULT_VIEW_RENDER_TIMEOUT_MS,
 ): Promise<PortViewsOutcome> {
   // Same views + cell size as the CPU grid default, so the composited layout
   // matches renderCodeViewGrid (H-33 env variant included).

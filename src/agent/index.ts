@@ -26,8 +26,18 @@ export type { RunKilnAgentOptions, RunKilnAgentResult, KilnKnowhow, KilnInputIma
 export { resolveToolSurface, buildAgentTools } from './surface';
 export type { KilnToolSurface, RefineMode } from './surface';
 
-export { generateKilnAsset, generateKilnCodeAgent, DEFAULT_KILN_AGENT_MODEL } from './generate';
-export type { GenerateKilnAssetOptions, GenerateKilnAssetResult } from './generate';
+export {
+  generateKilnAsset,
+  generateKilnCodeAgent,
+  captureViewsViaPort,
+  DEFAULT_KILN_AGENT_MODEL,
+  DEFAULT_VIEW_RENDER_TIMEOUT_MS,
+} from './generate';
+export type {
+  GenerateKilnAssetOptions,
+  GenerateKilnAssetResult,
+  PortViewsOutcome,
+} from './generate';
 
 export {
   makeKilnTools,

@@ -391,6 +391,30 @@ describe('generateKilnAsset viewRenderPort (B3b/B4)', () => {
     expect(r.views).toBeInstanceOf(Buffer);
   });
 
+  test('captureViewsViaPort is a public single-owner shell (success + degrade)', async () => {
+    const { captureViewsViaPort } = await import('./generate');
+    const viewsPng = await stubViewPngs();
+    const okOutcome = await captureViewsViaPort(
+      async () => ({ ok: true, rendererId: 'dawn-vulkan:test-gpu:1.0', viewsPng }),
+      new Uint8Array([1, 2, 3]), // hosts hold Uint8Array GLBs; accepted directly
+    );
+    expect(okOutcome.ok).toBe(true);
+    if (okOutcome.ok) {
+      expect(okOutcome.rendererId).toBe('dawn-vulkan:test-gpu:1.0');
+      const { compositeViewPngGrid } = await import('../views');
+      expect(Buffer.compare(okOutcome.png, compositeViewPngGrid(viewsPng).png)).toBe(0);
+    }
+
+    const degraded = await captureViewsViaPort(
+      async () => {
+        throw new Error('GPU service unreachable');
+      },
+      Buffer.from([1, 2, 3]),
+    );
+    expect(degraded.ok).toBe(false);
+    if (!degraded.ok) expect(degraded.reason).toContain('GPU service unreachable');
+  });
+
   test('B4: the port receives a copy of the GLB bytes, not a live alias', async () => {
     runImpl = okRun;
     const viewsPng = await stubViewPngs();
