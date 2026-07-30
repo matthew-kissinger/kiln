@@ -29,7 +29,7 @@ import {
   type SceneModelJSON,
 } from '../model';
 import type { OverlapViolation } from '../overlap';
-import type { SceneRenderPort } from '../render-port';
+import type { PbrRenderPort, SceneRenderPort } from '../render-port';
 import { buildComposerUserPrompt, COMPOSER_SYSTEM_PROMPT } from './prompt';
 import { type ComposerSink, makeSceneComposerTools, type SceneRenderCandidate } from './tools';
 
@@ -44,6 +44,11 @@ export interface RunKilnComposerOptions {
   /** Host renderer: placements (+ optional cameras) → PNG(s). Injected so the
    *  composer core stays THREE-free; tests pass a stub returning a fixed PNG. */
   render: SceneRenderPort;
+  /** OPTIONAL host PBR renderer seam (GLB bytes → per-view PNGs). Landed as a
+   *  seam only: NO default implementation, and no composer tool calls it yet —
+   *  absent means the feature is off and the run is byte-identical to today.
+   *  Studio wiring is a separate, later change. */
+  pbrRender?: PbrRenderPort;
   /** Display name for the scene (used in framing + the serialized program). */
   sceneName?: string;
   /** Terrain sampler. Default flat ground at y=0; a heightmap drops in unchanged. */

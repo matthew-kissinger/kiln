@@ -35,3 +35,40 @@ export interface SceneRenderResult {
 /** Inject this at `runKilnComposer` call time. A build/render failure returns
  *  `{ ok:false, error }` (no image) so the agent gets a fixable error. */
 export type SceneRenderPort = (req: SceneRenderRequest) => Promise<SceneRenderResult>;
+
+/**
+ * PbrRenderRequest — one PBR/beauty render of an ALREADY-PRODUCED GLB.
+ *
+ * The engine never talks to a render service directly: hosts implement
+ * {@link PbrRenderPort} (Studio wires it to its GPU render service; tests inject
+ * stubs). The GPU path is a non-deterministic VIEW producer only — GLB compute
+ * stays deterministic and never depends on this seam.
+ */
+export interface PbrRenderRequest {
+  /** The rendered GLB bytes (route the produced asset; do NOT re-execute programs). */
+  glb: Uint8Array;
+  /** View directions from model center toward the camera, max 12. Omit for the host default. */
+  viewDirs?: [number, number, number][];
+  /** Square per-view cell size in pixels. */
+  size?: number;
+  /** Optional larger single beauty-shot size. */
+  beautySize?: number;
+}
+
+export interface PbrRenderResult {
+  ok: boolean;
+  /** Honest producer identity, e.g. "dawn-vulkan:nvidia-rtx-a4500:NVIDIA: 550.100"
+   *  or the CPU fallback's deterministic "cpu-raster:<engine-version>". */
+  rendererId: string;
+  /** One PNG per requested view direction, in request order. */
+  viewsPng?: Uint8Array[];
+  /** The optional beauty shot. */
+  beautyPng?: Uint8Array;
+  /** Host-measured phase timings in milliseconds. */
+  timings?: Record<string, number>;
+  error?: string;
+}
+
+/** Host-supplied PBR renderer seam. Absent everywhere it is optional means the
+ *  feature is off and behavior is byte-identical to the CPU-only path. */
+export type PbrRenderPort = (req: PbrRenderRequest) => Promise<PbrRenderResult>;

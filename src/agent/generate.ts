@@ -15,6 +15,10 @@
  * `@strands-agents/sdk` dependency never enters the browser/editor bundle graph.
  */
 import { renderGLB, type KilnCodeMeta, type RenderResult } from '../render';
+import type { PbrRenderPort } from '../composer/render-port';
+import { resolveGridViews } from '../views/raster';
+import { compositeViewPngGrid } from '../views/grid';
+import { CPU_RASTER_RENDERER_ID } from '../views/renderer-id';
 import type { AssetStyle } from '../prompt';
 import { createAssetIntentV1, type AssetCategory, type AssetIntentV1 } from '../contracts';
 import { runKilnAgent, type RefineMode, type KilnKnowhow, type KilnInputImage } from './run';
@@ -64,6 +68,14 @@ export interface GenerateKilnAssetOptions {
   /** Also rasterize the final asset into the six-view grid PNG (`result.views`).
    *  Best-effort: a views failure never fails the run. Default false. */
   captureViews?: boolean;
+  /** OPTIONAL host PBR renderer (GLB bytes -> per-view PNGs). Only consulted when
+   *  `captureViews` is on: the already-produced GLB bytes are routed to the port
+   *  and its per-view PNGs are composited into the same 3x2 grid the CPU path
+   *  emits. ANY failure/timeout degrades to the CPU rasterizer (never fails the
+   *  run; see `renderDegraded`). Absent = byte-identical CPU behavior. */
+  viewRenderPort?: PbrRenderPort;
+  /** Deadline for one `viewRenderPort` call in ms. Default 8000. */
+  viewRenderTimeoutMs?: number;
   /** Style anchor: a complete Kiln program rendered as "## Reference Asset" for
    *  FRESH generation (ignored on refine). ~5-15k input tokens/run, mostly
    *  absorbed by prompt caching when reused across a batch. */
@@ -102,6 +114,14 @@ export interface GenerateKilnAssetResult {
   salvageError?: string;
   /** Six-view grid PNG of the final asset (only when `captureViews` was set and the render succeeded). */
   views?: Buffer;
+  /** Honest producer of `views` (only when `viewRenderPort` was supplied): the
+   *  port's rendererId on success, else the CPU rasterizer's deterministic id. */
+  viewsRendererId?: string;
+  /** Only when `viewRenderPort` was supplied: false when the port produced the
+   *  views, true when the run fell back to the CPU rasterizer. */
+  renderDegraded?: boolean;
+  /** Why the port was bypassed (rejection, ok:false, timeout, bad PNGs). */
+  renderDegradedReason?: string;
   /** Automatic trusted character skeleton/motion captures, when applicable. */
   diagnosticViews?: NonNullable<RenderResult['diagnosticViews']>;
   materialRecipeApplications?: NonNullable<RenderResult['materialRecipeApplications']>;
@@ -174,6 +194,69 @@ export async function generateKilnCodeAgent(opts: {
   };
 }
 
+const DEFAULT_VIEW_RENDER_TIMEOUT_MS = 8000;
+
+type PortViewsOutcome =
+  | { ok: true; png: Buffer; rendererId: string }
+  | { ok: false; reason: string };
+
+/**
+ * Call the host view-render port with the ALREADY-PRODUCED GLB bytes and
+ * composite its per-view PNGs into the same 3x2 grid the CPU path emits.
+ *
+ * This shell is NOT a render compute path: the deadline is a plain timer (no
+ * Date.now() enters any rasterizer), and every failure mode — thrown/rejected
+ * port, ok:false, timeout, missing rendererId, undecodable or mismatched PNGs —
+ * returns `{ ok: false, reason }` so the caller degrades to the CPU rasterizer
+ * instead of failing the generation.
+ */
+async function captureViewsViaPort(
+  port: PbrRenderPort,
+  glb: Buffer,
+  timeoutMs: number,
+): Promise<PortViewsOutcome> {
+  // Same views + cell size as the CPU grid default, so the composited layout
+  // matches renderCodeViewGrid (H-33 env variant included).
+  const views = resolveGridViews(process.env['KILN_GRID_VARIANT']);
+  let timer: ReturnType<typeof setTimeout> | undefined;
+  try {
+    const deadline = new Promise<never>((_, reject) => {
+      timer = setTimeout(
+        () => reject(new Error(`view render port timed out after ${timeoutMs}ms`)),
+        timeoutMs,
+      );
+    });
+    const result = await Promise.race([
+      port({
+        // Copy, not alias: a buggy port implementation must not be able to
+        // mutate the render.glb bytes returned as the generation artifact.
+        glb: Uint8Array.from(glb),
+        viewDirs: views.map((v) => [...v.dir] as [number, number, number]),
+        size: 384,
+      }),
+      deadline,
+    ]);
+    if (!result?.ok) {
+      return { ok: false, reason: result?.error ?? 'view render port returned ok: false' };
+    }
+    if (typeof result.rendererId !== 'string' || !result.rendererId.trim()) {
+      return { ok: false, reason: 'view render port returned no rendererId' };
+    }
+    if (!result.viewsPng || result.viewsPng.length !== views.length) {
+      return {
+        ok: false,
+        reason: `view render port returned ${result.viewsPng?.length ?? 0} view PNGs, expected ${views.length}`,
+      };
+    }
+    const grid = compositeViewPngGrid(result.viewsPng);
+    return { ok: true, png: grid.png, rendererId: result.rendererId };
+  } catch (err) {
+    return { ok: false, reason: err instanceof Error ? err.message : String(err) };
+  } finally {
+    if (timer !== undefined) clearTimeout(timer);
+  }
+}
+
 /**
  * Run one Kiln agent generation end-to-end: model -> tool loop -> GLB render.
  * Throws on a hard failure (agent error / no code / render failure); non-fatal
@@ -221,12 +304,38 @@ export async function generateKilnAsset(
   // Best-effort views artifact: what the vision loop / review UIs show.
   // Never fails the run — a rasterizer error just drops the sidecar.
   let views: Buffer | undefined;
+  let viewsRendererId: string | undefined;
+  let renderDegraded: boolean | undefined;
+  let renderDegradedReason: string | undefined;
   if (opts.captureViews) {
-    try {
-      const { renderCodeViewGrid } = await import('../views');
-      views = (await renderCodeViewGrid(agent.code)).png;
-    } catch {
-      views = undefined;
+    // B3b: an injected host PBR renderer sees the already-produced GLB bytes
+    // (never re-executes the program). B4: ANY port failure degrades to the CPU
+    // rasterizer below — the GPU being unavailable can never fail a generation.
+    if (opts.viewRenderPort) {
+      const port = await captureViewsViaPort(
+        opts.viewRenderPort,
+        render.glb,
+        opts.viewRenderTimeoutMs ?? DEFAULT_VIEW_RENDER_TIMEOUT_MS,
+      );
+      if (port.ok) {
+        views = port.png;
+        viewsRendererId = port.rendererId;
+        renderDegraded = false;
+      } else {
+        renderDegraded = true;
+        renderDegradedReason = port.reason;
+      }
+    }
+    if (!views) {
+      try {
+        const { renderCodeViewGrid } = await import('../views');
+        views = (await renderCodeViewGrid(agent.code)).png;
+        // Honest producer provenance, but only on the port-enabled path — the
+        // port-absent path stays byte-identical to the historical result shape.
+        if (opts.viewRenderPort) viewsRendererId = CPU_RASTER_RENDERER_ID;
+      } catch {
+        views = undefined;
+      }
     }
   }
 
@@ -254,6 +363,9 @@ export async function generateKilnAsset(
     ...(agent.salvaged ? { salvaged: agent.salvaged } : {}),
     ...(agent.salvaged && agent.error ? { salvageError: agent.error } : {}),
     ...(views ? { views } : {}),
+    ...(viewsRendererId ? { viewsRendererId } : {}),
+    ...(renderDegraded !== undefined ? { renderDegraded } : {}),
+    ...(renderDegradedReason ? { renderDegradedReason } : {}),
     ...(render.diagnosticViews ? { diagnosticViews: render.diagnosticViews } : {}),
     ...(render.materialRecipeApplications
       ? { materialRecipeApplications: render.materialRecipeApplications }
