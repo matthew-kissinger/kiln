@@ -117,6 +117,7 @@ function calibration(
     evidenceSha256: calibrationReportEvidenceSha256(report),
     frozenAt: '2026-07-09T13:00:00.000Z',
     authorizedBy: owner.id,
+    rendererId: 'cpu-raster:legacy',
     report,
     ...options.authorization,
   };
@@ -624,6 +625,157 @@ describe('QaRegistry', () => {
           }),
         ]),
     ).toThrow('permanently capped at warn');
+  });
+
+  test('requires a rendererId on promotion evidence and rejects missing/malformed values', () => {
+    // Valid: the checked-in helper stamps legacy evidence and passes.
+    const valid = conformancePromotionAuthorization(
+      'qa-test-fixtures-v1',
+      'src/qa/registry.test.ts',
+      TEST_EVIDENCE_SHA,
+      TEST_OWNER,
+    );
+    expect(valid.rendererId).toBe('cpu-raster:legacy');
+    expect(
+      () => new QaRegistry([rule({ id: 'TEST_RENDERER_OK', scope: { kind: 'universal' } })]),
+    ).not.toThrow();
+
+    // Valid: an explicit non-legacy rendererId with a family prefix.
+    expect(
+      () =>
+        new QaRegistry([
+          rule({
+            id: 'TEST_RENDERER_EXPLICIT',
+            scope: { kind: 'universal' },
+            promotion: conformancePromotionAuthorization(
+              'qa-test-fixtures-v1',
+              'src/qa/registry.test.ts',
+              TEST_EVIDENCE_SHA,
+              TEST_OWNER,
+              undefined,
+              'enforce',
+              'cpu-raster:0.6.0',
+            ),
+          }),
+        ]),
+    ).not.toThrow();
+
+    // Missing rendererId throws with an actionable message.
+    expect(
+      () =>
+        new QaRegistry([
+          rule({
+            id: 'TEST_RENDERER_MISSING',
+            scope: { kind: 'universal' },
+            promotion: {
+              ...valid,
+              rendererId: undefined,
+            } as unknown as QaRule['promotion'],
+          }),
+        ]),
+    ).toThrow('must name its producing rendererId');
+    expect(
+      () =>
+        new QaRegistry([
+          rule({
+            id: 'TEST_RENDERER_EMPTY',
+            scope: { kind: 'universal' },
+            promotion: { ...valid, rendererId: '   ' },
+          }),
+        ]),
+    ).toThrow('must name its producing rendererId');
+
+    // Malformed prefix (no family ':' separator / illegal characters) throws.
+    for (const bad of ['cpu-raster', 'CPU-RASTER:legacy', 'gpu_render:x', ':nvidia']) {
+      expect(
+        () =>
+          new QaRegistry([
+            rule({
+              id: 'TEST_RENDERER_MALFORMED',
+              scope: { kind: 'universal' },
+              promotion: { ...valid, rendererId: bad },
+            }),
+          ]),
+        bad,
+      ).toThrow('renderer family prefix');
+    }
+
+    // Calibration evidence carries the same requirement.
+    const owner: QaRuleOwner = { id: 'qa-delegate:renderer', authority: 'delegated' };
+    const noRenderer = calibration(owner, 'TEST_RENDERER_CALIBRATION', {
+      authorization: { rendererId: 'not-prefixed' },
+    });
+    expect(
+      () =>
+        new QaRegistry([
+          rule({
+            id: 'TEST_RENDERER_CALIBRATION',
+            scope: { kind: 'universal' },
+            ruleClass: 'heuristic',
+            owner,
+            defaultMode: 'warn',
+            promotion: noRenderer,
+          }),
+        ]),
+    ).toThrow('renderer family prefix');
+  });
+
+  test('appearance rules register at observe but can never exceed it', () => {
+    const owner: QaRuleOwner = { id: 'qa-delegate:appearance', authority: 'delegated' };
+    const appearance = rule({
+      id: 'TEST_APPEARANCE',
+      scope: { kind: 'universal' },
+      ruleClass: 'appearance',
+      owner,
+      defaultMode: 'observe',
+      promotion: undefined,
+    });
+    const registry = new QaRegistry([appearance]);
+    expect(registry.run(context).findings[0]?.disposition).toBe('observe');
+
+    // Off also registers (below observe).
+    expect(
+      () =>
+        new QaRegistry([
+          rule({
+            id: 'TEST_APPEARANCE_OFF',
+            scope: { kind: 'universal' },
+            ruleClass: 'appearance',
+            owner,
+            defaultMode: 'off',
+            promotion: undefined,
+          }),
+        ]),
+    ).not.toThrow();
+
+    // Any mode above observe throws at registration — even with calibration
+    // evidence a heuristic could use (stricter than the VLM warn cap).
+    for (const defaultMode of ['warn', 'enforce'] as const) {
+      expect(
+        () =>
+          new QaRegistry([
+            rule({
+              id: 'TEST_APPEARANCE_PROMOTED',
+              scope: { kind: 'universal' },
+              ruleClass: 'appearance',
+              owner,
+              defaultMode,
+              promotion: calibration(owner, 'TEST_APPEARANCE_PROMOTED', {
+                authorizedMode: defaultMode,
+              }),
+            }),
+          ]),
+        defaultMode,
+      ).toThrow('cannot exceed observe');
+    }
+
+    // A runtime policy escalation is rejected the same way.
+    expect(() => registry.run(context, { byRule: { TEST_APPEARANCE: 'warn' } })).toThrow(
+      'cannot exceed observe',
+    );
+    expect(() => registry.describePolicy({ byRule: { TEST_APPEARANCE: 'enforce' } })).toThrow(
+      'cannot exceed observe',
+    );
   });
 
   test('rejects unknown runtime rollout modes before blocker severity can survive', () => {

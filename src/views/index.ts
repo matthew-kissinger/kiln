@@ -22,6 +22,7 @@ import {
   type ViewSpec,
 } from './raster';
 import { encodePng } from './png';
+import { compositeCellGrid } from './grid';
 import {
   prepareClip,
   poseSceneAtTime,
@@ -50,7 +51,11 @@ export {
   coverage,
 } from './raster';
 export type { RasterOptions, ViewSpec, ViewGridVariant } from './raster';
-export { encodePng } from './png';
+export { encodePng, decodePng } from './png';
+export type { DecodedPng } from './png';
+export { compositeCellGrid, compositeViewPngGrid, GRID_COLS } from './grid';
+export type { ComposedCellGrid, ComposedPngGrid } from './grid';
+export { CPU_RASTER_RENDERER_ID } from './renderer-id';
 export {
   ARCHITECTURE_ROOF_ROLE_PREFIXES,
   hasArchitectureRoofRole,
@@ -114,9 +119,6 @@ export {
   type DuckClip,
   type PreparedClip,
 } from './pose';
-
-const PAD = 4;
-const PAD_COLOR: [number, number, number] = [10, 11, 13];
 
 interface DuckColor {
   r: number;
@@ -330,38 +332,21 @@ export async function renderViewGrid(
   // always wins; unset/unknown env keeps SIX_VIEWS.
   const views = opts.views ?? resolveGridViews(process.env['KILN_GRID_VARIANT']);
   if (opts.snapPalette?.length) snapSceneToPalette(root, opts.snapPalette);
-  const cols = 3;
-  const rows = Math.ceil(views.length / cols);
-  const width = cols * size + (cols + 1) * PAD;
-  const height = rows * size + (rows + 1) * PAD;
-
-  const grid = new Uint8Array(width * height * 3);
-  for (let i = 0; i < width * height; i++) {
-    grid[i * 3] = PAD_COLOR[0];
-    grid[i * 3 + 1] = PAD_COLOR[1];
-    grid[i * 3 + 2] = PAD_COLOR[2];
-  }
 
   const labelScale = Math.max(2, Math.round(size / 96));
+  const cells: Uint8Array[] = [];
   for (let vi = 0; vi < views.length; vi++) {
     const cell = rasterizeView(root, views[vi]!.dir, { size, backfaceCull: opts.backfaceCull });
     // H-30: stamp the view name + axis gnomon into the cell (small, corner-
     // anchored, away from the centered silhouette — SeeAct caveat).
     stampLabel(cell, size, size, labelScale, labelScale, views[vi]!.name, labelScale);
     stampAxisGnomon(cell, size, views[vi]!.dir);
-    const col = vi % cols;
-    const row = Math.floor(vi / cols);
-    const x0 = PAD + col * (size + PAD);
-    const y0 = PAD + row * (size + PAD);
-    for (let y = 0; y < size; y++) {
-      const src = y * size * 3;
-      const dst = ((y0 + y) * width + x0) * 3;
-      grid.set(cell.subarray(src, src + size * 3), dst);
-    }
+    cells.push(cell);
   }
+  const { rgb, width, height } = compositeCellGrid(cells, size);
 
   return {
-    png: encodePng(grid, width, height),
+    png: encodePng(rgb, width, height),
     width,
     height,
     views: views.map((v) => v.name),
@@ -546,28 +531,8 @@ export async function renderClipAnimation(
   }
 
   // Compose into a 3x2 grid (same layout as the six-view grid).
-  const cols = 3;
-  const rows = Math.ceil(cells.length / cols);
-  const width = cols * size + (cols + 1) * PAD;
-  const height = rows * size + (rows + 1) * PAD;
-  const grid = new Uint8Array(width * height * 3);
-  for (let p = 0; p < width * height; p++) {
-    grid[p * 3] = PAD_COLOR[0];
-    grid[p * 3 + 1] = PAD_COLOR[1];
-    grid[p * 3 + 2] = PAD_COLOR[2];
-  }
-  for (let i = 0; i < cells.length; i++) {
-    const col = i % cols;
-    const row = Math.floor(i / cols);
-    const x0 = PAD + col * (size + PAD);
-    const y0 = PAD + row * (size + PAD);
-    for (let y = 0; y < size; y++) {
-      const src = y * size * 3;
-      const dst = ((y0 + y) * width + x0) * 3;
-      grid.set(cells[i]!.subarray(src, src + size * 3), dst);
-    }
-  }
-  return { ...baseMeta, width, height, png: encodePng(grid, width, height) };
+  const { rgb, width, height } = compositeCellGrid(cells, size);
+  return { ...baseMeta, width, height, png: encodePng(rgb, width, height) };
 }
 
 // =============================================================================
@@ -656,27 +621,10 @@ export async function renderInteriorGrid(
   }
 
   // Single-row grid (reuse the six-view PAD/PAD_COLOR layout).
-  const cols = INTERIOR_VIEWS.length;
-  const width = cols * size + (cols + 1) * PAD;
-  const height = size + 2 * PAD;
-  const grid = new Uint8Array(width * height * 3);
-  for (let p = 0; p < width * height; p++) {
-    grid[p * 3] = PAD_COLOR[0];
-    grid[p * 3 + 1] = PAD_COLOR[1];
-    grid[p * 3 + 2] = PAD_COLOR[2];
-  }
-  for (let i = 0; i < cells.length; i++) {
-    const x0 = PAD + i * (size + PAD);
-    const y0 = PAD;
-    for (let y = 0; y < size; y++) {
-      const src = y * size * 3;
-      const dst = ((y0 + y) * width + x0) * 3;
-      grid.set(cells[i]!.subarray(src, src + size * 3), dst);
-    }
-  }
+  const { rgb, width, height } = compositeCellGrid(cells, size, INTERIOR_VIEWS.length);
 
   return {
-    png: encodePng(grid, width, height),
+    png: encodePng(rgb, width, height),
     width,
     height,
     views: INTERIOR_VIEWS.map((v) => v.name),
