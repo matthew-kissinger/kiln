@@ -3,8 +3,11 @@ import { spawnSync } from 'node:child_process';
 import { mkdtemp, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
+import { fileURLToPath } from 'node:url';
 
-const checker = new URL('./check-coverage.mjs', import.meta.url).pathname;
+// URL#pathname keeps a leading slash before Windows drive letters ("/C:/...");
+// fileURLToPath is the portable conversion.
+const checker = fileURLToPath(new URL('./check-coverage.mjs', import.meta.url));
 
 async function fixture(thresholds) {
   const directory = await mkdtemp(join(tmpdir(), 'kiln-coverage-'));
