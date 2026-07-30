@@ -44,7 +44,13 @@ import {
 } from './surface';
 import { unifiedDiff } from './diff';
 import { MetricsCollector, type AgentUsage, type KilnAgentEvent } from './hooks';
-import { installRenderImageCompaction } from './compaction';
+import {
+  installRenderImageCompaction,
+  installGenerationCounters,
+  type GenerationCounters,
+} from './compaction';
+import { installMutatorBatchGuard } from './concurrency';
+import { toCachedSystemPrompt } from './providers';
 import {
   assessProgramGrade,
   buildGradeRefineMessage,
@@ -116,7 +122,7 @@ export interface RunKilnAgentOptions {
   refineMode?: RefineMode;
   /** Which agent tool surface to use. Resolved at call time: this option, else
    *  the KILN_TOOL_SURFACE env, else 'current'. The 'unified' surface is the
-   *  buffer-based draft/view/edit/validate/render/finalize six (render+screenshot
+   *  buffer-based draft/view/edit/render/finalize set (render+screenshot
    *  collapsed, no kiln_list_primitives) — the surface Kiln Studio runs in prod
    *  (KILN_TOOL_SURFACE=unified); 'current' remains the library default. */
   toolSurface?: KilnToolSurface;
@@ -161,8 +167,12 @@ export interface RunKilnAgentResult {
   toolCalls: string[];
   /** Number of model calls (agent-loop iterations). */
   steps: number;
-  /** Best-effort token usage. */
+  /** Best-effort token usage (incl. provider prompt-cache read/write counts when
+   *  the adapter reports them). */
   usage?: AgentUsage;
+  /** M1/M2 loop instrumentation: per-model-call projected input tokens +
+   *  transcript length, and render-bearing tool results per generation. */
+  counters?: GenerationCounters;
   /** The last assistant text (fallback / diagnostics). */
   lastText?: string;
   /** In edit mode, the applied surgical edits in order (the patch the model produced). */
@@ -222,6 +232,9 @@ export async function runKilnAgent(opts: RunKilnAgentOptions): Promise<RunKilnAg
   const sink: SubmitSink = {};
   const editSink: EditSink = { edits: [] };
   const unifiedSink: UnifiedSink = { edits: [] };
+  // M1/M2 counters live outside the try so every return path (success, step-cap,
+  // salvage, hard error) can expose whatever was collected before the exit.
+  let counters: GenerationCounters | undefined;
   try {
     const tools: Tool[] = buildAgentTools(
       surface,
@@ -271,12 +284,24 @@ export async function runKilnAgent(opts: RunKilnAgentOptions): Promise<RunKilnAg
 
     const agent = new Agent({
       model: opts.model as never,
-      systemPrompt,
+      // A2: providers whose adapter consumes system-prompt cache points
+      // (Anthropic/Bedrock) get [TextBlock, CachePointBlock] so the whole
+      // system prompt — including any refine directive prepended above, which
+      // stays INSIDE the cached text — lands in the provider prompt cache.
+      // Other providers keep the plain string.
+      systemPrompt: toCachedSystemPrompt(systemPrompt, opts.model),
       tools: allTools as never,
       ...(plugins.length ? { plugins } : {}),
       name: opts.agentName ?? 'kiln-agent',
     });
     metrics.attach(agent);
+    // A3: Strands runs a turn's tool calls concurrently; kiln_draft/kiln_edit
+    // mutate the shared working buffer the other tools read. Reject any batch
+    // that mixes a buffer mutator with another call (the model is told to issue
+    // the mutator alone); solo mutators and pure-reader batches pass through.
+    installMutatorBatchGuard(agent);
+    // M1/M2: passive per-model-call + renders-per-generation counters.
+    counters = installGenerationCounters(agent).counters;
     // Transcript compaction (default on): before every model call, strip the image
     // out of each superseded render tool result so only the newest render image
     // rides the request. Pairing-safe — messages and toolUseIds are untouched;
@@ -375,6 +400,7 @@ export async function runKilnAgent(opts: RunKilnAgentOptions): Promise<RunKilnAg
           toolCalls: collected.toolCalls,
           steps: collected.steps,
           ...(collected.usage ? { usage: collected.usage } : {}),
+          ...(counters ? { counters } : {}),
           error: `kiln agent exceeded ${maxSteps} model calls (step cap) — aborted to bound cost${qaNote}`,
         };
       }
@@ -458,6 +484,7 @@ export async function runKilnAgent(opts: RunKilnAgentOptions): Promise<RunKilnAg
       toolCalls: collected.toolCalls,
       steps: collected.steps,
       ...(collected.usage ? { usage: collected.usage } : {}),
+      ...(counters ? { counters } : {}),
       ...(lastText ? { lastText } : {}),
       ...(emitEdits ? { edits: editsTrace } : {}),
       ...(diff ? { diff } : {}),
@@ -470,6 +497,7 @@ export async function runKilnAgent(opts: RunKilnAgentOptions): Promise<RunKilnAg
       toolCalls: collected.toolCalls,
       steps: collected.steps,
       ...(collected.usage ? { usage: collected.usage } : {}),
+      ...(counters ? { counters } : {}),
     };
     // Salvage-on-error (H-10): a thrown error used to discard a program the
     // sink already held — and MaxTokensError, the canonical throw here, is

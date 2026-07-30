@@ -130,6 +130,88 @@ describe('rasterizeView', () => {
     const rgb = rasterizeView(root, [1, 0, 0], { size: 32 });
     expect(coverage(rgb, 32)).toBe(0);
   });
+
+  test('multi-material mesh: each geometry group renders with its OWN material color', () => {
+    // Two coplanar triangles facing +Z: the left one in group 0 (red material),
+    // the right one in group 1 (blue material). Before the per-group fix every
+    // triangle took mats[0], so the blue group rendered red.
+    const positions = new Float32Array([
+      // group 0 (left triangle)
+      -1, -1, 0, -0.1, -1, 0, -0.55, 1, 0,
+      // group 1 (right triangle)
+      0.1, -1, 0, 1, -1, 0, 0.55, 1, 0,
+    ]);
+    const identity = [1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1];
+    const mesh = {
+      isMesh: true,
+      geometry: {
+        getAttribute: (name: string) =>
+          name === 'position' ? { array: positions, itemSize: 3, count: 6 } : undefined,
+        index: { array: new Uint16Array([0, 1, 2, 3, 4, 5]), itemSize: 1, count: 6 },
+        groups: [
+          { start: 0, count: 3, materialIndex: 0 },
+          { start: 3, count: 3, materialIndex: 1 },
+        ],
+      },
+      material: [{ color: { r: 1, g: 0, b: 0 } }, { color: { r: 0, g: 0, b: 1 } }],
+      matrixWorld: { elements: identity },
+    };
+    const scene = {
+      updateMatrixWorld() {},
+      traverse(cb: (o: unknown) => void) {
+        cb(mesh);
+      },
+    };
+
+    const size = 64;
+    const rgb = rasterizeView(scene, [0, 0, 1], { size });
+    let redPixels = 0;
+    let bluePixels = 0;
+    for (let i = 0; i < size * size; i++) {
+      const r = rgb[i * 3]!;
+      const g = rgb[i * 3 + 1]!;
+      const b = rgb[i * 3 + 2]!;
+      if (r === 26 && g === 26 && b === 26) continue; // background
+      if (r > 100 && b < 60) redPixels++;
+      if (b > 100 && r < 60) bluePixels++;
+    }
+    // Both group materials must appear (the blue group no longer inherits red).
+    expect(redPixels).toBeGreaterThan(50);
+    expect(bluePixels).toBeGreaterThan(50);
+  });
+
+  test('multi-material mesh WITHOUT groups falls back to the first material', () => {
+    const positions = new Float32Array([-1, -1, 0, 1, -1, 0, 0, 1, 0]);
+    const identity = [1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1];
+    const mesh = {
+      isMesh: true,
+      geometry: {
+        getAttribute: (name: string) =>
+          name === 'position' ? { array: positions, itemSize: 3, count: 3 } : undefined,
+        index: null,
+      },
+      material: [{ color: { r: 1, g: 0, b: 0 } }, { color: { r: 0, g: 0, b: 1 } }],
+      matrixWorld: { elements: identity },
+    };
+    const scene = {
+      updateMatrixWorld() {},
+      traverse(cb: (o: unknown) => void) {
+        cb(mesh);
+      },
+    };
+    const rgb = rasterizeView(scene, [0, 0, 1], { size: 32 });
+    let bluePixels = 0;
+    let redPixels = 0;
+    for (let i = 0; i < 32 * 32; i++) {
+      const r = rgb[i * 3]!;
+      const b = rgb[i * 3 + 2]!;
+      if (r === 26 && rgb[i * 3 + 1] === 26 && b === 26) continue;
+      if (r > 100 && b < 60) redPixels++;
+      if (b > 100 && r < 60) bluePixels++;
+    }
+    expect(redPixels).toBeGreaterThan(0);
+    expect(bluePixels).toBe(0);
+  });
 });
 
 describe('encodePng', () => {

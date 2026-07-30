@@ -91,4 +91,51 @@ describe('MetricsCollector', () => {
     m.recordResultUsage({ inputTokens: 1200, outputTokens: 340 });
     expect(m.readMetrics().usage).toEqual({ inputTokens: 1200, outputTokens: 340 });
   });
+
+  test('records cache read/write token counts from a result carrying them (A2)', () => {
+    const m = new MetricsCollector();
+    // Shape mirrors the Strands adapters: Anthropic maps cache_read_input_tokens /
+    // cache_creation_input_tokens onto these fields; Bedrock passes them through.
+    m.recordResultUsage({
+      inputTokens: 900,
+      outputTokens: 210,
+      cacheReadInputTokens: 8000,
+      cacheWriteInputTokens: 1500,
+    });
+    expect(m.readMetrics().usage).toEqual({
+      inputTokens: 900,
+      outputTokens: 210,
+      cacheReadInputTokens: 8000,
+      cacheWriteInputTokens: 1500,
+    });
+  });
+
+  test('accumulates cache counts across invokes and tolerates results without them', () => {
+    const m = new MetricsCollector();
+    m.recordResultUsage({ inputTokens: 100, outputTokens: 10, cacheReadInputTokens: 500 });
+    // Second invoke (e.g. the grade-refine turn) adds writes and more reads.
+    m.recordResultUsage({
+      inputTokens: 50,
+      outputTokens: 5,
+      cacheReadInputTokens: 700,
+      cacheWriteInputTokens: 40,
+    });
+    // A provider result with no cache fields must not disturb the totals.
+    m.recordResultUsage({ inputTokens: 25 });
+    expect(m.readMetrics().usage).toEqual({
+      inputTokens: 175,
+      outputTokens: 15,
+      cacheReadInputTokens: 1200,
+      cacheWriteInputTokens: 40,
+    });
+    // Undefined / empty results still record nothing.
+    m.recordResultUsage(undefined);
+    m.recordResultUsage({});
+    expect(m.readMetrics().usage).toEqual({
+      inputTokens: 175,
+      outputTokens: 15,
+      cacheReadInputTokens: 1200,
+      cacheWriteInputTokens: 40,
+    });
+  });
 });

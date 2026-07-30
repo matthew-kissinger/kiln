@@ -17,6 +17,7 @@ import { Agent, type Message, type Tool } from '@strands-agents/sdk';
 
 import { unifiedDiff } from '../../agent/diff';
 import { type AgentUsage, type KilnAgentEvent, MetricsCollector } from '../../agent/hooks';
+import { toCachedSystemPrompt } from '../../agent/providers';
 import { SceneCompactionManager } from './compaction';
 import { serialize } from '../dsl';
 import { flatGround, type GroundSampler } from '../ground';
@@ -164,7 +165,11 @@ export async function runKilnComposer(
 
     const agent = new Agent({
       model: opts.model as never,
-      systemPrompt: COMPOSER_SYSTEM_PROMPT,
+      // A2: same portable cache breakpoint as the asset agent — Anthropic/Bedrock
+      // get [TextBlock, CachePointBlock]; other providers keep the plain string.
+      // Safe here: the composer's system prompt is a static const, and the
+      // SceneCompactionManager only manages `messages`, never the system prompt.
+      systemPrompt: toCachedSystemPrompt(COMPOSER_SYSTEM_PROMPT, opts.model),
       tools: allTools as never,
       name: opts.agentName ?? 'kiln-composer',
       conversationManager: compaction,

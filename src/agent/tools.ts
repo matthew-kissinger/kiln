@@ -13,7 +13,7 @@
  *
  * Three factories: {@link makeKilnTools} (the library-default `current` generate
  * surface), {@link makeKilnEditTools} (the `current` surgical-refine surface), and
- * {@link makeKilnUnifiedTools} (the buffer-based 6-tool `unified` surface, selected
+ * {@link makeKilnUnifiedTools} (the buffer-based `unified` surface, selected
  * via KILN_TOOL_SURFACE='unified' — what Kiln Studio runs in prod). The first two
  * stay byte-identical so the bench baseline does not move.
  */
@@ -440,14 +440,19 @@ export function makeKilnEditTools(
 // =============================================================================
 //
 // One buffer-based surface that unifies the from-scratch generate path and the
-// refine path behind a single working buffer. Six tools:
+// refine path behind a single working buffer. Core tools:
 //
-//   kiln_draft    write/replace the whole buffer (authoring + capture point)
+//   kiln_draft    write/replace the whole buffer (authoring + capture point);
+//                 the result carries the buffer's static-validation report
 //   kiln_view     read the current buffer (anchors edits)
-//   kiln_edit     surgical exact-string replace on the buffer
-//   kiln_validate static check of the buffer (no execution — the cheap loop)
+//   kiln_edit     surgical exact-string replace on the buffer; a successful edit
+//                 also carries the static-validation report
 //   kiln_render   execute ONCE -> metrics + the six-view image (render+screenshot)
 //   kiln_finalize terminal: lock in the current buffer as the answer (arg-less)
+//
+// There is NO standalone kiln_validate here (A1): every buffer write already
+// runs the same static check and returns it inline, so a separate validate
+// round-trip only cost a model call. The legacy `current` surfaces keep theirs.
 //
 // The program is HELD in the buffer, so capture is unambiguous (the final buffer)
 // rather than "whichever copy landed in kiln_submit". Generate seeds an empty
@@ -512,7 +517,7 @@ const inspectBufferInput = z.object({
 });
 
 /**
- * Build the unified 6-tool surface over a working buffer seeded with `seedCode`
+ * Build the unified buffer surface over a working buffer seeded with `seedCode`
  * (empty for generate, the parent's code for refine). The buffer's live edit
  * trace is shared into `sink.edits`; `sink.code` tracks the latest buffer after
  * every draft/edit (so an un-finalized run still captures the work). `kiln_edit`
@@ -538,18 +543,30 @@ export function makeKilnUnifiedTools(
   const animationDef = createKilnScreenshotAnimationDef(opts);
   const interiorDef = createKilnViewInteriorDef(opts);
 
+  // A1: the unified surface has no standalone kiln_validate tool — every buffer
+  // write (kiln_draft / a successful kiln_edit) runs the registry's static check
+  // on the fresh buffer and returns it inline, so the model still sees every
+  // validation error/warning without spending a tool round-trip on it.
+  const validateBuffer = async () =>
+    (await validateDef.run({ code: buffer.code })) as {
+      valid: boolean;
+      errors: string[];
+      warnings: string[];
+    };
+
   const draftTool: Tool = tool({
     name: 'kiln_draft',
     description:
       'Write the complete Kiln program into your working buffer. This is how you author — call it first ' +
       'to lay down your program, and call it again any time to rewrite it wholesale. The argument `code` ' +
       'is the full program (meta + build(), optional animate()). For small fixes prefer kiln_edit. ' +
-      'Returns { ok, bytes, lines }.',
+      'Returns { ok, bytes, lines, validation } — validation is the static check of the drafted buffer ' +
+      '({ valid, errors, warnings }); fix any errors before rendering.',
     inputSchema: draftInput,
-    callback: (input) => {
+    callback: async (input) => {
       const r = buffer.draft((input as { code: string }).code);
       opts.sink.code = buffer.code; // capture the live buffer even if finalize is skipped
-      return r as JSONValue;
+      return { ...r, validation: await validateBuffer() } as JSONValue;
     },
   });
 
@@ -569,15 +586,16 @@ export function makeKilnUnifiedTools(
       'oldString must appear verbatim in the current code (call kiln_view first) and be unique unless ' +
       'replaceAll is set. Make the smallest edits that satisfy the request; do not rewrite the whole ' +
       'program. If an edit cannot anchor, fall back to kiln_draft to rewrite. Returns ' +
-      '{ ok, occurrences, newBytes } or { ok:false, error, hint }.',
+      '{ ok, occurrences, newBytes, validation } (validation is the static check of the edited buffer) ' +
+      'or { ok:false, error, hint }.',
     inputSchema: editInput,
-    callback: (input) => {
+    callback: async (input) => {
       const r = buffer.apply(
         input as { oldString: string; newString: string; replaceAll?: boolean },
       );
       if (r.ok) {
         opts.sink.code = buffer.code; // capture the live buffer even if finalize is skipped
-        return r as JSONValue;
+        return { ...r, validation: await validateBuffer() } as JSONValue;
       }
       // Point the model at kiln_draft as the always-reliable escape hatch.
       const hint = r.hint
@@ -585,13 +603,6 @@ export function makeKilnUnifiedTools(
         : 'Call kiln_draft to rewrite the whole program.';
       return { ...r, hint } as JSONValue;
     },
-  });
-
-  const validateTool: Tool = tool({
-    name: 'kiln_validate',
-    description: `${validateDef.description} Operates on your current working buffer (no argument).`,
-    inputSchema: viewInput,
-    callback: async () => (await validateDef.run({ code: buffer.code })) as JSONValue,
   });
 
   const renderTool: Tool = tool({
@@ -685,7 +696,6 @@ export function makeKilnUnifiedTools(
     draftTool,
     viewTool,
     editTool,
-    validateTool,
     renderTool,
     inspectTool,
     animationTool,
