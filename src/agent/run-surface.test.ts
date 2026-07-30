@@ -23,11 +23,12 @@ function freshSinks() {
 const base: ToolBuildOptions = {};
 const names = (tools: ReturnType<typeof buildAgentTools>) => tools.map((t) => t.name);
 
+// A1: no standalone kiln_validate on the unified surface — kiln_draft and
+// kiln_edit validate the buffer inline in their results.
 const UNIFIED = [
   'kiln_draft',
   'kiln_view',
   'kiln_edit',
-  'kiln_validate',
   'kiln_render',
   'kiln_inspect',
   'kiln_screenshot_animation',
@@ -54,11 +55,11 @@ const CURRENT_EDIT = [
 ];
 
 describe('buildAgentTools', () => {
-  test('unified surface -> the nine buffer tools (fresh generate, empty seed)', () => {
+  test('unified surface -> the eight buffer tools (fresh generate, empty seed)', () => {
     expect(names(buildAgentTools('unified', base, freshSinks()))).toEqual(UNIFIED);
   });
 
-  test('unified surface -> the same nine tools when refining (seeded buffer)', () => {
+  test('unified surface -> the same eight tools when refining (seeded buffer)', () => {
     const opts = { ...base, existingCode: 'const meta = {};', refineMode: 'edit' as const };
     expect(names(buildAgentTools('unified', opts, freshSinks()))).toEqual(UNIFIED);
   });

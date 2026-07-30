@@ -15,7 +15,7 @@ import { AnthropicModel } from '@strands-agents/sdk/models/anthropic';
 import { OpenAIModel } from '@strands-agents/sdk/models/openai';
 import { GoogleModel } from '@strands-agents/sdk/models/google';
 import { BedrockModel } from '@strands-agents/sdk/models/bedrock';
-import type { Model } from '@strands-agents/sdk';
+import { CachePointBlock, TextBlock, type Model, type SystemPrompt } from '@strands-agents/sdk';
 import { createOpenRouter } from '@openrouter/ai-sdk-provider';
 import type { LanguageModelV3 } from '@ai-sdk/provider';
 
@@ -356,6 +356,40 @@ export function makeKilnModel(desc: KilnModelDescriptor, opts: MakeKilnModelOpti
       throw new Error(`Unsupported Kiln agent provider: ${String(exhaustive)}`);
     }
   }
+}
+
+// =============================================================================
+// A2 — portable system-prompt cache breakpoint
+// =============================================================================
+
+/**
+ * Whether a Strands model's request adapter CONSUMES a block-array system prompt
+ * with a cache point (verified against @strands-agents/sdk 1.10.0 dist):
+ *
+ * - AnthropicModel: a `cachePointBlock` after a `textBlock` becomes
+ *   `cache_control: {type:'ephemeral'}` on that text block (anthropic.js
+ *   `_formatRequest`) — the explicit prompt-caching breakpoint.
+ * - BedrockModel: system blocks map through `_formatContentBlock`, emitting the
+ *   converse-API `{cachePoint: {type}}` system entry.
+ * - GoogleModel joins the text blocks and DROPS cache points (Gemini caching is
+ *   implicit); OpenAI warns-and-ignores them; the Vercel bridge only forwards
+ *   text. Those providers get the plain string so nothing changes for them.
+ */
+export function modelConsumesSystemPromptCachePoints(model: unknown): boolean {
+  return model instanceof AnthropicModel || model instanceof BedrockModel;
+}
+
+/**
+ * Shape a system prompt for a model: providers whose adapter consumes cache
+ * points (Anthropic / Bedrock, see {@link modelConsumesSystemPromptCachePoints})
+ * get `[TextBlock(text), CachePointBlock]` so the WHOLE system prompt lands in
+ * the provider's prompt cache; everyone else keeps the plain string. Any
+ * refine/edit directive must already be prepended to `text` — it rides inside
+ * the cached block, before the cache point.
+ */
+export function toCachedSystemPrompt(text: string, model: unknown): SystemPrompt {
+  if (!modelConsumesSystemPromptCachePoints(model)) return text;
+  return [new TextBlock(text), new CachePointBlock({ cacheType: 'default' })];
 }
 
 /**

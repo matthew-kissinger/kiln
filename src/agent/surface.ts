@@ -20,7 +20,8 @@ import {
 
 /** Which agent tool surface drives the loop. 'current' = today's
  *  list/validate/render/screenshot/submit (+ edit tools in edit-mode refine);
- *  'unified' = the buffer-based draft/view/edit/validate/render/finalize six. */
+ *  'unified' = the buffer-based draft/view/edit/render/finalize set (writes
+ *  validate inline; no standalone kiln_validate). */
 export type KilnToolSurface = 'current' | 'unified';
 
 /** How a refine applies its change: whole-program re-emission, or surgical edits. */
