@@ -102,6 +102,9 @@ interface DuckAttribute {
 interface DuckGeometry {
   getAttribute(name: string): DuckAttribute | undefined;
   index: DuckAttribute | null;
+  /** Three.js geometry groups: ranges of the index (or position) buffer drawn
+   *  with `materialIndex` when the mesh carries a material ARRAY. */
+  groups?: Array<{ start: number; count: number; materialIndex?: number }>;
 }
 interface DuckMaterial {
   color?: { r: number; g: number; b: number };
@@ -142,12 +145,26 @@ function collectTriangles(root: DuckObject3D): { tris: Tri[]; bbox: { min: Vec3;
     if (!geo || !pos || pos.itemSize !== 3) return;
 
     const mats = Array.isArray(mesh.material) ? mesh.material : [mesh.material];
-    // Multi-material groups are rare in kiln output; first material's color is
-    // a sufficient approximation for QA views.
-    const c = mats[0]?.color;
-    const color: [number, number, number] = c
-      ? [clamp01(c.r), clamp01(c.g), clamp01(c.b)]
-      : [0.7, 0.7, 0.7];
+    const colorOf = (mat: DuckMaterial | undefined): [number, number, number] => {
+      const c = mat?.color;
+      return c ? [clamp01(c.r), clamp01(c.g), clamp01(c.b)] : [0.7, 0.7, 0.7];
+    };
+    // Per-group material resolution: a multi-material mesh draws each geometry
+    // group (a start/count range over the index — or position — buffer) with its
+    // own `materialIndex`. Colors are already per-triangle here, so resolve the
+    // group covering each triangle's first buffer position; meshes without
+    // groups (the common single-material case) keep the flat first material.
+    const fallback = colorOf(mats[0]);
+    const groups = mats.length > 1 && geo.groups?.length ? geo.groups : undefined;
+    const colorAt = (bufferPos: number): [number, number, number] => {
+      if (!groups) return fallback;
+      for (const g of groups) {
+        if (bufferPos >= g.start && bufferPos < g.start + g.count) {
+          return colorOf(mats[g.materialIndex ?? 0]);
+        }
+      }
+      return fallback;
+    };
 
     const m = mesh.matrixWorld?.elements;
     if (!m) return;
@@ -172,7 +189,7 @@ function collectTriangles(root: DuckObject3D): { tris: Tri[]; bbox: { min: Vec3;
       if (wz > max[2]) max[2] = wz;
     }
 
-    const pushTri = (a: number, b: number, c2: number) => {
+    const pushTri = (a: number, b: number, c2: number, color: [number, number, number]) => {
       const v = new Float64Array(9);
       v[0] = world[a * 3]!;
       v[1] = world[a * 3 + 1]!;
@@ -186,15 +203,18 @@ function collectTriangles(root: DuckObject3D): { tris: Tri[]; bbox: { min: Vec3;
       tris.push({ v, color });
     };
 
+    // Geometry groups address the index buffer for indexed geometry and the
+    // position buffer otherwise, so `i` (the triangle's first buffer slot) is
+    // the group-lookup key in both branches.
     const index = geo.index;
     if (index) {
       const ia = index.array;
       for (let i = 0; i + 2 < index.count; i += 3) {
-        pushTri(ia[i]!, ia[i + 1]!, ia[i + 2]!);
+        pushTri(ia[i]!, ia[i + 1]!, ia[i + 2]!, colorAt(i));
       }
     } else {
       for (let i = 0; i + 2 < pos.count; i += 3) {
-        pushTri(i, i + 1, i + 2);
+        pushTri(i, i + 1, i + 2, colorAt(i));
       }
     }
   });

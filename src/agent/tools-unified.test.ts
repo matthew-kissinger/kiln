@@ -1,9 +1,9 @@
 /**
  * Unit tests for the unified buffer surface (KilnDraftBuffer.draft +
  * makeKilnUnifiedTools). Mirrors tools-edit.test.ts: the buffer is pure string
- * ops (tested directly) and the factory is checked for its 6-tool wiring,
- * capture into the sink, the kiln_draft escape-hatch hint, and the collapsed
- * kiln_render media contract.
+ * ops (tested directly) and the factory is checked for its tool wiring,
+ * capture into the sink, the inline validation on buffer writes (A1), the
+ * kiln_draft escape-hatch hint, and the collapsed kiln_render media contract.
  */
 import { describe, expect, test } from 'bun:test';
 import { ImageBlock, JsonBlock } from '@strands-agents/sdk';
@@ -81,14 +81,13 @@ describe('KilnDraftBuffer', () => {
 });
 
 describe('makeKilnUnifiedTools', () => {
-  test('exposes exactly the nine unified tools in order (incl. the close-up, motion + interior views)', () => {
+  test('exposes exactly the eight unified tools in order (incl. the close-up, motion + interior views)', () => {
     const sink: UnifiedSink = { edits: [] };
     const tools = makeKilnUnifiedTools({ sink });
     expect(tools.map((t) => t.name)).toEqual([
       'kiln_draft',
       'kiln_view',
       'kiln_edit',
-      'kiln_validate',
       'kiln_render',
       'kiln_inspect',
       'kiln_screenshot_animation',
@@ -96,10 +95,12 @@ describe('makeKilnUnifiedTools', () => {
       'kiln_finalize',
     ]);
     // No legacy verbs leak into the unified surface (the static screenshot collapsed
-    // into kiln_render; only the dedicated motion + interior views are added).
+    // into kiln_render; only the dedicated motion + interior views are added). A1:
+    // there is no standalone kiln_validate — buffer writes validate inline.
     expect(tools.map((t) => t.name)).not.toContain('kiln_list_primitives');
     expect(tools.map((t) => t.name)).not.toContain('kiln_screenshot');
     expect(tools.map((t) => t.name)).not.toContain('kiln_submit');
+    expect(tools.map((t) => t.name)).not.toContain('kiln_validate');
     expect(sink.edits).toHaveLength(0);
   });
 
@@ -109,8 +110,12 @@ describe('makeKilnUnifiedTools', () => {
     const drafted = (await findTool(tools, 'kiln_draft').invoke({ code: BOX_CODE })) as {
       ok: boolean;
       bytes: number;
+      validation: { valid: boolean; errors: string[]; warnings: string[] };
     };
     expect(drafted.ok).toBe(true);
+    // A1: the draft result carries the static validation of the fresh buffer.
+    expect(drafted.validation.valid).toBe(true);
+    expect(drafted.validation.errors).toEqual([]);
     expect(sink.code).toBe(BOX_CODE); // captured even before finalize
     const viewed = (await findTool(tools, 'kiln_view').invoke({})) as {
       code: string;
@@ -119,16 +124,41 @@ describe('makeKilnUnifiedTools', () => {
     expect(viewed.code).toBe(BOX_CODE);
   });
 
+  test('kiln_draft of a broken program surfaces the validation errors inline (A1)', async () => {
+    const sink: UnifiedSink = { edits: [] };
+    const tools = makeKilnUnifiedTools({ sink });
+    const drafted = (await findTool(tools, 'kiln_draft').invoke({
+      code: 'function build() { return 1; }', // no meta
+    })) as { ok: boolean; validation: { valid: boolean; errors: string[] } };
+    expect(drafted.ok).toBe(true); // the write itself succeeded
+    expect(drafted.validation.valid).toBe(false);
+    expect(drafted.validation.errors.length).toBeGreaterThan(0);
+  });
+
   test('refine seed: kiln_edit updates sink.code; the shared edit trace records it', async () => {
     const sink: UnifiedSink = { edits: [] };
     const tools = makeKilnUnifiedTools({ seedCode: BOX_CODE, sink });
     const edited = (await findTool(tools, 'kiln_edit').invoke({
       oldString: 'boxGeo(1, 1, 1)',
       newString: 'boxGeo(2, 1, 1)',
-    })) as { ok: boolean };
+    })) as { ok: boolean; validation: { valid: boolean; errors: string[] } };
     expect(edited.ok).toBe(true);
+    // A1: a successful edit re-validates the edited buffer inline.
+    expect(edited.validation.valid).toBe(true);
     expect(sink.code).toContain('boxGeo(2, 1, 1)');
     expect(sink.edits).toHaveLength(1); // live trace shared into the sink
+  });
+
+  test('a kiln_edit that breaks the program reports validation errors inline (A1)', async () => {
+    const sink: UnifiedSink = { edits: [] };
+    const tools = makeKilnUnifiedTools({ seedCode: BOX_CODE, sink });
+    const edited = (await findTool(tools, 'kiln_edit').invoke({
+      oldString: 'function build() {',
+      newString: 'function broken() {',
+    })) as { ok: boolean; validation: { valid: boolean; errors: string[] } };
+    expect(edited.ok).toBe(true); // the string replace applied
+    expect(edited.validation.valid).toBe(false);
+    expect(edited.validation.errors.length).toBeGreaterThan(0);
   });
 
   test('a failed kiln_edit points the model at kiln_draft as the escape hatch', async () => {

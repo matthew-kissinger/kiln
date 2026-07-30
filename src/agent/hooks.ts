@@ -18,11 +18,28 @@ import {
   AfterModelCallEvent,
 } from '@strands-agents/sdk';
 
-/** Token-usage subset we surface. */
+/** Token-usage subset we surface. The cache fields mirror the Strands `Usage`
+ *  type (dist/src/models/streaming.d.ts): the Anthropic adapter fills them from
+ *  `cache_read_input_tokens` / `cache_creation_input_tokens` and the Bedrock
+ *  adapter passes its converse-stream `cacheReadInputTokens` /
+ *  `cacheWriteInputTokens` counts through under the same names. Providers
+ *  without prompt caching simply omit them. */
 export interface AgentUsage {
   inputTokens?: number;
   outputTokens?: number;
+  /** Input tokens served from the provider's prompt cache (cache hits). */
+  cacheReadInputTokens?: number;
+  /** Input tokens written to the provider's prompt cache (cache creation). */
+  cacheWriteInputTokens?: number;
 }
+
+/** The AgentUsage fields recordResultUsage accumulates, in surface order. */
+const USAGE_FIELDS = [
+  'inputTokens',
+  'outputTokens',
+  'cacheReadInputTokens',
+  'cacheWriteInputTokens',
+] as const;
 
 /** A live agent-loop event, emitted as the loop runs (for progress UIs). */
 export type KilnAgentEvent =
@@ -135,13 +152,15 @@ export class MetricsCollector {
   recordResultUsage(usage: AgentUsage | undefined): void {
     if (!usage) return;
     const next: AgentUsage = { ...this.usage };
-    if (typeof usage.inputTokens === 'number') {
-      next.inputTokens = (next.inputTokens ?? 0) + usage.inputTokens;
+    let recorded = false;
+    for (const field of USAGE_FIELDS) {
+      const value = usage[field];
+      if (typeof value === 'number') {
+        next[field] = (next[field] ?? 0) + value;
+        recorded = true;
+      }
     }
-    if (typeof usage.outputTokens === 'number') {
-      next.outputTokens = (next.outputTokens ?? 0) + usage.outputTokens;
-    }
-    if (next.inputTokens !== undefined || next.outputTokens !== undefined) this.usage = next;
+    if (recorded) this.usage = next;
   }
 
   /** Read the collected metrics (a fresh copy each call). */

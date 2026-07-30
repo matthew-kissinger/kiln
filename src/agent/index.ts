@@ -12,7 +12,7 @@
  * - {@link resolveKilnAgentModel} — model-id string -> Strands provider descriptor
  * - {@link makeKilnTools}     — in-process tool skin over the shared registry
  * - {@link makeKilnEditTools} — surgical edit-tool skin for refining an existing asset
- * - {@link makeKilnUnifiedTools} — buffer-based 6-tool surface (KILN_TOOL_SURFACE='unified')
+ * - {@link makeKilnUnifiedTools} — buffer-based unified surface (KILN_TOOL_SURFACE='unified')
  * - {@link unifiedDiff}       — dependency-free unified diff (the refine patch artifact)
  * - {@link ensureStreamStart} — the OpenRouter/Vercel-bridge stream fix
  * - {@link makeOpenRouterModel} — build an OpenRouter Strands model with the fix
@@ -52,9 +52,22 @@ export type { UnifiedDiffOptions } from './diff';
 export {
   pruneStaleRenderImages,
   installRenderImageCompaction,
+  installGenerationCounters,
   STALE_RENDER_PLACEHOLDER,
 } from './compaction';
-export type { PruneImagesResult, RenderImageCompactionOptions } from './compaction';
+export type {
+  PruneImagesResult,
+  RenderImageCompactionOptions,
+  ModelCallStat,
+  GenerationCounters,
+} from './compaction';
+
+export {
+  installMutatorBatchGuard,
+  rejectMixedMutatorBatch,
+  toolNamesInBatch,
+  KILN_MUTATOR_TOOLS,
+} from './concurrency';
 
 export {
   assessProgramGrade,
@@ -77,6 +90,8 @@ export {
   makeKilnModel,
   resolveKilnAgentModel,
   harnessIdToAgentModelId,
+  modelConsumesSystemPromptCachePoints,
+  toCachedSystemPrompt,
 } from './providers';
 export type {
   OpenRouterModelOptions,

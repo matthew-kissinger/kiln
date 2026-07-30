@@ -8,7 +8,14 @@
  * keys so native construction never touches the network).
  */
 import { test, expect, describe, beforeAll, afterAll } from 'bun:test';
-import { resolveKilnAgentModel, makeKilnModel, resolveOpenRouterReasoning } from './providers';
+import { CachePointBlock, TextBlock } from '@strands-agents/sdk';
+import {
+  resolveKilnAgentModel,
+  makeKilnModel,
+  resolveOpenRouterReasoning,
+  modelConsumesSystemPromptCachePoints,
+  toCachedSystemPrompt,
+} from './providers';
 
 describe('resolveKilnAgentModel', () => {
   test('explicit provider prefixes win and keep the model id intact', () => {
@@ -332,5 +339,58 @@ describe('makeKilnModel', () => {
         else process.env['KILN_THINKING'] = prev;
       }
     });
+  });
+});
+
+describe('toCachedSystemPrompt (A2 portable cache breakpoint)', () => {
+  const TEXT = 'You generate exportable 3D game assets as Kiln code.';
+
+  test('Anthropic models get [TextBlock, CachePointBlock] — the adapter emits cache_control', () => {
+    const model = makeKilnModel(
+      { provider: 'anthropic', model: 'claude-opus-4-8' },
+      { apiKey: 'test-key' },
+    );
+    expect(modelConsumesSystemPromptCachePoints(model)).toBe(true);
+    const shaped = toCachedSystemPrompt(TEXT, model);
+    expect(Array.isArray(shaped)).toBe(true);
+    const blocks = shaped as unknown[];
+    expect(blocks).toHaveLength(2);
+    expect(blocks[0]).toBeInstanceOf(TextBlock);
+    expect((blocks[0] as TextBlock).text).toBe(TEXT);
+    expect(blocks[1]).toBeInstanceOf(CachePointBlock);
+    expect((blocks[1] as CachePointBlock).cacheType).toBe('default');
+    // The discriminators the anthropic/bedrock adapters branch on (1.10.0).
+    expect((blocks[0] as { type: string }).type).toBe('textBlock');
+    expect((blocks[1] as { type: string }).type).toBe('cachePointBlock');
+  });
+
+  test('Bedrock models get the block array too (converse cachePoint entry)', () => {
+    const model = makeKilnModel(
+      { provider: 'bedrock', model: 'global.anthropic.claude-opus-4-8' },
+      { region: 'us-west-2' },
+    );
+    expect(modelConsumesSystemPromptCachePoints(model)).toBe(true);
+    expect(Array.isArray(toCachedSystemPrompt(TEXT, model))).toBe(true);
+  });
+
+  test('Google keeps the plain string (its adapter drops cache points)', () => {
+    const model = makeKilnModel(
+      { provider: 'google', model: 'gemini-3.5-flash' },
+      { apiKey: 'test-key' },
+    );
+    expect(modelConsumesSystemPromptCachePoints(model)).toBe(false);
+    expect(toCachedSystemPrompt(TEXT, model)).toBe(TEXT);
+  });
+
+  test('OpenAI / OpenRouter (Vercel bridge) / unknown models keep the plain string', () => {
+    const openai = makeKilnModel({ provider: 'openai', model: 'gpt-5.5' }, { apiKey: 'test-key' });
+    expect(toCachedSystemPrompt(TEXT, openai)).toBe(TEXT);
+    const openrouter = makeKilnModel(
+      { provider: 'openrouter', model: 'x-ai/grok-4.3' },
+      { apiKey: 'test-key' },
+    );
+    expect(toCachedSystemPrompt(TEXT, openrouter)).toBe(TEXT);
+    expect(toCachedSystemPrompt(TEXT, undefined)).toBe(TEXT);
+    expect(toCachedSystemPrompt(TEXT, {})).toBe(TEXT);
   });
 });

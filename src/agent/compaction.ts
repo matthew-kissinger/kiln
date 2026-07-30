@@ -19,7 +19,13 @@
  * keeps the numeric history and loses only superseded pixels. Images OUTSIDE
  * tool results (the user's reference inputImage) are always preserved.
  */
-import { BeforeModelCallEvent, TextBlock, type Agent, type Message } from '@strands-agents/sdk';
+import {
+  AfterToolCallEvent,
+  BeforeModelCallEvent,
+  TextBlock,
+  type Agent,
+  type Message,
+} from '@strands-agents/sdk';
 
 /** Placeholder text swapped in for a superseded render image. */
 export const STALE_RENDER_PLACEHOLDER =
@@ -131,4 +137,61 @@ export function installRenderImageCompaction(
       }
     }
   });
+}
+
+// =============================================================================
+// Generation-loop counters (M1 per-call input/transcript size, M2 renders)
+// =============================================================================
+
+/** M1: one record per model call, in call order. */
+export interface ModelCallStat {
+  /** Projected input tokens for this call (SDK `BeforeModelCallEvent.projectedInputTokens`
+   *  — the agent loop's own estimate; hook events carry no billed usage). Absent when
+   *  the SDK did not compute a projection. */
+  inputTokens?: number;
+  /** Transcript length (`agent.messages.length`) when this call was issued. */
+  messages: number;
+}
+
+/** M1/M2 loop instrumentation collected passively via hooks. Data only. */
+export interface GenerationCounters {
+  /** M1: per-model-call stats, in order (includes calls later cancelled by the step cap). */
+  modelCalls: ModelCallStat[];
+  /** M2: render-bearing tool results produced this generation — every tool result
+   *  that carried at least one image (kiln_render / kiln_screenshot / inspect /
+   *  animation / interior views). */
+  renders: number;
+}
+
+/**
+ * Install passive M1/M2 counters on an agent: before every model call, record
+ * the projected input tokens and transcript length; after every tool call,
+ * count image-bearing (render) results. Same additive hook mechanism as
+ * {@link installRenderImageCompaction} — no messages are touched, no output is
+ * printed. Returns the live counters plus an uninstaller.
+ */
+export function installGenerationCounters(agent: Agent): {
+  counters: GenerationCounters;
+  uninstall: () => void;
+} {
+  const counters: GenerationCounters = { modelCalls: [], renders: 0 };
+  const offModel = agent.addHook(BeforeModelCallEvent, (event) => {
+    counters.modelCalls.push({
+      ...(typeof event.projectedInputTokens === 'number'
+        ? { inputTokens: event.projectedInputTokens }
+        : {}),
+      messages: event.agent.messages.length,
+    });
+  });
+  const offTool = agent.addHook(AfterToolCallEvent, (event) => {
+    const content = (event.result as { content?: unknown[] } | undefined)?.content;
+    if (Array.isArray(content) && content.some(isImageBlock)) counters.renders += 1;
+  });
+  return {
+    counters,
+    uninstall: () => {
+      offModel();
+      offTool();
+    },
+  };
 }

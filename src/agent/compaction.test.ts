@@ -22,10 +22,12 @@ import {
 } from '@strands-agents/sdk';
 
 import {
+  installGenerationCounters,
   installRenderImageCompaction,
   pruneStaleRenderImages,
   STALE_RENDER_PLACEHOLDER,
 } from './compaction';
+import { AfterToolCallEvent } from '@strands-agents/sdk';
 
 const png = () => new ImageBlock({ format: 'png', source: { bytes: new Uint8Array([137, 80]) } });
 
@@ -218,5 +220,84 @@ describe('installRenderImageCompaction', () => {
     // Second call: nothing left to prune, so onPrune stays quiet.
     modelCall();
     expect(pruned).toEqual([2]);
+  });
+});
+
+describe('installGenerationCounters', () => {
+  type Cb = (event: unknown) => void;
+
+  /** Fake agent that also dispatches AfterToolCallEvent (tool results). */
+  function fakeAgent(messages: Message[]) {
+    const hooks = new Map<unknown, Cb[]>();
+    const agent = {
+      messages,
+      addHook(EventClass: unknown, cb: Cb) {
+        const arr = hooks.get(EventClass) ?? [];
+        arr.push(cb);
+        hooks.set(EventClass, arr);
+        return () => {
+          const cur = hooks.get(EventClass) ?? [];
+          hooks.set(
+            EventClass,
+            cur.filter((c) => c !== cb),
+          );
+        };
+      },
+    };
+    const modelCall = (projectedInputTokens?: number) => {
+      for (const cb of hooks.get(BeforeModelCallEvent) ?? []) {
+        cb({ agent, ...(projectedInputTokens != null ? { projectedInputTokens } : {}) });
+      }
+    };
+    const toolResult = (result: ToolResultBlock) => {
+      for (const cb of hooks.get(AfterToolCallEvent) ?? []) cb({ agent, result });
+    };
+    return { agent, modelCall, toolResult };
+  }
+
+  const imageResult = (id: string, images = 1) => toolResultOf(renderResult(id, images));
+  const plainResult = (id: string) => toolResultOf(jsonResult(id));
+
+  test('M1: records projected input tokens + transcript length per model call', () => {
+    const messages = transcript();
+    const { agent, modelCall } = fakeAgent(messages);
+    const { counters } = installGenerationCounters(agent as never);
+
+    modelCall(1234);
+    messages.push(new Message({ role: 'assistant', content: [new TextBlock('…')] }));
+    modelCall(2345);
+    modelCall(); // no projection available from the SDK
+
+    expect(counters.modelCalls).toEqual([
+      { inputTokens: 1234, messages: 10 },
+      { inputTokens: 2345, messages: 11 },
+      { messages: 11 },
+    ]);
+  });
+
+  test('M2: counts image-bearing (render) tool results; JSON-only results do not count', () => {
+    const { agent, toolResult } = fakeAgent([]);
+    const { counters } = installGenerationCounters(agent as never);
+
+    toolResult(imageResult('r1'));
+    toolResult(plainResult('v1')); // e.g. a validation-style JSON result
+    toolResult(imageResult('r2', 4)); // one multi-image result = ONE render
+    expect(counters.renders).toBe(2);
+    expect(counters.modelCalls).toEqual([]);
+  });
+
+  test('uninstall stops both counters', () => {
+    const messages = transcript();
+    const { agent, modelCall, toolResult } = fakeAgent(messages);
+    const { counters, uninstall } = installGenerationCounters(agent as never);
+
+    modelCall(10);
+    toolResult(imageResult('r1'));
+    uninstall();
+    modelCall(20);
+    toolResult(imageResult('r2'));
+
+    expect(counters.modelCalls).toEqual([{ inputTokens: 10, messages: 10 }]);
+    expect(counters.renders).toBe(1);
   });
 });

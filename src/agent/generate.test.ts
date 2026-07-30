@@ -25,11 +25,29 @@ const FALSE_PROP_CODE = CANNED_CODE.replace(
   "const meta = { name: 'TestBox', category: 'prop' };",
 );
 
+// Capture the REAL './run' exports BEFORE mocking. bun's mock.module patches the
+// module (and any already-imported namespace) in place, but plain function
+// references captured beforehand keep pointing at the real implementations —
+// so the afterAll below can restore the module for later test files
+// (__tests__/run-loop.test.ts drives the real runKilnAgent) in a shared process.
+const realRun = await import('./run');
+const restoreRunModule = {
+  runKilnAgent: realRun.runKilnAgent,
+  resolveToolSurface: realRun.resolveToolSurface,
+  buildAgentTools: realRun.buildAgentTools,
+};
+
 // Mutable impl the mocked runKilnAgent delegates to (set per test).
 let runImpl: (opts: Record<string, unknown>) => Promise<Record<string, unknown>>;
 mock.module('./run', () => ({
   runKilnAgent: (opts: Record<string, unknown>) => runImpl(opts),
 }));
+
+afterAll(() => {
+  // Un-leak the module mock: put the real functions back for any test file
+  // that runs after this one.
+  mock.module('./run', () => restoreRunModule);
+});
 
 // mock.module must precede the import of the module under test (bun runs it in
 // order; ESM imports would hoist above it, so the dynamic import is required).
