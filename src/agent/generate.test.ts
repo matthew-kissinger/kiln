@@ -213,3 +213,199 @@ describe('generateKilnAsset', () => {
     await expect(generateKilnAsset({ prompt: 'x' })).rejects.toThrow(/provider returned 500/);
   });
 });
+
+describe('generateKilnAsset viewRenderPort (B3b/B4)', () => {
+  const saved: Record<string, string | undefined> = {};
+  const KEYS = ['GEMINI_API_KEY', 'ANTHROPIC_API_KEY', 'KILN_MODEL', 'PIXEL_FORGE_MODEL'];
+  beforeAll(() => {
+    for (const k of KEYS) saved[k] = process.env[k];
+    if (!process.env['GEMINI_API_KEY']) process.env['GEMINI_API_KEY'] = 'test-gemini-key';
+    delete process.env['KILN_MODEL'];
+    delete process.env['PIXEL_FORGE_MODEL'];
+  });
+  afterAll(() => {
+    for (const k of KEYS) {
+      if (saved[k] === undefined) delete process.env[k];
+      else process.env[k] = saved[k];
+    }
+  });
+
+  const okRun = async () => ({ code: CANNED_CODE, toolCalls: ['kiln_submit'], steps: 1 });
+
+  /** 6 tiny solid-color per-view PNGs, like a host PBR renderer would return. */
+  async function stubViewPngs(size = 8): Promise<Uint8Array[]> {
+    const { encodePng } = await import('../views');
+    return Array.from({ length: 6 }, (_, i) => {
+      const rgb = new Uint8Array(size * size * 3);
+      for (let p = 0; p < size * size; p++) rgb[p * 3] = 30 + i * 30;
+      return new Uint8Array(encodePng(rgb, size, size));
+    });
+  }
+
+  test('option absent: views are byte-identical to the CPU grid, no degrade fields', async () => {
+    runImpl = okRun;
+    const r = await generateKilnAsset({ prompt: 'a crate', captureViews: true });
+
+    const { renderCodeViewGrid } = await import('../views');
+    const cpu = (await renderCodeViewGrid(CANNED_CODE)).png;
+    expect(r.views).toBeInstanceOf(Buffer);
+    expect(Buffer.compare(r.views!, cpu)).toBe(0);
+    // Pin: the port-absent result shape is unchanged — no provenance/degrade keys.
+    expect(r.viewsRendererId).toBeUndefined();
+    expect(r.renderDegraded).toBeUndefined();
+    expect(r.renderDegradedReason).toBeUndefined();
+    expect('renderDegraded' in r).toBe(false);
+  });
+
+  test('port success: composited port views, port rendererId, renderDegraded false', async () => {
+    runImpl = okRun;
+    const viewsPng = await stubViewPngs();
+    const requests: import('../composer/render-port').PbrRenderRequest[] = [];
+    const r = await generateKilnAsset({
+      prompt: 'a crate',
+      captureViews: true,
+      viewRenderPort: async (req) => {
+        requests.push(req);
+        return { ok: true, rendererId: 'dawn-vulkan:test-gpu:1.0', viewsPng };
+      },
+    });
+
+    // The port saw the ALREADY-PRODUCED GLB bytes and the six grid view dirs.
+    expect(requests).toHaveLength(1);
+    expect(Buffer.compare(Buffer.from(requests[0]!.glb), r.glb)).toBe(0);
+    expect(requests[0]!.viewDirs).toHaveLength(6);
+    expect(requests[0]!.size).toBe(384);
+
+    expect(r.renderDegraded).toBe(false);
+    expect(r.renderDegradedReason).toBeUndefined();
+    expect(r.viewsRendererId).toBe('dawn-vulkan:test-gpu:1.0');
+    // The views are the port cells composited into the SAME 3x2 grid layout.
+    const { compositeViewPngGrid } = await import('../views');
+    expect(Buffer.compare(r.views!, compositeViewPngGrid(viewsPng).png)).toBe(0);
+  });
+
+  test('port is never consulted when captureViews is off', async () => {
+    runImpl = okRun;
+    let calls = 0;
+    const r = await generateKilnAsset({
+      prompt: 'a crate',
+      viewRenderPort: async () => {
+        calls++;
+        return { ok: true, rendererId: 'dawn-vulkan:test-gpu:1.0' };
+      },
+    });
+    expect(calls).toBe(0);
+    expect(r.views).toBeUndefined();
+    expect(r.renderDegraded).toBeUndefined();
+  });
+
+  test('B4: a rejecting port degrades to the CPU grid with honest provenance', async () => {
+    runImpl = okRun;
+    const r = await generateKilnAsset({
+      prompt: 'a crate',
+      captureViews: true,
+      viewRenderPort: async () => {
+        throw new Error('GPU service unreachable');
+      },
+    });
+
+    const { renderCodeViewGrid, CPU_RASTER_RENDERER_ID } = await import('../views');
+    expect(r.renderDegraded).toBe(true);
+    expect(r.renderDegradedReason).toContain('GPU service unreachable');
+    expect(r.viewsRendererId).toBe(CPU_RASTER_RENDERER_ID);
+    expect(r.viewsRendererId).toMatch(/^cpu-raster:/);
+    const cpu = (await renderCodeViewGrid(CANNED_CODE)).png;
+    expect(Buffer.compare(r.views!, cpu)).toBe(0);
+  });
+
+  test('B4: an ok:false port degrades with the port error as the reason', async () => {
+    runImpl = okRun;
+    const r = await generateKilnAsset({
+      prompt: 'a crate',
+      captureViews: true,
+      viewRenderPort: async () => ({
+        ok: false,
+        rendererId: 'dawn-vulkan:test-gpu:1.0',
+        error: 'device lost',
+      }),
+    });
+    expect(r.renderDegraded).toBe(true);
+    expect(r.renderDegradedReason).toContain('device lost');
+    expect(r.viewsRendererId).toMatch(/^cpu-raster:/);
+    expect(r.views).toBeInstanceOf(Buffer);
+  });
+
+  test('B4: a hanging port trips the deadline and degrades', async () => {
+    runImpl = okRun;
+    const r = await generateKilnAsset({
+      prompt: 'a crate',
+      captureViews: true,
+      viewRenderTimeoutMs: 25,
+      viewRenderPort: () => new Promise(() => {}), // never settles
+    });
+    expect(r.renderDegraded).toBe(true);
+    expect(r.renderDegradedReason).toContain('timed out after 25ms');
+    expect(r.viewsRendererId).toMatch(/^cpu-raster:/);
+    expect(r.views).toBeInstanceOf(Buffer);
+  });
+
+  test('B4: undecodable or missing port PNGs degrade instead of throwing', async () => {
+    runImpl = okRun;
+    const garbage = await generateKilnAsset({
+      prompt: 'a crate',
+      captureViews: true,
+      viewRenderPort: async () => ({
+        ok: true,
+        rendererId: 'dawn-vulkan:test-gpu:1.0',
+        viewsPng: Array.from({ length: 6 }, () => new Uint8Array([1, 2, 3])),
+      }),
+    });
+    expect(garbage.renderDegraded).toBe(true);
+    expect(garbage.renderDegradedReason).toContain('bad signature');
+    expect(garbage.views).toBeInstanceOf(Buffer);
+
+    const empty = await generateKilnAsset({
+      prompt: 'a crate',
+      captureViews: true,
+      viewRenderPort: async () => ({ ok: true, rendererId: 'dawn-vulkan:test-gpu:1.0' }),
+    });
+    expect(empty.renderDegraded).toBe(true);
+    expect(empty.renderDegradedReason).toContain('returned 0 view PNGs, expected 6');
+  });
+
+  test('B4: a port returning fewer PNGs than requested degrades instead of shrinking the grid', async () => {
+    runImpl = okRun;
+    const viewsPng = await stubViewPngs();
+    const r = await generateKilnAsset({
+      prompt: 'a crate',
+      captureViews: true,
+      viewRenderPort: async () => ({
+        ok: true,
+        rendererId: 'dawn-vulkan:test-gpu:1.0',
+        viewsPng: viewsPng.slice(0, 3),
+      }),
+    });
+    expect(r.renderDegraded).toBe(true);
+    expect(r.renderDegradedReason).toContain('returned 3 view PNGs, expected 6');
+    expect(r.viewsRendererId).toMatch(/^cpu-raster:/);
+    expect(r.views).toBeInstanceOf(Buffer);
+  });
+
+  test('B4: the port receives a copy of the GLB bytes, not a live alias', async () => {
+    runImpl = okRun;
+    const viewsPng = await stubViewPngs();
+    let seen: Uint8Array | undefined;
+    const r = await generateKilnAsset({
+      prompt: 'a crate',
+      captureViews: true,
+      viewRenderPort: async (req) => {
+        seen = req.glb;
+        req.glb.fill(0); // a hostile/buggy port scribbling on its input
+        return { ok: true, rendererId: 'dawn-vulkan:test-gpu:1.0', viewsPng };
+      },
+    });
+    expect(seen!.every((b) => b === 0)).toBe(true);
+    // The returned artifact is untouched: still a valid GLB with the magic intact.
+    expect(r.glb.readUInt32LE(0)).toBe(0x46546c67);
+  });
+});

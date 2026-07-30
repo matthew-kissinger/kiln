@@ -6,8 +6,11 @@ import type { QaContext, QaFinding } from './types';
 export const QA_RULE_MODES = ['off', 'observe', 'warn', 'enforce'] as const;
 export type QaRuleMode = (typeof QA_RULE_MODES)[number];
 
-export const QA_RULE_CLASSES = ['exact', 'heuristic', 'vlm'] as const;
+export const QA_RULE_CLASSES = ['exact', 'heuristic', 'vlm', 'appearance'] as const;
 export type QaRuleClass = (typeof QA_RULE_CLASSES)[number];
+
+/** rendererId stamped onto promotion evidence produced before renderer identity existed. */
+export const LEGACY_CPU_RASTER_RENDERER_ID = 'cpu-raster:legacy' as const;
 
 /** Cross-repo identities frozen by QA-023/026. The exact matrix must keep Studio in lock-step. */
 export const QA_026_CALIBRATION_THRESHOLD_ID =
@@ -58,6 +61,10 @@ export interface QaConformancePromotionAuthorization {
   evidenceSha256: string;
   frozenAt: string;
   authorizedBy: string;
+  /** Renderer that produced the evidence: a `<family>:` prefix plus identity, e.g.
+   *  `cpu-raster:0.6.0` or `dawn-vulkan:nvidia-rtx-a4500:...`. Evidence frozen before
+   *  renderer identity existed carries {@link LEGACY_CPU_RASTER_RENDERER_ID}. */
+  rendererId: string;
 }
 
 export interface QaCalibrationPromotionAuthorization {
@@ -67,6 +74,8 @@ export interface QaCalibrationPromotionAuthorization {
   evidenceSha256: string;
   frozenAt: string;
   authorizedBy: string;
+  /** Renderer that produced the evidence (same format as conformance evidence). */
+  rendererId: string;
   report: QaCalibrationReportEvidenceV1;
 }
 
@@ -153,6 +162,10 @@ export function conformancePromotionAuthorization(
   owner: QaRuleOwner = KILN_ENGINE_QA_OWNER,
   frozenAt = '2026-07-09T00:00:00.000Z',
   authorizedMode: 'warn' | 'enforce' = 'enforce',
+  /** Default stamps pre-existing frozen evidence honestly: it was produced by the
+   *  CPU rasterizer before renderer identity was recorded. New evidence generated
+   *  under a known renderer must pass that renderer's real id explicitly. */
+  rendererId: string = LEGACY_CPU_RASTER_RENDERER_ID,
 ): QaConformancePromotionAuthorization {
   return {
     basis: 'conformance',
@@ -162,6 +175,7 @@ export function conformancePromotionAuthorization(
     evidenceSha256,
     frozenAt,
     authorizedBy: owner.id,
+    rendererId,
   };
 }
 
@@ -210,6 +224,8 @@ export interface QaRulePolicyDecision {
 
 const SHA256_PATTERN = /^[a-f0-9]{64}$/;
 const OWNER_ID_PATTERN = /^[a-z0-9][a-z0-9:._/-]*$/;
+/** Renderer family prefix + ':' — e.g. "cpu-raster:0.6.0", "dawn-vulkan:nvidia-...". */
+const RENDERER_ID_PATTERN = /^[a-z0-9-]+:/;
 
 function evidenceId(promotion: QaPromotionAuthorization): string {
   return promotion.basis === 'conformance' ? promotion.fixtureSetId : promotion.packetId;
@@ -412,6 +428,18 @@ function assertPromotionShape(rule: QaRule, promotion: QaPromotionAuthorization)
   if (!SHA256_PATTERN.test(promotion.evidenceSha256)) {
     throw new TypeError(`QA rule ${rule.id} promotion evidence must have a lowercase SHA-256`);
   }
+  if (typeof promotion.rendererId !== 'string' || !promotion.rendererId.trim()) {
+    throw new TypeError(
+      `QA rule ${rule.id} promotion evidence must name its producing rendererId ` +
+        `(e.g. "cpu-raster:0.6.0"; pre-existing evidence uses "${LEGACY_CPU_RASTER_RENDERER_ID}")`,
+    );
+  }
+  if (!RENDERER_ID_PATTERN.test(promotion.rendererId)) {
+    throw new TypeError(
+      `QA rule ${rule.id} promotion rendererId "${promotion.rendererId}" must start with a ` +
+        `renderer family prefix followed by ':' (e.g. "cpu-raster:", "dawn-vulkan:")`,
+    );
+  }
   if (!Number.isFinite(Date.parse(promotion.frozenAt))) {
     throw new TypeError(`QA rule ${rule.id} promotion evidence must have a frozenAt timestamp`);
   }
@@ -438,6 +466,15 @@ function assertModeAuthorized(rule: QaRule, mode: QaRuleMode): void {
   if (mode === 'off' || mode === 'observe') {
     if (rule.promotion) assertPromotionShape(rule, rule.promotion);
     return;
+  }
+
+  // Stricter than the VLM warn cap below: appearance evidence derives from
+  // rendered/GPU output, which is a non-deterministic VIEW producer — findings
+  // may inform, never gate.
+  if (rule.ruleClass === 'appearance') {
+    throw new Error(
+      `Appearance QA rule ${rule.id} cannot exceed observe; appearance findings derive from rendered output and are never gates`,
+    );
   }
 
   const promotion = rule.promotion;
