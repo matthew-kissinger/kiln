@@ -540,14 +540,17 @@ export async function renderClipAnimation(
 // =============================================================================
 
 export interface InteriorGridResult extends ViewGridResult {
-  /** Roof subtree roots hidden (0 → the roof part was not named like nodeName). */
+  /** Roof subtree roots hidden (0 → no roof resolved: no `roof.` role, no
+   *  historical roof name, or an explicit `nodeName` that matched nothing). */
   roofsHidden: number;
   /** Near-wall subtree roots hidden for the eye-level cutaway (0 → not a room()). */
   wallsHidden: number;
 }
 
 export interface InteriorGridOptions extends RasterOptions {
-  /** Name of the roof part to lift. Default 'Roof'. */
+  /** Exact-name override: lift this node and its children instead of resolving
+   *  the roof semantically. Omit it for the ordinary path — role first, then a
+   *  narrow historical-name fallback. */
   nodeName?: string;
 }
 

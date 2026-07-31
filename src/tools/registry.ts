@@ -126,7 +126,9 @@ const viewInteriorInput = z.object({
     .string()
     .optional()
     .describe(
-      'The roof part to lift, by name (default "Roof"). Matches that node and its children.',
+      'Override: lift the roof by exact node name instead of by role. Matches that node and its ' +
+        'children. Normally OMIT it — Kiln finds the roof from its semantic role (anything built ' +
+        'with createRoofPlanes/createGableRoof), falling back to historical "Roof" naming.',
     ),
 });
 
@@ -621,7 +623,7 @@ export interface KilnViewInteriorResult {
   views?: string[];
   gridWidth?: number;
   gridHeight?: number;
-  /** Roof subtree roots hidden (0 → the roof part was not named "Roof"). */
+  /** Roof subtree roots hidden (0 → no roof was resolvable by role or by name). */
   roofsHidden?: number;
   /** Near-wall subtree roots removed for the eye-level cutaway (0 → not a room()). */
   wallsHidden?: number;
@@ -636,10 +638,11 @@ export interface KilnViewInteriorResult {
  * exterior views cannot (open/walkable floor, a doorway that is a real gap, fixtures
  * on the floor, nothing buried/sealed). Three roof-off cells: Floor plan, Dollhouse,
  * Eye-level. A build error comes back image-free ({ ok:false, error }). When the roof
- * could not be lifted (roofsHidden === 0) the interior stays occluded — a warning tells
- * the agent to name the roof part "Roof". Pure visual QA: does NOT run the structural
- * inspector uses the same host-owned category as every other view path. The views module
- * is imported lazily to keep node:zlib out of the browser bundle graph.
+ * could not be lifted (roofsHidden === 0) the interior stays occluded — the warning is
+ * mode-specific: a bad explicit nodeName vs no resolvable roof at all. Pure visual QA:
+ * does NOT run the structural inspector uses the same host-owned category as every other
+ * view path. The views module is imported lazily to keep node:zlib out of the browser
+ * bundle graph.
  */
 async function runViewInterior(
   input: z.infer<typeof viewInteriorInput>,
@@ -648,12 +651,18 @@ async function runViewInterior(
   try {
     const { renderInteriorGrid } = await import('../views');
     const { root } = await executeKilnCode(input.code);
-    const nodeName = input.nodeName ?? 'Roof';
-    const grid = await renderInteriorGrid(root, { nodeName });
+    // No default name. An explicit nodeName stays an exact-name override; with
+    // none, the grid resolves the roof from its semantic role (and only then
+    // falls back to historical "Roof" naming) — so a correctly-roled roof named
+    // anything at all still lifts.
+    const nodeName = input.nodeName?.trim() ? input.nodeName : undefined;
+    const grid = await renderInteriorGrid(root, { ...(nodeName ? { nodeName } : {}) });
     const warnings = inspectSceneStructure(root, { category: trustedCategory(context) });
     if (grid.roofsHidden === 0) {
       warnings.push(
-        `No node named "${nodeName}" was found, so the roof could not be lifted and the interior is still occluded. Name the roof group exactly "${nodeName}".`,
+        nodeName
+          ? `No node named "${nodeName}" was found, so the roof could not be lifted and the interior is still occluded. Check that name, or omit nodeName so the roof is found by its semantic role instead.`
+          : 'No roof was found, so nothing could be lifted and the interior is still occluded. Build the roof with createRoofPlanes/createGableRoof (which tag it as a roof), or name the roof group "Roof".',
       );
     }
     return {
@@ -681,14 +690,16 @@ async function runViewInterior(
  * `screenshotMedia` so image transports attach the PNG bytes and strip the base64.
  */
 const KILN_VIEW_INTERIOR_DESCRIPTION =
-  'SEE INSIDE an enterable building: renders it with the roof (the part named "Roof") lifted off, as a ' +
+  'SEE INSIDE an enterable building: renders it with the roof lifted off, as a ' +
   'three-view grid. (1) Floor plan: top-down — check the interior is open and walkable and the footprint ' +
   'is right. (2) Dollhouse: a 3/4 cutaway — check built-in fixtures (hearth, counter, shelves) rest ON the ' +
   'floor, not floating or sunk, and the walls enclose a real volume with headroom. (3) Eye-level: a low ' +
   'angle looking in through the doorway with the near walls also removed — confirm the doorway is a REAL ' +
   'gap you could walk through (not a panel) and no wall or glass is buried inside a solid mass. ' +
-  'Call this before finalizing any building. If roofsHidden comes back 0 the roof part was not named ' +
-  '"Roof" (the interior stays hidden — rename it). Flat-shaded CPU render; writes no files.';
+  'Call this before finalizing any building. Take no argument: the roof is found from its semantic ' +
+  'role, so any roof built with createRoofPlanes/createGableRoof lifts whatever it is named. If ' +
+  'roofsHidden comes back 0 no roof was resolvable and the interior stays hidden — build the roof ' +
+  'with a roof primitive (or name the group "Roof"). Flat-shaded CPU render; writes no files.';
 
 /** Create the interior-view definition with host-owned QA context. */
 export function createKilnViewInteriorDef(context: KilnToolContext = {}): KilnToolDef {
@@ -728,6 +739,14 @@ const inspectInput = z.object({
       'Padding multiplier around the part bounds, clamped to 1-4. Default 1.2; raise it to see ' +
         'more surrounding context.',
     ),
+  isolate: z
+    .boolean()
+    .optional()
+    .describe(
+      'Hide everything except the named part (and its descendants) so nothing can block the view. ' +
+        'Use it when the part is buried inside or behind other geometry. Needs `part`; without ' +
+        'one it does nothing. Default false — surrounding geometry stays visible for context.',
+    ),
 });
 
 export interface KilnInspectResult {
@@ -736,6 +755,8 @@ export interface KilnInspectResult {
   part?: string;
   view?: string;
   zoom?: number;
+  /** True when everything outside the framed part was hidden (isolate honored). */
+  isolated?: boolean;
   /** One line stating what was framed and from which view. */
   framed?: string;
   width?: number;
@@ -763,6 +784,7 @@ async function runInspect(input: z.infer<typeof inspectInput>): Promise<KilnInsp
       ...(input.part !== undefined ? { part: input.part } : {}),
       ...(input.view !== undefined ? { view: input.view } : {}),
       ...(input.zoom !== undefined ? { zoom: input.zoom } : {}),
+      ...(input.isolate !== undefined ? { isolate: input.isolate } : {}),
     });
     if (!r.ok) {
       return {
@@ -774,13 +796,17 @@ async function runInspect(input: z.infer<typeof inspectInput>): Promise<KilnInsp
       };
     }
     const framed = r.part
-      ? `Framed part "${r.part}" (with its descendants) from the ${r.view} view at zoom ${r.zoom}.`
+      ? `Framed part "${r.part}" (with its descendants) from the ${r.view} view at zoom ${r.zoom}.` +
+        (r.isolated
+          ? ' Everything else is hidden, so nothing in this image occludes it.'
+          : ' Surrounding geometry is still drawn and may occlude it.')
       : `Framed the whole asset from the ${r.view} view.`;
     return {
       ok: true,
       ...(r.part ? { part: r.part } : {}),
       view: r.view,
       zoom: r.zoom,
+      isolated: r.isolated,
       framed,
       width: r.width,
       height: r.height,
@@ -805,9 +831,12 @@ const KILN_INSPECT_DESCRIPTION =
   'joint, a wrong proportion — to see fine detail one grid cell cannot show. args: part (omit to ' +
   'frame the whole asset in one large view), view (front/right/back/left/top/three-quarter, ' +
   'default three-quarter), zoom (padding multiplier around the part bounds, 1 = tight crop up to ' +
-  '4 = wide context, default 1.2). If the part name does not resolve you get the list of available ' +
-  'part names back — pick one and retry. Surrounding geometry stays visible and can occlude the ' +
-  'part; pick a different view if blocked. Flat-shaded CPU render; writes no files.';
+  '4 = wide context, default 1.2), isolate (hide everything except that part, default false). ' +
+  'If the part name does not resolve you get the list of available part names back — pick one and ' +
+  'retry. By default surrounding geometry stays visible for context and can occlude the part: ' +
+  'either pick a different view, or set isolate:true to hide everything else and see the part ' +
+  'unobstructed (use it for anything buried inside or behind other geometry). Flat-shaded CPU ' +
+  'render; writes no files.';
 
 /** Create the close-up inspection definition. */
 export function createKilnInspectDef(): KilnToolDef {

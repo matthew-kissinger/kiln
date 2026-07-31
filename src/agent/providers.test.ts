@@ -394,3 +394,77 @@ describe('toCachedSystemPrompt (A2 portable cache breakpoint)', () => {
     expect(toCachedSystemPrompt(TEXT, {})).toBe(TEXT);
   });
 });
+
+describe('OpenRouter-Anthropic prompt caching (cache_control)', () => {
+  /** The LanguageModelV3 the Vercel bridge wraps (through the stream-start proxy,
+   *  which forwards every non-doStream property untouched). */
+  const settingsOf = (model: unknown): Record<string, unknown> =>
+    (model as { _provider: { settings: Record<string, unknown> } })._provider.settings;
+
+  test('an anthropic/* slug is built with the ephemeral cache_control directive', () => {
+    const model = makeKilnModel(
+      { provider: 'openrouter', model: 'anthropic/claude-sonnet-5' },
+      { apiKey: 'test-key' },
+    );
+    expect(settingsOf(model)['cache_control']).toEqual({ type: 'ephemeral' });
+  });
+
+  test('the directive reaches the outgoing request body (fetch captured, no network)', async () => {
+    const model = makeKilnModel(
+      { provider: 'openrouter', model: 'anthropic/claude-opus-4.8' },
+      { apiKey: 'test-key' },
+    );
+    const provider = (model as unknown as { _provider: { doStream(o: unknown): Promise<unknown> } })
+      ._provider;
+
+    const realFetch = globalThis.fetch;
+    let body: Record<string, unknown> | undefined;
+    globalThis.fetch = (async (_url: unknown, init: { body: string }) => {
+      body = JSON.parse(init.body) as Record<string, unknown>;
+      return new Response('data: [DONE]\n\n', {
+        status: 200,
+        headers: { 'content-type': 'text/event-stream' },
+      });
+    }) as unknown as typeof fetch;
+    try {
+      const result = (await provider.doStream({
+        prompt: [{ role: 'user', content: [{ type: 'text', text: 'hi' }] }],
+      })) as { stream: ReadableStream<unknown> };
+      const reader = result.stream.getReader();
+      while (!(await reader.read()).done) {
+        // drain
+      }
+    } finally {
+      globalThis.fetch = realFetch;
+    }
+
+    expect(body?.['model']).toBe('anthropic/claude-opus-4.8');
+    // Top-level directive → Anthropic automatic caching of the stable prefix.
+    expect(body?.['cache_control']).toEqual({ type: 'ephemeral' });
+  });
+
+  test('non-Anthropic OpenRouter vendors do NOT get the flag', () => {
+    for (const model of ['x-ai/grok-4.3', 'openai/gpt-5.5', 'moonshotai/kimi-k2.5']) {
+      const built = makeKilnModel({ provider: 'openrouter', model }, { apiKey: 'test-key' });
+      expect(settingsOf(built)['cache_control']).toBeUndefined();
+    }
+    // ...and the reasoning setting is still the only thing that lands there.
+    const reasoning = makeKilnModel(
+      { provider: 'openrouter', model: 'x-ai/grok-4.3', maxTokens: 64000, thinking: 'high' },
+      { apiKey: 'test-key' },
+    );
+    expect(settingsOf(reasoning)).toEqual({ reasoning: { effort: 'high' } });
+  });
+
+  test('the two caching mechanisms stay separate: cache_control is not a system cache point', () => {
+    const model = makeKilnModel(
+      { provider: 'openrouter', model: 'anthropic/claude-sonnet-5' },
+      { apiKey: 'test-key' },
+    );
+    // The Vercel bridge DROPS CachePointBlocks, so the system prompt must stay a
+    // plain string even for the vendor whose upstream supports caching. The
+    // request-settings directive above is how OpenRouter gets it instead.
+    expect(modelConsumesSystemPromptCachePoints(model)).toBe(false);
+    expect(toCachedSystemPrompt('SYSTEM', model)).toBe('SYSTEM');
+  });
+});
