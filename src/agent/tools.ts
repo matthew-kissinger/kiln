@@ -514,6 +514,13 @@ const inspectBufferInput = z.object({
     .number()
     .optional()
     .describe('Padding multiplier around the part bounds, clamped to 1-4. Default 1.2.'),
+  isolate: z
+    .boolean()
+    .optional()
+    .describe(
+      'Hide everything except the named part so nothing can occlude it. Needs `part`. ' +
+        'Default false.',
+    ),
 });
 
 /**
@@ -640,12 +647,13 @@ export function makeKilnUnifiedTools(
     description: `${inspectDef.description} Operates on your current working buffer (no code argument).`,
     inputSchema: inspectBufferInput,
     callback: async (input) => {
-      const i = input as { part?: string; view?: string; zoom?: number };
+      const i = input as { part?: string; view?: string; zoom?: number; isolate?: boolean };
       const out = await inspectDef.run({
         code: buffer.code,
         ...(i.part !== undefined ? { part: i.part } : {}),
         ...(i.view !== undefined ? { view: i.view } : {}),
         ...(i.zoom !== undefined ? { zoom: i.zoom } : {}),
+        ...(i.isolate !== undefined ? { isolate: i.isolate } : {}),
       });
       return toCallbackResult(inspectDef, out);
     },
@@ -661,7 +669,13 @@ export function makeKilnUnifiedTools(
     name: 'kiln_view_interior',
     description: `${interiorDef.description} Operates on your current working buffer (omit code).`,
     inputSchema: z.object({
-      nodeName: z.string().optional().describe('The roof part to lift, by name (default "Roof").'),
+      nodeName: z
+        .string()
+        .optional()
+        .describe(
+          'Override: lift the roof by exact node name. Normally omit it — the roof is found by ' +
+            'its semantic role whatever it is named.',
+        ),
     }),
     callback: async (input) => {
       const n = (input as { nodeName?: string }).nodeName;

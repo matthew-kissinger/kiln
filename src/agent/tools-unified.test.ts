@@ -261,6 +261,38 @@ describe('makeKilnUnifiedTools', () => {
     expect(out.availableParts).toContain('Mesh_Head');
   });
 
+  test('kiln_inspect isolate:true reaches the renderer and is reported back', async () => {
+    const sink: UnifiedSink = { edits: [] };
+    const tools = makeKilnUnifiedTools({ seedCode: TWO_PART_CODE, sink });
+    const out = (await findTool(tools, 'kiln_inspect').invoke({
+      part: 'head',
+      isolate: true,
+    })) as unknown[];
+    expect(out[0]).toBeInstanceOf(ImageBlock);
+    const json = (out[1] as JsonBlock).json as Record<string, unknown>;
+    expect(json['isolated']).toBe(true);
+    expect(json['framed']).toContain('nothing in this image occludes it');
+  });
+
+  test('kiln_inspect defaults to isolate:false and says so in the framing line', async () => {
+    const sink: UnifiedSink = { edits: [] };
+    const tools = makeKilnUnifiedTools({ seedCode: TWO_PART_CODE, sink });
+    const out = (await findTool(tools, 'kiln_inspect').invoke({ part: 'head' })) as unknown[];
+    const json = (out[1] as JsonBlock).json as Record<string, unknown>;
+    expect(json['isolated']).toBe(false);
+    expect(json['framed']).toContain('may occlude it');
+  });
+
+  test('kiln_inspect isolate:true without a part is a no-op, not an error', async () => {
+    const sink: UnifiedSink = { edits: [] };
+    const tools = makeKilnUnifiedTools({ seedCode: TWO_PART_CODE, sink });
+    const out = (await findTool(tools, 'kiln_inspect').invoke({ isolate: true })) as unknown[];
+    const json = (out[1] as JsonBlock).json as Record<string, unknown>;
+    expect(json['ok']).toBe(true);
+    expect(json['isolated']).toBe(false);
+    expect(json['framed']).toContain('whole asset');
+  });
+
   test('kiln_inspect with no part frames the whole asset in one view', async () => {
     const sink: UnifiedSink = { edits: [] };
     const tools = makeKilnUnifiedTools({ seedCode: TWO_PART_CODE, sink });
@@ -301,14 +333,43 @@ describe('makeKilnUnifiedTools', () => {
     expect(out.error).toBeDefined();
   });
 
-  test('kiln_view_interior warns when the roof is not named "Roof"', async () => {
+  test('kiln_view_interior lifts a semantically-roled roof that is NOT named "Roof"', async () => {
     const sink: UnifiedSink = { edits: [] };
     const lidCode = BUILDING_CODE.replace("createRoofPlanes('Roof'", "createRoofPlanes('Lid'");
     const tools = makeKilnUnifiedTools({ seedCode: lidCode, sink });
     const out = (await findTool(tools, 'kiln_view_interior').invoke({})) as unknown[];
     const json = (out[1] as JsonBlock).json as Record<string, unknown>;
-    expect(json['roofsHidden']).toBe(0); // no node named "Roof" → nothing lifted
-    expect((json['warnings'] as string[]).join(' ')).toContain('Roof');
+    // createRoofPlanes stamps roof.* roles regardless of the node's name, so the
+    // tool resolves the roof by role. The asset is already correct — there must
+    // be no warning telling the model to rename anything.
+    expect(json['roofsHidden']).toBe(1);
+    expect((json['warnings'] as string[]).join(' ')).not.toContain('could not be lifted');
+    expect((json['warnings'] as string[]).join(' ')).not.toContain('still occluded');
+  });
+
+  test('kiln_view_interior warns in explicit-override mode when the named node is absent', async () => {
+    const sink: UnifiedSink = { edits: [] };
+    const tools = makeKilnUnifiedTools({ seedCode: BUILDING_CODE, sink });
+    const out = (await findTool(tools, 'kiln_view_interior').invoke({
+      nodeName: 'Canopy',
+    })) as unknown[];
+    const json = (out[1] as JsonBlock).json as Record<string, unknown>;
+    expect(json['roofsHidden']).toBe(0);
+    const warnings = (json['warnings'] as string[]).join(' ');
+    expect(warnings).toContain('Canopy');
+    // The advice must point at the override, not at renaming the asset.
+    expect(warnings).toContain('omit nodeName');
+  });
+
+  test('kiln_view_interior warns in semantic mode when no roof is resolvable at all', async () => {
+    const sink: UnifiedSink = { edits: [] };
+    const tools = makeKilnUnifiedTools({ seedCode: BOX_CODE, sink });
+    const out = (await findTool(tools, 'kiln_view_interior').invoke({})) as unknown[];
+    const json = (out[1] as JsonBlock).json as Record<string, unknown>;
+    expect(json['roofsHidden']).toBe(0);
+    const warnings = (json['warnings'] as string[]).join(' ');
+    expect(warnings).toContain('No roof was found');
+    expect(warnings).toContain('createRoofPlanes');
   });
 
   test('kiln_finalize captures the buffer and marks finalized', async () => {

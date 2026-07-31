@@ -10,6 +10,88 @@
 export const KILN_SEMANTIC_EXTRAS_KEY = 'kilnSemantic' as const;
 export const KILN_SEMANTIC_SCHEMA_VERSION = 1 as const;
 
+// =============================================================================
+// Role vocabulary
+//
+// A role is a dot-delimited path: a BASE naming the concept plus instance
+// segments naming the occurrence ('wheel.tire' + 'left.0' -> 'wheel.tire.left.0').
+// Producers build roles from these constants; consumers match against them with
+// {@link semanticRoleMatches}. Both sides therefore share one spelling instead
+// of two independently typed string literals — a rename here is a compile error
+// at every emit site rather than a silently empty match downstream.
+// =============================================================================
+
+/**
+ * Canonical base roles Kiln stamps on nodes. Values are the portable wire
+ * spelling and are part of the GLB contract: renaming one changes published
+ * assets, so treat a change here as a versioned contract change.
+ */
+export const KILN_SEMANTIC_ROLES = Object.freeze({
+  // -- vehicle frame + typed sockets ------------------------------------------
+  /** The +X-forward/+Y-up/+Z-right frame root of a vehicle. */
+  vehicleFrame: 'vehicle.frame',
+  /** Declares the frame's forward axis explicitly, for readers that check it. */
+  vehicleForward: 'vehicle.front.+x',
+  /** Any typed socket node; full role is `socket.<kind>.<id>`. */
+  socket: 'socket',
+  /** Chassis mount point. */
+  chassis: 'chassis',
+  /** The single primary chassis mount (`chassis` sockets are id-less by convention). */
+  chassisMain: 'chassis.main',
+  axle: 'axle',
+  seat: 'seat',
+  contact: 'contact',
+  steering: 'steering',
+  propulsion: 'propulsion',
+
+  // -- wheel assembly ---------------------------------------------------------
+  /** The spin pivot that owns one wheel; the anchor readers rig from. */
+  wheelAssembly: 'wheel.assembly',
+  wheelPivot: 'wheel.pivot',
+  /** Present only on wheels that carry load (drivable ground contact). */
+  wheelLoadBearing: 'wheel.load-bearing',
+  wheelTire: 'wheel.tire',
+  wheelRim: 'wheel.rim',
+  wheelHub: 'wheel.hub',
+  wheelContact: 'wheel.contact',
+  /** Steering pivot above a steered wheel assembly. */
+  steeringPivot: 'steering.pivot',
+
+  // -- architecture -----------------------------------------------------------
+  /** Separable roof. Interior views lift every node under this role. */
+  roof: 'roof',
+  /** Long-form spelling of {@link KILN_SEMANTIC_ROLES.roof}, accepted on read. */
+  architectureRoof: 'architecture.roof',
+} as const);
+
+export type KilnSemanticRoleKey = keyof typeof KILN_SEMANTIC_ROLES;
+
+/**
+ * Build a concrete role from a base plus instance segments. Segments are joined
+ * with `.`; empty/blank segments are dropped so `semanticRole('chassis')` stays
+ * `'chassis'`.
+ */
+export function semanticRole(base: string, ...segments: readonly (string | number)[]): string {
+  const tail = segments
+    .map((segment) => String(segment).trim())
+    .filter((segment) => segment !== '');
+  return tail.length > 0 ? `${base}.${tail.join('.')}` : base;
+}
+
+/**
+ * Whether `role` IS `base` or lives beneath it. Matching is on a segment
+ * boundary, so base `'roof'` matches `'roof.assembly'` but never `'rooftop'` —
+ * the property a bare `startsWith` does not give you.
+ */
+export function semanticRoleMatches(role: string, base: string): boolean {
+  return role === base || role.startsWith(`${base}.`);
+}
+
+/** Whether any role in `roles` matches `base` per {@link semanticRoleMatches}. */
+export function hasSemanticRole(roles: readonly string[], base: string): boolean {
+  return roles.some((role) => semanticRoleMatches(role, base));
+}
+
 export type SemanticVector3 = [number, number, number];
 export type SemanticQuaternion = [number, number, number, number];
 

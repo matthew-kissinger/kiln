@@ -7,9 +7,10 @@
  * proportion — at full-image detail instead of one grid cell. Part selection is
  * name-driven by design (the model authored the names via createPart), NOT a
  * free camera: an unresolved name comes back with the list of available part
- * names so the model can retry. Surrounding geometry stays visible (and may
- * occlude the part from some angles), matching the diagnostic views'
- * focus-bounds framing model (see ./diagnostic.ts).
+ * names so the model can retry. Surrounding geometry stays visible by default
+ * (and may occlude the part from some angles), matching the diagnostic views'
+ * focus-bounds framing model (see ./diagnostic.ts); `isolate` opts out of that
+ * and hides everything outside the part so nothing can block the view.
  */
 
 import { rasterizeView, measureBounds } from './raster';
@@ -36,6 +37,8 @@ const INSPECT_CAMERAS: Record<string, [number, number, number]> = {
 /** Minimal duck-typed view of a (possibly cross-realm) scene node. */
 interface DuckNamedNode {
   name?: string;
+  isMesh?: boolean;
+  visible?: boolean;
   updateMatrixWorld?(force?: boolean): void;
   traverse?(cb: (obj: unknown) => void): void;
 }
@@ -51,6 +54,10 @@ export interface InspectViewOptions {
   zoom?: number;
   /** Square output size in pixels. Default {@link INSPECT_SIZE}. */
   size?: number;
+  /** Hide every mesh outside the framed part's subtree, so surrounding geometry
+   *  cannot occlude it from any angle. Requires `part` — with nothing singled
+   *  out there is nothing to isolate, so it is a no-op. Default false. */
+  isolate?: boolean;
 }
 
 export type InspectViewResult =
@@ -62,6 +69,9 @@ export type InspectViewResult =
       view: string;
       /** Effective (clamped) padding multiplier. */
       zoom: number;
+      /** Whether everything outside the framed part was actually hidden. False
+       *  whenever no part was singled out, even if `isolate` was requested. */
+      isolated: boolean;
       width: number;
       height: number;
       png: Buffer;
@@ -125,6 +135,26 @@ function isEmptyBounds(b: Bounds): boolean {
 }
 
 /**
+ * Hide every mesh that is NOT inside `keep`'s subtree, so the framed part cannot
+ * be occluded from any angle. A FLAT mesh-level pass is exactly right here:
+ * `collectTriangles` culls per-MESH on `.visible` and ignores ancestor-group
+ * visibility (raster.ts), so flipping groups would be both insufficient (their
+ * child meshes still draw) and unnecessary.
+ *
+ * MUTATES `.visible` on the passed scene — safe because every caller renders a
+ * freshly executed program, the same contract `renderInteriorGrid` relies on.
+ */
+function isolateSubtree(root: unknown, keep: DuckNamedNode): void {
+  const kept = new Set<unknown>();
+  keep.traverse?.((obj) => kept.add(obj));
+  (root as DuckNamedNode).traverse?.((obj) => {
+    const node = obj as DuckNamedNode;
+    if (!node.isMesh || kept.has(obj)) return;
+    node.visible = false;
+  });
+}
+
+/**
  * Render one close-up view framed to a named part's world bounds (or the whole
  * asset when no part is given). Never throws on a bad part name — that comes
  * back as { ok:false, availableParts } so the agent loop can retry by name.
@@ -144,6 +174,7 @@ export function renderInspectView(root: unknown, opts: InspectViewOptions = {}):
 
   let part: string | undefined;
   let bounds: Bounds;
+  let isolated = false;
   const requested = opts.part?.trim();
   if (requested) {
     const node = findPartNode(root, requested);
@@ -168,6 +199,12 @@ export function renderInspectView(root: unknown, opts: InspectViewOptions = {}):
     }
     part = node.name!.trim();
     bounds = b;
+    // Framing is measured first: isolation only removes geometry OUTSIDE the
+    // part, so the framed box is identical either way.
+    if (opts.isolate) {
+      isolateSubtree(root, node);
+      isolated = true;
+    }
   } else {
     bounds = measureBounds(root);
   }
@@ -181,6 +218,7 @@ export function renderInspectView(root: unknown, opts: InspectViewOptions = {}):
     ...(part ? { part } : {}),
     view,
     zoom,
+    isolated,
     width: size,
     height: size,
     png: encodePng(rgb, size, size),

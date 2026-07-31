@@ -2,12 +2,19 @@
 import * as THREE from 'three';
 
 import {
+  hasSemanticRole,
+  KILN_SEMANTIC_ROLES,
   readSemanticMetadataV1,
+  semanticRole,
+  semanticRoleMatches,
   stampSemanticMetadataV1,
   type SemanticMetadataV1Input,
   type SemanticSocketV1,
   type VehicleIntentV1,
 } from './contracts';
+
+/** Local alias — the shared role vocabulary is referenced on nearly every stamp. */
+const ROLE = KILN_SEMANTIC_ROLES;
 
 export const VEHICLE_AXES = Object.freeze({
   forward: Object.freeze([1, 0, 0] as const),
@@ -152,10 +159,20 @@ function semantic(
   };
 }
 
+/** Base role per socket kind — the shared vocabulary, not a local literal. */
+const SOCKET_ROLE_BASE: Readonly<Record<VehicleSocketKind, string>> = Object.freeze({
+  chassis: KILN_SEMANTIC_ROLES.chassis,
+  axle: KILN_SEMANTIC_ROLES.axle,
+  seat: KILN_SEMANTIC_ROLES.seat,
+  contact: KILN_SEMANTIC_ROLES.contact,
+  steering: KILN_SEMANTIC_ROLES.steering,
+  propulsion: KILN_SEMANTIC_ROLES.propulsion,
+});
+
 function socketRole(kind: VehicleSocketKind, id: string): string {
-  if (kind === 'chassis') return 'chassis.main';
-  if (kind === 'axle') return `axle.${id}`;
-  return `${kind}.${id}`;
+  // The chassis socket is singular by construction, so it keeps a fixed role.
+  if (kind === 'chassis') return KILN_SEMANTIC_ROLES.chassisMain;
+  return semanticRole(SOCKET_ROLE_BASE[kind], id);
 }
 
 function createTypedSocket(
@@ -179,10 +196,12 @@ function createTypedSocket(
   };
   stampSemanticMetadataV1(
     node,
-    semantic([`socket.${kind}.${id}`, socketRole(kind, id)], {
+    semantic([semanticRole(KILN_SEMANTIC_ROLES.socket, kind, id), socketRole(kind, id)], {
       frames: [{ id: 'socket', translation: [0, 0, 0], rotation: [0, 0, 0, 1] }],
       sockets: [socket],
-      relationships: [{ kind: 'owned-by', target: 'vehicle.frame', targetType: 'role' }],
+      relationships: [
+        { kind: 'owned-by', target: KILN_SEMANTIC_ROLES.vehicleFrame, targetType: 'role' },
+      ],
     }),
   );
   parent.add(node);
@@ -198,7 +217,7 @@ export function createVehicleFrame(
   root.name = name;
   stampSemanticMetadataV1(
     root,
-    semantic(['vehicle.frame', 'vehicle.front.+x'], {
+    semantic([KILN_SEMANTIC_ROLES.vehicleFrame, KILN_SEMANTIC_ROLES.vehicleForward], {
       frames: [
         { id: 'origin', translation: [0, 0, 0], rotation: [0, 0, 0, 1] },
         { id: 'forward.+x', translation: [0, 0, 0], rotation: [0, 0, 0, 1] },
@@ -277,9 +296,11 @@ export function createWheelAssembly(
     steeringPivot.position.set(...(options.position ?? [0, 0, 0]));
     stampSemanticMetadataV1(
       steeringPivot,
-      semantic([`steering.pivot.${key}`], {
+      semantic([semanticRole(ROLE.steeringPivot, key)], {
         frames: [{ id: 'steering-axis.+y', translation: [0, 0, 0], rotation: [0, 0, 0, 1] }],
-        relationships: [{ kind: 'steers', target: `wheel.assembly.${key}`, targetType: 'role' }],
+        relationships: [
+          { kind: 'steers', target: semanticRole(ROLE.wheelAssembly, key), targetType: 'role' },
+        ],
       }),
     );
     root.add(steeringPivot);
@@ -292,9 +313,9 @@ export function createWheelAssembly(
     spinPivot,
     semantic(
       [
-        `wheel.assembly.${key}`,
-        `wheel.pivot.${key}`,
-        ...(options.loadBearing === false ? [] : [`wheel.load-bearing.${key}`]),
+        semanticRole(ROLE.wheelAssembly, key),
+        semanticRole(ROLE.wheelPivot, key),
+        ...(options.loadBearing === false ? [] : [semanticRole(ROLE.wheelLoadBearing, key)]),
       ],
       {
         frames: [
@@ -302,10 +323,10 @@ export function createWheelAssembly(
           { id: 'spin-axis.+z', translation: [0, 0, 0], rotation: [0, 0, 0, 1] },
         ],
         relationships: [
-          { kind: 'mounted-on', target: `axle.${index}`, targetType: 'role' },
-          { kind: 'contains', target: `wheel.tire.${key}`, targetType: 'role' },
-          { kind: 'contains', target: `wheel.rim.${key}`, targetType: 'role' },
-          { kind: 'contains', target: `wheel.hub.${key}`, targetType: 'role' },
+          { kind: 'mounted-on', target: semanticRole(ROLE.axle, index), targetType: 'role' },
+          { kind: 'contains', target: semanticRole(ROLE.wheelTire, key), targetType: 'role' },
+          { kind: 'contains', target: semanticRole(ROLE.wheelRim, key), targetType: 'role' },
+          { kind: 'contains', target: semanticRole(ROLE.wheelHub, key), targetType: 'role' },
         ],
       },
     ),
@@ -327,20 +348,26 @@ export function createWheelAssembly(
   hub.name = `Hub_${options.side}_${index}`;
   stampSemanticMetadataV1(
     tire,
-    semantic([`wheel.tire.${key}`], {
-      relationships: [{ kind: 'descends-from', target: `wheel.pivot.${key}`, targetType: 'role' }],
+    semantic([semanticRole(ROLE.wheelTire, key)], {
+      relationships: [
+        { kind: 'descends-from', target: semanticRole(ROLE.wheelPivot, key), targetType: 'role' },
+      ],
     }),
   );
   stampSemanticMetadataV1(
     rim,
-    semantic([`wheel.rim.${key}`], {
-      relationships: [{ kind: 'contained-by', target: `wheel.tire.${key}`, targetType: 'role' }],
+    semantic([semanticRole(ROLE.wheelRim, key)], {
+      relationships: [
+        { kind: 'contained-by', target: semanticRole(ROLE.wheelTire, key), targetType: 'role' },
+      ],
     }),
   );
   stampSemanticMetadataV1(
     hub,
-    semantic([`wheel.hub.${key}`], {
-      relationships: [{ kind: 'contained-by', target: `wheel.rim.${key}`, targetType: 'role' }],
+    semantic([semanticRole(ROLE.wheelHub, key)], {
+      relationships: [
+        { kind: 'contained-by', target: semanticRole(ROLE.wheelRim, key), targetType: 'role' },
+      ],
     }),
   );
   spinPivot.add(tire, rim, hub);
@@ -350,9 +377,9 @@ export function createWheelAssembly(
   contact.position.y = -radius;
   stampSemanticMetadataV1(
     contact,
-    semantic([`wheel.contact.${key}`, `contact.${key}`], {
+    semantic([semanticRole(ROLE.wheelContact, key), semanticRole(ROLE.contact, key)], {
       frames: [{ id: 'contact', translation: [0, 0, 0], rotation: [0, 0, 0, 1] }],
-      relationships: [{ kind: 'supports', target: 'vehicle.frame', targetType: 'role' }],
+      relationships: [{ kind: 'supports', target: ROLE.vehicleFrame, targetType: 'role' }],
     }),
   );
   spinPivot.add(contact);
@@ -486,24 +513,24 @@ function resolved(
     ...(tire ? { radius: tire.radius, width: tire.width } : {}),
     ...(rim ? { rimRadius: rim.radius, rimWidth: rim.width } : {}),
     ...(hub ? { hubRadius: hub.radius, hubWidth: hub.width } : {}),
-    loadBearing: roles(pivot).some((role) => role.startsWith('wheel.load-bearing.')),
+    loadBearing: hasSemanticRole(roles(pivot), ROLE.wheelLoadBearing),
   };
 }
 
 function semanticAssemblies(root: THREE.Object3D): ResolvedWheelAssembly[] {
   const result: ResolvedWheelAssembly[] = [];
   root.traverse((node) => {
-    const assemblyRole = roles(node).find((role) => role.startsWith('wheel.assembly.'));
+    const assemblyRole = roles(node).find((role) => semanticRoleMatches(role, ROLE.wheelAssembly));
     if (!assemblyRole) return;
     const parsed = parseWheelRole(assemblyRole);
     result.push(
       resolved('semantic', assemblyRole, node, node, {
         ...parsed,
-        tire: descendantWithRole(node, 'wheel.tire.'),
-        rim: descendantWithRole(node, 'wheel.rim.'),
-        hub: descendantWithRole(node, 'wheel.hub.'),
-        contact: descendantWithRole(node, 'wheel.contact.'),
-        steeringPivot: ancestorWithRole(node, 'steering.pivot.'),
+        tire: descendantWithRole(node, `${ROLE.wheelTire}.`),
+        rim: descendantWithRole(node, `${ROLE.wheelRim}.`),
+        hub: descendantWithRole(node, `${ROLE.wheelHub}.`),
+        contact: descendantWithRole(node, `${ROLE.wheelContact}.`),
+        steeringPivot: ancestorWithRole(node, `${ROLE.steeringPivot}.`),
       }),
     );
   });
@@ -574,8 +601,8 @@ export function hasCanonicalVehicleFront(root: THREE.Object3D): boolean {
   root.traverse((node) => {
     const metadata = readSemanticMetadataV1(node);
     if (
-      metadata?.roles.includes('vehicle.frame') &&
-      metadata.roles.includes('vehicle.front.+x') &&
+      metadata?.roles.includes(ROLE.vehicleFrame) &&
+      metadata.roles.includes(ROLE.vehicleForward) &&
       metadata.frames.some((frame) => frame.id === 'forward.+x')
     ) {
       found = true;

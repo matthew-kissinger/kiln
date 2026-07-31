@@ -2,6 +2,8 @@
 import * as THREE from 'three';
 
 import {
+  KILN_SEMANTIC_ROLES,
+  semanticRole,
   stampSemanticMetadataV1,
   type SemanticLocalFrameV1,
   type SemanticRelationshipV1,
@@ -313,7 +315,10 @@ function buildRoof(
   if (parent) parent.add(root);
   stampSemanticMetadataV1(
     root,
-    roleMetadata(['roof.assembly'], [relationship('separable-from', 'architecture.shell.gable')]),
+    roleMetadata(
+      [semanticRole(KILN_SEMANTIC_ROLES.roof, 'assembly')],
+      [relationship('separable-from', 'architecture.shell.gable')],
+    ),
   );
 
   const faces = [buildFace(root, profile, 1), buildFace(root, profile, -1)] as const;
@@ -342,11 +347,15 @@ function buildRoof(
     stampSemanticMetadataV1(
       mesh,
       roleMetadata(
-        [`roof.slope.${face.side}`],
+        [semanticRole(KILN_SEMANTIC_ROLES.roof, 'slope', face.side)],
         [
           relationship(
             'adjacent-to',
-            `roof.slope.${face.side === 'positive' ? 'negative' : 'positive'}`,
+            semanticRole(
+              KILN_SEMANTIC_ROLES.roof,
+              'slope',
+              face.side === 'positive' ? 'negative' : 'positive',
+            ),
           ),
           relationship('coverage-of', coveredWall),
           relationship('separable-from', 'architecture.shell.gable'),

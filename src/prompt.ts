@@ -312,7 +312,8 @@ If any view looks wrong, fix the code (kiln_edit or kiln_draft) and re-render be
 If a view reveals a suspect REGION — a floating part, a bad joint, a wrong proportion — call
 kiln_inspect with that part's name for a single framed close-up before editing; prefer it over
 re-reading the whole grid for fine detail. An unresolved name returns the list of part names to
-retry with.
+retry with. If surrounding geometry blocks the part from every angle, pass isolate:true to hide
+everything else.
 If this is an ANIMATED CHARACTER, also call kiln_screenshot_animation on your key clips
 before finalizing — at least the walk and the main attack — from the right (side) camera,
 and check the MOTION (the static render cannot show it):
@@ -332,7 +333,8 @@ three roof-off views the exterior six cannot, and you check the INSIDE:
   floating or sunk through it; the walls enclose a real volume with standing headroom.
 - Eye-level (looking in through the doorway, near walls removed): the doorway is a REAL gap you
   could walk through (not a panel), and no glass or wall is buried inside a solid mass.
-If roofsHidden comes back 0 the roof was not named Roof — rename it so the tool can lift it. Fix any
+If roofsHidden comes back 0 no roof could be lifted — build the roof with a roof primitive
+(createRoofPlanes / createGableRoof), which tags it so the tool finds it whatever it is named. Fix any
 sealed, buried, or floating interior and view it again.
 </visual-qa>`;
 

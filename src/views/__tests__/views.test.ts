@@ -1,5 +1,6 @@
 import { describe, expect, test } from 'bun:test';
 import sharp from 'sharp';
+import * as THREE from 'three';
 import {
   coverage,
   rasterizeView,
@@ -365,5 +366,37 @@ describe('renderInteriorGrid', () => {
     expect(grid.roofsHidden).toBe(0);
     expect(grid.wallsHidden).toBe(0);
     expect(grid.png.length).toBeGreaterThan(100);
+  });
+
+  test('an explicit nodeName stays an exact-name override, semantics ignored', async () => {
+    // The roof carries roof.* roles AND is named Roof; naming a node that does
+    // not exist must NOT silently fall through to the semantic path, or the
+    // override would be unable to report its own miss.
+    const { root } = await executeKilnCode(BUILDING_CODE);
+    expect((await renderInteriorGrid(root, { size: 48, nodeName: 'Lid' })).roofsHidden).toBe(0);
+    expect((await renderInteriorGrid(root, { size: 48, nodeName: 'Roof' })).roofsHidden).toBe(1);
+  });
+
+  test('legacy-name fallback is narrow: Roof_Ridge lifts, RoofTop does not', async () => {
+    // Deliberate behavior NARROWING vs the old unconditional hideNodeInScene
+    // pass, whose startsWith('roof') also swept up RoofTop/RoofRack/Roofing.
+    // Assets built with a roof primitive are unaffected — they carry a role and
+    // never reach this fallback. Hand-rolled groups named like a roof but not
+    // named "Roof" no longer lift; that is the price of not hiding a rooftop
+    // garden along with the roof.
+    const build = (name: string): THREE.Group => {
+      const scene = new THREE.Group();
+      const lid = new THREE.Group();
+      lid.name = name;
+      lid.add(new THREE.Mesh(new THREE.BoxGeometry(2, 0.2, 2)));
+      scene.add(lid);
+      return scene;
+    };
+    expect((await renderInteriorGrid(build('Roof_Ridge'), { size: 32 })).roofsHidden).toBe(1);
+    expect((await renderInteriorGrid(build('RoofTop'), { size: 32 })).roofsHidden).toBe(0);
+    // The override is still available for exactly this case.
+    expect(
+      (await renderInteriorGrid(build('RoofTop'), { size: 32, nodeName: 'RoofTop' })).roofsHidden,
+    ).toBe(1);
   });
 });
