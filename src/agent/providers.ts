@@ -107,6 +107,18 @@ export interface OpenRouterModelOptions {
    *  outright; other OpenRouter models don't need this. Model-scoped by the
    *  caller (see the 'openrouter' case below), default false. */
   splitToolResultImages?: boolean;
+  /** Set OpenRouter's top-level `cache_control: {type:'ephemeral'}` directive,
+   *  which turns on Anthropic AUTOMATIC prompt caching for the request — the
+   *  upstream picks the breakpoints, so the stable tools+system prefix is cached
+   *  without us placing any block. Anthropic-hosted models only (the provider
+   *  documents it as such); harmless-but-pointless elsewhere, so callers gate it
+   *  on the slug's vendor segment (see the 'openrouter' case below).
+   *
+   *  This is a DIFFERENT mechanism from {@link toCachedSystemPrompt}'s explicit
+   *  `CachePointBlock`, and the two must not be conflated: the Vercel bridge
+   *  drops cache-point blocks outright (@strands-agents/sdk vercel.js), which is
+   *  exactly why the OpenRouter fix lives here in request settings instead. */
+  promptCache?: boolean;
 }
 
 /**
@@ -116,10 +128,10 @@ export interface OpenRouterModelOptions {
 export function makeOpenRouterModel(opts: OpenRouterModelOptions): Model {
   const openrouter = createOpenRouter({ apiKey: opts.apiKey ?? process.env['OPENROUTER_API_KEY'] });
   let provider = ensureStreamStart(
-    openrouter.chat(
-      opts.modelId,
-      opts.reasoning ? { reasoning: opts.reasoning } : {},
-    ) as LanguageModelV3,
+    openrouter.chat(opts.modelId, {
+      ...(opts.reasoning ? { reasoning: opts.reasoning } : {}),
+      ...(opts.promptCache ? { cache_control: { type: 'ephemeral' } } : {}),
+    }) as LanguageModelV3,
   );
   if (opts.splitToolResultImages) provider = splitToolResultImages(provider);
   return new VercelModel({
@@ -349,6 +361,13 @@ export function makeKilnModel(desc: KilnModelDescriptor, opts: MakeKilnModelOpti
         // Together's Inkling hosting rejects images embedded in a tool-result
         // message (verified live 2026-07-19) — see split-tool-result-images.ts.
         ...(desc.model === 'thinkingmachines/inkling' ? { splitToolResultImages: true } : {}),
+        // Anthropic automatic prompt caching. Gating on the slug's vendor segment
+        // is not a heuristic: it IS OpenRouter's routing key, and the capability
+        // is vendor-scoped by construction (@openrouter/ai-sdk-provider documents
+        // cache_control as Anthropic-only). Deliberately NOT a ModelDescriptor
+        // capability field — that type crosses the AgentCore wire, and this value
+        // is 100% derivable from a model id the engine already holds.
+        ...(desc.model.startsWith('anthropic/') ? { promptCache: true } : {}),
       });
     }
     default: {
@@ -374,6 +393,13 @@ export function makeKilnModel(desc: KilnModelDescriptor, opts: MakeKilnModelOpti
  * - GoogleModel joins the text blocks and DROPS cache points (Gemini caching is
  *   implicit); OpenAI warns-and-ignores them; the Vercel bridge only forwards
  *   text. Those providers get the plain string so nothing changes for them.
+ *
+ * This is a statement about the ADAPTER, not about the upstream vendor, so it
+ * stays false for OpenRouter-hosted Anthropic even though that upstream does
+ * support caching: emitting a `CachePointBlock` the Vercel bridge discards
+ * (vercel.js drops them and logs a warning) would be strictly worse than
+ * today's silent no-op. OpenRouter gets caching through a different seam —
+ * {@link OpenRouterModelOptions.promptCache}.
  */
 export function modelConsumesSystemPromptCachePoints(model: unknown): boolean {
   return model instanceof AnthropicModel || model instanceof BedrockModel;

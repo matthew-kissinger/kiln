@@ -1,4 +1,4 @@
-import { readSemanticMetadataV1FromExtras } from '../contracts';
+import { KILN_SEMANTIC_ROLES, readSemanticMetadataV1FromExtras } from '../contracts';
 
 export interface ArchitectureViewNode {
   name?: string;
@@ -15,7 +15,11 @@ export interface ArchitectureRoofSelection {
   nodes: ArchitectureViewNode[];
 }
 
-export const ARCHITECTURE_ROOF_ROLE_PREFIXES = Object.freeze(['roof.', 'architecture.roof.']);
+/** Derived from the shared vocabulary so a role rename cannot desync the views. */
+export const ARCHITECTURE_ROOF_ROLE_PREFIXES = Object.freeze([
+  `${KILN_SEMANTIC_ROLES.roof}.`,
+  `${KILN_SEMANTIC_ROLES.architectureRoof}.`,
+]);
 
 function nodeRoles(node: ArchitectureViewNode): readonly string[] {
   return readSemanticMetadataV1FromExtras(node.userData ?? {})?.roles ?? [];
