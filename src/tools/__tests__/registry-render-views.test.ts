@@ -31,6 +31,12 @@ describe('kilnRenderViewsDef (unified kiln_render)', () => {
     expect(kilnToolRegistry.filter((d) => d === kilnRenderViewsDef)).toEqual([]);
   });
 
+  test('describes the conditional GPU PBR path and the flat-shaded CPU fallback honestly', () => {
+    expect(kilnRenderViewsDef.description).toContain('GPU PBR shading');
+    expect(kilnRenderViewsDef.description).toContain('textured or metallic materials');
+    expect(kilnRenderViewsDef.description).toContain('flat-shaded CPU render');
+  });
+
   test('valid code returns metrics AND the six-view grid PNG from one execution', async () => {
     const out = (await kilnRenderViewsDef.run({ code: BOX_CODE })) as KilnRenderViewsResult;
     expect(out.ok).toBe(true);
