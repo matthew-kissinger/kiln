@@ -23,6 +23,7 @@ import {
 } from './raster';
 import { encodePng } from './png';
 import { compositeCellGrid } from './grid';
+import { resolveCapture, type CaptureConfig, type CapturePreset } from './capture';
 import {
   prepareClip,
   poseSceneAtTime,
@@ -57,6 +58,16 @@ export {
 export type { RasterOptions, ViewSpec, ViewGridVariant } from './raster';
 export { encodePng, decodePng } from './png';
 export type { DecodedPng } from './png';
+export {
+  CAPTURE_PRESETS,
+  CaptureConfigError,
+  DEFAULT_CAPTURE_PRESET,
+  MAX_CAPTURE_CELLS,
+  captureCellLabel,
+  describeCapture,
+  resolveCapture,
+} from './capture';
+export type { CaptureCell, CaptureConfig, CapturePreset, ResolvedCapture } from './capture';
 export { compositeCellGrid, compositeViewPngGrid, GRID_COLS } from './grid';
 export type { ComposedCellGrid, ComposedPngGrid } from './grid';
 export { CPU_RASTER_RENDERER_ID } from './renderer-id';
@@ -244,12 +255,22 @@ export interface ViewGridResult {
   height: number;
   /** View names in grid order (row-major). */
   views: string[];
+  /** Grid shape actually rendered by the model-facing contact sheet — the
+   *  default reports `3x2`. Absent on the fixed diagnostic layouts (interior
+   *  cutaway, animation strip), which have their own row shape and would have
+   *  to invent a preset name to report one. */
+  capture?: { preset: CapturePreset; cols: number; cells: number };
 }
 
 export interface ViewGridOptions extends RasterOptions {
   views?: ViewSpec[];
   /** Snap flat-color materials before rasterization. Mutates the provided scene root. */
   snapPalette?: readonly SnapPaletteSlot[];
+  /** Model-chosen grid shape and cameras. Omit for the shipped 3x2 contact sheet.
+   *  Ignored when `views` is passed explicitly (internal callers win). */
+  capture?: CaptureConfig;
+  /** Column count override. Defaults to the capture preset's columns. */
+  cols?: number;
 }
 
 // H-30: kiln-frame axis gnomon colors (+X fwd red, +Y up green, +Z right blue).
@@ -334,27 +355,67 @@ export async function renderViewGrid(
   // swaps the 3/4 cell to the opposite-rear azimuth) so a bench arm can flip the
   // grid per-process without any wire or tool-schema change. Explicit opts.views
   // always wins; unset/unknown env keeps SIX_VIEWS.
-  const views = opts.views ?? resolveGridViews(process.env['KILN_GRID_VARIANT']);
+  //
+  // T3.2: `capture` lets the model pick the grid shape and per-cell cameras.
+  // The env variant and an explicit `views` both still win, in that order of
+  // specificity, so no internal caller changes behavior. With `capture`
+  // omitted this resolves to SIX_VIEWS at 3 columns — the previous constants.
+  const resolved = resolveCapture(opts.capture);
+  const views =
+    opts.views ??
+    (opts.capture ? resolved.views : resolveGridViews(process.env['KILN_GRID_VARIANT']));
+  const cols = opts.cols ?? resolved.cols;
   if (opts.snapPalette?.length) snapSceneToPalette(root, opts.snapPalette);
+
+  // Per-cell zoom needs a shared frame box; measuring is only worth it when a
+  // zoom was actually requested. Passing frameBounds unconditionally would
+  // route every render through a different framing path than before and break
+  // the byte-identity guarantee for the default grid.
+  const wantsZoom = resolved.zooms.some((z) => z !== undefined);
+  const sceneBounds = wantsZoom ? measureBounds(root) : undefined;
 
   const labelScale = Math.max(2, Math.round(size / 96));
   const cells: Uint8Array[] = [];
   for (let vi = 0; vi < views.length; vi++) {
-    const cell = rasterizeView(root, views[vi]!.dir, { size, backfaceCull: opts.backfaceCull });
+    const zoom = resolved.zooms[vi];
+    const cell = rasterizeView(root, views[vi]!.dir, {
+      size,
+      backfaceCull: opts.backfaceCull,
+      ...(sceneBounds && zoom !== undefined
+        ? { frameBounds: expandFrameBounds(sceneBounds, zoom) }
+        : {}),
+    });
     // H-30: stamp the view name + axis gnomon into the cell (small, corner-
     // anchored, away from the centered silhouette — SeeAct caveat).
     stampLabel(cell, size, size, labelScale, labelScale, views[vi]!.name, labelScale);
     stampAxisGnomon(cell, size, views[vi]!.dir);
     cells.push(cell);
   }
-  const { rgb, width, height } = compositeCellGrid(cells, size);
+  const { rgb, width, height } = compositeCellGrid(cells, size, cols);
 
   return {
     png: encodePng(rgb, width, height),
     width,
     height,
     views: views.map((v) => v.name),
+    capture: { preset: resolved.preset, cols, cells: views.length },
   };
+}
+
+/** Grow a bounds box about its center — the per-cell `zoom` padding. */
+function expandFrameBounds(
+  b: { min: [number, number, number]; max: [number, number, number] },
+  factor: number,
+): { min: [number, number, number]; max: [number, number, number] } {
+  const min: [number, number, number] = [0, 0, 0];
+  const max: [number, number, number] = [0, 0, 0];
+  for (let a = 0; a < 3; a++) {
+    const center = (b.min[a]! + b.max[a]!) / 2;
+    const half = ((b.max[a]! - b.min[a]!) / 2) * factor;
+    min[a] = center - half;
+    max[a] = center + half;
+  }
+  return { min, max };
 }
 
 /** Execute a Kiln program and render its scene into the 3x2 grid. */

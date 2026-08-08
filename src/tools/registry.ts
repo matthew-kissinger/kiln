@@ -96,6 +96,58 @@ const screenshotInput = z.object({
   code: z.string().describe('Kiln source code to execute and render to a six-view image grid.'),
 });
 
+/**
+ * `kiln_render` (unified surface only) additionally accepts a capture config.
+ * Kept off the shared `renderInput` on purpose: the four-tool baseline's
+ * metrics-only `kiln_render` produces no image, so a grid shape would be a
+ * meaningless argument there and would change that schema for no reason.
+ */
+const captureInput = z
+  .object({
+    preset: z
+      .enum(['1x1', '1x2', '2x1', '3x1', '2x2', '3x2', '3x3'])
+      .optional()
+      .describe(
+        'Grid shape as COLSxROWS. Default 3x2 (the six-view contact sheet). Use a smaller grid ' +
+          'for a simple or symmetric object where six cells repeat each other, and 3x3 when you ' +
+          'genuinely need more angles than six.',
+      ),
+    cells: z
+      .array(
+        z.object({
+          azimuthDeg: z.number().describe('0 = front, 90 = right, 180 = back, 270 = left. Wraps.'),
+          elevationDeg: z
+            .number()
+            .describe(
+              '0 = eye level, positive looks down, negative from below. Clamped to -89..89.',
+            ),
+          zoom: z
+            .number()
+            .optional()
+            .describe(
+              'Padding multiplier around the asset bounds for this cell only. Omit for the ' +
+                'default framing; below 1 crops in, above 1 pulls back.',
+            ),
+          name: z
+            .string()
+            .optional()
+            .describe('Cell label. Auto-derived from the angles if omitted.'),
+        }),
+      )
+      .optional()
+      .describe(
+        'One camera per cell, in row-major order. Omit to use the preset default cameras. ' +
+          'Must not exceed the preset capacity (max 9 overall).',
+      ),
+  })
+  .optional()
+  .describe(
+    'Optional. Choose the contact-sheet shape and cameras. Omit it entirely for the standard ' +
+      'six-view 3x2 grid, which is the right default for most assets.',
+  );
+
+const renderViewsInput = renderInput.extend({ capture: captureInput });
+
 const screenshotAnimationInput = z.object({
   code: z
     .string()
@@ -308,8 +360,10 @@ async function runRender(
 
 export interface KilnScreenshotResult {
   ok: boolean;
-  /** View names in grid order (row-major): Front, Right, Back, Left, Top, 3/4. */
+  /** View names in grid order (row-major). Defaults to Front, Right, Back, Left, Top, 3/4. */
   views?: string[];
+  /** Grid shape actually rendered — echoes the capture config back, or `3x2` by default. */
+  capture?: { preset: string; cols: number; cells: number };
   width?: number;
   height?: number;
   /** The 3x2 grid PNG, base64-encoded (transports with image support strip this and attach the bytes). */
@@ -332,6 +386,8 @@ async function runScreenshot(
     const { renderViewGrid } = await import('../views');
     const { root } = await executeKilnCode(input.code);
     const warnings = inspectSceneStructure(root, { category: trustedCategory(context) });
+    // No capture config here on purpose: kiln_screenshot belongs to the frozen
+    // four-tool baseline, whose schemas stay byte-for-byte unchanged.
     const grid = await renderViewGrid(root);
     return {
       ok: true,
@@ -374,8 +430,10 @@ export interface KilnRenderViewsResult {
   instanceability?: { grade: string; summary: string };
   /** Structured deterministic report; five dimensions remain separate. */
   qaReport?: AssetQaReportV1;
-  /** View names in grid order (row-major): Front, Right, Back, Left, Top, 3/4. */
+  /** View names in grid order (row-major). Defaults to Front, Right, Back, Left, Top, 3/4. */
   views?: string[];
+  /** Grid shape actually rendered — echoes the capture config back, or `3x2` by default. */
+  capture?: { preset: string; cols: number; cells: number };
   gridWidth?: number;
   gridHeight?: number;
   /** The 3x2 grid PNG, base64-encoded (transports with image support strip this and attach the bytes). */
@@ -395,7 +453,7 @@ export interface KilnRenderViewsResult {
  * bundle graph.
  */
 async function runRenderViews(
-  input: z.infer<typeof renderInput>,
+  input: z.infer<typeof renderViewsInput>,
   context: KilnToolContext,
 ): Promise<KilnRenderViewsResult> {
   try {
@@ -412,7 +470,7 @@ async function runRenderViews(
       ...(category ? { category } : {}),
       ...(context.intent ? { intent: context.intent } : {}),
     });
-    const grid = await renderViewGrid(root);
+    const grid = await renderViewGrid(root, input.capture ? { capture: input.capture } : {});
 
     const warnings = [...structuralWarnings, ...rendered.warnings];
 
@@ -432,6 +490,7 @@ async function runRenderViews(
           }
         : {}),
       views: grid.views,
+      ...(grid.capture ? { capture: grid.capture } : {}),
       gridWidth: grid.width,
       gridHeight: grid.height,
       pngBase64: grid.png.toString('base64'),
@@ -458,6 +517,15 @@ const KILN_RENDER_VIEWS_DESCRIPTION =
   'Row 1 = Front (camera on +X, the nose/muzzle should face you), Right (+Z, the long profile), Back (-X); ' +
   'row 2 = Left (-Z), Top (+Y, check symmetry), 3/4 perspective (check part contact and overall read). ' +
   'Use it to confirm the model builds and to verify orientation (+X forward), attachment (no floating parts), proportion, and silhouette. ' +
+  'That default grid is right for most assets — omit `capture` and you get it. ' +
+  'Pass `capture` when the default is a poor fit: `{preset:"2x2"}` or `{preset:"1x1"}` for a simple ' +
+  'or symmetric object whose six cells just repeat each other (fewer, larger cells read better), ' +
+  '`{preset:"3x3"}` when six angles genuinely are not enough. ' +
+  'For full control give `capture.cells` — one camera per cell in row-major order, each ' +
+  '{azimuthDeg, elevationDeg, zoom?}: azimuth 0 = front, 90 = right, 180 = back, 270 = left; ' +
+  'elevation 0 = eye level, positive looks down. Use it to aim every cell at what actually needs ' +
+  'checking — a seam, an underside, a joint the standard six leave occluded — instead of spending ' +
+  'cells on angles that show nothing. Max 9 cells. The reply echoes the grid shape it rendered. ' +
   'If the build fails you get an error and NO image — fix the code and render again. Flat-shaded CPU render; writes no files.';
 
 /** Create the unified render/view definition with host-owned QA context. */
@@ -465,8 +533,8 @@ export function createKilnRenderViewsDef(context: KilnToolContext = {}): KilnToo
   return {
     name: 'kiln_render',
     description: KILN_RENDER_VIEWS_DESCRIPTION,
-    inputSchema: renderInput,
-    run: async (input) => runRenderViews(renderInput.parse(input), context),
+    inputSchema: renderViewsInput,
+    run: async (input) => runRenderViews(renderViewsInput.parse(input), context),
     media: screenshotMedia,
   };
 }
