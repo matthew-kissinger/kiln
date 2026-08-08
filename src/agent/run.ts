@@ -35,6 +35,7 @@ import {
 } from '../prompt';
 import type { AssetCategory, AssetStyle } from '../prompt';
 import type { AssetIntentV1 } from '../contracts';
+import type { KilnToolContext } from '../tools/registry';
 import type { SubmitSink, EditSink, UnifiedSink, EditRecord, KilnRenderCandidate } from './tools';
 import {
   resolveToolSurface,
@@ -85,7 +86,8 @@ function imageFormatFromMime(mime: string): 'png' | 'jpeg' | 'gif' | 'webp' {
   return 'png';
 }
 
-export interface RunKilnAgentOptions {
+export interface RunKilnAgentOptions
+  extends Pick<KilnToolContext, 'viewRenderPort' | 'viewRenderTimeoutMs' | 'onViewsRendered'> {
   /** A constructed Strands `Model` instance (provider-agnostic). */
   model: unknown;
   /** Natural-language description of the asset to build. */
