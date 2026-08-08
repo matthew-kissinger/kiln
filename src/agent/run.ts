@@ -32,6 +32,8 @@ import {
   KILN_EDIT_DIRECTIVE,
   KILN_REFINE_DIRECTIVE_UNIFIED,
   KILN_EDIT_DIRECTIVE_UNIFIED,
+  KILN_REFERENCE_IMAGE_DIRECTIVE,
+  KILN_REFERENCE_IMAGE_DIRECTIVE_UNIFIED,
 } from '../prompt';
 import type { AssetCategory, AssetStyle } from '../prompt';
 import type { AssetIntentV1 } from '../contracts';
@@ -344,8 +346,11 @@ export async function runKilnAgent(opts: RunKilnAgentOptions): Promise<RunKilnAg
         ...(opts.exemplarCode ? { exemplarCode: opts.exemplarCode } : {}),
       }) +
       (opts.inputImage
-        ? '\n\nA reference image of the desired asset is attached. Match its overall form, ' +
-          'proportions, and silhouette; treat the text above as the intent and any specific changes.'
+        ? `\n\n${
+            surface === 'unified'
+              ? KILN_REFERENCE_IMAGE_DIRECTIVE_UNIFIED
+              : KILN_REFERENCE_IMAGE_DIRECTIVE
+          }`
         : '') +
       reviewNote;
 
