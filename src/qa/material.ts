@@ -107,7 +107,8 @@ function validateTextureSlot(
       profile: 'material.portablePbr',
       message: `${slot} texture has no verified decoded/exportable image payload.`,
       affected: affected(mesh, material, texture, slot),
-      repairText: 'Load a decodable PNG, JPEG, or WebP with loadTexture() before assigning it.',
+      repairText:
+        'Load a decodable PNG, JPEG, or WebP with loadTexture() before assigning it. A texture built in code is baked to PNG automatically, so reaching this means its pixels were unreadable — it must be a DataTexture holding 8-bit RGB or RGBA bytes, not float data or an image element.',
     });
   }
   if (actual !== expected) {
@@ -119,7 +120,7 @@ function validateTextureSlot(
       message: `${slot} texture must use ${expected} data interpretation, not ${actual}.`,
       affected: affected(mesh, material, texture, slot),
       measurement: { name: 'colorSpace', actual, expected },
-      repairText: `Reload the texture with loadTexture(..., { usage: '${slot === 'map' ? 'albedo' : slot}' }).`,
+      repairText: `Reload the texture with loadTexture(..., { usage: '${slot === 'map' ? 'albedo' : slot}' }), or for a texture built in code set texture.colorSpace = ${expected === 'srgb' ? 'THREE.SRGBColorSpace' : 'THREE.NoColorSpace'} — it is never set for you, because reinterpreting an author's pixels silently is exactly the failure this check exists to catch.`,
     });
   }
 
