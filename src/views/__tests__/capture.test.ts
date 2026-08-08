@@ -15,8 +15,10 @@ import {
   captureCellLabel,
   describeCapture,
   resolveCapture,
+  resolveGridCapture,
 } from '../capture';
-import { SIX_VIEWS, orbitAnglesOf } from '../raster';
+import { GRID_BACKGROUND_HEX, GRID_BACKGROUND_RGB } from '../background';
+import { SIX_VIEWS, SIX_VIEWS_REAR_QUARTER, orbitAnglesOf } from '../raster';
 import { renderViewGrid } from '../index';
 import { boxGeo, createPart, createRoot, cylinderGeo, gameMaterial } from '../../primitives';
 
@@ -127,6 +129,67 @@ describe('resolveCapture', () => {
     );
     expect(() => resolveCapture({ cells: [{ azimuthDeg: 0, elevationDeg: 0, zoom: 0 }] })).toThrow(
       /zoom must be a positive number/,
+    );
+  });
+});
+
+describe('resolveGridCapture', () => {
+  // T3.3: the one precedence rule both grid producers (CPU rasterizer and GPU
+  // render port) share. If they disagreed, a run's artifact would change shape
+  // depending on whether a GPU happened to be reachable.
+  const KEY = 'KILN_GRID_VARIANT';
+
+  it('with no config, the env variant selects the default cameras', () => {
+    const plain = resolveGridCapture(undefined, undefined);
+    expect(plain.views).toBe(SIX_VIEWS);
+    expect(plain.preset).toBe('3x2');
+
+    const rear = resolveGridCapture(undefined, 'rear-quarter');
+    expect(rear.views).toBe(SIX_VIEWS_REAR_QUARTER);
+    expect(rear.cols).toBe(3);
+    // Still the shipped shape — the variant swaps cameras, not the layout.
+    expect(rear.preset).toBe('3x2');
+
+    // An unknown variant can never change what the agent sees, and keeps the
+    // exact array identity the byte-identity tests pin.
+    expect(resolveGridCapture(undefined, 'nonsense').views).toBe(SIX_VIEWS);
+  });
+
+  it('an explicit config wins over the env variant instead of being rewritten by it', () => {
+    const r = resolveGridCapture({ preset: '3x2' }, 'rear-quarter');
+    expect(r.views).toBe(SIX_VIEWS);
+    const cells = resolveGridCapture(
+      { cells: [{ azimuthDeg: 12, elevationDeg: 0 }] },
+      'rear-quarter',
+    );
+    expect(cells.views).toHaveLength(1);
+    expect(orbitAnglesOf(cells.views[0]!.dir).azimuthDeg).toBeCloseTo(12, 1);
+  });
+
+  it('renderViewGrid reads the env through this same helper', async () => {
+    const saved = process.env[KEY];
+    try {
+      process.env[KEY] = 'rear-quarter';
+      const g = await renderViewGrid(scene(), { size: 32 });
+      expect(g.views).toEqual(SIX_VIEWS_REAR_QUARTER.map((v) => v.name));
+      // An explicit capture is NOT rewritten by the env.
+      const explicit = await renderViewGrid(scene(), { size: 32, capture: { preset: '3x2' } });
+      expect(explicit.views).toEqual(SIX_VIEWS.map((v) => v.name));
+    } finally {
+      if (saved === undefined) delete process.env[KEY];
+      else process.env[KEY] = saved;
+    }
+  });
+});
+
+describe('grid background', () => {
+  it('the hex and rgb forms are the same color', () => {
+    // The GPU render port sends the hex; the rasterizer clears to the rgb. They
+    // drifted once (#202225 vs #1a1a1a) and the sheet's backdrop depended on
+    // whether a serverless worker was warm.
+    const [r, g, b] = GRID_BACKGROUND_RGB;
+    expect(GRID_BACKGROUND_HEX).toBe(
+      `#${[r, g, b].map((c) => c.toString(16).padStart(2, '0')).join('')}`,
     );
   });
 });

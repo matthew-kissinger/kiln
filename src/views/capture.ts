@@ -23,7 +23,7 @@
  * tall pair.
  */
 
-import { SIX_VIEWS, type ViewSpec, orbitAnglesOf, orbitDir } from './raster';
+import { SIX_VIEWS, type ViewSpec, orbitAnglesOf, orbitDir, resolveGridViews } from './raster';
 
 /** Grid shapes the model may ask for. `COLS x ROWS`. */
 export type CapturePreset = '1x1' | '1x2' | '2x1' | '3x1' | '2x2' | '3x2' | '3x3';
@@ -127,6 +127,18 @@ export interface ResolvedCapture {
   isDefault: boolean;
 }
 
+/**
+ * The layout a contact sheet was actually produced in, reported alongside it.
+ *
+ * Shared by the tool result, the `views` artifact and the render port so a
+ * consumer never has to infer the grid shape by dividing image dimensions.
+ */
+export interface CaptureShape {
+  preset: CapturePreset;
+  cols: number;
+  cells: number;
+}
+
 export class CaptureConfigError extends Error {}
 
 /**
@@ -212,6 +224,31 @@ export function resolveCapture(config?: CaptureConfig): ResolvedCapture {
     zooms: new Array(PRESET_VIEWS[chosen].length).fill(undefined),
     isDefault: chosen === DEFAULT_CAPTURE_PRESET,
   };
+}
+
+/**
+ * Resolve a capture config the way every grid producer must (T3.3).
+ *
+ * There are two producers of the same contact sheet — the CPU rasterizer and the
+ * GPU render port — and they have to agree on the layout down to the cell order,
+ * or a run's artifact silently changes shape depending on whether a GPU happened
+ * to be reachable. This is the one function both call, so the precedence rule
+ * exists once:
+ *
+ *   capture supplied  -> exactly what it asks for
+ *   capture omitted   -> the `KILN_GRID_VARIANT` view set at the shipped 3 cols
+ *
+ * The env variant only applies to the omitted case on purpose: it swaps the
+ * *default* six cameras for a bench arm, and silently rewriting a caller's
+ * explicitly-requested angles would make the request a lie.
+ */
+export function resolveGridCapture(config?: CaptureConfig, envVariant?: string): ResolvedCapture {
+  const resolved = resolveCapture(config);
+  if (config) return resolved;
+  const views = resolveGridViews(envVariant);
+  // Identity when the variant is unset/unknown, so the default stays the exact
+  // object the byte-identity tests pin.
+  return views === resolved.views ? resolved : { ...resolved, views };
 }
 
 /** Describe a resolved capture for the tool result, in the model's own coordinates. */

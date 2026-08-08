@@ -17,13 +17,12 @@ import {
   rasterizeView,
   measureBounds,
   hideNodeInScene,
-  resolveGridViews,
   type RasterOptions,
   type ViewSpec,
 } from './raster';
 import { encodePng } from './png';
 import { compositeCellGrid } from './grid';
-import { resolveCapture, type CaptureConfig, type CapturePreset } from './capture';
+import { resolveGridCapture, type CaptureConfig, type CaptureShape } from './capture';
 import {
   prepareClip,
   poseSceneAtTime,
@@ -56,6 +55,7 @@ export {
   MAX_ELEVATION_DEG,
 } from './raster';
 export type { RasterOptions, ViewSpec, ViewGridVariant } from './raster';
+export { GRID_BACKGROUND_HEX, GRID_BACKGROUND_RGB } from './background';
 export { encodePng, decodePng } from './png';
 export type { DecodedPng } from './png';
 export {
@@ -66,8 +66,15 @@ export {
   captureCellLabel,
   describeCapture,
   resolveCapture,
+  resolveGridCapture,
 } from './capture';
-export type { CaptureCell, CaptureConfig, CapturePreset, ResolvedCapture } from './capture';
+export type {
+  CaptureCell,
+  CaptureConfig,
+  CapturePreset,
+  CaptureShape,
+  ResolvedCapture,
+} from './capture';
 export { compositeCellGrid, compositeViewPngGrid, GRID_COLS } from './grid';
 export type { ComposedCellGrid, ComposedPngGrid } from './grid';
 export { CPU_RASTER_RENDERER_ID } from './renderer-id';
@@ -259,7 +266,7 @@ export interface ViewGridResult {
    *  default reports `3x2`. Absent on the fixed diagnostic layouts (interior
    *  cutaway, animation strip), which have their own row shape and would have
    *  to invent a preset name to report one. */
-  capture?: { preset: CapturePreset; cols: number; cells: number };
+  capture?: CaptureShape;
 }
 
 export interface ViewGridOptions extends RasterOptions {
@@ -360,10 +367,8 @@ export async function renderViewGrid(
   // The env variant and an explicit `views` both still win, in that order of
   // specificity, so no internal caller changes behavior. With `capture`
   // omitted this resolves to SIX_VIEWS at 3 columns — the previous constants.
-  const resolved = resolveCapture(opts.capture);
-  const views =
-    opts.views ??
-    (opts.capture ? resolved.views : resolveGridViews(process.env['KILN_GRID_VARIANT']));
+  const resolved = resolveGridCapture(opts.capture, process.env['KILN_GRID_VARIANT']);
+  const views = opts.views ?? resolved.views;
   const cols = opts.cols ?? resolved.cols;
   if (opts.snapPalette?.length) snapSceneToPalette(root, opts.snapPalette);
 

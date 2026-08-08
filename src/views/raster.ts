@@ -20,6 +20,8 @@
  * the offline audit grid) so inverted winding shows up as missing faces.
  */
 
+import { GRID_BACKGROUND_RGB } from './background';
+
 export interface ViewSpec {
   name: string;
   /** Direction from model center toward the camera (kiln frame: +X fwd, +Y up, +Z right). */
@@ -119,7 +121,8 @@ export interface RasterOptions {
   frameBounds?: { min: [number, number, number]; max: [number, number, number] };
 }
 
-const BG: [number, number, number] = [26, 26, 26]; // #1a1a1a, matches audit grid
+// Shared with the GPU render port so both producers paint the same backdrop.
+const BG = GRID_BACKGROUND_RGB;
 const AMBIENT = 0.25;
 const KEY_INTENSITY = 1.1;
 const KEY_DIR = normalize([1.5, 2, 1]);
