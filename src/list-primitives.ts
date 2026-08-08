@@ -695,6 +695,55 @@ const PRIMITIVES: PrimitiveSpec[] = [
       "const body = new THREE.Mesh(cylinderGeo(1, 1, 0.3, 32), steel);\nconst teeth = [...]; // 8 radially-arrayed box meshes\nconst gear = await boolDiff('Gear', body, ...teeth);  // hard-edged",
   },
   {
+    name: 'roundedBoxGeo',
+    signature:
+      "await roundedBoxGeo(width: number, height: number, depth: number, radius: number, opts?: { style?: 'round' | 'chamfer', segments?: 12, smooth?: boolean })",
+    returns: 'Promise<THREE.BufferGeometry>',
+    category: 'csg',
+    description:
+      'A box with all twelve edges rounded (or chamfered) at the EXACT outer size requested — roundedBoxGeo(1, 1, 1, 0.1) measures 1x1x1, it does not grow. Use it anywhere boxGeo reads too sharp: consoles, crates, appliances, handheld props, machined blocks.',
+    promptNotes:
+      "Real objects almost never have perfectly sharp box edges, and a small radius is the single cheapest upgrade to how manufactured an asset looks. Prefer this over boxGeo for anything moulded, cast, or machined. Keep radius small relative to the box (5-10% of the smallest dimension); radius must be less than half the smallest dimension or the call throws. style: 'chamfer' reads as machined metal, 'round' as moulded plastic. This is async — build() must be async and the call must use await.",
+    example:
+      "const geo = await roundedBoxGeo(1.2, 0.6, 0.8, 0.05);\ncreatePart('Console', geo, plastic, { position: [0, 0.3, 0], parent: root });",
+  },
+  {
+    name: 'extrudeProfile',
+    signature:
+      "await extrudeProfile(profile: [number, number][], opts?: { depth?: 1, holes?: [number, number][][], bevel?: 0, bevelStyle?: 'round' | 'chamfer', segments?: 12, twist?: 0, taper?: number | [number, number], divisions?: number, axis?: 'x' | 'y' | 'z', center?: true, smooth?: false })",
+    returns: 'Promise<THREE.BufferGeometry>',
+    category: 'csg',
+    description:
+      'Sweeps a closed 2D outline into a watertight solid, with optional holes, corner rounding/chamfering, twist, and taper. The way to build any cross-section that is not a box or a cylinder: L-brackets, I-beams, gaskets, washers, star and gear plates, signage, extruded trim.',
+    promptNotes:
+      "The bevel rounds the edges PARALLEL to the sweep axis (the profile corners) — the two flat caps stay sharp. For a box rounded on all twelve edges use roundedBoxGeo instead. Holes are subtracted, so their winding order does not matter. A bevel larger than half the outline's narrowest feature throws rather than silently returning an empty solid. Output is manifold, so it feeds straight into boolUnion / boolDiff / boolIntersect. Async — await it inside an async build().",
+    example:
+      "// L-bracket, inner AND outer corners filleted\nconst outline = [[0, 0], [2, 0], [2, 0.4], [0.4, 0.4], [0.4, 2], [0, 2]];\nconst geo = await extrudeProfile(outline, { depth: 0.5, bevel: 0.06 });\ncreatePart('Bracket', geo, steel, { parent: root });",
+  },
+  {
+    name: 'revolveProfile',
+    signature:
+      "await revolveProfile(profile: [number, number][], opts?: { segments?: 24, angle?: 360, bevel?: 0, bevelStyle?: 'round' | 'chamfer', bevelSegments?: 12, axis?: 'x' | 'y' | 'z', smooth?: true })",
+    returns: 'Promise<THREE.BufferGeometry>',
+    category: 'csg',
+    description:
+      'Revolves a closed 2D outline around an axis into a watertight SOLID, optionally rounding the profile corners first. Bottles, tanks, pressure vessels, wheels, turned wood, domes, buttons, pills.',
+    promptNotes:
+      'Use this instead of lathe/revolveGeo whenever the result must survive a boolean or needs a rounded rim — lathe and revolveGeo build an open surface, this builds a closed solid. Profile convention matches lathe: x is distance from the axis, y is position along it, and only the x >= 0 side is used. Async — await it inside an async build().',
+    example:
+      "// capsule tank with a rounded rim, then carve a port into it\nconst profile = [[0, -0.5], [0.4, -0.5], [0.4, 0.5], [0, 0.5]];\nconst body = await revolveProfile(profile, { bevel: 0.08, segments: 32 });\nconst tank = await boolDiff('Tank', createPart('B', body, steel), portCutter);",
+  },
+  {
+    name: 'circleProfile',
+    signature: 'circleProfile(radius: number, segments?: 24, center?: [number, number])',
+    returns: '[number, number][]',
+    category: 'csg',
+    description:
+      'Builds a closed circular outline for extrudeProfile / revolveProfile, so you never hand-write the trigonometry. Synchronous.',
+    example:
+      'const washer = await extrudeProfile(circleProfile(1), {\n  depth: 0.1,\n  holes: [circleProfile(0.4), circleProfile(0.1, 16, [0.7, 0])],\n});',
+  },
+  {
     name: 'boolIntersect',
     signature:
       'await boolIntersect(name: string, a: Object3D, b: Object3D, opts?: { smooth?: false })',

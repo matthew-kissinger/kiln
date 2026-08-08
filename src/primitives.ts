@@ -20,6 +20,7 @@ import {
 } from './architecture';
 import * as gears from './gears';
 import * as ops from './ops';
+import * as profile from './profile';
 import * as solids from './solids';
 import * as proceduralTextures from './procedural-texture';
 import * as textures from './textures';
@@ -1646,6 +1647,13 @@ export function buildSandboxGlobals(usage?: Record<string, number>): Record<stri
     boolDiff: wrap('boolDiff', solids.boolDiff),
     boolIntersect: wrap('boolIntersect', solids.boolIntersect),
     hull: wrap('hull', solids.hull),
+    // Bevel / extrude / revolve (async — same manifold WASM as the CSG ops).
+    // NOT wrapGeo: these return a Promise, and the geometry memo/kilnRanges
+    // stamp in wrapGeo operates on a BufferGeometry synchronously.
+    roundedBoxGeo: wrap('roundedBoxGeo', profile.roundedBoxGeo),
+    extrudeProfile: wrap('extrudeProfile', profile.extrudeProfile),
+    revolveProfile: wrap('revolveProfile', profile.revolveProfile),
+    circleProfile: wrap('circleProfile', profile.circleProfile),
     // Array/mirror/subdivide/curve ops
     arrayLinear: wrap('arrayLinear', ops.arrayLinear),
     arrayRadial: wrap('arrayRadial', ops.arrayRadial),

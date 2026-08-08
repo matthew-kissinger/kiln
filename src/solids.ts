@@ -58,7 +58,11 @@ import type { ManifoldToplevel, Manifold, Mesh } from 'manifold-3d';
 let _module: ManifoldToplevel | null = null;
 let _initPromise: Promise<ManifoldToplevel> | null = null;
 
-async function getManifoldModule(): Promise<ManifoldToplevel> {
+/**
+ * @internal — shared with `profile.ts` so the extrude/revolve/bevel ops reuse
+ * this one WASM instance instead of initialising a second one.
+ */
+export async function getManifoldModule(): Promise<ManifoldToplevel> {
   if (_module) return _module;
   if (_initPromise) return _initPromise;
 
@@ -199,6 +203,24 @@ function manifoldToThree(
   name: string,
   opts: { smooth?: boolean } = {},
 ): THREE.Mesh {
+  const out = new THREE.Mesh(manifoldToGeometry(m, opts), material);
+  out.name = name;
+  return out;
+}
+
+/**
+ * Manifold -> BufferGeometry, with the same flat/smooth normal contract as
+ * `manifoldToThree`. Split out so `profile.ts` shares the bridge.
+ *
+ * As with every manifold-backed op, **only positions survive** — normals are
+ * regenerated here and UVs are not carried at all.
+ *
+ * @internal
+ */
+export function manifoldToGeometry(
+  m: Manifold,
+  opts: { smooth?: boolean } = {},
+): THREE.BufferGeometry {
   const mesh = m.getMesh();
   const numProp = mesh.numProp;
   const verts = mesh.vertProperties;
@@ -218,18 +240,12 @@ function manifoldToThree(
 
   if (opts.smooth) {
     geo.computeVertexNormals();
-  } else {
-    // Flat: duplicate verts per triangle so each face gets its own normal.
-    const flat = geo.toNonIndexed();
-    flat.computeVertexNormals();
-    const out = new THREE.Mesh(flat, material);
-    out.name = name;
-    return out;
+    return geo;
   }
-
-  const out = new THREE.Mesh(geo, material);
-  out.name = name;
-  return out;
+  // Flat: duplicate verts per triangle so each face gets its own normal.
+  const flat = geo.toNonIndexed();
+  flat.computeVertexNormals();
+  return flat;
 }
 
 /**
