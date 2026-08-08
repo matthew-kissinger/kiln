@@ -19,7 +19,8 @@ import { listPrimitives } from './list-primitives';
 import { renderApiSection } from './prompt-api';
 import { KILN_ASSET_FRAME, type AssetCategory, type AssetIntentV1 } from './contracts';
 import { characterBodyPlanRecipe } from './character';
-import { MATERIAL_RECIPE_PROMPT_CONTEXT_V1 } from './material-recipe-prompt';
+import { buildMaterialRecipePromptContextV1 } from './material-recipe-prompt';
+import { approvedTextureCatalogV1 } from './material-resources';
 import { vegetationSubtypePromptContext } from './vegetation-prompt';
 import { vehicleSubtypeRecipe } from './vehicle';
 import { renderAssetScopePrompt, renderVfxBreadthPrompt } from './breadth-prompt';
@@ -1078,7 +1079,10 @@ export function buildUserPrompt(request: KilnGenerateRequest): string {
       request.intent?.material.mode === 'pbrRecipe' ||
       request.intent?.material.mode === 'texturedHero'
     ) {
-      parts.push(`\n${MATERIAL_RECIPE_PROMPT_CONTEXT_V1}`);
+      // Built per call, not from the static snapshot: a host that has registered
+      // a runtime texture resolver has more resources to offer than one that has
+      // not, and naming an ID the environment cannot resolve is worse than none.
+      parts.push(`\n${buildMaterialRecipePromptContextV1(approvedTextureCatalogV1())}`);
     }
   }
 

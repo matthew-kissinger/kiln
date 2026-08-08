@@ -104,6 +104,34 @@ export interface MaterialRecipeDescriptorV1 {
   defaults: PortablePbrRecipeV1;
 }
 
+/**
+ * Where a resource's bytes come from.
+ *
+ * `embedded` bytes ship inside the engine package. `runtime` bytes do not exist
+ * in the tarball at all and are fetched through a host-registered resolver
+ * against the pinned `contentHash`. The distinction is what keeps a photographic
+ * library off the critical path of a package that is vendored as a tarball and
+ * installed into two container images by two package managers.
+ */
+export type TextureResourceDelivery = 'embedded' | 'runtime';
+
+/**
+ * `placeholder` marks a resource that exists to prove a slot binds, not to look
+ * like anything — the historical 4x4/2x2 swatches. Only `production` resources
+ * are offered to a model, because naming a 4x4 bark swatch to a model that would
+ * otherwise call `proceduralTexture()` makes the output worse, not better.
+ */
+export type TextureResourceQuality = 'placeholder' | 'production';
+
+/** Recorded per resource so a shipped asset can state what it is allowed to be. */
+export interface TextureResourceLicenseV1 {
+  /** SPDX identifier, or `CC0-1.0` for public-domain scans. */
+  spdx: string;
+  /** Empty when the licence requires none; never omitted, so silence is a choice. */
+  attribution: string;
+  source: string;
+}
+
 export interface ApprovedTextureResourceDescriptorV1 {
   schemaVersion: 1;
   id: ApprovedTextureResourceId;
@@ -113,6 +141,12 @@ export interface ApprovedTextureResourceDescriptorV1 {
   colorSpace: 'srgb' | 'linear';
   mime: 'image/png';
   contentHash: string;
+  delivery: TextureResourceDelivery;
+  quality: TextureResourceQuality;
+  /** Bytes the resolver must return. Checked before hashing so a truncated or
+   *  wrong-object response fails on size rather than on an opaque hash mismatch. */
+  byteLength: number;
+  license: TextureResourceLicenseV1;
   allowedSlots: readonly MaterialTextureSlot[];
   recipeIds: readonly MaterialRecipeId[];
 }
@@ -310,6 +344,14 @@ export const APPROVED_TEXTURE_RESOURCES_V1: Readonly<
     colorSpace: 'srgb',
     mime: 'image/png',
     contentHash: 'ec74fd42fe317f578018a13a65d81a726e9baeade068ae016cff30c15507017f',
+    delivery: 'embedded',
+    quality: 'placeholder',
+    byteLength: 100,
+    license: Object.freeze({
+      spdx: 'CC0-1.0',
+      attribution: '',
+      source: 'authored in-repo',
+    }),
     allowedSlots: Object.freeze(['baseColor'] as const),
     recipeIds: Object.freeze(['kiln.material.bark.v1', 'kiln.material.wood.v1'] as const),
   }),
@@ -322,6 +364,14 @@ export const APPROVED_TEXTURE_RESOURCES_V1: Readonly<
     colorSpace: 'srgb',
     mime: 'image/png',
     contentHash: 'ae9ad7f5389529a42fd9e63cb16aa7dc2c803739953242422b0ccc8003bd827c',
+    delivery: 'embedded',
+    quality: 'placeholder',
+    byteLength: 119,
+    license: Object.freeze({
+      spdx: 'CC0-1.0',
+      attribution: '',
+      source: 'authored in-repo',
+    }),
     allowedSlots: Object.freeze(['baseColor'] as const),
     recipeIds: Object.freeze(['kiln.material.leaf.v1'] as const),
   }),
@@ -334,6 +384,14 @@ export const APPROVED_TEXTURE_RESOURCES_V1: Readonly<
     colorSpace: 'linear',
     mime: 'image/png',
     contentHash: '2be025139faed13fb12ac50101f7d91f8a758ce6a668104a7e8003eccdab7db7',
+    delivery: 'embedded',
+    quality: 'placeholder',
+    byteLength: 95,
+    license: Object.freeze({
+      spdx: 'CC0-1.0',
+      attribution: '',
+      source: 'authored in-repo',
+    }),
     allowedSlots: Object.freeze(['normal'] as const),
     recipeIds: Object.freeze([
       'kiln.material.bark.v1',
@@ -353,6 +411,14 @@ export const APPROVED_TEXTURE_RESOURCES_V1: Readonly<
     colorSpace: 'linear',
     mime: 'image/png',
     contentHash: '5e03d1e2863800c5f1a88411dd4447ccc0ec8470232129d8682db8f6ea76ad52',
+    delivery: 'embedded',
+    quality: 'placeholder',
+    byteLength: 94,
+    license: Object.freeze({
+      spdx: 'CC0-1.0',
+      attribution: '',
+      source: 'authored in-repo',
+    }),
     allowedSlots: Object.freeze(['metallicRoughness'] as const),
     recipeIds: Object.freeze([
       'kiln.material.rubber.v1',
@@ -368,6 +434,14 @@ export const APPROVED_TEXTURE_RESOURCES_V1: Readonly<
     colorSpace: 'srgb',
     mime: 'image/png',
     contentHash: 'a0b2f4e243ec0ec914b80d4998cf4624ff68181aafc4b97a6bafa765a41e4814',
+    delivery: 'embedded',
+    quality: 'placeholder',
+    byteLength: 100,
+    license: Object.freeze({
+      spdx: 'CC0-1.0',
+      attribution: '',
+      source: 'authored in-repo',
+    }),
     allowedSlots: Object.freeze(['emissive'] as const),
     recipeIds: Object.freeze(['kiln.material.emissive.v1'] as const),
   }),
