@@ -643,7 +643,7 @@ const KILN_RENDER_VIEWS_DESCRIPTION =
   'elevation 0 = eye level, positive looks down. Use it to aim every cell at what actually needs ' +
   'checking — a seam, an underside, a joint the standard six leave occluded — instead of spending ' +
   'cells on angles that show nothing. Max 9 cells. The reply echoes the grid shape it rendered. ' +
-  'If the build fails you get an error and NO image — fix the code and render again. Flat-shaded CPU render; writes no files.';
+  'If the build fails you get an error and NO image — fix the code and render again. Uses GPU PBR shading when the scene has textured or metallic materials and the renderer is reachable; otherwise uses a flat-shaded CPU render. Writes no files.';
 
 /** Create the unified render/view definition with host-owned QA context. */
 export function createKilnRenderViewsDef(context: KilnToolContext = {}): KilnToolDef {
