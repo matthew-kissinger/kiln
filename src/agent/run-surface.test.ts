@@ -11,6 +11,7 @@ import { describe, expect, test } from 'bun:test';
 
 import { buildAgentTools, resolveToolSurface, type ToolBuildOptions } from './surface';
 import type { SubmitSink, EditSink, UnifiedSink } from './tools';
+import type { InLoopViewRender, KilnToolContext } from '../tools/registry';
 
 function freshSinks() {
   return {
@@ -22,6 +23,23 @@ function freshSinks() {
 
 const base: ToolBuildOptions = {};
 const names = (tools: ReturnType<typeof buildAgentTools>) => tools.map((t) => t.name);
+
+function findTool(tools: ReturnType<typeof buildAgentTools>, name: string) {
+  const tool = tools.find((candidate) => candidate.name === name) as
+    | { invoke(input: unknown): Promise<unknown> }
+    | undefined;
+  if (!tool) throw new Error(`tool ${name} not found`);
+  return tool;
+}
+
+const METAL_CODE = `
+const meta = { name: 'metal-box', category: 'prop' };
+function build() {
+  const root = createRoot('Root');
+  createPart('Body', boxGeo(1, 1, 1), gameMaterial('#c0c0c0', { metalness: 0.6 }), { parent: root });
+  return root;
+}
+`;
 
 // A1: no standalone kiln_validate on the unified surface — kiln_draft and
 // kiln_edit validate the buffer inline in their results.
@@ -82,6 +100,30 @@ describe('buildAgentTools', () => {
   test('current surface, refine in rewrite mode -> the five generate tools (no edit tools)', () => {
     const opts = { ...base, existingCode: 'const meta = {};', refineMode: 'rewrite' as const };
     expect(names(buildAgentTools('current', opts, freshSinks()))).toEqual(CURRENT_GEN);
+  });
+
+  test('threads the host render port, its short deadline, and tally callback into unified kiln_render', async () => {
+    const events: InLoopViewRender[] = [];
+    let portCalls = 0;
+    const context: KilnToolContext = {
+      viewRenderPort: () => {
+        portCalls += 1;
+        return new Promise(() => {});
+      },
+      viewRenderTimeoutMs: 5,
+      onViewsRendered: (event) => events.push(event),
+    };
+    const tools = buildAgentTools('unified', context, freshSinks());
+
+    await findTool(tools, 'kiln_draft').invoke({ code: METAL_CODE });
+    const rendered = await findTool(tools, 'kiln_render').invoke({});
+
+    expect(Array.isArray(rendered)).toBe(true);
+    expect(portCalls).toBe(1);
+    expect(events).toHaveLength(1);
+    expect(events[0]?.neededPbr).toBe(true);
+    expect(events[0]?.degraded).toBe(true);
+    expect(events[0]?.degradedReason).toContain('timed out after 5ms');
   });
 });
 
