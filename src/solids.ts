@@ -19,8 +19,35 @@
  * Limitations:
  *   - Input geometry should be watertight / manifold. sphereGeo's polar
  *     singularity can produce degenerate triangles that manifold trims.
- *   - Only position data survives — normals and UVs are regenerated.
  *   - Material is inherited from the first operand.
+ *
+ * ## UV semantics (T2.4) — read this before texturing a boolean
+ *
+ * **Every boolean DESTROYS UVs.** The bridge to manifold carries positions
+ * only (`numProp: 3`); normals are recomputed from the result topology and the
+ * `uv` attribute is simply absent on the output. This is not a bug to fix here:
+ * manifold-3d does not preserve per-triangle provenance, so there is no
+ * correspondence to carry UVs through in the first place — a new cut face has
+ * no pre-image in either operand.
+ *
+ * The consequence for asset code: **unwrap after the boolean, not before.**
+ *
+ * ```js
+ * const carved = await boolDiff('Panel', body, ...bolts);
+ * carved.geometry = await autoUnwrap(carved.geometry);   // now it can hold a texture
+ * ```
+ *
+ * Unwrapping an operand first is wasted work at best; the atlas it produces is
+ * discarded by the very next boolean.
+ *
+ * Guards (all measured against real silent failures, see the tests):
+ *   - An operand contributing zero triangles throws, naming which operand.
+ *     `boolUnion(body, emptyGroup)` used to return the body unchanged and
+ *     `boolIntersect(body, emptyGroup)` a zero-triangle mesh, both silently.
+ *   - A ragged triangle list throws here rather than as manifold's bare
+ *     "Not manifold", which names nothing.
+ *   - An empty RESULT throws with the op-specific likely cause. A disjoint
+ *     `boolIntersect` is the common one, and it used to ship an invisible part.
  */
 
 import * as THREE from 'three';
@@ -51,11 +78,15 @@ async function getManifoldModule(): Promise<ManifoldToplevel> {
 /**
  * Convert a Three.js Mesh/Object3D to a Manifold Mesh (world-space).
  * Flattens any scene subtree into a single merged manifold.
+ *
+ * `label` names the operand in guard messages — the agent sees these, and
+ * "operand 2 (Cutter)" is actionable where "Not manifold" is not.
  */
 function threeToManifold(
   src: THREE.Object3D,
   ManifoldCls: typeof Manifold,
   MeshCls: typeof Mesh,
+  label = 'operand',
 ): Manifold {
   src.updateMatrixWorld(true);
 
@@ -64,6 +95,7 @@ function threeToManifold(
 
   const tmpVec = new THREE.Vector3();
   let vertexOffset = 0;
+  let meshCount = 0;
 
   src.traverse((child) => {
     // Duck-typed `.isMesh` — sandbox-created meshes belong to a different
@@ -73,6 +105,21 @@ function threeToManifold(
     const geo = meshChild.geometry as THREE.BufferGeometry;
     const posAttr = geo.getAttribute('position') as THREE.BufferAttribute | undefined;
     if (!posAttr) return;
+    meshCount++;
+
+    const idx = geo.getIndex();
+    // T2.4: a ragged triangle list reaches manifold as a partial triangle and
+    // comes back as a bare "Not manifold" that names nothing. Caught here, where
+    // the offending mesh is still identifiable.
+    const listCount = idx ? idx.count : posAttr.count;
+    if (listCount % 3 !== 0) {
+      throw new Error(
+        `CSG ${label}: mesh "${meshChild.name || '(unnamed)'}" has ${listCount} ${
+          idx ? 'indices' : 'vertices'
+        }, which is not a whole number of triangles. ` +
+          'Every CSG input must be a triangle mesh; build it from the primitive geometry helpers rather than assembling attributes by hand.',
+      );
+    }
 
     const matrix = meshChild.matrixWorld;
 
@@ -81,7 +128,6 @@ function threeToManifold(
       positions.push(tmpVec.x, tmpVec.y, tmpVec.z);
     }
 
-    const idx = geo.getIndex();
     if (idx) {
       for (let i = 0; i < idx.count; i++) {
         indices.push((idx.getX(i) as number) + vertexOffset);
@@ -96,6 +142,21 @@ function threeToManifold(
     vertexOffset += posAttr.count;
   });
 
+  // T2.4: an operand that contributes nothing used to be absorbed in silence —
+  // `boolUnion(body, emptyGroup)` returned the body, and `boolIntersect(body,
+  // emptyGroup)` returned a ZERO-triangle mesh that sailed on into the GLB.
+  // Measured, both cases; neither said a word. The realistic cause is a Group
+  // whose children were never added, or a mesh built before its geometry was.
+  if (indices.length === 0) {
+    throw new Error(
+      `CSG ${label}: contributes no triangles${
+        meshCount === 0
+          ? ' (nothing in it is a mesh — an empty Group, or a part that was never added to it)'
+          : ' (its meshes have no geometry)'
+      }. Every CSG operand must be a solid with triangles.`,
+    );
+  }
+
   const mesh = new MeshCls({
     numProp: 3,
     vertProperties: new Float32Array(positions),
@@ -104,6 +165,21 @@ function threeToManifold(
   mesh.merge();
 
   return ManifoldCls.ofMesh(mesh);
+}
+
+/**
+ * Guard a boolean's RESULT (T2.4).
+ *
+ * An empty result is geometrically legal and almost never intended: a
+ * disjoint `boolIntersect`, or a `boolDiff` whose cutters swallow the body.
+ * Measured before this guard, both produced a 0-triangle mesh that passed
+ * silently through `autoUnwrap` (which also returned 0 vertices without
+ * complaint) and into the GLB as an invisible part. Failing loudly here gives
+ * the agent a fixable error at the step that caused it.
+ */
+function assertNonEmptyResult(m: Manifold, op: string, hint: string): void {
+  if (m.numTri() > 0) return;
+  throw new Error(`${op}: the result is empty (zero triangles). ${hint}`);
 }
 
 /**
@@ -285,12 +361,21 @@ export async function boolUnion(
     throw new Error('boolUnion requires at least two parts');
   }
   const mod = await getManifoldModule();
-  const manifolds = parts.map((p) => threeToManifold(p, mod.Manifold, mod.Mesh));
+  const manifolds = parts.map((p, i) =>
+    threeToManifold(p, mod.Manifold, mod.Mesh, `boolUnion operand ${i + 1}`),
+  );
   const result = mod.Manifold.union(manifolds);
+  try {
+    assertNonEmptyResult(result, 'boolUnion', 'Every operand was empty after merging.');
+  } catch (err) {
+    for (const m of manifolds) m.delete();
+    result.delete();
+    throw err;
+  }
   const mat = materialOf(parts[0]!, new THREE.MeshStandardMaterial());
   const mesh = manifoldToThree(result, mat, `Mesh_${name}`, opts);
   tagCsgOutput(mesh, parts);
-  manifolds.forEach((m) => m.delete());
+  for (const m of manifolds) m.delete();
   result.delete();
   return mesh;
 }
@@ -315,15 +400,30 @@ export async function boolDiff(
     throw new Error('boolDiff requires at least one cutter');
   }
   const mod = await getManifoldModule();
-  const bodyM = threeToManifold(body, mod.Manifold, mod.Mesh);
-  const cutterM = cutters.map((c) => threeToManifold(c, mod.Manifold, mod.Mesh));
+  const bodyM = threeToManifold(body, mod.Manifold, mod.Mesh, 'boolDiff body');
+  const cutterM = cutters.map((c, i) =>
+    threeToManifold(c, mod.Manifold, mod.Mesh, `boolDiff cutter ${i + 1}`),
+  );
   const cutterUnion = cutterM.length === 1 ? (cutterM[0] as Manifold) : mod.Manifold.union(cutterM);
   const result = bodyM.subtract(cutterUnion);
+  try {
+    assertNonEmptyResult(
+      result,
+      'boolDiff',
+      'The cutters removed the entire body — check their size and position, or subtract fewer of them.',
+    );
+  } catch (err) {
+    bodyM.delete();
+    for (const m of cutterM) m.delete();
+    if (cutterM.length > 1) cutterUnion.delete();
+    result.delete();
+    throw err;
+  }
   const mat = materialOf(body, new THREE.MeshStandardMaterial());
   const mesh = manifoldToThree(result, mat, `Mesh_${name}`, opts);
   tagCsgOutput(mesh, [body, ...cutters]);
   bodyM.delete();
-  cutterM.forEach((m) => m.delete());
+  for (const m of cutterM) m.delete();
   if (cutterM.length > 1) cutterUnion.delete();
   result.delete();
   return mesh;
@@ -342,9 +442,21 @@ export async function boolIntersect(
   opts: { smooth?: boolean } = {},
 ): Promise<THREE.Mesh> {
   const mod = await getManifoldModule();
-  const aM = threeToManifold(a, mod.Manifold, mod.Mesh);
-  const bM = threeToManifold(b, mod.Manifold, mod.Mesh);
+  const aM = threeToManifold(a, mod.Manifold, mod.Mesh, 'boolIntersect operand a');
+  const bM = threeToManifold(b, mod.Manifold, mod.Mesh, 'boolIntersect operand b');
   const result = aM.intersect(bM);
+  try {
+    assertNonEmptyResult(
+      result,
+      'boolIntersect',
+      'The two operands do not overlap — position them so their volumes actually intersect.',
+    );
+  } catch (err) {
+    aM.delete();
+    bM.delete();
+    result.delete();
+    throw err;
+  }
   const mat = materialOf(a, new THREE.MeshStandardMaterial());
   const mesh = manifoldToThree(result, mat, `Mesh_${name}`, opts);
   tagCsgOutput(mesh, [a, b]);
@@ -371,13 +483,26 @@ export async function hull(
     throw new Error('hull requires at least one part');
   }
   const mod = await getManifoldModule();
-  const manifolds = parts.map((p) => threeToManifold(p, mod.Manifold, mod.Mesh));
+  const manifolds = parts.map((p, i) =>
+    threeToManifold(p, mod.Manifold, mod.Mesh, `hull operand ${i + 1}`),
+  );
   const result =
     manifolds.length === 1 ? (manifolds[0] as Manifold).hull() : mod.Manifold.hull(manifolds);
+  try {
+    assertNonEmptyResult(
+      result,
+      'hull',
+      'The inputs are coplanar or collinear, so they enclose no volume.',
+    );
+  } catch (err) {
+    for (const m of manifolds) m.delete();
+    if (manifolds.length > 1) result.delete();
+    throw err;
+  }
   const mat = materialOf(parts[0]!, new THREE.MeshStandardMaterial());
   const mesh = manifoldToThree(result, mat, `Mesh_${name}`, { smooth: opts.smooth ?? true });
   tagCsgOutput(mesh, parts);
-  manifolds.forEach((m) => m.delete());
+  for (const m of manifolds) m.delete();
   if (manifolds.length > 1) result.delete();
   return mesh;
 }

@@ -208,6 +208,12 @@ mirror(name, source, axis: 'x'|'y'|'z', parent?)
   // handled by viewers).
 
 // CSG / Boolean (async — using any of these requires \`async function build()\`)
+// NOTE: UVs do NOT survive a boolean: the manifold bridge carries positions only, so the result
+// has no uv attribute and any texture on it will not appear. Unwrap AFTER the boolean, never
+// before — \`mesh.geometry = await autoUnwrap(mesh.geometry)\`. Unwrapping an operand first is
+// wasted work; the next boolean throws the atlas away. An operand that contributes zero
+// triangles (an empty Group) and an empty result both throw with the cause named, instead of
+// silently producing an invisible part.
 await boolUnion(name: string, ...parts: Object3D[], opts?: { smooth?: false })
   // Merges two or more parts into one watertight manifold mesh. Default flat shading (hard
   // edges) — pass { smooth: true } as last arg for averaged normals on organic merges.
@@ -604,6 +610,12 @@ mirror(name, source, axis: 'x'|'y'|'z', parent?)
   // e.g. mirror('WingR', wingL, 'x', root);
 
 // CSG / Boolean (async — using any of these requires \`async function build()\`)
+// NOTE: UVs do NOT survive a boolean: the manifold bridge carries positions only, so the result
+// has no uv attribute and any texture on it will not appear. Unwrap AFTER the boolean, never
+// before — \`mesh.geometry = await autoUnwrap(mesh.geometry)\`. Unwrapping an operand first is
+// wasted work; the next boolean throws the atlas away. An operand that contributes zero
+// triangles (an empty Group) and an empty result both throw with the cause named, instead of
+// silently producing an invisible part.
 await boolUnion(name: string, ...parts: Object3D[], opts?: { smooth?: false })
   // Merges two or more parts into one watertight manifold mesh. Default flat shading (hard
   // edges) — pass { smooth: true } as last arg for averaged normals on organic merges.

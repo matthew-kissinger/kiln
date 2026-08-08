@@ -45,6 +45,10 @@ export interface PrimitiveSpec {
     | 'textures';
 }
 
+// T2.4 — the CSG/UV rule (every boolean destroys UVs; unwrap after, never
+// before) applies to all four boolean entries, so it lives once as the `csg`
+// entry in CATEGORY_NOTES in prompt-api.ts rather than four times here.
+
 const PRIMITIVES: PrimitiveSpec[] = [
   // ---------------------------------------------------------------------------
   // Structure
