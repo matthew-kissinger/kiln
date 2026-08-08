@@ -25,6 +25,9 @@ import { executeKilnCode, inspectSceneStructure, renderSceneToGLB } from '../ren
 import { listPrimitives, type PrimitiveSpec } from '../list-primitives';
 import type { AssetCategory, AssetIntentV1 } from '../contracts';
 import type { AssetQaReportV1 } from '../qa';
+import type { PbrRenderPort } from '../composer/render-port';
+import type { ViewGridResult } from '../views';
+import { sceneNeedsPbrShading } from '../material-resources';
 
 // =============================================================================
 // Tool definition contract
@@ -65,7 +68,55 @@ export interface KilnToolDef {
 export interface KilnToolContext {
   intent?: AssetIntentV1;
   category?: AssetCategory;
+  /**
+   * Host-injected GPU renderer for the in-loop view grid. Absent by default, and
+   * absent means every render stays on the CPU rasterizer — byte-identical to the
+   * behavior before this existed.
+   *
+   * The engine never opens a socket itself (AGENTS.md): the host owns the HTTP
+   * adapter, auth, and configuration, and {@link captureViewsViaPort} stays the
+   * single owner of the deadline, PNG validation, grid composition, and the
+   * never-throw CPU fallback. This field is the injection point, nothing more.
+   */
+  viewRenderPort?: PbrRenderPort;
+  /**
+   * Deadline for ONE in-loop port call. Deliberately separate from the deadline
+   * the host uses for the post-loop artifact sheet, and expected to be far
+   * shorter: nothing waits on the artifact sheet, whereas an in-loop render
+   * blocks the agent mid-thought. A slow GPU must fall back to the CPU raster
+   * quickly rather than stall the loop. Defaults to
+   * {@link DEFAULT_INLOOP_VIEW_RENDER_TIMEOUT_MS}.
+   */
+  viewRenderTimeoutMs?: number;
+  /**
+   * Host tally hook, called once per in-loop grid with whoever actually drew it.
+   *
+   * Reporting rides this callback rather than the tool's OUTPUT so the decision
+   * stays invisible to the model's own reasoning, and rides neither the input
+   * schema nor the description so the cached tool definition is untouched (the
+   * program's schema/prompt-invalidation window is reserved — see the P6 rule).
+   * Never throws into the render path: a host callback that throws is swallowed.
+   */
+  onViewsRendered?(event: InLoopViewRender): void;
 }
+
+/** One in-loop grid, and who drew it. Counted by the host, never shown to the model. */
+export interface InLoopViewRender {
+  /** The port's own renderer id when the GPU drew it; `cpu-raster` when it did not. */
+  renderer: string;
+  /** True when a port was injected and did not produce the grid. */
+  degraded: boolean;
+  /** Why the port was bypassed. Only set when `degraded`. */
+  degradedReason?: string;
+  /** Whether the scene held anything a flat raster cannot show (the routing predicate). */
+  neededPbr: boolean;
+}
+
+/**
+ * In-loop port deadline. Well under the engine's post-loop default because the
+ * cost of waiting is completely different here: this one blocks the agent.
+ */
+export const DEFAULT_INLOOP_VIEW_RENDER_TIMEOUT_MS = 6000;
 
 function trustedCategory(context: KilnToolContext): AssetCategory | undefined {
   return context.intent?.category ?? context.category;
@@ -457,7 +508,13 @@ async function runRenderViews(
   context: KilnToolContext,
 ): Promise<KilnRenderViewsResult> {
   try {
-    const { renderViewGrid } = await import('../views');
+    // `CPU_RASTER_RENDERER_ID` and `resolveGridCapture` come from this SAME lazy
+    // import rather than static ones on purpose. `../views/renderer-id` reads
+    // package.json with `readFileSync` at MODULE LOAD, so a static import would
+    // put a `node:fs` edge — evaluated on import, not on call — into this
+    // module's graph, which is exactly what the lazy `../views` import at the top
+    // of this file exists to prevent.
+    const { renderViewGrid, CPU_RASTER_RENDERER_ID, resolveGridCapture } = await import('../views');
     const { root, clips } = await executeKilnCode(input.code);
     const category = trustedCategory(context);
 
@@ -470,7 +527,67 @@ async function runRenderViews(
       ...(category ? { category } : {}),
       ...(context.intent ? { intent: context.intent } : {}),
     });
-    const grid = await renderViewGrid(root, input.capture ? { capture: input.capture } : {});
+
+    // Route to the GPU only when a flat-shaded raster would misrepresent the
+    // scene. A prop made of untextured `gameMaterial` looks the same either way,
+    // so sending it costs a round trip and a warm GPU to draw a picture the CPU
+    // already draws correctly. `renderSceneToGLB` above ALREADY produced the
+    // bytes the port needs — this reuses them rather than paying a second bake.
+    const neededPbr = context.viewRenderPort ? sceneNeedsPbrShading(root) : false;
+    let grid: ViewGridResult | undefined;
+    let drawnBy: InLoopViewRender | undefined;
+
+    if (context.viewRenderPort && neededPbr) {
+      // Lazy import: `../agent/generate` sits upstream of this module in the
+      // agent tool-surface graph (tools/registry <- agent/tools <- agent/surface
+      // <- agent/run <- agent/generate), so a static import of
+      // `captureViewsViaPort` here would be a real runtime import cycle. Loaded
+      // lazily exactly like the `../views` import above.
+      const { captureViewsViaPort } = await import('../agent/generate');
+      const ported = await captureViewsViaPort(
+        context.viewRenderPort,
+        rendered.bytes,
+        context.viewRenderTimeoutMs ?? DEFAULT_INLOOP_VIEW_RENDER_TIMEOUT_MS,
+        input.capture,
+      );
+      if (ported.ok) {
+        // The port reports pixels only, not view names. Derive the same names
+        // the CPU path would report for this capture config through the SAME
+        // resolver both producers share, so the two paths agree on cell order.
+        const resolvedViews = resolveGridCapture(input.capture, process.env['KILN_GRID_VARIANT']);
+        grid = {
+          png: ported.png,
+          views: resolvedViews.views.map((v) => v.name),
+          width: ported.width,
+          height: ported.height,
+          capture: ported.capture,
+        };
+        drawnBy = { renderer: ported.rendererId, degraded: false, neededPbr };
+      } else {
+        drawnBy = {
+          renderer: CPU_RASTER_RENDERER_ID,
+          degraded: true,
+          degradedReason: ported.reason,
+          neededPbr,
+        };
+      }
+    }
+
+    // The CPU path is unchanged and is still what runs for every scene that does
+    // not need PBR, every host with no port, and every port call that did not
+    // come back. It is never skipped as an optimisation — it is the fallback.
+    if (!grid) {
+      grid = await renderViewGrid(root, input.capture ? { capture: input.capture } : {});
+    }
+    drawnBy ??= { renderer: CPU_RASTER_RENDERER_ID, degraded: false, neededPbr };
+
+    // A host bookkeeping hook must never be able to fail a render the model is
+    // waiting on.
+    try {
+      context.onViewsRendered?.(drawnBy);
+    } catch {
+      /* ignore */
+    }
 
     const warnings = [...structuralWarnings, ...rendered.warnings];
 
