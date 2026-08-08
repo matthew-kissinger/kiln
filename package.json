@@ -20,6 +20,7 @@
     "./views": "./src/views/index.ts",
     "./validation": "./src/validation.ts",
     "./primitives": "./src/primitives.ts",
+    "./profile": "./src/profile.ts",
     "./architecture": "./src/architecture.ts",
     "./character": "./src/character.ts",
     "./vehicle": "./src/vehicle.ts",
