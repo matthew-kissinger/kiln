@@ -12,7 +12,11 @@
 
 import * as THREE from 'three';
 import { Document, WebIO, getBounds } from '@gltf-transform/core';
-import { EXTMeshGPUInstancing } from '@gltf-transform/extensions';
+import {
+  EXTMeshGPUInstancing,
+  KHRMaterialsVariants,
+  KHRTextureBasisu,
+} from '@gltf-transform/extensions';
 import {
   dedup,
   instance,
@@ -84,6 +88,7 @@ import {
   type MaterialResourceProvenanceV1,
 } from './material-resources';
 import { analyzePartPenetration, type PartPenetrationEvidenceV1 } from './qa/self-intersection';
+import { applyKitContract, type KitPackOptions, type KitPackSummary } from './kit';
 import {
   type BakedTextureProvenanceV1,
   bakeSceneTextures,
@@ -109,7 +114,11 @@ export type CapturedDiagnosticV1 = CharacterCapturedDiagnosticV1 | VehicleCaptur
  *  the instancing a prior bake emitted — the batch node would collapse to a
  *  single copy. Write-side registration is harmless (the extension instance
  *  travels on the Document). */
-const engineIO = (): WebIO => new WebIO().registerExtensions([EXTMeshGPUInstancing]);
+// Variants and Basisu are registered for READS as much as writes: once the kit
+// pass has run, every later pass that parses these bytes (metrics, optimize,
+// palette snap) would silently drop both extensions without them.
+const engineIO = (): WebIO =>
+  new WebIO().registerExtensions([EXTMeshGPUInstancing, KHRMaterialsVariants, KHRTextureBasisu]);
 
 /**
  * World-space AABB of a stored GLB, computed from its bytes alone — node
@@ -1479,6 +1488,46 @@ export async function optimizeGlbBytes(
     if (error instanceof GltfValidationError) throw error;
     return undefined;
   }
+}
+
+export interface PackKitResult {
+  bytes: Uint8Array;
+  summary: KitPackSummary;
+  gltfValidation: KhronosGltfValidationReport;
+}
+
+/**
+ * Apply the kit contract to a finished GLB, working from bytes.
+ *
+ * Sibling of {@link optimizeGlbBytes} and deliberately the same shape: parse,
+ * transform, re-serialise, re-validate against Khronos. The runtime never sees
+ * a kit flag, so this reaches production with no wire bump.
+ *
+ * Returns `undefined` when nothing changed or the bytes cannot be parsed, so a
+ * caller keeps the original GLB rather than persisting a no-op rewrite.
+ * Khronos validation failures are the one thing that throws: bytes that do not
+ * validate must never be persisted, and silently returning the original would
+ * hide that this pass produced an invalid file.
+ */
+export async function packKitGlb(
+  bytes: Uint8Array,
+  opts: KitPackOptions = {},
+): Promise<PackKitResult | undefined> {
+  let doc: Document;
+  try {
+    doc = await engineIO().readBinary(bytes);
+  } catch {
+    return undefined;
+  }
+
+  const summary = await applyKitContract(doc, opts);
+  const changed = summary.ormPacked > 0 || summary.variantsAdded.length > 0 || summary.ktx2.applied;
+  if (!changed) return undefined;
+
+  ensureDefaultScene(doc);
+  const outBytes = await engineIO().writeBinary(doc);
+  const gltfValidation = await assertFinalGlbValid(outBytes);
+  return { bytes: outBytes, summary, gltfValidation };
 }
 
 // =============================================================================
