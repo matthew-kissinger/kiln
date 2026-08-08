@@ -31,6 +31,27 @@ const CATEGORY_HEADERS: Array<[PrimitiveSpec['category'], string]> = [
   ['utility', '// Inspection utilities'],
 ];
 
+/**
+ * A rule that holds for EVERY primitive in a category, rendered once under the
+ * category header.
+ *
+ * Why not `promptNotes` on each entry: the whole catalog goes into every system
+ * prompt, so an identical paragraph on all four CSG ops costs four times the
+ * tokens for no extra signal — and the four entries render consecutively under
+ * the header anyway, so one statement sits directly above all of them.
+ * Per-entry `promptNotes` stays the right home for anything that distinguishes
+ * one primitive from its neighbours.
+ */
+const CATEGORY_NOTES: Partial<Record<PrimitiveSpec['category'], string>> = {
+  csg:
+    'UVs do NOT survive a boolean: the manifold bridge carries positions only, so the result has ' +
+    'no uv attribute and any texture on it will not appear. Unwrap AFTER the boolean, never before — ' +
+    '`mesh.geometry = await autoUnwrap(mesh.geometry)`. Unwrapping an operand first is wasted work; ' +
+    'the next boolean throws the atlas away. An operand that contributes zero triangles (an empty ' +
+    'Group) and an empty result both throw with the cause named, instead of silently producing an ' +
+    'invisible part.',
+};
+
 const WRAP = 96;
 
 /** Wrap text into `// `-prefixed comment lines at ~WRAP columns. */
@@ -103,6 +124,8 @@ export function renderApiSection(
     const list = byCategory.get(category);
     if (!list || list.length === 0) continue;
     const lines = [header];
+    const note = CATEGORY_NOTES[category];
+    if (note) lines.push(...wrapComment(`NOTE: ${note}`, ''));
     for (const p of list) lines.push(...renderPrimitiveLines(p, includeExamples));
     blocks.push(lines.join('\n'));
   }
@@ -168,6 +191,8 @@ export function renderPrimitivesMarkdown(primitives: PrimitiveSpec[]): string {
     const list = byCategory.get(category);
     if (!list || list.length === 0) continue;
     parts.push('', `## ${titles[category] ?? category}`);
+    const categoryNote = CATEGORY_NOTES[category as PrimitiveSpec['category']];
+    if (categoryNote) parts.push('', `**Applies to every ${category} helper:** ${categoryNote}`);
     for (const p of list) {
       parts.push('', `### ${p.name}`, '', '```typescript', p.signature, '```', '');
       parts.push(`Returns: ${p.returns}`, '', p.description);
@@ -202,6 +227,8 @@ export function renderSkillQuickReference(primitives: PrimitiveSpec[]): string {
     const list = byCategory.get(category);
     if (!list || list.length === 0) continue;
     lines.push(header);
+    const categoryNote = CATEGORY_NOTES[category];
+    if (categoryNote) lines.push(...wrapComment(`NOTE: ${categoryNote}`, ''));
     for (const p of list) {
       lines.push(p.signature);
       if (p.promptNotes) lines.push(...wrapComment(`NOTE: ${p.promptNotes}`, '  '));

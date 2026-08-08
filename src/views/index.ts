@@ -17,12 +17,13 @@ import {
   rasterizeView,
   measureBounds,
   hideNodeInScene,
-  resolveGridViews,
   type RasterOptions,
   type ViewSpec,
 } from './raster';
 import { encodePng } from './png';
 import { compositeCellGrid } from './grid';
+import { annotateViewCell } from './annotate';
+import { resolveGridCapture, type CaptureConfig, type CaptureShape } from './capture';
 import {
   prepareClip,
   poseSceneAtTime,
@@ -49,10 +50,33 @@ export {
   SIX_VIEWS_REAR_QUARTER,
   resolveGridViews,
   coverage,
+  orbitDir,
+  orbitAnglesOf,
+  MIN_ELEVATION_DEG,
+  MAX_ELEVATION_DEG,
 } from './raster';
 export type { RasterOptions, ViewSpec, ViewGridVariant } from './raster';
+export { annotateViewCell, stampAxisGnomon } from './annotate';
+export { GRID_BACKGROUND_HEX, GRID_BACKGROUND_RGB } from './background';
 export { encodePng, decodePng } from './png';
 export type { DecodedPng } from './png';
+export {
+  CAPTURE_PRESETS,
+  CaptureConfigError,
+  DEFAULT_CAPTURE_PRESET,
+  MAX_CAPTURE_CELLS,
+  captureCellLabel,
+  describeCapture,
+  resolveCapture,
+  resolveGridCapture,
+} from './capture';
+export type {
+  CaptureCell,
+  CaptureConfig,
+  CapturePreset,
+  CaptureShape,
+  ResolvedCapture,
+} from './capture';
 export { compositeCellGrid, compositeViewPngGrid, GRID_COLS } from './grid';
 export type { ComposedCellGrid, ComposedPngGrid } from './grid';
 export { CPU_RASTER_RENDERER_ID } from './renderer-id';
@@ -240,79 +264,22 @@ export interface ViewGridResult {
   height: number;
   /** View names in grid order (row-major). */
   views: string[];
+  /** Grid shape actually rendered by the model-facing contact sheet — the
+   *  default reports `3x2`. Absent on the fixed diagnostic layouts (interior
+   *  cutaway, animation strip), which have their own row shape and would have
+   *  to invent a preset name to report one. */
+  capture?: CaptureShape;
 }
 
 export interface ViewGridOptions extends RasterOptions {
   views?: ViewSpec[];
   /** Snap flat-color materials before rasterization. Mutates the provided scene root. */
   snapPalette?: readonly SnapPaletteSlot[];
-}
-
-// H-30: kiln-frame axis gnomon colors (+X fwd red, +Y up green, +Z right blue).
-const GNOMON_AXES: Array<{
-  label: string;
-  axis: [number, number, number];
-  color: [number, number, number];
-}> = [
-  { label: 'X', axis: [1, 0, 0], color: [235, 80, 70] },
-  { label: 'Y', axis: [0, 1, 0], color: [90, 205, 90] },
-  { label: 'Z', axis: [0, 0, 1], color: [90, 145, 245] },
-];
-
-/**
- * Stamp a small world-axis gnomon into a rasterized cell (bottom-left corner),
- * using the SAME camera basis as rasterizeView so the arrows are exact
- * (3DAxisPrompt: ticked/annotated axes measurably improve VLM 3D localization).
- * Axes nearly perpendicular to the image plane (projected length < 0.25) are
- * skipped — only in-plane axes disambiguate a view.
- */
-export function stampAxisGnomon(rgb: Uint8Array, size: number, viewDir: readonly number[]): void {
-  // rasterizeView's basis, duplicated deliberately (raster.ts keeps it private).
-  const zl = Math.hypot(viewDir[0]!, viewDir[1]!, viewDir[2]!) || 1;
-  const z = [viewDir[0]! / zl, viewDir[1]! / zl, viewDir[2]! / zl] as const;
-  const up = Math.abs(z[1]) > 0.99 ? ([0, 0, -1] as const) : ([0, 1, 0] as const);
-  const cx = [
-    up[1] * z[2] - up[2] * z[1],
-    up[2] * z[0] - up[0] * z[2],
-    up[0] * z[1] - up[1] * z[0],
-  ];
-  const xl = Math.hypot(cx[0]!, cx[1]!, cx[2]!) || 1;
-  const bx = [cx[0]! / xl, cx[1]! / xl, cx[2]! / xl] as const;
-  const by = [
-    z[1] * bx[2] - z[2] * bx[1],
-    z[2] * bx[0] - z[0] * bx[2],
-    z[0] * bx[1] - z[1] * bx[0],
-  ] as const;
-
-  const len = Math.max(12, Math.round(size * 0.055));
-  // Inset the origin by the arrow length so leftward/downward projections
-  // (e.g. +Z in the Front view) aren't clipped at the cell edge.
-  const ox = len + 10;
-  const oy = size - len - 10;
-  for (const { label, axis, color } of GNOMON_AXES) {
-    const dx = axis[0] * bx[0] + axis[1] * bx[1] + axis[2] * bx[2];
-    const dy = axis[0] * by[0] + axis[1] * by[1] + axis[2] * by[2];
-    if (Math.hypot(dx, dy) < 0.25) continue;
-    const ex = ox + dx * len;
-    const ey = oy - dy * len; // screen y is flipped vs the camera's up
-    const steps = Math.ceil(Math.hypot(ex - ox, ey - oy));
-    for (let s = 0; s <= steps; s++) {
-      const px = Math.round(ox + ((ex - ox) * s) / steps);
-      const py = Math.round(oy + ((ey - oy) * s) / steps);
-      for (let ty = 0; ty < 2; ty++) {
-        for (let tx = 0; tx < 2; tx++) {
-          const x = px + tx;
-          const y = py + ty;
-          if (x < 0 || y < 0 || x >= size || y >= size) continue;
-          const p = (y * size + x) * 3;
-          rgb[p] = color[0];
-          rgb[p + 1] = color[1];
-          rgb[p + 2] = color[2];
-        }
-      }
-    }
-    stampLabel(rgb, size, size, Math.round(ex) + 2, Math.round(ey) - 6, label, 1);
-  }
+  /** Model-chosen grid shape and cameras. Omit for the shipped 3x2 contact sheet.
+   *  Ignored when `views` is passed explicitly (internal callers win). */
+  capture?: CaptureConfig;
+  /** Column count override. Defaults to the capture preset's columns. */
+  cols?: number;
 }
 
 /** Render a (possibly sandbox-created) Three.js scene root into the 3x2 grid. */
@@ -330,27 +297,62 @@ export async function renderViewGrid(
   // swaps the 3/4 cell to the opposite-rear azimuth) so a bench arm can flip the
   // grid per-process without any wire or tool-schema change. Explicit opts.views
   // always wins; unset/unknown env keeps SIX_VIEWS.
-  const views = opts.views ?? resolveGridViews(process.env['KILN_GRID_VARIANT']);
+  //
+  // T3.2: `capture` lets the model pick the grid shape and per-cell cameras.
+  // The env variant and an explicit `views` both still win, in that order of
+  // specificity, so no internal caller changes behavior. With `capture`
+  // omitted this resolves to SIX_VIEWS at 3 columns — the previous constants.
+  const resolved = resolveGridCapture(opts.capture, process.env['KILN_GRID_VARIANT']);
+  const views = opts.views ?? resolved.views;
+  const cols = opts.cols ?? resolved.cols;
   if (opts.snapPalette?.length) snapSceneToPalette(root, opts.snapPalette);
 
-  const labelScale = Math.max(2, Math.round(size / 96));
+  // Per-cell zoom needs a shared frame box; measuring is only worth it when a
+  // zoom was actually requested. Passing frameBounds unconditionally would
+  // route every render through a different framing path than before and break
+  // the byte-identity guarantee for the default grid.
+  const wantsZoom = resolved.zooms.some((z) => z !== undefined);
+  const sceneBounds = wantsZoom ? measureBounds(root) : undefined;
+
   const cells: Uint8Array[] = [];
   for (let vi = 0; vi < views.length; vi++) {
-    const cell = rasterizeView(root, views[vi]!.dir, { size, backfaceCull: opts.backfaceCull });
-    // H-30: stamp the view name + axis gnomon into the cell (small, corner-
-    // anchored, away from the centered silhouette — SeeAct caveat).
-    stampLabel(cell, size, size, labelScale, labelScale, views[vi]!.name, labelScale);
-    stampAxisGnomon(cell, size, views[vi]!.dir);
+    const zoom = resolved.zooms[vi];
+    const cell = rasterizeView(root, views[vi]!.dir, {
+      size,
+      backfaceCull: opts.backfaceCull,
+      ...(sceneBounds && zoom !== undefined
+        ? { frameBounds: expandFrameBounds(sceneBounds, zoom) }
+        : {}),
+    });
+    // H-30: view name + axis gnomon, via the annotator the GPU port shares.
+    annotateViewCell(cell, size, views[vi]!);
     cells.push(cell);
   }
-  const { rgb, width, height } = compositeCellGrid(cells, size);
+  const { rgb, width, height } = compositeCellGrid(cells, size, cols);
 
   return {
     png: encodePng(rgb, width, height),
     width,
     height,
     views: views.map((v) => v.name),
+    capture: { preset: resolved.preset, cols, cells: views.length },
   };
+}
+
+/** Grow a bounds box about its center — the per-cell `zoom` padding. */
+function expandFrameBounds(
+  b: { min: [number, number, number]; max: [number, number, number] },
+  factor: number,
+): { min: [number, number, number]; max: [number, number, number] } {
+  const min: [number, number, number] = [0, 0, 0];
+  const max: [number, number, number] = [0, 0, 0];
+  for (let a = 0; a < 3; a++) {
+    const center = (b.min[a]! + b.max[a]!) / 2;
+    const half = ((b.max[a]! - b.min[a]!) / 2) * factor;
+    min[a] = center - half;
+    max[a] = center + half;
+  }
+  return { min, max };
 }
 
 /** Execute a Kiln program and render its scene into the 3x2 grid. */

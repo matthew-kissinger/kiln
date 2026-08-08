@@ -45,6 +45,10 @@ export interface PrimitiveSpec {
     | 'textures';
 }
 
+// T2.4 — the CSG/UV rule (every boolean destroys UVs; unwrap after, never
+// before) applies to all four boolean entries, so it lives once as the `csg`
+// entry in CATEGORY_NOTES in prompt-api.ts rather than four times here.
+
 const PRIMITIVES: PrimitiveSpec[] = [
   // ---------------------------------------------------------------------------
   // Structure
@@ -940,6 +944,31 @@ const PRIMITIVES: PrimitiveSpec[] = [
     example: "const wood = await loadTexture('./textures/oak-albedo.png', { usage: 'albedo' });",
     promptNotes:
       'NEVER texture.clone() a loaded texture (clone() corrupts the encoded bytes and breaks GLB export). Share the same Texture object and remap UVs with panelRemapV on the smaller mesh instead.',
+  },
+  {
+    name: 'proceduralTexture',
+    signature:
+      "proceduralTexture({ size?: 4..1024 pow2, usage?, name?, layers: [{ op: 'solid'|'checker'|'stripes'|'gradient'|'bricks'|'noise', ...params, blend?: 'normal'|'multiply'|'screen'|'overlay', opacity?: 0..1 }] })",
+    returns: 'THREE.DataTexture (tiling, sRGB or linear per usage)',
+    category: 'textures',
+    description:
+      'Builds a tiling texture from a bounded layer stack — no image file needed. Layers composite bottom-first. Noise is seeded and tileable, so the same spec always produces the same bytes and a repeating material shows no seam. Baked to PNG and embedded in the GLB automatically.',
+    example:
+      "const bark = proceduralTexture({ size: 256, usage: 'albedo', name: 'Bark', layers: [{ op: 'solid', color: 0x5a4632 }, { op: 'noise', colorA: 0x3d2f21, colorB: 0x7a6248, scale: 6, octaves: 4, blend: 'overlay' }] });",
+    promptNotes:
+      'Sync — no await. Prefer this over loadTexture for any surface you can describe (wood, rust, brick, fabric, dirt): it needs no asset files and cannot fail at load. Max 8 layers, size must be a power of two up to 1024. Only the six listed ops exist; there is no custom per-pixel callback.',
+  },
+  {
+    name: 'normalMapFromHeight',
+    signature: 'normalMapFromHeight(source: THREE.Texture, { strength?: number, name?: string })',
+    returns: 'THREE.DataTexture (linear normal map)',
+    category: 'textures',
+    description:
+      "Derives a tangent-space normal map from the source texture's brightness, treating it as height. The cheap way to get real PBR surface relief out of a procedural albedo. Wraps at the edges, so a tiling source gives a tiling normal map.",
+    example:
+      "const bark = proceduralTexture({ usage: 'albedo', layers: [{ op: 'noise', colorA: 0x3d2f21, colorB: 0x7a6248, scale: 6, octaves: 4 }] });\nconst mat = pbrMaterial({ albedo: bark, normal: normalMapFromHeight(bark, { strength: 4 }) });",
+    promptNotes:
+      'strength 1 is subtle, 4-8 reads clearly at normal viewing distance. Output is always linear data — never assign it to an albedo/emissive slot.',
   },
   {
     name: 'pbrMaterial',

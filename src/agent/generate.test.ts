@@ -279,9 +279,12 @@ describe('generateKilnAsset viewRenderPort (B3b/B4)', () => {
     expect(r.renderDegraded).toBe(false);
     expect(r.renderDegradedReason).toBeUndefined();
     expect(r.viewsRendererId).toBe('dawn-vulkan:test-gpu:1.0');
-    // The views are the port cells composited into the SAME 3x2 grid layout.
-    const { compositeViewPngGrid } = await import('../views');
-    expect(Buffer.compare(r.views!, compositeViewPngGrid(viewsPng).png)).toBe(0);
+    // The views are the port cells composited into the SAME 3x2 grid layout,
+    // and stamped with the same cell labels + gnomon the CPU path applies.
+    const { compositeViewPngGrid, SIX_VIEWS } = await import('../views');
+    expect(Buffer.compare(r.views!, compositeViewPngGrid(viewsPng, 3, SIX_VIEWS).png)).toBe(0);
+    // Annotation is not optional decoration: an unlabelled sheet would differ.
+    expect(Buffer.compare(r.views!, compositeViewPngGrid(viewsPng).png)).not.toBe(0);
   });
 
   test('port is never consulted when captureViews is off', async () => {
@@ -401,8 +404,10 @@ describe('generateKilnAsset viewRenderPort (B3b/B4)', () => {
     expect(okOutcome.ok).toBe(true);
     if (okOutcome.ok) {
       expect(okOutcome.rendererId).toBe('dawn-vulkan:test-gpu:1.0');
-      const { compositeViewPngGrid } = await import('../views');
-      expect(Buffer.compare(okOutcome.png, compositeViewPngGrid(viewsPng).png)).toBe(0);
+      const { compositeViewPngGrid, SIX_VIEWS } = await import('../views');
+      expect(Buffer.compare(okOutcome.png, compositeViewPngGrid(viewsPng, 3, SIX_VIEWS).png)).toBe(
+        0,
+      );
     }
 
     const degraded = await captureViewsViaPort(
@@ -431,5 +436,216 @@ describe('generateKilnAsset viewRenderPort (B3b/B4)', () => {
     expect(seen!.every((b) => b === 0)).toBe(true);
     // The returned artifact is untouched: still a valid GLB with the magic intact.
     expect(r.glb.readUInt32LE(0)).toBe(0x46546c67);
+  });
+
+  // ===========================================================================
+  // T3.3 — the persisted artifact honours the requested layout, on BOTH paths
+  // ===========================================================================
+
+  /** N solid-color per-view PNGs, like a host PBR renderer would return. */
+  async function stubCells(n: number, size = 8): Promise<Uint8Array[]> {
+    const { encodePng } = await import('../views');
+    return Array.from({ length: n }, (_, i) => {
+      const rgb = new Uint8Array(size * size * 3);
+      for (let p = 0; p < size * size; p++) rgb[p * 3] = 20 + i * 20;
+      return new Uint8Array(encodePng(rgb, size, size));
+    });
+  }
+
+  test('T3.3 BYTE-IDENTITY: omitting capture is unchanged, and an explicit 3x2 matches it', async () => {
+    runImpl = okRun;
+    const base = await generateKilnAsset({ prompt: 'a crate', captureViews: true });
+    const explicit = await generateKilnAsset({
+      prompt: 'a crate',
+      captureViews: true,
+      capture: { preset: '3x2' },
+    });
+    expect(Buffer.compare(explicit.views!, base.views!)).toBe(0);
+    expect(base.viewsCapture).toEqual({ preset: '3x2', cols: 3, cells: 6 });
+    expect(explicit.viewsCapture).toEqual({ preset: '3x2', cols: 3, cells: 6 });
+  });
+
+  test('T3.3: the port is asked for the requested cell count and composited at its columns', async () => {
+    runImpl = okRun;
+    const viewsPng = await stubCells(9);
+    const requests: import('../composer/render-port').PbrRenderRequest[] = [];
+    const r = await generateKilnAsset({
+      prompt: 'a crate',
+      captureViews: true,
+      capture: { preset: '3x3' },
+      viewRenderPort: async (req) => {
+        requests.push(req);
+        return { ok: true, rendererId: 'dawn-vulkan:test-gpu:1.0', viewsPng };
+      },
+    });
+    // The relaxed count check: nine views requested, nine accepted (this used to
+    // be a hard six).
+    expect(requests[0]!.viewDirs).toHaveLength(9);
+    expect(r.renderDegraded).toBe(false);
+    expect(r.viewsCapture).toEqual({ preset: '3x3', cols: 3, cells: 9 });
+    const { compositeViewPngGrid, resolveCapture } = await import('../views');
+    const cells = resolveCapture({ preset: '3x3' }).views;
+    expect(Buffer.compare(r.views!, compositeViewPngGrid(viewsPng, 3, cells).png)).toBe(0);
+  });
+
+  test('T3.3: a 2-column request composites at 2 columns, not the default 3', async () => {
+    runImpl = okRun;
+    const viewsPng = await stubCells(4);
+    const r = await generateKilnAsset({
+      prompt: 'a crate',
+      captureViews: true,
+      capture: { preset: '2x2' },
+      viewRenderPort: async () => ({ ok: true, rendererId: 'gpu:test', viewsPng }),
+    });
+    expect(r.viewsCapture).toEqual({ preset: '2x2', cols: 2, cells: 4 });
+    const { compositeViewPngGrid, resolveCapture } = await import('../views');
+    const cells = resolveCapture({ preset: '2x2' }).views;
+    // Same cells at 3 cols would be a different image; pin that it is not that.
+    expect(Buffer.compare(r.views!, compositeViewPngGrid(viewsPng, 2, cells).png)).toBe(0);
+    expect(Buffer.compare(r.views!, compositeViewPngGrid(viewsPng, 3, cells).png)).not.toBe(0);
+  });
+
+  test('T3.3: a GPU degrade produces the SAME layout the port was asked for', async () => {
+    runImpl = okRun;
+    const capture = { preset: '3x1' as const };
+    const degraded = await generateKilnAsset({
+      prompt: 'a crate',
+      captureViews: true,
+      capture,
+      viewRenderPort: async () => {
+        throw new Error('GPU service unreachable');
+      },
+    });
+    expect(degraded.renderDegraded).toBe(true);
+    expect(degraded.viewsCapture).toEqual({ preset: '3x1', cols: 3, cells: 3 });
+
+    // The whole point: a GPU outage must not reshape the artifact. The degraded
+    // sheet is exactly what the CPU path produces for the same request.
+    const { renderCodeViewGrid } = await import('../views');
+    const cpu = await renderCodeViewGrid(CANNED_CODE, { capture });
+    expect(Buffer.compare(degraded.views!, cpu.png)).toBe(0);
+  });
+
+  test('T3.3: per-cell zoom declines the port rather than silently auto-framing', async () => {
+    runImpl = okRun;
+    let portCalls = 0;
+    const capture = { cells: [{ azimuthDeg: 45, elevationDeg: 20, zoom: 2 }] };
+    const r = await generateKilnAsset({
+      prompt: 'a crate',
+      captureViews: true,
+      capture,
+      viewRenderPort: async () => {
+        portCalls++;
+        return { ok: true, rendererId: 'gpu:test', viewsPng: await stubCells(1) };
+      },
+    });
+    // The port contract carries directions only — it cannot express zoom, and
+    // returning auto-framed cells for a zoom request would be a silent wrong
+    // answer. Not even attempted.
+    expect(portCalls).toBe(0);
+    expect(r.renderDegraded).toBe(true);
+    expect(r.renderDegradedReason).toContain('zoom is not supported');
+    const { renderCodeViewGrid } = await import('../views');
+    expect(Buffer.compare(r.views!, (await renderCodeViewGrid(CANNED_CODE, { capture })).png)).toBe(
+      0,
+    );
+  });
+
+  test('T3.3: an invalid capture warns and falls back — it never fails the run', async () => {
+    runImpl = okRun;
+    const r = await generateKilnAsset({
+      prompt: 'a crate',
+      captureViews: true,
+      capture: { preset: '4x4' as never },
+    });
+    expect(r.views).toBeInstanceOf(Buffer);
+    expect(r.viewsCapture).toEqual({ preset: '3x2', cols: 3, cells: 6 });
+    expect(r.warnings.some((w) => w.includes('capture config ignored'))).toBe(true);
+
+    const base = await generateKilnAsset({ prompt: 'a crate', captureViews: true });
+    expect(Buffer.compare(r.views!, base.views!)).toBe(0);
+  });
+
+  test('T3.3: a bad config degrades the port too, instead of reaching it twice differently', async () => {
+    runImpl = okRun;
+    let portCalls = 0;
+    const r = await generateKilnAsset({
+      prompt: 'a crate',
+      captureViews: true,
+      capture: { cells: [] },
+      viewRenderPort: async () => {
+        portCalls++;
+        return { ok: true, rendererId: 'gpu:test', viewsPng: await stubCells(6) };
+      },
+    });
+    // Validated once, up front: the port is asked for the DEFAULT grid, not for
+    // the rejected config and not skipped entirely.
+    expect(portCalls).toBe(1);
+    expect(r.renderDegraded).toBe(false);
+    expect(r.viewsCapture).toEqual({ preset: '3x2', cols: 3, cells: 6 });
+    expect(r.warnings.some((w) => w.includes('capture config ignored'))).toBe(true);
+  });
+
+  test('T3.3: the GPU sheet carries the same cell labels and gnomon as the CPU one', async () => {
+    // A host returns pixels; it knows nothing of the Kiln camera vocabulary. If
+    // the engine did not stamp, the GPU sheet would arrive unlabelled and the
+    // model would lose its orientation cues on the one path that cannot tell it
+    // happened. Producer identity belongs in `viewsRendererId`, not in whether
+    // the picture has words on it.
+    runImpl = okRun;
+    const viewsPng = await stubCells(2);
+    const capture = { cells: [{ azimuthDeg: 0, elevationDeg: 0, name: 'seam' }] };
+    const r = await generateKilnAsset({
+      prompt: 'a crate',
+      captureViews: true,
+      capture: { preset: '1x2' },
+      viewRenderPort: async () => ({ ok: true, rendererId: 'gpu:test', viewsPng }),
+    });
+
+    const { compositeViewPngGrid, resolveCapture } = await import('../views');
+    const cells = resolveCapture({ preset: '1x2' }).views;
+    const annotated = compositeViewPngGrid(viewsPng, 1, cells).png;
+    const bare = compositeViewPngGrid(viewsPng, 1).png;
+    expect(Buffer.compare(r.views!, annotated)).toBe(0);
+    expect(Buffer.compare(r.views!, bare)).not.toBe(0);
+
+    // Custom cell names reach the GPU sheet too, not just the CPU one.
+    const named = resolveCapture(capture).views;
+    expect(named[0]!.name).toBe('SEAM');
+    const one = viewsPng.slice(0, 1);
+    expect(
+      Buffer.compare(compositeViewPngGrid(one, 1, named).png, compositeViewPngGrid(one, 1).png),
+    ).not.toBe(0);
+
+    // A misaligned view list is a caller bug, not something to composite anyway.
+    expect(() => compositeViewPngGrid(viewsPng, 1, named)).toThrow(/align 1:1/);
+  });
+
+  test('T3.3: captureViewsViaPort takes capture as its fourth argument', async () => {
+    const { captureViewsViaPort } = await import('./generate');
+    const viewsPng = await stubCells(2);
+    const seen: number[] = [];
+    const out = await captureViewsViaPort(
+      async (req) => {
+        seen.push(req.viewDirs?.length ?? 0);
+        return { ok: true, rendererId: 'gpu:test', viewsPng };
+      },
+      new Uint8Array([1, 2, 3]),
+      undefined,
+      { preset: '2x1' },
+    );
+    expect(seen).toEqual([2]);
+    expect(out.ok).toBe(true);
+    if (out.ok) expect(out.capture).toEqual({ preset: '2x1', cols: 2, cells: 2 });
+
+    // Count mismatch now reports the REQUESTED count, not a hardcoded six.
+    const short = await captureViewsViaPort(
+      async () => ({ ok: true, rendererId: 'gpu:test', viewsPng: viewsPng.slice(0, 1) }),
+      new Uint8Array([1, 2, 3]),
+      undefined,
+      { preset: '2x1' },
+    );
+    expect(short.ok).toBe(false);
+    if (!short.ok) expect(short.reason).toContain('returned 1 view PNGs, expected 2');
   });
 });

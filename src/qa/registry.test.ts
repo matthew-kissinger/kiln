@@ -791,7 +791,7 @@ describe('QaRegistry', () => {
 
   test('publishes a stable auditable state and owner for every checked-in rule', () => {
     const decisions = DETERMINISTIC_QA_REGISTRY.describePolicy();
-    expect(decisions).toHaveLength(24);
+    expect(decisions).toHaveLength(26);
     expect(
       decisions
         .filter((item) => item.ruleClass === 'exact')
