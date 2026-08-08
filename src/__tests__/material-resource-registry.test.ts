@@ -88,7 +88,8 @@ describe('runtime-delivered approved resources', () => {
       // Right length, wrong content: the case a length check alone would pass.
       resolver: async () => {
         const bytes = goodBytes();
-        bytes[bytes.byteLength - 1] ^= 0xff;
+        const last = bytes.byteLength - 1;
+        bytes.set([(bytes[last] ?? 0) ^ 0xff], last);
         return bytes;
       },
     });
