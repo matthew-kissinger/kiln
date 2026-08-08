@@ -7,7 +7,10 @@
  *
  * 1. **ORM channel packing.** A separate occlusion image is folded into the R
  *    channel of the metallic-roughness image, which is where glTF expects it.
- *    One fewer image to fetch and decode.
+ *    One fewer image to fetch, decode, and hold on the GPU — for a 512px pair
+ *    that is a megabyte of VRAM. Note that it is NOT reliably a byte saving: a
+ *    flat occlusion map that PNG compresses to nothing on its own costs real
+ *    bytes once interleaved with a noisy metallic-roughness map.
  * 2. **Palette colourways** as `KHR_materials_variants`, so one file carries
  *    every look instead of one file per look.
  * 3. **KTX2 supercompression** via `KHR_texture_basisu`. Measured at -80% to
@@ -124,6 +127,22 @@ export function resetKtxEncoderProbe(): void {
 const isPng = (texture: Texture): boolean => texture.getMimeType() === 'image/png';
 
 /**
+ * Drop a texture nothing points at any more.
+ *
+ * gltf-transform's writer does NOT prune unreferenced properties — an image left
+ * behind by a re-point is still serialized into the binary chunk. Without this the
+ * whole point of channel packing is lost: the material would read one image while
+ * the FILE still carried two, so the saving would be a claim rather than a fact.
+ *
+ * `listParents()` always includes the document Root, which is bookkeeping and not a
+ * reference; anything else means something still uses the texture.
+ */
+function disposeIfOrphaned(texture: Texture): void {
+  const stillUsed = texture.listParents().some((parent) => parent.propertyType !== 'Root');
+  if (!stillUsed) texture.dispose();
+}
+
+/**
  * Fold occlusion into metallic-roughness R.
  *
  * Only when the two are genuinely distinct images of identical size — a
@@ -159,13 +178,23 @@ async function packOcclusionIntoMetallicRoughness(doc: Document): Promise<number
         continue;
       }
 
-      // R <- occlusion R, G/B (roughness/metalness) untouched.
-      const merged = Buffer.from(mrImage.data);
-      for (let i = 0; i < merged.length; i += 4) merged[i] = occImage.data[i] ?? 255;
-      const png = await sharp(merged, {
-        raw: { width: mrImage.info.width, height: mrImage.info.height, channels: 4 },
-      })
-        .png()
+      // R <- occlusion R, G/B (roughness/metalness) untouched, and NO alpha channel.
+      //
+      // Three channels, not four, is the difference between this pass saving bytes and
+      // costing them. glTF's ORM convention uses R/G/B only, so the alpha `ensureAlpha`
+      // added for a uniform stride is pure padding once merged — and a fourth constant
+      // channel plus default PNG compression made the merged image larger than the two
+      // separate images it replaced. Measured on a 64px pair: 7512 bytes at RGBA/level 6
+      // against 7032 for the unpacked original.
+      const { width, height } = mrImage.info;
+      const merged = Buffer.allocUnsafe(width * height * 3);
+      for (let i = 0, o = 0; o < merged.length; i += 4, o += 3) {
+        merged[o] = occImage.data[i] ?? 255;
+        merged[o + 1] = mrImage.data[i + 1] ?? 255;
+        merged[o + 2] = mrImage.data[i + 2] ?? 255;
+      }
+      const png = await sharp(merged, { raw: { width, height, channels: 3 } })
+        .png({ compressionLevel: 9 })
         .toBuffer();
 
       metallicRoughness.setImage(new Uint8Array(png));
@@ -173,13 +202,13 @@ async function packOcclusionIntoMetallicRoughness(doc: Document): Promise<number
       const info = material.getOcclusionTextureInfo();
       const mrInfo = material.getMetallicRoughnessTextureInfo();
       if (info && mrInfo) info.setTexCoord(mrInfo.getTexCoord());
+      disposeIfOrphaned(occlusion);
       packed += 1;
     } catch {
       // A texture we cannot decode stays as it is. The file is still valid.
     }
   }
 
-  // Any occlusion image left with no reference is dropped by the writer.
   return packed;
 }
 
