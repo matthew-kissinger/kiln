@@ -84,6 +84,34 @@ async function build() {
 }
 `;
 
+/** A packed metallic-roughness image beside a same-size occlusion image — the pair
+ *  channel packing exists to merge. */
+const ORM = `
+const meta = { name: 'Panel', category: 'prop' };
+
+async function build() {
+  const root = createRoot('Panel');
+  const mr = proceduralTexture({
+    size: 64,
+    usage: 'metallicRoughness',
+    layers: [
+      { op: 'solid', color: 0x008000 },
+      { op: 'noise', colorA: 0x004000, colorB: 0x00c000, octaves: 3, scale: 8, blend: 'overlay' },
+    ],
+  });
+  const ao = proceduralTexture({
+    size: 64,
+    usage: 'occlusion',
+    layers: [
+      { op: 'solid', color: 0xffffff },
+      { op: 'stripes', colorA: 0x808080, colorB: 0xffffff, scale: 6, blend: 'multiply' },
+    ],
+  });
+  root.add(createPart('Body', boxGeo(1, 1, 1), pbrMaterial({ albedo: 0x8a5a2b, metallicRoughness: mr, aoMap: ao }), {}));
+  return root;
+}
+`;
+
 const PALETTES: KitVariantSpec[] = [
   { name: 'Rust', slots: [{ color: '#8a3b21' }, { color: '#c76a3a' }] },
   { name: 'Frost', slots: [{ color: '#9fc9d8' }, { color: '#e8f2f6' }] },
@@ -92,6 +120,45 @@ const PALETTES: KitVariantSpec[] = [
 async function glbOf(code: string): Promise<Uint8Array> {
   return (await renderGLB(code, {})).glb;
 }
+
+describe('ORM channel packing', () => {
+  test('the occlusion image is folded in AND removed from the file', async () => {
+    const original = await glbOf(ORM);
+    const packed = await packKitGlb(original, { ktx2: false });
+
+    expect(packed).toBeDefined();
+    expect(packed!.summary.ormPacked).toBe(1);
+    expect(packed!.gltfValidation.issues.numErrors).toBe(0);
+
+    const before = await io().readBinary(original);
+    const after = await io().readBinary(packed!.bytes);
+    // The load-bearing half. gltf-transform's writer does not prune, so re-pointing the
+    // material without disposing the old image leaves both in the binary chunk — the
+    // material reads one texture, the file still ships two, and packing saved nothing.
+    expect(before.getRoot().listTextures().length).toBe(2);
+    expect(after.getRoot().listTextures().length).toBe(1);
+
+    // Deliberately NOT a byte assertion, and this is the interesting part. The payoff
+    // here is one fewer image to fetch, decode, and hold on the GPU — for a 512px pair
+    // that is a megabyte of VRAM — not a smaller file. Merging a low-entropy occlusion
+    // map into a noisy metallic-roughness map can cost bytes: PNG compresses flat
+    // stripes to almost nothing on their own and to real bytes once interleaved with
+    // noise. Measured on this 64px pair, 7032 unpacked against 7232 packed. Anyone who
+    // adds a "keep the smaller" guard here the way the KTX2 step has one will decline
+    // the glTF ORM convention to save 200 bytes and lose the VRAM win that motivates it.
+
+    // Both slots now name the same image, which is what glTF's ORM convention means.
+    const material = after.getRoot().listMaterials()[0];
+    expect(material?.getOcclusionTexture()).toBe(material?.getMetallicRoughnessTexture() ?? null);
+  });
+
+  test('nothing to pack means no rewrite', async () => {
+    // TEXTURED has one albedo image and no occlusion/metallic-roughness pair.
+    const packed = await packKitGlb(await glbOf(TEXTURED), { ktx2: false });
+
+    expect(packed).toBeUndefined();
+  });
+});
 
 describe('palette colourways as KHR_materials_variants', () => {
   test('one file carries every palette, and the default look is unchanged', async () => {
