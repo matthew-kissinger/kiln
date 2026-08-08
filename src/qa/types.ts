@@ -97,6 +97,10 @@ export interface QaContext {
     modularJoin?: unknown;
     /** T4.1 part-vs-part boolean intersection volumes; computed async before QA runs. */
     partPenetration?: unknown;
+    /** T4.3 reference-image agreement; computed by whichever tier holds both the
+     *  decoded reference and a rendered view. Absent on every generation that had
+     *  no reference image, which is most of them. */
+    referenceComparison?: unknown;
   };
 }
 
