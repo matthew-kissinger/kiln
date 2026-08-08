@@ -405,8 +405,11 @@ describe('W7 engine-derived QA evidence', () => {
         'ASSET_SCOPE_PROFILE',
       ]),
     );
-    expect(DETERMINISTIC_QA_REGISTRY.list().some((rule) => /REF|REFERENCE/.test(rule.id))).toBe(
-      false,
-    );
+    // T4.3 added the first REF_* rule. This assertion used to say no such rule
+    // existed; it is kept as a positive statement of the same fact rather than
+    // deleted, so the registry's contents stay accounted for.
+    const reference = DETERMINISTIC_QA_REGISTRY.list().filter((rule) => rule.id.startsWith('REF_'));
+    expect(reference.map((rule) => rule.id)).toEqual(['REF_COMPARISON']);
+    expect(reference[0]?.defaultMode).toBe('observe');
   });
 });
