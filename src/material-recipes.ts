@@ -7,6 +7,11 @@
  * filesystem access, or provider credentials.
  */
 
+import {
+  PRODUCTION_TEXTURE_RESOURCE_DESCRIPTORS_V1,
+  PRODUCTION_TEXTURE_RESOURCE_IDS,
+} from './material-texture-library.generated';
+
 export const MATERIAL_RECIPE_SCHEMA_VERSION = 1 as const;
 
 export const MATERIAL_RECIPE_IDS = [
@@ -44,6 +49,7 @@ export const APPROVED_TEXTURE_RESOURCE_IDS = [
   'kiln.texture.neutral-normal.v1',
   'kiln.texture.neutral-metallic-roughness.v1',
   'kiln.texture.emissive-grid.v1',
+  ...PRODUCTION_TEXTURE_RESOURCE_IDS,
 ] as const;
 
 export type ApprovedTextureResourceId = (typeof APPROVED_TEXTURE_RESOURCE_IDS)[number];
@@ -445,6 +451,7 @@ export const APPROVED_TEXTURE_RESOURCES_V1: Readonly<
     allowedSlots: Object.freeze(['emissive'] as const),
     recipeIds: Object.freeze(['kiln.material.emissive.v1'] as const),
   }),
+  ...PRODUCTION_TEXTURE_RESOURCE_DESCRIPTORS_V1,
 });
 
 const isRecord = (value: unknown): value is Record<string, unknown> =>

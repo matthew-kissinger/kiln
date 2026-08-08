@@ -10,6 +10,7 @@ import {
   type ApprovedTextureResourceId,
   type TextureResourceDelivery,
 } from './material-recipes';
+import { PRODUCTION_TEXTURE_RESOURCE_BASE64 } from './material-texture-library.generated';
 import {
   loadTexture,
   type KilnTextureMetadata,
@@ -100,6 +101,7 @@ const EMBEDDED_RESOURCE_BASE64: Readonly<Record<ApprovedTextureResourceId, strin
       'iVBORw0KGgoAAAANSUhEUgAAAAIAAAACCAYAAABytg0kAAAACXBIWXMAAAPoAAAD6AG1e1JrAAAAEElEQVQImWNguCT0H4xhDAA/hAeNGSjqWAAAAABJRU5ErkJggg==',
     'kiln.texture.emissive-grid.v1':
       'iVBORw0KGgoAAAANSUhEUgAAAAIAAAACCAYAAABytg0kAAAACXBIWXMAAAPoAAAD6AG1e1JrAAAAFklEQVQImWP4P0Hhv4MEy38GEAHiAABG+wgTqOP6IAAAAABJRU5ErkJggg==',
+    ...PRODUCTION_TEXTURE_RESOURCE_BASE64,
   },
 );
 
