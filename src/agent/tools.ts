@@ -26,6 +26,8 @@ import {
   createKilnRenderViewsDef,
   createKilnScreenshotAnimationDef,
   createKilnViewInteriorDef,
+  inspectBufferInput,
+  renderViewsBufferInput,
   type KilnToolContext,
   type KilnToolDef,
 } from '../tools/registry';
@@ -497,32 +499,6 @@ const draftInput = z.object({
     .describe('The complete Kiln program (defines `meta` + `build()`, optional `animate()`).'),
 });
 
-/** Schema for the buffer-aware close-up tool (omits `code` — it reads the working buffer). */
-const inspectBufferInput = z.object({
-  part: z
-    .string()
-    .optional()
-    .describe(
-      'The part to frame, by node name (case-insensitive; substring match as a fallback). ' +
-        'Omit to frame the whole asset.',
-    ),
-  view: z
-    .string()
-    .optional()
-    .describe('Camera angle: front, right, back, left, top, or three-quarter (default).'),
-  zoom: z
-    .number()
-    .optional()
-    .describe('Padding multiplier around the part bounds, clamped to 1-4. Default 1.2.'),
-  isolate: z
-    .boolean()
-    .optional()
-    .describe(
-      'Hide everything except the named part so nothing can occlude it. Needs `part`. ' +
-        'Default false.',
-    ),
-});
-
 /**
  * Build the unified buffer surface over a working buffer seeded with `seedCode`
  * (empty for generate, the parent's code for refine). The buffer's live edit
@@ -614,10 +590,14 @@ export function makeKilnUnifiedTools(
 
   const renderTool: Tool = tool({
     name: 'kiln_render',
-    description: `${renderViewsDef.description} Operates on your current working buffer (no argument).`,
-    inputSchema: viewInput,
-    callback: async () => {
-      const out = await renderViewsDef.run({ code: buffer.code });
+    description: `${renderViewsDef.description} Operates on your current working buffer: omit code; optional capture controls remain available.`,
+    inputSchema: renderViewsBufferInput,
+    callback: async (input) => {
+      const i = input as { capture?: unknown };
+      const out = await renderViewsDef.run({
+        code: buffer.code,
+        ...(i.capture !== undefined ? { capture: i.capture } : {}),
+      });
       // Out-of-band: surface a SUCCESSFUL render as a live candidate (the working
       // buffer + the six-view image the agent just saw). Best-effort; a build
       // failure is image-free and not a candidate. Never changes the agent's view.
@@ -647,11 +627,20 @@ export function makeKilnUnifiedTools(
     description: `${inspectDef.description} Operates on your current working buffer (no code argument).`,
     inputSchema: inspectBufferInput,
     callback: async (input) => {
-      const i = input as { part?: string; view?: string; zoom?: number; isolate?: boolean };
+      const i = input as {
+        part?: string;
+        view?: string;
+        azimuthDeg?: number;
+        elevationDeg?: number;
+        zoom?: number;
+        isolate?: boolean;
+      };
       const out = await inspectDef.run({
         code: buffer.code,
         ...(i.part !== undefined ? { part: i.part } : {}),
         ...(i.view !== undefined ? { view: i.view } : {}),
+        ...(i.azimuthDeg !== undefined ? { azimuthDeg: i.azimuthDeg } : {}),
+        ...(i.elevationDeg !== undefined ? { elevationDeg: i.elevationDeg } : {}),
         ...(i.zoom !== undefined ? { zoom: i.zoom } : {}),
         ...(i.isolate !== undefined ? { isolate: i.isolate } : {}),
       });

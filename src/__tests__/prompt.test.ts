@@ -31,6 +31,9 @@ import {
   KILN_REFINE_DIRECTIVE_UNIFIED,
   KILN_EDIT_DIRECTIVE_UNIFIED,
   KILN_COORDINATE_CONTRACT,
+  KILN_AUTHORING_STRATEGY,
+  KILN_REFERENCE_IMAGE_DIRECTIVE,
+  KILN_REFERENCE_IMAGE_DIRECTIVE_UNIFIED,
 } from '../prompt';
 import { KILN_ASSET_FRAME, createAssetIntentV1 } from '../contracts';
 
@@ -44,6 +47,18 @@ describe('getSystemPrompt', () => {
 
   test('returns the GLB prompt for mode=glb', () => {
     expect(getSystemPrompt('glb')).toBe(KILN_SYSTEM_PROMPT);
+  });
+
+  test('coordinates the new geometry and portable material vocabulary without prescribing every asset', () => {
+    expect(KILN_AUTHORING_STRATEGY).toContain('roundedBoxGeo');
+    expect(KILN_AUTHORING_STRATEGY).toContain('extrudeProfile');
+    expect(KILN_AUTHORING_STRATEGY).toContain('revolveProfile');
+    expect(KILN_AUTHORING_STRATEGY).toContain(
+      'proceduralTexture() creates deterministic image data',
+    );
+    expect(KILN_AUTHORING_STRATEGY).toContain('baked into the GLB');
+    expect(KILN_AUTHORING_STRATEGY).toContain('Do not replace a simple primitive');
+    expect(getSystemPrompt('glb')).toContain(KILN_AUTHORING_STRATEGY);
   });
 
   test('returns the TSL prompt for mode=tsl', () => {
@@ -391,6 +406,13 @@ describe('unified tool surface prompt', () => {
     expect(KILN_VISUAL_QA_UNIFIED).toContain('BUILDING');
   });
 
+  test('the unified vision loop explains bounded captures and object-relative orbit inspection', () => {
+    expect(KILN_VISUAL_QA_UNIFIED).toContain('default 3x2 capture');
+    expect(KILN_VISUAL_QA_UNIFIED).toContain('bounded custom capture.cells');
+    expect(KILN_VISUAL_QA_UNIFIED).toContain('azimuthDeg/elevationDeg');
+    expect(KILN_VISUAL_QA_UNIFIED).toContain('object-relative angle');
+  });
+
   test('unified takes precedence over apiSurface:trimmed (which points at the removed list tool)', () => {
     expect(getSystemPrompt('glb', { toolSurface: 'unified', apiSurface: 'trimmed' })).toBe(
       getSystemPrompt('glb', { toolSurface: 'unified' }),
@@ -413,5 +435,24 @@ describe('unified tool surface prompt', () => {
     expect(KILN_EDIT_DIRECTIVE_UNIFIED).toContain('kiln_draft');
     expect(KILN_EDIT_DIRECTIVE_UNIFIED).not.toContain('kiln_submit');
     expect(KILN_EDIT_DIRECTIVE_UNIFIED).not.toContain('kiln_screenshot');
+  });
+});
+
+describe('reference-image grounding', () => {
+  test('requires comparison-driven iteration in both tool vocabularies', () => {
+    for (const directive of [
+      KILN_REFERENCE_IMAGE_DIRECTIVE,
+      KILN_REFERENCE_IMAGE_DIRECTIVE_UNIFIED,
+    ]) {
+      expect(directive).toContain('primary visual evidence');
+      expect(directive).toContain('silhouette and proportions');
+      expect(directive).toContain('part attachment/contact');
+      expect(directive).toContain('material boundaries and surface-detail scale');
+      expect(directive).toContain('highest-impact visible mismatch');
+      expect(directive).toContain('lighting, backdrop, or camera distortion');
+    }
+    expect(KILN_REFERENCE_IMAGE_DIRECTIVE).toContain('kiln_screenshot');
+    expect(KILN_REFERENCE_IMAGE_DIRECTIVE_UNIFIED).toContain('kiln_render');
+    expect(KILN_REFERENCE_IMAGE_DIRECTIVE_UNIFIED).toContain('kiln_inspect');
   });
 });

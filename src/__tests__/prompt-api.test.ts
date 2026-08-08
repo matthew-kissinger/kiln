@@ -101,6 +101,7 @@ describe('system prompt embeds the generated catalog', () => {
       'coordinate-contract',
       'api',
       'architecture',
+      'authoring-strategy',
       'quality',
       'attachment-rules',
       'rules',

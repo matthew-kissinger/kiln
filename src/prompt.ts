@@ -185,6 +185,31 @@ For animations, track names must use "Joint_" prefix:
 - createPart("Wheel", ..., {pivot: true}) creates "Joint_Wheel" - animate it
 </architecture>`;
 
+/** Capability-selection guidance above the generated helper signatures. */
+export const KILN_AUTHORING_STRATEGY = `<authoring-strategy>
+Model the requested construction, not just its outline:
+- For moulded, cast, machined, upholstered, or toy-like hard surfaces, prefer roundedBoxGeo with
+  an intentional round/chamfer edge treatment over a perfectly sharp box. Keep truly fabricated
+  sheet parts sharp when that is the design.
+- Use extrudeProfile for a constant-depth designed section (bracket, sign, trim, plate, opening, or
+  custom silhouette), including holes when the reference shows them. Use revolveProfile for a
+  rotational body (vessel, knob, wheel rim, turned leg) whose side profile controls the form. These
+  helpers are async; await them inside async build(). Do not replace a simple primitive with a sweep
+  merely to sound sophisticated.
+- Treat attachments and contact as construction: brackets meet hosts, wheels meet hubs and ground,
+  handles join at both ends, and layered trim sits visibly proud rather than coplanar.
+
+Author portable material response, not render-only decoration:
+- Use gameMaterial for deliberate flat/stylized colour. For metal, wood, stone, bark, cloth, skin,
+  glass, paint, or textured-hero requests, follow the resolved portable material recipe guidance.
+- proceduralTexture() creates deterministic image data that is baked into the GLB. Build restrained
+  albedo/roughness patterns (and normalMapFromHeight when useful), unwrap the geometry, and bind them
+  through pbrMaterial. Prefer a few coherent material roles over unique noisy textures per part.
+- Surface detail supports form: align grain, wear, seams, and pattern scale with the object's
+  construction. Do not fake texture by scattering hundreds of tiny meshes or by inventing filesystem
+  paths/resource IDs.
+</authoring-strategy>`;
+
 export const KILN_QUALITY = `<quality>
 - Give your asset personality and character
 - Use appropriate level of detail for the category
@@ -292,7 +317,11 @@ that doesn't exist — fix the joint name. Fix any motion defect and screenshot 
  * kiln_screenshot + kiln_submit.
  */
 export const KILN_VISUAL_QA_UNIFIED = `<visual-qa>
-After kiln_render you SEE the six views (metrics ride alongside the image). Before kiln_finalize, check each view deliberately:
+Start with kiln_render's default 3x2 capture: it is the comparison baseline and metrics ride alongside
+the image. Use a smaller preset (1x1/2x1/2x2) only when a simple or symmetric form repeats the same
+evidence; use 3x3 only when six angles leave real ambiguity. For an underside, seam, opening, or joint
+the defaults hide, pass bounded custom capture.cells with object-relative azimuth/elevation instead
+of spending cells on redundant views. Before kiln_finalize, check each view deliberately:
 - Front (camera on +X): the nose/muzzle/face should point AT you. If you see
   a side profile here, the asset is built sideways — rebuild along +X.
   Wheels/discs read edge-on here and as circles from the side — a circle seen
@@ -314,7 +343,9 @@ If any view looks wrong, fix the code (kiln_edit or kiln_draft) and re-render be
 If a view reveals a suspect REGION — a floating part, a bad joint, a wrong proportion — call
 kiln_inspect with that part's name for a single framed close-up before editing; prefer it over
 re-reading the whole grid for fine detail. An unresolved name returns the list of part names to
-retry with. If surrounding geometry blocks the part from every angle, pass isolate:true to hide
+retry with. Use azimuthDeg/elevationDeg to orbit to any object-relative angle when a named view is
+edge-on or occluded; the reply reports the angles so the next look can step from evidence rather than
+guessing. If surrounding geometry blocks the part from every angle, pass isolate:true to hide
 everything else.
 If this is an ANIMATED CHARACTER, also call kiln_screenshot_animation on your key clips
 before finalizing — at least the walk and the main attack — from the right (side) camera,
@@ -493,6 +524,7 @@ export const KILN_SYSTEM_PROMPT_SECTIONS: ReadonlyArray<readonly [string, string
   ['coordinate-contract', KILN_COORDINATE_CONTRACT],
   ['api', KILN_API_SECTION],
   ['architecture', KILN_ARCHITECTURE],
+  ['authoring-strategy', KILN_AUTHORING_STRATEGY],
   ['quality', KILN_QUALITY],
   ['attachment-rules', KILN_ATTACHMENT_RULES],
   ['rules', KILN_RULES],
@@ -793,6 +825,12 @@ export const KILN_EDIT_DIRECTIVE = `You are EDITING an existing Kiln asset in pl
 export const KILN_REFINE_DIRECTIVE_UNIFIED = `You are MODIFYING an existing Kiln asset, not building a new one from scratch. The user message gives you the Original Request that created the asset, its Current Code, and an Edit Request. Your working buffer is already seeded with the Current Code. Keep the asset's established character, proportions, and structure; change ONLY what the Edit Request asks for — use kiln_edit for small changes, or kiln_draft to rewrite the whole program. Every buffer write returns a static validation report — fix any errors it lists, re-render the buffer with kiln_render, then call kiln_finalize.`;
 
 export const KILN_EDIT_DIRECTIVE_UNIFIED = `You are EDITING an existing Kiln asset in place, not rebuilding it. Your working buffer is already seeded with the Current Code shown in the user message. Use the kiln_edit tool to make the SMALLEST set of changes that satisfy the Edit Request: replace an exact span (oldString) with newString. Each oldString must match the current buffer verbatim - call kiln_view to read it (the text is raw, with no line-number prefixes). Keep everything the Edit Request does not mention byte-for-byte unchanged. Every successful edit returns a static validation report - fix any errors it lists, re-render the buffer with kiln_render, then call kiln_finalize. If an edit cannot be anchored after a couple of tries, call kiln_draft to rewrite the whole program instead.`;
+
+/** Dynamic reference grounding belongs in the user turn so an attached image
+ * does not fork the large cached system prefix. */
+export const KILN_REFERENCE_IMAGE_DIRECTIVE = `A reference image of the desired asset is attached. Treat it as primary visual evidence for form while the text remains authoritative for requested changes. After each kiln_screenshot, compare in this order: silhouette and proportions, major openings and part attachment/contact, then material boundaries and surface-detail scale. Fix the highest-impact visible mismatch and screenshot again. Do not add unseen companion objects or scenery, and do not copy lighting, backdrop, or camera distortion into the geometry.`;
+
+export const KILN_REFERENCE_IMAGE_DIRECTIVE_UNIFIED = `A reference image of the desired asset is attached. Treat it as primary visual evidence for form while the text remains authoritative for requested changes. After each kiln_render, compare in this order: silhouette and proportions, major openings and part attachment/contact, then material boundaries and surface-detail scale. Fix the highest-impact visible mismatch and render again. Use kiln_inspect with an object-relative orbit for a reference feature the grid leaves edge-on or occluded. Do not add unseen companion objects or scenery, and do not copy lighting, backdrop, or camera distortion into the geometry.`;
 
 export interface AssetBudget {
   maxTriangles?: number;

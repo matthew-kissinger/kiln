@@ -199,6 +199,12 @@ const captureInput = z
 
 const renderViewsInput = renderInput.extend({ capture: captureInput });
 
+/** Unified-agent schema: the working buffer supplies `code`, while the model
+ * still owns the deliberately bounded camera selection. Keeping this derived
+ * from the registry schema prevents the Strands skin from silently lagging the
+ * canonical capture contract. */
+export const renderViewsBufferInput = renderViewsInput.omit({ code: true });
+
 const screenshotAnimationInput = z.object({
   code: z
     .string()
@@ -951,6 +957,10 @@ const inspectInput = z.object({
         'one it does nothing. Default false — surrounding geometry stays visible for context.',
     ),
 });
+
+/** Unified-agent schema: identical inspection controls, with source supplied
+ * by the working buffer instead of the model. */
+export const inspectBufferInput = inspectInput.omit({ code: true });
 
 export interface KilnInspectResult {
   ok: boolean;

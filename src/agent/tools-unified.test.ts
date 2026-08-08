@@ -187,6 +187,17 @@ describe('makeKilnUnifiedTools', () => {
     expect('pngBase64' in json).toBe(false);
   });
 
+  test('kiln_render exposes and honors the bounded capture contract on the working buffer', async () => {
+    const sink: UnifiedSink = { edits: [] };
+    const tools = makeKilnUnifiedTools({ seedCode: BOX_CODE, sink });
+    const render = findTool(tools, 'kiln_render');
+    const out = (await render.invoke({ capture: { preset: '1x1' } })) as unknown[];
+    const json = (out[1] as JsonBlock).json as {
+      capture?: { preset?: string; cols?: number; cells?: number };
+    };
+    expect(json.capture).toEqual({ preset: '1x1', cols: 1, cells: 1 });
+  });
+
   test('kiln_render on a broken buffer is image-free (plain JSON error)', async () => {
     const sink: UnifiedSink = { edits: [] };
     const tools = makeKilnUnifiedTools({ seedCode: 'not a kiln program (', sink });
@@ -244,6 +255,21 @@ describe('makeKilnUnifiedTools', () => {
     expect(json['framed']).toContain('three-quarter');
     expect(json['width']).toBe(512);
     expect('pngBase64' in json).toBe(false); // image stripped by the media extractor
+  });
+
+  test('kiln_inspect exposes and honors object-relative orbit angles on the working buffer', async () => {
+    const sink: UnifiedSink = { edits: [] };
+    const tools = makeKilnUnifiedTools({ seedCode: TWO_PART_CODE, sink });
+    const inspect = findTool(tools, 'kiln_inspect');
+    const out = (await inspect.invoke({
+      part: 'head',
+      azimuthDeg: 125,
+      elevationDeg: -20,
+    })) as unknown[];
+    const json = (out[1] as JsonBlock).json as Record<string, unknown>;
+    expect(json['azimuthDeg']).toBeCloseTo(125, 1);
+    expect(json['elevationDeg']).toBeCloseTo(-20, 1);
+    expect(json['framed']).toContain('azimuth 125deg');
   });
 
   test('kiln_inspect on an unknown part returns the part list without throwing (image-free)', async () => {
