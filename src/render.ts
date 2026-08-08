@@ -83,6 +83,7 @@ import {
   collectMaterialResourceProvenance,
   type MaterialResourceProvenanceV1,
 } from './material-resources';
+import { analyzePartPenetration, type PartPenetrationEvidenceV1 } from './qa/self-intersection';
 import {
   type BakedTextureProvenanceV1,
   bakeSceneTextures,
@@ -1111,7 +1112,31 @@ export async function renderSceneToGLB(
   // changes the exported bytes.
   ensureNormalMapTangents(root, warnings);
 
-  const sceneQaReport = runDeterministicSceneQa({ intent, scene: root, clips }, qaPolicyFromEnv());
+  // T4.1 — part-vs-part penetration. Async (manifold is WASM) and QA rules
+  // evaluate synchronously, so it runs here and reaches the rule through the
+  // derivedEvidence seam. A failure here must never lose the asset: the gate is
+  // in `observe`, and an analysis that could not run is reported as absent
+  // rather than as a clean result.
+  let partPenetration: PartPenetrationEvidenceV1 | undefined;
+  try {
+    partPenetration = await analyzePartPenetration(root);
+  } catch (err) {
+    warnings.push(
+      `self-intersection analysis failed: ${err instanceof Error ? err.message : String(err)}`,
+    );
+  }
+
+  const sceneQaReport = runDeterministicSceneQa(
+    {
+      intent,
+      scene: root,
+      clips,
+      ...(partPenetration
+        ? { derivedEvidence: { source: 'engine-scene-analysis' as const, partPenetration } }
+        : {}),
+    },
+    qaPolicyFromEnv(),
+  );
   if (sceneQaReport.disposition === 'block') {
     const blocked = new AssetQaBlockedError(sceneQaReport, 'scene');
     if (qaBlockingEnabled()) throw blocked;
