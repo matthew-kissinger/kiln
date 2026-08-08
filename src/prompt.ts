@@ -95,7 +95,8 @@ const meta = { name: "AssetName", category: "prop", role: "prop" };
 // "ground" | "building" | "wonder" | "poi" | "prop" | "fill" | "vehicle".
 
 // build() may be sync OR async. Mark it async if you use any CSG op
-// (boolUnion / boolDiff / boolIntersect / hull) because those await WASM.
+// (boolUnion / boolDiff / boolIntersect / hull) or any bevel/sweep op
+// (roundedBoxGeo / extrudeProfile / revolveProfile) because those await WASM.
 function build() {               // simple, no CSG
   const root = createRoot("AssetName");
   return root;
@@ -707,6 +708,11 @@ The sandbox exposes ~70 primitive helpers as globals (no imports), grouped:
 - Materials: gameMaterial, glassMaterial, lambertMaterial, basicMaterial, pbrMaterial
 - Repetition: createInstance, arrayLinear, arrayRadial, mirror
 - CSG (async build() required): boolUnion, boolDiff, boolIntersect, hull
+- Bevel & sweeps (async build() required): roundedBoxGeo (all 12 edges rounded
+  or chamfered, exact outer size — prefer over boxGeo for anything moulded,
+  cast, or machined), extrudeProfile (any 2D outline -> solid, with holes,
+  corner bevel, twist, taper), revolveProfile (solid lathe with a bevelled
+  rim), circleProfile (sync outline helper)
 - Mesh ops & curves: subdivide, mergeVertices, curveToMesh, pipeAlongPath, lathe, revolveGeo
 - UV + textures: autoUnwrap, boxUnwrap, cylinderUnwrap, planeUnwrap, panelRemapV, loadTexture
 - Animation: rotationTrack/positionTrack/scaleTrack (keys are "rotation"/"position"/"scale",
