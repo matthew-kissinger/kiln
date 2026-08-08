@@ -731,7 +731,25 @@ const inspectInput = z.object({
   view: z
     .string()
     .optional()
-    .describe('Camera angle: front, right, back, left, top, or three-quarter (default).'),
+    .describe(
+      'Camera angle: front, right, back, left, top, or three-quarter (default). Ignored when ' +
+        'azimuthDeg or elevationDeg is given.',
+    ),
+  azimuthDeg: z
+    .number()
+    .optional()
+    .describe(
+      'Orbit the camera around the asset: 0 = front, 90 = right, 180 = back, 270 = left. Wraps, ' +
+        'so 315 and -45 are the same. Use it to look between the named views — at a corner, a ' +
+        'seam, or whatever angle the last render left ambiguous.',
+    ),
+  elevationDeg: z
+    .number()
+    .optional()
+    .describe(
+      'Orbit the camera up or down: 0 = eye level, positive looks down from above, negative from ' +
+        'below. Clamped to -89..89. Combine with azimuthDeg for any three-quarter angle you want.',
+    ),
   zoom: z
     .number()
     .optional()
@@ -754,6 +772,9 @@ export interface KilnInspectResult {
   /** Resolved part name that was framed (absent when the whole asset was framed). */
   part?: string;
   view?: string;
+  /** Orbit angles actually rendered — reported for named cameras too. */
+  azimuthDeg?: number;
+  elevationDeg?: number;
   zoom?: number;
   /** True when everything outside the framed part was hidden (isolate honored). */
   isolated?: boolean;
@@ -783,6 +804,8 @@ async function runInspect(input: z.infer<typeof inspectInput>): Promise<KilnInsp
     const r = renderInspectView(root, {
       ...(input.part !== undefined ? { part: input.part } : {}),
       ...(input.view !== undefined ? { view: input.view } : {}),
+      ...(input.azimuthDeg !== undefined ? { azimuthDeg: input.azimuthDeg } : {}),
+      ...(input.elevationDeg !== undefined ? { elevationDeg: input.elevationDeg } : {}),
       ...(input.zoom !== undefined ? { zoom: input.zoom } : {}),
       ...(input.isolate !== undefined ? { isolate: input.isolate } : {}),
     });
@@ -795,16 +818,21 @@ async function runInspect(input: z.infer<typeof inspectInput>): Promise<KilnInsp
         availableParts: r.availableParts,
       };
     }
+    // Always state the angles, named camera or not, so the model can step from
+    // where it actually is instead of guessing the next view by name.
+    const from = `the ${r.view} view (azimuth ${r.azimuthDeg}deg, elevation ${r.elevationDeg}deg)`;
     const framed = r.part
-      ? `Framed part "${r.part}" (with its descendants) from the ${r.view} view at zoom ${r.zoom}.` +
+      ? `Framed part "${r.part}" (with its descendants) from ${from} at zoom ${r.zoom}.` +
         (r.isolated
           ? ' Everything else is hidden, so nothing in this image occludes it.'
           : ' Surrounding geometry is still drawn and may occlude it.')
-      : `Framed the whole asset from the ${r.view} view.`;
+      : `Framed the whole asset from ${from}.`;
     return {
       ok: true,
       ...(r.part ? { part: r.part } : {}),
       view: r.view,
+      azimuthDeg: r.azimuthDeg,
+      elevationDeg: r.elevationDeg,
       zoom: r.zoom,
       isolated: r.isolated,
       framed,
@@ -830,8 +858,13 @@ const KILN_INSPECT_DESCRIPTION =
   'from one camera. Use it after kiln_render reveals a suspect region — a floating part, a bad ' +
   'joint, a wrong proportion — to see fine detail one grid cell cannot show. args: part (omit to ' +
   'frame the whole asset in one large view), view (front/right/back/left/top/three-quarter, ' +
-  'default three-quarter), zoom (padding multiplier around the part bounds, 1 = tight crop up to ' +
-  '4 = wide context, default 1.2), isolate (hide everything except that part, default false). ' +
+  'default three-quarter), azimuthDeg + elevationDeg (orbit to ANY angle instead of a named view: ' +
+  'azimuth 0 = front, 90 = right, 180 = back, 270 = left; elevation 0 = eye level, positive looks ' +
+  'down, clamped to -89..89), zoom (padding multiplier around the part bounds, 1 = tight crop up ' +
+  'to 4 = wide context, default 1.2), isolate (hide everything except that part, default false). ' +
+  'Reach for the orbit angles when a named view puts the thing you need to judge edge-on or ' +
+  'behind something — the reply always tells you the azimuth/elevation it used, so you can step ' +
+  'from there. ' +
   'If the part name does not resolve you get the list of available part names back — pick one and ' +
   'retry. By default surrounding geometry stays visible for context and can occlude the part: ' +
   'either pick a different view, or set isolate:true to hide everything else and see the part ' +

@@ -46,6 +46,52 @@ export const SIX_VIEWS_REAR_QUARTER: ViewSpec[] = [
   { name: '3/4 Rear', dir: [-0.7, 0.5, -0.7] },
 ];
 
+/**
+ * Elevation clamp for orbit cameras. The rasterizer already swaps its up-hint
+ * past |y| > 0.99 so a true pole does not degenerate, but an exactly-vertical
+ * camera makes the framing basis spin freely with azimuth — two calls that
+ * differ only in azimuth would return differently-rotated top views. Clamping
+ * short of the pole keeps azimuth meaningful all the way up.
+ */
+export const MIN_ELEVATION_DEG = -89;
+export const MAX_ELEVATION_DEG = 89;
+
+/**
+ * Object-relative orbit angles to a camera direction in the kiln frame
+ * (+X forward, +Y up, +Z right).
+ *
+ * Azimuth sweeps from the front (+X) toward the right (+Z), so it reproduces
+ * the named grid cameras exactly: 0 = Front, 90 = Right, 180 = Back,
+ * 270 = Left, and (45, 26.79) is the shipped 3/4 direction. Azimuth wraps
+ * naturally; elevation is clamped to {@link MIN_ELEVATION_DEG}..{@link MAX_ELEVATION_DEG}.
+ */
+export function orbitDir(azimuthDeg: number, elevationDeg: number): [number, number, number] {
+  const el =
+    (Math.min(MAX_ELEVATION_DEG, Math.max(MIN_ELEVATION_DEG, elevationDeg)) * Math.PI) / 180;
+  const az = (azimuthDeg * Math.PI) / 180;
+  const cosEl = Math.cos(el);
+  return [cosEl * Math.cos(az), Math.sin(el), cosEl * Math.sin(az)];
+}
+
+/**
+ * Exact inverse of {@link orbitDir}: recover orbit angles from a direction.
+ *
+ * Used so the named cameras can report where they are in the same coordinates
+ * the model steers with, without a second hand-maintained table that could
+ * drift from the direction vectors above. Azimuth comes back in [0, 360).
+ */
+export function orbitAnglesOf(dir: [number, number, number]): {
+  azimuthDeg: number;
+  elevationDeg: number;
+} {
+  const [x, y, z] = normalize(dir);
+  const azimuthDeg = ((((Math.atan2(z, x) * 180) / Math.PI) % 360) + 360) % 360;
+  return {
+    azimuthDeg: +azimuthDeg.toFixed(2),
+    elevationDeg: +((Math.asin(Math.min(1, Math.max(-1, y))) * 180) / Math.PI).toFixed(2),
+  };
+}
+
 /** Named six-view grid variants (H-33). 'default' keeps the shipped front-quarter grid. */
 export type ViewGridVariant = 'default' | 'rear-quarter';
 

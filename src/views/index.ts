@@ -49,6 +49,10 @@ export {
   SIX_VIEWS_REAR_QUARTER,
   resolveGridViews,
   coverage,
+  orbitDir,
+  orbitAnglesOf,
+  MIN_ELEVATION_DEG,
+  MAX_ELEVATION_DEG,
 } from './raster';
 export type { RasterOptions, ViewSpec, ViewGridVariant } from './raster';
 export { encodePng, decodePng } from './png';
