@@ -7,6 +7,7 @@
  * Pure and deterministic.
  */
 
+import { annotateViewCell } from './annotate';
 import { decodePng, encodePng } from './png';
 
 export const PAD = 4;
@@ -73,15 +74,27 @@ export interface ComposedPngGrid {
 
 /**
  * Decode per-view PNGs (e.g. from a host PbrRenderPort) and composite them into
- * the same padded 3-column grid layout the CPU six-view path produces. Every
- * view must be the same square size; unsupported PNG formats or mismatched
- * sizes throw — the caller treats that as a render-port degrade.
+ * the same padded grid layout the CPU view path produces. Every view must be
+ * the same square size; unsupported PNG formats or mismatched sizes throw — the
+ * caller treats that as a render-port degrade.
+ *
+ * Pass `views` to stamp each cell with its name and axis gnomon, exactly as the
+ * CPU rasterizer does. A host renders pixels; it does not know the Kiln camera
+ * vocabulary, so the annotation has to happen here or the GPU sheet arrives
+ * unlabelled — a silent loss of the model's orientation cues on the one path
+ * where the run cannot tell it happened. `views` must align 1:1 with `pngs`.
  */
 export function compositeViewPngGrid(
   pngs: readonly Uint8Array[],
   cols: number = GRID_COLS,
+  views?: readonly { name: string; dir: readonly number[] }[],
 ): ComposedPngGrid {
   if (pngs.length === 0) throw new Error('compositeViewPngGrid: no views to composite');
+  if (views && views.length !== pngs.length) {
+    throw new Error(
+      `compositeViewPngGrid: ${views.length} view specs for ${pngs.length} PNGs — they must align 1:1`,
+    );
+  }
   const decoded = pngs.map((png) => decodePng(png));
   const size = decoded[0]!.width;
   for (const d of decoded) {
@@ -90,6 +103,11 @@ export function compositeViewPngGrid(
         `compositeViewPngGrid: every view must be a ${size}x${size} square; got ${d.width}x${d.height}`,
       );
     }
+  }
+  if (views) {
+    // decodePng returns cell-owned buffers, so this mutates nothing the caller
+    // still holds — the host's PNG bytes are untouched.
+    for (let i = 0; i < decoded.length; i++) annotateViewCell(decoded[i]!.rgb, size, views[i]!);
   }
   const { rgb, width, height } = compositeCellGrid(
     decoded.map((d) => d.rgb),

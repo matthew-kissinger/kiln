@@ -279,9 +279,12 @@ describe('generateKilnAsset viewRenderPort (B3b/B4)', () => {
     expect(r.renderDegraded).toBe(false);
     expect(r.renderDegradedReason).toBeUndefined();
     expect(r.viewsRendererId).toBe('dawn-vulkan:test-gpu:1.0');
-    // The views are the port cells composited into the SAME 3x2 grid layout.
-    const { compositeViewPngGrid } = await import('../views');
-    expect(Buffer.compare(r.views!, compositeViewPngGrid(viewsPng).png)).toBe(0);
+    // The views are the port cells composited into the SAME 3x2 grid layout,
+    // and stamped with the same cell labels + gnomon the CPU path applies.
+    const { compositeViewPngGrid, SIX_VIEWS } = await import('../views');
+    expect(Buffer.compare(r.views!, compositeViewPngGrid(viewsPng, 3, SIX_VIEWS).png)).toBe(0);
+    // Annotation is not optional decoration: an unlabelled sheet would differ.
+    expect(Buffer.compare(r.views!, compositeViewPngGrid(viewsPng).png)).not.toBe(0);
   });
 
   test('port is never consulted when captureViews is off', async () => {
@@ -401,8 +404,10 @@ describe('generateKilnAsset viewRenderPort (B3b/B4)', () => {
     expect(okOutcome.ok).toBe(true);
     if (okOutcome.ok) {
       expect(okOutcome.rendererId).toBe('dawn-vulkan:test-gpu:1.0');
-      const { compositeViewPngGrid } = await import('../views');
-      expect(Buffer.compare(okOutcome.png, compositeViewPngGrid(viewsPng).png)).toBe(0);
+      const { compositeViewPngGrid, SIX_VIEWS } = await import('../views');
+      expect(Buffer.compare(okOutcome.png, compositeViewPngGrid(viewsPng, 3, SIX_VIEWS).png)).toBe(
+        0,
+      );
     }
 
     const degraded = await captureViewsViaPort(
@@ -478,8 +483,9 @@ describe('generateKilnAsset viewRenderPort (B3b/B4)', () => {
     expect(requests[0]!.viewDirs).toHaveLength(9);
     expect(r.renderDegraded).toBe(false);
     expect(r.viewsCapture).toEqual({ preset: '3x3', cols: 3, cells: 9 });
-    const { compositeViewPngGrid } = await import('../views');
-    expect(Buffer.compare(r.views!, compositeViewPngGrid(viewsPng, 3).png)).toBe(0);
+    const { compositeViewPngGrid, resolveCapture } = await import('../views');
+    const cells = resolveCapture({ preset: '3x3' }).views;
+    expect(Buffer.compare(r.views!, compositeViewPngGrid(viewsPng, 3, cells).png)).toBe(0);
   });
 
   test('T3.3: a 2-column request composites at 2 columns, not the default 3', async () => {
@@ -492,10 +498,11 @@ describe('generateKilnAsset viewRenderPort (B3b/B4)', () => {
       viewRenderPort: async () => ({ ok: true, rendererId: 'gpu:test', viewsPng }),
     });
     expect(r.viewsCapture).toEqual({ preset: '2x2', cols: 2, cells: 4 });
-    const { compositeViewPngGrid } = await import('../views');
+    const { compositeViewPngGrid, resolveCapture } = await import('../views');
+    const cells = resolveCapture({ preset: '2x2' }).views;
     // Same cells at 3 cols would be a different image; pin that it is not that.
-    expect(Buffer.compare(r.views!, compositeViewPngGrid(viewsPng, 2).png)).toBe(0);
-    expect(Buffer.compare(r.views!, compositeViewPngGrid(viewsPng, 3).png)).not.toBe(0);
+    expect(Buffer.compare(r.views!, compositeViewPngGrid(viewsPng, 2, cells).png)).toBe(0);
+    expect(Buffer.compare(r.views!, compositeViewPngGrid(viewsPng, 3, cells).png)).not.toBe(0);
   });
 
   test('T3.3: a GPU degrade produces the SAME layout the port was asked for', async () => {
@@ -577,6 +584,41 @@ describe('generateKilnAsset viewRenderPort (B3b/B4)', () => {
     expect(r.renderDegraded).toBe(false);
     expect(r.viewsCapture).toEqual({ preset: '3x2', cols: 3, cells: 6 });
     expect(r.warnings.some((w) => w.includes('capture config ignored'))).toBe(true);
+  });
+
+  test('T3.3: the GPU sheet carries the same cell labels and gnomon as the CPU one', async () => {
+    // A host returns pixels; it knows nothing of the Kiln camera vocabulary. If
+    // the engine did not stamp, the GPU sheet would arrive unlabelled and the
+    // model would lose its orientation cues on the one path that cannot tell it
+    // happened. Producer identity belongs in `viewsRendererId`, not in whether
+    // the picture has words on it.
+    runImpl = okRun;
+    const viewsPng = await stubCells(2);
+    const capture = { cells: [{ azimuthDeg: 0, elevationDeg: 0, name: 'seam' }] };
+    const r = await generateKilnAsset({
+      prompt: 'a crate',
+      captureViews: true,
+      capture: { preset: '1x2' },
+      viewRenderPort: async () => ({ ok: true, rendererId: 'gpu:test', viewsPng }),
+    });
+
+    const { compositeViewPngGrid, resolveCapture } = await import('../views');
+    const cells = resolveCapture({ preset: '1x2' }).views;
+    const annotated = compositeViewPngGrid(viewsPng, 1, cells).png;
+    const bare = compositeViewPngGrid(viewsPng, 1).png;
+    expect(Buffer.compare(r.views!, annotated)).toBe(0);
+    expect(Buffer.compare(r.views!, bare)).not.toBe(0);
+
+    // Custom cell names reach the GPU sheet too, not just the CPU one.
+    const named = resolveCapture(capture).views;
+    expect(named[0]!.name).toBe('SEAM');
+    const one = viewsPng.slice(0, 1);
+    expect(
+      Buffer.compare(compositeViewPngGrid(one, 1, named).png, compositeViewPngGrid(one, 1).png),
+    ).not.toBe(0);
+
+    // A misaligned view list is a caller bug, not something to composite anyway.
+    expect(() => compositeViewPngGrid(viewsPng, 1, named)).toThrow(/align 1:1/);
   });
 
   test('T3.3: captureViewsViaPort takes capture as its fourth argument', async () => {

@@ -294,7 +294,13 @@ export async function captureViewsViaPort(
         reason: `view render port returned ${result.viewsPng?.length ?? 0} view PNGs, expected ${views.length}`,
       };
     }
-    const grid = compositeViewPngGrid(result.viewsPng, resolved.cols);
+    // Annotated with the SAME cell labels + gnomon the CPU path stamps. A host
+    // returns pixels and knows nothing of the Kiln camera vocabulary, so
+    // without this the GPU sheet arrives unlabelled and the model quietly loses
+    // its orientation cues on the one path that cannot tell it happened.
+    // Degrade stays reportable through `renderDegraded` / `viewsRendererId`,
+    // which is a structured field rather than a visual tell.
+    const grid = compositeViewPngGrid(result.viewsPng, resolved.cols, views);
     return { ok: true, png: grid.png, rendererId: result.rendererId, capture: shape };
   } catch (err) {
     return { ok: false, reason: err instanceof Error ? err.message : String(err) };
