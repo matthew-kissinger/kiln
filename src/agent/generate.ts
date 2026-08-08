@@ -212,7 +212,17 @@ export async function generateKilnCodeAgent(opts: {
 export const DEFAULT_VIEW_RENDER_TIMEOUT_MS = 8000;
 
 export type PortViewsOutcome =
-  | { ok: true; png: Buffer; rendererId: string; capture: CaptureShape }
+  | {
+      ok: true;
+      png: Buffer;
+      rendererId: string;
+      capture: CaptureShape;
+      /** Pixel dimensions of the composited grid — the same `width`/`height` the
+       *  CPU path reports alongside its grid, additive here so a caller never has
+       *  to decode the PNG to learn them. */
+      width: number;
+      height: number;
+    }
   | { ok: false; reason: string };
 
 /**
@@ -301,7 +311,14 @@ export async function captureViewsViaPort(
     // Degrade stays reportable through `renderDegraded` / `viewsRendererId`,
     // which is a structured field rather than a visual tell.
     const grid = compositeViewPngGrid(result.viewsPng, resolved.cols, views);
-    return { ok: true, png: grid.png, rendererId: result.rendererId, capture: shape };
+    return {
+      ok: true,
+      png: grid.png,
+      rendererId: result.rendererId,
+      capture: shape,
+      width: grid.width,
+      height: grid.height,
+    };
   } catch (err) {
     return { ok: false, reason: err instanceof Error ? err.message : String(err) };
   } finally {

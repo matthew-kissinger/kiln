@@ -20,6 +20,21 @@ the single owner of the deadline, renderer/PNG validation, grid composition, and
 fallback. Do not duplicate that degrade policy in a host or introduce network/service knowledge into
 the deterministic engine paths.
 
+The port is injected twice, for different jobs, and their deadlines must stay separate. The host
+calls it once after the loop for the artifact sheet, where nothing is blocked and a long deadline is
+correct. `KilnToolContext.viewRenderPort` injects it into `kiln_render` for the IN-LOOP grid, where a
+slow render blocks the agent mid-thought — that deadline is its own per-call argument and belongs far
+lower. Never collapse the two onto one value. Routing there is conditional on
+`sceneNeedsPbrShading(root)`: bound texture or `metalness > 0`, never material type, because
+`gameMaterial` and `pbrMaterial` both construct a `MeshStandardMaterial` and are indistinguishable
+after construction. Who drew a grid is reported through the context's `onViewsRendered` callback, not
+the tool result, so the cached tool definition stays byte-identical.
+
+`src/views/renderer-id.ts` runs `readFileSync` at MODULE LOAD. Reach `CPU_RASTER_RENDERER_ID` through
+the lazy `await import('../views')` that render paths already use; a static import puts a `node:fs`
+edge, evaluated at import time, into a graph deliberately kept free of node-only dependencies. No test
+catches this.
+
 Prompt-cache transports are deliberately different. Native Anthropic and Bedrock adapters consume a
 system `[TextBlock, CachePointBlock]`; OpenRouter-hosted Anthropic keeps plain system text and receives
 top-level `cache_control: { type: 'ephemeral' }` because its Vercel bridge drops cache-point blocks.
