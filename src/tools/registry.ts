@@ -96,6 +96,58 @@ const screenshotInput = z.object({
   code: z.string().describe('Kiln source code to execute and render to a six-view image grid.'),
 });
 
+/**
+ * `kiln_render` (unified surface only) additionally accepts a capture config.
+ * Kept off the shared `renderInput` on purpose: the four-tool baseline's
+ * metrics-only `kiln_render` produces no image, so a grid shape would be a
+ * meaningless argument there and would change that schema for no reason.
+ */
+const captureInput = z
+  .object({
+    preset: z
+      .enum(['1x1', '1x2', '2x1', '3x1', '2x2', '3x2', '3x3'])
+      .optional()
+      .describe(
+        'Grid shape as COLSxROWS. Default 3x2 (the six-view contact sheet). Use a smaller grid ' +
+          'for a simple or symmetric object where six cells repeat each other, and 3x3 when you ' +
+          'genuinely need more angles than six.',
+      ),
+    cells: z
+      .array(
+        z.object({
+          azimuthDeg: z.number().describe('0 = front, 90 = right, 180 = back, 270 = left. Wraps.'),
+          elevationDeg: z
+            .number()
+            .describe(
+              '0 = eye level, positive looks down, negative from below. Clamped to -89..89.',
+            ),
+          zoom: z
+            .number()
+            .optional()
+            .describe(
+              'Padding multiplier around the asset bounds for this cell only. Omit for the ' +
+                'default framing; below 1 crops in, above 1 pulls back.',
+            ),
+          name: z
+            .string()
+            .optional()
+            .describe('Cell label. Auto-derived from the angles if omitted.'),
+        }),
+      )
+      .optional()
+      .describe(
+        'One camera per cell, in row-major order. Omit to use the preset default cameras. ' +
+          'Must not exceed the preset capacity (max 9 overall).',
+      ),
+  })
+  .optional()
+  .describe(
+    'Optional. Choose the contact-sheet shape and cameras. Omit it entirely for the standard ' +
+      'six-view 3x2 grid, which is the right default for most assets.',
+  );
+
+const renderViewsInput = renderInput.extend({ capture: captureInput });
+
 const screenshotAnimationInput = z.object({
   code: z
     .string()
@@ -308,8 +360,10 @@ async function runRender(
 
 export interface KilnScreenshotResult {
   ok: boolean;
-  /** View names in grid order (row-major): Front, Right, Back, Left, Top, 3/4. */
+  /** View names in grid order (row-major). Defaults to Front, Right, Back, Left, Top, 3/4. */
   views?: string[];
+  /** Grid shape actually rendered — echoes the capture config back, or `3x2` by default. */
+  capture?: { preset: string; cols: number; cells: number };
   width?: number;
   height?: number;
   /** The 3x2 grid PNG, base64-encoded (transports with image support strip this and attach the bytes). */
@@ -332,6 +386,8 @@ async function runScreenshot(
     const { renderViewGrid } = await import('../views');
     const { root } = await executeKilnCode(input.code);
     const warnings = inspectSceneStructure(root, { category: trustedCategory(context) });
+    // No capture config here on purpose: kiln_screenshot belongs to the frozen
+    // four-tool baseline, whose schemas stay byte-for-byte unchanged.
     const grid = await renderViewGrid(root);
     return {
       ok: true,
@@ -374,8 +430,10 @@ export interface KilnRenderViewsResult {
   instanceability?: { grade: string; summary: string };
   /** Structured deterministic report; five dimensions remain separate. */
   qaReport?: AssetQaReportV1;
-  /** View names in grid order (row-major): Front, Right, Back, Left, Top, 3/4. */
+  /** View names in grid order (row-major). Defaults to Front, Right, Back, Left, Top, 3/4. */
   views?: string[];
+  /** Grid shape actually rendered — echoes the capture config back, or `3x2` by default. */
+  capture?: { preset: string; cols: number; cells: number };
   gridWidth?: number;
   gridHeight?: number;
   /** The 3x2 grid PNG, base64-encoded (transports with image support strip this and attach the bytes). */
@@ -395,7 +453,7 @@ export interface KilnRenderViewsResult {
  * bundle graph.
  */
 async function runRenderViews(
-  input: z.infer<typeof renderInput>,
+  input: z.infer<typeof renderViewsInput>,
   context: KilnToolContext,
 ): Promise<KilnRenderViewsResult> {
   try {
@@ -412,7 +470,7 @@ async function runRenderViews(
       ...(category ? { category } : {}),
       ...(context.intent ? { intent: context.intent } : {}),
     });
-    const grid = await renderViewGrid(root);
+    const grid = await renderViewGrid(root, input.capture ? { capture: input.capture } : {});
 
     const warnings = [...structuralWarnings, ...rendered.warnings];
 
@@ -432,6 +490,7 @@ async function runRenderViews(
           }
         : {}),
       views: grid.views,
+      ...(grid.capture ? { capture: grid.capture } : {}),
       gridWidth: grid.width,
       gridHeight: grid.height,
       pngBase64: grid.png.toString('base64'),
@@ -458,6 +517,15 @@ const KILN_RENDER_VIEWS_DESCRIPTION =
   'Row 1 = Front (camera on +X, the nose/muzzle should face you), Right (+Z, the long profile), Back (-X); ' +
   'row 2 = Left (-Z), Top (+Y, check symmetry), 3/4 perspective (check part contact and overall read). ' +
   'Use it to confirm the model builds and to verify orientation (+X forward), attachment (no floating parts), proportion, and silhouette. ' +
+  'That default grid is right for most assets — omit `capture` and you get it. ' +
+  'Pass `capture` when the default is a poor fit: `{preset:"2x2"}` or `{preset:"1x1"}` for a simple ' +
+  'or symmetric object whose six cells just repeat each other (fewer, larger cells read better), ' +
+  '`{preset:"3x3"}` when six angles genuinely are not enough. ' +
+  'For full control give `capture.cells` — one camera per cell in row-major order, each ' +
+  '{azimuthDeg, elevationDeg, zoom?}: azimuth 0 = front, 90 = right, 180 = back, 270 = left; ' +
+  'elevation 0 = eye level, positive looks down. Use it to aim every cell at what actually needs ' +
+  'checking — a seam, an underside, a joint the standard six leave occluded — instead of spending ' +
+  'cells on angles that show nothing. Max 9 cells. The reply echoes the grid shape it rendered. ' +
   'If the build fails you get an error and NO image — fix the code and render again. Flat-shaded CPU render; writes no files.';
 
 /** Create the unified render/view definition with host-owned QA context. */
@@ -465,8 +533,8 @@ export function createKilnRenderViewsDef(context: KilnToolContext = {}): KilnToo
   return {
     name: 'kiln_render',
     description: KILN_RENDER_VIEWS_DESCRIPTION,
-    inputSchema: renderInput,
-    run: async (input) => runRenderViews(renderInput.parse(input), context),
+    inputSchema: renderViewsInput,
+    run: async (input) => runRenderViews(renderViewsInput.parse(input), context),
     media: screenshotMedia,
   };
 }
@@ -731,7 +799,25 @@ const inspectInput = z.object({
   view: z
     .string()
     .optional()
-    .describe('Camera angle: front, right, back, left, top, or three-quarter (default).'),
+    .describe(
+      'Camera angle: front, right, back, left, top, or three-quarter (default). Ignored when ' +
+        'azimuthDeg or elevationDeg is given.',
+    ),
+  azimuthDeg: z
+    .number()
+    .optional()
+    .describe(
+      'Orbit the camera around the asset: 0 = front, 90 = right, 180 = back, 270 = left. Wraps, ' +
+        'so 315 and -45 are the same. Use it to look between the named views — at a corner, a ' +
+        'seam, or whatever angle the last render left ambiguous.',
+    ),
+  elevationDeg: z
+    .number()
+    .optional()
+    .describe(
+      'Orbit the camera up or down: 0 = eye level, positive looks down from above, negative from ' +
+        'below. Clamped to -89..89. Combine with azimuthDeg for any three-quarter angle you want.',
+    ),
   zoom: z
     .number()
     .optional()
@@ -754,6 +840,9 @@ export interface KilnInspectResult {
   /** Resolved part name that was framed (absent when the whole asset was framed). */
   part?: string;
   view?: string;
+  /** Orbit angles actually rendered — reported for named cameras too. */
+  azimuthDeg?: number;
+  elevationDeg?: number;
   zoom?: number;
   /** True when everything outside the framed part was hidden (isolate honored). */
   isolated?: boolean;
@@ -783,6 +872,8 @@ async function runInspect(input: z.infer<typeof inspectInput>): Promise<KilnInsp
     const r = renderInspectView(root, {
       ...(input.part !== undefined ? { part: input.part } : {}),
       ...(input.view !== undefined ? { view: input.view } : {}),
+      ...(input.azimuthDeg !== undefined ? { azimuthDeg: input.azimuthDeg } : {}),
+      ...(input.elevationDeg !== undefined ? { elevationDeg: input.elevationDeg } : {}),
       ...(input.zoom !== undefined ? { zoom: input.zoom } : {}),
       ...(input.isolate !== undefined ? { isolate: input.isolate } : {}),
     });
@@ -795,16 +886,21 @@ async function runInspect(input: z.infer<typeof inspectInput>): Promise<KilnInsp
         availableParts: r.availableParts,
       };
     }
+    // Always state the angles, named camera or not, so the model can step from
+    // where it actually is instead of guessing the next view by name.
+    const from = `the ${r.view} view (azimuth ${r.azimuthDeg}deg, elevation ${r.elevationDeg}deg)`;
     const framed = r.part
-      ? `Framed part "${r.part}" (with its descendants) from the ${r.view} view at zoom ${r.zoom}.` +
+      ? `Framed part "${r.part}" (with its descendants) from ${from} at zoom ${r.zoom}.` +
         (r.isolated
           ? ' Everything else is hidden, so nothing in this image occludes it.'
           : ' Surrounding geometry is still drawn and may occlude it.')
-      : `Framed the whole asset from the ${r.view} view.`;
+      : `Framed the whole asset from ${from}.`;
     return {
       ok: true,
       ...(r.part ? { part: r.part } : {}),
       view: r.view,
+      azimuthDeg: r.azimuthDeg,
+      elevationDeg: r.elevationDeg,
       zoom: r.zoom,
       isolated: r.isolated,
       framed,
@@ -830,8 +926,13 @@ const KILN_INSPECT_DESCRIPTION =
   'from one camera. Use it after kiln_render reveals a suspect region — a floating part, a bad ' +
   'joint, a wrong proportion — to see fine detail one grid cell cannot show. args: part (omit to ' +
   'frame the whole asset in one large view), view (front/right/back/left/top/three-quarter, ' +
-  'default three-quarter), zoom (padding multiplier around the part bounds, 1 = tight crop up to ' +
-  '4 = wide context, default 1.2), isolate (hide everything except that part, default false). ' +
+  'default three-quarter), azimuthDeg + elevationDeg (orbit to ANY angle instead of a named view: ' +
+  'azimuth 0 = front, 90 = right, 180 = back, 270 = left; elevation 0 = eye level, positive looks ' +
+  'down, clamped to -89..89), zoom (padding multiplier around the part bounds, 1 = tight crop up ' +
+  'to 4 = wide context, default 1.2), isolate (hide everything except that part, default false). ' +
+  'Reach for the orbit angles when a named view puts the thing you need to judge edge-on or ' +
+  'behind something — the reply always tells you the azimuth/elevation it used, so you can step ' +
+  'from there. ' +
   'If the part name does not resolve you get the list of available part names back — pick one and ' +
   'retry. By default surrounding geometry stays visible for context and can occlude the part: ' +
   'either pick a different view, or set isolate:true to hide everything else and see the part ' +

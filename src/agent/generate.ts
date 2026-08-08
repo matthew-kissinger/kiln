@@ -16,7 +16,13 @@
  */
 import { renderGLB, type KilnCodeMeta, type RenderResult } from '../render';
 import type { PbrRenderPort } from '../composer/render-port';
-import { resolveGridViews } from '../views/raster';
+import {
+  CaptureConfigError,
+  resolveGridCapture,
+  type CaptureConfig,
+  type CaptureShape,
+  type ResolvedCapture,
+} from '../views/capture';
 import { compositeViewPngGrid } from '../views/grid';
 import { CPU_RASTER_RENDERER_ID } from '../views/renderer-id';
 import type { AssetStyle } from '../prompt';
@@ -68,6 +74,11 @@ export interface GenerateKilnAssetOptions {
   /** Also rasterize the final asset into the six-view grid PNG (`result.views`).
    *  Best-effort: a views failure never fails the run. Default false. */
   captureViews?: boolean;
+  /** Grid shape / per-cell cameras for the `views` artifact (T3.3). Honoured
+   *  identically by the GPU port and the CPU rasterizer. Omitted keeps the
+   *  shipped six-view 3x2. An invalid config degrades to that default with a
+   *  warning rather than failing the run. */
+  capture?: CaptureConfig;
   /** OPTIONAL host PBR renderer (GLB bytes -> per-view PNGs). Only consulted when
    *  `captureViews` is on: the already-produced GLB bytes are routed to the port
    *  and its per-view PNGs are composited into the same 3x2 grid the CPU path
@@ -114,6 +125,10 @@ export interface GenerateKilnAssetResult {
   salvageError?: string;
   /** Six-view grid PNG of the final asset (only when `captureViews` was set and the render succeeded). */
   views?: Buffer;
+  /** The layout `views` was actually produced in — preset, columns, cell count.
+   *  Present whenever `views` is, and identical whichever producer made it, so a
+   *  consumer never has to infer the grid shape from the image dimensions. */
+  viewsCapture?: CaptureShape;
   /** Honest producer of `views` (only when `viewRenderPort` was supplied): the
    *  port's rendererId on success, else the CPU rasterizer's deterministic id. */
   viewsRendererId?: string;
@@ -197,12 +212,12 @@ export async function generateKilnCodeAgent(opts: {
 export const DEFAULT_VIEW_RENDER_TIMEOUT_MS = 8000;
 
 export type PortViewsOutcome =
-  | { ok: true; png: Buffer; rendererId: string }
+  | { ok: true; png: Buffer; rendererId: string; capture: CaptureShape }
   | { ok: false; reason: string };
 
 /**
  * Call the host view-render port with the ALREADY-PRODUCED GLB bytes and
- * composite its per-view PNGs into the same 3x2 grid the CPU path emits.
+ * composite its per-view PNGs into the same grid the CPU path emits.
  *
  * This shell is NOT a render compute path: the deadline is a plain timer (no
  * Date.now() enters any rasterizer), and every failure mode — thrown/rejected
@@ -213,15 +228,39 @@ export type PortViewsOutcome =
  * Exported as the single owner of the degrade policy: hosts that assemble their
  * own generation pipeline (rather than calling generateKilnAsset) route their
  * produced GLB through this same shell instead of re-implementing it.
+ *
+ * T3.3: `capture` selects the grid shape and per-cell cameras, resolved through
+ * the SAME {@link resolveGridCapture} the CPU rasterizer uses so both producers
+ * lay out identically. Omitted keeps the shipped six-view 3x2 (H-33 env variant
+ * included).
  */
 export async function captureViewsViaPort(
   port: PbrRenderPort,
   glb: Buffer | Uint8Array,
   timeoutMs: number = DEFAULT_VIEW_RENDER_TIMEOUT_MS,
+  capture?: CaptureConfig,
 ): Promise<PortViewsOutcome> {
-  // Same views + cell size as the CPU grid default, so the composited layout
-  // matches renderCodeViewGrid (H-33 env variant included).
-  const views = resolveGridViews(process.env['KILN_GRID_VARIANT']);
+  let resolved: ResolvedCapture;
+  try {
+    resolved = resolveGridCapture(capture, process.env['KILN_GRID_VARIANT']);
+  } catch (err) {
+    return { ok: false, reason: err instanceof Error ? err.message : String(err) };
+  }
+  const views = resolved.views;
+  const shape: CaptureShape = { preset: resolved.preset, cols: resolved.cols, cells: views.length };
+
+  // Per-cell zoom has no equivalent in the port contract: the request carries
+  // view directions only, and the host frames each view to the asset's own
+  // bounds. Rather than silently returning auto-framed cells for a request that
+  // asked for tighter ones, decline and let the CPU rasterizer — which does
+  // implement zoom — produce the sheet that was actually asked for.
+  if (resolved.zooms.some((z) => z !== undefined)) {
+    return {
+      ok: false,
+      reason: 'per-cell zoom is not supported by the view render port',
+    };
+  }
+
   let timer: ReturnType<typeof setTimeout> | undefined;
   try {
     const deadline = new Promise<never>((_, reject) => {
@@ -246,14 +285,23 @@ export async function captureViewsViaPort(
     if (typeof result.rendererId !== 'string' || !result.rendererId.trim()) {
       return { ok: false, reason: 'view render port returned no rendererId' };
     }
+    // Count must equal the cells that were REQUESTED — not a hardcoded six.
+    // A host that truncates or pads the view list produces a differently-shaped
+    // sheet than the caller asked for, which is a degrade, not a success.
     if (!result.viewsPng || result.viewsPng.length !== views.length) {
       return {
         ok: false,
         reason: `view render port returned ${result.viewsPng?.length ?? 0} view PNGs, expected ${views.length}`,
       };
     }
-    const grid = compositeViewPngGrid(result.viewsPng);
-    return { ok: true, png: grid.png, rendererId: result.rendererId };
+    // Annotated with the SAME cell labels + gnomon the CPU path stamps. A host
+    // returns pixels and knows nothing of the Kiln camera vocabulary, so
+    // without this the GPU sheet arrives unlabelled and the model quietly loses
+    // its orientation cues on the one path that cannot tell it happened.
+    // Degrade stays reportable through `renderDegraded` / `viewsRendererId`,
+    // which is a structured field rather than a visual tell.
+    const grid = compositeViewPngGrid(result.viewsPng, resolved.cols, views);
+    return { ok: true, png: grid.png, rendererId: result.rendererId, capture: shape };
   } catch (err) {
     return { ok: false, reason: err instanceof Error ? err.message : String(err) };
   } finally {
@@ -308,10 +356,30 @@ export async function generateKilnAsset(
   // Best-effort views artifact: what the vision loop / review UIs show.
   // Never fails the run — a rasterizer error just drops the sidecar.
   let views: Buffer | undefined;
+  let viewsCapture: CaptureShape | undefined;
   let viewsRendererId: string | undefined;
   let renderDegraded: boolean | undefined;
   let renderDegradedReason: string | undefined;
+  const captureWarnings: string[] = [];
   if (opts.captureViews) {
+    // T3.3: validate the requested layout ONCE, up front. A malformed config is
+    // a caller bug, not a render hazard, so it must not reach two producers and
+    // be reported differently by each. It also must not fail the run: the views
+    // artifact is best-effort by contract, so a bad config degrades to the
+    // shipped default and says so in `warnings`.
+    let capture = opts.capture;
+    if (capture) {
+      try {
+        resolveGridCapture(capture, process.env['KILN_GRID_VARIANT']);
+      } catch (err) {
+        if (!(err instanceof CaptureConfigError)) throw err;
+        captureWarnings.push(
+          `views capture config ignored (using the default grid): ${err.message}`,
+        );
+        capture = undefined;
+      }
+    }
+
     // B3b: an injected host PBR renderer sees the already-produced GLB bytes
     // (never re-executes the program). B4: ANY port failure degrades to the CPU
     // rasterizer below — the GPU being unavailable can never fail a generation.
@@ -320,9 +388,11 @@ export async function generateKilnAsset(
         opts.viewRenderPort,
         render.glb,
         opts.viewRenderTimeoutMs ?? DEFAULT_VIEW_RENDER_TIMEOUT_MS,
+        capture,
       );
       if (port.ok) {
         views = port.png;
+        viewsCapture = port.capture;
         viewsRendererId = port.rendererId;
         renderDegraded = false;
       } else {
@@ -333,17 +403,22 @@ export async function generateKilnAsset(
     if (!views) {
       try {
         const { renderCodeViewGrid } = await import('../views');
-        views = (await renderCodeViewGrid(agent.code)).png;
+        // The degrade path must reproduce the SAME layout the port was asked
+        // for, or a GPU outage silently reshapes the artifact.
+        const grid = await renderCodeViewGrid(agent.code, capture ? { capture } : {});
+        views = grid.png;
+        viewsCapture = grid.capture;
         // Honest producer provenance, but only on the port-enabled path — the
         // port-absent path stays byte-identical to the historical result shape.
         if (opts.viewRenderPort) viewsRendererId = CPU_RASTER_RENDERER_ID;
       } catch {
         views = undefined;
+        viewsCapture = undefined;
       }
     }
   }
 
-  const warnings = [...(render.warnings ?? [])];
+  const warnings = [...(render.warnings ?? []), ...captureWarnings];
   if (agent.salvaged) {
     warnings.push(
       agent.salvaged === 'error'
@@ -367,6 +442,7 @@ export async function generateKilnAsset(
     ...(agent.salvaged ? { salvaged: agent.salvaged } : {}),
     ...(agent.salvaged && agent.error ? { salvageError: agent.error } : {}),
     ...(views ? { views } : {}),
+    ...(views && viewsCapture ? { viewsCapture } : {}),
     ...(viewsRendererId ? { viewsRendererId } : {}),
     ...(renderDegraded !== undefined ? { renderDegraded } : {}),
     ...(renderDegradedReason ? { renderDegradedReason } : {}),

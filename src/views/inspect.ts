@@ -13,7 +13,7 @@
  * and hides everything outside the part so nothing can block the view.
  */
 
-import { rasterizeView, measureBounds } from './raster';
+import { measureBounds, orbitAnglesOf, orbitDir, rasterizeView } from './raster';
 import { encodePng } from './png';
 
 /** Square close-up size in pixels — one big view, not a grid cell. */
@@ -48,8 +48,16 @@ export interface InspectViewOptions {
    *  Omit to frame the whole asset. */
   part?: string;
   /** Camera angle: front, right, back, left, top, or three-quarter (default).
-   *  Unknown names fall back to three-quarter. */
+   *  Unknown names fall back to three-quarter. Ignored when `azimuthDeg` or
+   *  `elevationDeg` is supplied. */
   view?: string;
+  /** Object-relative orbit azimuth in degrees: 0 = front, 90 = right,
+   *  180 = back, 270 = left. Wraps. Supplying either orbit angle switches the
+   *  camera off the named presets. */
+  azimuthDeg?: number;
+  /** Object-relative orbit elevation in degrees: 0 = eye level, positive looks
+   *  down from above. Clamped to -89..89. */
+  elevationDeg?: number;
   /** Padding multiplier around the framed bounds, clamped to 1..4. Default 1.2. */
   zoom?: number;
   /** Square output size in pixels. Default {@link INSPECT_SIZE}. */
@@ -65,8 +73,13 @@ export type InspectViewResult =
       ok: true;
       /** Resolved node name that was framed (absent when the whole asset was framed). */
       part?: string;
-      /** Resolved camera name. */
+      /** Resolved camera name, or `'orbit'` when orbit angles were supplied. */
       view: string;
+      /** Effective orbit angles actually rendered — present for BOTH named and
+       *  orbit cameras, so the model always learns where the camera was and can
+       *  nudge from there. Elevation reflects the clamp. */
+      azimuthDeg: number;
+      elevationDeg: number;
       /** Effective (clamped) padding multiplier. */
       zoom: number;
       /** Whether everything outside the framed part was actually hidden. False
@@ -161,8 +174,19 @@ function isolateSubtree(root: unknown, keep: DuckNamedNode): void {
  */
 export function renderInspectView(root: unknown, opts: InspectViewOptions = {}): InspectViewResult {
   const size = opts.size ?? INSPECT_SIZE;
+
+  // Orbit angles win over the named presets, but ONLY when at least one is
+  // supplied — omitting both must reproduce the previous behavior exactly, so
+  // the named direction vectors stay authoritative rather than being
+  // regenerated from angles (`top` is [0, 1, 0.0001], which is not orbitDir's
+  // 89-degree elevation, and re-deriving it would silently move that camera).
+  const hasOrbit = opts.azimuthDeg !== undefined || opts.elevationDeg !== undefined;
   const viewKey = (opts.view ?? 'three-quarter').trim().toLowerCase();
-  const view = viewKey in INSPECT_CAMERAS ? viewKey : 'three-quarter';
+  const view = hasOrbit ? 'orbit' : viewKey in INSPECT_CAMERAS ? viewKey : 'three-quarter';
+  const namedDir = INSPECT_CAMERAS[view in INSPECT_CAMERAS ? view : 'three-quarter']!;
+  const dir = hasOrbit ? orbitDir(opts.azimuthDeg ?? 0, opts.elevationDeg ?? 0) : namedDir;
+  const angles = orbitAnglesOf(dir);
+
   const zoom = Math.min(
     INSPECT_MAX_ZOOM,
     Math.max(INSPECT_MIN_ZOOM, opts.zoom ?? INSPECT_DEFAULT_ZOOM),
@@ -209,7 +233,7 @@ export function renderInspectView(root: unknown, opts: InspectViewOptions = {}):
     bounds = measureBounds(root);
   }
 
-  const rgb = rasterizeView(root, INSPECT_CAMERAS[view]!, {
+  const rgb = rasterizeView(root, dir, {
     size,
     frameBounds: expandBounds(bounds, zoom),
   });
@@ -217,6 +241,7 @@ export function renderInspectView(root: unknown, opts: InspectViewOptions = {}):
     ok: true,
     ...(part ? { part } : {}),
     view,
+    ...angles,
     zoom,
     isolated,
     width: size,

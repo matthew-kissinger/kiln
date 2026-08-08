@@ -83,6 +83,12 @@ import {
   collectMaterialResourceProvenance,
   type MaterialResourceProvenanceV1,
 } from './material-resources';
+import { analyzePartPenetration, type PartPenetrationEvidenceV1 } from './qa/self-intersection';
+import {
+  type BakedTextureProvenanceV1,
+  bakeSceneTextures,
+  ensureNormalMapTangents,
+} from './texture-bake';
 import {
   captureCharacterDiagnosticViews,
   type CharacterCapturedDiagnosticV1,
@@ -480,10 +486,16 @@ function bridgeMaterial(
 /**
  * Bridge a Three.js Texture to a gltf-transform Texture.
  *
- * Prefers `userData.encoded` (raw PNG/JPG bytes from loadTexture) so we
- * don't re-encode. Falls back to null if nothing is encoded — procedural
- * DataTextures without encoded bytes aren't exportable yet (requires
- * runtime PNG encoding, which we'll wire in Wave 3D via sharp).
+ * Uses `userData.encoded` — the bytes `loadTexture` stashed, or the PNG
+ * `bakeSceneTextures` encoded earlier in `renderSceneToGLB` — so nothing is
+ * re-encoded here.
+ *
+ * Returning null still drops the slot, but it is no longer silent: the bake
+ * pass has already walked every material slot and warned by material and slot
+ * name for anything it could not encode. That warning lives there rather than
+ * here because this function receives a bare `THREE.Texture` and cannot say
+ * which material or slot it came from — which is most of what makes the
+ * warning actionable.
  */
 function bridgeTexture(
   doc: Document,
@@ -859,6 +871,8 @@ export interface RenderSceneResult {
   instanceability?: InstanceabilityReport;
   /** Set if metric computation threw; bytes are still valid. */
   metricsError?: string;
+  /** Textures encoded to PNG at export time (T2.2). Absent when none were baked. */
+  bakedTextures?: BakedTextureProvenanceV1[];
   /** Set when an opt-in consolidation pass ran (optimize !== 'off'). */
   optimize?: OptimizeSummary;
   /** Set when the GPU-instancing pass created batches (instance !== 'off'). */
@@ -1087,7 +1101,42 @@ export async function renderSceneToGLB(
   for (const w of inspectGeneratedAnimation(root, clips)) warnings.push(w);
   for (const w of inspectSceneStructure(root, { category: trustedCategory })) warnings.push(w);
 
-  const sceneQaReport = runDeterministicSceneQa({ intent, scene: root, clips }, qaPolicyFromEnv());
+  // T2.2 — encode in-memory textures to PNG BEFORE QA, so QA judges the file
+  // that will actually be written. A procedural DataTexture used to reach the
+  // bridge with no encoded bytes and be dropped without a word; now it is
+  // either baked into the GLB or warned about by name.
+  const bakedTextures = await bakeSceneTextures(root, warnings);
+  // A normal-mapped mesh without tangents makes every runtime invent its own
+  // tangent basis, so the same asset lights differently in different engines.
+  // Only touches meshes that actually carry a normal map — the attribute
+  // changes the exported bytes.
+  ensureNormalMapTangents(root, warnings);
+
+  // T4.1 — part-vs-part penetration. Async (manifold is WASM) and QA rules
+  // evaluate synchronously, so it runs here and reaches the rule through the
+  // derivedEvidence seam. A failure here must never lose the asset: the gate is
+  // in `observe`, and an analysis that could not run is reported as absent
+  // rather than as a clean result.
+  let partPenetration: PartPenetrationEvidenceV1 | undefined;
+  try {
+    partPenetration = await analyzePartPenetration(root);
+  } catch (err) {
+    warnings.push(
+      `self-intersection analysis failed: ${err instanceof Error ? err.message : String(err)}`,
+    );
+  }
+
+  const sceneQaReport = runDeterministicSceneQa(
+    {
+      intent,
+      scene: root,
+      clips,
+      ...(partPenetration
+        ? { derivedEvidence: { source: 'engine-scene-analysis' as const, partPenetration } }
+        : {}),
+    },
+    qaPolicyFromEnv(),
+  );
   if (sceneQaReport.disposition === 'block') {
     const blocked = new AssetQaBlockedError(sceneQaReport, 'scene');
     if (qaBlockingEnabled()) throw blocked;
@@ -1266,6 +1315,7 @@ export async function renderSceneToGLB(
     ...(materialMetrics ? { materialMetrics } : {}),
     ...(materialRecipeApplications.length ? { materialRecipeApplications } : {}),
     ...(materialResourceProvenance.length ? { materialResourceProvenance } : {}),
+    ...(bakedTextures.length ? { bakedTextures } : {}),
     integrationManifest,
   };
 }

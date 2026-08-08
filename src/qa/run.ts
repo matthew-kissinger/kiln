@@ -7,6 +7,8 @@ import { CHARACTER_ADVISORY_QA_RULE } from './character-advisory';
 import { VEHICLE_QA_RULES } from './vehicle';
 import { VEGETATION_QA_RULES } from './vegetation';
 import { PROP_QA_RULES } from './prop';
+import { PART_CONNECTIVITY_QA_RULE } from './part-connectivity';
+import { SELF_INTERSECTION_QA_RULE } from './self-intersection';
 import { ENVIRONMENT_QA_RULES } from './environment';
 import { W7_BREADTH_QA_RULES } from './breadth';
 import { withDerivedW7BreadthEvidence } from './breadth-evidence';
@@ -32,6 +34,8 @@ export const DETERMINISTIC_QA_REGISTRY = new QaRegistry([
   ...PROP_QA_RULES,
   ...ENVIRONMENT_QA_RULES,
   ...W7_BREADTH_QA_RULES,
+  SELF_INTERSECTION_QA_RULE,
+  PART_CONNECTIVITY_QA_RULE,
 ]);
 
 export function runDeterministicSceneQa(

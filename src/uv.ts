@@ -121,6 +121,21 @@ export async function autoUnwrap(
   if (!posAttr || !idxAttr) {
     throw new Error('autoUnwrap: geometry requires position attribute and an index');
   }
+  // T2.4: measured — xatlas accepts an empty mesh and returns an empty atlas
+  // without complaint, so a zero-triangle geometry used to come back with zero
+  // vertices and NO uv attribute, and the failure only surfaced later as a
+  // texture that would not appear. The realistic upstream cause is a CSG result
+  // that collapsed to nothing.
+  if (idxAttr.count === 0 || posAttr.count === 0) {
+    throw new Error(
+      'autoUnwrap: geometry has no triangles. Nothing can be unwrapped — check the operation that produced it (an empty CSG result is the usual cause).',
+    );
+  }
+  if (idxAttr.count % 3 !== 0) {
+    throw new Error(
+      `autoUnwrap: geometry has ${idxAttr.count} indices, which is not a whole number of triangles.`,
+    );
+  }
 
   xa.createAtlas();
 
@@ -174,6 +189,12 @@ export async function autoUnwrap(
 
   // Atlas metadata lives on userData so downstream tools (texture baking,
   // projection painting) can sample the atlas resolution.
+  //
+  // T2.4 — read `width`/`height`, do NOT assume `resolution` squared. `resolution`
+  // is an upper bound xatlas packs within, not the atlas it returns: a CSG'd box
+  // at resolution 1024 measured 917x1085. A baker that allocated a square
+  // `resolution x resolution` target would sample the wrong texels along one
+  // axis, which reads as a subtle uniform stretch rather than an obvious break.
   out.userData['atlas'] = {
     width: result.width,
     height: result.height,
@@ -181,6 +202,16 @@ export async function autoUnwrap(
   };
 
   if (!out.getAttribute('normal')) out.computeVertexNormals();
+
+  // xatlas can pack every chart and still hand back a mesh with no coords1 when
+  // the input degenerates. Better to say so than to return a geometry whose
+  // missing `uv` only shows up as an untextured surface much later.
+  if (!out.getAttribute('uv')) {
+    xa.destroyAtlas();
+    throw new Error(
+      'autoUnwrap: xatlas produced no UV coordinates for this geometry (degenerate or zero-area triangles?).',
+    );
+  }
 
   xa.destroyAtlas();
   return out;

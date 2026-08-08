@@ -95,6 +95,8 @@ export interface QaContext {
     assetScope?: unknown;
     modularKit?: unknown;
     modularJoin?: unknown;
+    /** T4.1 part-vs-part boolean intersection volumes; computed async before QA runs. */
+    partPenetration?: unknown;
   };
 }
 

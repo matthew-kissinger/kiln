@@ -47,13 +47,29 @@ export type SceneRenderPort = (req: SceneRenderRequest) => Promise<SceneRenderRe
 export interface PbrRenderRequest {
   /** The rendered GLB bytes (route the produced asset; do NOT re-execute programs). */
   glb: Uint8Array;
-  /** View directions from model center toward the camera, max 12. Omit for the host default. */
+  /**
+   * View directions from model center toward the camera, max 12. Omit for the
+   * host default.
+   *
+   * A host must return exactly one PNG per entry, in request order. Truncating
+   * or padding is a degrade, not a success: the engine composites the result
+   * into a grid whose shape was chosen from this list's length, so a
+   * different-length reply would silently reshape the artifact.
+   */
   viewDirs?: [number, number, number][];
   /** Square per-view cell size in pixels. */
   size?: number;
   /** Optional larger single beauty-shot size. */
   beautySize?: number;
 }
+
+/**
+ * Backdrop hosts must paint behind the asset, so a GPU-rendered sheet and the
+ * CPU-rasterized one a degrade produces are comparable. Re-exported here (from
+ * the rasterizer's own leaf constant) because the host implementing this port
+ * has no reason to import the rasterizer.
+ */
+export { GRID_BACKGROUND_HEX, GRID_BACKGROUND_RGB } from '../views/background';
 
 export interface PbrRenderResult {
   ok: boolean;
