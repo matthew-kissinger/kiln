@@ -25,4 +25,5 @@ export * from './breadth-evidence';
 export * from './breadth-final';
 export * from './breadth-corpus';
 export * from './benchmark-fixtures';
+export * from './reference-comparison';
 export * from './run';

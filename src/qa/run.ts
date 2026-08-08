@@ -8,6 +8,11 @@ import { VEHICLE_QA_RULES } from './vehicle';
 import { VEGETATION_QA_RULES } from './vegetation';
 import { PROP_QA_RULES } from './prop';
 import { PART_CONNECTIVITY_QA_RULE } from './part-connectivity';
+import {
+  REFERENCE_COMPARISON_QA_RULE,
+  referenceComparisonFindings,
+  type ReferenceComparisonEvidenceV1,
+} from './reference-comparison';
 import { SELF_INTERSECTION_QA_RULE } from './self-intersection';
 import { ENVIRONMENT_QA_RULES } from './environment';
 import { W7_BREADTH_QA_RULES } from './breadth';
@@ -36,6 +41,7 @@ export const DETERMINISTIC_QA_REGISTRY = new QaRegistry([
   ...W7_BREADTH_QA_RULES,
   SELF_INTERSECTION_QA_RULE,
   PART_CONNECTIVITY_QA_RULE,
+  REFERENCE_COMPARISON_QA_RULE,
 ]);
 
 export function runDeterministicSceneQa(
@@ -184,6 +190,48 @@ export function appendMaterialMetricsQa(
     decodedImageBytesRgba8: materialMetrics.decodedImageBytesRgba8,
     estimatedGpuBytesWithMipmaps: materialMetrics.estimatedGpuBytesWithMipmaps,
     blendedSurfaceAreaRatio: materialMetrics.blendedSurfaceAreaRatio,
+  };
+  return createAssetQaReportV1(intent, { findings, evaluatedDimensions, metrics });
+}
+
+/**
+ * Attach reference-image agreement to promptAlignment.
+ *
+ * A separate appender rather than evidence on the pre-export context, because
+ * the rendered views this compares against do not exist until after the GLB is
+ * written — the scene QA pass runs strictly earlier. The findings come from
+ * {@link referenceComparisonFindings}, the same code the registered rule uses,
+ * so the two paths cannot drift into different opinions about disagreement.
+ *
+ * Observe-only, so this can never turn a passing asset into a blocked one; the
+ * dimension status it produces is at worst unchanged.
+ */
+export function appendReferenceComparisonQa(
+  intent: AssetIntentV1,
+  report: AssetQaReportV1,
+  evidence: ReferenceComparisonEvidenceV1,
+): AssetQaReportV1 {
+  const findings = Object.values(report.dimensions).flatMap((dimension) => dimension.findings);
+  findings.push(...referenceComparisonFindings(evidence, 'reference.comparison'));
+  const evaluatedDimensions = Object.entries(report.dimensions)
+    .filter(([, dimension]) => dimension.status !== 'notEvaluated')
+    .map(([dimension]) => dimension as keyof AssetQaReportV1['dimensions']);
+  if (!evaluatedDimensions.includes('promptAlignment')) evaluatedDimensions.push('promptAlignment');
+  const metrics = Object.fromEntries(
+    Object.entries(report.dimensions).flatMap(([dimension, result]) =>
+      result.metrics ? [[dimension, result.metrics]] : [],
+    ),
+  ) as Partial<
+    Record<keyof AssetQaReportV1['dimensions'], Record<string, number | string | boolean | null>>
+  >;
+  metrics.promptAlignment = {
+    ...(metrics.promptAlignment ?? {}),
+    referenceSilhouetteIoU: evidence.silhouetteIoU,
+    referenceColorAgreement: evidence.colorAgreement,
+    referenceCoverageRatio: evidence.coverageRatio,
+    // Surfaced because a reference with no rejected shadow pixels is either a
+    // cutout or flat-lit, and the coverage numbers mean something different then.
+    referenceShadowPixels: evidence.reference.shadowPixels,
   };
   return createAssetQaReportV1(intent, { findings, evaluatedDimensions, metrics });
 }
