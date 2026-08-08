@@ -12,6 +12,19 @@ Read [README.md](./README.md) before changing exports or package contents. Runti
 `scripts/`. The package intentionally ships TypeScript source through the explicit `files` and
 `exports` lists in `package.json`.
 
+## Host-injected render and cache boundaries
+
+The engine defines the host-injected `PbrRenderPort`; Studio owns the HTTP adapter, authentication,
+environment configuration, production service, and EMF telemetry. Exported `captureViewsViaPort` is
+the single owner of the deadline, renderer/PNG validation, grid composition, and never-throw CPU
+fallback. Do not duplicate that degrade policy in a host or introduce network/service knowledge into
+the deterministic engine paths.
+
+Prompt-cache transports are deliberately different. Native Anthropic and Bedrock adapters consume a
+system `[TextBlock, CachePointBlock]`; OpenRouter-hosted Anthropic keeps plain system text and receives
+top-level `cache_control: { type: 'ephemeral' }` because its Vercel bridge drops cache-point blocks.
+Preserve that distinction and the provider usage fields when changing model routing.
+
 ## Toolchain and validation
 
 Supported CI toolchain: Bun `1.3.14`; Node `22.23.1`; npm `12.0.1`. Do not use a Bun canary or implicit latest for a
