@@ -60,6 +60,22 @@ export interface BakedTextureProvenanceV1 {
   bytes: number;
   /** SHA-1 of the PNG bytes — the handle a determinism test compares. */
   sha1: string;
+  /**
+   * The layer stack, when this texture came from `proceduralTexture()`.
+   *
+   * Recorded so the manifest says what was generated rather than only that
+   * something was: the spec is small, serializable, and sufficient to
+   * regenerate the exact bytes. Absent for textures loaded from a file.
+   */
+  procedural?: ProceduralRecipeRecord;
+}
+
+/** The `userData.kilnProcedural` stamp `proceduralTexture()` leaves behind. */
+interface ProceduralRecipeRecord {
+  schemaVersion: 1;
+  size: number;
+  usage: TextureUsage;
+  layers: unknown[];
 }
 
 /**
@@ -248,6 +264,10 @@ export async function bakeSceneTextures(
       hasAlpha: hasTranslucentPixel(raw),
     } satisfies KilnTextureMetadata;
 
+    const recipe = (entry.texture.userData as Record<string, unknown>)['kilnProcedural'] as
+      | ProceduralRecipeRecord
+      | undefined;
+
     baked.push({
       schemaVersion: 1,
       texture: name,
@@ -259,8 +279,186 @@ export async function bakeSceneTextures(
       channels: raw.channels,
       bytes: bytes.length,
       sha1: createHash('sha1').update(bytes).digest('hex'),
+      ...(recipe ? { procedural: recipe } : {}),
     });
   }
 
   return baked.sort((a, b) => `${a.texture}:${a.slot}`.localeCompare(`${b.texture}:${b.slot}`));
+}
+
+// -----------------------------------------------------------------------------
+// Tangents for normal-mapped meshes
+// -----------------------------------------------------------------------------
+
+/**
+ * Give every normal-mapped mesh a TANGENT attribute.
+ *
+ * A glTF material with a normal texture is supposed to ship tangents. Without
+ * them the Khronos validator raises `MESH_PRIMITIVE_GENERATED_TANGENT_SPACE`
+ * and each runtime invents its own tangent basis, so the same asset lights
+ * differently in different engines — the exact failure mode that makes a normal
+ * map look right in one viewer and subtly wrong in another.
+ *
+ * Measured on a procedural crate with a derived normal map: the GLB validated
+ * with that warning and no TANGENT accessor until this pass existed. The bridge
+ * already exports `geometry.attributes.tangent` when it is present; nothing was
+ * ever computing it.
+ *
+ * Runs only where it is needed — a mesh with no normal map does not pay for it,
+ * and the attribute changes the exported bytes, so computing it unconditionally
+ * would move every existing textured asset for no benefit.
+ *
+ * MikkTSpace is the gold standard and glTF's reference basis, but it is a
+ * separate WASM package. This engine is vendored into Studio as a tarball and
+ * installed into two container images by two different package managers, so a
+ * new native/WASM dependency is a real cost there — `computeTangentBasis` below
+ * implements the standard per-triangle formulation directly instead. three's
+ * own `computeTangents` used the same method before it was removed. If tangent
+ * seams ever show on a shipped asset, MikkTSpace is the upgrade path.
+ *
+ * @param root Scene root, traversed for meshes.
+ * @param warnings Appended to for each mesh that needs tangents but cannot get them.
+ * @returns Number of geometries that received a tangent attribute.
+ */
+/**
+ * Per-vertex tangent basis (Lengyel's method).
+ *
+ * Accumulates a tangent and bitangent per vertex from each triangle's position
+ * and UV deltas, then orthonormalizes the tangent against the vertex normal.
+ * The fourth component is the handedness the shader needs to rebuild the
+ * bitangent as `cross(normal, tangent.xyz) * tangent.w`.
+ *
+ * Triangles with degenerate UVs (zero area in texture space) contribute
+ * nothing rather than poisoning the accumulation with infinities.
+ */
+function computeTangentBasis(geometry: THREE.BufferGeometry): void {
+  const index = geometry.getIndex();
+  const position = geometry.getAttribute('position');
+  const normal = geometry.getAttribute('normal');
+  const uv = geometry.getAttribute('uv');
+  if (!index || !position || !normal || !uv) {
+    throw new Error('position, normal, uv, and an index are all required');
+  }
+
+  const vertexCount = position.count;
+  const tan1 = new Float32Array(vertexCount * 3);
+  const tan2 = new Float32Array(vertexCount * 3);
+
+  for (let i = 0; i < index.count; i += 3) {
+    const a = index.getX(i);
+    const b = index.getX(i + 1);
+    const c = index.getX(i + 2);
+
+    const x1 = position.getX(b) - position.getX(a);
+    const y1 = position.getY(b) - position.getY(a);
+    const z1 = position.getZ(b) - position.getZ(a);
+    const x2 = position.getX(c) - position.getX(a);
+    const y2 = position.getY(c) - position.getY(a);
+    const z2 = position.getZ(c) - position.getZ(a);
+
+    const s1 = uv.getX(b) - uv.getX(a);
+    const t1 = uv.getY(b) - uv.getY(a);
+    const s2 = uv.getX(c) - uv.getX(a);
+    const t2 = uv.getY(c) - uv.getY(a);
+
+    const det = s1 * t2 - s2 * t1;
+    if (det === 0 || !Number.isFinite(det)) continue;
+    const r = 1 / det;
+
+    const sdx = (t2 * x1 - t1 * x2) * r;
+    const sdy = (t2 * y1 - t1 * y2) * r;
+    const sdz = (t2 * z1 - t1 * z2) * r;
+    const tdx = (s1 * x2 - s2 * x1) * r;
+    const tdy = (s1 * y2 - s2 * y1) * r;
+    const tdz = (s1 * z2 - s2 * z1) * r;
+
+    for (const v of [a, b, c]) {
+      const o = v * 3;
+      tan1[o] = (tan1[o] ?? 0) + sdx;
+      tan1[o + 1] = (tan1[o + 1] ?? 0) + sdy;
+      tan1[o + 2] = (tan1[o + 2] ?? 0) + sdz;
+      tan2[o] = (tan2[o] ?? 0) + tdx;
+      tan2[o + 1] = (tan2[o + 1] ?? 0) + tdy;
+      tan2[o + 2] = (tan2[o + 2] ?? 0) + tdz;
+    }
+  }
+
+  const out = new Float32Array(vertexCount * 4);
+  const n = new THREE.Vector3();
+  const t = new THREE.Vector3();
+  const tmp = new THREE.Vector3();
+  const tmp2 = new THREE.Vector3();
+
+  for (let v = 0; v < vertexCount; v++) {
+    n.set(normal.getX(v), normal.getY(v), normal.getZ(v));
+    t.set(tan1[v * 3]!, tan1[v * 3 + 1]!, tan1[v * 3 + 2]!);
+
+    // A vertex touched only by degenerate triangles has no tangent to
+    // orthogonalize; give it any vector perpendicular to the normal so the
+    // attribute stays well-formed instead of holding NaN.
+    if (t.lengthSq() === 0) {
+      t.set(1, 0, 0);
+      if (Math.abs(n.x) > 0.9) t.set(0, 1, 0);
+    }
+
+    // Gram-Schmidt: remove the component along the normal, then normalize.
+    tmp.copy(t).sub(tmp2.copy(n).multiplyScalar(n.dot(t)));
+    if (tmp.lengthSq() === 0) tmp.set(1, 0, 0);
+    tmp.normalize();
+
+    tmp2.set(tan2[v * 3]!, tan2[v * 3 + 1]!, tan2[v * 3 + 2]!);
+    const w = n.clone().cross(t).dot(tmp2) < 0 ? -1 : 1;
+
+    out[v * 4] = tmp.x;
+    out[v * 4 + 1] = tmp.y;
+    out[v * 4 + 2] = tmp.z;
+    out[v * 4 + 3] = w;
+  }
+
+  geometry.setAttribute('tangent', new THREE.BufferAttribute(out, 4));
+}
+
+export function ensureNormalMapTangents(root: THREE.Object3D, warnings: string[]): number {
+  let count = 0;
+  const done = new Set<THREE.BufferGeometry>();
+
+  root.traverse((node) => {
+    const mesh = node as THREE.Mesh;
+    if (!mesh.isMesh) return;
+    const materials = Array.isArray(mesh.material) ? mesh.material : [mesh.material];
+    const needsTangents = materials.some(
+      (m) => (m as THREE.MeshStandardMaterial | undefined)?.normalMap,
+    );
+    if (!needsTangents) return;
+
+    const geometry = mesh.geometry;
+    if (!geometry || done.has(geometry) || geometry.getAttribute('tangent')) return;
+    done.add(geometry);
+
+    const name = mesh.name || '(unnamed mesh)';
+    if (!geometry.getIndex()) {
+      warnings.push(
+        `Mesh ${JSON.stringify(name)} uses a normal map but its geometry is not indexed, so tangents could not be computed. Each runtime will generate its own tangent basis and the surface may light differently across engines.`,
+      );
+      return;
+    }
+    if (!geometry.getAttribute('uv')) {
+      warnings.push(
+        `Mesh ${JSON.stringify(name)} uses a normal map but has no UV coordinates, so tangents could not be computed — and the normal map cannot be sampled either. Unwrap it first: mesh.geometry = await autoUnwrap(mesh.geometry).`,
+      );
+      return;
+    }
+    if (!geometry.getAttribute('normal')) geometry.computeVertexNormals();
+
+    try {
+      computeTangentBasis(geometry);
+      count++;
+    } catch (err) {
+      warnings.push(
+        `Mesh ${JSON.stringify(name)} uses a normal map but tangents could not be computed (${err instanceof Error ? err.message : String(err)}). Each runtime will generate its own tangent basis.`,
+      );
+    }
+  });
+
+  return count;
 }

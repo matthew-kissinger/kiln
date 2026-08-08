@@ -11,7 +11,7 @@
 import { describe, expect, test } from 'bun:test';
 import * as THREE from 'three';
 import { renderSceneToGLB } from '../render';
-import { bakeSceneTextures } from '../texture-bake';
+import { bakeSceneTextures, ensureNormalMapTangents } from '../texture-bake';
 
 // -----------------------------------------------------------------------------
 // Fixtures
@@ -330,5 +330,127 @@ describe('bake boundaries', () => {
     const out = await renderSceneToGLB(sceneWith(stdMaterial('Plain')));
     expect(out.bakedTextures).toBeUndefined();
     expect(out.warnings).toEqual([]);
+  });
+});
+
+// -----------------------------------------------------------------------------
+// Tangents — a normal map without them is non-portable
+// -----------------------------------------------------------------------------
+
+describe('normal-mapped meshes get a tangent basis', () => {
+  /** Box geometry with UVs, which is what a normal map needs to be sampled at all. */
+  function uvBox(): THREE.BufferGeometry {
+    return new THREE.BoxGeometry(1, 1, 1);
+  }
+
+  function normalMapped(name = 'NormalMat'): THREE.MeshStandardMaterial {
+    const mat = stdMaterial(name);
+    const n = checkerTexture();
+    n.name = 'NormalTex';
+    mat.normalMap = n;
+    return mat;
+  }
+
+  test('the Khronos tangent-space warning is gone and TANGENT is in the file', async () => {
+    // Measured before this pass existed: the same asset validated with
+    // MESH_PRIMITIVE_GENERATED_TANGENT_SPACE and carried no tangent accessor.
+    const mat = normalMapped();
+    const root = new THREE.Object3D();
+    root.name = 'Asset';
+    const mesh = new THREE.Mesh(uvBox(), mat);
+    mesh.name = 'Mesh_Box';
+    root.add(mesh);
+
+    const out = await renderSceneToGLB(root);
+
+    expect(out.warnings).toEqual([]);
+    const issues = JSON.stringify(out.gltfValidation);
+    expect(issues).not.toContain('GENERATED_TANGENT_SPACE');
+    expect(glbText(out.bytes)).toContain('TANGENT');
+  });
+
+  test('tangents are unit length, perpendicular to the normal, with ±1 handedness', () => {
+    const geometry = uvBox();
+    const mesh = new THREE.Mesh(geometry, normalMapped());
+    mesh.name = 'Mesh_Box';
+    const root = new THREE.Object3D();
+    root.add(mesh);
+
+    expect(ensureNormalMapTangents(root, [])).toBe(1);
+
+    const tangent = geometry.getAttribute('tangent')!;
+    expect(tangent.itemSize).toBe(4);
+    const normal = geometry.getAttribute('normal')!;
+    for (let i = 0; i < tangent.count; i++) {
+      const t = new THREE.Vector3(tangent.getX(i), tangent.getY(i), tangent.getZ(i));
+      const n = new THREE.Vector3(normal.getX(i), normal.getY(i), normal.getZ(i));
+      expect(t.length()).toBeCloseTo(1, 5);
+      expect(Math.abs(t.dot(n))).toBeLessThan(1e-5);
+      expect(Math.abs(tangent.getW(i))).toBe(1);
+    }
+  });
+
+  test('a mesh with no normal map is left alone — the attribute changes the bytes', () => {
+    const geometry = uvBox();
+    const mesh = new THREE.Mesh(geometry, stdMaterial('Plain'));
+    const root = new THREE.Object3D();
+    root.add(mesh);
+
+    expect(ensureNormalMapTangents(root, [])).toBe(0);
+    expect(geometry.getAttribute('tangent')).toBeUndefined();
+  });
+
+  test('an existing tangent attribute is never recomputed', () => {
+    const geometry = uvBox();
+    const mine = new THREE.BufferAttribute(
+      new Float32Array(geometry.getAttribute('position')!.count * 4),
+      4,
+    );
+    geometry.setAttribute('tangent', mine);
+    const mesh = new THREE.Mesh(geometry, normalMapped());
+    const root = new THREE.Object3D();
+    root.add(mesh);
+
+    expect(ensureNormalMapTangents(root, [])).toBe(0);
+    expect(geometry.getAttribute('tangent')).toBe(mine);
+  });
+
+  test('a normal-mapped mesh with no UVs is warned about, pointing at autoUnwrap', () => {
+    const geometry = uvBox();
+    geometry.deleteAttribute('uv');
+    const mesh = new THREE.Mesh(geometry, normalMapped());
+    mesh.name = 'Mesh_NoUv';
+    const root = new THREE.Object3D();
+    root.add(mesh);
+
+    const warnings: string[] = [];
+    expect(ensureNormalMapTangents(root, warnings)).toBe(0);
+    expect(warnings).toHaveLength(1);
+    expect(warnings[0]).toContain('"Mesh_NoUv"');
+    expect(warnings[0]).toContain('autoUnwrap');
+  });
+
+  test('a non-indexed normal-mapped mesh is warned about by name', () => {
+    const geometry = uvBox().toNonIndexed();
+    const mesh = new THREE.Mesh(geometry, normalMapped());
+    mesh.name = 'Mesh_Flat';
+    const root = new THREE.Object3D();
+    root.add(mesh);
+
+    const warnings: string[] = [];
+    expect(ensureNormalMapTangents(root, warnings)).toBe(0);
+    expect(warnings[0]).toContain('"Mesh_Flat"');
+    expect(warnings[0]).toContain('not indexed');
+  });
+
+  test('geometry shared by two normal-mapped meshes is computed once', () => {
+    const geometry = uvBox();
+    const root = new THREE.Object3D();
+    for (const i of [0, 1]) {
+      const mesh = new THREE.Mesh(geometry, normalMapped(`Mat${i}`));
+      mesh.name = `Mesh_${i}`;
+      root.add(mesh);
+    }
+    expect(ensureNormalMapTangents(root, [])).toBe(1);
   });
 });

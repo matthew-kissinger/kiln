@@ -83,7 +83,11 @@ import {
   collectMaterialResourceProvenance,
   type MaterialResourceProvenanceV1,
 } from './material-resources';
-import { type BakedTextureProvenanceV1, bakeSceneTextures } from './texture-bake';
+import {
+  type BakedTextureProvenanceV1,
+  bakeSceneTextures,
+  ensureNormalMapTangents,
+} from './texture-bake';
 import {
   captureCharacterDiagnosticViews,
   type CharacterCapturedDiagnosticV1,
@@ -1101,6 +1105,11 @@ export async function renderSceneToGLB(
   // bridge with no encoded bytes and be dropped without a word; now it is
   // either baked into the GLB or warned about by name.
   const bakedTextures = await bakeSceneTextures(root, warnings);
+  // A normal-mapped mesh without tangents makes every runtime invent its own
+  // tangent basis, so the same asset lights differently in different engines.
+  // Only touches meshes that actually carry a normal map — the attribute
+  // changes the exported bytes.
+  ensureNormalMapTangents(root, warnings);
 
   const sceneQaReport = runDeterministicSceneQa({ intent, scene: root, clips }, qaPolicyFromEnv());
   if (sceneQaReport.disposition === 'block') {

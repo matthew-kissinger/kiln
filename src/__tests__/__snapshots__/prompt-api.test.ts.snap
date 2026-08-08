@@ -288,6 +288,20 @@ await loadTexture(source, { usage?: 'albedo'|'emissive'|'normal'|'roughness'|'me
   // NOTE: NEVER texture.clone() a loaded texture (clone() corrupts the encoded bytes and breaks
   // GLB export). Share the same Texture object and remap UVs with panelRemapV on the smaller
   // mesh instead.
+proceduralTexture({ size?: 4..1024 pow2, usage?, name?, layers: [{ op: 'solid'|'checker'|'stripes'|'gradient'|'bricks'|'noise', ...params, blend?: 'normal'|'multiply'|'screen'|'overlay', opacity?: 0..1 }] })
+  // Builds a tiling texture from a bounded layer stack — no image file needed. Layers composite
+  // bottom-first. Noise is seeded and tileable, so the same spec always produces the same bytes
+  // and a repeating material shows no seam. Baked to PNG and embedded in the GLB automatically.
+  // NOTE: Sync — no await. Prefer this over loadTexture for any surface you can describe (wood,
+  // rust, brick, fabric, dirt): it needs no asset files and cannot fail at load. Max 8 layers,
+  // size must be a power of two up to 1024. Only the six listed ops exist; there is no custom
+  // per-pixel callback.
+normalMapFromHeight(source: THREE.Texture, { strength?: number, name?: string })
+  // Derives a tangent-space normal map from the source texture's brightness, treating it as
+  // height. The cheap way to get real PBR surface relief out of a procedural albedo. Wraps at
+  // the edges, so a tiling source gives a tiling normal map.
+  // NOTE: strength 1 is subtle, 4-8 reads clearly at normal viewing distance. Output is always
+  // linear data — never assign it to an albedo/emissive slot.
 
 // Animation — keyframes use "rotation"/"position"/"scale" keys, NOT "value"
 rotationTrack(jointName: string, keyframes: Array<{ time, rotation: [xDeg, yDeg, zDeg] }>, interp?: 'LINEAR' | 'STEP')
@@ -724,6 +738,26 @@ await loadTexture(source, { usage?: 'albedo'|'emissive'|'normal'|'roughness'|'me
   // GLB export). Share the same Texture object and remap UVs with panelRemapV on the smaller
   // mesh instead.
   // e.g. const wood = await loadTexture('./textures/oak-albedo.png', { usage: 'albedo' });
+proceduralTexture({ size?: 4..1024 pow2, usage?, name?, layers: [{ op: 'solid'|'checker'|'stripes'|'gradient'|'bricks'|'noise', ...params, blend?: 'normal'|'multiply'|'screen'|'overlay', opacity?: 0..1 }] })
+  // Builds a tiling texture from a bounded layer stack — no image file needed. Layers composite
+  // bottom-first. Noise is seeded and tileable, so the same spec always produces the same bytes
+  // and a repeating material shows no seam. Baked to PNG and embedded in the GLB automatically.
+  // NOTE: Sync — no await. Prefer this over loadTexture for any surface you can describe (wood,
+  // rust, brick, fabric, dirt): it needs no asset files and cannot fail at load. Max 8 layers,
+  // size must be a power of two up to 1024. Only the six listed ops exist; there is no custom
+  // per-pixel callback.
+  // e.g. const bark = proceduralTexture({ size: 256, usage: 'albedo', name: 'Bark', layers: [{
+  // op: 'solid', color: 0x5a4632 }, { op: 'noise', colorA: 0x3d2f21, colorB: 0x7a6248, scale:
+  // 6, octaves: 4, blend: 'overlay' }] });
+normalMapFromHeight(source: THREE.Texture, { strength?: number, name?: string })
+  // Derives a tangent-space normal map from the source texture's brightness, treating it as
+  // height. The cheap way to get real PBR surface relief out of a procedural albedo. Wraps at
+  // the edges, so a tiling source gives a tiling normal map.
+  // NOTE: strength 1 is subtle, 4-8 reads clearly at normal viewing distance. Output is always
+  // linear data — never assign it to an albedo/emissive slot.
+  // e.g. const bark = proceduralTexture({ usage: 'albedo', layers: [{ op: 'noise', colorA:
+  // 0x3d2f21, colorB: 0x7a6248, scale: 6, octaves: 4 }] }); const mat = pbrMaterial({ albedo:
+  // bark, normal: normalMapFromHeight(bark, { strength: 4 }) });
 
 // Animation — keyframes use "rotation"/"position"/"scale" keys, NOT "value"
 rotationTrack(jointName: string, keyframes: Array<{ time, rotation: [xDeg, yDeg, zDeg] }>, interp?: 'LINEAR' | 'STEP')

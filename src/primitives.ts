@@ -21,6 +21,7 @@ import {
 import * as gears from './gears';
 import * as ops from './ops';
 import * as solids from './solids';
+import * as proceduralTextures from './procedural-texture';
 import * as textures from './textures';
 import { materialRecipe } from './material-recipe-runtime';
 import { createVehicleFrame, createWheelAssembly, createWheelGeometrySet } from './vehicle';
@@ -1668,6 +1669,9 @@ export function buildSandboxGlobals(usage?: Record<string, number>): Record<stri
     bladeGeo: wrapGeo('bladeGeo', gears.bladeGeo),
     // Textures + PBR (loadTexture is async)
     loadTexture: wrap('loadTexture', textures.loadTexture),
+    // Procedural textures (sync — no I/O, so no await)
+    proceduralTexture: wrap('proceduralTexture', proceduralTextures.proceduralTexture),
+    normalMapFromHeight: wrap('normalMapFromHeight', proceduralTextures.normalMapFromHeight),
     pbrMaterial: wrap('pbrMaterial', textures.pbrMaterial),
     foliageMaterial: wrap('foliageMaterial', textures.foliageMaterial),
     countTriangles: wrap('countTriangles', countTriangles),
