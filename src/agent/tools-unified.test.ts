@@ -196,10 +196,16 @@ describe('makeKilnUnifiedTools', () => {
       capture?: { preset?: string; cols?: number; cells?: number };
     };
     expect(json.capture).toEqual({ preset: '1x1', cols: 1, cells: 1 });
+    expect(sink.rendered).toBe(true);
+    expect(sink.capture).toEqual({ preset: '1x1' });
+
+    await render.invoke({});
+    expect(sink.rendered).toBe(true);
+    expect(sink.capture).toBeUndefined(); // a later successful default render wins
   });
 
   test('kiln_render on a broken buffer is image-free (plain JSON error)', async () => {
-    const sink: UnifiedSink = { edits: [] };
+    const sink: UnifiedSink = { edits: [], capture: { preset: '2x2' } };
     const tools = makeKilnUnifiedTools({ seedCode: 'not a kiln program (', sink });
     const out = (await findTool(tools, 'kiln_render').invoke({})) as {
       ok: boolean;
@@ -208,6 +214,8 @@ describe('makeKilnUnifiedTools', () => {
     expect(Array.isArray(out)).toBe(false);
     expect(out.ok).toBe(false);
     expect(out.error).toBeDefined();
+    expect(sink.rendered).toBeUndefined();
+    expect(sink.capture).toEqual({ preset: '2x2' }); // failed renders never replace the last good layout
   });
 
   test('kiln_render emits a render candidate (buffer code + six-view png) via onCandidate', async () => {
