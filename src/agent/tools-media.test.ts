@@ -51,6 +51,58 @@ describe('makeKilnTools media handling', () => {
     expect('pngBase64' in json).toBe(false);
   });
 
+  test('a host observer replaces screenshot pixels with a structured visual observation', async () => {
+    const calls: Array<{ toolName: string; pngs: readonly Uint8Array[] }> = [];
+    const tools = makeKilnTools(
+      {},
+      {
+        renderObservationPort: async (input) => {
+          calls.push({ toolName: input.toolName, pngs: input.pngs });
+          return {
+            schemaVersion: 1,
+            verdict: 'continue',
+            findings: [{ criterionId: 'silhouette', summary: 'The box is visible.' }],
+          };
+        },
+      },
+    );
+    const out = (await findTool(tools, 'kiln_screenshot').invoke({ code: BOX_CODE })) as unknown[];
+
+    expect(out).toHaveLength(1);
+    expect(out[0]).toBeInstanceOf(JsonBlock);
+    const json = (out[0] as JsonBlock).json as Record<string, unknown>;
+    expect(json['ok']).toBe(true);
+    expect(json['visualObservation']).toEqual({
+      ok: true,
+      value: {
+        schemaVersion: 1,
+        verdict: 'continue',
+        findings: [{ criterionId: 'silhouette', summary: 'The box is visible.' }],
+      },
+    });
+    expect(calls).toHaveLength(1);
+    expect(calls[0]?.toolName).toBe('kiln_screenshot');
+    expect(calls[0]?.pngs).toHaveLength(1);
+  });
+
+  test('an observer failure degrades to explicit unavailable JSON and never leaks pixels', async () => {
+    const tools = makeKilnTools(
+      {},
+      {
+        renderObservationPort: async () => {
+          throw new Error('provider detail must stay host-only');
+        },
+      },
+    );
+    const out = (await findTool(tools, 'kiln_screenshot').invoke({ code: BOX_CODE })) as unknown[];
+
+    expect(out).toHaveLength(1);
+    expect(out[0]).toBeInstanceOf(JsonBlock);
+    const json = (out[0] as JsonBlock).json as Record<string, unknown>;
+    expect(json['visualObservation']).toEqual({ ok: false, reason: 'observer-unavailable' });
+    expect(JSON.stringify(json)).not.toContain('provider detail');
+  });
+
   test('kiln_screenshot on broken code falls back to the plain JSON error output', async () => {
     const tools = makeKilnTools({});
     const out = (await findTool(tools, 'kiln_screenshot').invoke({ code: 'nope(' })) as {

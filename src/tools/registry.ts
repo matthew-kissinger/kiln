@@ -98,7 +98,45 @@ export interface KilnToolContext {
    * Never throws into the render path: a host callback that throws is swallowed.
    */
   onViewsRendered?(event: InLoopViewRender): void;
+  /**
+   * Optional host-owned visual observer for authors that cannot consume image
+   * input. When present, media-bearing tool results are sent here out of band
+   * and the author receives only the returned structured observation plus the
+   * ordinary JSON metrics. Raw pixels never enter the author transcript.
+   *
+   * The engine does not construct a model or network client. Studio owns the
+   * observer model, prompt, schema validation, deadline, accounting, and retry
+   * policy. A port failure degrades to an explicit unavailable marker rather
+   * than leaking the image or failing the render tool.
+   */
+  renderObservationPort?: RenderObservationPort;
 }
+
+/** JSON-safe value accepted from a host visual observer. */
+export type RenderObservationValue =
+  | null
+  | boolean
+  | number
+  | string
+  | RenderObservationValue[]
+  | { [key: string]: RenderObservationValue };
+
+/** Evidence passed to a host visual observer, never to the author model. */
+export interface RenderObservationInput {
+  /** Model-facing tool that produced the evidence. */
+  toolName: string;
+  /** One grid PNG for ordinary render/inspect, or multiple animation frames. */
+  pngs: readonly Uint8Array[];
+  /** The same base64-free metrics JSON a direct-vision author would receive. */
+  json: unknown;
+  /** Trusted request intent, when the host supplied one. */
+  intent?: AssetIntentV1;
+}
+
+/** Host-injected, model-free engine seam for a bounded VLM observer. */
+export type RenderObservationPort = (
+  input: RenderObservationInput,
+) => Promise<RenderObservationValue>;
 
 /** One in-loop grid, and who drew it. Counted by the host, never shown to the model. */
 export interface InLoopViewRender {
