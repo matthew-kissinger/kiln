@@ -10,4 +10,6 @@ export * from './layout';
 export * from './model';
 export * from './overlap';
 export * from './render-port';
+export * from './terrain';
 export * from './world-document';
+export * from './world-integration';

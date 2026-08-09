@@ -17,8 +17,24 @@ export type { RunKilnComposerOptions, RunKilnComposerResult } from './run';
 export { makeSceneComposerTools } from './tools';
 export type { ComposerSink, MakeComposerToolsOptions, SceneRenderCandidate } from './tools';
 
-export { buildComposerUserPrompt, COMPOSER_SYSTEM_PROMPT } from './prompt';
+export {
+  buildComposerUserPrompt,
+  COMPOSER_SYSTEM_PROMPT,
+  WORLD_INTEGRATION_PROMPT_V2,
+} from './prompt';
 export type { BuildComposerPromptOptions } from './prompt';
+
+export { makeWorldIntegrationToolsV2 } from './world-tools';
+export type {
+  MakeWorldIntegrationToolsV2Options,
+  WorldIntegrationToolState,
+} from './world-tools';
+
+export { runKilnWorldIntegration } from './world-run';
+export type {
+  RunKilnWorldIntegrationOptions,
+  RunKilnWorldIntegrationResult,
+} from './world-run';
 
 export { SceneCompactionManager } from './compaction';
 export type { SceneCompactionConfig, SceneCompactionInfo } from './compaction';

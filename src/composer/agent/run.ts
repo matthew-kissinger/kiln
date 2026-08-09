@@ -16,6 +16,7 @@
 import { Agent, type Message, type Tool } from '@strands-agents/sdk';
 
 import { unifiedDiff } from '../../agent/diff';
+import type { GenerationCallBudget, GenerationCallBudgetReceipt } from '../../agent/call-budget';
 import { type AgentUsage, type KilnAgentEvent, MetricsCollector } from '../../agent/hooks';
 import { toCachedSystemPrompt } from '../../agent/providers';
 import { SceneCompactionManager } from './compaction';
@@ -67,6 +68,10 @@ export interface RunKilnComposerOptions {
   onCandidate?: (c: SceneRenderCandidate) => void;
   /** Extra tools to expose (e.g. a Strands McpClient). */
   extraTools?: unknown[];
+  /** Explicit first-stage model-call ceiling; overrides KILN_AGENT_MAX_STEPS. */
+  maxSteps?: number;
+  /** Shared aggregate allowance across compose, integration, observer, and repair phases. */
+  generationCallBudget?: GenerationCallBudget;
 }
 
 export interface RunKilnComposerResult {
@@ -88,6 +93,8 @@ export interface RunKilnComposerResult {
   steps: number;
   /** Best-effort token usage. */
   usage?: AgentUsage;
+  /** Snapshot of the shared aggregate allowance after this stage, when supplied. */
+  callBudget?: GenerationCallBudgetReceipt;
   /** The last assistant text (fallback / diagnostics). */
   lastText?: string;
   /** When refining (seedScene set): a unified diff from the parent program. */
@@ -140,11 +147,11 @@ export async function runKilnComposer(
   // long the run gets, so the cap is a far-back safety net, not the primary stop; the
   // agent should finalize well before it. Env-overridable (0 disables); shares the
   // asset-gen knob name for one place to tune.
-  const maxSteps = Number(process.env['KILN_AGENT_MAX_STEPS'] ?? 80) || 0;
+  const maxSteps = opts.maxSteps ?? (Number(process.env['KILN_AGENT_MAX_STEPS'] ?? 80) || 0);
   // Compact the transcript once it grows past this many messages: the scene state
   // lives in the model, so the history is disposable working memory. Env-tunable.
   const compactAt = Number(process.env['KILN_COMPOSER_COMPACT_AT'] ?? 24) || 0;
-  const metrics = new MetricsCollector(opts.onEvent, maxSteps);
+  const metrics = new MetricsCollector(opts.onEvent, maxSteps, opts.generationCallBudget, 'author');
   const model = buildModel(opts);
   const parentProgram = opts.seedScene ? serialize(model) : undefined;
   const sink: ComposerSink = {};
@@ -214,6 +221,7 @@ export async function runKilnComposer(
         toolCalls: collected.toolCalls,
         steps: collected.steps,
         ...(collected.usage ? { usage: collected.usage } : {}),
+        ...(opts.generationCallBudget ? { callBudget: opts.generationCallBudget.receipt() } : {}),
         ...(lastText ? { lastText } : {}),
       };
     }
@@ -231,6 +239,7 @@ export async function runKilnComposer(
       toolCalls: collected.toolCalls,
       steps: collected.steps,
       ...(collected.usage ? { usage: collected.usage } : {}),
+      ...(opts.generationCallBudget ? { callBudget: opts.generationCallBudget.receipt() } : {}),
       ...(lastText ? { lastText } : {}),
       ...(diff ? { diff } : {}),
     };
@@ -242,6 +251,7 @@ export async function runKilnComposer(
       toolCalls: collected.toolCalls,
       steps: collected.steps,
       ...(collected.usage ? { usage: collected.usage } : {}),
+      ...(opts.generationCallBudget ? { callBudget: opts.generationCallBudget.receipt() } : {}),
       error: err instanceof Error ? err.message : String(err),
     };
   } finally {
