@@ -12,11 +12,13 @@ import { ScriptedModel } from '../agent/__tests__/scripted-model';
 
 class ToolCapturingModel extends ScriptedModel {
   toolNames: string[][] = [];
+  messages: Message[][] = [];
   override async *stream(
     messages: Message[],
     options?: StreamOptions,
   ): AsyncIterable<ModelStreamEvent> {
     this.toolNames.push((options?.toolSpecs ?? []).map(({ name }) => name));
+    this.messages.push(structuredClone(messages));
     yield* super.stream(messages, options);
   }
 }
@@ -103,6 +105,94 @@ describe('runKilnWorldIntegration', () => {
     expect(String(model.seenSystemPrompts[0])).toContain(WORLD_INTEGRATION_PROMPT_V2.slice(0, 30));
   });
 
+  test('surfaces and returns an exact GPU receipt for persistence', async () => {
+    const receiptBase = {
+      cameras: [
+        {
+          position: [12, 8, 15] as [number, number, number],
+          target: [0, 1, 0] as [number, number, number],
+          up: [0, 1, 0] as [number, number, number],
+          fovDeg: 50,
+          aspect: 16 / 9,
+          near: 0.1,
+          far: 500,
+        },
+      ],
+      width: 1280,
+      height: 720,
+      lightingPresetId: 'studio-day-v2',
+      backend: 'vulkan',
+      rendererId: 'dawn-vulkan:test',
+      outputSha256: `sha256:${'c'.repeat(64)}` as const,
+    };
+    const model = new ToolCapturingModel([
+      { toolCalls: [{ name: 'scene_world_render' }] },
+      { toolCalls: [{ name: 'scene_world_finalize' }] },
+      { text: 'done' },
+    ]);
+    let receipt: (typeof receiptBase & { worldHash: `sha256:${string}` }) | undefined;
+    const result = await runKilnWorldIntegration({
+      model,
+      prompt: 'inspect the world',
+      world: world(),
+      render: async (request) => {
+        receipt = { ...receiptBase, worldHash: request.worldHash! };
+        return {
+          ok: true,
+          pngBase64: Buffer.from('png').toString('base64'),
+          degraded: false,
+          receipt,
+        };
+      },
+      maxSteps: 6,
+    });
+
+    expect(result.renderEvidence).toEqual([
+      {
+        worldHash: result.renderEvidence[0]!.worldHash,
+        views: 1,
+        degraded: false,
+        receipt,
+      },
+    ]);
+    const modelContext = JSON.stringify(model.messages);
+    expect(modelContext).toContain('dawn-vulkan:test');
+    expect(modelContext).toContain('outputSha256');
+    expect(modelContext).toContain('"degraded":false');
+  });
+
+  test('surfaces an ok CPU fallback as degraded evidence without inventing a receipt', async () => {
+    const model = new ToolCapturingModel([
+      { toolCalls: [{ name: 'scene_world_render' }] },
+      { text: 'done' },
+    ]);
+    const result = await runKilnWorldIntegration({
+      model,
+      prompt: 'inspect the world',
+      world: world(),
+      render: async () => ({
+        ok: true,
+        pngBase64: Buffer.from('png').toString('base64'),
+        degraded: true,
+        degradeReason: 'GPU deadline; deterministic CPU fallback',
+      }),
+      maxSteps: 4,
+    });
+
+    expect(result.renderEvidence).toEqual([
+      {
+        worldHash: result.renderEvidence[0]!.worldHash,
+        views: 1,
+        degraded: true,
+        degradeReason: 'GPU deadline; deterministic CPU fallback',
+      },
+    ]);
+    const modelContext = JSON.stringify(model.messages);
+    expect(modelContext).toContain('"degraded":true');
+    expect(modelContext).toContain('GPU deadline; deterministic CPU fallback');
+    expect(modelContext).not.toContain('outputSha256');
+  });
+
   test('shares one aggregate model-call allowance across compose and integration', async () => {
     const budget = createGenerationCallBudget(1);
     const render: SceneRenderPort = async () => ({ ok: true });
@@ -131,6 +221,33 @@ describe('runKilnWorldIntegration', () => {
     });
     expect(integrated.capped).toBe(true);
     expect(integrated.callBudget).toMatchObject({ consumed: 1, remaining: 0, denied: 1 });
+    expect(budget.receipt()).toEqual(integrated.callBudget!);
+  });
+
+  test('enforces its local sub-cap without consuming the aggregate remainder', async () => {
+    const budget = createGenerationCallBudget(5);
+    const integrated = await runKilnWorldIntegration({
+      model: new ScriptedModel([
+        { toolCalls: [{ name: 'scene_world_render' }] },
+        { toolCalls: [{ name: 'scene_world_render' }] },
+        { text: 'must not dispatch' },
+      ]),
+      prompt: 'inspect twice within the integration slice',
+      world: world(),
+      render: async () => ({ ok: true }),
+      maxSteps: 2,
+      generationCallBudget: budget,
+    });
+
+    expect(integrated.capped).toBe(true);
+    expect(integrated.steps).toBe(2);
+    expect(integrated.callBudget).toMatchObject({
+      limit: 5,
+      consumed: 2,
+      remaining: 3,
+      denied: 0,
+      byRole: { author: 2 },
+    });
     expect(budget.receipt()).toEqual(integrated.callBudget!);
   });
 });
