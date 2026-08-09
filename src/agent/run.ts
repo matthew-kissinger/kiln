@@ -38,6 +38,7 @@ import {
 import type { AssetCategory, AssetStyle } from '../prompt';
 import type { AssetIntentV1 } from '../contracts';
 import type { KilnToolContext } from '../tools/registry';
+import type { CaptureConfig } from '../views/capture';
 import type { SubmitSink, EditSink, UnifiedSink, EditRecord, KilnRenderCandidate } from './tools';
 import {
   resolveToolSurface,
@@ -198,6 +199,10 @@ export interface RunKilnAgentResult {
   edits?: EditRecord[];
   /** In edit mode, a unified diff from the parent code to the final buffer. */
   diff?: string;
+  /** Layout selected by the most recent successful unified `kiln_render`.
+   * Presence means a render succeeded; an empty object means the standard 3x2
+   * grid, while `capture` carries a custom grid/camera selection. */
+  captureSelection?: { capture?: CaptureConfig };
   /** True when the run hit the step cap but the sink held a program that renders —
    *  the code is the salvaged best effort instead of a discarded run. A cap with
    *  nothing renderable is still an `error`. */
@@ -346,10 +351,12 @@ export async function runKilnAgent(opts: RunKilnAgentOptions): Promise<RunKilnAg
 
     const reviewNote =
       surface === 'unified'
-        ? '\n\nBefore finalizing, call kiln_render once and look at the six views: correct ' +
-          'facing in Front, a clean silhouette in Right, symmetry in Top, and no floating or ' +
-          'detached parts in the 3/4 view. Fix anything that looks wrong (kiln_edit or ' +
-          'kiln_draft), then call kiln_finalize exactly once.'
+        ? '\n\nBefore finalizing, call kiln_render and inspect the view sheet: correct facing in ' +
+          'Front, a clean silhouette in Right, symmetry in Top, and no floating or detached ' +
+          'parts in the 3/4 view. Keep the default 3x2 when it communicates the asset well; ' +
+          'otherwise choose the smallest useful grid and bounded per-cell cameras. The last ' +
+          'successful layout becomes the final presentation sheet. Fix anything that looks ' +
+          'wrong (kiln_edit or kiln_draft), then call kiln_finalize exactly once.'
         : '\n\nBefore submitting, call kiln_screenshot once on your final code and check ' +
           'the six views: correct facing in Front, a clean silhouette in Right, symmetry in ' +
           'Top, and no floating or detached parts in the 3/4 view. Fix anything that looks ' +
@@ -518,6 +525,9 @@ export async function runKilnAgent(opts: RunKilnAgentOptions): Promise<RunKilnAg
       ...(lastText ? { lastText } : {}),
       ...(emitEdits ? { edits: editsTrace } : {}),
       ...(diff ? { diff } : {}),
+      ...(unifiedSink.rendered
+        ? { captureSelection: unifiedSink.capture ? { capture: unifiedSink.capture } : {} }
+        : {}),
       ...(capped ? { capped: true, salvaged: 'step-cap' as const } : {}),
     };
   } catch (err) {
@@ -528,6 +538,9 @@ export async function runKilnAgent(opts: RunKilnAgentOptions): Promise<RunKilnAg
       steps: collected.steps,
       ...(collected.usage ? { usage: collected.usage } : {}),
       ...(counters ? { counters } : {}),
+      ...(unifiedSink.rendered
+        ? { captureSelection: unifiedSink.capture ? { capture: unifiedSink.capture } : {} }
+        : {}),
     };
     // Salvage-on-error (H-10): a thrown error used to discard a program the
     // sink already held — and MaxTokensError, the canonical throw here, is

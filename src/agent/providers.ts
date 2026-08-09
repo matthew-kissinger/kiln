@@ -119,6 +119,10 @@ export interface OpenRouterModelOptions {
    *  drops cache-point blocks outright (@strands-agents/sdk vercel.js), which is
    *  exactly why the OpenRouter fix lives here in request settings instead. */
   promptCache?: boolean;
+  /** OpenRouter provider routing. `throughput` preserves the requested model and
+   * all generation parameters while avoiding the router's price-first default,
+   * which is a poor fit for a serial interactive tool loop. */
+  providerSort?: 'price' | 'throughput' | 'latency';
 }
 
 /**
@@ -131,6 +135,7 @@ export function makeOpenRouterModel(opts: OpenRouterModelOptions): Model {
     openrouter.chat(opts.modelId, {
       ...(opts.reasoning ? { reasoning: opts.reasoning } : {}),
       ...(opts.promptCache ? { cache_control: { type: 'ephemeral' } } : {}),
+      ...(opts.providerSort ? { provider: { sort: opts.providerSort } } : {}),
     }) as LanguageModelV3,
   );
   if (opts.splitToolResultImages) provider = splitToolResultImages(provider);
@@ -358,6 +363,10 @@ export function makeKilnModel(desc: KilnModelDescriptor, opts: MakeKilnModelOpti
         ...(opts.apiKey ? { apiKey: opts.apiKey } : {}),
         ...(maxTokens != null ? { maxTokens } : {}),
         ...(reasoning ? { reasoning } : {}),
+        // OpenRouter's default is price-first routing. Kiln's calls are serial
+        // and user-facing, so choose the same model's highest-throughput healthy
+        // endpoint. Reasoning, tools, prompts, and completion limits are unchanged.
+        providerSort: 'throughput',
         // Together's Inkling hosting rejects images embedded in a tool-result
         // message (verified live 2026-07-19) — see split-tool-result-images.ts.
         ...(desc.model === 'thinkingmachines/inkling' ? { splitToolResultImages: true } : {}),

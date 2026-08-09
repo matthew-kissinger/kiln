@@ -453,7 +453,43 @@ describe('OpenRouter-Anthropic prompt caching (cache_control)', () => {
       { provider: 'openrouter', model: 'x-ai/grok-4.3', maxTokens: 64000, thinking: 'high' },
       { apiKey: 'test-key' },
     );
-    expect(settingsOf(reasoning)).toEqual({ reasoning: { effort: 'high' } });
+    expect(settingsOf(reasoning)).toEqual({
+      reasoning: { effort: 'high' },
+      provider: { sort: 'throughput' },
+    });
+  });
+
+  test('all OpenRouter author calls prefer throughput without changing the requested model', async () => {
+    const model = makeKilnModel(
+      { provider: 'openrouter', model: 'deepseek/deepseek-v4-flash-latest' },
+      { apiKey: 'test-key' },
+    );
+    expect(settingsOf(model)['provider']).toEqual({ sort: 'throughput' });
+
+    const provider = (model as unknown as { _provider: { doStream(o: unknown): Promise<unknown> } })
+      ._provider;
+    const realFetch = globalThis.fetch;
+    let body: Record<string, unknown> | undefined;
+    globalThis.fetch = (async (_url: unknown, init: { body: string }) => {
+      body = JSON.parse(init.body) as Record<string, unknown>;
+      return new Response('data: [DONE]\n\n', {
+        status: 200,
+        headers: { 'content-type': 'text/event-stream' },
+      });
+    }) as unknown as typeof fetch;
+    try {
+      const result = (await provider.doStream({
+        prompt: [{ role: 'user', content: [{ type: 'text', text: 'hi' }] }],
+      })) as { stream: ReadableStream<unknown> };
+      const reader = result.stream.getReader();
+      while (!(await reader.read()).done) {
+        // drain
+      }
+    } finally {
+      globalThis.fetch = realFetch;
+    }
+    expect(body?.['model']).toBe('deepseek/deepseek-v4-flash-latest');
+    expect(body?.['provider']).toEqual({ sort: 'throughput' });
   });
 
   test('the two caching mechanisms stay separate: cache_control is not a system cache point', () => {
