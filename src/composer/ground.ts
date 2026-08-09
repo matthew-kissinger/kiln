@@ -9,10 +9,17 @@
 export interface GroundSampler {
   /** World-space terrain height at (x, z). */
   heightAt(x: number, z: number): number;
+  /** World-space upward surface normal. Flat and canonical heightfields provide it. */
+  normalAt?(x: number, z: number): [number, number, number];
 }
 
 /** Constant-height ground (the default, y = 0). */
-export const flatGround = (y = 0): GroundSampler => ({ heightAt: () => y });
+export const flatGround = (
+  y = 0,
+): GroundSampler & { normalAt(x: number, z: number): [number, number, number] } => ({
+  heightAt: () => y,
+  normalAt: () => [0, 1, 0],
+});
 
 /** Mark a sampler as terrain — the heightmap seam. Identity today (a heightfield
  *  is just a `GroundSampler`); exists so a scene program reads `heightmap(fn)`

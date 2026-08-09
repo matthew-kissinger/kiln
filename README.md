@@ -61,7 +61,19 @@ The engine ships TypeScript source (Bun/tsx transpile on the fly); consume by su
 | `@kiln/engine/prompt`, `/prompt-api`, `/list-primitives` | system-prompt generation + catalog |
 | `@kiln/engine/metrics`, `/inspect` | instanceability grade + scene-structure analysis |
 | `@kiln/engine/contracts` | browser-safe asset and integration contracts, including `IntegrationManifestV1` and the semantic role vocabulary (`KILN_SEMANTIC_ROLES`, `semanticRole`, `semanticRoleMatches`, `hasSemanticRole`) |
-| `@kiln/engine/composer`, `/composer/agent` | THREE-free scene-composition core (canonical `WorldDocumentV2`, deterministic v1 migration/hash/projection, placement model, layout, overlap, DSL) + its Strands agent loop (`runKilnComposer`) |
+| `@kiln/engine/composer`, `/composer/agent` | THREE-free scene-composition core (canonical `WorldDocumentV2`, strict reconciliation, sockets/zones/paths/spawns, deterministic terrain, layout/overlap/DSL) + bounded compose and post-compose integration loops (`runKilnComposer`, `runKilnWorldIntegration`) |
+| `@kiln/engine/world-runtime` | dependency-free browser-safe heightfield V1 parser/codec/hash/sampler/mesh projection; Studio `sync:engine` may copy this exact leaf and stamp its source SHA so frontend/Play run the Engine-owned implementation without importing the Engine package |
+
+Composer V2 uses one canonical-world authority. For a fresh scene, run the ordinary composer,
+migrate its evaluated candidate with `migrateSceneModelV1ToWorldDocumentV2`, then pass that world to
+`runKilnWorldIntegration`. For refine, merge the migrated candidate into the parent with
+`reconcileWorldDocumentV2Candidate` first; that preserves terrain/authored/runtime state and applies
+locked asset-swap semantics. The bounded integration loop renders and finalizes the same world state
+its `scene_world_*` tools mutate. It requires either the shared `generationCallBudget` used by the
+host settlement or an explicit positive `maxSteps`; there is no hidden second-stage call allowance.
+Heightfield artifact SHA-256 binds the exact bytes from
+`encodeHeightfieldArtifactV1`; portable asset paths remain the additive package contract
+`models/<generationId>.glb`.
 
 Finished renders include `integrationManifest`, a versioned sidecar with the artifact
 hash, metres/+Y-up axes, bounds, grounding offset, selected default scene, role, render

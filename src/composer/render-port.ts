@@ -5,21 +5,57 @@
  * the rasterizer). Bun tests inject a stub returning a fixed PNG.
  */
 import type { Placement } from './model';
+import type { WorldDocumentV2 } from './world-document';
 
 export interface SceneCamera {
   position: [number, number, number];
   target: [number, number, number];
+  /** World-space camera up vector. Host default is [0,1,0]. */
+  up?: [number, number, number];
   /** Vertical FOV in degrees. Default ~50. */
   fovDeg?: number;
+  aspect?: number;
+  near?: number;
+  far?: number;
+}
+
+/** Fully resolved camera values recorded in an immutable render receipt. */
+export interface ResolvedSceneCamera {
+  position: [number, number, number];
+  target: [number, number, number];
+  up: [number, number, number];
+  fovDeg: number;
+  aspect: number;
+  near: number;
+  far: number;
 }
 
 export interface SceneRenderRequest {
   /** The evaluated scene (generationId + transform per instance). */
   placements: Placement[];
+  /** Canonical authority for terrain/artifact resolution on world-aware host adapters. */
+  worldDocument?: WorldDocumentV2;
   /** Omit for the standard 3-angle grid; pass one camera for a custom shot. */
   cameras?: SceneCamera[];
   width?: number;
   height?: number;
+  /** Canonical input identity for an immutable GPU milestone. */
+  worldHash?: `sha256:${string}`;
+  lightingPresetId?: string;
+  /** Requested host backend, e.g. `webgpu` or `vulkan`; host reports actual backend. */
+  backendPreference?: string;
+}
+
+/** Reproducibility/provenance record for a successful GPU milestone render. */
+export interface SceneRenderReceipt {
+  worldHash: `sha256:${string}`;
+  cameras: ResolvedSceneCamera[];
+  width: number;
+  height: number;
+  lightingPresetId: string;
+  backend: string;
+  rendererId: string;
+  outputSha256: `sha256:${string}`;
 }
 
 export interface SceneRenderResult {
@@ -29,6 +65,8 @@ export interface SceneRenderResult {
   /** One PNG per requested camera, when more than one was passed. */
   perCameraBase64?: string[];
   tris?: number;
+  /** Present when the host renders an immutable canonical-world milestone. */
+  receipt?: SceneRenderReceipt;
   error?: string;
 }
 

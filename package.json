@@ -38,7 +38,8 @@
     "./contracts": "./src/contracts/index.ts",
     "./qa": "./src/qa/index.ts",
     "./composer": "./src/composer/index.ts",
-    "./composer/agent": "./src/composer/agent/index.ts"
+    "./composer/agent": "./src/composer/agent/index.ts",
+    "./world-runtime": "./src/composer/terrain-runtime.ts"
   },
   "files": [
     "src/**/*.ts",
