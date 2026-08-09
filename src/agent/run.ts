@@ -89,7 +89,10 @@ function imageFormatFromMime(mime: string): 'png' | 'jpeg' | 'gif' | 'webp' {
 }
 
 export interface RunKilnAgentOptions
-  extends Pick<KilnToolContext, 'viewRenderPort' | 'viewRenderTimeoutMs' | 'onViewsRendered'> {
+  extends Pick<
+    KilnToolContext,
+    'viewRenderPort' | 'viewRenderTimeoutMs' | 'onViewsRendered' | 'renderObservationPort'
+  > {
   /** A constructed Strands `Model` instance (provider-agnostic). */
   model: unknown;
   /** Natural-language description of the asset to build. */
