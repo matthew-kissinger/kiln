@@ -58,6 +58,12 @@ export interface SceneRenderReceipt {
   lightingPresetId: string;
   backend: string;
   rendererId: string;
+  /** Ordered digest for every camera output. When present, its length must
+   * exactly match `cameras`; omitted for legacy hosts that only bind the
+   * primary/composited output. */
+  perCameraOutputSha256?: `sha256:${string}`[];
+  /** Digest of the host's deterministic ordered output-set encoding. */
+  outputSetSha256?: `sha256:${string}`;
   outputSha256: `sha256:${string}`;
 }
 

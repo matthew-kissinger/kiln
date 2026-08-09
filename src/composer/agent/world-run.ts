@@ -166,8 +166,17 @@ function lifecycleTools(
 }
 
 function cloneReceipt(receipt: SceneRenderReceipt): SceneRenderReceipt {
+  if (
+    receipt.perCameraOutputSha256 !== undefined &&
+    receipt.perCameraOutputSha256.length !== receipt.cameras.length
+  ) {
+    throw new TypeError('render receipt per-camera output hashes must match cameras');
+  }
   return {
     ...receipt,
+    ...(receipt.perCameraOutputSha256
+      ? { perCameraOutputSha256: [...receipt.perCameraOutputSha256] }
+      : {}),
     cameras: receipt.cameras.map((camera) => ({
       ...camera,
       position: [...camera.position],
