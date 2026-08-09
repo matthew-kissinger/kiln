@@ -15,7 +15,7 @@ import type {
   SceneModelJSON,
   Statement,
 } from './model';
-import { PlacementModel } from './model';
+import { placementRoleForAsset, PlacementModel } from './model';
 
 export const WORLD_DOCUMENT_V2_SCHEMA_VERSION = 'kiln.world.v2' as const;
 
@@ -203,6 +203,15 @@ const spawnSchema = z
   })
   .strict();
 
+const worldEnvironmentSchema = z
+  .object({
+    presetId: groundThemeSchema.optional(),
+    lightingPresetId: nonEmptyId,
+    backdrop: backdropSchema.optional(),
+    groundPaint: z.array(paintZoneSchema).max(512),
+  })
+  .strict();
+
 const duplicateValues = (values: readonly string[]): string[] => {
   const seen = new Set<string>();
   const duplicates = new Set<string>();
@@ -213,6 +222,120 @@ const duplicateValues = (values: readonly string[]): string[] => {
   return [...duplicates].sort();
 };
 
+const v1ProvenanceSchema = z
+  .object({
+    sourcePrompt: z.string().min(1).max(4000).optional(),
+    parentGenerationId: nonEmptyId.optional(),
+  })
+  .strict();
+
+const v1StatementCommon = {
+  stmtId: nonEmptyId,
+  alias: nonEmptyId,
+  generationId: nonEmptyId,
+  role: roleSchema,
+  scale: finite.positive(),
+  group: nonEmptyId.optional(),
+  provenance: v1ProvenanceSchema.optional(),
+};
+
+const v1FacingSchema = z.union([z.enum(['center', 'out']), vec2, finite]);
+const v1StatementSchema = z.discriminatedUnion('kind', [
+  z
+    .object({
+      ...v1StatementCommon,
+      kind: z.literal('place'),
+      at: vec2,
+      y: finite.optional(),
+      face: v1FacingSchema,
+      exact: z
+        .object({
+          pos: vec3,
+          rotYDeg: finite,
+        })
+        .strict()
+        .optional(),
+    })
+    .strict(),
+  z
+    .object({
+      ...v1StatementCommon,
+      kind: z.literal('cluster'),
+      around: vec2,
+      count: z.number().int().min(1).max(200),
+      spread: finite.nonnegative(),
+      face: v1FacingSchema,
+    })
+    .strict(),
+  z
+    .object({
+      ...v1StatementCommon,
+      kind: z.literal('ring'),
+      center: vec2,
+      count: z.number().int().min(1).max(200),
+      radius: finite.nonnegative(),
+      faceOut: z.boolean(),
+    })
+    .strict(),
+]);
+
+/** Strict runtime schema for the unversioned v1 PlacementModel persistence shape. */
+export const SceneModelV1Schema = z
+  .object({
+    name: z.string().min(1).max(256),
+    seed: z.number().int().safe(),
+    catalog: z
+      .array(
+        z
+          .object({
+            generationId: nonEmptyId,
+            bbox: boundsSchema,
+            name: z.string().min(1).max(256).optional(),
+            tags: z.array(z.string().min(1).max(128)).max(128).optional(),
+            role: assetRoleSchema.optional(),
+            tier: assetTierSchema.optional(),
+          })
+          .strict(),
+      )
+      .max(200),
+    statements: z.array(v1StatementSchema).max(200),
+    environment: groundThemeSchema.optional(),
+    backdrop: backdropSchema.optional(),
+    paint: z.array(paintZoneSchema).max(512).optional(),
+  })
+  .strict()
+  .superRefine((model, ctx) => {
+    const unique = (values: readonly string[], path: 'catalog' | 'statements'): void => {
+      for (const duplicate of duplicateValues(values)) {
+        ctx.addIssue({ code: 'custom', path: [path], message: `duplicate id "${duplicate}"` });
+      }
+    };
+    unique(
+      model.catalog.map((entry) => entry.generationId),
+      'catalog',
+    );
+    unique(
+      model.statements.map((statement) => statement.stmtId),
+      'statements',
+    );
+    unique(
+      model.statements.map((statement) => statement.alias),
+      'statements',
+    );
+
+    const generations = new Set(model.catalog.map((entry) => entry.generationId));
+    for (let index = 0; index < model.statements.length; index++) {
+      const statement = model.statements[index]!;
+      if (!generations.has(statement.generationId)) {
+        ctx.addIssue({
+          code: 'custom',
+          path: ['statements', index, 'generationId'],
+          message: `unknown generation "${statement.generationId}"`,
+        });
+      }
+    }
+  });
+
 /** Strict schema for the canonical world. Every referenced artifact carries a SHA-256. */
 export const WorldDocumentV2Schema = z
   .object({
@@ -222,14 +345,7 @@ export const WorldDocumentV2Schema = z
     seed: z.number().int().safe(),
     assets: z.array(assetSchema).max(200),
     objects: z.array(objectSchema).max(200),
-    environment: z
-      .object({
-        presetId: groundThemeSchema.optional(),
-        lightingPresetId: nonEmptyId,
-        backdrop: backdropSchema.optional(),
-        groundPaint: z.array(paintZoneSchema).max(512),
-      })
-      .strict(),
+    environment: worldEnvironmentSchema,
     terrain: terrainSchema,
     authored: z
       .object({
@@ -294,8 +410,11 @@ export const WorldDocumentV2Schema = z
 
     const assetRefs = new Set(world.assets.map((asset) => asset.refId));
     const collisionRefs = new Set(world.collisionArtifacts.map((artifact) => artifact.refId));
+    const referencedAssets = new Set<string>();
+    const referencedCollisions = new Set<string>();
     for (let index = 0; index < world.objects.length; index++) {
       const object = world.objects[index]!;
+      referencedAssets.add(object.assetRefId);
       if (!assetRefs.has(object.assetRefId)) {
         ctx.addIssue({
           code: 'custom',
@@ -313,12 +432,40 @@ export const WorldDocumentV2Schema = z
           message: `unknown collision artifact ref "${object.collision.artifactRefId}"`,
         });
       }
+      if (object.collision?.policy === 'artifact') {
+        referencedCollisions.add(object.collision.artifactRefId);
+      }
+    }
+    for (let index = 0; index < world.assets.length; index++) {
+      const asset = world.assets[index]!;
+      if (!referencedAssets.has(asset.refId)) {
+        ctx.addIssue({
+          code: 'custom',
+          path: ['assets', index, 'refId'],
+          message: `unreferenced asset "${asset.refId}"`,
+        });
+      }
+    }
+    for (let index = 0; index < world.collisionArtifacts.length; index++) {
+      const artifact = world.collisionArtifacts[index]!;
+      if (!referencedCollisions.has(artifact.refId)) {
+        ctx.addIssue({
+          code: 'custom',
+          path: ['collisionArtifacts', index, 'refId'],
+          message: `unreferenced collision artifact "${artifact.refId}"`,
+        });
+      }
     }
   });
 
 export type WorldDocumentV2 = z.infer<typeof WorldDocumentV2Schema>;
 export type WorldAssetRefV2 = WorldDocumentV2['assets'][number];
 export type WorldObjectV2 = WorldDocumentV2['objects'][number];
+
+/** Parse and clone current v1 persistence before it reaches PlacementModel.fromJSON. */
+export function parseSceneModelV1JSON(input: unknown): SceneModelJSON {
+  return SceneModelV1Schema.parse(input) as SceneModelJSON;
+}
 
 /** Parse and clone a v2 document. Unknown schema versions and unknown keys fail closed. */
 export function parseWorldDocumentV2(input: unknown): WorldDocumentV2 {
@@ -359,6 +506,135 @@ export async function hashWorldDocumentV2(input: unknown): Promise<`sha256:${str
   return `sha256:${hex}`;
 }
 
+const reconciliationSchema = z
+  .object({
+    objects: z
+      .array(
+        z
+          .object({
+            id: nonEmptyId,
+            generationId: nonEmptyId,
+            position: vec3,
+            rotationYDeg: finite,
+            uniformScale: finite.positive(),
+          })
+          .strict(),
+      )
+      .max(200),
+    assets: z
+      .array(
+        z
+          .object({
+            generationId: nonEmptyId,
+            artifactSha256: sha256,
+            bounds: boundsSchema,
+            name: z.string().min(1).max(256).optional(),
+            tags: z.array(z.string().min(1).max(128)).max(128).optional(),
+            role: assetRoleSchema.optional(),
+            tier: assetTierSchema.optional(),
+          })
+          .strict(),
+      )
+      .max(200)
+      .optional(),
+    /** Complete replacement when manual PUT changes presentation state. */
+    environment: worldEnvironmentSchema.optional(),
+  })
+  .strict()
+  .superRefine((input, ctx) => {
+    for (const duplicate of duplicateValues(input.objects.map((object) => object.id))) {
+      ctx.addIssue({ code: 'custom', path: ['objects'], message: `duplicate id "${duplicate}"` });
+    }
+    for (const duplicate of duplicateValues(
+      (input.assets ?? []).map((asset) => asset.generationId),
+    )) {
+      ctx.addIssue({
+        code: 'custom',
+        path: ['assets'],
+        message: `duplicate generation "${duplicate}"`,
+      });
+    }
+    const referencedGenerations = new Set(input.objects.map((object) => object.generationId));
+    for (let index = 0; index < (input.assets ?? []).length; index++) {
+      const asset = input.assets![index]!;
+      if (!referencedGenerations.has(asset.generationId)) {
+        ctx.addIssue({
+          code: 'custom',
+          path: ['assets', index, 'generationId'],
+          message: `unreferenced asset metadata "${asset.generationId}"`,
+        });
+      }
+    }
+  });
+
+export type ReconcileWorldDocumentV2Input = z.infer<typeof reconciliationSchema>;
+
+/**
+ * Reconcile a host-authoritative complete placement set into an existing world.
+ * Retained object ids preserve role/group/collision/provenance, untouched world
+ * fields are carried through, removed references are pruned, and output arrays
+ * are sorted by stable ids so caller ordering cannot change the document hash.
+ */
+export function reconcileWorldDocumentV2Objects(
+  current: unknown,
+  replacement: unknown,
+): WorldDocumentV2 {
+  const world = parseWorldDocumentV2(current);
+  const input = reconciliationSchema.parse(replacement);
+  const existingObjects = new Map(world.objects.map((object) => [object.id, object]));
+  const existingAssets = new Map(world.assets.map((asset) => [asset.generationId, asset]));
+  const suppliedAssets = new Map((input.assets ?? []).map((asset) => [asset.generationId, asset]));
+  const compareId = (a: string, b: string): number => (a < b ? -1 : a > b ? 1 : 0);
+
+  const resolvedAssets = new Map<string, WorldAssetRefV2>();
+  const objects = [...input.objects]
+    .sort((a, b) => compareId(a.id, b.id))
+    .map((object) => {
+      const previous = existingObjects.get(object.id);
+      const existingAsset = existingAssets.get(object.generationId);
+      const suppliedAsset = suppliedAssets.get(object.generationId);
+      if (!existingAsset && !suppliedAsset) {
+        throw new Error(`missing asset metadata for generation "${object.generationId}"`);
+      }
+      const refId = existingAsset?.refId ?? assetRefId(object.generationId);
+      const asset = assetSchema.parse({
+        refId,
+        ...(suppliedAsset ?? existingAsset!),
+      });
+      resolvedAssets.set(asset.refId, asset);
+      return {
+        id: object.id,
+        assetRefId: asset.refId,
+        transform: {
+          position: object.position,
+          rotationYDeg: object.rotationYDeg,
+          uniformScale: object.uniformScale,
+        },
+        role: previous?.role ?? placementRoleForAsset(asset.role) ?? 'support',
+        provenance: previous?.provenance ?? {
+          sourceStatementId: `manual:${object.id}`.slice(0, 256),
+        },
+        ...(previous?.groupId ? { groupId: previous.groupId } : {}),
+        ...(previous?.collision ? { collision: previous.collision } : {}),
+      };
+    });
+
+  const referencedCollisions = new Set(
+    objects.flatMap((object) =>
+      object.collision?.policy === 'artifact' ? [object.collision.artifactRefId] : [],
+    ),
+  );
+  return parseWorldDocumentV2({
+    ...world,
+    assets: [...resolvedAssets.values()].sort((a, b) => compareId(a.refId, b.refId)),
+    objects,
+    collisionArtifacts: world.collisionArtifacts.filter((artifact) =>
+      referencedCollisions.has(artifact.refId),
+    ),
+    ...(input.environment ? { environment: input.environment } : {}),
+  });
+}
+
 export interface MigrateSceneModelV1Options {
   /** Stable product-owned scene/world id. No random id is invented in the pure engine. */
   worldId: string;
@@ -380,9 +656,10 @@ const assetRefId = (generationId: string): string => `asset:${generationId}`;
  * instance transforms are the visual truth and survive reload bit-for-bit.
  */
 export function migrateSceneModelV1ToWorldDocumentV2(
-  modelJson: SceneModelJSON,
+  input: unknown,
   options: MigrateSceneModelV1Options,
 ): WorldDocumentV2 {
+  const modelJson = parseSceneModelV1JSON(input);
   const evaluated = PlacementModel.fromJSON(modelJson).placements();
   const placements = options.placements ?? evaluated.placements;
   const statements = new Map(
