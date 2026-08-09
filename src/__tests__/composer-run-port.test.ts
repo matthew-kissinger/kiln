@@ -10,12 +10,13 @@
 import { describe, expect, test } from 'bun:test';
 import type { Message, ModelStreamEvent, StreamOptions } from '@strands-agents/sdk';
 
-import type {
-  CatalogEntry,
-  PbrRenderPort,
-  PbrRenderRequest,
-  PbrRenderResult,
-  SceneRenderPort,
+import {
+  validatePbrRenderRequest,
+  type CatalogEntry,
+  type PbrRenderPort,
+  type PbrRenderRequest,
+  type PbrRenderResult,
+  type SceneRenderPort,
 } from '../composer';
 import { runKilnComposer } from '../composer/agent';
 import { ScriptedModel } from '../agent/__tests__/scripted-model';
@@ -78,6 +79,63 @@ describe('composer pbrRender seam (B3a)', () => {
     expect(res.ok).toBe(true);
     expect(res.rendererId).toMatch(/^[a-z0-9-]+:/);
     expect(res.viewsPng).toHaveLength(2);
+  });
+
+  test('validates and clones exact perspective camera transport without changing legacy view dirs', () => {
+    const glb = new Uint8Array([1, 2, 3]);
+    const input: PbrRenderRequest = {
+      glb,
+      width: 1280,
+      height: 720,
+      cameras: [
+        {
+          position: [12, 8, 15],
+          target: [0, 1, 0],
+          up: [0, 1, 0],
+          fovDeg: 50,
+          aspect: 16 / 9,
+          near: 0.1,
+          far: 500,
+        },
+      ],
+      lightingPresetId: 'studio-day-v2',
+    };
+    const parsed = validatePbrRenderRequest(input);
+    expect(parsed).toEqual(input);
+    expect(parsed).not.toBe(input);
+    expect(parsed.glb).toBe(glb);
+    expect(parsed.cameras).not.toBe(input.cameras);
+
+    const legacyInput: PbrRenderRequest = { glb, viewDirs: [[1, 0, 0]], size: 384 };
+    const legacy = validatePbrRenderRequest(legacyInput);
+    expect(legacy).toEqual(legacyInput);
+    expect(legacy.viewDirs).not.toBe(legacyInput.viewDirs);
+
+    expect(() =>
+      validatePbrRenderRequest({ ...input, cameras: [{ ...input.cameras![0]!, far: 0.05 }] }),
+    ).toThrow(/far/i);
+    expect(() =>
+      validatePbrRenderRequest({ ...input, cameras: [{ ...input.cameras![0]!, up: [0, 0, 0] }] }),
+    ).toThrow(/up/i);
+    expect(() =>
+      validatePbrRenderRequest({
+        ...input,
+        cameras: [{ ...input.cameras![0]!, up: [3, 1.75, 3.75] }],
+      }),
+    ).toThrow(/collinear/i);
+    expect(() => validatePbrRenderRequest({ ...input, viewDirs: [[1, 0, 0]] })).toThrow(
+      /mutually exclusive/i,
+    );
+    expect(() => validatePbrRenderRequest({ ...input, height: undefined })).toThrow(
+      /provided together/i,
+    );
+    expect(() =>
+      validatePbrRenderRequest({ ...input, width: undefined, height: undefined }),
+    ).toThrow(/requires width and height/i);
+    expect(() => validatePbrRenderRequest({ ...input, width: 1000 })).toThrow(/aspect/i);
+    expect(() => validatePbrRenderRequest({ ...input, lightingPresetId: '   ' })).toThrow(
+      /lightingPresetId/i,
+    );
   });
 
   test('threading pbrRender changes nothing: identical tool surface and result, port never called', async () => {

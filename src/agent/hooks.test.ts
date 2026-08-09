@@ -112,6 +112,22 @@ describe('MetricsCollector', () => {
     });
   });
 
+  test('local sub-cap stops before consuming the shared aggregate allowance', () => {
+    const budget = createGenerationCallBudget(5);
+    const integration = new MetricsCollector(undefined, 2, budget, 'author');
+    const integrationAgent = fakeAgent();
+    integration.attach(integrationAgent.agent as never);
+
+    expect(integrationAgent.modelCall().cancelled).toBe(false);
+    expect(integrationAgent.modelCall().cancelled).toBe(false);
+    const locallyExhausted = integrationAgent.modelCall();
+
+    expect(locallyExhausted.cancelled).toBe(true);
+    expect(locallyExhausted.cancelText).toContain('step cap');
+    expect(integration.wasCapped()).toBe(true);
+    expect(budget.receipt()).toMatchObject({ consumed: 2, remaining: 3, denied: 0 });
+  });
+
   test('records token usage from the agent result', () => {
     const m = new MetricsCollector();
     m.recordResultUsage({ inputTokens: 1200, outputTokens: 340 });
