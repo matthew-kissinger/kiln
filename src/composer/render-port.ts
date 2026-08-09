@@ -41,6 +41,8 @@ export interface SceneRenderRequest {
   height?: number;
   /** Canonical input identity for an immutable GPU milestone. */
   worldHash?: `sha256:${string}`;
+  /** Optional future explicit presentation request. Phase 1 world integration
+   * omits this so the host selects its fixed material/terrain inspection profile. */
   lightingPresetId?: string;
   /** Requested host backend, e.g. `webgpu` or `vulkan`; host reports actual backend. */
   backendPreference?: string;
@@ -52,6 +54,7 @@ export interface SceneRenderReceipt {
   cameras: ResolvedSceneCamera[];
   width: number;
   height: number;
+  /** Actual host-selected presentation profile used for these pixels. */
   lightingPresetId: string;
   backend: string;
   rendererId: string;

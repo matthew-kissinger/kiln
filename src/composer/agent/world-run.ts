@@ -126,7 +126,7 @@ function lifecycleTools(
     tool({
       name: 'scene_world_render',
       description:
-        'Render the current canonical world after integration edits; inspect before finalizing.',
+        'Render the current canonical world with the host inspection profile; inspect before finalizing.',
       inputSchema: empty,
       callback: async () => {
         const worldHash = await hashWorldDocumentV2(state.world);
@@ -134,7 +134,6 @@ function lifecycleTools(
           placements: placements(state.world),
           worldDocument: state.world,
           worldHash,
-          lightingPresetId: state.world.environment.lightingPresetId,
         });
         if (!result.ok) return { ok: false, error: result.error ?? 'render failed' } as JSONValue;
         const frames = result.perCameraBase64?.length
