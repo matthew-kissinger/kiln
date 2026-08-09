@@ -17,6 +17,7 @@ import {
   parseWorldDocumentV2,
   PlacementModel,
   type Placement,
+  type SceneRenderFallbackReceipt,
   type SceneRenderReceipt,
   type SceneRenderPort,
   type SceneRenderResult,
@@ -69,6 +70,7 @@ export interface WorldIntegrationRenderEvidence {
   degraded?: boolean;
   degradeReason?: string;
   receipt?: SceneRenderReceipt;
+  fallbackReceipt?: SceneRenderFallbackReceipt;
 }
 
 const empty = z.object({}).strict();
@@ -181,12 +183,16 @@ function renderEvidenceOf(
   views: number,
   result: SceneRenderResult,
 ): WorldIntegrationRenderEvidence {
+  if (result.receipt && result.fallbackReceipt) {
+    throw new TypeError('render result cannot carry both exact and fallback receipts');
+  }
   return {
     worldHash,
     views,
     ...(result.degraded !== undefined ? { degraded: result.degraded } : {}),
     ...(result.degradeReason ? { degradeReason: result.degradeReason } : {}),
     ...(result.receipt ? { receipt: cloneReceipt(result.receipt) } : {}),
+    ...(result.fallbackReceipt ? { fallbackReceipt: { ...result.fallbackReceipt } } : {}),
   };
 }
 
