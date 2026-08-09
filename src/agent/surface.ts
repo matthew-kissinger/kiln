@@ -76,6 +76,7 @@ export function buildAgentTools(
       ? { viewRenderTimeoutMs: opts.viewRenderTimeoutMs }
       : {}),
     ...(opts.onViewsRendered ? { onViewsRendered: opts.onViewsRendered } : {}),
+    ...(opts.renderObservationPort ? { renderObservationPort: opts.renderObservationPort } : {}),
   };
   if (surface === 'unified') {
     return makeKilnUnifiedTools({

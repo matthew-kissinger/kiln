@@ -62,9 +62,53 @@ const submitInput = z.object({
  * tool-result coercion passes block arrays through as-is — so it is cast past
  * JSONValue.
  */
-function toCallbackResult(def: KilnToolDef, output: unknown): JSONValue {
+function withVisualObservation(json: unknown, visualObservation: JSONValue): JSONValue {
+  if (json && typeof json === 'object' && !Array.isArray(json)) {
+    return { ...(json as Record<string, JSONValue>), visualObservation } as JSONValue;
+  }
+  return { result: json as JSONValue, visualObservation } as JSONValue;
+}
+
+async function observedMediaResult(
+  def: KilnToolDef,
+  pngs: readonly Uint8Array[],
+  json: unknown,
+  context: KilnToolContext,
+): Promise<JSONValue> {
+  try {
+    const value = await context.renderObservationPort!({
+      toolName: def.name,
+      pngs,
+      json,
+      ...(context.intent ? { intent: context.intent } : {}),
+    });
+    return [
+      new JsonBlock({
+        json: withVisualObservation(json, { ok: true, value } as JSONValue),
+      }),
+    ] as unknown as JSONValue;
+  } catch {
+    return [
+      new JsonBlock({
+        json: withVisualObservation(json, {
+          ok: false,
+          reason: 'observer-unavailable',
+        } as JSONValue),
+      }),
+    ] as unknown as JSONValue;
+  }
+}
+
+async function toCallbackResult(
+  def: KilnToolDef,
+  output: unknown,
+  context: KilnToolContext = {},
+): Promise<JSONValue> {
   const multi = def.mediaMulti?.(output);
   if (multi) {
+    if (context.renderObservationPort) {
+      return observedMediaResult(def, multi.pngs, multi.json, context);
+    }
     return [
       ...multi.pngs.map((png) => new ImageBlock({ format: 'png', source: { bytes: png } })),
       new JsonBlock({ json: multi.json as JSONValue }),
@@ -72,6 +116,9 @@ function toCallbackResult(def: KilnToolDef, output: unknown): JSONValue {
   }
   const media = def.media?.(output);
   if (media) {
+    if (context.renderObservationPort) {
+      return observedMediaResult(def, [media.png], media.json, context);
+    }
     return [
       new ImageBlock({ format: 'png', source: { bytes: media.png } }),
       new JsonBlock({ json: media.json as JSONValue }),
@@ -97,7 +144,11 @@ const animationBufferInput = z.object({
 /** Build a buffer-aware kiln_screenshot_animation tool that runs against `getCode()`
  *  (the working buffer) instead of a `code` argument. Same behavior as the registry
  *  def otherwise; image transports attach the frame(s) via toCallbackResult. */
-function makeBufferAnimationTool(getCode: () => string, def: KilnToolDef): Tool {
+function makeBufferAnimationTool(
+  getCode: () => string,
+  def: KilnToolDef,
+  context: KilnToolContext = {},
+): Tool {
   return tool({
     name: def.name,
     description: `${def.description} Operates on your current working buffer (omit code).`,
@@ -112,17 +163,18 @@ function makeBufferAnimationTool(getCode: () => string, def: KilnToolDef): Tool 
           ...(i.camera ? { camera: i.camera } : {}),
           ...(i.perFrame ? { perFrame: true } : {}),
         }),
+        context,
       );
     },
   });
 }
 
-function toStrandsTool(def: KilnToolDef): Tool {
+function toStrandsTool(def: KilnToolDef, context: KilnToolContext = {}): Tool {
   return tool({
     name: def.name,
     description: def.description,
     inputSchema: def.inputSchema as z.ZodType,
-    callback: async (input) => toCallbackResult(def, await def.run(input)),
+    callback: async (input) => toCallbackResult(def, await def.run(input), context),
   });
 }
 
@@ -134,10 +186,10 @@ function toStrandsTool(def: KilnToolDef): Tool {
  * @param sink - Receives the submitted final code. Read `sink.code` after invoke.
  */
 export function makeKilnTools(sink: SubmitSink, context: KilnToolContext = {}): Tool[] {
-  const kilnTools = createKilnToolRegistry(context).map(toStrandsTool);
+  const kilnTools = createKilnToolRegistry(context).map((def) => toStrandsTool(def, context));
   // kiln_screenshot_animation rides alongside the four registry tools (it takes a
   // `code` arg like them) so a from-scratch animated build can SEE its motion.
-  const animationTool = toStrandsTool(createKilnScreenshotAnimationDef(context));
+  const animationTool = toStrandsTool(createKilnScreenshotAnimationDef(context), context);
   const submitTool: Tool = tool({
     name: KILN_SUBMIT_TOOL_NAME,
     description:
@@ -345,7 +397,7 @@ export function makeKilnEditTools(
   const renderDef = find('kiln_render');
   const screenshotDef = find('kiln_screenshot');
 
-  const listTool = toStrandsTool(find('kiln_list_primitives'));
+  const listTool = toStrandsTool(find('kiln_list_primitives'), opts);
 
   const viewTool: Tool = tool({
     name: 'kiln_view',
@@ -399,12 +451,13 @@ export function makeKilnEditTools(
       toCallbackResult(
         screenshotDef,
         await screenshotDef.run({ code: (input as { code?: string }).code ?? buffer.code }),
+        opts,
       ),
   });
 
   // Buffer-aware motion view: a refine that touches an animated character can SEE
   // the clip move and confirm the edit didn't break it.
-  const animationTool = makeBufferAnimationTool(() => buffer.code, animationDef);
+  const animationTool = makeBufferAnimationTool(() => buffer.code, animationDef, opts);
 
   const submitTool: Tool = tool({
     name: KILN_SUBMIT_TOOL_NAME,
@@ -615,7 +668,7 @@ export function makeKilnUnifiedTools(
           }
         }
       }
-      return toCallbackResult(renderViewsDef, out);
+      return toCallbackResult(renderViewsDef, out, opts);
     },
   });
 
@@ -644,13 +697,13 @@ export function makeKilnUnifiedTools(
         ...(i.zoom !== undefined ? { zoom: i.zoom } : {}),
         ...(i.isolate !== undefined ? { isolate: i.isolate } : {}),
       });
-      return toCallbackResult(inspectDef, out);
+      return toCallbackResult(inspectDef, out, opts);
     },
   });
 
   // Buffer-aware motion view: after drafting/editing an animated character, SEE a
   // clip move (sideways walk, reverse knee, backward swing, item not tracking).
-  const animationTool = makeBufferAnimationTool(() => buffer.code, animationDef);
+  const animationTool = makeBufferAnimationTool(() => buffer.code, animationDef, opts);
 
   // Buffer-aware interior view: after drafting/editing a BUILDING, SEE inside it
   // (roof off — open floor, real doorway gap, fixtures grounded, nothing buried).
@@ -672,7 +725,7 @@ export function makeKilnUnifiedTools(
         code: buffer.code,
         ...(n ? { nodeName: n } : {}),
       });
-      return toCallbackResult(interiorDef, out);
+      return toCallbackResult(interiorDef, out, opts);
     },
   });
 

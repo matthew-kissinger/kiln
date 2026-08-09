@@ -27,7 +27,12 @@ export { resolveToolSurface, buildAgentTools } from './surface';
 export type { KilnToolSurface, RefineMode } from './surface';
 
 export { DEFAULT_INLOOP_VIEW_RENDER_TIMEOUT_MS } from '../tools/registry';
-export type { InLoopViewRender } from '../tools/registry';
+export type {
+  InLoopViewRender,
+  RenderObservationInput,
+  RenderObservationPort,
+  RenderObservationValue,
+} from '../tools/registry';
 
 export {
   generateKilnAsset,

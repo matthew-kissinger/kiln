@@ -11,7 +11,7 @@ import { describe, expect, test } from 'bun:test';
 
 import { buildAgentTools, resolveToolSurface, type ToolBuildOptions } from './surface';
 import type { SubmitSink, EditSink, UnifiedSink } from './tools';
-import type { InLoopViewRender, KilnToolContext } from '../tools/registry';
+import type { InLoopViewRender, KilnToolContext, RenderObservationInput } from '../tools/registry';
 
 function freshSinks() {
   return {
@@ -124,6 +124,24 @@ describe('buildAgentTools', () => {
     expect(events[0]?.neededPbr).toBe(true);
     expect(events[0]?.degraded).toBe(true);
     expect(events[0]?.degradedReason).toContain('timed out after 5ms');
+  });
+
+  test('threads a host visual observer into unified kiln_render without returning pixels', async () => {
+    const observed: RenderObservationInput[] = [];
+    const context: KilnToolContext = {
+      renderObservationPort: async (input) => {
+        observed.push(input);
+        return { schemaVersion: 1, verdict: 'ready', findings: [] };
+      },
+    };
+    const tools = buildAgentTools('unified', context, freshSinks());
+
+    await findTool(tools, 'kiln_draft').invoke({ code: METAL_CODE });
+    const rendered = (await findTool(tools, 'kiln_render').invoke({})) as unknown[];
+
+    expect(rendered).toHaveLength(1);
+    expect(observed).toHaveLength(1);
+    expect(observed[0]?.toolName).toBe('kiln_render');
   });
 });
 
