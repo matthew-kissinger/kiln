@@ -10,6 +10,7 @@ import {
   type ApprovedTextureResourceId,
   type TextureResourceDelivery,
 } from './material-recipes';
+import { PRODUCTION_TEXTURE_RESOURCE_BASE64 } from './material-texture-library.generated';
 import {
   loadTexture,
   type KilnTextureMetadata,
@@ -100,6 +101,7 @@ const EMBEDDED_RESOURCE_BASE64: Readonly<Record<ApprovedTextureResourceId, strin
       'iVBORw0KGgoAAAANSUhEUgAAAAIAAAACCAYAAABytg0kAAAACXBIWXMAAAPoAAAD6AG1e1JrAAAAEElEQVQImWNguCT0H4xhDAA/hAeNGSjqWAAAAABJRU5ErkJggg==',
     'kiln.texture.emissive-grid.v1':
       'iVBORw0KGgoAAAANSUhEUgAAAAIAAAACCAYAAABytg0kAAAACXBIWXMAAAPoAAAD6AG1e1JrAAAAFklEQVQImWP4P0Hhv4MEy38GEAHiAABG+wgTqOP6IAAAAABJRU5ErkJggg==',
+    ...PRODUCTION_TEXTURE_RESOURCE_BASE64,
   },
 );
 
@@ -430,6 +432,47 @@ const materialTextures = (material: THREE.Material): THREE.Texture[] => {
     ...new Set(candidates.filter((value): value is THREE.Texture => value?.isTexture === true)),
   ];
 };
+
+/**
+ * Does this scene contain anything a flat-shaded raster cannot honestly show?
+ *
+ * The question a caller actually wants answered is "is `gameMaterial` enough here,
+ * or did the author reach for PBR", and that is NOT recoverable from the material
+ * type: `gameMaterial` and `pbrMaterial` both construct a `MeshStandardMaterial`,
+ * so after construction they are the same object shape. Two signals survive, and
+ * this checks both:
+ *
+ *   1. A bound texture in any of the six slots. Same six {@link materialTextures}
+ *      reads, and the same duck-typed `.isTexture` — the sandbox is a different
+ *      module realm, so `instanceof THREE.Texture` is always false here.
+ *   2. `metalness > 0`. `gameMaterial` defaults it to 0 and a flat-shaded raster
+ *      is at its most wrong exactly on metal, so an untextured chrome or brass
+ *      surface has to count even though no texture is bound. Roughness is NOT a
+ *      signal: `gameMaterial` sets it by default, so it says nothing about intent.
+ *
+ * Deterministic and read-only: a pure traversal of already-executed scene state,
+ * no clock, no randomness, safe to call from a render path.
+ */
+export function sceneNeedsPbrShading(root: THREE.Object3D): boolean {
+  let needs = false;
+  root.traverse((node) => {
+    if (needs) return;
+    const material = (node as THREE.Mesh).material;
+    const materials = Array.isArray(material) ? material : material ? [material] : [];
+    for (const item of materials) {
+      if (materialTextures(item).length > 0) {
+        needs = true;
+        return;
+      }
+      const metalness = (item as THREE.MeshStandardMaterial).metalness;
+      if (typeof metalness === 'number' && metalness > 0) {
+        needs = true;
+        return;
+      }
+    }
+  });
+  return needs;
+}
 
 /** Deterministic scene-side provenance hook for render/wire/provenance integration. */
 export function collectMaterialResourceProvenance(

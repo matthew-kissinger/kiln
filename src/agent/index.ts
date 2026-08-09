@@ -26,6 +26,14 @@ export type { RunKilnAgentOptions, RunKilnAgentResult, KilnKnowhow, KilnInputIma
 export { resolveToolSurface, buildAgentTools } from './surface';
 export type { KilnToolSurface, RefineMode } from './surface';
 
+export { DEFAULT_INLOOP_VIEW_RENDER_TIMEOUT_MS } from '../tools/registry';
+export type {
+  InLoopViewRender,
+  RenderObservationInput,
+  RenderObservationPort,
+  RenderObservationValue,
+} from '../tools/registry';
+
 export {
   generateKilnAsset,
   generateKilnCodeAgent,
@@ -112,3 +120,15 @@ export type {
 
 export { MetricsCollector } from './hooks';
 export type { CollectedMetrics, AgentUsage, KilnAgentEvent } from './hooks';
+
+export {
+  createGenerationCallBudget,
+  generationModelCallLimitFromEnv,
+  resolveGenerationModelCallLimit,
+  DEFAULT_GENERATION_MODEL_CALL_LIMIT,
+} from './call-budget';
+export type {
+  GenerationCallBudget,
+  GenerationCallBudgetReceipt,
+  GenerationModelCallRole,
+} from './call-budget';

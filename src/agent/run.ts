@@ -32,9 +32,13 @@ import {
   KILN_EDIT_DIRECTIVE,
   KILN_REFINE_DIRECTIVE_UNIFIED,
   KILN_EDIT_DIRECTIVE_UNIFIED,
+  KILN_REFERENCE_IMAGE_DIRECTIVE,
+  KILN_REFERENCE_IMAGE_DIRECTIVE_UNIFIED,
 } from '../prompt';
 import type { AssetCategory, AssetStyle } from '../prompt';
 import type { AssetIntentV1 } from '../contracts';
+import type { KilnToolContext } from '../tools/registry';
+import type { CaptureConfig } from '../views/capture';
 import type { SubmitSink, EditSink, UnifiedSink, EditRecord, KilnRenderCandidate } from './tools';
 import {
   resolveToolSurface,
@@ -44,6 +48,12 @@ import {
 } from './surface';
 import { unifiedDiff } from './diff';
 import { MetricsCollector, type AgentUsage, type KilnAgentEvent } from './hooks';
+import {
+  createGenerationCallBudget,
+  generationModelCallLimitFromEnv,
+  type GenerationCallBudget,
+  type GenerationModelCallRole,
+} from './call-budget';
 import {
   installRenderImageCompaction,
   installGenerationCounters,
@@ -85,7 +95,15 @@ function imageFormatFromMime(mime: string): 'png' | 'jpeg' | 'gif' | 'webp' {
   return 'png';
 }
 
-export interface RunKilnAgentOptions {
+export interface RunKilnAgentOptions
+  extends Pick<
+    KilnToolContext,
+    | 'viewRenderPort'
+    | 'viewRenderTimeoutMs'
+    | 'onViewsRendered'
+    | 'renderObservationPort'
+    | 'generationCallBudget'
+  > {
   /** A constructed Strands `Model` instance (provider-agnostic). */
   model: unknown;
   /** Natural-language description of the asset to build. */
@@ -158,6 +176,8 @@ export interface RunKilnAgentOptions {
    *  consolidate, and the refined program is kept only if its grade improves.
    *  'off' skips the check (no extra model turn, no assessment bake). */
   gradeRefine?: 'auto' | 'off';
+  /** Attribution role for this invocation within the shared generation budget. */
+  modelCallRole?: GenerationModelCallRole;
 }
 
 export interface RunKilnAgentResult {
@@ -179,6 +199,10 @@ export interface RunKilnAgentResult {
   edits?: EditRecord[];
   /** In edit mode, a unified diff from the parent code to the final buffer. */
   diff?: string;
+  /** Layout selected by the most recent successful unified `kiln_render`.
+   * Presence means a render succeeded; an empty object means the standard 3x2
+   * grid, while `capture` carries a custom grid/camera selection. */
+  captureSelection?: { capture?: CaptureConfig };
   /** True when the run hit the step cap but the sink held a program that renders —
    *  the code is the salvaged best effort instead of a discarded run. A cap with
    *  nothing renderable is still an `error`. */
@@ -211,14 +235,22 @@ function lastMessageText(message: Message | undefined): string | undefined {
  * on `result.error` with whatever metrics were collected beforehand.
  */
 export async function runKilnAgent(opts: RunKilnAgentOptions): Promise<RunKilnAgentResult> {
-  // Hard agent-loop cap (runaway backstop, NOT a throttle): a stuck model could
+  // Hard generation-global cap (runaway backstop, NOT a throttle): a stuck model could
   // otherwise loop draft/edit/render forever, re-feeding a growing transcript
   // (input tokens scale ~linearly with step count). Default 40 — ~4x the normal
   // run (~10 model calls) and clear of the slowest legit runs observed (~23); only
-  // catches genuine infinite loops. Env-overridable (set 0 to disable, raise for
-  // an unusually deep build).
-  const maxSteps = Number(process.env['KILN_AGENT_MAX_STEPS'] ?? 40) || 0;
-  const metrics = new MetricsCollector(opts.onEvent, maxSteps);
+  // catches genuine infinite loops. The same object can span author, observer,
+  // retry/fallback, and bounded repair calls. Env-overridable (set 0 to disable).
+  const configuredLimit = generationModelCallLimitFromEnv();
+  const generationCallBudget: GenerationCallBudget =
+    opts.generationCallBudget ?? createGenerationCallBudget(configuredLimit);
+  const maxSteps = generationCallBudget.receipt().limit;
+  const metrics = new MetricsCollector(
+    opts.onEvent,
+    maxSteps,
+    generationCallBudget,
+    opts.modelCallRole ?? 'author',
+  );
   const surface = resolveToolSurface(opts.toolSurface);
   const trustedCategory = opts.intent?.category ?? opts.category ?? 'prop';
   const gradeAssessmentOptions = {
@@ -238,7 +270,7 @@ export async function runKilnAgent(opts: RunKilnAgentOptions): Promise<RunKilnAg
   try {
     const tools: Tool[] = buildAgentTools(
       surface,
-      { ...opts, category: trustedCategory },
+      { ...opts, category: trustedCategory, generationCallBudget },
       { sink, editSink, unifiedSink },
     );
     const allTools: unknown[] = opts.extraTools ? [...tools, ...opts.extraTools] : tools;
@@ -319,10 +351,12 @@ export async function runKilnAgent(opts: RunKilnAgentOptions): Promise<RunKilnAg
 
     const reviewNote =
       surface === 'unified'
-        ? '\n\nBefore finalizing, call kiln_render once and look at the six views: correct ' +
-          'facing in Front, a clean silhouette in Right, symmetry in Top, and no floating or ' +
-          'detached parts in the 3/4 view. Fix anything that looks wrong (kiln_edit or ' +
-          'kiln_draft), then call kiln_finalize exactly once.'
+        ? '\n\nBefore finalizing, call kiln_render and inspect the view sheet: correct facing in ' +
+          'Front, a clean silhouette in Right, symmetry in Top, and no floating or detached ' +
+          'parts in the 3/4 view. Keep the default 3x2 when it communicates the asset well; ' +
+          'otherwise choose the smallest useful grid and bounded per-cell cameras. The last ' +
+          'successful layout becomes the final presentation sheet. Fix anything that looks ' +
+          'wrong (kiln_edit or kiln_draft), then call kiln_finalize exactly once.'
         : '\n\nBefore submitting, call kiln_screenshot once on your final code and check ' +
           'the six views: correct facing in Front, a clean silhouette in Right, symmetry in ' +
           'Top, and no floating or detached parts in the 3/4 view. Fix anything that looks ' +
@@ -342,8 +376,11 @@ export async function runKilnAgent(opts: RunKilnAgentOptions): Promise<RunKilnAg
         ...(opts.exemplarCode ? { exemplarCode: opts.exemplarCode } : {}),
       }) +
       (opts.inputImage
-        ? '\n\nA reference image of the desired asset is attached. Match its overall form, ' +
-          'proportions, and silhouette; treat the text above as the intent and any specific changes.'
+        ? `\n\n${
+            surface === 'unified'
+              ? KILN_REFERENCE_IMAGE_DIRECTIVE_UNIFIED
+              : KILN_REFERENCE_IMAGE_DIRECTIVE
+          }`
         : '') +
       reviewNote;
 
@@ -418,8 +455,8 @@ export async function runKilnAgent(opts: RunKilnAgentOptions): Promise<RunKilnAg
         const trigger = {
           mode: 'auto' as const,
           report: assess.report,
-          steps: metrics.readMetrics().steps,
-          maxSteps,
+          steps: generationCallBudget.receipt().consumed,
+          maxSteps: generationCallBudget.receipt().limit,
         };
         if (assess.ok && assess.report && shouldGradeRefine(trigger)) {
           const report = assess.report;
@@ -488,6 +525,9 @@ export async function runKilnAgent(opts: RunKilnAgentOptions): Promise<RunKilnAg
       ...(lastText ? { lastText } : {}),
       ...(emitEdits ? { edits: editsTrace } : {}),
       ...(diff ? { diff } : {}),
+      ...(unifiedSink.rendered
+        ? { captureSelection: unifiedSink.capture ? { capture: unifiedSink.capture } : {} }
+        : {}),
       ...(capped ? { capped: true, salvaged: 'step-cap' as const } : {}),
     };
   } catch (err) {
@@ -498,6 +538,9 @@ export async function runKilnAgent(opts: RunKilnAgentOptions): Promise<RunKilnAg
       steps: collected.steps,
       ...(collected.usage ? { usage: collected.usage } : {}),
       ...(counters ? { counters } : {}),
+      ...(unifiedSink.rendered
+        ? { captureSelection: unifiedSink.capture ? { capture: unifiedSink.capture } : {} }
+        : {}),
     };
     // Salvage-on-error (H-10): a thrown error used to discard a program the
     // sink already held — and MaxTokensError, the canonical throw here, is

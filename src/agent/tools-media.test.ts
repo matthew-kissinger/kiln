@@ -6,6 +6,7 @@ import { describe, expect, test } from 'bun:test';
 import { ImageBlock, JsonBlock } from '@strands-agents/sdk';
 
 import { makeKilnTools, makeKilnEditTools, type SubmitSink, type EditSink } from './tools';
+import { createGenerationCallBudget } from './call-budget';
 
 const BOX_CODE = `
 const meta = { name: 'test-box', category: 'prop' };
@@ -25,6 +26,28 @@ function findTool(tools: ReturnType<typeof makeKilnTools>, name: string) {
 }
 
 describe('makeKilnTools media handling', () => {
+  test('forwards the global budget so the observer port can debit actual dispatches', async () => {
+    const budget = createGenerationCallBudget(1);
+    expect(budget.tryConsume('author')).toBe(true);
+    let observerCalls = 0;
+    const tools = makeKilnTools(
+      {},
+      {
+        generationCallBudget: budget,
+        renderObservationPort: async (input) => {
+          observerCalls++;
+          expect(input.generationCallBudget).toBe(budget);
+          return { verdict: 'ready' };
+        },
+      },
+    );
+
+    const result = await findTool(tools, 'kiln_screenshot').invoke({ code: BOX_CODE });
+    expect(observerCalls).toBe(1);
+    expect(JSON.stringify(result)).toContain('ready');
+    expect(budget.receipt()).toMatchObject({ consumed: 1, denied: 0 });
+  });
+
   test('exposes the four registry tools plus the animation view and kiln_submit', () => {
     const sink: SubmitSink = {};
     const tools = makeKilnTools(sink);
@@ -49,6 +72,58 @@ describe('makeKilnTools media handling', () => {
     const json = (out[1] as JsonBlock).json as Record<string, unknown>;
     expect(json['ok']).toBe(true);
     expect('pngBase64' in json).toBe(false);
+  });
+
+  test('a host observer replaces screenshot pixels with a structured visual observation', async () => {
+    const calls: Array<{ toolName: string; pngs: readonly Uint8Array[] }> = [];
+    const tools = makeKilnTools(
+      {},
+      {
+        renderObservationPort: async (input) => {
+          calls.push({ toolName: input.toolName, pngs: input.pngs });
+          return {
+            schemaVersion: 1,
+            verdict: 'continue',
+            findings: [{ criterionId: 'silhouette', summary: 'The box is visible.' }],
+          };
+        },
+      },
+    );
+    const out = (await findTool(tools, 'kiln_screenshot').invoke({ code: BOX_CODE })) as unknown[];
+
+    expect(out).toHaveLength(1);
+    expect(out[0]).toBeInstanceOf(JsonBlock);
+    const json = (out[0] as JsonBlock).json as Record<string, unknown>;
+    expect(json['ok']).toBe(true);
+    expect(json['visualObservation']).toEqual({
+      ok: true,
+      value: {
+        schemaVersion: 1,
+        verdict: 'continue',
+        findings: [{ criterionId: 'silhouette', summary: 'The box is visible.' }],
+      },
+    });
+    expect(calls).toHaveLength(1);
+    expect(calls[0]?.toolName).toBe('kiln_screenshot');
+    expect(calls[0]?.pngs).toHaveLength(1);
+  });
+
+  test('an observer failure degrades to explicit unavailable JSON and never leaks pixels', async () => {
+    const tools = makeKilnTools(
+      {},
+      {
+        renderObservationPort: async () => {
+          throw new Error('provider detail must stay host-only');
+        },
+      },
+    );
+    const out = (await findTool(tools, 'kiln_screenshot').invoke({ code: BOX_CODE })) as unknown[];
+
+    expect(out).toHaveLength(1);
+    expect(out[0]).toBeInstanceOf(JsonBlock);
+    const json = (out[0] as JsonBlock).json as Record<string, unknown>;
+    expect(json['visualObservation']).toEqual({ ok: false, reason: 'observer-unavailable' });
+    expect(JSON.stringify(json)).not.toContain('provider detail');
   });
 
   test('kiln_screenshot on broken code falls back to the plain JSON error output', async () => {

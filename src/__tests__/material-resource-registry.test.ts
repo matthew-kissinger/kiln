@@ -9,6 +9,7 @@
  * rather than skipped.
  */
 import { describe, expect, test } from 'bun:test';
+import sharp from 'sharp';
 
 import {
   APPROVED_TEXTURE_RESOURCE_IDS,
@@ -22,6 +23,7 @@ import {
   approvedTextureCatalogV1,
 } from '../material-resources';
 import { buildMaterialRecipePromptContextV1 } from '../material-recipe-prompt';
+import { PRODUCTION_TEXTURE_SOURCE_PROVENANCE_V1 } from '../material-texture-library.generated';
 
 const SUBJECT: ApprovedTextureResourceId = 'kiln.texture.bark-albedo.v1';
 
@@ -170,11 +172,21 @@ describe('runtime-delivered approved resources', () => {
 });
 
 describe('what the model is told it can bind', () => {
-  test('placeholder swatches are withheld, so the catalogue is empty as shipped', () => {
-    // Every shipped resource is a 2x2 or 4x4 swatch that exists to prove a slot
-    // binds. Offering one to a model competes with proceduralTexture() and looks
-    // worse than it, so the honest catalogue today is empty.
-    expect(approvedTextureCatalogV1()).toEqual([]);
+  test('placeholder swatches are withheld while production texture families are advertised', () => {
+    const catalog = approvedTextureCatalogV1();
+    expect(catalog).toHaveLength(24);
+    expect(catalog.map((entry) => entry.id)).toEqual(
+      expect.arrayContaining([
+        'kiln.texture.bark-brown-01-albedo.v1',
+        'kiln.texture.weathered-planks-albedo.v1',
+        'kiln.texture.rough-concrete-normal.v1',
+        'kiln.texture.denim-arm.v1',
+        'kiln.texture.rusted-metal-albedo.v1',
+        'kiln.texture.rock-face-normal.v1',
+        'kiln.texture.dry-soil-arm.v1',
+        'kiln.texture.brick-wall-albedo.v1',
+      ]),
+    );
     expect(approvedTextureCatalogV1({ includePlaceholders: true })).toHaveLength(
       APPROVED_TEXTURE_RESOURCE_IDS.length,
     );
@@ -192,15 +204,18 @@ describe('what the model is told it can bind', () => {
     });
 
     const withoutResolver = new ApprovedTextureResourceCache({ registry: production });
-    expect(approvedTextureCatalogV1({ cache: withoutResolver })).toEqual([]);
+    expect(approvedTextureCatalogV1({ cache: withoutResolver })).toHaveLength(24);
+    expect(
+      approvedTextureCatalogV1({ cache: withoutResolver }).some((entry) => entry.id === SUBJECT),
+    ).toBe(false);
 
     const withResolver = new ApprovedTextureResourceCache({
       registry: production,
       resolver: async () => goodBytes(),
     });
     const catalog = approvedTextureCatalogV1({ cache: withResolver });
-    expect(catalog.map((entry) => entry.id)).toEqual([SUBJECT]);
-    expect(catalog[0]?.delivery).toBe('runtime');
+    expect(catalog).toHaveLength(25);
+    expect(catalog.find((entry) => entry.id === SUBJECT)?.delivery).toBe('runtime');
   });
 
   test('the prompt names resolvable IDs, and says so plainly when there are none', () => {
@@ -223,6 +238,46 @@ describe('what the model is told it can bind', () => {
 });
 
 describe('package weight', () => {
+  test('every production family ships a verified albedo, normal, and packed ARM map', async () => {
+    const cache = new ApprovedTextureResourceCache();
+    const productionIds = APPROVED_TEXTURE_RESOURCE_IDS.filter(
+      (id) => APPROVED_TEXTURE_RESOURCES_V1[id].quality === 'production',
+    );
+    expect(productionIds).toHaveLength(24);
+
+    const families = new Map<string, Set<string>>();
+    for (const id of productionIds) {
+      const resolved = cache.resolve(id);
+      expect(resolved.bytes.subarray(0, 8)).toEqual(
+        new Uint8Array([137, 80, 78, 71, 13, 10, 26, 10]),
+      );
+      expect(resolved.bytes.byteLength).toBe(APPROVED_TEXTURE_RESOURCES_V1[id].byteLength);
+      const image = sharp(resolved.bytes);
+      const metadata = await image.metadata();
+      expect([metadata.width, metadata.height, metadata.format]).toEqual([128, 128, 'png']);
+      const stats = await image.stats();
+      expect(Math.max(...stats.channels.map((channel) => channel.stdev))).toBeGreaterThan(2);
+      const match = id.match(/^kiln\.texture\.(.+)-(albedo|normal|arm)\.v1$/);
+      expect(match).not.toBeNull();
+      const family = match?.[1] ?? '';
+      const map = match?.[2] ?? '';
+      const maps = families.get(family) ?? new Set<string>();
+      maps.add(map);
+      families.set(family, maps);
+
+      const source =
+        PRODUCTION_TEXTURE_SOURCE_PROVENANCE_V1[
+          id as keyof typeof PRODUCTION_TEXTURE_SOURCE_PROVENANCE_V1
+        ];
+      expect(source.sourceUrl).toMatch(/^https:\/\/dl\.polyhaven\.org\//);
+      expect(source.sourceMd5).toMatch(/^[0-9a-f]{32}$/);
+      expect(source.transform).toContain('128x128');
+    }
+    expect(families.size).toBe(8);
+    for (const maps of families.values())
+      expect([...maps].sort()).toEqual(['albedo', 'arm', 'normal']);
+  });
+
   test('runtime resources ship no bytes, and the embedded set stays negligible', () => {
     for (const id of APPROVED_TEXTURE_RESOURCE_IDS) {
       const descriptor = APPROVED_TEXTURE_RESOURCES_V1[id];
@@ -239,10 +294,10 @@ describe('package weight', () => {
     const embedded = APPROVED_TEXTURE_RESOURCE_IDS.filter(
       (id) => APPROVED_TEXTURE_RESOURCES_V1[id].delivery === 'embedded',
     ).reduce((sum, id) => sum + APPROVED_TEXTURE_RESOURCES_V1[id].byteLength, 0);
-    // The engine is vendored as a tarball and installed into two container
-    // images by two package managers, so embedded bytes are paid for on every
-    // image build. 64 KB is far above today's 508 and far below one photo.
-    expect(embedded).toBeLessThanOrEqual(64 * 1024);
+    // Eight 128px photographic families carry albedo, normal, and packed ARM.
+    // One MiB keeps the engine tarball bounded while preserving materially more
+    // signal than the historical 2x2/4x4 proof swatches.
+    expect(embedded).toBeLessThanOrEqual(1024 * 1024);
   });
 
   test('every resource records a licence, so silence is never the default', () => {

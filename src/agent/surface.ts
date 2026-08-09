@@ -7,6 +7,7 @@
  */
 import type { Tool } from '@strands-agents/sdk';
 import type { AssetCategory, AssetIntentV1 } from '../contracts';
+import type { KilnToolContext } from '../tools/registry';
 
 import {
   makeKilnTools,
@@ -28,7 +29,7 @@ export type KilnToolSurface = 'current' | 'unified';
 export type RefineMode = 'rewrite' | 'edit';
 
 /** The subset of run options the tool assembly reads. */
-export interface ToolBuildOptions {
+export interface ToolBuildOptions extends KilnToolContext {
   existingCode?: string;
   refineMode?: RefineMode;
   /** Trusted request category captured outside generated source. */
@@ -70,6 +71,13 @@ export function buildAgentTools(
   const trustedContext = {
     ...(opts.intent ? { intent: opts.intent } : {}),
     ...(opts.category ? { category: opts.category } : {}),
+    ...(opts.viewRenderPort ? { viewRenderPort: opts.viewRenderPort } : {}),
+    ...(opts.viewRenderTimeoutMs !== undefined
+      ? { viewRenderTimeoutMs: opts.viewRenderTimeoutMs }
+      : {}),
+    ...(opts.onViewsRendered ? { onViewsRendered: opts.onViewsRendered } : {}),
+    ...(opts.renderObservationPort ? { renderObservationPort: opts.renderObservationPort } : {}),
+    ...(opts.generationCallBudget ? { generationCallBudget: opts.generationCallBudget } : {}),
   };
   if (surface === 'unified') {
     return makeKilnUnifiedTools({

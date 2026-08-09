@@ -24,7 +24,6 @@ import {
   type ResolvedCapture,
 } from '../views/capture';
 import { compositeViewPngGrid } from '../views/grid';
-import { CPU_RASTER_RENDERER_ID } from '../views/renderer-id';
 import type { AssetStyle } from '../prompt';
 import { createAssetIntentV1, type AssetCategory, type AssetIntentV1 } from '../contracts';
 import { runKilnAgent, type RefineMode, type KilnKnowhow, type KilnInputImage } from './run';
@@ -212,7 +211,17 @@ export async function generateKilnCodeAgent(opts: {
 export const DEFAULT_VIEW_RENDER_TIMEOUT_MS = 8000;
 
 export type PortViewsOutcome =
-  | { ok: true; png: Buffer; rendererId: string; capture: CaptureShape }
+  | {
+      ok: true;
+      png: Buffer;
+      rendererId: string;
+      capture: CaptureShape;
+      /** Pixel dimensions of the composited grid — the same `width`/`height` the
+       *  CPU path reports alongside its grid, additive here so a caller never has
+       *  to decode the PNG to learn them. */
+      width: number;
+      height: number;
+    }
   | { ok: false; reason: string };
 
 /**
@@ -301,7 +310,14 @@ export async function captureViewsViaPort(
     // Degrade stays reportable through `renderDegraded` / `viewsRendererId`,
     // which is a structured field rather than a visual tell.
     const grid = compositeViewPngGrid(result.viewsPng, resolved.cols, views);
-    return { ok: true, png: grid.png, rendererId: result.rendererId, capture: shape };
+    return {
+      ok: true,
+      png: grid.png,
+      rendererId: result.rendererId,
+      capture: shape,
+      width: grid.width,
+      height: grid.height,
+    };
   } catch (err) {
     return { ok: false, reason: err instanceof Error ? err.message : String(err) };
   } finally {
@@ -402,7 +418,10 @@ export async function generateKilnAsset(
     }
     if (!views) {
       try {
-        const { renderCodeViewGrid } = await import('../views');
+        // Keep the renderer id on this same lazy entrypoint. renderer-id.ts reads
+        // package metadata at module initialization; an eager import changes the
+        // production agent boot graph even when no CPU fallback is needed.
+        const { renderCodeViewGrid, CPU_RASTER_RENDERER_ID } = await import('../views');
         // The degrade path must reproduce the SAME layout the port was asked
         // for, or a GPU outage silently reshapes the artifact.
         const grid = await renderCodeViewGrid(agent.code, capture ? { capture } : {});

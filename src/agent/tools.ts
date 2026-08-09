@@ -19,6 +19,7 @@
  */
 import { tool, ImageBlock, JsonBlock, type Tool, type JSONValue } from '@strands-agents/sdk';
 import { z } from 'zod';
+import type { CaptureConfig } from '../views/capture';
 
 import {
   createKilnToolRegistry,
@@ -26,6 +27,8 @@ import {
   createKilnRenderViewsDef,
   createKilnScreenshotAnimationDef,
   createKilnViewInteriorDef,
+  inspectBufferInput,
+  renderViewsBufferInput,
   type KilnToolContext,
   type KilnToolDef,
 } from '../tools/registry';
@@ -60,9 +63,56 @@ const submitInput = z.object({
  * tool-result coercion passes block arrays through as-is — so it is cast past
  * JSONValue.
  */
-function toCallbackResult(def: KilnToolDef, output: unknown): JSONValue {
+function withVisualObservation(json: unknown, visualObservation: JSONValue): JSONValue {
+  if (json && typeof json === 'object' && !Array.isArray(json)) {
+    return { ...(json as Record<string, JSONValue>), visualObservation } as JSONValue;
+  }
+  return { result: json as JSONValue, visualObservation } as JSONValue;
+}
+
+async function observedMediaResult(
+  def: KilnToolDef,
+  pngs: readonly Uint8Array[],
+  json: unknown,
+  context: KilnToolContext,
+): Promise<JSONValue> {
+  try {
+    const value = await context.renderObservationPort!({
+      toolName: def.name,
+      pngs,
+      json,
+      ...(context.intent ? { intent: context.intent } : {}),
+      ...(context.generationCallBudget
+        ? { generationCallBudget: context.generationCallBudget }
+        : {}),
+    });
+    return [
+      new JsonBlock({
+        json: withVisualObservation(json, { ok: true, value } as JSONValue),
+      }),
+    ] as unknown as JSONValue;
+  } catch {
+    return [
+      new JsonBlock({
+        json: withVisualObservation(json, {
+          ok: false,
+          reason: 'observer-unavailable',
+        } as JSONValue),
+      }),
+    ] as unknown as JSONValue;
+  }
+}
+
+async function toCallbackResult(
+  def: KilnToolDef,
+  output: unknown,
+  context: KilnToolContext = {},
+): Promise<JSONValue> {
   const multi = def.mediaMulti?.(output);
   if (multi) {
+    if (context.renderObservationPort) {
+      return observedMediaResult(def, multi.pngs, multi.json, context);
+    }
     return [
       ...multi.pngs.map((png) => new ImageBlock({ format: 'png', source: { bytes: png } })),
       new JsonBlock({ json: multi.json as JSONValue }),
@@ -70,6 +120,9 @@ function toCallbackResult(def: KilnToolDef, output: unknown): JSONValue {
   }
   const media = def.media?.(output);
   if (media) {
+    if (context.renderObservationPort) {
+      return observedMediaResult(def, [media.png], media.json, context);
+    }
     return [
       new ImageBlock({ format: 'png', source: { bytes: media.png } }),
       new JsonBlock({ json: media.json as JSONValue }),
@@ -95,7 +148,11 @@ const animationBufferInput = z.object({
 /** Build a buffer-aware kiln_screenshot_animation tool that runs against `getCode()`
  *  (the working buffer) instead of a `code` argument. Same behavior as the registry
  *  def otherwise; image transports attach the frame(s) via toCallbackResult. */
-function makeBufferAnimationTool(getCode: () => string, def: KilnToolDef): Tool {
+function makeBufferAnimationTool(
+  getCode: () => string,
+  def: KilnToolDef,
+  context: KilnToolContext = {},
+): Tool {
   return tool({
     name: def.name,
     description: `${def.description} Operates on your current working buffer (omit code).`,
@@ -110,17 +167,18 @@ function makeBufferAnimationTool(getCode: () => string, def: KilnToolDef): Tool 
           ...(i.camera ? { camera: i.camera } : {}),
           ...(i.perFrame ? { perFrame: true } : {}),
         }),
+        context,
       );
     },
   });
 }
 
-function toStrandsTool(def: KilnToolDef): Tool {
+function toStrandsTool(def: KilnToolDef, context: KilnToolContext = {}): Tool {
   return tool({
     name: def.name,
     description: def.description,
     inputSchema: def.inputSchema as z.ZodType,
-    callback: async (input) => toCallbackResult(def, await def.run(input)),
+    callback: async (input) => toCallbackResult(def, await def.run(input), context),
   });
 }
 
@@ -132,10 +190,10 @@ function toStrandsTool(def: KilnToolDef): Tool {
  * @param sink - Receives the submitted final code. Read `sink.code` after invoke.
  */
 export function makeKilnTools(sink: SubmitSink, context: KilnToolContext = {}): Tool[] {
-  const kilnTools = createKilnToolRegistry(context).map(toStrandsTool);
+  const kilnTools = createKilnToolRegistry(context).map((def) => toStrandsTool(def, context));
   // kiln_screenshot_animation rides alongside the four registry tools (it takes a
   // `code` arg like them) so a from-scratch animated build can SEE its motion.
-  const animationTool = toStrandsTool(createKilnScreenshotAnimationDef(context));
+  const animationTool = toStrandsTool(createKilnScreenshotAnimationDef(context), context);
   const submitTool: Tool = tool({
     name: KILN_SUBMIT_TOOL_NAME,
     description:
@@ -343,7 +401,7 @@ export function makeKilnEditTools(
   const renderDef = find('kiln_render');
   const screenshotDef = find('kiln_screenshot');
 
-  const listTool = toStrandsTool(find('kiln_list_primitives'));
+  const listTool = toStrandsTool(find('kiln_list_primitives'), opts);
 
   const viewTool: Tool = tool({
     name: 'kiln_view',
@@ -397,12 +455,13 @@ export function makeKilnEditTools(
       toCallbackResult(
         screenshotDef,
         await screenshotDef.run({ code: (input as { code?: string }).code ?? buffer.code }),
+        opts,
       ),
   });
 
   // Buffer-aware motion view: a refine that touches an animated character can SEE
   // the clip move and confirm the edit didn't break it.
-  const animationTool = makeBufferAnimationTool(() => buffer.code, animationDef);
+  const animationTool = makeBufferAnimationTool(() => buffer.code, animationDef, opts);
 
   const submitTool: Tool = tool({
     name: KILN_SUBMIT_TOOL_NAME,
@@ -473,6 +532,12 @@ export interface UnifiedSink {
   code?: string;
   edits: EditRecord[];
   finalized?: boolean;
+  /** True after at least one successful unified render. This distinguishes a
+   * successful default-layout render from a run that never produced a view. */
+  rendered?: boolean;
+  /** Capture requested by the most recent successful unified render. Undefined
+   * means that render used the standard 3x2 layout. */
+  capture?: CaptureConfig;
 }
 
 /**
@@ -495,32 +560,6 @@ const draftInput = z.object({
   code: z
     .string()
     .describe('The complete Kiln program (defines `meta` + `build()`, optional `animate()`).'),
-});
-
-/** Schema for the buffer-aware close-up tool (omits `code` — it reads the working buffer). */
-const inspectBufferInput = z.object({
-  part: z
-    .string()
-    .optional()
-    .describe(
-      'The part to frame, by node name (case-insensitive; substring match as a fallback). ' +
-        'Omit to frame the whole asset.',
-    ),
-  view: z
-    .string()
-    .optional()
-    .describe('Camera angle: front, right, back, left, top, or three-quarter (default).'),
-  zoom: z
-    .number()
-    .optional()
-    .describe('Padding multiplier around the part bounds, clamped to 1-4. Default 1.2.'),
-  isolate: z
-    .boolean()
-    .optional()
-    .describe(
-      'Hide everything except the named part so nothing can occlude it. Needs `part`. ' +
-        'Default false.',
-    ),
 });
 
 /**
@@ -614,10 +653,21 @@ export function makeKilnUnifiedTools(
 
   const renderTool: Tool = tool({
     name: 'kiln_render',
-    description: `${renderViewsDef.description} Operates on your current working buffer (no argument).`,
-    inputSchema: viewInput,
-    callback: async () => {
-      const out = await renderViewsDef.run({ code: buffer.code });
+    description: `${renderViewsDef.description} Operates on your current working buffer: omit code; optional capture controls remain available.`,
+    inputSchema: renderViewsBufferInput,
+    callback: async (input) => {
+      const i = input as { capture?: unknown };
+      const out = await renderViewsDef.run({
+        code: buffer.code,
+        ...(i.capture !== undefined ? { capture: i.capture } : {}),
+      });
+      const rendered = out as { ok?: boolean };
+      if (rendered.ok) {
+        // Preserve only a validated, successful render request. A later default
+        // render deliberately clears an earlier custom layout.
+        opts.sink.rendered = true;
+        opts.sink.capture = i.capture as CaptureConfig | undefined;
+      }
       // Out-of-band: surface a SUCCESSFUL render as a live candidate (the working
       // buffer + the six-view image the agent just saw). Best-effort; a build
       // failure is image-free and not a candidate. Never changes the agent's view.
@@ -635,7 +685,7 @@ export function makeKilnUnifiedTools(
           }
         }
       }
-      return toCallbackResult(renderViewsDef, out);
+      return toCallbackResult(renderViewsDef, out, opts);
     },
   });
 
@@ -647,21 +697,30 @@ export function makeKilnUnifiedTools(
     description: `${inspectDef.description} Operates on your current working buffer (no code argument).`,
     inputSchema: inspectBufferInput,
     callback: async (input) => {
-      const i = input as { part?: string; view?: string; zoom?: number; isolate?: boolean };
+      const i = input as {
+        part?: string;
+        view?: string;
+        azimuthDeg?: number;
+        elevationDeg?: number;
+        zoom?: number;
+        isolate?: boolean;
+      };
       const out = await inspectDef.run({
         code: buffer.code,
         ...(i.part !== undefined ? { part: i.part } : {}),
         ...(i.view !== undefined ? { view: i.view } : {}),
+        ...(i.azimuthDeg !== undefined ? { azimuthDeg: i.azimuthDeg } : {}),
+        ...(i.elevationDeg !== undefined ? { elevationDeg: i.elevationDeg } : {}),
         ...(i.zoom !== undefined ? { zoom: i.zoom } : {}),
         ...(i.isolate !== undefined ? { isolate: i.isolate } : {}),
       });
-      return toCallbackResult(inspectDef, out);
+      return toCallbackResult(inspectDef, out, opts);
     },
   });
 
   // Buffer-aware motion view: after drafting/editing an animated character, SEE a
   // clip move (sideways walk, reverse knee, backward swing, item not tracking).
-  const animationTool = makeBufferAnimationTool(() => buffer.code, animationDef);
+  const animationTool = makeBufferAnimationTool(() => buffer.code, animationDef, opts);
 
   // Buffer-aware interior view: after drafting/editing a BUILDING, SEE inside it
   // (roof off — open floor, real doorway gap, fixtures grounded, nothing buried).
@@ -683,7 +742,7 @@ export function makeKilnUnifiedTools(
         code: buffer.code,
         ...(n ? { nodeName: n } : {}),
       });
-      return toCallbackResult(interiorDef, out);
+      return toCallbackResult(interiorDef, out, opts);
     },
   });
 
