@@ -2,7 +2,12 @@ import { describe, expect, test } from 'bun:test';
 import type { Message, ModelStreamEvent, StreamOptions } from '@strands-agents/sdk';
 import type { SceneModelJSON, SceneRenderPort } from '../composer';
 import { migrateSceneModelV1ToWorldDocumentV2 } from '../composer';
-import { runKilnWorldIntegration, WORLD_INTEGRATION_PROMPT_V2 } from '../composer/agent';
+import { createGenerationCallBudget } from '../agent/call-budget';
+import {
+  runKilnComposer,
+  runKilnWorldIntegration,
+  WORLD_INTEGRATION_PROMPT_V2,
+} from '../composer/agent';
 import { ScriptedModel } from '../agent/__tests__/scripted-model';
 
 class ToolCapturingModel extends ScriptedModel {
@@ -96,5 +101,36 @@ describe('runKilnWorldIntegration', () => {
       expect.arrayContaining(['scene_world_snap', 'scene_world_render', 'scene_world_finalize']),
     );
     expect(String(model.seenSystemPrompts[0])).toContain(WORLD_INTEGRATION_PROMPT_V2.slice(0, 30));
+  });
+
+  test('shares one aggregate model-call allowance across compose and integration', async () => {
+    const budget = createGenerationCallBudget(1);
+    const render: SceneRenderPort = async () => ({ ok: true });
+    const composed = await runKilnComposer({
+      model: new ScriptedModel([{ text: 'first stage done' }]),
+      prompt: 'compose a crate',
+      catalog: [
+        {
+          generationId: 'crate',
+          bbox: { min: [-1, 0, -1], max: [1, 2, 1] },
+          tags: ['cargo'],
+        },
+      ],
+      render,
+      maxSteps: 8,
+      generationCallBudget: budget,
+    });
+    expect(composed.callBudget).toMatchObject({ consumed: 1, remaining: 0, denied: 0 });
+
+    const integrated = await runKilnWorldIntegration({
+      model: new ScriptedModel([{ text: 'must not dispatch' }]),
+      prompt: 'add integration',
+      world: world(),
+      render,
+      generationCallBudget: budget,
+    });
+    expect(integrated.capped).toBe(true);
+    expect(integrated.callBudget).toMatchObject({ consumed: 1, remaining: 0, denied: 1 });
+    expect(budget.receipt()).toEqual(integrated.callBudget!);
   });
 });

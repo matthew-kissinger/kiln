@@ -69,8 +69,9 @@ migrate its evaluated candidate with `migrateSceneModelV1ToWorldDocumentV2`, the
 `runKilnWorldIntegration`. For refine, merge the migrated candidate into the parent with
 `reconcileWorldDocumentV2Candidate` first; that preserves terrain/authored/runtime state and applies
 locked asset-swap semantics. The bounded integration loop renders and finalizes the same world state
-its `scene_world_*` tools mutate. It requires either the shared `generationCallBudget` used by the
-host settlement or an explicit positive `maxSteps`; there is no hidden second-stage call allowance.
+its `scene_world_*` tools mutate. Pass one `generationCallBudget` through both `runKilnComposer` and
+`runKilnWorldIntegration` so the host settles one aggregate allowance; the integration stage otherwise
+requires an explicit positive `maxSteps`, with no hidden second-stage call allowance.
 Heightfield artifact SHA-256 binds the exact bytes from
 `encodeHeightfieldArtifactV1`; portable asset paths remain the additive package contract
 `models/<generationId>.glb`.
