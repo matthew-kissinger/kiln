@@ -52,6 +52,8 @@ function world() {
 
 describe('runKilnWorldIntegration', () => {
   test('mutates, renders, and finalizes one canonical world authority', async () => {
+    const initialWorld = world();
+    expect(initialWorld.environment.lightingPresetId).toBe('legacy-scene-v1');
     const model = new ToolCapturingModel([
       {
         toolCalls: [
@@ -85,7 +87,7 @@ describe('runKilnWorldIntegration', () => {
     const result = await runKilnWorldIntegration({
       model,
       prompt: 'add a cargo anchor',
-      world: world(),
+      world: initialWorld,
       render,
       maxSteps: 8,
     });
@@ -99,6 +101,7 @@ describe('runKilnWorldIntegration', () => {
     expect(calls).toHaveLength(1);
     expect(calls[0]!.worldHash).toBe(result.worldHash);
     expect(calls[0]!.worldDocument).toEqual(result.world);
+    expect(calls[0]).not.toHaveProperty('lightingPresetId');
     expect(model.toolNames[0]).toEqual(
       expect.arrayContaining(['scene_world_snap', 'scene_world_render', 'scene_world_finalize']),
     );
@@ -131,11 +134,13 @@ describe('runKilnWorldIntegration', () => {
       { text: 'done' },
     ]);
     let receipt: (typeof receiptBase & { worldHash: `sha256:${string}` }) | undefined;
+    let requestedLighting = false;
     const result = await runKilnWorldIntegration({
       model,
       prompt: 'inspect the world',
       world: world(),
       render: async (request) => {
+        requestedLighting = Object.hasOwn(request, 'lightingPresetId');
         receipt = { ...receiptBase, worldHash: request.worldHash! };
         return {
           ok: true,
@@ -155,6 +160,8 @@ describe('runKilnWorldIntegration', () => {
         receipt,
       },
     ]);
+    expect(requestedLighting).toBe(false);
+    expect(result.renderEvidence[0]!.receipt!.lightingPresetId).toBe('studio-day-v2');
     const modelContext = JSON.stringify(model.messages);
     expect(modelContext).toContain('dawn-vulkan:test');
     expect(modelContext).toContain('outputSha256');
