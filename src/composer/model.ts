@@ -480,8 +480,17 @@ export class PlacementModel {
     if (m.scale != null) st.scale = m.scale;
     const apply = (cur: Vec2): Vec2 =>
       m.to ? [m.to[0], m.to[1]] : m.delta ? [cur[0] + m.delta[0], cur[1] + m.delta[1]] : cur;
-    if (st.kind === 'place') st.at = apply(st.at);
-    else if (st.kind === 'cluster') st.around = apply(st.around);
+    if (st.kind === 'place') {
+      if (st.exact) {
+        const next = apply([st.exact.pos[0], st.exact.pos[2]]);
+        // Exact is the evaluated authority for a look-preserving import. Keep its
+        // XZ in lockstep with the editable projection while preserving exact Y.
+        st.exact.pos = [next[0], st.exact.pos[1], next[1]];
+        st.at = [next[0], next[1]];
+      } else {
+        st.at = apply(st.at);
+      }
+    } else if (st.kind === 'cluster') st.around = apply(st.around);
     else st.center = apply(st.center);
     return { ok: true, alias: st.alias };
   }
@@ -491,7 +500,12 @@ export class PlacementModel {
     if (!st) return notFound(target);
     if (st.kind === 'ring') st.faceOut = intent === 'out';
     else if (st.kind === 'cluster') st.face = intent === 'out' ? 'out' : 'center';
-    else st.face = intent;
+    else {
+      st.face = intent;
+      if (st.exact) {
+        st.exact.rotYDeg = facingToRotY(intent, [st.exact.pos[0], st.exact.pos[2]], SCENE_CENTER);
+      }
+    }
     return { ok: true, alias: st.alias };
   }
 
