@@ -48,6 +48,12 @@ import {
 import { unifiedDiff } from './diff';
 import { MetricsCollector, type AgentUsage, type KilnAgentEvent } from './hooks';
 import {
+  createGenerationCallBudget,
+  generationModelCallLimitFromEnv,
+  type GenerationCallBudget,
+  type GenerationModelCallRole,
+} from './call-budget';
+import {
   installRenderImageCompaction,
   installGenerationCounters,
   type GenerationCounters,
@@ -91,7 +97,11 @@ function imageFormatFromMime(mime: string): 'png' | 'jpeg' | 'gif' | 'webp' {
 export interface RunKilnAgentOptions
   extends Pick<
     KilnToolContext,
-    'viewRenderPort' | 'viewRenderTimeoutMs' | 'onViewsRendered' | 'renderObservationPort'
+    | 'viewRenderPort'
+    | 'viewRenderTimeoutMs'
+    | 'onViewsRendered'
+    | 'renderObservationPort'
+    | 'generationCallBudget'
   > {
   /** A constructed Strands `Model` instance (provider-agnostic). */
   model: unknown;
@@ -165,6 +175,8 @@ export interface RunKilnAgentOptions
    *  consolidate, and the refined program is kept only if its grade improves.
    *  'off' skips the check (no extra model turn, no assessment bake). */
   gradeRefine?: 'auto' | 'off';
+  /** Attribution role for this invocation within the shared generation budget. */
+  modelCallRole?: GenerationModelCallRole;
 }
 
 export interface RunKilnAgentResult {
@@ -218,14 +230,22 @@ function lastMessageText(message: Message | undefined): string | undefined {
  * on `result.error` with whatever metrics were collected beforehand.
  */
 export async function runKilnAgent(opts: RunKilnAgentOptions): Promise<RunKilnAgentResult> {
-  // Hard agent-loop cap (runaway backstop, NOT a throttle): a stuck model could
+  // Hard generation-global cap (runaway backstop, NOT a throttle): a stuck model could
   // otherwise loop draft/edit/render forever, re-feeding a growing transcript
   // (input tokens scale ~linearly with step count). Default 40 — ~4x the normal
   // run (~10 model calls) and clear of the slowest legit runs observed (~23); only
-  // catches genuine infinite loops. Env-overridable (set 0 to disable, raise for
-  // an unusually deep build).
-  const maxSteps = Number(process.env['KILN_AGENT_MAX_STEPS'] ?? 40) || 0;
-  const metrics = new MetricsCollector(opts.onEvent, maxSteps);
+  // catches genuine infinite loops. The same object can span author, observer,
+  // retry/fallback, and bounded repair calls. Env-overridable (set 0 to disable).
+  const configuredLimit = generationModelCallLimitFromEnv();
+  const generationCallBudget: GenerationCallBudget =
+    opts.generationCallBudget ?? createGenerationCallBudget(configuredLimit);
+  const maxSteps = generationCallBudget.receipt().limit;
+  const metrics = new MetricsCollector(
+    opts.onEvent,
+    maxSteps,
+    generationCallBudget,
+    opts.modelCallRole ?? 'author',
+  );
   const surface = resolveToolSurface(opts.toolSurface);
   const trustedCategory = opts.intent?.category ?? opts.category ?? 'prop';
   const gradeAssessmentOptions = {
@@ -245,7 +265,7 @@ export async function runKilnAgent(opts: RunKilnAgentOptions): Promise<RunKilnAg
   try {
     const tools: Tool[] = buildAgentTools(
       surface,
-      { ...opts, category: trustedCategory },
+      { ...opts, category: trustedCategory, generationCallBudget },
       { sink, editSink, unifiedSink },
     );
     const allTools: unknown[] = opts.extraTools ? [...tools, ...opts.extraTools] : tools;
@@ -428,8 +448,8 @@ export async function runKilnAgent(opts: RunKilnAgentOptions): Promise<RunKilnAg
         const trigger = {
           mode: 'auto' as const,
           report: assess.report,
-          steps: metrics.readMetrics().steps,
-          maxSteps,
+          steps: generationCallBudget.receipt().consumed,
+          maxSteps: generationCallBudget.receipt().limit,
         };
         if (assess.ok && assess.report && shouldGradeRefine(trigger)) {
           const report = assess.report;

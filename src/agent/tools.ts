@@ -81,6 +81,9 @@ async function observedMediaResult(
       pngs,
       json,
       ...(context.intent ? { intent: context.intent } : {}),
+      ...(context.generationCallBudget
+        ? { generationCallBudget: context.generationCallBudget }
+        : {}),
     });
     return [
       new JsonBlock({

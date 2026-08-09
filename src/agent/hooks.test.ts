@@ -11,6 +11,7 @@ import {
   AfterModelCallEvent,
 } from '@strands-agents/sdk';
 import { MetricsCollector } from './hooks';
+import { createGenerationCallBudget } from './call-budget';
 
 type Cb = (event: unknown) => void;
 
@@ -84,6 +85,31 @@ describe('MetricsCollector', () => {
     expect(m.wasCapped()).toBe(true);
     // steps stays at 3 — the cancelled call never fired AfterModelCallEvent.
     expect(m.readMetrics().steps).toBe(3);
+  });
+
+  test('two collectors debit one aggregate budget before author and repair dispatch', () => {
+    const budget = createGenerationCallBudget(3);
+    const author = new MetricsCollector(undefined, 40, budget, 'author');
+    const repair = new MetricsCollector(undefined, 40, budget, 'repair');
+    const authorAgent = fakeAgent();
+    const repairAgent = fakeAgent();
+    author.attach(authorAgent.agent as never);
+    repair.attach(repairAgent.agent as never);
+
+    expect(authorAgent.modelCall().cancelled).toBe(false);
+    expect(authorAgent.modelCall().cancelled).toBe(false);
+    expect(repairAgent.modelCall().cancelled).toBe(false);
+    const exhausted = repairAgent.modelCall();
+
+    expect(exhausted.cancelled).toBe(true);
+    expect(exhausted.cancelText).toContain('generation model-call budget');
+    expect(repair.wasCapped()).toBe(true);
+    expect(budget.receipt()).toMatchObject({
+      consumed: 3,
+      remaining: 0,
+      denied: 1,
+      byRole: { author: 2, repair: 1 },
+    });
   });
 
   test('records token usage from the agent result', () => {

@@ -28,6 +28,7 @@ import type { AssetQaReportV1 } from '../qa';
 import type { PbrRenderPort } from '../composer/render-port';
 import type { ViewGridResult } from '../views';
 import { sceneNeedsPbrShading } from '../material-resources';
+import type { GenerationCallBudget } from '../agent/call-budget';
 
 // =============================================================================
 // Tool definition contract
@@ -110,6 +111,8 @@ export interface KilnToolContext {
    * than leaking the image or failing the render tool.
    */
   renderObservationPort?: RenderObservationPort;
+  /** Shared generation-global allowance, forwarded to the host observer port. */
+  generationCallBudget?: GenerationCallBudget;
 }
 
 /** JSON-safe value accepted from a host visual observer. */
@@ -131,6 +134,12 @@ export interface RenderObservationInput {
   json: unknown;
   /** Trusted request intent, when the host supplied one. */
   intent?: AssetIntentV1;
+  /**
+   * Shared generation-global allowance. The host must debit role `observer`
+   * immediately before each actual provider dispatch; image preparation,
+   * sub-cap rejection, and other pre-dispatch failures must not consume it.
+   */
+  generationCallBudget?: GenerationCallBudget;
 }
 
 /** Host-injected, model-free engine seam for a bounded VLM observer. */

@@ -17,6 +17,7 @@ import {
   BeforeModelCallEvent,
   AfterModelCallEvent,
 } from '@strands-agents/sdk';
+import type { GenerationCallBudget, GenerationModelCallRole } from './call-budget';
 
 /** Token-usage subset we surface. The cache fields mirror the Strands `Usage`
  *  type (dist/src/models/streaming.d.ts): the Anthropic adapter fills them from
@@ -81,15 +82,16 @@ export class MetricsCollector {
    * @param onEvent - Optional live sink, fired as the loop runs (tool calls,
    * model calls). Errors thrown by the sink are swallowed — a broken progress
    * listener must never fail a generation.
-   * @param maxSteps - Optional hard cap on model calls (agent-loop iterations).
-   * When the loop reaches this many calls, the NEXT model call is cancelled
-   * (SDK `BeforeModelCallEvent.cancel`), ending the loop with a clean stop
-   * instead of an unbounded tool/edit/render loop. A pure cost backstop — set
-   * well above normal runs (~10 calls); only catches runaways. 0/undefined = off.
+   * @param maxSteps - Legacy per-collector cap, retained for direct callers that
+   * do not inject a generation-global budget.
+   * @param generationCallBudget - Shared allowance across author, observer, and
+   * repair work. It supersedes maxSteps and is consumed before dispatch.
    */
   constructor(
     private readonly onEvent?: (event: KilnAgentEvent) => void,
     private readonly maxSteps?: number,
+    private readonly generationCallBudget?: GenerationCallBudget,
+    private readonly modelCallRole: GenerationModelCallRole = 'author',
   ) {}
 
   private emit(event: KilnAgentEvent): void {
@@ -111,12 +113,22 @@ export class MetricsCollector {
       this.steps += 1;
       this.emit({ type: 'model_call', step: this.steps });
     });
-    // Hard step cap: before a model call that would exceed maxSteps, cancel it.
+    // Hard cost cap: reserve from the shared budget before dispatch. Direct
+    // legacy collectors without one retain their local maxSteps behavior.
     // The SDK ends the loop with stopReason 'endTurn' (no exception) — `capped`
     // lets the caller turn that bounded stop into a clear failed generation.
     const offCap =
-      this.maxSteps && this.maxSteps > 0
+      this.generationCallBudget || (this.maxSteps && this.maxSteps > 0)
         ? agent.addHook(BeforeModelCallEvent, (event) => {
+            if (this.generationCallBudget) {
+              if (this.generationCallBudget.tryConsume(this.modelCallRole)) return;
+              this.capped = true;
+              const receipt = this.generationCallBudget.receipt();
+              event.cancel =
+                `kiln: generation model-call budget reached (${receipt.limit} aggregate calls) — ` +
+                'aborted before provider dispatch to bound cost';
+              return;
+            }
             if (this.steps >= this.maxSteps!) {
               this.capped = true;
               event.cancel = `kiln: agent step cap reached (${this.maxSteps} model calls) — aborted to bound cost`;

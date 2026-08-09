@@ -6,6 +6,7 @@ import { describe, expect, test } from 'bun:test';
 import { ImageBlock, JsonBlock } from '@strands-agents/sdk';
 
 import { makeKilnTools, makeKilnEditTools, type SubmitSink, type EditSink } from './tools';
+import { createGenerationCallBudget } from './call-budget';
 
 const BOX_CODE = `
 const meta = { name: 'test-box', category: 'prop' };
@@ -25,6 +26,28 @@ function findTool(tools: ReturnType<typeof makeKilnTools>, name: string) {
 }
 
 describe('makeKilnTools media handling', () => {
+  test('forwards the global budget so the observer port can debit actual dispatches', async () => {
+    const budget = createGenerationCallBudget(1);
+    expect(budget.tryConsume('author')).toBe(true);
+    let observerCalls = 0;
+    const tools = makeKilnTools(
+      {},
+      {
+        generationCallBudget: budget,
+        renderObservationPort: async (input) => {
+          observerCalls++;
+          expect(input.generationCallBudget).toBe(budget);
+          return { verdict: 'ready' };
+        },
+      },
+    );
+
+    const result = await findTool(tools, 'kiln_screenshot').invoke({ code: BOX_CODE });
+    expect(observerCalls).toBe(1);
+    expect(JSON.stringify(result)).toContain('ready');
+    expect(budget.receipt()).toMatchObject({ consumed: 1, denied: 0 });
+  });
+
   test('exposes the four registry tools plus the animation view and kiln_submit', () => {
     const sink: SubmitSink = {};
     const tools = makeKilnTools(sink);
