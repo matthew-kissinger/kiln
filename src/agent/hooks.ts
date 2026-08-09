@@ -82,10 +82,10 @@ export class MetricsCollector {
    * @param onEvent - Optional live sink, fired as the loop runs (tool calls,
    * model calls). Errors thrown by the sink are swallowed — a broken progress
    * listener must never fail a generation.
-   * @param maxSteps - Legacy per-collector cap, retained for direct callers that
-   * do not inject a generation-global budget.
+   * @param maxSteps - Optional per-collector sub-cap. When a shared budget is
+   * also present, both bounds apply and the tighter remaining bound wins.
    * @param generationCallBudget - Shared allowance across author, observer, and
-   * repair work. It supersedes maxSteps and is consumed before dispatch.
+   * repair work. It is consumed only after the local sub-cap admits dispatch.
    */
   constructor(
     private readonly onEvent?: (event: KilnAgentEvent) => void,
@@ -110,33 +110,32 @@ export class MetricsCollector {
       this.emit({ type: 'tool', tool: event.toolUse.name, step: this.steps });
     });
     const offModel = agent.addHook(AfterModelCallEvent, () => {
-      this.steps += 1;
       this.emit({ type: 'model_call', step: this.steps });
     });
-    // Hard cost cap: reserve from the shared budget before dispatch. Direct
-    // legacy collectors without one retain their local maxSteps behavior.
+    // Hard cost caps: enforce the local phase allowance first, then reserve from
+    // the aggregate budget. A locally denied call must not consume or increment
+    // the shared allowance.
     // The SDK ends the loop with stopReason 'endTurn' (no exception) — `capped`
     // lets the caller turn that bounded stop into a clear failed generation.
-    const offCap =
-      this.generationCallBudget || (this.maxSteps && this.maxSteps > 0)
-        ? agent.addHook(BeforeModelCallEvent, (event) => {
-            if (this.generationCallBudget) {
-              if (this.generationCallBudget.tryConsume(this.modelCallRole)) return;
-              this.capped = true;
-              const receipt = this.generationCallBudget.receipt();
-              event.cancel =
-                `kiln: generation model-call budget reached (${receipt.limit} aggregate calls) — ` +
-                'aborted before provider dispatch to bound cost';
-              return;
-            }
-            if (this.steps >= this.maxSteps!) {
-              this.capped = true;
-              event.cancel = `kiln: agent step cap reached (${this.maxSteps} model calls) — aborted to bound cost`;
-            }
-          })
-        : undefined;
-    this.cleanups.push(offTool, offModel);
-    if (offCap) this.cleanups.push(offCap);
+    const offDispatch = agent.addHook(BeforeModelCallEvent, (event) => {
+      if (this.maxSteps && this.maxSteps > 0 && this.steps >= this.maxSteps) {
+        this.capped = true;
+        event.cancel = `kiln: agent step cap reached (${this.maxSteps} model calls) — aborted to bound cost`;
+        return;
+      }
+      if (this.generationCallBudget && !this.generationCallBudget.tryConsume(this.modelCallRole)) {
+        this.capped = true;
+        const receipt = this.generationCallBudget.receipt();
+        event.cancel =
+          `kiln: generation model-call budget reached (${receipt.limit} aggregate calls) — ` +
+          'aborted before provider dispatch to bound cost';
+        return;
+      }
+      // Count admitted provider dispatches, never the SDK's synthetic after-event
+      // for a call cancelled by one of the bounds above.
+      this.steps += 1;
+    });
+    this.cleanups.push(offTool, offModel, offDispatch);
     return () => this.detach();
   }
 

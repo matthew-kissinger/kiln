@@ -67,6 +67,12 @@ export interface SceneRenderResult {
   tris?: number;
   /** Present when the host renders an immutable canonical-world milestone. */
   receipt?: SceneRenderReceipt;
+  /** True when `ok:true` pixels came from a declared fallback rather than the
+   * requested renderer. Absent preserves compatibility with legacy hosts whose
+   * successful result did not report fallback provenance. */
+  degraded?: boolean;
+  /** Stable, credential-free fallback explanation. Meaningful when degraded is true. */
+  degradeReason?: string;
   error?: string;
 }
 
@@ -99,6 +105,177 @@ export interface PbrRenderRequest {
   size?: number;
   /** Optional larger single beauty-shot size. */
   beautySize?: number;
+  /** Fully resolved perspective cameras for canonical composed-scene renders.
+   * Legacy asset sheets continue to use `viewDirs` unchanged. */
+  cameras?: ResolvedSceneCamera[];
+  /** Rectangular camera target. Both are required in camera mode and each is bounded. */
+  width?: number;
+  height?: number;
+  /** Host-owned lighting preset identity applied to the perspective render. */
+  lightingPresetId?: string;
+}
+
+const PBR_REQUEST_KEYS = new Set([
+  'glb',
+  'viewDirs',
+  'size',
+  'beautySize',
+  'cameras',
+  'width',
+  'height',
+  'lightingPresetId',
+]);
+
+function finiteTuple3(value: unknown, path: string): [number, number, number] {
+  if (
+    !Array.isArray(value) ||
+    value.length !== 3 ||
+    value.some((entry) => typeof entry !== 'number' || !Number.isFinite(entry))
+  )
+    throw new TypeError(`${path} must be a finite [x,y,z] tuple`);
+  return [value[0] as number, value[1] as number, value[2] as number];
+}
+
+function boundedPixelSize(value: unknown, path: string): number {
+  if (!Number.isInteger(value) || (value as number) < 1 || (value as number) > 4096) {
+    throw new TypeError(`${path} must be an integer in [1,4096]`);
+  }
+  return value as number;
+}
+
+/** Strict runtime validator/clone for the private GPU transport boundary. */
+export function validatePbrRenderRequest(input: unknown): PbrRenderRequest {
+  if (!input || typeof input !== 'object' || Array.isArray(input)) {
+    throw new TypeError('PbrRenderRequest must be an object');
+  }
+  const source = input as Record<string, unknown>;
+  for (const key of Object.keys(source)) {
+    if (!PBR_REQUEST_KEYS.has(key)) throw new TypeError(`PbrRenderRequest.${key} is unknown`);
+  }
+  if (!(source.glb instanceof Uint8Array) || source.glb.byteLength === 0) {
+    throw new TypeError('PbrRenderRequest.glb must be a non-empty Uint8Array');
+  }
+  const result: PbrRenderRequest = { glb: source.glb };
+  if (source.viewDirs !== undefined) {
+    if (
+      !Array.isArray(source.viewDirs) ||
+      source.viewDirs.length < 1 ||
+      source.viewDirs.length > 12
+    ) {
+      throw new TypeError('PbrRenderRequest.viewDirs must contain 1..12 directions');
+    }
+    result.viewDirs = source.viewDirs.map((value, index) => {
+      const direction = finiteTuple3(value, `PbrRenderRequest.viewDirs[${index}]`);
+      if (Math.hypot(...direction) === 0) {
+        throw new TypeError(`PbrRenderRequest.viewDirs[${index}] must be non-zero`);
+      }
+      return direction;
+    });
+  }
+  if (source.size !== undefined)
+    result.size = boundedPixelSize(source.size, 'PbrRenderRequest.size');
+  if (source.beautySize !== undefined) {
+    result.beautySize = boundedPixelSize(source.beautySize, 'PbrRenderRequest.beautySize');
+  }
+  const hasWidth = source.width !== undefined;
+  const hasHeight = source.height !== undefined;
+  if (hasWidth !== hasHeight) {
+    throw new TypeError('PbrRenderRequest.width and height must be provided together');
+  }
+  if (hasWidth) {
+    result.width = boundedPixelSize(source.width, 'PbrRenderRequest.width');
+    result.height = boundedPixelSize(source.height, 'PbrRenderRequest.height');
+  }
+  if (source.cameras !== undefined) {
+    if (source.viewDirs !== undefined) {
+      throw new TypeError('PbrRenderRequest.cameras and viewDirs are mutually exclusive');
+    }
+    if (source.size !== undefined || source.beautySize !== undefined) {
+      throw new TypeError('PbrRenderRequest camera mode cannot use legacy size or beautySize');
+    }
+    if (result.width === undefined || result.height === undefined) {
+      throw new TypeError('PbrRenderRequest camera mode requires width and height');
+    }
+    if (!Array.isArray(source.cameras) || source.cameras.length < 1 || source.cameras.length > 12) {
+      throw new TypeError('PbrRenderRequest.cameras must contain 1..12 cameras');
+    }
+    result.cameras = source.cameras.map((value, index) => {
+      if (!value || typeof value !== 'object' || Array.isArray(value)) {
+        throw new TypeError(`PbrRenderRequest.cameras[${index}] must be an object`);
+      }
+      const camera = value as Record<string, unknown>;
+      const expected = new Set(['position', 'target', 'up', 'fovDeg', 'aspect', 'near', 'far']);
+      for (const key of Object.keys(camera)) {
+        if (!expected.has(key))
+          throw new TypeError(`PbrRenderRequest.cameras[${index}].${key} is unknown`);
+      }
+      const position = finiteTuple3(camera.position, `PbrRenderRequest.cameras[${index}].position`);
+      const target = finiteTuple3(camera.target, `PbrRenderRequest.cameras[${index}].target`);
+      const up = finiteTuple3(camera.up, `PbrRenderRequest.cameras[${index}].up`);
+      if (
+        Math.hypot(position[0] - target[0], position[1] - target[1], position[2] - target[2]) === 0
+      ) {
+        throw new TypeError(`PbrRenderRequest.cameras[${index}].target must differ from position`);
+      }
+      if (Math.hypot(...up) === 0) {
+        throw new TypeError(`PbrRenderRequest.cameras[${index}].up must be non-zero`);
+      }
+      const view = [
+        target[0] - position[0],
+        target[1] - position[1],
+        target[2] - position[2],
+      ] as const;
+      const cross = [
+        view[1] * up[2] - view[2] * up[1],
+        view[2] * up[0] - view[0] * up[2],
+        view[0] * up[1] - view[1] * up[0],
+      ] as const;
+      if (Math.hypot(...cross) <= Math.hypot(...view) * Math.hypot(...up) * 1e-9) {
+        throw new TypeError(
+          `PbrRenderRequest.cameras[${index}].up must not be collinear with view`,
+        );
+      }
+      const number = (key: 'fovDeg' | 'aspect' | 'near' | 'far'): number => {
+        const parsed = camera[key];
+        if (typeof parsed !== 'number' || !Number.isFinite(parsed)) {
+          throw new TypeError(`PbrRenderRequest.cameras[${index}].${key} must be finite`);
+        }
+        return parsed;
+      };
+      const fovDeg = number('fovDeg');
+      const aspect = number('aspect');
+      const near = number('near');
+      const far = number('far');
+      if (fovDeg <= 0 || fovDeg >= 180) {
+        throw new TypeError(`PbrRenderRequest.cameras[${index}].fovDeg must be in (0,180)`);
+      }
+      if (aspect <= 0)
+        throw new TypeError(`PbrRenderRequest.cameras[${index}].aspect must be positive`);
+      if (near <= 0)
+        throw new TypeError(`PbrRenderRequest.cameras[${index}].near must be positive`);
+      if (far <= near)
+        throw new TypeError(`PbrRenderRequest.cameras[${index}].far must exceed near`);
+      const targetAspect = result.width! / result.height!;
+      if (Math.abs(aspect - targetAspect) > Math.max(1, targetAspect) * 1e-9) {
+        throw new TypeError(`PbrRenderRequest.cameras[${index}].aspect must equal width/height`);
+      }
+      return { position, target, up, fovDeg, aspect, near, far };
+    });
+  } else if (hasWidth) {
+    throw new TypeError('PbrRenderRequest width and height require camera mode');
+  }
+  if (source.lightingPresetId !== undefined) {
+    if (
+      typeof source.lightingPresetId !== 'string' ||
+      !source.lightingPresetId.trim() ||
+      source.lightingPresetId !== source.lightingPresetId.trim() ||
+      source.lightingPresetId.length > 128
+    ) {
+      throw new TypeError('PbrRenderRequest.lightingPresetId must be a non-empty string');
+    }
+    result.lightingPresetId = source.lightingPresetId;
+  }
+  return result;
 }
 
 /**

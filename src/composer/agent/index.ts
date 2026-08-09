@@ -34,6 +34,7 @@ export { runKilnWorldIntegration } from './world-run';
 export type {
   RunKilnWorldIntegrationOptions,
   RunKilnWorldIntegrationResult,
+  WorldIntegrationRenderEvidence,
 } from './world-run';
 
 export { SceneCompactionManager } from './compaction';

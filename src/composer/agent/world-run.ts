@@ -17,7 +17,9 @@ import {
   parseWorldDocumentV2,
   PlacementModel,
   type Placement,
+  type SceneRenderReceipt,
   type SceneRenderPort,
+  type SceneRenderResult,
   type WorldDocumentV2,
   validateWorldIntegrationV2,
   worldDocumentV2ToSceneModelJSON,
@@ -53,9 +55,20 @@ export interface RunKilnWorldIntegrationResult {
   steps: number;
   usage?: AgentUsage;
   callBudget?: GenerationCallBudgetReceipt;
+  /** Every successful canonical-world render attempt, in tool-call order. */
+  renderEvidence: WorldIntegrationRenderEvidence[];
   capped?: boolean;
   lastText?: string;
   error?: string;
+}
+
+export interface WorldIntegrationRenderEvidence {
+  worldHash: `sha256:${string}`;
+  views: number;
+  /** Absent only for a legacy host that did not report fallback provenance. */
+  degraded?: boolean;
+  degradeReason?: string;
+  receipt?: SceneRenderReceipt;
 }
 
 const empty = z.object({}).strict();
@@ -79,6 +92,7 @@ function lifecycleTools(
   state: WorldIntegrationToolState,
   render: SceneRenderPort,
   finalized: { value: boolean },
+  renderEvidence: WorldIntegrationRenderEvidence[],
 ): Tool[] {
   return [
     tool({
@@ -126,11 +140,13 @@ function lifecycleTools(
           : result.pngBase64
             ? [result.pngBase64]
             : [];
+        const evidence = renderEvidenceOf(worldHash, frames.length, result);
+        renderEvidence.push(evidence);
         return [
           ...frames.map(
             (frame) => new ImageBlock({ format: 'png', source: { bytes: png(frame) } }),
           ),
-          new JsonBlock({ json: { ok: true, worldHash, views: frames.length } }),
+          new JsonBlock({ json: { ok: true, ...evidence } as unknown as JSONValue }),
         ] as unknown as JSONValue;
       },
     }),
@@ -148,6 +164,32 @@ function lifecycleTools(
   ];
 }
 
+function cloneReceipt(receipt: SceneRenderReceipt): SceneRenderReceipt {
+  return {
+    ...receipt,
+    cameras: receipt.cameras.map((camera) => ({
+      ...camera,
+      position: [...camera.position],
+      target: [...camera.target],
+      up: [...camera.up],
+    })),
+  };
+}
+
+function renderEvidenceOf(
+  worldHash: `sha256:${string}`,
+  views: number,
+  result: SceneRenderResult,
+): WorldIntegrationRenderEvidence {
+  return {
+    worldHash,
+    views,
+    ...(result.degraded !== undefined ? { degraded: result.degraded } : {}),
+    ...(result.degradeReason ? { degradeReason: result.degradeReason } : {}),
+    ...(result.receipt ? { receipt: cloneReceipt(result.receipt) } : {}),
+  };
+}
+
 /**
  * Run the bounded post-compose integration phase over one canonical authority.
  * Fresh flow: compose -> migrate v1 candidate -> run this. Refine flow: compose
@@ -159,6 +201,7 @@ export async function runKilnWorldIntegration(
 ): Promise<RunKilnWorldIntegrationResult> {
   const state: WorldIntegrationToolState = { world: parseWorldDocumentV2(options.world) };
   const finalized = { value: false };
+  const renderEvidence: WorldIntegrationRenderEvidence[] = [];
   const maxSteps = options.maxSteps ?? 0;
   const metrics = new MetricsCollector(
     options.onEvent,
@@ -181,7 +224,7 @@ export async function runKilnWorldIntegration(
     });
     const tools: unknown[] = [
       ...mutationTools,
-      ...lifecycleTools(state, options.render, finalized),
+      ...lifecycleTools(state, options.render, finalized, renderEvidence),
       ...(options.extraTools ?? []),
     ];
     const agent = new Agent({
@@ -205,6 +248,7 @@ export async function runKilnWorldIntegration(
       finalized: finalized.value,
       toolCalls: collected.toolCalls,
       steps: collected.steps,
+      renderEvidence,
       ...(collected.usage ? { usage: collected.usage } : {}),
       ...(options.generationCallBudget
         ? { callBudget: options.generationCallBudget.receipt() }
@@ -221,6 +265,7 @@ export async function runKilnWorldIntegration(
       finalized: finalized.value,
       toolCalls: collected.toolCalls,
       steps: collected.steps,
+      renderEvidence,
       ...(collected.usage ? { usage: collected.usage } : {}),
       ...(options.generationCallBudget
         ? { callBudget: options.generationCallBudget.receipt() }
