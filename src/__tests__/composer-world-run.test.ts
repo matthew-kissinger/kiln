@@ -127,6 +127,8 @@ describe('runKilnWorldIntegration', () => {
       backend: 'vulkan',
       rendererId: 'dawn-vulkan:test',
       outputSha256: `sha256:${'c'.repeat(64)}` as const,
+      perCameraOutputSha256: [`sha256:${'c'.repeat(64)}` as const],
+      outputSetSha256: `sha256:${'e'.repeat(64)}` as const,
     };
     const model = new ToolCapturingModel([
       { toolCalls: [{ name: 'scene_world_render' }] },
@@ -165,8 +167,75 @@ describe('runKilnWorldIntegration', () => {
     const modelContext = JSON.stringify(model.messages);
     expect(modelContext).toContain('dawn-vulkan:test');
     expect(modelContext).toContain('outputSha256');
+    expect(modelContext).toContain('perCameraOutputSha256');
+    expect(modelContext).toContain('outputSetSha256');
     expect(modelContext).toContain('"degraded":false');
     expect(modelContext).not.toContain('fallbackReceipt');
+
+    receipt!.perCameraOutputSha256[0] = `sha256:${'f'.repeat(64)}`;
+    expect(result.renderEvidence[0]!.receipt!.perCameraOutputSha256).toEqual([
+      `sha256:${'c'.repeat(64)}`,
+    ]);
+  });
+
+  test('rejects mismatched per-camera output evidence and exact/fallback ambiguity', async () => {
+    const exact = {
+      worldHash: `sha256:${'a'.repeat(64)}` as const,
+      cameras: [
+        {
+          position: [12, 8, 15] as [number, number, number],
+          target: [0, 1, 0] as [number, number, number],
+          up: [0, 1, 0] as [number, number, number],
+          fovDeg: 50,
+          aspect: 1,
+          near: 0.1,
+          far: 500,
+        },
+      ],
+      width: 512,
+      height: 512,
+      lightingPresetId: 'neutral-studio-v1',
+      backend: 'vulkan',
+      rendererId: 'dawn-vulkan:test',
+      outputSha256: `sha256:${'b'.repeat(64)}` as const,
+      perCameraOutputSha256: [
+        `sha256:${'b'.repeat(64)}` as const,
+        `sha256:${'c'.repeat(64)}` as const,
+      ],
+      outputSetSha256: `sha256:${'d'.repeat(64)}` as const,
+    };
+    const fallback = {
+      cameraAttested: false as const,
+      backend: 'cpu',
+      rendererId: 'cpu-raster:test',
+      outputSha256: `sha256:${'e'.repeat(64)}` as const,
+    };
+    const run = async (render: SceneRenderPort) => {
+      const model = new ToolCapturingModel([{ toolCalls: [{ name: 'scene_world_render' }] }]);
+      const result = await runKilnWorldIntegration({
+        model,
+        prompt: 'inspect the world',
+        world: world(),
+        render,
+        maxSteps: 3,
+      });
+      return { result, context: JSON.stringify(model.messages) };
+    };
+
+    const mismatched = await run(async () => ({
+      ok: true,
+      pngBase64: Buffer.from('png').toString('base64'),
+      receipt: exact,
+    }));
+    expect(mismatched.context).toContain('per-camera output hashes');
+
+    const ambiguous = await run(async () => ({
+      ok: true,
+      pngBase64: Buffer.from('png').toString('base64'),
+      receipt: { ...exact, perCameraOutputSha256: exact.perCameraOutputSha256.slice(0, 1) },
+      fallbackReceipt: fallback,
+    }));
+    expect(ambiguous.context).toContain('both exact and fallback receipts');
   });
 
   test('surfaces an ok CPU fallback as degraded evidence without inventing a receipt', async () => {
