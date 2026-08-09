@@ -120,3 +120,15 @@ export type {
 
 export { MetricsCollector } from './hooks';
 export type { CollectedMetrics, AgentUsage, KilnAgentEvent } from './hooks';
+
+export {
+  createGenerationCallBudget,
+  generationModelCallLimitFromEnv,
+  resolveGenerationModelCallLimit,
+  DEFAULT_GENERATION_MODEL_CALL_LIMIT,
+} from './call-budget';
+export type {
+  GenerationCallBudget,
+  GenerationCallBudgetReceipt,
+  GenerationModelCallRole,
+} from './call-budget';
