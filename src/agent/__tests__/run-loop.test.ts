@@ -38,7 +38,7 @@ describe('runKilnAgent over a ScriptedModel (unified surface)', () => {
           cacheWriteInputTokens: 900,
         },
       },
-      { toolCalls: [{ name: 'kiln_render' }] },
+      { toolCalls: [{ name: 'kiln_render', input: { capture: { preset: '2x2' } } }] },
       { toolCalls: [{ name: 'kiln_finalize' }] },
       {
         text: 'done',
@@ -62,6 +62,7 @@ describe('runKilnAgent over a ScriptedModel (unified surface)', () => {
     expect(result.code).toBe(BOX_CODE);
     expect(result.steps).toBe(4);
     expect(result.toolCalls).toEqual(['kiln_draft', 'kiln_render', 'kiln_finalize']);
+    expect(result.captureSelection).toEqual({ capture: { preset: '2x2' } });
 
     // A2-instrumentation: cache counts accumulated alongside the token totals.
     expect(result.usage).toEqual({

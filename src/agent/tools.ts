@@ -19,6 +19,7 @@
  */
 import { tool, ImageBlock, JsonBlock, type Tool, type JSONValue } from '@strands-agents/sdk';
 import { z } from 'zod';
+import type { CaptureConfig } from '../views/capture';
 
 import {
   createKilnToolRegistry,
@@ -531,6 +532,12 @@ export interface UnifiedSink {
   code?: string;
   edits: EditRecord[];
   finalized?: boolean;
+  /** True after at least one successful unified render. This distinguishes a
+   * successful default-layout render from a run that never produced a view. */
+  rendered?: boolean;
+  /** Capture requested by the most recent successful unified render. Undefined
+   * means that render used the standard 3x2 layout. */
+  capture?: CaptureConfig;
 }
 
 /**
@@ -654,6 +661,13 @@ export function makeKilnUnifiedTools(
         code: buffer.code,
         ...(i.capture !== undefined ? { capture: i.capture } : {}),
       });
+      const rendered = out as { ok?: boolean };
+      if (rendered.ok) {
+        // Preserve only a validated, successful render request. A later default
+        // render deliberately clears an earlier custom layout.
+        opts.sink.rendered = true;
+        opts.sink.capture = i.capture as CaptureConfig | undefined;
+      }
       // Out-of-band: surface a SUCCESSFUL render as a live candidate (the working
       // buffer + the six-view image the agent just saw). Best-effort; a build
       // failure is image-free and not a candidate. Never changes the agent's view.
