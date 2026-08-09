@@ -126,6 +126,10 @@ describe('composer pbrRender seam (B3a)', () => {
     expect(() => validatePbrRenderRequest({ ...input, viewDirs: [[1, 0, 0]] })).toThrow(
       /mutually exclusive/i,
     );
+    expect(() => validatePbrRenderRequest({ ...input, size: 720 })).toThrow(/legacy size/i);
+    expect(() => validatePbrRenderRequest({ ...input, beautySize: 1080 })).toThrow(
+      /legacy size or beautySize/i,
+    );
     expect(() => validatePbrRenderRequest({ ...input, height: undefined })).toThrow(
       /provided together/i,
     );

@@ -190,6 +190,9 @@ export function validatePbrRenderRequest(input: unknown): PbrRenderRequest {
     if (source.viewDirs !== undefined) {
       throw new TypeError('PbrRenderRequest.cameras and viewDirs are mutually exclusive');
     }
+    if (source.size !== undefined || source.beautySize !== undefined) {
+      throw new TypeError('PbrRenderRequest camera mode cannot use legacy size or beautySize');
+    }
     if (result.width === undefined || result.height === undefined) {
       throw new TypeError('PbrRenderRequest camera mode requires width and height');
     }
