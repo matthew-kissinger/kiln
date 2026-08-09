@@ -61,7 +61,7 @@ The engine ships TypeScript source (Bun/tsx transpile on the fly); consume by su
 | `@kiln/engine/prompt`, `/prompt-api`, `/list-primitives` | system-prompt generation + catalog |
 | `@kiln/engine/metrics`, `/inspect` | instanceability grade + scene-structure analysis |
 | `@kiln/engine/contracts` | browser-safe asset and integration contracts, including `IntegrationManifestV1` and the semantic role vocabulary (`KILN_SEMANTIC_ROLES`, `semanticRole`, `semanticRoleMatches`, `hasSemanticRole`) |
-| `@kiln/engine/composer`, `/composer/agent` | THREE-free scene-composition core (placement model, layout, overlap, DSL) + its Strands agent loop (`runKilnComposer`) |
+| `@kiln/engine/composer`, `/composer/agent` | THREE-free scene-composition core (canonical `WorldDocumentV2`, deterministic v1 migration/hash/projection, placement model, layout, overlap, DSL) + its Strands agent loop (`runKilnComposer`) |
 
 Finished renders include `integrationManifest`, a versioned sidecar with the artifact
 hash, metres/+Y-up axes, bounds, grounding offset, selected default scene, role, render
