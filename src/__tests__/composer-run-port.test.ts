@@ -64,8 +64,17 @@ describe('composer pbrRender seam (B3a)', () => {
     const port: PbrRenderPort = async (req: PbrRenderRequest): Promise<PbrRenderResult> => ({
       ok: true,
       rendererId: 'dawn-vulkan:nvidia-rtx-a4500:NVIDIA: 550.100',
-      viewsPng: (req.viewDirs ?? []).map(() => new Uint8Array([1])),
+      viewsPng: (req.cameras ?? req.viewDirs ?? []).map(() => new Uint8Array([1])),
       timings: { renderMs: 12 },
+      ...(req.cameras
+        ? {
+            backend: 'vulkan',
+            cameras: req.cameras,
+            width: req.width,
+            height: req.height,
+            lightingPresetId: req.lightingPresetId,
+          }
+        : {}),
     });
     const res = await port({
       glb: new Uint8Array([0x67, 0x6c, 0x54, 0x46]),
@@ -79,6 +88,30 @@ describe('composer pbrRender seam (B3a)', () => {
     expect(res.ok).toBe(true);
     expect(res.rendererId).toMatch(/^[a-z0-9-]+:/);
     expect(res.viewsPng).toHaveLength(2);
+
+    const exactCamera = {
+      position: [12, 8, 15] as [number, number, number],
+      target: [0, 1, 0] as [number, number, number],
+      up: [0, 1, 0] as [number, number, number],
+      fovDeg: 50,
+      aspect: 16 / 9,
+      near: 0.1,
+      far: 500,
+    };
+    const exact = await port({
+      glb: new Uint8Array([1]),
+      cameras: [exactCamera],
+      width: 1280,
+      height: 720,
+      lightingPresetId: 'neutral-studio-v1',
+    });
+    expect(exact).toMatchObject({
+      backend: 'vulkan',
+      cameras: [exactCamera],
+      width: 1280,
+      height: 720,
+      lightingPresetId: 'neutral-studio-v1',
+    });
   });
 
   test('validates and clones exact perspective camera transport without changing legacy view dirs', () => {

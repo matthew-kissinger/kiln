@@ -58,6 +58,15 @@ export interface SceneRenderReceipt {
   outputSha256: `sha256:${string}`;
 }
 
+/** Provenance for successful fallback pixels that do not attest the requested cameras. */
+export interface SceneRenderFallbackReceipt {
+  /** Literal false prevents this record from being mistaken for a SceneRenderReceipt. */
+  cameraAttested: false;
+  backend: string;
+  rendererId: string;
+  outputSha256: `sha256:${string}`;
+}
+
 export interface SceneRenderResult {
   ok: boolean;
   /** The composited grid, or the single custom-camera frame (base64 PNG). */
@@ -67,6 +76,8 @@ export interface SceneRenderResult {
   tris?: number;
   /** Present when the host renders an immutable canonical-world milestone. */
   receipt?: SceneRenderReceipt;
+  /** Actual fallback producer/output identity; never an exact-camera attestation. */
+  fallbackReceipt?: SceneRenderFallbackReceipt;
   /** True when `ok:true` pixels came from a declared fallback rather than the
    * requested renderer. Absent preserves compatibility with legacy hosts whose
    * successful result did not report fallback provenance. */
@@ -291,6 +302,13 @@ export interface PbrRenderResult {
   /** Honest producer identity, e.g. "dawn-vulkan:nvidia-rtx-a4500:NVIDIA: 550.100"
    *  or the CPU fallback's deterministic "cpu-raster:<engine-version>". */
   rendererId: string;
+  /** Actual renderer backend. Required by hosts for camera mode; optional for legacy ports. */
+  backend?: string;
+  /** Exact camera transport echoed by a camera-mode host after validation. */
+  cameras?: ResolvedSceneCamera[];
+  width?: number;
+  height?: number;
+  lightingPresetId?: string;
   /** One PNG per requested view direction, in request order. */
   viewsPng?: Uint8Array[];
   /** The optional beauty shot. */

@@ -159,9 +159,16 @@ describe('runKilnWorldIntegration', () => {
     expect(modelContext).toContain('dawn-vulkan:test');
     expect(modelContext).toContain('outputSha256');
     expect(modelContext).toContain('"degraded":false');
+    expect(modelContext).not.toContain('fallbackReceipt');
   });
 
   test('surfaces an ok CPU fallback as degraded evidence without inventing a receipt', async () => {
+    const fallbackReceipt = {
+      cameraAttested: false as const,
+      backend: 'cpu',
+      rendererId: 'cpu-raster:test',
+      outputSha256: `sha256:${'d'.repeat(64)}` as const,
+    };
     const model = new ToolCapturingModel([
       { toolCalls: [{ name: 'scene_world_render' }] },
       { text: 'done' },
@@ -175,6 +182,7 @@ describe('runKilnWorldIntegration', () => {
         pngBase64: Buffer.from('png').toString('base64'),
         degraded: true,
         degradeReason: 'GPU deadline; deterministic CPU fallback',
+        fallbackReceipt,
       }),
       maxSteps: 4,
     });
@@ -185,12 +193,16 @@ describe('runKilnWorldIntegration', () => {
         views: 1,
         degraded: true,
         degradeReason: 'GPU deadline; deterministic CPU fallback',
+        fallbackReceipt,
       },
     ]);
     const modelContext = JSON.stringify(model.messages);
     expect(modelContext).toContain('"degraded":true');
     expect(modelContext).toContain('GPU deadline; deterministic CPU fallback');
-    expect(modelContext).not.toContain('outputSha256');
+    expect(modelContext).toContain('cpu-raster:test');
+    expect(modelContext).toContain('outputSha256');
+    expect(modelContext).toContain('"cameraAttested":false');
+    expect(modelContext).not.toContain('"receipt":');
   });
 
   test('shares one aggregate model-call allowance across compose and integration', async () => {
