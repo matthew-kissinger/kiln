@@ -57,6 +57,14 @@ Every cluster / ring instance and every laid-out asset counts toward a hard 200-
 4. Refine with a HANDFUL of targeted edits, not a fresh placement per asset: scene_move / scene_face / scene_group the heroes, and build one or two deliberate clusters or rings for the spaces that matter (a courtyard, a motor-court, a row). Then scene_paint the ground to match (an avenue strip + a plaza). scene_validate for overlaps (move by the mtv). Re-render once to confirm.
 5. Call scene_finalize once, before the budget runs out. A laid-out, lightly-refined, overlap-free scene that is FINALIZED beats a half-hand-placed one that never finishes.`;
 
+/** Optional Phase 1 addendum for hosts exposing the bounded `scene_world_*` tools. */
+export const WORLD_INTEGRATION_PROMPT_V2 = `## World integration
+Honor the user's complete world intent; do not narrow the scene into a terrain-only or socket-only task. Use scene_world_* only after the main composition reads well.
+- Reserve intentional negative space and keep player spawns and portals clear.
+- Author a small number of meaningful paths, anchors, and portals. Compatibility tags must match asset tags; snap only when the relationship is intentional.
+- Use one bounded seeded heightfield when terrain materially helps the request. Road/path/pad stamps shape traversable space; keep them inside the generated grid.
+- Re-check the composed world after integration. Never trade readable composition for procedural complexity.`;
+
 export interface BuildComposerPromptOptions {
   /** Natural-language description of the scene to compose. */
   prompt: string;

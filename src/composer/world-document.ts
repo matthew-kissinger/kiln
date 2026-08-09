@@ -21,9 +21,13 @@ export const WORLD_DOCUMENT_V2_SCHEMA_VERSION = 'kiln.world.v2' as const;
 
 const finite = z.number().finite();
 const vec2 = z.tuple([finite, finite]);
+const positiveVec2 = z.tuple([finite.positive(), finite.positive()]);
 const vec3 = z.tuple([finite, finite, finite]);
 const sha256 = z.string().regex(/^[0-9a-f]{64}$/, 'expected 64 lowercase SHA-256 hex characters');
 const nonEmptyId = z.string().min(1).max(256);
+const generationIdSchema = z
+  .string()
+  .regex(/^[A-Za-z0-9][A-Za-z0-9._:-]{0,255}$/, 'expected a portable generation id');
 
 const boundsSchema = z
   .object({ min: vec3, max: vec3 })
@@ -103,9 +107,24 @@ const paintZoneSchema = z
   })
   .strict();
 
+const portableArtifactUri = z
+  .string()
+  .min(1)
+  .max(2048)
+  .refine(
+    (uri) =>
+      !uri.startsWith('/') &&
+      !uri.includes('\\') &&
+      !uri.includes('?') &&
+      !uri.includes('#') &&
+      !/^[a-z][a-z0-9+.-]*:/i.test(uri) &&
+      uri.split('/').every((segment) => segment.length > 0 && segment !== '.' && segment !== '..'),
+    'expected a portable package-relative artifact URI',
+  );
+
 const artifactSchema = z
   .object({
-    uri: z.string().min(1).max(2048),
+    uri: portableArtifactUri,
     sha256,
     mediaType: z.string().min(1).max(128).optional(),
   })
@@ -114,7 +133,7 @@ const artifactSchema = z
 const assetSchema = z
   .object({
     refId: nonEmptyId,
-    generationId: nonEmptyId,
+    generationId: generationIdSchema,
     artifactSha256: sha256,
     bounds: boundsSchema,
     name: z.string().min(1).max(256).optional(),
@@ -137,6 +156,7 @@ const objectSchema = z
       .strict(),
     role: roleSchema,
     groupId: nonEmptyId.optional(),
+    socketId: nonEmptyId.optional(),
     collision: z
       .discriminatedUnion('policy', [
         z.object({ policy: z.literal('none') }).strict(),
@@ -149,6 +169,24 @@ const objectSchema = z
         sourceStatementId: nonEmptyId,
         sourcePrompt: z.string().min(1).max(4000).optional(),
         parentGenerationId: nonEmptyId.optional(),
+        activeAsset: z
+          .object({ generationId: generationIdSchema, artifactSha256: sha256 })
+          .strict()
+          .optional(),
+        assetHistory: z
+          .array(
+            z
+              .object({
+                kind: z.literal('asset-swap'),
+                fromGenerationId: generationIdSchema,
+                toGenerationId: generationIdSchema,
+                fromArtifactSha256: sha256,
+                toArtifactSha256: sha256,
+              })
+              .strict(),
+          )
+          .max(128)
+          .optional(),
       })
       .strict(),
   })
@@ -159,7 +197,7 @@ const zoneSchema = z
     id: nonEmptyId,
     kind: z.enum(['reserved', 'portal-clearance', 'spawn-clearance']),
     shape: z.discriminatedUnion('type', [
-      z.object({ type: z.literal('rect'), center: vec2, halfExtents: vec2 }).strict(),
+      z.object({ type: z.literal('rect'), center: vec2, halfExtents: positiveVec2 }).strict(),
       z.object({ type: z.literal('circle'), center: vec2, radius: finite.positive() }).strict(),
     ]),
   })
@@ -176,11 +214,30 @@ const pathSchema = z
 const socketSchema = z
   .object({
     id: nonEmptyId,
+    kind: z.enum(['anchor', 'portal']),
     position: vec3,
     rotationYDeg: finite,
-    tags: z.array(z.string().min(1).max(128)).max(64),
+    compatibilityTags: z.array(z.string().min(1).max(128)).min(1).max(64),
+    capacity: z.number().int().min(1).max(32),
+    clearanceRadius: finite.positive().optional(),
   })
-  .strict();
+  .strict()
+  .superRefine((socket, ctx) => {
+    if (socket.kind === 'portal' && socket.clearanceRadius == null) {
+      ctx.addIssue({
+        code: 'custom',
+        path: ['clearanceRadius'],
+        message: 'portal sockets require positive clearanceRadius',
+      });
+    }
+    for (const duplicate of duplicateValues(socket.compatibilityTags)) {
+      ctx.addIssue({
+        code: 'custom',
+        path: ['compatibilityTags'],
+        message: `duplicate compatibility tag "${duplicate}"`,
+      });
+    }
+  });
 
 const terrainSchema = z.discriminatedUnion('kind', [
   z.object({ kind: z.literal('flat'), height: finite }).strict(),
@@ -232,7 +289,7 @@ const v1ProvenanceSchema = z
 const v1StatementCommon = {
   stmtId: nonEmptyId,
   alias: nonEmptyId,
-  generationId: nonEmptyId,
+  generationId: generationIdSchema,
   role: roleSchema,
   scale: finite.positive(),
   group: nonEmptyId.optional(),
@@ -288,7 +345,7 @@ export const SceneModelV1Schema = z
       .array(
         z
           .object({
-            generationId: nonEmptyId,
+            generationId: generationIdSchema,
             bbox: boundsSchema,
             name: z.string().min(1).max(256).optional(),
             tags: z.array(z.string().min(1).max(128)).max(128).optional(),
@@ -410,6 +467,7 @@ export const WorldDocumentV2Schema = z
 
     const assetRefs = new Set(world.assets.map((asset) => asset.refId));
     const collisionRefs = new Set(world.collisionArtifacts.map((artifact) => artifact.refId));
+    const socketRefs = new Set(world.authored.sockets.map((socket) => socket.id));
     const referencedAssets = new Set<string>();
     const referencedCollisions = new Set<string>();
     for (let index = 0; index < world.objects.length; index++) {
@@ -420,6 +478,13 @@ export const WorldDocumentV2Schema = z
           code: 'custom',
           path: ['objects', index, 'assetRefId'],
           message: `unknown asset ref "${object.assetRefId}"`,
+        });
+      }
+      if (object.socketId && !socketRefs.has(object.socketId)) {
+        ctx.addIssue({
+          code: 'custom',
+          path: ['objects', index, 'socketId'],
+          message: `unknown socket ref "${object.socketId}"`,
         });
       }
       if (
@@ -461,6 +526,21 @@ export const WorldDocumentV2Schema = z
 export type WorldDocumentV2 = z.infer<typeof WorldDocumentV2Schema>;
 export type WorldAssetRefV2 = WorldDocumentV2['assets'][number];
 export type WorldObjectV2 = WorldDocumentV2['objects'][number];
+export type WorldZoneV2 = WorldDocumentV2['authored']['zones'][number];
+export type WorldPathV2 = WorldDocumentV2['authored']['paths'][number];
+export type WorldSocketV2 = WorldDocumentV2['authored']['sockets'][number];
+export type WorldSpawnV2 = WorldDocumentV2['spawns'][number];
+export type WorldTerrainV2 = WorldDocumentV2['terrain'];
+
+export interface WorldDocumentV2ArtifactReference {
+  kind: 'asset' | 'collision' | 'heightfield';
+  refId: string;
+  /** Canonical package-relative URI. Asset URIs are Engine-derived. */
+  uri: string;
+  packagePath: string;
+  /** Plain lowercase 64-hex SHA-256. */
+  sha256: string;
+}
 
 /** Parse and clone current v1 persistence before it reaches PlacementModel.fromJSON. */
 export function parseSceneModelV1JSON(input: unknown): SceneModelJSON {
@@ -475,6 +555,56 @@ export function parseWorldDocumentV2(input: unknown): WorldDocumentV2 {
 /** Non-throwing companion to `parseWorldDocumentV2`. */
 export function safeParseWorldDocumentV2(input: unknown) {
   return WorldDocumentV2Schema.safeParse(input);
+}
+
+/**
+ * Enumerate the complete portable artifact closure in deterministic order.
+ * Asset GLB paths are derived from their stable ref ids; terrain/collider paths
+ * are the validated package-relative URIs stored in the document.
+ */
+export function worldDocumentV2ArtifactReferences(
+  input: unknown,
+): WorldDocumentV2ArtifactReference[] {
+  const world = parseWorldDocumentV2(input);
+  const references: WorldDocumentV2ArtifactReference[] = world.assets.map((asset) => {
+    const packagePath = `models/${asset.generationId}.glb`;
+    return {
+      kind: 'asset',
+      refId: asset.refId,
+      uri: packagePath,
+      packagePath,
+      sha256: asset.artifactSha256,
+    };
+  });
+  if (world.terrain.kind === 'heightfield') {
+    references.push({
+      kind: 'heightfield',
+      refId: 'terrain',
+      uri: world.terrain.artifact.uri,
+      packagePath: world.terrain.artifact.uri,
+      sha256: world.terrain.artifact.sha256,
+    });
+  }
+  for (const collision of world.collisionArtifacts) {
+    references.push({
+      kind: 'collision',
+      refId: collision.refId,
+      uri: collision.artifact.uri,
+      packagePath: collision.artifact.uri,
+      sha256: collision.artifact.sha256,
+    });
+  }
+  return references.sort((a, b) =>
+    a.kind === b.kind
+      ? a.refId < b.refId
+        ? -1
+        : a.refId > b.refId
+          ? 1
+          : 0
+      : a.kind < b.kind
+        ? -1
+        : 1,
+  );
 }
 
 function canonicalJson(value: unknown): string {
@@ -513,7 +643,7 @@ const reconciliationSchema = z
         z
           .object({
             id: nonEmptyId,
-            generationId: nonEmptyId,
+            generationId: generationIdSchema,
             position: vec3,
             rotationYDeg: finite,
             uniformScale: finite.positive(),
@@ -525,7 +655,7 @@ const reconciliationSchema = z
       .array(
         z
           .object({
-            generationId: nonEmptyId,
+            generationId: generationIdSchema,
             artifactSha256: sha256,
             bounds: boundsSchema,
             name: z.string().min(1).max(256).optional(),
@@ -571,9 +701,11 @@ export type ReconcileWorldDocumentV2Input = z.infer<typeof reconciliationSchema>
 
 /**
  * Reconcile a host-authoritative complete placement set into an existing world.
- * Retained object ids preserve role/group/collision/provenance, untouched world
- * fields are carried through, removed references are pruned, and output arrays
- * are sorted by stable ids so caller ordering cannot change the document hash.
+ * Retained object ids preserve role/group/edit history and untouched world
+ * fields. Same-asset edits preserve collision/socket bindings. An asset content
+ * swap resets asset-bound collision to bounds, clears socket attachment, and
+ * records the active asset transition. Removed references are pruned and output
+ * arrays are sorted so caller ordering cannot change the document hash.
  */
 export function reconcileWorldDocumentV2Objects(
   current: unknown,
@@ -583,6 +715,7 @@ export function reconcileWorldDocumentV2Objects(
   const input = reconciliationSchema.parse(replacement);
   const existingObjects = new Map(world.objects.map((object) => [object.id, object]));
   const existingAssets = new Map(world.assets.map((asset) => [asset.generationId, asset]));
+  const existingAssetsByRef = new Map(world.assets.map((asset) => [asset.refId, asset]));
   const suppliedAssets = new Map((input.assets ?? []).map((asset) => [asset.generationId, asset]));
   const compareId = (a: string, b: string): number => (a < b ? -1 : a > b ? 1 : 0);
 
@@ -602,7 +735,44 @@ export function reconcileWorldDocumentV2Objects(
         ...(suppliedAsset ?? existingAsset!),
       });
       resolvedAssets.set(asset.refId, asset);
-      return {
+      const previousAsset = previous ? existingAssetsByRef.get(previous.assetRefId) : undefined;
+      const previousActive =
+        previous?.provenance.activeAsset ??
+        (previousAsset
+          ? {
+              generationId: previousAsset.generationId,
+              artifactSha256: previousAsset.artifactSha256,
+            }
+          : undefined);
+      const assetChanged =
+        previousActive != null &&
+        (previousActive.generationId !== asset.generationId ||
+          previousActive.artifactSha256 !== asset.artifactSha256);
+      const assetHistory = [
+        ...(previous?.provenance.assetHistory ?? []),
+        ...(assetChanged
+          ? [
+              {
+                kind: 'asset-swap' as const,
+                fromGenerationId: previousActive.generationId,
+                toGenerationId: asset.generationId,
+                fromArtifactSha256: previousActive.artifactSha256,
+                toArtifactSha256: asset.artifactSha256,
+              },
+            ]
+          : []),
+      ];
+      const provenance = {
+        ...(previous?.provenance ?? {
+          sourceStatementId: `manual:${object.id}`.slice(0, 256),
+        }),
+        activeAsset: {
+          generationId: asset.generationId,
+          artifactSha256: asset.artifactSha256,
+        },
+        ...(assetHistory.length ? { assetHistory } : {}),
+      };
+      const reconciled: WorldObjectV2 = {
         id: object.id,
         assetRefId: asset.refId,
         transform: {
@@ -611,12 +781,16 @@ export function reconcileWorldDocumentV2Objects(
           uniformScale: object.uniformScale,
         },
         role: previous?.role ?? placementRoleForAsset(asset.role) ?? 'support',
-        provenance: previous?.provenance ?? {
-          sourceStatementId: `manual:${object.id}`.slice(0, 256),
-        },
+        provenance,
         ...(previous?.groupId ? { groupId: previous.groupId } : {}),
-        ...(previous?.collision ? { collision: previous.collision } : {}),
+        ...(!assetChanged && previous?.socketId ? { socketId: previous.socketId } : {}),
+        ...(assetChanged
+          ? { collision: { policy: 'bounds' as const } }
+          : previous?.collision
+            ? { collision: previous.collision }
+            : {}),
       };
+      return reconciled;
     });
 
   const referencedCollisions = new Set(
@@ -721,6 +895,10 @@ export function migrateSceneModelV1ToWorldDocumentV2(
         sourceStatementId: placement.stmtId,
         ...(sourcePrompt ? { sourcePrompt } : {}),
         ...(parentGenerationId ? { parentGenerationId } : {}),
+        activeAsset: {
+          generationId: placement.generationId,
+          artifactSha256: options.artifactSha256ByGenerationId[placement.generationId]!,
+        },
       },
     };
   });
