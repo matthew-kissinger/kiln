@@ -139,4 +139,36 @@ describe('HeightfieldArtifactV1', () => {
       ]),
     ).toThrow();
   });
+
+  test('decode rejects every noncanonical byte representation and invalid UTF-8', () => {
+    const artifact = createHeightfieldArtifactV1({
+      seed: 3,
+      origin: [0, 0],
+      cellSize: 1,
+      width: 2,
+      height: 2,
+      baseHeight: 0,
+      amplitude: 0,
+      frequency: 1,
+    });
+    const canonical = encodeHeightfieldArtifactV1(artifact);
+    const text = new TextDecoder().decode(canonical);
+    expect(decodeHeightfieldArtifactV1(canonical)).toEqual(artifact);
+    expect(() => decodeHeightfieldArtifactV1(new TextEncoder().encode(` ${text}`))).toThrow(
+      'not canonical',
+    );
+
+    const parsed = JSON.parse(text) as Record<string, unknown>;
+    const reversed = Object.fromEntries(Object.entries(parsed).reverse());
+    expect(() =>
+      decodeHeightfieldArtifactV1(new TextEncoder().encode(JSON.stringify(reversed))),
+    ).toThrow('not canonical');
+
+    const nonquantized = structuredClone(parsed) as { heights: number[] };
+    nonquantized.heights[0] = HEIGHTFIELD_QUANTIZATION_STEP / 3;
+    expect(() =>
+      decodeHeightfieldArtifactV1(new TextEncoder().encode(JSON.stringify(nonquantized))),
+    ).toThrow('not canonical');
+    expect(() => decodeHeightfieldArtifactV1(new Uint8Array([0xc3, 0x28]))).toThrow();
+  });
 });

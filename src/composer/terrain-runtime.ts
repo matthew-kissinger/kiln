@@ -323,8 +323,22 @@ export function encodeHeightfieldArtifactV1(source: unknown): Uint8Array {
   return new TextEncoder().encode(canonicalJson(parseHeightfieldArtifactV1(source)));
 }
 
+function bytesEqual(left: Uint8Array, right: Uint8Array): boolean {
+  if (left.byteLength !== right.byteLength) return false;
+  for (let index = 0; index < left.byteLength; index++) {
+    if (left[index] !== right[index]) return false;
+  }
+  return true;
+}
+
+/** Decode only the one canonical byte representation bound by the artifact SHA-256. */
 export function decodeHeightfieldArtifactV1(bytes: Uint8Array): HeightfieldArtifactV1 {
-  return parseHeightfieldArtifactV1(JSON.parse(new TextDecoder().decode(bytes)));
+  const text = new TextDecoder('utf-8', { fatal: true }).decode(bytes);
+  const artifact = parseHeightfieldArtifactV1(JSON.parse(text));
+  if (!bytesEqual(bytes, encodeHeightfieldArtifactV1(artifact))) {
+    throw new TypeError('heightfield bytes are not canonical');
+  }
+  return artifact;
 }
 
 export async function hashHeightfieldArtifactV1(source: unknown): Promise<string> {
