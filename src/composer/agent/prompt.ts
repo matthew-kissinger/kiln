@@ -72,7 +72,7 @@ Honor the user's complete world intent; do not narrow the scene into a terrain-o
 - Use the supported neutral-studio-v1 lighting profile unless the host advertises another versioned ID.
 
 ## Collision, traversal, and terrain
-- scene_world_set_collision selects one object's explicit asset-local policy: none, bounds, or deterministic generated-mesh bounds-box. Generated collider bytes require the host publisher; do not invent paths or hashes.
+- scene_world_set_collision selects one object's explicit asset-local policy: none, bounds, selected authored-submesh GLB nodeNames, or deterministic generated-mesh bounds-box. Authored nodes are resolved only through the host's hash-bound geometry port; artifact modes require the host publisher. Do not invent paths, URLs, or hashes.
 - Reserve intentional negative space and keep player spawns and portals clear.
 - Author a small number of meaningful paths, anchors, and portals. Compatibility tags must match asset tags; snap only when the relationship is intentional.
 - Use one bounded seeded heightfield when terrain materially helps the request. Road/path/pad stamps shape traversable space; keep them inside the generated grid.

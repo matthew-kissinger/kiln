@@ -277,6 +277,9 @@ export async function runKilnWorldIntegration(
       ...(options.publishColliderArtifact
         ? { publishColliderArtifact: options.publishColliderArtifact }
         : {}),
+      ...(options.resolveAuthoredColliderGeometry
+        ? { resolveAuthoredColliderGeometry: options.resolveAuthoredColliderGeometry }
+        : {}),
       ...(options.onWorldChanged ? { onWorldChanged: options.onWorldChanged } : {}),
     });
     const tools: unknown[] = [

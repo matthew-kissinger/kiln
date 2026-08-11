@@ -1,7 +1,12 @@
 import { describe, expect, test } from 'bun:test';
 import type { Message, ModelStreamEvent, StreamOptions } from '@strands-agents/sdk';
 import type { SceneModelJSON, SceneRenderPort } from '../composer';
-import { migrateSceneModelV1ToWorldDocumentV2, setWorldPresentationV1 } from '../composer';
+import {
+  decodeColliderArtifactV1,
+  migrateSceneModelV1ToWorldDocumentV2,
+  setWorldPresentationV1,
+  worldColliderAabbV1,
+} from '../composer';
 import { createGenerationCallBudget } from '../agent/call-budget';
 import {
   runKilnComposer,
@@ -111,6 +116,7 @@ describe('runKilnWorldIntegration', () => {
     expect(WORLD_INTEGRATION_PROMPT_V2).toContain('16,777,216');
     expect(WORLD_INTEGRATION_PROMPT_V2).toContain('Do not send artifactBinding');
     expect(WORLD_INTEGRATION_PROMPT_V2).toContain('scene_world_set_collision');
+    expect(WORLD_INTEGRATION_PROMPT_V2).toContain('authored-submesh');
   });
 
   test('surfaces and returns an exact GPU receipt for persistence', async () => {
@@ -226,6 +232,77 @@ describe('runKilnWorldIntegration', () => {
     expect(modelContext).toContain('"target":[1,2,3]');
     expect(modelContext).toContain('"maxTotalPixels":16777216');
     expect(modelContext).toContain('"authoredByModel":false');
+  });
+
+  test('routes authored GLB node geometry through the bounded production collider ports', async () => {
+    const model = new ToolCapturingModel([
+      {
+        toolCalls: [
+          {
+            name: 'scene_world_set_collision',
+            input: {
+              objectId: 'crate',
+              policy: {
+                kind: 'authored-submesh',
+                transformFrame: 'asset-local',
+                nodeNames: ['Collider_Main'],
+              },
+            },
+          },
+        ],
+      },
+      { toolCalls: [{ name: 'scene_world_finalize' }] },
+      { text: 'done' },
+    ]);
+    let resolverRequest: unknown;
+    let published: Uint8Array | undefined;
+    const result = await runKilnWorldIntegration({
+      model,
+      prompt: 'use the authored collider node',
+      world: world(),
+      render: async () => ({ ok: true }),
+      resolveAuthoredColliderGeometry: async (request) => {
+        resolverRequest = request;
+        return {
+          schemaVersion: 'kiln.authored-collider-geometry.v1',
+          sourceArtifactSha256: request.sourceArtifactSha256,
+          transformFrame: 'asset-local',
+          submeshes: [
+            {
+              nodeName: 'Collider_Main',
+              positions: [-1, 0, -1, 1, 0, -1, 0, 2, 1],
+              indices: [0, 1, 2],
+            },
+          ],
+        };
+      },
+      publishColliderArtifact: async (_artifact, bytes) => {
+        published = bytes;
+        return { uri: 'colliders/crate-authored.collider.json' };
+      },
+      maxSteps: 5,
+    });
+
+    expect(result.finalized).toBe(true);
+    expect(resolverRequest).toMatchObject({
+      sourceArtifactSha256: `sha256:${'a'.repeat(64)}`,
+      transformFrame: 'asset-local',
+      nodeNames: ['Collider_Main'],
+    });
+    const artifact = decodeColliderArtifactV1(published!);
+    expect(artifact.policy).toEqual({
+      kind: 'authored-submesh',
+      transformFrame: 'asset-local',
+      nodeNames: ['Collider_Main'],
+    });
+    expect(
+      worldColliderAabbV1(artifact, {
+        position: result.world.objects[0]!.transform.position,
+        rotationYDeg: result.world.objects[0]!.transform.rotationYDeg,
+        uniformScale: result.world.objects[0]!.transform.uniformScale,
+      }),
+    ).toEqual({ min: [4, 0, 4], max: [6, 2, 6] });
+    expect(result.world.objects[0]?.collision?.policy).toBe('artifact');
   });
 
   test('forwards persisted presentation parameters and accepts only their exact receipt', async () => {

@@ -8,6 +8,13 @@ import {
 
 export const COLLIDER_POLICY_V1_SCHEMA_VERSION = 'kiln.collider-policy.v1' as const;
 export const COLLIDER_ARTIFACT_V1_SCHEMA_VERSION = 'kiln.collider-artifact.v1' as const;
+export const AUTHORED_COLLIDER_GEOMETRY_V1_SCHEMA_VERSION =
+  'kiln.authored-collider-geometry.v1' as const;
+export const AUTHORED_COLLIDER_GEOMETRY_LIMITS_V1 = Object.freeze({
+  maxNodes: 64,
+  maxVertices: 65_536,
+  maxTriangles: 65_536,
+});
 
 const finite = z.number().finite();
 const vec3 = z.tuple([finite, finite, finite]);
@@ -59,8 +66,10 @@ export const ColliderPolicyV1Schema = z.discriminatedUnion('kind', [
 const primitive = z
   .object({
     nodeName: id,
-    positions: z.array(finite).max(196_608),
-    indices: z.array(z.number().int().nonnegative()).max(196_608),
+    positions: z.array(finite).max(AUTHORED_COLLIDER_GEOMETRY_LIMITS_V1.maxVertices * 3),
+    indices: z
+      .array(z.number().int().nonnegative())
+      .max(AUTHORED_COLLIDER_GEOMETRY_LIMITS_V1.maxTriangles * 3),
   })
   .strict()
   .superRefine((value, ctx) => {
@@ -81,6 +90,37 @@ const primitive = z
     const vertexCount = value.positions.length / 3;
     if (value.indices.some((index) => index >= vertexCount)) {
       ctx.addIssue({ code: 'custom', path: ['indices'], message: 'index exceeds vertex count' });
+    }
+  });
+
+/** Strict output boundary for a host that flattens selected GLB mesh nodes into asset-local space. */
+export const AuthoredColliderGeometryV1Schema = z
+  .object({
+    schemaVersion: z.literal(AUTHORED_COLLIDER_GEOMETRY_V1_SCHEMA_VERSION),
+    sourceArtifactSha256: sha256,
+    transformFrame: z.literal('asset-local'),
+    submeshes: z.array(primitive).min(1).max(AUTHORED_COLLIDER_GEOMETRY_LIMITS_V1.maxNodes),
+  })
+  .strict()
+  .superRefine((value, ctx) => {
+    if (new Set(value.submeshes.map((entry) => entry.nodeName)).size !== value.submeshes.length) {
+      ctx.addIssue({
+        code: 'custom',
+        path: ['submeshes'],
+        message: 'submesh nodeName must be unique',
+      });
+    }
+    const vertexCount = value.submeshes.reduce((sum, entry) => sum + entry.positions.length / 3, 0);
+    const triangleCount = value.submeshes.reduce((sum, entry) => sum + entry.indices.length / 3, 0);
+    if (
+      vertexCount > AUTHORED_COLLIDER_GEOMETRY_LIMITS_V1.maxVertices ||
+      triangleCount > AUTHORED_COLLIDER_GEOMETRY_LIMITS_V1.maxTriangles
+    ) {
+      ctx.addIssue({
+        code: 'custom',
+        path: ['submeshes'],
+        message: 'resolved collider geometry exceeds aggregate budget',
+      });
     }
   });
 
@@ -129,10 +169,48 @@ export const ColliderArtifactV1Schema = z
         });
       }
     }
+    const vertexCount = value.primitives.reduce(
+      (sum, entry) => sum + entry.positions.length / 3,
+      0,
+    );
+    const triangleCount = value.primitives.reduce(
+      (sum, entry) => sum + entry.indices.length / 3,
+      0,
+    );
+    if (
+      vertexCount > AUTHORED_COLLIDER_GEOMETRY_LIMITS_V1.maxVertices ||
+      triangleCount > AUTHORED_COLLIDER_GEOMETRY_LIMITS_V1.maxTriangles
+    ) {
+      ctx.addIssue({
+        code: 'custom',
+        path: ['primitives'],
+        message: 'collider artifact exceeds aggregate geometry budget',
+      });
+    }
   });
 
 export type ColliderPolicyV1 = z.infer<typeof ColliderPolicyV1Schema>;
 export type ColliderArtifactV1 = z.infer<typeof ColliderArtifactV1Schema>;
+type ParsedAuthoredColliderGeometryV1 = z.infer<typeof AuthoredColliderGeometryV1Schema>;
+export type AuthoredColliderGeometryV1 = Omit<
+  ParsedAuthoredColliderGeometryV1,
+  'sourceArtifactSha256'
+> & {
+  sourceArtifactSha256: `sha256:${string}`;
+};
+
+export interface ResolveAuthoredColliderGeometryV1Request {
+  schemaVersion: typeof AUTHORED_COLLIDER_GEOMETRY_V1_SCHEMA_VERSION;
+  sourceArtifactSha256: `sha256:${string}`;
+  transformFrame: 'asset-local';
+  nodeNames: readonly string[];
+  limits: Readonly<typeof AUTHORED_COLLIDER_GEOMETRY_LIMITS_V1>;
+}
+
+/** Host port: resolve only the requested hash-bound GLB nodes, never paths, URLs, or model code. */
+export type ResolveAuthoredColliderGeometryV1Port = (
+  request: ResolveAuthoredColliderGeometryV1Request,
+) => Promise<unknown>;
 
 export interface AuthoredColliderSubmeshV1 {
   nodeName: string;
@@ -151,6 +229,7 @@ export class ColliderCompileError extends Error {
     readonly code:
       | 'COLLIDER_AUTHORED_SUBMESH_MISSING'
       | 'COLLIDER_AUTHORED_SUBMESH_INVALID'
+      | 'COLLIDER_SOURCE_HASH_MISMATCH'
       | 'COLLIDER_BUDGET_EXCEEDED',
     message: string,
   ) {
@@ -162,6 +241,43 @@ export class ColliderCompileError extends Error {
 export function parseColliderPolicyV1(input: unknown): ColliderPolicyV1 {
   assertNoPrototypeKeys(input);
   return ColliderPolicyV1Schema.parse(input);
+}
+
+export function parseAuthoredColliderGeometryV1(input: unknown): AuthoredColliderGeometryV1 {
+  if (typeof input === 'object' && input !== null && 'submeshes' in input) {
+    const submeshes = (input as { submeshes?: unknown }).submeshes;
+    if (Array.isArray(submeshes)) {
+      let vertices = 0;
+      let triangles = 0;
+      for (const submesh of submeshes) {
+        if (typeof submesh !== 'object' || submesh === null) continue;
+        const positions = (submesh as { positions?: unknown }).positions;
+        const indices = (submesh as { indices?: unknown }).indices;
+        if (Array.isArray(positions)) vertices += positions.length / 3;
+        if (Array.isArray(indices)) triangles += indices.length / 3;
+      }
+      if (
+        submeshes.length > AUTHORED_COLLIDER_GEOMETRY_LIMITS_V1.maxNodes ||
+        vertices > AUTHORED_COLLIDER_GEOMETRY_LIMITS_V1.maxVertices ||
+        triangles > AUTHORED_COLLIDER_GEOMETRY_LIMITS_V1.maxTriangles
+      ) {
+        throw new ColliderCompileError(
+          'COLLIDER_BUDGET_EXCEEDED',
+          'resolved collider geometry exceeds node/vertex/triangle limits',
+        );
+      }
+    }
+  }
+  assertNoPrototypeKeys(input);
+  try {
+    return AuthoredColliderGeometryV1Schema.parse(input) as AuthoredColliderGeometryV1;
+  } catch (error) {
+    if (error instanceof ColliderCompileError) throw error;
+    throw new ColliderCompileError(
+      'COLLIDER_AUTHORED_SUBMESH_INVALID',
+      error instanceof Error ? error.message : String(error),
+    );
+  }
 }
 
 export function parseColliderArtifactV1(input: unknown): ColliderArtifactV1 {
@@ -260,10 +376,13 @@ export function compileColliderArtifactV1(
   }
   const vertexCount = primitives.reduce((sum, entry) => sum + entry.positions.length / 3, 0);
   const triangleCount = primitives.reduce((sum, entry) => sum + entry.indices.length / 3, 0);
-  if (vertexCount > 65_536 || triangleCount > 65_536) {
+  if (
+    vertexCount > AUTHORED_COLLIDER_GEOMETRY_LIMITS_V1.maxVertices ||
+    triangleCount > AUTHORED_COLLIDER_GEOMETRY_LIMITS_V1.maxTriangles
+  ) {
     throw new ColliderCompileError(
       'COLLIDER_BUDGET_EXCEEDED',
-      'collider exceeds 65,536 vertices/triangles',
+      'collider exceeds node/vertex/triangle limits',
     );
   }
   const artifactBounds = primitives.length ? boundsOfPrimitives(primitives) : parsedBounds;

@@ -2,11 +2,16 @@
 import { type JSONValue, type Tool, tool } from '@strands-agents/sdk';
 import { z } from 'zod';
 import {
+  AUTHORED_COLLIDER_GEOMETRY_LIMITS_V1,
+  AUTHORED_COLLIDER_GEOMETRY_V1_SCHEMA_VERSION,
+  ColliderCompileError,
   ColliderPolicyV1Schema,
   compileColliderArtifactV1,
   encodeColliderArtifactV1,
   hashColliderArtifactV1,
   type ColliderArtifactV1,
+  parseAuthoredColliderGeometryV1,
+  type ResolveAuthoredColliderGeometryV1Port,
   createHeightfieldArtifactV1,
   encodeHeightfieldArtifactV1,
   hashHeightfieldArtifactV1,
@@ -39,6 +44,7 @@ export interface MakeWorldIntegrationToolsV2Options {
     bytes: Uint8Array,
     sha256: `sha256:${string}`,
   ) => Promise<{ uri: string; mediaType?: string }>;
+  resolveAuthoredColliderGeometry?: ResolveAuthoredColliderGeometryV1Port;
   onWorldChanged?: (world: WorldDocumentV2) => void;
 }
 
@@ -167,7 +173,7 @@ export function makeWorldIntegrationToolsV2(options: MakeWorldIntegrationToolsV2
   const setCollision: Tool = tool({
     name: 'scene_world_set_collision',
     description:
-      'Set one object collision policy to none, asset bounds, or a deterministic generated bounds-box artifact. Generated artifacts require the host publisher.',
+      'Set one object collision policy to none, asset bounds, selected authored GLB mesh nodes, or a deterministic generated bounds-box artifact. Artifact policies require bounded host ports.',
     inputSchema: z.object({ objectId: id, policy: ColliderPolicyV1Schema }).strict(),
     callback: async (input) => {
       try {
@@ -203,19 +209,64 @@ export function makeWorldIntegrationToolsV2(options: MakeWorldIntegrationToolsV2
           );
         }
 
-        if (input.policy.kind === 'authored-submesh') {
+        if (input.policy.kind === 'authored-submesh' && !options.resolveAuthoredColliderGeometry) {
           return {
             ok: false,
-            error: 'authored-submesh compilation requires host-supplied GLB node geometry',
+            error: 'authored collider geometry resolver is not configured',
           } as JSONValue;
         }
         if (!options.publishColliderArtifact) {
           return { ok: false, error: 'collider artifact publisher is not configured' } as JSONValue;
         }
-        const artifact = compileColliderArtifactV1(input.policy, {
-          sourceArtifactSha256: `sha256:${asset.artifactSha256}`,
-          bounds: asset.bounds,
-        });
+        const sourceArtifactSha256 = `sha256:${asset.artifactSha256}` as const;
+        let artifact: ColliderArtifactV1;
+        if (input.policy.kind === 'authored-submesh') {
+          const resolved = parseAuthoredColliderGeometryV1(
+            await options.resolveAuthoredColliderGeometry!(
+              Object.freeze({
+                schemaVersion: AUTHORED_COLLIDER_GEOMETRY_V1_SCHEMA_VERSION,
+                sourceArtifactSha256,
+                transformFrame: 'asset-local',
+                nodeNames: Object.freeze([...input.policy.nodeNames]),
+                limits: AUTHORED_COLLIDER_GEOMETRY_LIMITS_V1,
+              }),
+            ),
+          );
+          if (resolved.sourceArtifactSha256 !== sourceArtifactSha256) {
+            throw new ColliderCompileError(
+              'COLLIDER_SOURCE_HASH_MISMATCH',
+              'resolved collider geometry does not match the selected asset hash',
+            );
+          }
+          const requested = new Set(input.policy.nodeNames);
+          const returned = new Set(resolved.submeshes.map((entry) => entry.nodeName));
+          const missing = input.policy.nodeNames.filter((nodeName) => !returned.has(nodeName));
+          if (missing.length) {
+            throw new ColliderCompileError(
+              'COLLIDER_AUTHORED_SUBMESH_MISSING',
+              `missing authored collider node(s): ${missing.join(', ')}`,
+            );
+          }
+          const unexpected = resolved.submeshes
+            .map((entry) => entry.nodeName)
+            .filter((nodeName) => !requested.has(nodeName));
+          if (unexpected.length) {
+            throw new ColliderCompileError(
+              'COLLIDER_AUTHORED_SUBMESH_INVALID',
+              `resolver returned unrequested collider node(s): ${unexpected.join(', ')}`,
+            );
+          }
+          artifact = compileColliderArtifactV1(input.policy, {
+            sourceArtifactSha256,
+            bounds: asset.bounds,
+            authoredSubmeshes: resolved.submeshes,
+          });
+        } else {
+          artifact = compileColliderArtifactV1(input.policy, {
+            sourceArtifactSha256,
+            bounds: asset.bounds,
+          });
+        }
         const bytes = encodeColliderArtifactV1(artifact);
         const sha256 = await hashColliderArtifactV1(artifact);
         const published = await options.publishColliderArtifact(artifact, bytes, sha256);

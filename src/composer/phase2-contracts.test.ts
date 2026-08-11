@@ -1,6 +1,8 @@
 import { describe, expect, test } from 'bun:test';
 import { createHash } from 'node:crypto';
 import {
+  AUTHORED_COLLIDER_GEOMETRY_LIMITS_V1,
+  AUTHORED_COLLIDER_GEOMETRY_V1_SCHEMA_VERSION,
   COLLIDER_ARTIFACT_V1_SCHEMA_VERSION,
   PRESENTATION_DOCUMENT_V1_SCHEMA_VERSION,
   WORLD_PACKAGE_V2_SCHEMA_VERSION,
@@ -14,6 +16,7 @@ import {
   hashHeightfieldArtifactV1,
   hashPresentationDocumentV1,
   hashWorldPackageV2,
+  parseAuthoredColliderGeometryV1,
   parseColliderPolicyV1,
   parsePresentationDocumentV1,
   parseWorldDocumentV2,
@@ -183,6 +186,74 @@ describe('C5.1/C5.2 strict deterministic collider artifacts', () => {
         },
       ),
     ).toThrow('COLLIDER_AUTHORED_SUBMESH_INVALID');
+  });
+
+  test('strictly bounds host-resolved GLB node geometry in the asset-local frame', () => {
+    const resolved = parseAuthoredColliderGeometryV1({
+      schemaVersion: AUTHORED_COLLIDER_GEOMETRY_V1_SCHEMA_VERSION,
+      sourceArtifactSha256: `sha256:${A}`,
+      transformFrame: 'asset-local',
+      submeshes: [
+        {
+          nodeName: 'Collider_Main',
+          positions: [-1, 0, -2, 1, 0, -2, 0, 3, 2],
+          indices: [0, 1, 2],
+        },
+      ],
+    });
+    expect(resolved.submeshes[0]?.nodeName).toBe('Collider_Main');
+    expect(AUTHORED_COLLIDER_GEOMETRY_LIMITS_V1).toEqual({
+      maxNodes: 64,
+      maxVertices: 65_536,
+      maxTriangles: 65_536,
+    });
+    const secondSubmesh = {
+      nodeName: 'Collider_Second',
+      positions: [2, 0, 0, 3, 0, 0, 2, 1, 0],
+      indices: [0, 1, 2],
+    };
+    const authoredPolicy = {
+      kind: 'authored-submesh' as const,
+      transformFrame: 'asset-local' as const,
+      nodeNames: ['Collider_Second', 'Collider_Main'],
+    };
+    const compileResolved = (submeshes: typeof resolved.submeshes) =>
+      compileColliderArtifactV1(authoredPolicy, {
+        sourceArtifactSha256: resolved.sourceArtifactSha256,
+        bounds: { min: [-1, 0, -2], max: [3, 3, 2] },
+        authoredSubmeshes: submeshes,
+      });
+    const ordered = compileResolved([...resolved.submeshes, secondSubmesh]);
+    const reversed = compileResolved([secondSubmesh, ...resolved.submeshes]);
+    expect(ordered.primitives.map(({ nodeName }) => nodeName)).toEqual([
+      'Collider_Main',
+      'Collider_Second',
+    ]);
+    expect(encodeColliderArtifactV1(ordered)).toEqual(encodeColliderArtifactV1(reversed));
+    expect(() =>
+      parseAuthoredColliderGeometryV1({ ...resolved, sourceUrl: 'file:///secret/model.glb' }),
+    ).toThrow();
+    expect(() =>
+      parseAuthoredColliderGeometryV1({ ...resolved, transformFrame: 'world' }),
+    ).toThrow();
+    const forged = { ...resolved } as Record<string, unknown>;
+    Object.defineProperty(forged, '__proto__', {
+      value: 'forged',
+      enumerable: true,
+    });
+    expect(() => parseAuthoredColliderGeometryV1(forged)).toThrow(/forbidden/);
+    expect(() =>
+      parseAuthoredColliderGeometryV1({
+        ...resolved,
+        submeshes: [
+          {
+            nodeName: 'Collider_Main',
+            positions: Array.from({ length: 65_537 * 3 }, () => 0),
+            indices: [0, 1, 2],
+          },
+        ],
+      }),
+    ).toThrow('COLLIDER_BUDGET_EXCEEDED');
   });
 });
 

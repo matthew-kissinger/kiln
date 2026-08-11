@@ -223,7 +223,135 @@ describe('Composer V2 world tools', () => {
       }),
     ).toEqual({
       ok: false,
-      error: 'authored-submesh compilation requires host-supplied GLB node geometry',
+      error: 'authored collider geometry resolver is not configured',
     });
+  });
+
+  test('resolves only hash-bound named GLB nodes for authored-submesh colliders', async () => {
+    const target = state();
+    let resolverRequest: unknown;
+    let published: Uint8Array | undefined;
+    const tools = makeWorldIntegrationToolsV2({
+      state: target,
+      resolveAuthoredColliderGeometry: async (request) => {
+        resolverRequest = request;
+        return {
+          schemaVersion: 'kiln.authored-collider-geometry.v1',
+          sourceArtifactSha256: `sha256:${'a'.repeat(64)}`,
+          transformFrame: 'asset-local',
+          submeshes: [
+            {
+              nodeName: 'Collider_Main',
+              positions: [-1, 0, -1, 1, 0, -1, 0, 2, 1],
+              indices: [0, 1, 2],
+            },
+          ],
+        };
+      },
+      publishColliderArtifact: async (_artifact, bytes) => {
+        published = bytes;
+        return { uri: 'colliders/authored.collider.json' };
+      },
+    });
+
+    const result = await call(tools, 'scene_world_set_collision', {
+      objectId: 'crate',
+      policy: {
+        kind: 'authored-submesh',
+        transformFrame: 'asset-local',
+        nodeNames: ['Collider_Main'],
+      },
+    });
+    expect(result.ok).toBe(true);
+    expect(resolverRequest).toEqual({
+      schemaVersion: 'kiln.authored-collider-geometry.v1',
+      sourceArtifactSha256: `sha256:${'a'.repeat(64)}`,
+      transformFrame: 'asset-local',
+      nodeNames: ['Collider_Main'],
+      limits: { maxNodes: 64, maxVertices: 65_536, maxTriangles: 65_536 },
+    });
+    expect(decodeColliderArtifactV1(published!)).toMatchObject({
+      transformFrame: 'asset-local',
+      sourceArtifactSha256: `sha256:${'a'.repeat(64)}`,
+      policy: { kind: 'authored-submesh', nodeNames: ['Collider_Main'] },
+      bounds: { min: [-1, 0, -1], max: [1, 2, 1] },
+    });
+
+    const failed = async (resolution: unknown) => {
+      const isolated = makeWorldIntegrationToolsV2({
+        state: state(),
+        resolveAuthoredColliderGeometry: async () => resolution,
+        publishColliderArtifact: async () => {
+          throw new Error('must not publish invalid geometry');
+        },
+      });
+      return call(isolated, 'scene_world_set_collision', {
+        objectId: 'crate',
+        policy: {
+          kind: 'authored-submesh',
+          transformFrame: 'asset-local',
+          nodeNames: ['Collider_Main'],
+        },
+      });
+    };
+    expect(
+      await failed({
+        schemaVersion: 'kiln.authored-collider-geometry.v1',
+        sourceArtifactSha256: `sha256:${'b'.repeat(64)}`,
+        transformFrame: 'asset-local',
+        submeshes: [
+          {
+            nodeName: 'Collider_Main',
+            positions: [0, 0, 0, 1, 0, 0, 0, 1, 0],
+            indices: [0, 1, 2],
+          },
+        ],
+      }),
+    ).toMatchObject({ ok: false, error: expect.stringContaining('SOURCE_HASH_MISMATCH') });
+    expect(
+      await failed({
+        schemaVersion: 'kiln.authored-collider-geometry.v1',
+        sourceArtifactSha256: `sha256:${'a'.repeat(64)}`,
+        transformFrame: 'asset-local',
+        submeshes: [
+          {
+            nodeName: 'Other',
+            positions: [0, 0, 0, 1, 0, 0, 0, 1, 0],
+            indices: [0, 1, 2],
+          },
+        ],
+      }),
+    ).toMatchObject({ ok: false, error: expect.stringContaining('SUBMESH_MISSING') });
+    expect(
+      await failed({
+        schemaVersion: 'kiln.authored-collider-geometry.v1',
+        sourceArtifactSha256: `sha256:${'a'.repeat(64)}`,
+        transformFrame: 'asset-local',
+        submeshes: [
+          {
+            nodeName: 'Collider_Main',
+            positions: Array.from({ length: 65_537 * 3 }, () => 0),
+            indices: [0, 1, 2],
+          },
+        ],
+      }),
+    ).toMatchObject({ ok: false, error: expect.stringContaining('BUDGET_EXCEEDED') });
+
+    const resolverOnly = makeWorldIntegrationToolsV2({
+      state: state(),
+      resolveAuthoredColliderGeometry: async () => {
+        throw new Error('must not resolve without a publisher');
+      },
+    });
+    expect(
+      await call(resolverOnly, 'scene_world_set_collision', {
+        objectId: 'crate',
+        policy: {
+          kind: 'authored-submesh',
+          transformFrame: 'asset-local',
+          nodeNames: ['Collider_Main'],
+        },
+      }),
+    ).toEqual({ ok: false, error: 'collider artifact publisher is not configured' });
   });
 });
