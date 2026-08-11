@@ -439,6 +439,28 @@ describe('generateKilnAsset viewRenderPort (B3b/B4)', () => {
     expect(r.views).toBeInstanceOf(Buffer);
   });
 
+  test('R2.7: final view timeout consumes dynamic warm-up and generation budget context', async () => {
+    runImpl = okRun;
+    const requests: string[] = [];
+    const r = await generateKilnAsset({
+      prompt: 'a crate',
+      captureViews: true,
+      viewRenderPort: () => new Promise(() => {}),
+      viewRenderTimeoutContext: () => ({
+        warmUpState: 'pending',
+        remainingGenerationBudgetMs: 17,
+        rendererDeadlineMs: 30,
+      }),
+      viewRenderTimeoutResolver: (context) => {
+        requests.push(context.requestKind);
+        return 1_000;
+      },
+    });
+    expect(r.renderDegraded).toBe(true);
+    expect(r.renderDegradedReason).toContain('timed out after 17ms');
+    expect(requests).toEqual(['final-grid']);
+  });
+
   test('B4: undecodable or missing port PNGs degrade instead of throwing', async () => {
     runImpl = okRun;
     const garbage = await generateKilnAsset({

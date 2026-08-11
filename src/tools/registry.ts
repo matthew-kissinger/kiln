@@ -36,6 +36,11 @@ import type {
 import type { ViewGridResult } from '../views';
 import { sceneNeedsPbrShading } from '../material-resources';
 import type { GenerationCallBudget } from '../agent/call-budget';
+import {
+  resolveViewRenderTimeoutMs,
+  type ViewRenderTimeoutContextProvider,
+  type ViewRenderTimeoutResolver,
+} from '../agent/view-render-timeout';
 import { ViewEvidenceHistoryStore } from '../views/evidence-history';
 
 // =============================================================================
@@ -97,6 +102,10 @@ export interface KilnToolContext {
    * {@link DEFAULT_INLOOP_VIEW_RENDER_TIMEOUT_MS}.
    */
   viewRenderTimeoutMs?: number;
+  /** Dynamic host state sampled immediately before every port call. */
+  viewRenderTimeoutContext?: ViewRenderTimeoutContextProvider;
+  /** Host policy for deriving one deadline from warm-up/budget state. */
+  viewRenderTimeoutResolver?: ViewRenderTimeoutResolver;
   /**
    * Host tally hook, called once per in-loop grid with whoever actually drew it.
    *
@@ -175,6 +184,23 @@ export interface InLoopViewRender {
  */
 export const DEFAULT_INLOOP_VIEW_RENDER_TIMEOUT_MS = 6000;
 
+function resolveInLoopViewRenderTimeoutMs(
+  context: KilnToolContext,
+  requestKind: 'in-loop-grid' | 'derivative-cell',
+): number {
+  return resolveViewRenderTimeoutMs({
+    requestKind,
+    defaultTimeoutMs: DEFAULT_INLOOP_VIEW_RENDER_TIMEOUT_MS,
+    ...(context.viewRenderTimeoutMs !== undefined
+      ? { timeoutMs: context.viewRenderTimeoutMs }
+      : {}),
+    ...(context.viewRenderTimeoutContext
+      ? { contextProvider: context.viewRenderTimeoutContext }
+      : {}),
+    ...(context.viewRenderTimeoutResolver ? { resolver: context.viewRenderTimeoutResolver } : {}),
+  });
+}
+
 function trustedCategory(context: KilnToolContext): AssetCategory | undefined {
   return context.intent?.category ?? context.category;
 }
@@ -220,7 +246,7 @@ async function renderDerivativeCell(
     const ported = await captureViewPngsViaPort(
       context.viewRenderPort,
       derivativeGlb,
-      context.viewRenderTimeoutMs ?? DEFAULT_INLOOP_VIEW_RENDER_TIMEOUT_MS,
+      resolveInLoopViewRenderTimeoutMs(context, 'derivative-cell'),
       [input.view.dir],
       input.size,
     );
@@ -765,7 +791,7 @@ async function runRenderViews(
       const ported = await captureViewsViaPort(
         context.viewRenderPort,
         rendered.bytes,
-        context.viewRenderTimeoutMs ?? DEFAULT_INLOOP_VIEW_RENDER_TIMEOUT_MS,
+        resolveInLoopViewRenderTimeoutMs(context, 'in-loop-grid'),
         input.capture,
       );
       if (ported.ok) {

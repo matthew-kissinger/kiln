@@ -244,6 +244,28 @@ describe('kiln_render in-loop GPU port routing', () => {
     expect(events[0]!.degradedReason).toContain('timed out after 25ms');
   });
 
+  test('samples warm-up and remaining budget for each in-loop request', async () => {
+    const requests: string[] = [];
+    const def = createKilnRenderViewsDef({
+      viewRenderPort: () => new Promise(() => {}),
+      viewRenderTimeoutMs: 25,
+      viewRenderTimeoutContext: () => ({
+        warmUpState: 'ready',
+        remainingGenerationBudgetMs: 13,
+        rendererDeadlineMs: 20,
+      }),
+      viewRenderTimeoutResolver: (context) => {
+        requests.push(context.requestKind);
+        return 19;
+      },
+    });
+    const out = (await def.run({ code: TEXTURED_CODE })) as KilnRenderViewsResult;
+
+    expect(out.ok).toBe(true);
+    expect(out.viewFidelity?.degradeReason).toContain('timed out after 13ms');
+    expect(requests).toEqual(['in-loop-grid']);
+  });
+
   test('an onViewsRendered callback that throws does not fail the render', async () => {
     const context: KilnToolContext = {
       onViewsRendered: () => {

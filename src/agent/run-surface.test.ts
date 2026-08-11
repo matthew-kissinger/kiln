@@ -104,6 +104,7 @@ describe('buildAgentTools', () => {
 
   test('threads the host render port, its short deadline, and tally callback into unified kiln_render', async () => {
     const events: InLoopViewRender[] = [];
+    const timeoutRequests: string[] = [];
     let portCalls = 0;
     const context: KilnToolContext = {
       viewRenderPort: () => {
@@ -111,6 +112,15 @@ describe('buildAgentTools', () => {
         return new Promise(() => {});
       },
       viewRenderTimeoutMs: 5,
+      viewRenderTimeoutContext: () => ({
+        warmUpState: 'pending',
+        remainingGenerationBudgetMs: 9,
+        rendererDeadlineMs: 8,
+      }),
+      viewRenderTimeoutResolver: (request) => {
+        timeoutRequests.push(request.requestKind);
+        return 7;
+      },
       onViewsRendered: (event) => events.push(event),
     };
     const tools = buildAgentTools('unified', context, freshSinks());
@@ -120,10 +130,11 @@ describe('buildAgentTools', () => {
 
     expect(Array.isArray(rendered)).toBe(true);
     expect(portCalls).toBe(1);
+    expect(timeoutRequests).toEqual(['in-loop-grid']);
     expect(events).toHaveLength(1);
     expect(events[0]?.neededPbr).toBe(true);
     expect(events[0]?.degraded).toBe(true);
-    expect(events[0]?.degradedReason).toContain('timed out after 5ms');
+    expect(events[0]?.degradedReason).toContain('timed out after 7ms');
   });
 
   test('threads a host visual observer into unified kiln_render without returning pixels', async () => {

@@ -36,6 +36,11 @@ import {
 } from './providers';
 import type { EditRecord } from './tools';
 import type { AgentUsage } from './hooks';
+import {
+  resolveViewRenderTimeoutMs,
+  type ViewRenderTimeoutContextProvider,
+  type ViewRenderTimeoutResolver,
+} from './view-render-timeout';
 
 /**
  * The hardcoded default Kiln agent model — the verified standout for GLB codegen.
@@ -87,6 +92,10 @@ export interface GenerateKilnAssetOptions {
   viewRenderPort?: PbrRenderPort;
   /** Deadline for one `viewRenderPort` call in ms. Default 8000. */
   viewRenderTimeoutMs?: number;
+  /** Dynamic host warm-up/deadline/budget state, sampled for the final request. */
+  viewRenderTimeoutContext?: ViewRenderTimeoutContextProvider;
+  /** Host policy for deriving the final request deadline from that state. */
+  viewRenderTimeoutResolver?: ViewRenderTimeoutResolver;
   /** Style anchor: a complete Kiln program rendered as "## Reference Asset" for
    *  FRESH generation (ignored on refine). ~5-15k input tokens/run, mostly
    *  absorbed by prompt caching when reused across a batch. */
@@ -477,7 +486,17 @@ export async function generateKilnAsset(
       const port = await captureViewsViaPort(
         opts.viewRenderPort,
         render.glb,
-        opts.viewRenderTimeoutMs ?? DEFAULT_VIEW_RENDER_TIMEOUT_MS,
+        resolveViewRenderTimeoutMs({
+          requestKind: 'final-grid',
+          defaultTimeoutMs: DEFAULT_VIEW_RENDER_TIMEOUT_MS,
+          ...(opts.viewRenderTimeoutMs !== undefined
+            ? { timeoutMs: opts.viewRenderTimeoutMs }
+            : {}),
+          ...(opts.viewRenderTimeoutContext
+            ? { contextProvider: opts.viewRenderTimeoutContext }
+            : {}),
+          ...(opts.viewRenderTimeoutResolver ? { resolver: opts.viewRenderTimeoutResolver } : {}),
+        }),
         capture,
       );
       if (port.ok) {
