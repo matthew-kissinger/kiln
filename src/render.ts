@@ -1367,16 +1367,24 @@ export async function renderSceneToGLB(
  *
  * Pure function: no file I/O, no globals, no WebGL.
  */
-export async function renderGLB(
+export interface RenderGlbOptions {
+  optimize?: OptimizeMode;
+  instance?: InstanceMode;
+  intent?: AssetIntentV1;
+  category?: AssetCategory;
+  /** Trusted evaluator dependency; never derived from generated code. */
+  textureResolver?: TextureResolver;
+}
+
+/**
+ * Trusted in-process execute/export implementation.
+ *
+ * Hosts should normally call {@link renderGLB}. The subprocess evaluator calls
+ * this function directly to prevent recursive process creation.
+ */
+export async function renderGLBInProcess(
   code: string,
-  opts: {
-    optimize?: OptimizeMode;
-    instance?: InstanceMode;
-    intent?: AssetIntentV1;
-    category?: AssetCategory;
-    /** Trusted evaluator dependency; never derived from generated code. */
-    textureResolver?: TextureResolver;
-  } = {},
+  opts: RenderGlbOptions = {},
 ): Promise<RenderResult> {
   const { meta, root, clips, primitiveUsage } = await executeKilnCode(code, {
     textureResolver: opts.textureResolver ?? DEFAULT_TEXTURE_RESOLVER,
@@ -1424,6 +1432,31 @@ export async function renderGLB(
     ...(scene.bakedTextures ? { bakedTextures: scene.bakedTextures } : {}),
     integrationManifest: scene.integrationManifest,
   };
+}
+
+export type EvaluatorMode = 'in-process' | 'subprocess';
+
+/** Resolve the trusted host evaluator flag. Unknown values fail closed. */
+export function resolveEvaluatorMode(
+  env: Record<string, string | undefined> = process.env,
+): EvaluatorMode {
+  const value = env['KILN_EVALUATOR_MODE'];
+  if (value === undefined || value === '' || value === 'in-process') return 'in-process';
+  if (value === 'subprocess') return 'subprocess';
+  throw new Error('Invalid KILN_EVALUATOR_MODE.');
+}
+
+/**
+ * Execute Kiln code and serialize it to GLB.
+ *
+ * Subprocess containment is disabled by default and selected only by the
+ * trusted host flag. A subprocess error is terminal; this boundary never
+ * falls back to unsafe in-process execution.
+ */
+export async function renderGLB(code: string, opts: RenderGlbOptions = {}): Promise<RenderResult> {
+  if (resolveEvaluatorMode() === 'in-process') return renderGLBInProcess(code, opts);
+  const { renderGLBViaSubprocess } = await import('./evaluator/subprocess');
+  return renderGLBViaSubprocess(code, opts);
 }
 
 /**
