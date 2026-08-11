@@ -44,6 +44,7 @@ describe('subprocess evaluator scaffold', () => {
   test('is disabled by default and rejects misspelled modes', () => {
     expect(resolveEvaluatorMode({})).toBe('in-process');
     expect(resolveEvaluatorMode({ KILN_EVALUATOR_MODE: 'subprocess' })).toBe('subprocess');
+    expect(resolveEvaluatorMode({ KILN_EVALUATOR_MODE: 'isolated' })).toBe('isolated');
     expect(() => resolveEvaluatorMode({ KILN_EVALUATOR_MODE: 'subproces' })).toThrow(
       'Invalid KILN_EVALUATOR_MODE',
     );

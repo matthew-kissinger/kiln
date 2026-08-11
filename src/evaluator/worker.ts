@@ -4,6 +4,7 @@ import { renderGLBInProcess } from '../render';
 import {
   decodeEvaluatorRequestV1,
   encodeRenderResultV1,
+  evaluatorOutcomeMessage,
   EVALUATOR_RESULT_VERSION,
   MAX_EVALUATOR_REQUEST_BYTES,
   type EvaluatorOutcomeCode,
@@ -30,7 +31,7 @@ function sanitizedFailure(requestId: string, error: unknown): WireEvaluatorResul
       ok: false,
       error: {
         code: 'QA_BLOCKED',
-        message: error.message,
+        message: evaluatorOutcomeMessage('QA_BLOCKED'),
         qa: {
           report: error.report,
           stage: error.stage,
@@ -49,10 +50,7 @@ function sanitizedFailure(requestId: string, error: unknown): WireEvaluatorResul
     ok: false,
     error: {
       code,
-      message:
-        code === 'OUTPUT_LIMIT_EXCEEDED'
-          ? 'Evaluator output limit exceeded.'
-          : 'Generated asset execution was rejected.',
+      message: evaluatorOutcomeMessage(code),
     },
   };
 }
@@ -74,7 +72,7 @@ try {
     version: EVALUATOR_RESULT_VERSION,
     requestId: 'invalid',
     ok: false,
-    error: { code: 'INPUT_INVALID', message: 'Evaluator request was invalid.' },
+    error: { code: 'INPUT_INVALID', message: evaluatorOutcomeMessage('INPUT_INVALID') },
   };
 }
 

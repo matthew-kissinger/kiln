@@ -15,8 +15,24 @@ export type EvaluatorOutcomeCode =
   | 'QA_BLOCKED'
   | 'DEADLINE_EXCEEDED'
   | 'OUTPUT_LIMIT_EXCEEDED'
+  | 'ISOLATION_UNAVAILABLE'
   | 'WORKER_FAILED'
   | 'PROTOCOL_ERROR';
+
+const EVALUATOR_OUTCOME_MESSAGES: Record<EvaluatorOutcomeCode, string> = {
+  INPUT_INVALID: 'Evaluator request was invalid.',
+  EXECUTION_REJECTED: 'Generated asset execution was rejected.',
+  QA_BLOCKED: 'Generated asset did not pass quality checks.',
+  DEADLINE_EXCEEDED: 'Evaluator deadline exceeded.',
+  OUTPUT_LIMIT_EXCEEDED: 'Evaluator output limit exceeded.',
+  ISOLATION_UNAVAILABLE: 'Isolated evaluator is unavailable.',
+  WORKER_FAILED: 'Evaluator worker failed.',
+  PROTOCOL_ERROR: 'Evaluator returned invalid data.',
+};
+
+export function evaluatorOutcomeMessage(code: EvaluatorOutcomeCode): string {
+  return EVALUATOR_OUTCOME_MESSAGES[code];
+}
 
 export interface EvaluatorRequestV1 {
   version: typeof EVALUATOR_REQUEST_VERSION;
@@ -195,12 +211,14 @@ export function decodeEvaluatorResultV1(json: string, maxGlbBytes: number): Eval
       'QA_BLOCKED',
       'DEADLINE_EXCEEDED',
       'OUTPUT_LIMIT_EXCEEDED',
+      'ISOLATION_UNAVAILABLE',
       'WORKER_FAILED',
       'PROTOCOL_ERROR',
     ];
     if (
       !codes.includes(value.error.code as EvaluatorOutcomeCode) ||
-      typeof value.error.message !== 'string'
+      typeof value.error.message !== 'string' ||
+      value.error.message !== evaluatorOutcomeMessage(value.error.code as EvaluatorOutcomeCode)
     ) {
       return fail('result');
     }

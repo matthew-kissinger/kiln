@@ -1,9 +1,10 @@
-import { spawn } from 'node:child_process';
+import { spawn, type SpawnOptions } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
 import type { RenderGlbOptions, RenderResult } from '../render';
 import { AssetQaBlockedError } from '../qa/run';
 import {
   decodeEvaluatorResultV1,
+  evaluatorOutcomeMessage,
   EVALUATOR_REQUEST_VERSION,
   type EvaluatorOutcomeCode,
   type EvaluatorRequestV1,
@@ -19,6 +20,13 @@ export interface EvaluatorSubprocessControls {
   deadlineMs?: number;
   maxGlbBytes?: number;
   maxResponseBytes?: number;
+}
+
+export interface EvaluatorProcessLaunch {
+  command: string;
+  args: string[];
+  env: NodeJS.ProcessEnv;
+  detached?: boolean;
 }
 
 export class EvaluatorSubprocessError extends Error {
@@ -49,10 +57,21 @@ function boundedInteger(value: number | undefined, fallback: number, max: number
   return resolved;
 }
 
-export async function renderGLBViaSubprocess(
+function terminateProcess(child: ReturnType<typeof spawn>, detached: boolean): void {
+  if (!child.pid || child.killed) return;
+  try {
+    if (detached && process.platform !== 'win32') process.kill(-child.pid, 'SIGKILL');
+    else child.kill('SIGKILL');
+  } catch (error) {
+    if ((error as NodeJS.ErrnoException).code !== 'ESRCH') throw error;
+  }
+}
+
+export async function renderGLBViaProcessLaunch(
   code: string,
   options: RenderGlbOptions = {},
   controls: EvaluatorSubprocessControls = {},
+  launch?: EvaluatorProcessLaunch,
 ): Promise<RenderResult> {
   if (options.textureResolver) {
     throw new EvaluatorSubprocessError(
@@ -84,17 +103,25 @@ export async function renderGLBViaSubprocess(
   }
 
   const workerPath = fileURLToPath(new URL('./worker.ts', import.meta.url));
-  const args = process.versions.bun ? [workerPath] : ['--import', 'tsx', workerPath];
+  const defaultLaunch: EvaluatorProcessLaunch = {
+    command: process.execPath,
+    args: process.versions.bun ? [workerPath] : ['--import', 'tsx', workerPath],
+    env: sanitizedEvaluatorEnv(),
+  };
+  const resolvedLaunch = launch ?? defaultLaunch;
+  const detached = resolvedLaunch.detached === true;
 
   return await new Promise<RenderResult>((resolve, reject) => {
-    const child = spawn(process.execPath, args, {
-      env: sanitizedEvaluatorEnv(),
+    const spawnOptions: SpawnOptions = {
+      env: resolvedLaunch.env,
       windowsHide: true,
       stdio: ['pipe', 'ignore', 'pipe', 'pipe'],
-    });
+      ...(detached ? { detached: true } : {}),
+    };
+    const child = spawn(resolvedLaunch.command, resolvedLaunch.args, spawnOptions);
     const protocol = child.stdio[3];
     if (!protocol) {
-      child.kill('SIGKILL');
+      terminateProcess(child, detached);
       reject(new EvaluatorSubprocessError('WORKER_FAILED', 'Evaluator worker did not start.'));
       return;
     }
@@ -110,14 +137,14 @@ export async function renderGLBViaSubprocess(
       else resolve(result as RenderResult);
     };
     const timer = setTimeout(() => {
-      child.kill('SIGKILL');
+      terminateProcess(child, detached);
       finish(new EvaluatorSubprocessError('DEADLINE_EXCEEDED', 'Evaluator deadline exceeded.'));
     }, deadlineMs);
 
     protocol.on('data', (chunk: Buffer) => {
       responseBytes += chunk.byteLength;
       if (responseBytes > maxResponseBytes) {
-        child.kill('SIGKILL');
+        terminateProcess(child, detached);
         finish(
           new EvaluatorSubprocessError('OUTPUT_LIMIT_EXCEEDED', 'Evaluator output limit exceeded.'),
         );
@@ -150,7 +177,12 @@ export async function renderGLBViaSubprocess(
             );
             return;
           }
-          finish(new EvaluatorSubprocessError(result.error.code, result.error.message));
+          finish(
+            new EvaluatorSubprocessError(
+              result.error.code,
+              evaluatorOutcomeMessage(result.error.code),
+            ),
+          );
           return;
         }
         finish(undefined, result.render);
@@ -160,4 +192,12 @@ export async function renderGLBViaSubprocess(
     });
     child.stdin?.end(requestJson);
   });
+}
+
+export async function renderGLBViaSubprocess(
+  code: string,
+  options: RenderGlbOptions = {},
+  controls: EvaluatorSubprocessControls = {},
+): Promise<RenderResult> {
+  return renderGLBViaProcessLaunch(code, options, controls);
 }

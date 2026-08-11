@@ -72,4 +72,19 @@ describe('evaluator protocol v1', () => {
       'invalid evaluator result',
     );
   });
+
+  test('rejects worker-controlled error text even when the outcome code is valid', () => {
+    const failure = {
+      version: EVALUATOR_RESULT_VERSION,
+      requestId: 'render-1',
+      ok: false,
+      error: {
+        code: 'EXECUTION_REJECTED',
+        message: 'provider prompt /app/private.ts sk-not-a-real-secret-but-sensitive',
+      },
+    };
+    expect(() => decodeEvaluatorResultV1(JSON.stringify(failure), 1024)).toThrow(
+      'invalid evaluator result',
+    );
+  });
 });

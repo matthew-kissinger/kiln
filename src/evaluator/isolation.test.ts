@@ -1,0 +1,89 @@
+import { describe, expect, test } from 'bun:test';
+import { resolveEvaluatorMode } from '../render';
+import { EvaluatorSubprocessError } from './subprocess';
+import { isolatedEvaluatorLaunch } from './isolation';
+
+const PATHS = new Set([
+  '/usr',
+  '/lib',
+  '/app/node_modules',
+  '/usr/local/bin/bwrap',
+  '/usr/bin/setpriv',
+  '/usr/bin/prlimit',
+  '/usr/local/bin/node',
+  '/app/node_modules/@kiln/engine/src/evaluator/worker.ts',
+]);
+
+function launch() {
+  return isolatedEvaluatorLaunch('/app/node_modules/@kiln/engine/src/evaluator/worker.ts', {
+    platform: 'linux',
+    pathExists: (path) => PATHS.has(path),
+  });
+}
+
+describe('isolated evaluator process contract', () => {
+  test('selects isolated mode exactly and rejects near-miss flags', () => {
+    expect(resolveEvaluatorMode({ KILN_EVALUATOR_MODE: 'isolated' })).toBe('isolated');
+    expect(() => resolveEvaluatorMode({ KILN_EVALUATOR_MODE: 'isolate' })).toThrow(
+      'Invalid KILN_EVALUATOR_MODE',
+    );
+  });
+
+  test('drops privileges before a no-network, read-only namespace boundary', () => {
+    const spec = launch();
+    expect(spec.command).toBe('/usr/bin/setpriv');
+    expect(spec.detached).toBe(true);
+    expect(spec.env).toEqual({ NODE_ENV: 'production', NO_COLOR: '1' });
+    expect(spec.args.slice(0, 6)).toEqual([
+      '--no-new-privs',
+      '--inh-caps=-all',
+      '--ambient-caps=-all',
+      '--bounding-set=-all',
+      '--',
+      '/usr/local/bin/bwrap',
+    ]);
+    expect(spec.args).toContain('--unshare-all');
+    expect(spec.args).not.toContain('--share-net');
+    expect(spec.args).toContain('--disable-userns');
+    expect(spec.args).toContain('--cap-drop');
+    expect(spec.args).toContain('--clearenv');
+    expect(spec.args).toContain('--tmpfs');
+    expect(spec.args).toContain('--ro-bind');
+    expect(spec.args).toContain('--preserve-fds');
+    expect(spec.args).toContain('--cpu=65:65');
+    expect(spec.args).toContain('--as=6442450944:6442450944');
+    expect(spec.args).toContain('--nproc=64:64');
+    expect(spec.args).toContain('--max-old-space-size=512');
+    expect(spec.args).not.toContain('/app/agent-runtime');
+    expect(spec.args).not.toContain('/etc');
+  });
+
+  test('refuses non-Linux hosts, missing binaries, and workers outside installed dependencies', () => {
+    for (const invoke of [
+      () =>
+        isolatedEvaluatorLaunch('/app/node_modules/@kiln/engine/src/evaluator/worker.ts', {
+          platform: 'win32',
+          pathExists: () => true,
+        }),
+      () =>
+        isolatedEvaluatorLaunch('/app/node_modules/@kiln/engine/src/evaluator/worker.ts', {
+          platform: 'linux',
+          pathExists: () => false,
+        }),
+      () =>
+        isolatedEvaluatorLaunch('/app/agent-runtime/src/server.ts', {
+          platform: 'linux',
+          pathExists: () => true,
+        }),
+    ]) {
+      try {
+        invoke();
+        throw new Error('expected isolation refusal');
+      } catch (error) {
+        expect(error).toBeInstanceOf(EvaluatorSubprocessError);
+        expect(error).toMatchObject({ code: 'ISOLATION_UNAVAILABLE' });
+        expect(String(error)).not.toContain('/app/agent-runtime/src/server.ts');
+      }
+    }
+  });
+});

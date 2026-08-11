@@ -1434,7 +1434,7 @@ export async function renderGLBInProcess(
   };
 }
 
-export type EvaluatorMode = 'in-process' | 'subprocess';
+export type EvaluatorMode = 'in-process' | 'subprocess' | 'isolated';
 
 /** Resolve the trusted host evaluator flag. Unknown values fail closed. */
 export function resolveEvaluatorMode(
@@ -1443,6 +1443,7 @@ export function resolveEvaluatorMode(
   const value = env['KILN_EVALUATOR_MODE'];
   if (value === undefined || value === '' || value === 'in-process') return 'in-process';
   if (value === 'subprocess') return 'subprocess';
+  if (value === 'isolated') return 'isolated';
   throw new Error('Invalid KILN_EVALUATOR_MODE.');
 }
 
@@ -1454,9 +1455,14 @@ export function resolveEvaluatorMode(
  * falls back to unsafe in-process execution.
  */
 export async function renderGLB(code: string, opts: RenderGlbOptions = {}): Promise<RenderResult> {
-  if (resolveEvaluatorMode() === 'in-process') return renderGLBInProcess(code, opts);
-  const { renderGLBViaSubprocess } = await import('./evaluator/subprocess');
-  return renderGLBViaSubprocess(code, opts);
+  const mode = resolveEvaluatorMode();
+  if (mode === 'in-process') return renderGLBInProcess(code, opts);
+  if (mode === 'subprocess') {
+    const { renderGLBViaSubprocess } = await import('./evaluator/subprocess');
+    return renderGLBViaSubprocess(code, opts);
+  }
+  const { renderGLBViaIsolatedEvaluator } = await import('./evaluator/isolation');
+  return renderGLBViaIsolatedEvaluator(code, opts);
 }
 
 /**
