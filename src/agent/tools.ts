@@ -691,7 +691,7 @@ export function makeKilnUnifiedTools(
 
   // Buffer-aware close-up: after kiln_render flags a suspect region, frame ONE
   // view to that part's bounds for detail a grid cell cannot show.
-  const inspectDef = createKilnInspectDef();
+  const inspectDef = createKilnInspectDef(opts);
   const inspectTool: Tool = tool({
     name: 'kiln_inspect',
     description: `${inspectDef.description} Operates on your current working buffer (no code argument).`,

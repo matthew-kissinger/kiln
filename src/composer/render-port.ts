@@ -93,6 +93,9 @@ export interface SceneRenderResult {
   degraded?: boolean;
   /** Stable, credential-free fallback explanation. Meaningful when degraded is true. */
   degradeReason?: string;
+  /** Material truth for ordinary Composer review pixels. The host owns scene
+   * GLB assembly and therefore binds receipts to its derivative bytes. */
+  viewFidelity?: DerivativeReviewFidelityV1;
   error?: string;
 }
 
@@ -109,6 +112,9 @@ export type DeliveredViewFidelity = 'full-material' | 'geometry-flat' | 'none';
 /** Stable machine-readable explanation for a degraded or unavailable view. */
 export type ViewFidelityReasonCode =
   | 'FULL_MATERIAL_RENDER_UNAVAILABLE'
+  | 'DERIVATIVE_GPU_FRAMING_UNSUPPORTED'
+  | 'DERIVATIVE_RECEIPT_UNAVAILABLE'
+  | 'DERIVATIVE_RECEIPT_INVALID'
   | 'GLB_FLAT_TEXTURE_SAMPLING_UNSUPPORTED'
   | 'GLB_FLAT_KTX2_SAMPLING_UNSUPPORTED'
   | 'GLB_FLAT_NON_TRIANGLE_PRIMITIVE_UNSUPPORTED'
@@ -137,6 +143,27 @@ export interface ViewFidelityV1 {
   degraded: boolean;
   degradeReason?: string;
   /** Stable codes for policy and telemetry; no credentials or provider details. */
+  reasonCodes?: ViewFidelityReasonCode[];
+}
+
+/** One purpose-built review GLB and the pixels derived from those exact bytes. */
+export interface DerivativeViewReceiptV1 extends ViewFidelityV1 {
+  /** Stable cell/frame identity within the review surface. */
+  derivativeLabel: string;
+  /** Derivative bytes are never the persisted/final artifact. */
+  exactArtifact: false;
+}
+
+/** Aggregate material-fidelity truth for a derivative review surface. */
+export interface DerivativeReviewFidelityV1 {
+  version: 'kiln.derivative-review-fidelity.v1';
+  requested: ViewFidelityPolicy;
+  delivered: DeliveredViewFidelity;
+  materialFaithful: boolean;
+  exactArtifact: false;
+  degraded: boolean;
+  /** One receipt per deterministic derivative GLB, in displayed order. */
+  receipts: DerivativeViewReceiptV1[];
   reasonCodes?: ViewFidelityReasonCode[];
 }
 
@@ -360,6 +387,12 @@ export interface PbrRenderResult {
   lightingPresetId?: string;
   /** One PNG per requested view direction, in request order. */
   viewsPng?: Uint8Array[];
+  /** Optional derivative-byte attestation. Required before a derivative review
+   * may claim materialFaithful:true; legacy contact sheets remain compatible. */
+  derivativeFidelity?: {
+    materialFaithful: true;
+    inputGlbSha256: `sha256:${string}`;
+  };
   /** The optional beauty shot. */
   beautyPng?: Uint8Array;
   /** Host-measured phase timings in milliseconds. */

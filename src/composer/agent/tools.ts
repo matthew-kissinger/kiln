@@ -32,7 +32,11 @@ import type {
   ScenePaintZoneSpec,
 } from '../model';
 import type { OverlapViolation } from '../overlap';
-import type { SceneRenderPort, SceneRenderResult } from '../render-port';
+import type {
+  DerivativeReviewFidelityV1,
+  SceneRenderPort,
+  SceneRenderResult,
+} from '../render-port';
 
 /**
  * A mutable sink the composer tools write into. Create one per run; after every
@@ -114,6 +118,38 @@ const paintShape = z.union([
 
 /** base64 PNG → the raw bytes an ImageBlock wants. */
 const png = (b64: string): Uint8Array => new Uint8Array(Buffer.from(b64, 'base64'));
+const SHA256 = /^sha256:[0-9a-f]{64}$/;
+
+function composerViewFidelity(res: SceneRenderResult): DerivativeReviewFidelityV1 {
+  const value = res.viewFidelity;
+  const valid =
+    value?.version === 'kiln.derivative-review-fidelity.v1' &&
+    value.exactArtifact === false &&
+    value.receipts.length > 0 &&
+    value.receipts.every(
+      (receipt) =>
+        receipt.exactArtifact === false &&
+        receipt.derivativeLabel.trim().length > 0 &&
+        SHA256.test(receipt.inputGlbSha256),
+    );
+  if (valid) {
+    return {
+      ...value,
+      exactArtifact: false,
+      receipts: value.receipts.map((receipt) => ({ ...receipt, exactArtifact: false })),
+    };
+  }
+  return {
+    version: 'kiln.derivative-review-fidelity.v1',
+    requested: 'full-preferred',
+    delivered: 'none',
+    materialFaithful: false,
+    exactArtifact: false,
+    degraded: true,
+    receipts: [],
+    reasonCodes: [value ? 'DERIVATIVE_RECEIPT_INVALID' : 'DERIVATIVE_RECEIPT_UNAVAILABLE'],
+  };
+}
 
 /** Turn a host render result into the tool-callback value: one ImageBlock per
  *  returned view (perCamera grid or single frame) + a JsonBlock of metadata, or a
@@ -131,11 +167,12 @@ function renderToCallback(res: SceneRenderResult): JSONValue {
   const json = {
     ok: true,
     views: frames.length,
+    viewFidelity: composerViewFidelity(res),
     ...(res.tris != null ? { tris: res.tris } : {}),
   };
   return [
     ...frames.map((b64) => new ImageBlock({ format: 'png', source: { bytes: png(b64) } })),
-    new JsonBlock({ json: json as JSONValue }),
+    new JsonBlock({ json: json as unknown as JSONValue }),
   ] as unknown as JSONValue;
 }
 

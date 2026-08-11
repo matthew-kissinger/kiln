@@ -21,6 +21,7 @@ import {
   type ViewSpec,
 } from './raster';
 import { encodePng } from './png';
+import { decodePng } from './png';
 import { compositeCellGrid } from './grid';
 import { annotateViewCell } from './annotate';
 import { resolveGridCapture, type CaptureConfig, type CaptureShape } from './capture';
@@ -333,6 +334,7 @@ export async function renderViewGrid(
     const cell = rasterizeView(root, views[vi]!.dir, {
       size,
       backfaceCull: opts.backfaceCull,
+      ...(opts.frameBounds ? { frameBounds: opts.frameBounds } : {}),
       ...(sceneBounds && zoom !== undefined
         ? { frameBounds: expandFrameBounds(sceneBounds, zoom) }
         : {}),
@@ -365,6 +367,41 @@ async function hashGlbViewInput(bytes: Uint8Array): Promise<`sha256:${string}`> 
   const copy = Uint8Array.from(bytes);
   const digest = new Uint8Array(await globalThis.crypto.subtle.digest('SHA-256', copy));
   return `sha256:${[...digest].map((value) => value.toString(16).padStart(2, '0')).join('')}`;
+}
+
+export interface GlbViewCellResult {
+  png: Buffer;
+  width: number;
+  height: number;
+  inputGlbSha256: `sha256:${string}`;
+  reasonCodes: GlbGeometryFlatReasonCode[];
+  meshCount: number;
+  instanceCount: number;
+}
+
+/** Render one unannotated geometry-flat cell from an immutable GLB snapshot. */
+export async function renderGlbViewCell(
+  bytes: Uint8Array,
+  view: ViewSpec,
+  options: RasterOptions = {},
+): Promise<GlbViewCellResult> {
+  const exactBytes = Uint8Array.from(bytes);
+  const loaded = await loadGlbGeometryFlatScene(exactBytes);
+  const size = options.size ?? 256;
+  const rgb = rasterizeView(loaded.root, view.dir, {
+    size,
+    ...(options.backfaceCull !== undefined ? { backfaceCull: options.backfaceCull } : {}),
+    ...(options.frameBounds ? { frameBounds: options.frameBounds } : {}),
+  });
+  return {
+    png: encodePng(rgb, size, size),
+    width: size,
+    height: size,
+    inputGlbSha256: await hashGlbViewInput(exactBytes),
+    reasonCodes: loaded.reasonCodes,
+    meshCount: loaded.meshCount,
+    instanceCount: loaded.instanceCount,
+  };
 }
 
 /** Render the geometry-flat contact sheet from exact final GLB bytes. */
@@ -457,7 +494,30 @@ export interface AnimationViewOptions extends RasterOptions {
   frames?: number;
   /** Return the frames as separate PNGs instead of one composite grid. Default false. */
   perFrame?: boolean;
+  /** Internal derivative renderer. Receives the already-posed scene and must
+   * render exactly one square cell without executing generated source. */
+  renderDerivativeCell?: DerivativeCellRenderer;
 }
+
+export interface DerivativeCellRenderInput {
+  root: unknown;
+  label: string;
+  view: ViewSpec;
+  size: number;
+  backfaceCull?: boolean;
+  frameBounds?: { min: [number, number, number]; max: [number, number, number] };
+  /** Stable reason to decline GPU when its auto-framing cannot honor this view. */
+  gpuUnsupportedReasonCode?: 'DERIVATIVE_GPU_FRAMING_UNSUPPORTED';
+}
+
+export interface DerivativeCellRenderResult {
+  png: Buffer;
+  receipt: import('../composer/render-port').DerivativeViewReceiptV1;
+}
+
+export type DerivativeCellRenderer = (
+  input: DerivativeCellRenderInput,
+) => Promise<DerivativeCellRenderResult>;
 
 export interface AnimationViewResult {
   ok: boolean;
@@ -479,6 +539,7 @@ export interface AnimationViewResult {
   /** Clip names available in the scene (set on a not-found error). */
   availableClips?: string[];
   error?: string;
+  derivativeReceipts?: import('../composer/render-port').DerivativeViewReceiptV1[];
 }
 
 /** Phase percentage label for frame i of n, e.g. "0%" … "100%". */
@@ -550,13 +611,34 @@ export async function renderClipAnimation(
   // Pass 2 — render + label each frame against the fixed framing.
   const labelScale = Math.max(2, Math.round(size / 80));
   const cells: Uint8Array[] = [];
+  const derivativeReceipts: import('../composer/render-port').DerivativeViewReceiptV1[] = [];
   for (let i = 0; i < times.length; i++) {
     poseSceneAtTime(root as never, prepared, times[i]!);
-    const cell = rasterizeView(root, cam.dir, {
-      size,
-      ...(opts.backfaceCull !== undefined ? { backfaceCull: opts.backfaceCull } : {}),
-      ...(frameBounds ? { frameBounds } : {}),
-    });
+    let cell: Uint8Array;
+    if (opts.renderDerivativeCell) {
+      const rendered = await opts.renderDerivativeCell({
+        root,
+        label: phaseLabel(i, times.length),
+        view: cam,
+        size,
+        ...(opts.backfaceCull !== undefined ? { backfaceCull: opts.backfaceCull } : {}),
+        ...(frameBounds ? { frameBounds } : {}),
+      });
+      const decoded = decodePng(rendered.png);
+      if (decoded.width !== size || decoded.height !== size) {
+        throw new Error(
+          `derivative animation cell must be ${size}x${size}; got ${decoded.width}x${decoded.height}`,
+        );
+      }
+      cell = decoded.rgb;
+      derivativeReceipts.push(rendered.receipt);
+    } else {
+      cell = rasterizeView(root, cam.dir, {
+        size,
+        ...(opts.backfaceCull !== undefined ? { backfaceCull: opts.backfaceCull } : {}),
+        ...(frameBounds ? { frameBounds } : {}),
+      });
+    }
     stampLabel(cell, size, size, labelScale, labelScale, phaseLabel(i, times.length), labelScale);
     cells.push(cell);
   }
@@ -569,6 +651,7 @@ export async function renderClipAnimation(
     frameTimes,
     duration: prepared.duration,
     ...(prepared.unresolved.length ? { unresolvedTracks: prepared.unresolved } : {}),
+    ...(derivativeReceipts.length ? { derivativeReceipts } : {}),
   };
 
   if (opts.perFrame) {
@@ -595,6 +678,7 @@ export interface InteriorGridResult extends ViewGridResult {
   roofsHidden: number;
   /** Near-wall subtree roots hidden for the eye-level cutaway (0 → not a room()). */
   wallsHidden: number;
+  derivativeReceipts?: import('../composer/render-port').DerivativeViewReceiptV1[];
 }
 
 export interface InteriorGridOptions extends RasterOptions {
@@ -602,6 +686,8 @@ export interface InteriorGridOptions extends RasterOptions {
    *  the roof semantically. Omit it for the ordinary path — role first, then a
    *  narrow historical-name fallback. */
   nodeName?: string;
+  /** Internal exact-derivative renderer; omitted preserves the historical CPU path. */
+  renderDerivativeCell?: DerivativeCellRenderer;
 }
 
 /** Outward face normals of room() walls, by lowercased name suffix (front faces +X). */
@@ -612,7 +698,7 @@ const ROOM_WALL_NORMALS: Array<{ suffix: string; n: [number, number, number] }> 
   { suffix: 'wallright', n: [0, 0, 1] },
 ];
 
-const INTERIOR_VIEWS: ViewSpec[] = [
+export const INTERIOR_VIEWS: ViewSpec[] = [
   { name: 'Floor plan', dir: [0, 1, 0.0001] }, // top-down, roof off
   { name: 'Dollhouse', dir: [0.7, 0.5, 0.7] }, // 3/4 cutaway, roof off
   { name: 'Eye-level', dir: [0.55, 0.35, 0.45] }, // low angle, roof + near walls off
@@ -655,6 +741,7 @@ export async function renderInteriorGrid(
 
   let wallsHidden = 0;
   const cells: Uint8Array[] = [];
+  const derivativeReceipts: import('../composer/render-port').DerivativeViewReceiptV1[] = [];
   for (const view of INTERIOR_VIEWS) {
     if (view.name === 'Eye-level') {
       // Cutaway: also remove the walls facing the camera so the eye looks past
@@ -668,7 +755,26 @@ export async function renderInteriorGrid(
         return false;
       });
     }
-    const cell = rasterizeView(root, view.dir, { size, backfaceCull: false });
+    let cell: Uint8Array;
+    if (opts.renderDerivativeCell) {
+      const rendered = await opts.renderDerivativeCell({
+        root,
+        label: view.name,
+        view,
+        size,
+        backfaceCull: false,
+      });
+      const decoded = decodePng(rendered.png);
+      if (decoded.width !== size || decoded.height !== size) {
+        throw new Error(
+          `derivative interior cell must be ${size}x${size}; got ${decoded.width}x${decoded.height}`,
+        );
+      }
+      cell = decoded.rgb;
+      derivativeReceipts.push(rendered.receipt);
+    } else {
+      cell = rasterizeView(root, view.dir, { size, backfaceCull: false });
+    }
     stampLabel(cell, size, size, labelScale, labelScale, view.name, labelScale);
     cells.push(cell);
   }
@@ -683,5 +789,6 @@ export async function renderInteriorGrid(
     views: INTERIOR_VIEWS.map((v) => v.name),
     roofsHidden,
     wallsHidden,
+    ...(derivativeReceipts.length ? { derivativeReceipts } : {}),
   };
 }

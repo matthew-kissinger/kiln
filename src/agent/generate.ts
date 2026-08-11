@@ -24,6 +24,7 @@ import {
   type ResolvedCapture,
 } from '../views/capture';
 import { compositeViewPngGrid } from '../views/grid';
+import { decodePng } from '../views/png';
 import type { AssetStyle } from '../prompt';
 import { createAssetIntentV1, type AssetCategory, type AssetIntentV1 } from '../contracts';
 import { runKilnAgent, type RefineMode, type KilnKnowhow, type KilnInputImage } from './run';
@@ -236,6 +237,91 @@ export type PortViewsOutcome =
     }
   | { ok: false; reason: string };
 
+export type PortViewPngsOutcome =
+  | {
+      ok: true;
+      pngs: Uint8Array[];
+      rendererId: string;
+      derivativeFidelityAttested: boolean;
+      inputGlbSha256?: `sha256:${string}`;
+    }
+  | { ok: false; reason: string };
+
+/**
+ * Lowest-level owner of the PBR-port deadline and reply validation. It accepts
+ * exact GLB bytes plus explicit view directions and returns unmodified square
+ * PNG cells. Contact sheets and derivative review surfaces both build on this
+ * function so timeout/error/shape policy cannot drift between them.
+ */
+export async function captureViewPngsViaPort(
+  port: PbrRenderPort,
+  glb: Buffer | Uint8Array,
+  timeoutMs: number,
+  viewDirs: readonly [number, number, number][],
+  size: number,
+): Promise<PortViewPngsOutcome> {
+  let timer: ReturnType<typeof setTimeout> | undefined;
+  try {
+    const requestGlb = Uint8Array.from(glb);
+    const inputGlbSha256 = await sha256Bytes(requestGlb);
+    const deadline = new Promise<never>((_, reject) => {
+      timer = setTimeout(
+        () => reject(new Error(`view render port timed out after ${timeoutMs}ms`)),
+        timeoutMs,
+      );
+    });
+    const result = await Promise.race([
+      port({
+        glb: requestGlb,
+        viewDirs: viewDirs.map((dir) => [...dir] as [number, number, number]),
+        size,
+      }),
+      deadline,
+    ]);
+    if (!result?.ok) {
+      return { ok: false, reason: result?.error ?? 'view render port returned ok: false' };
+    }
+    if (typeof result.rendererId !== 'string' || !result.rendererId.trim()) {
+      return { ok: false, reason: 'view render port returned no rendererId' };
+    }
+    if (!result.viewsPng || result.viewsPng.length !== viewDirs.length) {
+      return {
+        ok: false,
+        reason: `view render port returned ${result.viewsPng?.length ?? 0} view PNGs, expected ${viewDirs.length}`,
+      };
+    }
+    if (result.derivativeFidelity && result.derivativeFidelity.inputGlbSha256 !== inputGlbSha256) {
+      return {
+        ok: false,
+        reason: `view render port derivative receipt hash mismatch (${result.derivativeFidelity.inputGlbSha256} != ${inputGlbSha256})`,
+      };
+    }
+    // Decode here even though callers may decode again for annotation. This is
+    // the transport trust boundary: an ok:true reply with malformed/non-square
+    // pixels is a degrade, never a successful material attestation.
+    for (const png of result.viewsPng) {
+      const decoded = decodePng(png);
+      if (decoded.width !== decoded.height) {
+        return {
+          ok: false,
+          reason: `view render port returned non-square ${decoded.width}x${decoded.height} PNG`,
+        };
+      }
+    }
+    return {
+      ok: true,
+      pngs: result.viewsPng.map((png) => Uint8Array.from(png)),
+      rendererId: result.rendererId,
+      derivativeFidelityAttested: result.derivativeFidelity?.materialFaithful === true,
+      ...(result.derivativeFidelity ? { inputGlbSha256 } : {}),
+    };
+  } catch (err) {
+    return { ok: false, reason: err instanceof Error ? err.message : String(err) };
+  } finally {
+    if (timer !== undefined) clearTimeout(timer);
+  }
+}
+
 /**
  * Call the host view-render port with the ALREADY-PRODUCED GLB bytes and
  * composite its per-view PNGs into the same grid the CPU path emits.
@@ -282,46 +368,22 @@ export async function captureViewsViaPort(
     };
   }
 
-  let timer: ReturnType<typeof setTimeout> | undefined;
+  const result = await captureViewPngsViaPort(
+    port,
+    glb,
+    timeoutMs,
+    views.map((view) => view.dir),
+    384,
+  );
+  if (!result.ok) return result;
   try {
-    const deadline = new Promise<never>((_, reject) => {
-      timer = setTimeout(
-        () => reject(new Error(`view render port timed out after ${timeoutMs}ms`)),
-        timeoutMs,
-      );
-    });
-    const result = await Promise.race([
-      port({
-        // Copy, not alias: a buggy port implementation must not be able to
-        // mutate the render.glb bytes returned as the generation artifact.
-        glb: Uint8Array.from(glb),
-        viewDirs: views.map((v) => [...v.dir] as [number, number, number]),
-        size: 384,
-      }),
-      deadline,
-    ]);
-    if (!result?.ok) {
-      return { ok: false, reason: result?.error ?? 'view render port returned ok: false' };
-    }
-    if (typeof result.rendererId !== 'string' || !result.rendererId.trim()) {
-      return { ok: false, reason: 'view render port returned no rendererId' };
-    }
-    // Count must equal the cells that were REQUESTED — not a hardcoded six.
-    // A host that truncates or pads the view list produces a differently-shaped
-    // sheet than the caller asked for, which is a degrade, not a success.
-    if (!result.viewsPng || result.viewsPng.length !== views.length) {
-      return {
-        ok: false,
-        reason: `view render port returned ${result.viewsPng?.length ?? 0} view PNGs, expected ${views.length}`,
-      };
-    }
     // Annotated with the SAME cell labels + gnomon the CPU path stamps. A host
     // returns pixels and knows nothing of the Kiln camera vocabulary, so
     // without this the GPU sheet arrives unlabelled and the model quietly loses
     // its orientation cues on the one path that cannot tell it happened.
     // Degrade stays reportable through `renderDegraded` / `viewsRendererId`,
     // which is a structured field rather than a visual tell.
-    const grid = compositeViewPngGrid(result.viewsPng, resolved.cols, views);
+    const grid = compositeViewPngGrid(result.pngs, resolved.cols, views);
     return {
       ok: true,
       png: grid.png,
@@ -332,8 +394,6 @@ export async function captureViewsViaPort(
     };
   } catch (err) {
     return { ok: false, reason: err instanceof Error ? err.message : String(err) };
-  } finally {
-    if (timer !== undefined) clearTimeout(timer);
   }
 }
 
