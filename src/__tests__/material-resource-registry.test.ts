@@ -224,7 +224,7 @@ describe('what the model is told it can bind', () => {
     // while nothing reported any, so the only way to use a slot was to guess an
     // ID and be rejected by validation.
     expect(empty).toContain('none are available in this');
-    expect(empty).toContain('proceduralTexture()');
+    expect(empty).toContain('proceduralTexture({ schemaVersion: 2, ... })');
     // It still names the shape of the IDs, but no concrete one — there is
     // nothing to bind, and a guessable example would be guessed.
     expect(empty).not.toMatch(/kiln\.texture\.[a-z]/);

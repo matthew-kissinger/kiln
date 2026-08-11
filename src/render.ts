@@ -804,6 +804,8 @@ function bridgeAnimations(
 
 export interface RenderResult {
   glb: Buffer;
+  /** SHA-256 identity of the exact returned GLB bytes. */
+  artifactGlbSha256: `sha256:${string}`;
   tris: number;
   meta: KilnCodeMeta;
   warnings: string[];
@@ -812,6 +814,8 @@ export interface RenderResult {
   materialMetrics?: MaterialMetricsV1;
   materialRecipeApplications?: MaterialRecipeApplicationProvenanceV1[];
   materialResourceProvenance?: MaterialResourceProvenanceV1[];
+  /** Textures baked into the returned GLB, including bounded procedural lineage. */
+  bakedTextures?: BakedTextureProvenanceV1[];
   integrationManifest: IntegrationManifestV1;
 }
 
@@ -869,6 +873,8 @@ export interface InstancingSummary {
 export interface RenderSceneResult {
   /** Binary GLB bytes, platform-agnostic (Buffer-compatible in Node). */
   bytes: Uint8Array;
+  /** SHA-256 identity of `bytes`. */
+  artifactGlbSha256: `sha256:${string}`;
   tris: number;
   warnings: string[];
   /** Official Khronos report for these exact post-transform bytes. */
@@ -1253,6 +1259,11 @@ export async function renderSceneToGLB(
   const io = engineIO();
   ensureDefaultScene(doc);
   const bytes = await io.writeBinary(doc);
+  const artifactGlbSha256 = `sha256:${await sha256Hex(bytes)}` as const;
+  const boundBakedTextures = bakedTextures.map((entry) => ({
+    ...entry,
+    artifactGlbSha256,
+  }));
   const gltfValidation = await validateFinalGlbBytes(bytes);
   const finalGltfReport = appendFinalGltfQa(intent, sceneQaReport, gltfValidation);
   const runtimeQaReport = appendRuntimeCostQa(
@@ -1312,6 +1323,7 @@ export async function renderSceneToGLB(
 
   return {
     bytes,
+    artifactGlbSha256,
     tris,
     warnings,
     gltfValidation,
@@ -1324,7 +1336,7 @@ export async function renderSceneToGLB(
     ...(materialMetrics ? { materialMetrics } : {}),
     ...(materialRecipeApplications.length ? { materialRecipeApplications } : {}),
     ...(materialResourceProvenance.length ? { materialResourceProvenance } : {}),
-    ...(bakedTextures.length ? { bakedTextures } : {}),
+    ...(boundBakedTextures.length ? { bakedTextures: boundBakedTextures } : {}),
     integrationManifest,
   };
 }
@@ -1362,6 +1374,7 @@ export async function renderGLB(
   const { category: modelCategory, ...modelMeta } = meta;
   return {
     glb: Buffer.from(scene.bytes),
+    artifactGlbSha256: scene.artifactGlbSha256,
     tris: scene.tris,
     meta: {
       ...modelMeta,
@@ -1387,6 +1400,7 @@ export async function renderGLB(
     ...(scene.materialResourceProvenance
       ? { materialResourceProvenance: scene.materialResourceProvenance }
       : {}),
+    ...(scene.bakedTextures ? { bakedTextures: scene.bakedTextures } : {}),
     integrationManifest: scene.integrationManifest,
   };
 }

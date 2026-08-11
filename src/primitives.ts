@@ -25,6 +25,7 @@ import * as solids from './solids';
 import * as proceduralTextures from './procedural-texture';
 import * as textures from './textures';
 import { materialRecipe } from './material-recipe-runtime';
+import { compilePortableMaterialSpecV2 } from './portable-material-runtime';
 import { createVehicleFrame, createWheelAssembly, createWheelGeometrySet } from './vehicle';
 import {
   stampSemanticMetadataV1,
@@ -62,6 +63,31 @@ export {
 export { materialRecipe } from './material-recipe-runtime';
 export type { ApplyMaterialRecipeOptions } from './material-recipe-runtime';
 export type { MaterialRecipeId, MaterialRecipeOverridesV1 } from './material-recipes';
+export { compilePortableMaterialSpecV2 } from './portable-material-runtime';
+export {
+  MAX_PORTABLE_MATERIAL_TEXELS,
+  MAX_PORTABLE_MATERIAL_TEXTURES,
+  MAX_PROCEDURAL_LAYERS,
+  MAX_PROCEDURAL_SIZE,
+  PORTABLE_MATERIAL_SPEC_VERSION,
+  PROCEDURAL_TEXTURE_SPEC_VERSION,
+  ProceduralTextureError,
+  canonicalProceduralTextureJsonV2,
+  canonicalizePortableMaterialSpecV2,
+  canonicalizeProceduralTextureSpecV2,
+  compileProceduralTextureSpecV2,
+  hashProceduralTextureSpecV2,
+  migrateProceduralTextureSpecV1,
+} from './procedural-texture';
+export type {
+  CanonicalPortableMaterialSpecV2,
+  CanonicalProceduralTextureSpecV2,
+  PortableMaterialSpecV2,
+  ProceduralLayer,
+  ProceduralTextureSpec,
+  ProceduralTextureSpecV1,
+  ProceduralTextureSpecV2,
+} from './procedural-texture';
 export type {
   VehicleFrameOptions,
   VehicleFrameResult,
@@ -1629,6 +1655,10 @@ export function buildSandboxGlobals(usage?: Record<string, number>): Record<stri
     createStairs: wrap('createStairs', createStairs),
     gameMaterial: wrap('gameMaterial', gameMaterial),
     materialRecipe: wrap('materialRecipe', materialRecipe),
+    compilePortableMaterialSpecV2: wrap(
+      'compilePortableMaterialSpecV2',
+      compilePortableMaterialSpecV2,
+    ),
     basicMaterial: wrap('basicMaterial', basicMaterial),
     glassMaterial: wrap('glassMaterial', glassMaterial),
     lambertMaterial: wrap('lambertMaterial', lambertMaterial),

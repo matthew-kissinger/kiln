@@ -15,7 +15,7 @@
  * `@strands-agents/sdk` dependency never enters the browser/editor bundle graph.
  */
 import { renderGLB, type KilnCodeMeta, type RenderResult } from '../render';
-import type { PbrRenderPort } from '../composer/render-port';
+import type { PbrRenderPort, ViewFidelityV1 } from '../composer/render-port';
 import {
   CaptureConfigError,
   resolveGridCapture,
@@ -99,6 +99,8 @@ export interface GenerateKilnAssetResult {
   code: string;
   /** Rendered GLB, ready to write to disk. */
   glb: Buffer;
+  /** SHA-256 identity of the exact returned GLB bytes. */
+  artifactGlbSha256: `sha256:${string}`;
   /** Extracted from the code's `const meta = {...}` block, plus `tris` + `primitiveUsage`. */
   meta: KilnCodeMeta;
   /** Non-fatal issues (structural warnings, animation target missing). */
@@ -136,10 +138,13 @@ export interface GenerateKilnAssetResult {
   renderDegraded?: boolean;
   /** Why the port was bypassed (rejection, ok:false, timeout, bad PNGs). */
   renderDegradedReason?: string;
+  /** Material fidelity and exact-byte relationship of the final view sheet. */
+  viewsFidelity?: ViewFidelityV1;
   /** Automatic trusted character skeleton/motion captures, when applicable. */
   diagnosticViews?: NonNullable<RenderResult['diagnosticViews']>;
   materialRecipeApplications?: NonNullable<RenderResult['materialRecipeApplications']>;
   materialResourceProvenance?: NonNullable<RenderResult['materialResourceProvenance']>;
+  bakedTextures?: NonNullable<RenderResult['bakedTextures']>;
   materialMetrics?: NonNullable<RenderResult['materialMetrics']>;
   integrationManifest: RenderResult['integrationManifest'];
 }
@@ -209,6 +214,13 @@ export async function generateKilnCodeAgent(opts: {
 }
 
 export const DEFAULT_VIEW_RENDER_TIMEOUT_MS = 8000;
+
+async function sha256Bytes(bytes: Uint8Array): Promise<`sha256:${string}`> {
+  const input = new Uint8Array(bytes.byteLength);
+  input.set(bytes);
+  const digest = new Uint8Array(await globalThis.crypto.subtle.digest('SHA-256', input));
+  return `sha256:${[...digest].map((byte) => byte.toString(16).padStart(2, '0')).join('')}`;
+}
 
 export type PortViewsOutcome =
   | {
@@ -376,8 +388,10 @@ export async function generateKilnAsset(
   let viewsRendererId: string | undefined;
   let renderDegraded: boolean | undefined;
   let renderDegradedReason: string | undefined;
+  let viewsFidelity: ViewFidelityV1 | undefined;
   const captureWarnings: string[] = [];
   if (opts.captureViews) {
+    const inputGlbSha256 = await sha256Bytes(render.glb);
     // T3.3: validate the requested layout ONCE, up front. A malformed config is
     // a caller bug, not a render hazard, so it must not reach two producers and
     // be reported differently by each. It also must not fail the run: the views
@@ -411,6 +425,16 @@ export async function generateKilnAsset(
         viewsCapture = port.capture;
         viewsRendererId = port.rendererId;
         renderDegraded = false;
+        viewsFidelity = {
+          version: 'kiln.view-fidelity.v1',
+          requested: 'full-preferred',
+          delivered: 'full-material',
+          materialFaithful: true,
+          exactArtifact: true,
+          rendererId: port.rendererId,
+          inputGlbSha256,
+          degraded: false,
+        };
       } else {
         renderDegraded = true;
         renderDegradedReason = port.reason;
@@ -430,9 +454,36 @@ export async function generateKilnAsset(
         // Honest producer provenance, but only on the port-enabled path — the
         // port-absent path stays byte-identical to the historical result shape.
         if (opts.viewRenderPort) viewsRendererId = CPU_RASTER_RENDERER_ID;
+        const degradeReason =
+          renderDegradedReason ?? 'material-faithful view render port unavailable';
+        viewsFidelity = {
+          version: 'kiln.view-fidelity.v1',
+          requested: 'full-preferred',
+          delivered: 'geometry-flat',
+          materialFaithful: false,
+          // The current CPU path re-executes source. R2.11 replaces it with a
+          // GLB-native fallback; until then it cannot claim exact-artifact.
+          exactArtifact: false,
+          rendererId: CPU_RASTER_RENDERER_ID,
+          inputGlbSha256,
+          degraded: true,
+          degradeReason,
+        };
       } catch {
         views = undefined;
         viewsCapture = undefined;
+        viewsFidelity = {
+          version: 'kiln.view-fidelity.v1',
+          requested: 'full-preferred',
+          delivered: 'none',
+          materialFaithful: false,
+          exactArtifact: false,
+          rendererId: 'none',
+          inputGlbSha256,
+          degraded: true,
+          degradeReason:
+            renderDegradedReason ?? 'material-faithful and geometry fallback renders unavailable',
+        };
       }
     }
   }
@@ -449,6 +500,7 @@ export async function generateKilnAsset(
   return {
     code: agent.code,
     glb: render.glb,
+    artifactGlbSha256: render.artifactGlbSha256,
     meta: render.meta,
     warnings,
     toolCalls: agent.toolCalls,
@@ -465,6 +517,7 @@ export async function generateKilnAsset(
     ...(viewsRendererId ? { viewsRendererId } : {}),
     ...(renderDegraded !== undefined ? { renderDegraded } : {}),
     ...(renderDegradedReason ? { renderDegradedReason } : {}),
+    ...(viewsFidelity ? { viewsFidelity } : {}),
     ...(render.diagnosticViews ? { diagnosticViews: render.diagnosticViews } : {}),
     ...(render.materialRecipeApplications
       ? { materialRecipeApplications: render.materialRecipeApplications }
@@ -472,6 +525,7 @@ export async function generateKilnAsset(
     ...(render.materialResourceProvenance
       ? { materialResourceProvenance: render.materialResourceProvenance }
       : {}),
+    ...(render.bakedTextures ? { bakedTextures: render.bakedTextures } : {}),
     ...(render.materialMetrics ? { materialMetrics: render.materialMetrics } : {}),
     integrationManifest: render.integrationManifest,
   };

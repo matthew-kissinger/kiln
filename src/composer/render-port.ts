@@ -100,6 +100,31 @@ export interface SceneRenderResult {
  *  `{ ok:false, error }` (no image) so the agent gets a fixable error. */
 export type SceneRenderPort = (req: SceneRenderRequest) => Promise<SceneRenderResult>;
 
+/** Requested material-review policy for one view operation. */
+export type ViewFidelityPolicy = 'full-preferred' | 'full-required' | 'geometry-only';
+
+/** What the renderer actually delivered. */
+export type DeliveredViewFidelity = 'full-material' | 'geometry-flat' | 'none';
+
+/**
+ * Truthful, model-visible provenance for a rendered view.
+ *
+ * `exactArtifact` distinguishes a view of persisted/final bytes from an
+ * in-loop or purpose-built derivative GLB. A GPU producer is not enough to
+ * make that claim by itself.
+ */
+export interface ViewFidelityV1 {
+  version: 'kiln.view-fidelity.v1';
+  requested: ViewFidelityPolicy;
+  delivered: DeliveredViewFidelity;
+  materialFaithful: boolean;
+  exactArtifact: boolean;
+  rendererId: string;
+  inputGlbSha256: `sha256:${string}`;
+  degraded: boolean;
+  degradeReason?: string;
+}
+
 /**
  * PbrRenderRequest — one PBR/beauty render of an ALREADY-PRODUCED GLB.
  *

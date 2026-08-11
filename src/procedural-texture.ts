@@ -38,76 +38,48 @@
  */
 
 import * as THREE from 'three';
-import type { TextureUsage } from './textures';
+import {
+  type CanonicalProceduralLayerV2,
+  type CanonicalProceduralTextureSpecV2,
+  type ProceduralBlend,
+  type ProceduralTextureSpec,
+  ProceduralTextureError,
+  canonicalProceduralTextureJsonV2,
+  canonicalizeProceduralTextureSpecV2,
+  hashProceduralTextureSpecV2,
+} from './procedural-material-v2';
 
-// -----------------------------------------------------------------------------
-// Bounds — enforced before any work, so a bad spec costs nothing
-// -----------------------------------------------------------------------------
-
-/** Largest texture a spec may request. 1024^2 RGBA is 4 MB of intermediate. */
-export const MAX_PROCEDURAL_SIZE = 1024;
-/** Smallest useful size; below this the generators degenerate. */
-export const MIN_PROCEDURAL_SIZE = 4;
-/** Layers in one stack. Enough to build a convincing material, bounded enough to cost little. */
-export const MAX_PROCEDURAL_LAYERS = 8;
-/** fbm octaves. Past this, added octaves are sub-texel on a 1024 map. */
-export const MAX_NOISE_OCTAVES = 6;
-
-export type ProceduralBlend = 'normal' | 'multiply' | 'screen' | 'overlay';
-
-interface LayerCommon {
-  /** How this layer combines with everything under it. Ignored on the first layer. */
-  blend?: ProceduralBlend;
-  /** 0..1 contribution. Ignored on the first layer. Default 1. */
-  opacity?: number;
-}
-
-export type ProceduralLayer = LayerCommon &
-  (
-    | { op: 'solid'; color: number }
-    | { op: 'checker'; colorA: number; colorB: number; squares?: number }
-    | { op: 'stripes'; colorA: number; colorB: number; count?: number; angleDeg?: number }
-    | { op: 'gradient'; from: number; to: number; angleDeg?: number }
-    | {
-        op: 'bricks';
-        brick: number;
-        mortar: number;
-        rows?: number;
-        cols?: number;
-        mortarWidth?: number;
-        /** Row offset as a fraction of brick width. 0.5 is a running bond. */
-        stagger?: number;
-      }
-    | {
-        op: 'noise';
-        colorA: number;
-        colorB: number;
-        /** Lattice cells across the texture. Higher is finer. Default 8. */
-        scale?: number;
-        octaves?: number;
-        seed?: number;
-      }
-  );
-
-export interface ProceduralTextureSpec {
-  /** Power of two in [4, 1024]. Default 256. */
-  size?: number;
-  /** Sets `colorSpace` — sRGB for albedo/emissive, linear for data maps. Default albedo. */
-  usage?: TextureUsage;
-  name?: string;
-  /** 1..8 layers, bottom first. */
-  layers: ProceduralLayer[];
-}
-
-const OPS = ['solid', 'checker', 'stripes', 'gradient', 'bricks', 'noise'] as const;
-const BLENDS: readonly ProceduralBlend[] = ['normal', 'multiply', 'screen', 'overlay'];
-
-export class ProceduralTextureError extends Error {
-  constructor(message: string) {
-    super(message);
-    this.name = 'ProceduralTextureError';
-  }
-}
+export {
+  MAX_NOISE_OCTAVES,
+  MAX_PORTABLE_MATERIAL_TEXELS,
+  MAX_PORTABLE_MATERIAL_TEXTURES,
+  MAX_PROCEDURAL_LAYERS,
+  MAX_PROCEDURAL_NAME_LENGTH,
+  MAX_PROCEDURAL_PATTERN_COUNT,
+  MAX_PROCEDURAL_SIZE,
+  MIN_PROCEDURAL_SIZE,
+  PORTABLE_MATERIAL_SPEC_VERSION,
+  PROCEDURAL_TEXTURE_SPEC_VERSION,
+  ProceduralTextureError,
+  canonicalProceduralTextureJsonV2,
+  canonicalizePortableMaterialSpecV2,
+  canonicalizeProceduralTextureSpecV2,
+  hashProceduralTextureSpecV2,
+  migrateProceduralTextureSpecV1,
+} from './procedural-material-v2';
+export type {
+  CanonicalPortableMaterialSpecV2,
+  CanonicalPortableTextureRefV2,
+  CanonicalProceduralLayerV2,
+  CanonicalProceduralTextureSpecV2,
+  PortableMaterialSpecV2,
+  PortableTextureRefV2,
+  ProceduralBlend,
+  ProceduralLayer,
+  ProceduralTextureSpec,
+  ProceduralTextureSpecV1,
+  ProceduralTextureSpecV2,
+} from './procedural-material-v2';
 
 // -----------------------------------------------------------------------------
 // Deterministic value noise
@@ -172,99 +144,6 @@ function fbm(u: number, v: number, period: number, octaves: number, seed: number
 }
 
 // -----------------------------------------------------------------------------
-// Validation
-// -----------------------------------------------------------------------------
-
-function isPowerOfTwo(n: number): boolean {
-  return Number.isInteger(n) && n > 0 && (n & (n - 1)) === 0;
-}
-
-function checkColor(value: unknown, label: string): number {
-  if (typeof value !== 'number' || !Number.isInteger(value) || value < 0 || value > 0xffffff) {
-    throw new ProceduralTextureError(
-      `proceduralTexture: ${label} must be a color integer between 0x000000 and 0xffffff, got ${JSON.stringify(value)}.`,
-    );
-  }
-  return value;
-}
-
-function checkCount(value: unknown, label: string, fallback: number, max = 256): number {
-  if (value === undefined) return fallback;
-  if (typeof value !== 'number' || !Number.isInteger(value) || value < 1 || value > max) {
-    throw new ProceduralTextureError(
-      `proceduralTexture: ${label} must be a whole number between 1 and ${max}, got ${JSON.stringify(value)}.`,
-    );
-  }
-  return value;
-}
-
-function checkUnit(value: unknown, label: string, fallback: number): number {
-  if (value === undefined) return fallback;
-  if (typeof value !== 'number' || !Number.isFinite(value) || value < 0 || value > 1) {
-    throw new ProceduralTextureError(
-      `proceduralTexture: ${label} must be between 0 and 1, got ${JSON.stringify(value)}.`,
-    );
-  }
-  return value;
-}
-
-function validateSpec(spec: ProceduralTextureSpec): {
-  size: number;
-  usage: TextureUsage;
-  layers: ProceduralLayer[];
-} {
-  if (!spec || typeof spec !== 'object') {
-    throw new ProceduralTextureError('proceduralTexture: a spec object is required.');
-  }
-
-  const size = spec.size ?? 256;
-  if (!isPowerOfTwo(size) || size < MIN_PROCEDURAL_SIZE || size > MAX_PROCEDURAL_SIZE) {
-    throw new ProceduralTextureError(
-      `proceduralTexture: size must be a power of two between ${MIN_PROCEDURAL_SIZE} and ${MAX_PROCEDURAL_SIZE}, got ${JSON.stringify(spec.size)}.`,
-    );
-  }
-
-  const layers = spec.layers;
-  if (!Array.isArray(layers) || layers.length === 0) {
-    throw new ProceduralTextureError(
-      'proceduralTexture: layers must be a non-empty array — the bottom layer is the base pattern.',
-    );
-  }
-  if (layers.length > MAX_PROCEDURAL_LAYERS) {
-    throw new ProceduralTextureError(
-      `proceduralTexture: ${layers.length} layers exceeds the maximum of ${MAX_PROCEDURAL_LAYERS}.`,
-    );
-  }
-
-  for (const [i, layer] of layers.entries()) {
-    if (!layer || typeof layer !== 'object') {
-      throw new ProceduralTextureError(`proceduralTexture: layers[${i}] must be an object.`);
-    }
-    if (!(OPS as readonly string[]).includes(layer.op)) {
-      throw new ProceduralTextureError(
-        `proceduralTexture: layers[${i}].op ${JSON.stringify(layer.op)} is not one of ${OPS.join(', ')}.`,
-      );
-    }
-    if (layer.blend !== undefined && !BLENDS.includes(layer.blend)) {
-      throw new ProceduralTextureError(
-        `proceduralTexture: layers[${i}].blend ${JSON.stringify(layer.blend)} is not one of ${BLENDS.join(', ')}.`,
-      );
-    }
-    checkUnit(layer.opacity, `layers[${i}].opacity`, 1);
-    if (layer.op === 'noise') {
-      const octaves = layer.octaves ?? 3;
-      if (!Number.isInteger(octaves) || octaves < 1 || octaves > MAX_NOISE_OCTAVES) {
-        throw new ProceduralTextureError(
-          `proceduralTexture: layers[${i}].octaves must be a whole number between 1 and ${MAX_NOISE_OCTAVES}, got ${JSON.stringify(layer.octaves)}.`,
-        );
-      }
-    }
-  }
-
-  return { size, usage: spec.usage ?? 'albedo', layers };
-}
-
-// -----------------------------------------------------------------------------
 // Layer evaluation
 // -----------------------------------------------------------------------------
 
@@ -283,68 +162,51 @@ function project(u: number, v: number, angleDeg: number): number {
 }
 
 /** Evaluate one layer at a normalized coordinate, returning 0-255 RGB. */
-function evalLayer(layer: ProceduralLayer, u: number, v: number): [number, number, number] {
+function evalLayer(
+  layer: CanonicalProceduralLayerV2,
+  u: number,
+  v: number,
+): [number, number, number] {
   switch (layer.op) {
     case 'solid':
-      return rgbOf(checkColor(layer.color, 'solid.color'));
+      return rgbOf(layer.color);
 
     case 'checker': {
-      const squares = checkCount(layer.squares, 'checker.squares', 8);
-      const cx = Math.floor(u * squares);
-      const cy = Math.floor(v * squares);
-      return rgbOf(
-        (cx + cy) % 2 === 0
-          ? checkColor(layer.colorA, 'checker.colorA')
-          : checkColor(layer.colorB, 'checker.colorB'),
-      );
+      const cx = Math.floor(u * layer.squares);
+      const cy = Math.floor(v * layer.squares);
+      return rgbOf((cx + cy) % 2 === 0 ? layer.colorA : layer.colorB);
     }
 
     case 'stripes': {
-      const count = checkCount(layer.count, 'stripes.count', 8);
-      const t = project(u, v, layer.angleDeg ?? 0);
-      return rgbOf(
-        Math.floor(t * count) % 2 === 0
-          ? checkColor(layer.colorA, 'stripes.colorA')
-          : checkColor(layer.colorB, 'stripes.colorB'),
-      );
+      const t = project(u, v, layer.angleDeg);
+      return rgbOf(Math.floor(t * layer.count) % 2 === 0 ? layer.colorA : layer.colorB);
     }
 
     case 'gradient': {
-      const t = Math.min(1, Math.max(0, project(u, v, layer.angleDeg ?? 0)));
-      const from = rgbOf(checkColor(layer.from, 'gradient.from'));
-      const to = rgbOf(checkColor(layer.to, 'gradient.to'));
+      const t = Math.min(1, Math.max(0, project(u, v, layer.angleDeg)));
+      const from = rgbOf(layer.from);
+      const to = rgbOf(layer.to);
       return [lerp(from[0], to[0], t), lerp(from[1], to[1], t), lerp(from[2], to[2], t)];
     }
 
     case 'bricks': {
-      const rows = checkCount(layer.rows, 'bricks.rows', 8);
-      const cols = checkCount(layer.cols, 'bricks.cols', 4);
-      const mortarWidth = checkUnit(layer.mortarWidth, 'bricks.mortarWidth', 0.06);
-      const stagger = checkUnit(layer.stagger, 'bricks.stagger', 0.5);
-      const row = Math.floor(v * rows);
+      const row = Math.floor(v * layer.rows);
       // Offset alternate rows, wrapping into [0,1) so the pattern still tiles.
-      const shifted = (u + (row % 2 === 0 ? 0 : stagger / cols) + 1) % 1;
-      const inCol = (shifted * cols) % 1;
-      const inRow = (v * rows) % 1;
+      const shifted = (u + (row % 2 === 0 ? 0 : layer.stagger / layer.cols) + 1) % 1;
+      const inCol = (shifted * layer.cols) % 1;
+      const inRow = (v * layer.rows) % 1;
       const isMortar =
-        inCol < mortarWidth ||
-        inCol > 1 - mortarWidth ||
-        inRow < mortarWidth ||
-        inRow > 1 - mortarWidth;
-      return rgbOf(
-        isMortar
-          ? checkColor(layer.mortar, 'bricks.mortar')
-          : checkColor(layer.brick, 'bricks.brick'),
-      );
+        inCol < layer.mortarWidth ||
+        inCol > 1 - layer.mortarWidth ||
+        inRow < layer.mortarWidth ||
+        inRow > 1 - layer.mortarWidth;
+      return rgbOf(isMortar ? layer.mortar : layer.brick);
     }
 
     case 'noise': {
-      const scale = checkCount(layer.scale, 'noise.scale', 8);
-      const octaves = layer.octaves ?? 3;
-      const seed = Number.isInteger(layer.seed) ? (layer.seed as number) : 0;
-      const n = fbm(u, v, scale, octaves, seed);
-      const a = rgbOf(checkColor(layer.colorA, 'noise.colorA'));
-      const b = rgbOf(checkColor(layer.colorB, 'noise.colorB'));
+      const n = fbm(u, v, layer.scale, layer.octaves, layer.seed);
+      const a = rgbOf(layer.colorA);
+      const b = rgbOf(layer.colorB);
       return [lerp(a[0], b[0], n), lerp(a[1], b[1], n), lerp(a[2], b[2], n)];
     }
   }
@@ -382,6 +244,7 @@ function blendChannel(mode: ProceduralBlend, base: number, top: number): number 
  *
  * @example
  * const bark = proceduralTexture({
+ *   schemaVersion: 2,
  *   size: 256,
  *   usage: 'albedo',
  *   name: 'Bark',
@@ -394,9 +257,17 @@ function blendChannel(mode: ProceduralBlend, base: number, top: number): number 
  * });
  * const trunk = createPart('Trunk', cylinderGeo(0.3, 0.3, 3), pbrMaterial({ albedo: bark }), { parent: root });
  */
-export function proceduralTexture(spec: ProceduralTextureSpec): THREE.DataTexture {
-  const { size, usage, layers } = validateSpec(spec);
+export interface CompiledProceduralTextureV2 {
+  spec: CanonicalProceduralTextureSpecV2;
+  pixels: Uint8Array;
+  canonicalJson: string;
+  recipeHash: `sha256:${string}`;
+}
 
+/** Validate, canonicalize, and compile one texture without constructing Three.js state. */
+export function compileProceduralTextureSpecV2(input: unknown): CompiledProceduralTextureV2 {
+  const spec = canonicalizeProceduralTextureSpecV2(input);
+  const { size, layers } = spec;
   const data = new Uint8Array(size * size * 4);
   for (let y = 0; y < size; y++) {
     // Sample at texel centers so a pattern with N divisions lands on exact
@@ -415,11 +286,9 @@ export function proceduralTexture(spec: ProceduralTextureSpec): THREE.DataTextur
           b = lb;
           continue;
         }
-        const mode = layer.blend ?? 'normal';
-        const opacity = layer.opacity ?? 1;
-        r = lerp(r, blendChannel(mode, r, lr), opacity);
-        g = lerp(g, blendChannel(mode, g, lg), opacity);
-        b = lerp(b, blendChannel(mode, b, lb), opacity);
+        r = lerp(r, blendChannel(layer.blend, r, lr), layer.opacity);
+        g = lerp(g, blendChannel(layer.blend, g, lg), layer.opacity);
+        b = lerp(b, blendChannel(layer.blend, b, lb), layer.opacity);
       }
       const o = (y * size + x) * 4;
       data[o] = Math.max(0, Math.min(255, Math.round(r)));
@@ -429,8 +298,26 @@ export function proceduralTexture(spec: ProceduralTextureSpec): THREE.DataTextur
     }
   }
 
-  const tex = new THREE.DataTexture(data, size, size, THREE.RGBAFormat, THREE.UnsignedByteType);
-  if (spec.name) tex.name = spec.name;
+  return {
+    spec,
+    pixels: data,
+    canonicalJson: canonicalProceduralTextureJsonV2(spec),
+    recipeHash: hashProceduralTextureSpecV2(spec),
+  };
+}
+
+export function proceduralTexture(spec: ProceduralTextureSpec): THREE.DataTexture {
+  const compiled = compileProceduralTextureSpecV2(spec);
+  const { size, usage, name, layers } = compiled.spec;
+
+  const tex = new THREE.DataTexture(
+    compiled.pixels,
+    size,
+    size,
+    THREE.RGBAFormat,
+    THREE.UnsignedByteType,
+  );
+  if (name) tex.name = name;
   tex.colorSpace =
     usage === 'albedo' || usage === 'emissive' ? THREE.SRGBColorSpace : THREE.NoColorSpace;
   tex.wrapS = THREE.RepeatWrapping;
@@ -443,10 +330,13 @@ export function proceduralTexture(spec: ProceduralTextureSpec): THREE.DataTextur
   // Recorded so the manifest says what was generated, not merely that something
   // was. The spec is small, serializable, and enough to reproduce the bytes.
   (tex.userData as Record<string, unknown>)['kilnProcedural'] = {
-    schemaVersion: 1,
+    schemaVersion: 2,
     size,
     usage,
+    ...(name ? { name } : {}),
     layers,
+    canonicalJson: compiled.canonicalJson,
+    recipeHash: compiled.recipeHash,
   };
 
   return tex;

@@ -170,6 +170,12 @@ await materialRecipe(recipeId, overrides?: { baseColor?, roughness?, metalness?,
   // PBR.
   // NOTE: Use only listed kiln.material.*.v1 IDs and approved kiln.texture.* resource IDs. Leaf
   // is MASK, glass is BLEND, and host file paths are forbidden.
+await compilePortableMaterialSpecV2({ schemaVersion: 2, model: 'pbrMetallicRoughness', name?, baseColor?, roughness?, metalness?, emissive?, emissiveIntensity?, alphaMode?, alphaCutoff?, doubleSided?, textures?: { baseColor?, normal?, metallicRoughness?, emissive?, occlusion? } })
+  // Compiles the strict portable material contract. Texture refs are either typed procedural V2
+  // specs or closed approved kiln.texture.* IDs; paths, URLs, raw textures, callbacks, and
+  // shader source are rejected.
+  // NOTE: Use metallicRoughness as one packed G=roughness/B=metalness map. Every procedural ref
+  // usage must match its slot; resource refs must be approved for that exact slot.
 basicMaterial(color, opts?: { transparent, opacity })
   // Unlit flat material. For UI / effects where lighting is baked in.
 glassMaterial(color, opts?: { opacity, roughness, metalness })
@@ -317,17 +323,16 @@ await loadTexture(source, { usage?: 'albedo'|'emissive'|'normal'|'roughness'|'me
   // Loads a PNG/JPG/WebP image with explicit slot usage. Albedo/emissive preview as sRGB;
   // normal/roughness/metalness/occlusion are linear data. Stashes encoded bytes and QA metadata
   // for lossless GLB export.
-  // NOTE: NEVER texture.clone() a loaded texture (clone() corrupts the encoded bytes and breaks
-  // GLB export). Share the same Texture object and remap UVs with panelRemapV on the smaller
-  // mesh instead.
-proceduralTexture({ size?: 4..1024 pow2, usage?, name?, layers: [{ op: 'solid'|'checker'|'stripes'|'gradient'|'bricks'|'noise', ...params, blend?: 'normal'|'multiply'|'screen'|'overlay', opacity?: 0..1 }] })
+  // NOTE: Trusted host compatibility API only: generated asset code must not invent paths or
+  // URLs. Prefer approved materialRecipe resources or proceduralTexture V2. NEVER
+  // texture.clone() a loaded texture (clone() corrupts encoded bytes and breaks GLB export).
+proceduralTexture({ schemaVersion: 2, size?: 4..1024 pow2, usage?, name?, layers: [{ op: 'solid'|'checker'|'stripes'|'gradient'|'bricks'|'noise', ...params, blend?: 'normal'|'multiply'|'screen'|'overlay', opacity?: 0..1 }] })
   // Builds a tiling texture from a bounded layer stack — no image file needed. Layers composite
   // bottom-first. Noise is seeded and tileable, so the same spec always produces the same bytes
   // and a repeating material shows no seam. Baked to PNG and embedded in the GLB automatically.
-  // NOTE: Sync — no await. Prefer this over loadTexture for any surface you can describe (wood,
-  // rust, brick, fabric, dirt): it needs no asset files and cannot fail at load. Max 8 layers,
-  // size must be a power of two up to 1024. Only the six listed ops exist; there is no custom
-  // per-pixel callback.
+  // NOTE: Sync — no await. Strict V2 JSON boundary: unknown/prototype keys, callbacks, paths,
+  // URLs, and shader source are rejected. Prefer this over loadTexture for describable
+  // surfaces. Max 8 layers, power-of-two size up to 1024. Only the six listed ops exist.
 normalMapFromHeight(source: THREE.Texture, { strength?: number, name?: string })
   // Derives a tangent-space normal map from the source texture's brightness, treating it as
   // height. The cheap way to get real PBR surface relief out of a procedural albedo. Wraps at
@@ -559,15 +564,15 @@ decalBox(width: number, height: number, depth?: 0.01)
 foliageCardGeo(opts?: { width?, height?, yPivot?: 0..1 })
   // Single-quad foliage card with a configurable Y pivot. yPivot=0 plants the quad on the
   // ground. Pair with an alpha-tested material and a leaf/plant sprite.
-  // e.g. const leaves = await loadTexture('./fern.png', { usage: 'albedo' }); const quad =
-  // foliageCardGeo({ width: 4, height: 6, yPivot: 0 }); createPart('Mesh_Fern', quad,
-  // foliageMaterial(leaves), { parent: root });
+  // e.g. const leaves = await materialRecipe('kiln.material.leaf.v1'); const quad =
+  // foliageCardGeo({ width: 4, height: 6, yPivot: 0 }); createPart('Mesh_Fern', quad, leaves, {
+  // parent: root });
 crossedQuadsGeo(opts?: { width?, height?, planes?: 2 | 3, yPivot? })
   // Cross-billboard bush primitive: 2 or 3 planes intersecting along the Y axis. Reads as a
   // dense plant from any angle, cheaper than real geometry.
-  // e.g. const leaves = await loadTexture('./bush.png', { usage: 'albedo' }); const bush =
-  // crossedQuadsGeo({ width: 2, height: 2, planes: 3 }); createPart('Mesh_Bush', bush,
-  // foliageMaterial(leaves), { parent: root });
+  // e.g. const leaves = await materialRecipe('kiln.material.leaf.v1'); const bush =
+  // crossedQuadsGeo({ width: 2, height: 2, planes: 3 }); createPart('Mesh_Bush', bush, leaves,
+  // { parent: root });
 octaGridPlane({ tilesX, tilesY, width?, height?, yPivot? })
   // Atlas-ready billboard quad. UVs are pre-scaled to cover one tile of a tilesX×tilesY atlas;
   // the consumer shader adds per-instance tile offsets at draw time.
@@ -599,6 +604,16 @@ await materialRecipe(recipeId, overrides?: { baseColor?, roughness?, metalness?,
   // NOTE: Use only listed kiln.material.*.v1 IDs and approved kiln.texture.* resource IDs. Leaf
   // is MASK, glass is BLEND, and host file paths are forbidden.
   // e.g. const bark = await materialRecipe('kiln.material.bark.v1', { baseColor: '#6b4328' });
+await compilePortableMaterialSpecV2({ schemaVersion: 2, model: 'pbrMetallicRoughness', name?, baseColor?, roughness?, metalness?, emissive?, emissiveIntensity?, alphaMode?, alphaCutoff?, doubleSided?, textures?: { baseColor?, normal?, metallicRoughness?, emissive?, occlusion? } })
+  // Compiles the strict portable material contract. Texture refs are either typed procedural V2
+  // specs or closed approved kiln.texture.* IDs; paths, URLs, raw textures, callbacks, and
+  // shader source are rejected.
+  // NOTE: Use metallicRoughness as one packed G=roughness/B=metalness map. Every procedural ref
+  // usage must match its slot; resource refs must be approved for that exact slot.
+  // e.g. const steel = await compilePortableMaterialSpecV2({ schemaVersion: 2, model:
+  // 'pbrMetallicRoughness', roughness: 0.45, metalness: 0.85, textures: { metallicRoughness: {
+  // kind: 'procedural', spec: { schemaVersion: 2, usage: 'metallicRoughness', size: 64, layers:
+  // [{ op: 'solid', color: 0x0080cc }] } } } });
 basicMaterial(color, opts?: { transparent, opacity })
   // Unlit flat material. For UI / effects where lighting is baked in.
   // e.g. const mat = basicMaterial(0xffffff, { transparent: true, opacity: 0.5 });
@@ -612,13 +627,13 @@ pbrMaterial({ albedo?, normal?, roughness?, metalness?, metallicRoughness?, emis
   // Portable glTF PBR material. Use an explicit packed metallicRoughness texture (G=roughness,
   // B=metalness); separate data maps are rejected instead of silently dropping a channel.
   // Supports OPAQUE/MASK/BLEND and double-sided output.
-  // e.g. const wood = await loadTexture('./oak.png'); const crate = pbrMaterial({ albedo: wood,
-  // roughness: 0.85, metalness: 0 });
+  // e.g. const wood = proceduralTexture({ schemaVersion: 2, usage: 'albedo', layers: [{ op:
+  // 'noise', colorA: 0x4f301c, colorB: 0x9a6b3e, scale: 8, octaves: 3, seed: 4 }] }); const
+  // crate = pbrMaterial({ albedo: wood, roughness: 0.85, metalness: 0 });
 foliageMaterial(albedo, { alphaCutoff?, roughness?, doubleSided? })
   // Portable foliage material that defaults to glTF MASK, cutoff 0.5, rough nonmetal, and
   // double-sided. Use an alpha-bearing albedo texture.
-  // e.g. const leaves = await loadTexture('./leaf.png', { usage: 'albedo' }); const mat =
-  // foliageMaterial(leaves, { alphaCutoff: 0.45 });
+  // e.g. const mat = await materialRecipe('kiln.material.leaf.v1');
 
 // Instancing (share geometry+material; smaller GLBs)
 createWheelGeometrySet(radius: number, width: number)
@@ -809,30 +824,30 @@ await loadTexture(source, { usage?: 'albedo'|'emissive'|'normal'|'roughness'|'me
   // Loads a PNG/JPG/WebP image with explicit slot usage. Albedo/emissive preview as sRGB;
   // normal/roughness/metalness/occlusion are linear data. Stashes encoded bytes and QA metadata
   // for lossless GLB export.
-  // NOTE: NEVER texture.clone() a loaded texture (clone() corrupts the encoded bytes and breaks
-  // GLB export). Share the same Texture object and remap UVs with panelRemapV on the smaller
-  // mesh instead.
-  // e.g. const wood = await loadTexture('./textures/oak-albedo.png', { usage: 'albedo' });
-proceduralTexture({ size?: 4..1024 pow2, usage?, name?, layers: [{ op: 'solid'|'checker'|'stripes'|'gradient'|'bricks'|'noise', ...params, blend?: 'normal'|'multiply'|'screen'|'overlay', opacity?: 0..1 }] })
+  // NOTE: Trusted host compatibility API only: generated asset code must not invent paths or
+  // URLs. Prefer approved materialRecipe resources or proceduralTexture V2. NEVER
+  // texture.clone() a loaded texture (clone() corrupts encoded bytes and breaks GLB export).
+  // e.g. // Host-only compatibility API: pass encoded PNG/JPG/WebP bytes supplied by the
+  // caller.
+proceduralTexture({ schemaVersion: 2, size?: 4..1024 pow2, usage?, name?, layers: [{ op: 'solid'|'checker'|'stripes'|'gradient'|'bricks'|'noise', ...params, blend?: 'normal'|'multiply'|'screen'|'overlay', opacity?: 0..1 }] })
   // Builds a tiling texture from a bounded layer stack — no image file needed. Layers composite
   // bottom-first. Noise is seeded and tileable, so the same spec always produces the same bytes
   // and a repeating material shows no seam. Baked to PNG and embedded in the GLB automatically.
-  // NOTE: Sync — no await. Prefer this over loadTexture for any surface you can describe (wood,
-  // rust, brick, fabric, dirt): it needs no asset files and cannot fail at load. Max 8 layers,
-  // size must be a power of two up to 1024. Only the six listed ops exist; there is no custom
-  // per-pixel callback.
-  // e.g. const bark = proceduralTexture({ size: 256, usage: 'albedo', name: 'Bark', layers: [{
-  // op: 'solid', color: 0x5a4632 }, { op: 'noise', colorA: 0x3d2f21, colorB: 0x7a6248, scale:
-  // 6, octaves: 4, blend: 'overlay' }] });
+  // NOTE: Sync — no await. Strict V2 JSON boundary: unknown/prototype keys, callbacks, paths,
+  // URLs, and shader source are rejected. Prefer this over loadTexture for describable
+  // surfaces. Max 8 layers, power-of-two size up to 1024. Only the six listed ops exist.
+  // e.g. const bark = proceduralTexture({ schemaVersion: 2, size: 256, usage: 'albedo', name:
+  // 'Bark', layers: [{ op: 'solid', color: 0x5a4632 }, { op: 'noise', colorA: 0x3d2f21, colorB:
+  // 0x7a6248, scale: 6, octaves: 4, blend: 'overlay' }] });
 normalMapFromHeight(source: THREE.Texture, { strength?: number, name?: string })
   // Derives a tangent-space normal map from the source texture's brightness, treating it as
   // height. The cheap way to get real PBR surface relief out of a procedural albedo. Wraps at
   // the edges, so a tiling source gives a tiling normal map.
   // NOTE: strength 1 is subtle, 4-8 reads clearly at normal viewing distance. Output is always
   // linear data — never assign it to an albedo/emissive slot.
-  // e.g. const bark = proceduralTexture({ usage: 'albedo', layers: [{ op: 'noise', colorA:
-  // 0x3d2f21, colorB: 0x7a6248, scale: 6, octaves: 4 }] }); const mat = pbrMaterial({ albedo:
-  // bark, normal: normalMapFromHeight(bark, { strength: 4 }) });
+  // e.g. const bark = proceduralTexture({ schemaVersion: 2, usage: 'albedo', layers: [{ op:
+  // 'noise', colorA: 0x3d2f21, colorB: 0x7a6248, scale: 6, octaves: 4 }] }); const mat =
+  // pbrMaterial({ albedo: bark, normal: normalMapFromHeight(bark, { strength: 4 }) });
 
 // Animation — keyframes use "rotation"/"position"/"scale" keys, NOT "value"
 rotationTrack(jointName: string, keyframes: Array<{ time, rotation: [xDeg, yDeg, zDeg] }>, interp?: 'LINEAR' | 'STEP')

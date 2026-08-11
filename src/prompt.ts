@@ -202,9 +202,12 @@ Model the requested construction, not just its outline:
 Author portable material response, not render-only decoration:
 - Use gameMaterial for deliberate flat/stylized colour. For metal, wood, stone, bark, cloth, skin,
   glass, paint, or textured-hero requests, follow the resolved portable material recipe guidance.
-- proceduralTexture() creates deterministic image data that is baked into the GLB. Build restrained
-  albedo/roughness patterns (and normalMapFromHeight when useful), unwrap the geometry, and bind them
-  through pbrMaterial. Prefer a few coherent material roles over unique noisy textures per part.
+- proceduralTexture({ schemaVersion: 2, ... }) is the strict portable texture DSL: six finite layer
+  ops, no callbacks, shader source, URLs, filesystem paths, or unknown fields. It creates deterministic
+  image data that is baked into the GLB. Build restrained albedo/roughness patterns (and
+  normalMapFromHeight when useful), unwrap the geometry, and bind them through pbrMaterial. Prefer a
+  few coherent material roles over unique noisy textures per part. Historical recipes without a
+  schemaVersion still migrate, but author all new recipes as V2.
 - Surface detail supports form: align grain, wear, seams, and pattern scale with the object's
   construction. Do not fake texture by scattering hundreds of tiny meshes or by inventing filesystem
   paths/resource IDs.
@@ -443,7 +446,19 @@ const meta = { name: "Crate", category: "prop" };
 
 async function build() {
   const root = createRoot("Crate");
-  const wood = await loadTexture('./war-assets/textures/wood-planks.png');
+  const wood = proceduralTexture({
+    schemaVersion: 2,
+    size: 256,
+    usage: 'albedo',
+    name: 'WoodPlanks',
+    layers: [
+      { op: 'solid', color: 0x70482d },
+      { op: 'noise', colorA: 0x4a2d1c, colorB: 0xa06f45, scale: 8, octaves: 3, seed: 7,
+        blend: 'overlay', opacity: 0.35 },
+      { op: 'stripes', colorA: 0x3a2115, colorB: 0xc69762, count: 12, angleDeg: 0,
+        blend: 'multiply', opacity: 0.18 },
+    ],
+  });
   const mat = pbrMaterial({ albedo: wood, roughness: 0.88, metalness: 0 });
   const geo = await autoUnwrap(boxGeo(1, 1, 1), { resolution: 1024 });
   const mesh = new THREE.Mesh(geo, mat);

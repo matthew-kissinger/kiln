@@ -94,6 +94,16 @@ describe('kiln_render in-loop GPU port routing', () => {
     expect(events[0]!.renderer).toMatch(/^cpu-raster:/);
     expect(events[0]!.degraded).toBe(false);
     expect(events[0]!.neededPbr).toBe(false);
+    expect(out.viewFidelity).toMatchObject({
+      version: 'kiln.view-fidelity.v1',
+      requested: 'full-preferred',
+      delivered: 'geometry-flat',
+      materialFaithful: false,
+      exactArtifact: false,
+      rendererId: CPU_RASTER_RENDERER_ID,
+      degraded: false,
+    });
+    expect(out.viewFidelity?.inputGlbSha256).toMatch(/^sha256:[0-9a-f]{64}$/);
   });
 
   test('port injected + untextured metalness-0 scene: port is never called, CPU still draws', async () => {
@@ -143,6 +153,15 @@ describe('kiln_render in-loop GPU port routing', () => {
     expect(events[0]!.renderer).toBe('dawn-vulkan:test-gpu:1.0');
     expect(events[0]!.degraded).toBe(false);
     expect(events[0]!.neededPbr).toBe(true);
+    expect(out.viewFidelity).toMatchObject({
+      version: 'kiln.view-fidelity.v1',
+      requested: 'full-preferred',
+      delivered: 'full-material',
+      materialFaithful: true,
+      exactArtifact: false,
+      rendererId: 'dawn-vulkan:test-gpu:1.0',
+      degraded: false,
+    });
   });
 
   test('port injected + untextured metalness>0 scene: port IS called (the metal case)', async () => {
@@ -178,6 +197,27 @@ describe('kiln_render in-loop GPU port routing', () => {
     expect(events[0]!.degraded).toBe(true);
     expect(events[0]!.degradedReason).toContain('device lost');
     expect(events[0]!.neededPbr).toBe(true);
+    expect(out.viewFidelity).toMatchObject({
+      delivered: 'geometry-flat',
+      materialFaithful: false,
+      rendererId: CPU_RASTER_RENDERER_ID,
+      degraded: true,
+    });
+    expect(out.viewFidelity?.degradeReason).toContain('device lost');
+  });
+
+  test('no port + textured scene returns explicit model-visible geometry-only fidelity', async () => {
+    const def = createKilnRenderViewsDef();
+    const out = (await def.run({ code: TEXTURED_CODE })) as KilnRenderViewsResult;
+
+    expect(out.ok).toBe(true);
+    expect(out.viewFidelity).toMatchObject({
+      requested: 'full-preferred',
+      delivered: 'geometry-flat',
+      materialFaithful: false,
+      degraded: true,
+      degradeReason: 'material-faithful view render port unavailable',
+    });
   });
 
   test('port throws: falls back to CPU, no throw escapes the tool', async () => {

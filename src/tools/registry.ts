@@ -25,7 +25,7 @@ import { executeKilnCode, inspectSceneStructure, renderSceneToGLB } from '../ren
 import { listPrimitives, type PrimitiveSpec } from '../list-primitives';
 import type { AssetCategory, AssetIntentV1 } from '../contracts';
 import type { AssetQaReportV1 } from '../qa';
-import type { PbrRenderPort } from '../composer/render-port';
+import type { PbrRenderPort, ViewFidelityV1 } from '../composer/render-port';
 import type { ViewGridResult } from '../views';
 import { sceneNeedsPbrShading } from '../material-resources';
 import type { GenerationCallBudget } from '../agent/call-budget';
@@ -542,6 +542,8 @@ export interface KilnRenderViewsResult {
   gridHeight?: number;
   /** The 3x2 grid PNG, base64-encoded (transports with image support strip this and attach the bytes). */
   pngBase64?: string;
+  /** Truthful material fidelity delivered by this render, visible to the model. */
+  viewFidelity?: ViewFidelityV1;
   warnings: string[];
   error?: string;
 }
@@ -586,9 +588,10 @@ async function runRenderViews(
     // so sending it costs a round trip and a warm GPU to draw a picture the CPU
     // already draws correctly. `renderSceneToGLB` above ALREADY produced the
     // bytes the port needs — this reuses them rather than paying a second bake.
-    const neededPbr = context.viewRenderPort ? sceneNeedsPbrShading(root) : false;
+    const neededPbr = sceneNeedsPbrShading(root);
     let grid: ViewGridResult | undefined;
     let drawnBy: InLoopViewRender | undefined;
+    let materialFaithful = false;
 
     if (context.viewRenderPort && neededPbr) {
       // Lazy import: `../agent/generate` sits upstream of this module in the
@@ -615,6 +618,7 @@ async function runRenderViews(
           height: ported.height,
           capture: ported.capture,
         };
+        materialFaithful = true;
         drawnBy = { renderer: ported.rendererId, degraded: false, neededPbr };
       } else {
         drawnBy = {
@@ -632,7 +636,37 @@ async function runRenderViews(
     if (!grid) {
       grid = await renderViewGrid(root, input.capture ? { capture: input.capture } : {});
     }
-    drawnBy ??= { renderer: CPU_RASTER_RENDERER_ID, degraded: false, neededPbr };
+    drawnBy ??= context.viewRenderPort
+      ? { renderer: CPU_RASTER_RENDERER_ID, degraded: false, neededPbr }
+      : {
+          renderer: CPU_RASTER_RENDERER_ID,
+          degraded: neededPbr,
+          ...(neededPbr
+            ? { degradedReason: 'material-faithful view render port unavailable' }
+            : {}),
+          neededPbr,
+        };
+
+    // Copy into an ArrayBuffer-backed view: render bytes are typed as
+    // `Uint8Array<ArrayBufferLike>`, while Web Crypto deliberately rejects a
+    // possible SharedArrayBuffer at its boundary.
+    const hashInput = new Uint8Array(rendered.bytes.byteLength);
+    hashInput.set(rendered.bytes);
+    const digest = new Uint8Array(await globalThis.crypto.subtle.digest('SHA-256', hashInput));
+    const inputGlbSha256 = `sha256:${[...digest]
+      .map((byte) => byte.toString(16).padStart(2, '0'))
+      .join('')}` as const;
+    const viewFidelity: ViewFidelityV1 = {
+      version: 'kiln.view-fidelity.v1',
+      requested: 'full-preferred',
+      delivered: materialFaithful ? 'full-material' : 'geometry-flat',
+      materialFaithful,
+      exactArtifact: false,
+      rendererId: drawnBy.renderer,
+      inputGlbSha256,
+      degraded: drawnBy.degraded,
+      ...(drawnBy.degradedReason ? { degradeReason: drawnBy.degradedReason } : {}),
+    };
 
     // A host bookkeeping hook must never be able to fail a render the model is
     // waiting on.
@@ -664,6 +698,7 @@ async function runRenderViews(
       gridWidth: grid.width,
       gridHeight: grid.height,
       pngBase64: grid.png.toString('base64'),
+      viewFidelity,
       warnings,
       qaReport: rendered.qaReport,
     };
@@ -696,7 +731,7 @@ const KILN_RENDER_VIEWS_DESCRIPTION =
   'elevation 0 = eye level, positive looks down. Use it to aim every cell at what actually needs ' +
   'checking — a seam, an underside, a joint the standard six leave occluded — instead of spending ' +
   'cells on angles that show nothing. Max 9 cells. The reply echoes the grid shape it rendered. ' +
-  'If the build fails you get an error and NO image — fix the code and render again. Uses GPU PBR shading when the scene has textured or metallic materials and the renderer is reachable; otherwise uses a flat-shaded CPU render. Writes no files.';
+  'If the build fails you get an error and NO image — fix the code and render again. Uses GPU PBR shading when the scene has textured or metallic materials and the renderer is reachable; otherwise uses a flat-shaded CPU render. Always read viewFidelity: when materialFaithful is false, use the image for geometry and silhouette only; do not judge material color, textures, normal relief, roughness, metalness, AO, or emissive response from it. Writes no files.';
 
 /** Create the unified render/view definition with host-owned QA context. */
 export function createKilnRenderViewsDef(context: KilnToolContext = {}): KilnToolDef {

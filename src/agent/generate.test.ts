@@ -24,6 +24,19 @@ const FALSE_PROP_CODE = CANNED_CODE.replace(
   "const meta = { name: 'TestBox' };",
   "const meta = { name: 'TestBox', category: 'prop' };",
 );
+const PROCEDURAL_CODE = `
+const meta = { name: 'TexturedBox', category: 'prop' };
+function build() {
+  const root = createRoot('TexturedBox');
+  const albedo = proceduralTexture({
+    size: 8,
+    name: 'GeneratedSurface',
+    layers: [{ op: 'checker', colorA: 0xffffff, colorB: 0x222222, squares: 2 }],
+  });
+  root.add(createPart('Body', boxGeo(1, 1, 1), pbrMaterial({ albedo }), {}));
+  return root;
+}
+`;
 
 // Capture the REAL './run' exports BEFORE mocking. bun's mock.module patches the
 // module (and any already-imported namespace) in place, but plain function
@@ -104,6 +117,21 @@ describe('generateKilnAsset', () => {
     // Prompt + category threaded into the agent.
     expect(captured?.['prompt']).toBe('a wooden crate');
     expect(captured?.['category']).toBe('prop');
+  });
+
+  test('preserves baked procedural texture lineage on the public generation result', async () => {
+    runImpl = async () => ({ code: PROCEDURAL_CODE, toolCalls: ['kiln_finalize'], steps: 1 });
+
+    const r = await generateKilnAsset({ prompt: 'a textured box' });
+
+    expect(r.bakedTextures).toHaveLength(1);
+    expect(r.bakedTextures?.[0]).toMatchObject({
+      texture: 'GeneratedSurface',
+      slot: 'map',
+      procedural: { schemaVersion: 2 },
+    });
+    expect(r.artifactGlbSha256).toMatch(/^sha256:[0-9a-f]{64}$/);
+    expect(r.bakedTextures?.[0]?.artifactGlbSha256).toBe(r.artifactGlbSha256);
   });
 
   test('threads an explicit model + refine fields', async () => {
@@ -242,7 +270,7 @@ describe('generateKilnAsset viewRenderPort (B3b/B4)', () => {
     });
   }
 
-  test('option absent: views are byte-identical to the CPU grid, no degrade fields', async () => {
+  test('option absent: CPU grid remains byte-identical and fidelity is explicitly geometry-only', async () => {
     runImpl = okRun;
     const r = await generateKilnAsset({ prompt: 'a crate', captureViews: true });
 
@@ -250,11 +278,22 @@ describe('generateKilnAsset viewRenderPort (B3b/B4)', () => {
     const cpu = (await renderCodeViewGrid(CANNED_CODE)).png;
     expect(r.views).toBeInstanceOf(Buffer);
     expect(Buffer.compare(r.views!, cpu)).toBe(0);
-    // Pin: the port-absent result shape is unchanged — no provenance/degrade keys.
+    // Legacy port-specific fields remain absent; the additive fidelity contract
+    // now tells callers the image is not suitable for material acceptance.
     expect(r.viewsRendererId).toBeUndefined();
     expect(r.renderDegraded).toBeUndefined();
     expect(r.renderDegradedReason).toBeUndefined();
     expect('renderDegraded' in r).toBe(false);
+    expect(r.viewsFidelity).toMatchObject({
+      version: 'kiln.view-fidelity.v1',
+      requested: 'full-preferred',
+      delivered: 'geometry-flat',
+      materialFaithful: false,
+      exactArtifact: false,
+      degraded: true,
+      degradeReason: 'material-faithful view render port unavailable',
+    });
+    expect(r.viewsFidelity?.inputGlbSha256).toMatch(/^sha256:[0-9a-f]{64}$/);
   });
 
   test('port success: composited port views, port rendererId, renderDegraded false', async () => {
@@ -279,6 +318,13 @@ describe('generateKilnAsset viewRenderPort (B3b/B4)', () => {
     expect(r.renderDegraded).toBe(false);
     expect(r.renderDegradedReason).toBeUndefined();
     expect(r.viewsRendererId).toBe('dawn-vulkan:test-gpu:1.0');
+    expect(r.viewsFidelity).toMatchObject({
+      delivered: 'full-material',
+      materialFaithful: true,
+      exactArtifact: true,
+      rendererId: 'dawn-vulkan:test-gpu:1.0',
+      degraded: false,
+    });
     // The views are the port cells composited into the SAME 3x2 grid layout,
     // and stamped with the same cell labels + gnomon the CPU path applies.
     const { compositeViewPngGrid, SIX_VIEWS } = await import('../views');
@@ -317,6 +363,13 @@ describe('generateKilnAsset viewRenderPort (B3b/B4)', () => {
     expect(r.renderDegradedReason).toContain('GPU service unreachable');
     expect(r.viewsRendererId).toBe(CPU_RASTER_RENDERER_ID);
     expect(r.viewsRendererId).toMatch(/^cpu-raster:/);
+    expect(r.viewsFidelity).toMatchObject({
+      delivered: 'geometry-flat',
+      materialFaithful: false,
+      exactArtifact: false,
+      degraded: true,
+    });
+    expect(r.viewsFidelity?.degradeReason).toContain('GPU service unreachable');
     const cpu = (await renderCodeViewGrid(CANNED_CODE)).png;
     expect(Buffer.compare(r.views!, cpu)).toBe(0);
   });
