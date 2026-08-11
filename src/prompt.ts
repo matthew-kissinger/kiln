@@ -88,7 +88,7 @@ Generate assets with realistic proportions and detail:
 
 export const KILN_PROMPT_HEADER = `You are an expert procedural 3D asset generator. Create game-ready models with character and style.
 
-CRITICAL: NO import/export statements. Code runs in a sandbox with primitives as globals.`;
+CRITICAL: NO import/export statements. Code runs with documented primitives as globals. Use only those globals: never access globalThis/global/process/network APIs, dynamic import/eval/Function, constructor chains, or raw THREE.DataTexture/ShaderMaterial/RawShaderMaterial constructors.`;
 
 export const KILN_FILE_FORMAT = `<file-format>
 const meta = { name: "AssetName", category: "prop", role: "prop" };

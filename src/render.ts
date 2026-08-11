@@ -88,6 +88,7 @@ import {
   type MaterialResourceProvenanceV1,
 } from './material-resources';
 import { DEFAULT_TEXTURE_RESOLVER, type TextureResolver } from './texture-resolver';
+import { assertGeneratedSourceSafe } from './validation';
 import { analyzePartPenetration, type PartPenetrationEvidenceV1 } from './qa/self-intersection';
 import { applyKitContract, type KitPackOptions, type KitPackSummary } from './kit';
 import {
@@ -334,6 +335,10 @@ export async function executeKilnCode(
   // Normalize line endings - Windows CRLF from LLM responses trips up the
   // Function constructor.
   const normalized = code.replace(/\r\n/g, '\n');
+
+  // Defense in depth only: reject known ambient/dynamic-code escape patterns
+  // before the Function constructor sees source. This is not process isolation.
+  assertGeneratedSourceSafe(normalized);
 
   const primitiveUsage: Record<string, number> = {};
   const globals = buildSandboxGlobals(primitiveUsage, {

@@ -7,7 +7,7 @@
  * program, which renderGLB renders to actual GLB bytes. The live e2e
  * (`pixelforge gen glb`) covers the LLM half.
  */
-import { test, expect, describe, mock, beforeAll, afterAll } from 'bun:test';
+import { test, expect, describe, mock, beforeAll, afterAll, spyOn } from 'bun:test';
 import { createAssetIntentV1 } from '../contracts';
 
 // A real, minimal, valid Kiln program (mirrors render-edges.test.ts). renderGLB
@@ -298,21 +298,20 @@ describe('generateKilnAsset viewRenderPort (B3b/B4)', () => {
   });
 
   test('R2.11: final CPU fallback does not execute authored source a second time', async () => {
-    const counterKey = '__kilnR211BuildCount';
-    delete (globalThis as Record<string, unknown>)[counterKey];
     const countedCode = CANNED_CODE.replace(
-      'function build() {',
-      `function build() { globalThis.${counterKey} = (globalThis.${counterKey} ?? 0) + 1;`,
+      'boxGeo(1, 1, 1)',
+      'boxGeo(0.5 + Math.clz32(1) * 0, 1, 1)',
     );
     runImpl = async () => ({ code: countedCode, toolCalls: ['kiln_submit'], steps: 1 });
+    const sourceExecutionSpy = spyOn(Math, 'clz32');
     try {
       const result = await generateKilnAsset({ prompt: 'a crate', captureViews: true });
       expect(result.views).toBeInstanceOf(Buffer);
-      expect((globalThis as Record<string, unknown>)[counterKey]).toBe(1);
+      expect(sourceExecutionSpy).toHaveBeenCalledTimes(1);
       expect(result.viewsFidelity?.exactArtifact).toBe(true);
       expect(result.viewsFidelity?.inputGlbSha256).toBe(result.artifactGlbSha256);
     } finally {
-      delete (globalThis as Record<string, unknown>)[counterKey];
+      sourceExecutionSpy.mockRestore();
     }
   });
 

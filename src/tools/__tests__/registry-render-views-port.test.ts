@@ -36,27 +36,18 @@ function build() {
 }
 `;
 
-// A real, QA-decodable DataTexture (8-bit RGBA, srgb) — an empty `new
-// THREE.Texture()` has no pixel payload and gets blocked by
-// MAT_TEXTURE_DECODE_FAILED before routing is ever reached.
+// A real, QA-decodable approved procedural texture. Generated source may not
+// construct raw THREE.DataTexture instances at the evaluator boundary.
 const TEXTURED_CODE = `
 const meta = { name: 'textured-box', category: 'prop' };
 function build() {
   const root = createRoot('Root');
-  const mat = gameMaterial('#ffffff');
-  const size = 8;
-  const data = new Uint8Array(size * size * 4);
-  for (let i = 0; i < size * size; i++) {
-    data[i * 4] = 200;
-    data[i * 4 + 1] = 100;
-    data[i * 4 + 2] = 50;
-    data[i * 4 + 3] = 255;
-  }
-  const tex = new THREE.DataTexture(data, size, size, THREE.RGBAFormat, THREE.UnsignedByteType);
-  tex.needsUpdate = true;
-  tex.colorSpace = THREE.SRGBColorSpace;
-  mat.map = tex;
-  createPart('Body', boxGeo(1, 1, 1), mat, { parent: root });
+  const albedo = proceduralTexture({
+    size: 8,
+    name: 'RoutingFixture',
+    layers: [{ op: 'checker', colorA: 0xc86432, colorB: 0x643219, squares: 2 }],
+  });
+  createPart('Body', boxGeo(1, 1, 1), pbrMaterial({ albedo }), { parent: root });
   return root;
 }
 `;
