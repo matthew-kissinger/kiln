@@ -1,7 +1,11 @@
 import { describe, expect, test } from 'bun:test';
 import { resolveEvaluatorMode } from '../render';
 import { EvaluatorSubprocessError } from './subprocess';
-import { isolatedEvaluatorLaunch } from './isolation';
+import {
+  EvaluatorIsolationReadinessError,
+  isolationReadinessFailureCode,
+  isolatedEvaluatorLaunch,
+} from './isolation';
 
 const PATHS = new Set([
   '/usr',
@@ -22,6 +26,18 @@ function launch() {
 }
 
 describe('isolated evaluator process contract', () => {
+  test('exposes only the reviewed readiness failure vocabulary', () => {
+    for (const code of ['spawn', 'namespace', 'probe-protocol', 'deadline'] as const) {
+      const error = new EvaluatorIsolationReadinessError(code);
+      expect(error).toMatchObject({
+        code: 'ISOLATION_UNAVAILABLE',
+        message: 'Isolated evaluator readiness check failed.',
+        readinessCode: code,
+      });
+      expect(isolationReadinessFailureCode(error)).toBe(code);
+    }
+    expect(isolationReadinessFailureCode(new Error('bwrap /private/path secret'))).toBeUndefined();
+  });
   test('selects isolated mode exactly and rejects near-miss flags', () => {
     expect(resolveEvaluatorMode({ KILN_EVALUATOR_MODE: 'isolated' })).toBe('isolated');
     expect(() => resolveEvaluatorMode({ KILN_EVALUATOR_MODE: 'isolate' })).toThrow(

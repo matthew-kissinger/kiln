@@ -18,6 +18,8 @@ const DEFAULT_PRLIMIT_PATH = '/usr/bin/prlimit';
 const DEFAULT_NODE_PATH = '/usr/local/bin/node';
 const READINESS_VERSION = 'kiln.evaluator.isolation-readiness.v1';
 const PROBE_DEADLINE_MS = 8_000;
+const MAX_READINESS_STDERR_BYTES = 4 * 1024;
+const READINESS_FAILURE_CODES = ['spawn', 'namespace', 'probe-protocol', 'deadline'] as const;
 const READINESS_CHECKS = [
   'user-namespace',
   'no-new-privileges',
@@ -49,6 +51,29 @@ export interface EvaluatorIsolationReadiness {
   version: typeof READINESS_VERSION;
   mode: 'isolated';
   checks: readonly string[];
+}
+
+export type EvaluatorIsolationReadinessFailureCode = (typeof READINESS_FAILURE_CODES)[number];
+
+export class EvaluatorIsolationReadinessError extends EvaluatorSubprocessError {
+  readonly readinessCode: EvaluatorIsolationReadinessFailureCode;
+
+  constructor(readinessCode: EvaluatorIsolationReadinessFailureCode) {
+    super('ISOLATION_UNAVAILABLE', 'Isolated evaluator readiness check failed.');
+    this.name = 'EvaluatorIsolationReadinessError';
+    this.readinessCode = readinessCode;
+  }
+}
+
+export function isolationReadinessFailureCode(
+  error: unknown,
+): EvaluatorIsolationReadinessFailureCode | undefined {
+  if (!(error instanceof EvaluatorIsolationReadinessError)) return undefined;
+  return READINESS_FAILURE_CODES.includes(error.readinessCode) ? error.readinessCode : undefined;
+}
+
+function namespaceFailure(stderr: string): boolean {
+  return /(?:namespace|unshare|uid map|operation not permitted|permission denied)/i.test(stderr);
 }
 
 function isolationUnavailable(): never {
@@ -205,9 +230,16 @@ function strictReadinessResult(value: unknown): EvaluatorIsolationReadiness {
 export async function assertIsolatedEvaluatorReady(
   host: IsolatedEvaluatorHost = {},
 ): Promise<EvaluatorIsolationReadiness> {
-  if (typeof process.getuid !== 'function' || process.getuid() === 0) isolationUnavailable();
+  if (typeof process.getuid !== 'function' || process.getuid() === 0) {
+    throw new EvaluatorIsolationReadinessError('namespace');
+  }
   const probePath = fileURLToPath(new URL('./probe-worker.ts', import.meta.url));
-  const launch = isolatedEvaluatorLaunch(probePath, host);
+  let launch: EvaluatorProcessLaunch;
+  try {
+    launch = isolatedEvaluatorLaunch(probePath, host);
+  } catch {
+    throw new EvaluatorIsolationReadinessError('spawn');
+  }
   return await new Promise<EvaluatorIsolationReadiness>((resolve, reject) => {
     const child = spawn(launch.command, launch.args, {
       env: launch.env,
@@ -216,52 +248,61 @@ export async function assertIsolatedEvaluatorReady(
       stdio: ['ignore', 'ignore', 'pipe', 'pipe'],
     });
     const protocol = child.stdio[3];
+    const stderr = child.stderr;
     const chunks: Buffer[] = [];
+    const stderrChunks: Buffer[] = [];
     let bytes = 0;
+    let stderrBytes = 0;
     let settled = false;
-    const fail = () => {
+    const fail = (readinessCode: EvaluatorIsolationReadinessFailureCode) => {
       if (settled) return;
       settled = true;
       clearTimeout(timer);
-      reject(
-        new EvaluatorSubprocessError(
-          'ISOLATION_UNAVAILABLE',
-          'Isolated evaluator readiness check failed.',
-        ),
-      );
+      reject(new EvaluatorIsolationReadinessError(readinessCode));
     };
     const timer = setTimeout(() => {
       try {
         if (child.pid) process.kill(-child.pid, 'SIGKILL');
       } catch {}
-      fail();
+      fail('deadline');
     }, PROBE_DEADLINE_MS);
     if (!protocol) {
-      fail();
+      fail('probe-protocol');
       return;
     }
+    stderr?.on('data', (chunk: Buffer) => {
+      if (stderrBytes >= MAX_READINESS_STDERR_BYTES) return;
+      const remaining = MAX_READINESS_STDERR_BYTES - stderrBytes;
+      const bounded = Buffer.from(chunk).subarray(0, remaining);
+      stderrBytes += bounded.byteLength;
+      stderrChunks.push(bounded);
+    });
     protocol.on('data', (chunk: Buffer) => {
       bytes += chunk.byteLength;
       if (bytes > 16 * 1024) {
         try {
           if (child.pid) process.kill(-child.pid, 'SIGKILL');
         } catch {}
-        fail();
+        fail('probe-protocol');
         return;
       }
       chunks.push(Buffer.from(chunk));
     });
-    child.once('error', fail);
+    child.once('error', () => fail('spawn'));
     child.once('close', (code) => {
       if (settled) return;
       try {
-        if (code !== 0 || chunks.length === 0) return fail();
+        if (code !== 0) {
+          const boundedStderr = Buffer.concat(stderrChunks).toString('utf8');
+          return fail(namespaceFailure(boundedStderr) ? 'namespace' : 'probe-protocol');
+        }
+        if (chunks.length === 0) return fail('probe-protocol');
         const result = strictReadinessResult(JSON.parse(Buffer.concat(chunks).toString('utf8')));
         settled = true;
         clearTimeout(timer);
         resolve(result);
       } catch {
-        fail();
+        fail('probe-protocol');
       }
     });
   });

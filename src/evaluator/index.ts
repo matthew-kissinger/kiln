@@ -16,9 +16,12 @@ export {
 } from './subprocess';
 export {
   assertIsolatedEvaluatorReady,
+  EvaluatorIsolationReadinessError,
+  isolationReadinessFailureCode,
   isolatedEvaluatorLaunch,
   renderGLBViaIsolatedEvaluator,
   type EvaluatorIsolationReadiness,
+  type EvaluatorIsolationReadinessFailureCode,
   type IsolatedEvaluatorControls,
   type IsolatedEvaluatorHost,
 } from './isolation';
