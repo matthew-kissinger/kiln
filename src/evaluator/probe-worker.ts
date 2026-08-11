@@ -22,6 +22,14 @@ async function deniedRead(path: string): Promise<boolean> {
   }
 }
 
+async function optionalRead(path: string): Promise<string | undefined> {
+  try {
+    return await readFile(path, 'utf8');
+  } catch {
+    return undefined;
+  }
+}
+
 async function deniedWrite(path: string): Promise<boolean> {
   try {
     await writeFile(path, 'denied');
@@ -33,7 +41,13 @@ async function deniedWrite(path: string): Promise<boolean> {
 
 async function deniedConnect(host: string, port: number): Promise<boolean> {
   return await new Promise<boolean>((resolve) => {
-    const socket = connect({ host, port });
+    let socket: ReturnType<typeof connect>;
+    try {
+      socket = connect({ host, port });
+    } catch {
+      resolve(true);
+      return;
+    }
     const timer = setTimeout(() => {
       socket.destroy();
       resolve(true);
@@ -50,6 +64,20 @@ async function deniedConnect(host: string, port: number): Promise<boolean> {
   });
 }
 
+function isolationInterfaces(): ReturnType<typeof networkInterfaces> | undefined {
+  try {
+    return networkInterfaces();
+  } catch {
+    return undefined;
+  }
+}
+
+function writeFailure(failure: 'namespace' | 'probe-protocol'): void {
+  writeFileSync(3, JSON.stringify({ version: VERSION, mode: 'isolated', failure }), {
+    encoding: 'utf8',
+  });
+}
+
 function generatedDenials(): boolean {
   const prelude = "const meta = { name: 'probe' }; function build(){ return createRoot('probe'); }";
   const probes = [
@@ -62,20 +90,21 @@ function generatedDenials(): boolean {
 }
 
 async function main(): Promise<void> {
-  const status = await readFile('/proc/self/status', 'utf8');
-  const uidMap = await readFile('/proc/self/uid_map', 'utf8');
+  const status = await optionalRead('/proc/self/status');
+  const uidMap = await optionalRead('/proc/self/uid_map');
   const envKeys = Object.keys(process.env).sort();
-  const outsideUid = Number(uidMap.trim().split(/\s+/)[1]);
-  const interfaces = Object.values(networkInterfaces()).flat().filter(Boolean);
+  const outsideUid = Number(uidMap?.trim().split(/\s+/)[1]);
+  const interfaceMap = isolationInterfaces();
+  const interfaces = interfaceMap ? Object.values(interfaceMap).flat().filter(Boolean) : undefined;
   const checks: Array<[string, boolean]> = [
     ['user-namespace', Number.isInteger(outsideUid) && outsideUid > 0],
-    ['no-new-privileges', /^NoNewPrivs:\s+1$/m.test(status)],
-    ['capabilities-empty', /^CapEff:\s+0+$/m.test(status)],
+    ['no-new-privileges', typeof status === 'string' && /^NoNewPrivs:\s+1$/m.test(status)],
+    ['capabilities-empty', typeof status === 'string' && /^CapEff:\s+0+$/m.test(status)],
     ['environment-exact', envKeys.join(',') === 'NODE_ENV,NO_COLOR'],
     ['product-filesystem-denied', await deniedRead('/app/agent-runtime/src/server.ts')],
     ['host-filesystem-denied', await deniedRead('/etc/passwd')],
     ['runtime-filesystem-read-only', await deniedWrite('/app/node_modules/.kiln-probe')],
-    ['network-namespace-empty', interfaces.every((entry) => entry?.internal === true)],
+    ['network-namespace-empty', interfaces?.every((entry) => entry?.internal === true) === true],
     [
       'metadata-and-local-network-denied',
       (await deniedConnect('169.254.169.254', 80)) && (await deniedConnect('127.0.0.1', 8080)),
@@ -87,9 +116,7 @@ async function main(): Promise<void> {
     const failure = failedChecks.some((name) => NAMESPACE_CHECKS.has(name))
       ? 'namespace'
       : 'probe-protocol';
-    writeFileSync(3, JSON.stringify({ version: VERSION, mode: 'isolated', failure }), {
-      encoding: 'utf8',
-    });
+    writeFailure(failure);
     process.exitCode = 1;
   } else {
     writeFileSync(
@@ -101,5 +128,8 @@ async function main(): Promise<void> {
 }
 
 await main().catch(() => {
+  try {
+    writeFailure('probe-protocol');
+  } catch {}
   process.exitCode = 1;
 });
