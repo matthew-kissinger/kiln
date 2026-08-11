@@ -3,6 +3,7 @@ import { connect } from 'node:net';
 import { networkInterfaces } from 'node:os';
 import { validate } from '../validation';
 import { writeFileSync } from 'node:fs';
+import { processCapabilitiesAreEmpty } from './probe-invariants';
 
 const VERSION = 'kiln.evaluator.isolation-readiness.v1';
 type ProbeFailure =
@@ -124,7 +125,7 @@ async function main(): Promise<void> {
   const checks: Array<[string, boolean]> = [
     ['user-namespace', Number.isInteger(outsideUid) && outsideUid > 0],
     ['no-new-privileges', typeof status === 'string' && /^NoNewPrivs:\s+1$/m.test(status)],
-    ['capabilities-empty', typeof status === 'string' && /^CapEff:\s+0+$/m.test(status)],
+    ['capabilities-empty', processCapabilitiesAreEmpty(status)],
     ['environment-exact', envKeys.join(',') === 'NODE_ENV,NO_COLOR'],
     ['product-filesystem-denied', await deniedRead('/app/agent-runtime/src/server.ts')],
     ['host-filesystem-denied', await deniedRead('/etc/passwd')],

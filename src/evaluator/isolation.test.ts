@@ -8,6 +8,7 @@ import {
   isolationReadinessFailureCode,
   isolatedEvaluatorLaunch,
 } from './isolation';
+import { processCapabilitiesAreEmpty } from './probe-invariants';
 
 const PATHS = new Set([
   '/usr',
@@ -119,14 +120,14 @@ describe('isolated evaluator process contract', () => {
     expect(spec.command).toBe('/usr/bin/setpriv');
     expect(spec.detached).toBe(true);
     expect(spec.env).toEqual({ NODE_ENV: 'production', NO_COLOR: '1' });
-    expect(spec.args.slice(0, 6)).toEqual([
+    expect(spec.args.slice(0, 5)).toEqual([
       '--no-new-privs',
       '--inh-caps=-all',
       '--ambient-caps=-all',
-      '--bounding-set=-all',
       '--',
       '/usr/local/bin/bwrap',
     ]);
+    expect(spec.args).not.toContain('--bounding-set=-all');
     expect(spec.args).toContain('--unshare-all');
     expect(spec.args).not.toContain('--share-net');
     expect(spec.args).toContain('--disable-userns');
@@ -141,6 +142,27 @@ describe('isolated evaluator process contract', () => {
     expect(spec.args).toContain('--max-old-space-size=512');
     expect(spec.args).not.toContain('/app/agent-runtime');
     expect(spec.args).not.toContain('/etc');
+  });
+
+  test('requires every Linux capability set to be present and empty', () => {
+    const emptyStatus = [
+      'Name:\tnode',
+      'CapInh:\t0000000000000000',
+      'CapPrm:\t0000000000000000',
+      'CapEff:\t0000000000000000',
+      'CapBnd:\t0000000000000000',
+      'CapAmb:\t0000000000000000',
+    ].join('\n');
+    expect(processCapabilitiesAreEmpty(emptyStatus)).toBe(true);
+    for (const field of ['CapInh', 'CapPrm', 'CapEff', 'CapBnd', 'CapAmb']) {
+      expect(
+        processCapabilitiesAreEmpty(emptyStatus.replace(`${field}:\t0000`, `${field}:\t0001`)),
+      ).toBe(false);
+      expect(
+        processCapabilitiesAreEmpty(emptyStatus.replace(new RegExp(`^${field}:.*$`, 'm'), '')),
+      ).toBe(false);
+    }
+    expect(processCapabilitiesAreEmpty(undefined)).toBe(false);
   });
 
   test('refuses non-Linux hosts, missing binaries, and workers outside installed dependencies', () => {

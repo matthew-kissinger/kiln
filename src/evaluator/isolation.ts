@@ -138,10 +138,12 @@ function runtimeMounts(runtimeRoot: string, pathExists: (path: string) => boolea
 
 /**
  * Build the exact Linux process boundary used by production AgentCore images.
- * The outer image runs as a non-root user. setpriv removes every inherited
- * capability and locks no-new-privs before bubblewrap creates fresh user, PID,
- * network, mount, IPC, UTS, and cgroup namespaces. Only the language runtime
- * and installed dependency tree are mounted read-only; scratch is tmpfs.
+ * The outer image runs as a non-root user. setpriv clears inheritable/ambient
+ * capabilities and locks no-new-privs before bubblewrap creates fresh user,
+ * PID, network, mount, IPC, UTS, and cgroup namespaces. bubblewrap drops the
+ * bounding/effective sets after entering its user namespace, where that drop
+ * is valid for the non-root caller. Only the language runtime and installed
+ * dependency tree are mounted read-only; scratch is tmpfs.
  */
 function isolatedEvaluatorLaunchWithLoader(
   workerPath: string,
@@ -215,7 +217,6 @@ function isolatedEvaluatorLaunchWithLoader(
       '--no-new-privs',
       '--inh-caps=-all',
       '--ambient-caps=-all',
-      '--bounding-set=-all',
       '--',
       bwrapPath,
       ...bwrapArgs,
