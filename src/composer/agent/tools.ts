@@ -37,6 +37,7 @@ import type {
   SceneRenderPort,
   SceneRenderResult,
 } from '../render-port';
+import { ViewEvidenceHistoryStore } from '../../views/evidence-history';
 
 /**
  * A mutable sink the composer tools write into. Create one per run; after every
@@ -155,7 +156,11 @@ function composerViewFidelity(res: SceneRenderResult): DerivativeReviewFidelityV
  *  returned view (perCamera grid or single frame) + a JsonBlock of metadata, or a
  *  plain `{ok:false}` when the render failed. Block arrays are a valid (untyped)
  *  Strands callback return — cast past JSONValue, same as the kiln_* tools. */
-function renderToCallback(res: SceneRenderResult): JSONValue {
+function renderToCallback(
+  res: SceneRenderResult,
+  surface: 'scene_render' | 'scene_screenshot_camera',
+  evidenceHistory: ViewEvidenceHistoryStore,
+): JSONValue {
   if (!res.ok) {
     return { ok: false, error: res.error ?? 'render failed' } as JSONValue;
   }
@@ -164,10 +169,12 @@ function renderToCallback(res: SceneRenderResult): JSONValue {
     : res.pngBase64
       ? [res.pngBase64]
       : [];
+  const viewFidelity = composerViewFidelity(res);
   const json = {
     ok: true,
     views: frames.length,
-    viewFidelity: composerViewFidelity(res),
+    viewFidelity,
+    viewEvidence: evidenceHistory.record(surface, viewFidelity),
     ...(res.tris != null ? { tris: res.tris } : {}),
   };
   return [
@@ -196,6 +203,8 @@ export interface MakeComposerToolsOptions {
   sink: ComposerSink;
   /** Best-effort live render candidates (one per successful scene_render). */
   onCandidate?: (c: SceneRenderCandidate) => void;
+  /** Shared bounded hash-only material evidence ledger for this composer run. */
+  viewEvidenceHistory?: ViewEvidenceHistoryStore;
 }
 
 /**
@@ -206,6 +215,7 @@ export interface MakeComposerToolsOptions {
  */
 export function makeSceneComposerTools(opts: MakeComposerToolsOptions): Tool[] {
   const { model, render, sink } = opts;
+  const evidenceHistory = opts.viewEvidenceHistory ?? new ViewEvidenceHistoryStore();
 
   /** Re-serialize + re-evaluate into the sink; the single autosave point. */
   const capture = (): EvalResult => {
@@ -317,7 +327,7 @@ export function makeSceneComposerTools(opts: MakeComposerToolsOptions): Tool[] {
           }
         }
       }
-      return renderToCallback(res);
+      return renderToCallback(res, 'scene_render', evidenceHistory);
     },
   });
 
@@ -350,7 +360,7 @@ export function makeSceneComposerTools(opts: MakeComposerToolsOptions): Tool[] {
           },
         ],
       });
-      return renderToCallback(res);
+      return renderToCallback(res, 'scene_screenshot_camera', evidenceHistory);
     },
   });
 

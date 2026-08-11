@@ -80,6 +80,7 @@ export type {
   ResolvedCapture,
 } from './capture';
 export { compositeCellGrid, compositeViewPngGrid, GRID_COLS } from './grid';
+export { ViewEvidenceHistoryStore } from './evidence-history';
 export type { ComposedCellGrid, ComposedPngGrid } from './grid';
 export { CPU_RASTER_RENDERER_ID } from './renderer-id';
 export {

@@ -167,6 +167,46 @@ export interface DerivativeReviewFidelityV1 {
   reasonCodes?: ViewFidelityReasonCode[];
 }
 
+export type ViewEvidenceSurface =
+  | 'kiln_render'
+  | 'kiln_inspect'
+  | 'kiln_screenshot_animation'
+  | 'kiln_view_interior'
+  | 'scene_render'
+  | 'scene_screenshot_camera';
+
+/** Hash-only pointer to one prior fully material-faithful review request. */
+export interface FaithfulViewEvidenceReferenceV1 {
+  version: 'kiln.faithful-view-evidence-ref.v1';
+  sequence: number;
+  surface: ViewEvidenceSurface;
+  materialFaithful: true;
+  exactArtifact: boolean;
+  inputGlbSha256: `sha256:${string}`[];
+  rendererIds: string[];
+}
+
+/** Unambiguous evidence status for the request that just completed. */
+export interface CurrentViewEvidenceV1 {
+  sequence: number;
+  surface: ViewEvidenceSurface;
+  delivered: DeliveredViewFidelity;
+  materialFaithful: boolean;
+  exactArtifact: boolean;
+  degraded: boolean;
+  inputGlbSha256: `sha256:${string}`[];
+  rendererIds: string[];
+  reasonCodes?: ViewFidelityReasonCode[];
+}
+
+/** Bounded, model-visible metadata only. Contains no source or pixel bytes. */
+export interface ViewEvidenceHistoryV1 {
+  version: 'kiln.view-evidence-history.v1';
+  current: CurrentViewEvidenceV1;
+  lastFaithful?: FaithfulViewEvidenceReferenceV1;
+  faithfulHistory: FaithfulViewEvidenceReferenceV1[];
+}
+
 /**
  * PbrRenderRequest — one PBR/beauty render of an ALREADY-PRODUCED GLB.
  *

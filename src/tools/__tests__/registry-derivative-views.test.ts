@@ -153,4 +153,39 @@ describe('derivative review surfaces', () => {
       reasonCodes: ['FULL_MATERIAL_RENDER_UNAVAILABLE', 'DERIVATIVE_GPU_FRAMING_UNSUPPORTED'],
     });
   });
+
+  test('a later degraded request exposes current failure while retaining only a hash reference', async () => {
+    let succeed = true;
+    const def = createKilnInspectDef({
+      viewRenderPort: async (request) => {
+        if (!succeed) return { ok: false, rendererId: 'gpu:inspect', error: 'device lost' };
+        return {
+          ok: true,
+          rendererId: 'gpu:inspect',
+          viewsPng: [solidPng(request.size!)],
+          derivativeFidelity: {
+            materialFaithful: true,
+            inputGlbSha256: `sha256:${createHash('sha256').update(request.glb).digest('hex')}`,
+          },
+        };
+      },
+    });
+    const first = (await def.run({ code: ANIMATED, isolate: true })) as KilnInspectResult;
+    succeed = false;
+    const second = (await def.run({ code: ANIMATED, isolate: true })) as KilnInspectResult;
+
+    expect(first.viewEvidence?.current.materialFaithful).toBe(true);
+    expect(second.viewEvidence?.current).toMatchObject({
+      sequence: 2,
+      materialFaithful: false,
+      delivered: 'geometry-flat',
+      degraded: true,
+    });
+    expect(second.viewEvidence?.lastFaithful).toMatchObject({
+      sequence: 1,
+      materialFaithful: true,
+      inputGlbSha256: first.viewEvidence?.current.inputGlbSha256,
+    });
+    expect(JSON.stringify(second.viewEvidence)).not.toContain('png');
+  });
 });

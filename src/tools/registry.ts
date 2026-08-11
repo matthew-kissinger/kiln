@@ -31,10 +31,12 @@ import type {
   PbrRenderPort,
   ViewFidelityReasonCode,
   ViewFidelityV1,
+  ViewEvidenceHistoryV1,
 } from '../composer/render-port';
 import type { ViewGridResult } from '../views';
 import { sceneNeedsPbrShading } from '../material-resources';
 import type { GenerationCallBudget } from '../agent/call-budget';
+import { ViewEvidenceHistoryStore } from '../views/evidence-history';
 
 // =============================================================================
 // Tool definition contract
@@ -119,6 +121,8 @@ export interface KilnToolContext {
   renderObservationPort?: RenderObservationPort;
   /** Shared generation-global allowance, forwarded to the host observer port. */
   generationCallBudget?: GenerationCallBudget;
+  /** Shared bounded hash-only evidence ledger for one agent/tool session. */
+  viewEvidenceHistory?: ViewEvidenceHistoryStore;
 }
 
 /** JSON-safe value accepted from a host visual observer. */
@@ -173,6 +177,20 @@ export const DEFAULT_INLOOP_VIEW_RENDER_TIMEOUT_MS = 6000;
 
 function trustedCategory(context: KilnToolContext): AssetCategory | undefined {
   return context.intent?.category ?? context.category;
+}
+
+const viewEvidenceHistoryByContext = new WeakMap<KilnToolContext, ViewEvidenceHistoryStore>();
+const VIEW_EVIDENCE_GUIDANCE =
+  ' viewEvidence.current describes ONLY this request. lastFaithful is older hash-only evidence for reference, not reused pixels and not current verification.';
+
+function withViewEvidenceHistory(context: KilnToolContext): KilnToolContext {
+  if (context.viewEvidenceHistory) return context;
+  let history = viewEvidenceHistoryByContext.get(context);
+  if (!history) {
+    history = new ViewEvidenceHistoryStore();
+    viewEvidenceHistoryByContext.set(context, history);
+  }
+  return { ...context, viewEvidenceHistory: history };
 }
 
 async function sha256Glb(bytes: Uint8Array): Promise<`sha256:${string}`> {
@@ -687,6 +705,7 @@ export interface KilnRenderViewsResult {
   pngBase64?: string;
   /** Truthful material fidelity delivered by this render, visible to the model. */
   viewFidelity?: ViewFidelityV1;
+  viewEvidence?: ViewEvidenceHistoryV1;
   warnings: string[];
   error?: string;
 }
@@ -810,6 +829,7 @@ async function runRenderViews(
       degraded: drawnBy.degraded,
       ...(drawnBy.degradedReason ? { degradeReason: drawnBy.degradedReason } : {}),
     };
+    const viewEvidence = context.viewEvidenceHistory?.record('kiln_render', viewFidelity);
 
     // A host bookkeeping hook must never be able to fail a render the model is
     // waiting on.
@@ -842,6 +862,7 @@ async function runRenderViews(
       gridHeight: grid.height,
       pngBase64: grid.png.toString('base64'),
       viewFidelity,
+      ...(viewEvidence ? { viewEvidence } : {}),
       warnings,
       qaReport: rendered.qaReport,
     };
@@ -874,15 +895,17 @@ const KILN_RENDER_VIEWS_DESCRIPTION =
   'elevation 0 = eye level, positive looks down. Use it to aim every cell at what actually needs ' +
   'checking — a seam, an underside, a joint the standard six leave occluded — instead of spending ' +
   'cells on angles that show nothing. Max 9 cells. The reply echoes the grid shape it rendered. ' +
-  'If the build fails you get an error and NO image — fix the code and render again. Uses GPU PBR shading when the scene has textured or metallic materials and the renderer is reachable; otherwise uses a flat-shaded CPU render. Always read viewFidelity: when materialFaithful is false, use the image for geometry and silhouette only; do not judge material color, textures, normal relief, roughness, metalness, AO, or emissive response from it. Writes no files.';
+  'If the build fails you get an error and NO image — fix the code and render again. Uses GPU PBR shading when the scene has textured or metallic materials and the renderer is reachable; otherwise uses a flat-shaded CPU render. Always read viewFidelity: when materialFaithful is false, use the image for geometry and silhouette only; do not judge material color, textures, normal relief, roughness, metalness, AO, or emissive response from it. Writes no files.' +
+  VIEW_EVIDENCE_GUIDANCE;
 
 /** Create the unified render/view definition with host-owned QA context. */
 export function createKilnRenderViewsDef(context: KilnToolContext = {}): KilnToolDef {
+  const statefulContext = withViewEvidenceHistory(context);
   return {
     name: 'kiln_render',
     description: KILN_RENDER_VIEWS_DESCRIPTION,
     inputSchema: renderViewsInput,
-    run: async (input) => runRenderViews(renderViewsInput.parse(input), context),
+    run: async (input) => runRenderViews(renderViewsInput.parse(input), statefulContext),
     media: screenshotMedia,
   };
 }
@@ -913,6 +936,7 @@ export interface KilnScreenshotAnimationResult {
   framesBase64?: string[];
   /** Material fidelity and SHA-256 receipt for every posed derivative GLB. */
   viewFidelity?: DerivativeReviewFidelityV1;
+  viewEvidence?: ViewEvidenceHistoryV1;
   /** Clip names available in the scene (set when the requested clip wasn't found). */
   availableClips?: string[];
   warnings: string[];
@@ -951,6 +975,10 @@ async function runScreenshotAnimation(
         ...(r.availableClips ? { availableClips: r.availableClips } : {}),
       };
     }
+    const viewFidelity = derivativeReviewFidelity(r.derivativeReceipts);
+    const viewEvidence = viewFidelity
+      ? context.viewEvidenceHistory?.record('kiln_screenshot_animation', viewFidelity)
+      : undefined;
     const base: KilnScreenshotAnimationResult = {
       ok: true,
       frames: r.frames,
@@ -962,9 +990,8 @@ async function runScreenshotAnimation(
       ...(r.unresolvedTracks ? { unresolvedTracks: r.unresolvedTracks } : {}),
       ...(r.width ? { width: r.width } : {}),
       ...(r.height ? { height: r.height } : {}),
-      ...(derivativeReviewFidelity(r.derivativeReceipts)
-        ? { viewFidelity: derivativeReviewFidelity(r.derivativeReceipts) }
-        : {}),
+      ...(viewFidelity ? { viewFidelity } : {}),
+      ...(viewEvidence ? { viewEvidence } : {}),
     };
     if (r.pngs) return { ...base, framesBase64: r.pngs.map((p) => p.toString('base64')) };
     return { ...base, pngBase64: r.png!.toString('base64') };
@@ -1019,15 +1046,18 @@ const KILN_SCREENSHOT_ANIMATION_DESCRIPTION =
   'three-quarter), perFrame (optional, separate high-res frames). If unresolvedTracks comes back ' +
   'non-empty the clip targets joints that do not exist (a name mismatch) and looks frozen — fix the ' +
   'track names. Each frame is rendered from deterministic posed GLB bytes: GPU PBR when available, ' +
-  'otherwise a GLB-native geometry-flat fallback. Read viewFidelity before judging materials; writes no files.';
+  'otherwise a GLB-native geometry-flat fallback. Read viewFidelity before judging materials; writes no files.' +
+  VIEW_EVIDENCE_GUIDANCE;
 
 /** Create an animation-view definition with host-owned QA context. */
 export function createKilnScreenshotAnimationDef(context: KilnToolContext = {}): KilnToolDef {
+  const statefulContext = withViewEvidenceHistory(context);
   return {
     name: 'kiln_screenshot_animation',
     description: KILN_SCREENSHOT_ANIMATION_DESCRIPTION,
     inputSchema: screenshotAnimationInput,
-    run: async (input) => runScreenshotAnimation(screenshotAnimationInput.parse(input), context),
+    run: async (input) =>
+      runScreenshotAnimation(screenshotAnimationInput.parse(input), statefulContext),
     media: screenshotAnimationMedia,
     mediaMulti: screenshotAnimationMediaMulti,
   };
@@ -1054,6 +1084,7 @@ export interface KilnViewInteriorResult {
   pngBase64?: string;
   /** Material fidelity and SHA-256 receipt for every cutaway derivative GLB. */
   viewFidelity?: DerivativeReviewFidelityV1;
+  viewEvidence?: ViewEvidenceHistoryV1;
   warnings: string[];
   error?: string;
 }
@@ -1093,6 +1124,10 @@ async function runViewInterior(
           : 'No roof was found, so nothing could be lifted and the interior is still occluded. Build the roof with createRoofPlanes/createGableRoof (which tag it as a roof), or name the roof group "Roof".',
       );
     }
+    const viewFidelity = derivativeReviewFidelity(grid.derivativeReceipts);
+    const viewEvidence = viewFidelity
+      ? context.viewEvidenceHistory?.record('kiln_view_interior', viewFidelity)
+      : undefined;
     return {
       ok: true,
       views: grid.views,
@@ -1101,9 +1136,8 @@ async function runViewInterior(
       roofsHidden: grid.roofsHidden,
       wallsHidden: grid.wallsHidden,
       pngBase64: grid.png.toString('base64'),
-      ...(derivativeReviewFidelity(grid.derivativeReceipts)
-        ? { viewFidelity: derivativeReviewFidelity(grid.derivativeReceipts) }
-        : {}),
+      ...(viewFidelity ? { viewFidelity } : {}),
+      ...(viewEvidence ? { viewEvidence } : {}),
       warnings,
     };
   } catch (err) {
@@ -1132,15 +1166,17 @@ const KILN_VIEW_INTERIOR_DESCRIPTION =
   'roofsHidden comes back 0 no roof was resolvable and the interior stays hidden — build the roof ' +
   'with a roof primitive (or name the group "Roof"). Each cell is rendered from deterministic cutaway ' +
   'GLB bytes: GPU PBR when available, otherwise a GLB-native geometry-flat fallback. Read viewFidelity ' +
-  'before judging materials; writes no files.';
+  'before judging materials; writes no files.' +
+  VIEW_EVIDENCE_GUIDANCE;
 
 /** Create the interior-view definition with host-owned QA context. */
 export function createKilnViewInteriorDef(context: KilnToolContext = {}): KilnToolDef {
+  const statefulContext = withViewEvidenceHistory(context);
   return {
     name: 'kiln_view_interior',
     description: KILN_VIEW_INTERIOR_DESCRIPTION,
     inputSchema: viewInteriorInput,
-    run: async (input) => runViewInterior(viewInteriorInput.parse(input), context),
+    run: async (input) => runViewInterior(viewInteriorInput.parse(input), statefulContext),
     media: screenshotMedia,
   };
 }
@@ -1223,6 +1259,7 @@ export interface KilnInspectResult {
   pngBase64?: string;
   /** Fidelity and exact derivative-byte receipt for this close-up. */
   viewFidelity?: DerivativeReviewFidelityV1;
+  viewEvidence?: ViewEvidenceHistoryV1;
   /** Part names available for framing (set when the requested part was not found). */
   availableParts?: string[];
   error?: string;
@@ -1276,6 +1313,10 @@ async function runInspect(
       },
       context,
     );
+    const viewFidelity = derivativeReviewFidelity([rendered.receipt]);
+    const viewEvidence = viewFidelity
+      ? context.viewEvidenceHistory?.record('kiln_inspect', viewFidelity)
+      : undefined;
     // Always state the angles, named camera or not, so the model can step from
     // where it actually is instead of guessing the next view by name.
     const from = `the ${r.view} view (azimuth ${r.azimuthDeg}deg, elevation ${r.elevationDeg}deg)`;
@@ -1297,7 +1338,8 @@ async function runInspect(
       width: r.size,
       height: r.size,
       pngBase64: rendered.png.toString('base64'),
-      viewFidelity: derivativeReviewFidelity([rendered.receipt]),
+      ...(viewFidelity ? { viewFidelity } : {}),
+      ...(viewEvidence ? { viewEvidence } : {}),
     };
   } catch (err) {
     return { ok: false, error: err instanceof Error ? err.message : String(err) };
@@ -1329,15 +1371,17 @@ const KILN_INSPECT_DESCRIPTION =
   'either pick a different view, or set isolate:true to hide everything else and see the part ' +
   'unobstructed (use it for anything buried inside or behind other geometry). The view is rendered ' +
   'from deterministic derivative GLB bytes; GPU PBR is used only when it can preserve the requested ' +
-  'framing, otherwise the GLB-native geometry-flat fallback reports why in viewFidelity. Writes no files.';
+  'framing, otherwise the GLB-native geometry-flat fallback reports why in viewFidelity. Writes no files.' +
+  VIEW_EVIDENCE_GUIDANCE;
 
 /** Create the close-up inspection definition. */
 export function createKilnInspectDef(context: KilnToolContext = {}): KilnToolDef {
+  const statefulContext = withViewEvidenceHistory(context);
   return {
     name: 'kiln_inspect',
     description: KILN_INSPECT_DESCRIPTION,
     inputSchema: inspectInput,
-    run: async (input) => runInspect(inspectInput.parse(input), context),
+    run: async (input) => runInspect(inspectInput.parse(input), statefulContext),
     media: screenshotMedia,
   };
 }

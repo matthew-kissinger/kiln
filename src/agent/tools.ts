@@ -20,6 +20,7 @@
 import { tool, ImageBlock, JsonBlock, type Tool, type JSONValue } from '@strands-agents/sdk';
 import { z } from 'zod';
 import type { CaptureConfig } from '../views/capture';
+import { ViewEvidenceHistoryStore } from '../views/evidence-history';
 
 import {
   createKilnToolRegistry,
@@ -190,10 +191,16 @@ function toStrandsTool(def: KilnToolDef, context: KilnToolContext = {}): Tool {
  * @param sink - Receives the submitted final code. Read `sink.code` after invoke.
  */
 export function makeKilnTools(sink: SubmitSink, context: KilnToolContext = {}): Tool[] {
-  const kilnTools = createKilnToolRegistry(context).map((def) => toStrandsTool(def, context));
+  const toolContext: KilnToolContext = {
+    ...context,
+    viewEvidenceHistory: context.viewEvidenceHistory ?? new ViewEvidenceHistoryStore(),
+  };
+  const kilnTools = createKilnToolRegistry(toolContext).map((def) =>
+    toStrandsTool(def, toolContext),
+  );
   // kiln_screenshot_animation rides alongside the four registry tools (it takes a
   // `code` arg like them) so a from-scratch animated build can SEE its motion.
-  const animationTool = toStrandsTool(createKilnScreenshotAnimationDef(context), context);
+  const animationTool = toStrandsTool(createKilnScreenshotAnimationDef(toolContext), toolContext);
   const submitTool: Tool = tool({
     name: KILN_SUBMIT_TOOL_NAME,
     description:
@@ -389,8 +396,12 @@ export function makeKilnEditTools(
 ): Tool[] {
   const buffer = new KilnDraftBuffer(opts.seedCode);
   opts.sink.edits = buffer.edits; // share the live trace
-  const registry = createKilnToolRegistry(opts);
-  const animationDef = createKilnScreenshotAnimationDef(opts);
+  const toolContext: KilnToolContext = {
+    ...opts,
+    viewEvidenceHistory: opts.viewEvidenceHistory ?? new ViewEvidenceHistoryStore(),
+  };
+  const registry = createKilnToolRegistry(toolContext);
+  const animationDef = createKilnScreenshotAnimationDef(toolContext);
 
   const find = (name: string): KilnToolDef => {
     const def = registry.find((d) => d.name === name);
@@ -581,13 +592,17 @@ export function makeKilnUnifiedTools(
 ): Tool[] {
   const buffer = new KilnDraftBuffer(opts.seedCode ?? '');
   opts.sink.edits = buffer.edits; // share the live trace
+  const toolContext: KilnToolContext = {
+    ...opts,
+    viewEvidenceHistory: opts.viewEvidenceHistory ?? new ViewEvidenceHistoryStore(),
+  };
 
-  const registry = createKilnToolRegistry(opts);
+  const registry = createKilnToolRegistry(toolContext);
   const validateDef = registry.find((d) => d.name === 'kiln_validate');
   if (!validateDef) throw new Error('makeKilnUnifiedTools: missing registry tool kiln_validate');
-  const renderViewsDef = createKilnRenderViewsDef(opts);
-  const animationDef = createKilnScreenshotAnimationDef(opts);
-  const interiorDef = createKilnViewInteriorDef(opts);
+  const renderViewsDef = createKilnRenderViewsDef(toolContext);
+  const animationDef = createKilnScreenshotAnimationDef(toolContext);
+  const interiorDef = createKilnViewInteriorDef(toolContext);
 
   // A1: the unified surface has no standalone kiln_validate tool — every buffer
   // write (kiln_draft / a successful kiln_edit) runs the registry's static check
@@ -691,7 +706,7 @@ export function makeKilnUnifiedTools(
 
   // Buffer-aware close-up: after kiln_render flags a suspect region, frame ONE
   // view to that part's bounds for detail a grid cell cannot show.
-  const inspectDef = createKilnInspectDef(opts);
+  const inspectDef = createKilnInspectDef(toolContext);
   const inspectTool: Tool = tool({
     name: 'kiln_inspect',
     description: `${inspectDef.description} Operates on your current working buffer (no code argument).`,
