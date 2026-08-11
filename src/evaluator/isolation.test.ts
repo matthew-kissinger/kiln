@@ -2,6 +2,7 @@ import { describe, expect, test } from 'bun:test';
 import { resolveEvaluatorMode } from '../render';
 import { EvaluatorSubprocessError } from './subprocess';
 import {
+  decodeEvaluatorIsolationReadiness,
   EvaluatorIsolationReadinessError,
   isolationReadinessFailureCode,
   isolatedEvaluatorLaunch,
@@ -37,6 +38,35 @@ describe('isolated evaluator process contract', () => {
       expect(isolationReadinessFailureCode(error)).toBe(code);
     }
     expect(isolationReadinessFailureCode(new Error('bwrap /private/path secret'))).toBeUndefined();
+  });
+
+  test('accepts only bounded v1 negative readiness envelopes', () => {
+    for (const failure of ['namespace', 'probe-protocol'] as const) {
+      expect(
+        decodeEvaluatorIsolationReadiness({
+          version: 'kiln.evaluator.isolation-readiness.v1',
+          mode: 'isolated',
+          failure,
+        }),
+      ).toEqual({ version: 'kiln.evaluator.isolation-readiness.v1', mode: 'isolated', failure });
+    }
+    for (const value of [
+      {
+        version: 'kiln.evaluator.isolation-readiness.v1',
+        mode: 'isolated',
+        failure: 'spawn',
+      },
+      {
+        version: 'kiln.evaluator.isolation-readiness.v1',
+        mode: 'isolated',
+        failure: 'namespace',
+        detail: '/private/path',
+      },
+    ]) {
+      expect(() => decodeEvaluatorIsolationReadiness(value)).toThrow(
+        'Isolated evaluator is unavailable.',
+      );
+    }
   });
   test('selects isolated mode exactly and rejects near-miss flags', () => {
     expect(resolveEvaluatorMode({ KILN_EVALUATOR_MODE: 'isolated' })).toBe('isolated');

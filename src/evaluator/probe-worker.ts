@@ -5,6 +5,13 @@ import { validate } from '../validation';
 import { writeFileSync } from 'node:fs';
 
 const VERSION = 'kiln.evaluator.isolation-readiness.v1';
+const NAMESPACE_CHECKS = new Set([
+  'user-namespace',
+  'no-new-privileges',
+  'capabilities-empty',
+  'network-namespace-empty',
+  'metadata-and-local-network-denied',
+]);
 
 async function deniedRead(path: string): Promise<boolean> {
   try {
@@ -75,8 +82,16 @@ async function main(): Promise<void> {
     ],
     ['generated-capabilities-denied', generatedDenials()],
   ];
-  if (checks.some(([, ok]) => !ok)) process.exitCode = 1;
-  else {
+  const failedChecks = checks.filter(([, ok]) => !ok).map(([name]) => name);
+  if (failedChecks.length > 0) {
+    const failure = failedChecks.some((name) => NAMESPACE_CHECKS.has(name))
+      ? 'namespace'
+      : 'probe-protocol';
+    writeFileSync(3, JSON.stringify({ version: VERSION, mode: 'isolated', failure }), {
+      encoding: 'utf8',
+    });
+    process.exitCode = 1;
+  } else {
     writeFileSync(
       3,
       JSON.stringify({ version: VERSION, mode: 'isolated', checks: checks.map(([name]) => name) }),

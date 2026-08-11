@@ -53,6 +53,12 @@ export interface EvaluatorIsolationReadiness {
   checks: readonly string[];
 }
 
+interface EvaluatorIsolationReadinessFailure {
+  version: typeof READINESS_VERSION;
+  mode: 'isolated';
+  failure: Extract<EvaluatorIsolationReadinessFailureCode, 'namespace' | 'probe-protocol'>;
+}
+
 export type EvaluatorIsolationReadinessFailureCode = (typeof READINESS_FAILURE_CODES)[number];
 
 export class EvaluatorIsolationReadinessError extends EvaluatorSubprocessError {
@@ -210,9 +216,19 @@ export async function renderGLBViaIsolatedEvaluator(
   return renderGLBViaProcessLaunch(code, options, processControls, launch);
 }
 
-function strictReadinessResult(value: unknown): EvaluatorIsolationReadiness {
+export function decodeEvaluatorIsolationReadiness(
+  value: unknown,
+): EvaluatorIsolationReadiness | EvaluatorIsolationReadinessFailure {
   if (typeof value !== 'object' || value === null || Array.isArray(value)) isolationUnavailable();
   const record = value as Record<string, unknown>;
+  if (
+    Object.keys(record).sort().join(',') === 'failure,mode,version' &&
+    record.version === READINESS_VERSION &&
+    record.mode === 'isolated' &&
+    (record.failure === 'namespace' || record.failure === 'probe-protocol')
+  ) {
+    return record as unknown as EvaluatorIsolationReadinessFailure;
+  }
   if (
     Object.keys(record).sort().join(',') !== 'checks,mode,version' ||
     record.version !== READINESS_VERSION ||
@@ -292,15 +308,22 @@ export async function assertIsolatedEvaluatorReady(
     child.once('close', (code) => {
       if (settled) return;
       try {
+        if (chunks.length > 0) {
+          const result = decodeEvaluatorIsolationReadiness(
+            JSON.parse(Buffer.concat(chunks).toString('utf8')),
+          );
+          if ('failure' in result) return fail(result.failure);
+          if (code !== 0) return fail('probe-protocol');
+          settled = true;
+          clearTimeout(timer);
+          resolve(result);
+          return;
+        }
         if (code !== 0) {
           const boundedStderr = Buffer.concat(stderrChunks).toString('utf8');
           return fail(namespaceFailure(boundedStderr) ? 'namespace' : 'probe-protocol');
         }
-        if (chunks.length === 0) return fail('probe-protocol');
-        const result = strictReadinessResult(JSON.parse(Buffer.concat(chunks).toString('utf8')));
-        settled = true;
-        clearTimeout(timer);
-        resolve(result);
+        fail('probe-protocol');
       } catch {
         fail('probe-protocol');
       }
