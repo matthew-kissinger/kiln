@@ -81,6 +81,18 @@ export const WorldPackageV2Schema = z
   })
   .strict()
   .superRefine((value, ctx) => {
+    const artifactPaths = new Set<string>();
+    for (let index = 0; index < value.artifacts.length; index++) {
+      const path = value.artifacts[index]!.path;
+      if (artifactPaths.has(path)) {
+        ctx.addIssue({
+          code: 'custom',
+          path: ['artifacts', index, 'path'],
+          message: `duplicate package path "${path}"`,
+        });
+      }
+      artifactPaths.add(path);
+    }
     const { artifactBinding, ...presentationParameters } = value.presentation;
     if (
       !value.world.presentation ||

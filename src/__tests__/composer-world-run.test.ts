@@ -106,6 +106,11 @@ describe('runKilnWorldIntegration', () => {
       expect.arrayContaining(['scene_world_snap', 'scene_world_render', 'scene_world_finalize']),
     );
     expect(String(model.seenSystemPrompts[0])).toContain(WORLD_INTEGRATION_PROMPT_V2.slice(0, 30));
+    expect(WORLD_INTEGRATION_PROMPT_V2).toContain('scene_world_view');
+    expect(WORLD_INTEGRATION_PROMPT_V2).toContain('scene_world_set_presentation');
+    expect(WORLD_INTEGRATION_PROMPT_V2).toContain('16,777,216');
+    expect(WORLD_INTEGRATION_PROMPT_V2).toContain('Do not send artifactBinding');
+    expect(WORLD_INTEGRATION_PROMPT_V2).toContain('scene_world_set_collision');
   });
 
   test('surfaces and returns an exact GPU receipt for persistence', async () => {
@@ -176,6 +181,51 @@ describe('runKilnWorldIntegration', () => {
     expect(result.renderEvidence[0]!.receipt!.perCameraOutputSha256).toEqual([
       `sha256:${'c'.repeat(64)}`,
     ]);
+  });
+
+  test('makes exact current presentation values and aggregate limits model-visible', async () => {
+    const presented = setWorldPresentationV1(world(), {
+      schemaVersion: 'kiln.presentation.v1',
+      grid: { columns: 1, rows: 1, cellWidth: 640, cellHeight: 360 },
+      lightingPresetId: 'neutral-studio-v1',
+      receiptPolicy: {
+        requirePerCameraOutputSha256: true,
+        requireOutputSetSha256: true,
+      },
+      cameras: [
+        {
+          id: 'model-authored-hero',
+          cell: { column: 0, row: 0 },
+          position: [9, 6, 7],
+          target: [1, 2, 3],
+          up: [0, 1, 0],
+          fovDeg: 47,
+          aspect: 16 / 9,
+          near: 0.2,
+          far: 250,
+        },
+      ],
+    });
+    const model = new ToolCapturingModel([
+      { toolCalls: [{ name: 'scene_world_view' }] },
+      { toolCalls: [{ name: 'scene_world_finalize' }] },
+      { text: 'done' },
+    ]);
+    const result = await runKilnWorldIntegration({
+      model,
+      prompt: 'inspect the authored presentation',
+      world: presented,
+      render: async () => ({ ok: true }),
+      maxSteps: 5,
+    });
+
+    expect(result.finalized).toBe(true);
+    const modelContext = JSON.stringify(model.messages);
+    expect(modelContext).toContain('model-authored-hero');
+    expect(modelContext).toContain('"position":[9,6,7]');
+    expect(modelContext).toContain('"target":[1,2,3]');
+    expect(modelContext).toContain('"maxTotalPixels":16777216');
+    expect(modelContext).toContain('"authoredByModel":false');
   });
 
   test('forwards persisted presentation parameters and accepts only their exact receipt', async () => {

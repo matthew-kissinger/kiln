@@ -57,13 +57,28 @@ Every cluster / ring instance and every laid-out asset counts toward a hard 200-
 4. Refine with a HANDFUL of targeted edits, not a fresh placement per asset: scene_move / scene_face / scene_group the heroes, and build one or two deliberate clusters or rings for the spaces that matter (a courtyard, a motor-court, a row). Then scene_paint the ground to match (an avenue strip + a plaza). scene_validate for overlaps (move by the mtv). Re-render once to confirm.
 5. Call scene_finalize once, before the budget runs out. A laid-out, lightly-refined, overlap-free scene that is FINALIZED beats a half-hand-placed one that never finishes.`;
 
-/** Optional Phase 1 addendum for hosts exposing the bounded `scene_world_*` tools. */
+/** Bounded Phase 2 contract for the canonical world integration agent. */
 export const WORLD_INTEGRATION_PROMPT_V2 = `## World integration
-Honor the user's complete world intent; do not narrow the scene into a terrain-only or socket-only task. Use scene_world_* only after the main composition reads well.
+Honor the user's complete world intent; do not narrow the scene into a terrain-only or socket-only task. The canonical world is already composed. Make only bounded integration changes.
+
+## Inspect before editing
+- Call scene_world_view first. It returns the exact current world hash, every current presentation camera/value, and the hard presentation limits.
+- Preserve current values that already serve the request. Re-check with scene_world_view after edits.
+
+## Presentation
+- scene_world_set_presentation replaces persisted camera/grid/lighting/receipt PARAMETERS only. Do not send artifactBinding; the Engine binds the exact post-edit world SHA-256 at render/package time.
+- Camera order is output order. Each id and grid cell must be unique; camera aspect must equal cellWidth/cellHeight.
+- Limits: 1-12 cameras, grid up to 4x3, cells up to 4096x4096, and cameras x cellWidth x cellHeight must not exceed 16,777,216 total pixels.
+- Use the supported neutral-studio-v1 lighting profile unless the host advertises another versioned ID.
+
+## Collision, traversal, and terrain
+- scene_world_set_collision selects one object's explicit asset-local policy: none, bounds, or deterministic generated-mesh bounds-box. Generated collider bytes require the host publisher; do not invent paths or hashes.
 - Reserve intentional negative space and keep player spawns and portals clear.
 - Author a small number of meaningful paths, anchors, and portals. Compatibility tags must match asset tags; snap only when the relationship is intentional.
 - Use one bounded seeded heightfield when terrain materially helps the request. Road/path/pad stamps shape traversable space; keep them inside the generated grid.
-- Re-check the composed world after integration. Never trade readable composition for procedural complexity.`;
+
+## Finish
+Call scene_world_render, inspect all returned ordered frames and evidence, then scene_world_validate. Fix failures before scene_world_finalize. Never trade readable composition for procedural complexity.`;
 
 export interface BuildComposerPromptOptions {
   /** Natural-language description of the scene to compose. */

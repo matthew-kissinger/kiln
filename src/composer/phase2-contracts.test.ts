@@ -16,6 +16,7 @@ import {
   hashWorldPackageV2,
   parseColliderPolicyV1,
   parsePresentationDocumentV1,
+  parseWorldDocumentV2,
   parseWorldPackageV2,
   setWorldPresentationV1,
   validatePresentationReceiptV1,
@@ -437,6 +438,46 @@ describe('C5.8 WorldPackageV2 closure', () => {
     await expect(validateWorldPackageV2({ ...built, worldSha256: `sha256:${B}` })).rejects.toThrow(
       'worldSha256',
     );
+  });
+
+  test('rejects package-path aliases across model, terrain, and collider namespaces', async () => {
+    const collisionAlias = world();
+    collisionAlias.collisionArtifacts = [
+      {
+        refId: 'collision:wall',
+        artifact: { uri: 'models/wall.glb', sha256: B },
+      },
+    ];
+    collisionAlias.objects[0]!.collision = {
+      policy: 'artifact',
+      artifactRefId: 'collision:wall',
+    };
+    expect(() => parseWorldDocumentV2(collisionAlias)).toThrow(/duplicate package path/i);
+    await expect(
+      createWorldPackageV2({
+        world: { ...collisionAlias, presentation: presentationParameters() },
+      }),
+    ).rejects.toThrow(/duplicate package path/i);
+
+    const terrainAlias = world();
+    terrainAlias.terrain = {
+      kind: 'heightfield',
+      artifact: { uri: 'models/wall.glb', sha256: B },
+    };
+    expect(() => parseWorldDocumentV2(terrainAlias)).toThrow(/duplicate package path/i);
+
+    const packageWorld = world();
+    packageWorld.terrain = {
+      kind: 'heightfield',
+      artifact: { uri: 'terrain/world.heightfield.json', sha256: B },
+    };
+    const built = await createWorldPackageV2({
+      world: setWorldPresentationV1(packageWorld, presentationParameters()),
+    });
+    const forged = structuredClone(built);
+    forged.artifacts[1]!.path = forged.artifacts[0]!.path;
+    expect(() => parseWorldPackageV2(forged)).toThrow(/duplicate package path/i);
+    await expect(validateWorldPackageV2(forged)).rejects.toThrow(/duplicate package path/i);
   });
 
   test('verifies every exact artifact byte and refuses omissions, drift, or extras', async () => {

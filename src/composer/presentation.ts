@@ -3,6 +3,8 @@ import type { SceneRenderReceipt } from './render-port';
 import { assertNoPrototypeKeys, canonicalContractJson, sha256ContractJson } from './contract-utils';
 
 export const PRESENTATION_DOCUMENT_V1_SCHEMA_VERSION = 'kiln.presentation.v1' as const;
+/** Renderer-aligned ceiling across every requested camera frame. */
+export const PRESENTATION_MAX_TOTAL_PIXELS_V1 = 16_777_216;
 
 const finite = z.number().finite();
 const vec3 = z.tuple([finite, finite, finite]);
@@ -88,6 +90,14 @@ type PresentationShape = {
 function refinePresentation(document: PresentationShape, ctx: z.RefinementCtx): void {
   if (document.cameras.length > document.grid.columns * document.grid.rows) {
     ctx.addIssue({ code: 'custom', path: ['cameras'], message: 'camera count exceeds grid cells' });
+  }
+  const totalPixels = document.cameras.length * document.grid.cellWidth * document.grid.cellHeight;
+  if (totalPixels > PRESENTATION_MAX_TOTAL_PIXELS_V1) {
+    ctx.addIssue({
+      code: 'custom',
+      path: ['grid'],
+      message: `presentation total pixel budget ${totalPixels} exceeds ${PRESENTATION_MAX_TOTAL_PIXELS_V1}`,
+    });
   }
   const ids = new Set<string>();
   const cells = new Set<string>();

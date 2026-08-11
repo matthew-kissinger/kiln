@@ -14,6 +14,7 @@ import type { GenerationCallBudget, GenerationCallBudgetReceipt } from '../../ag
 import { toCachedSystemPrompt } from '../../agent/providers';
 import {
   hashWorldDocumentV2,
+  PRESENTATION_MAX_TOTAL_PIXELS_V1,
   parseWorldDocumentV2,
   PlacementModel,
   type Placement,
@@ -102,24 +103,31 @@ function lifecycleTools(
       name: 'scene_world_view',
       description: 'Inspect the complete canonical world and authored integration counts.',
       inputSchema: empty,
-      callback: async () =>
-        ({
+      callback: async () => {
+        const worldHash = await hashWorldDocumentV2(state.world);
+        return {
           ok: true,
-          worldHash: await hashWorldDocumentV2(state.world),
+          worldHash,
           objects: state.world.objects.length,
           zones: state.world.authored.zones.length,
           paths: state.world.authored.paths.length,
           sockets: state.world.authored.sockets.length,
           spawns: state.world.spawns.length,
           terrain: state.world.terrain.kind,
-          presentation: state.world.presentation
-            ? {
-                cameras: state.world.presentation.cameras.length,
-                grid: state.world.presentation.grid,
-                lightingPresetId: state.world.presentation.lightingPresetId,
-              }
+          presentation: state.world.presentation ?? null,
+          presentationLimits: {
+            maxCameras: 12,
+            maxGridColumns: 4,
+            maxGridRows: 3,
+            maxCellWidth: 4096,
+            maxCellHeight: 4096,
+            maxTotalPixels: PRESENTATION_MAX_TOTAL_PIXELS_V1,
+          },
+          presentationBinding: state.world.presentation
+            ? { kind: 'world', sha256: worldHash, authoredByModel: false }
             : null,
-        }) as JSONValue,
+        } as JSONValue;
+      },
     }),
     tool({
       name: 'scene_world_validate',
@@ -265,6 +273,9 @@ export async function runKilnWorldIntegration(
       state,
       ...(options.publishHeightfieldArtifact
         ? { publishHeightfieldArtifact: options.publishHeightfieldArtifact }
+        : {}),
+      ...(options.publishColliderArtifact
+        ? { publishColliderArtifact: options.publishColliderArtifact }
         : {}),
       ...(options.onWorldChanged ? { onWorldChanged: options.onWorldChanged } : {}),
     });

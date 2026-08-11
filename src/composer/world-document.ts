@@ -524,6 +524,36 @@ export const WorldDocumentV2Schema = z
         });
       }
     }
+
+    const packagePaths = [
+      ...world.assets.map((asset, index) => ({
+        path: `models/${asset.generationId}.glb`,
+        issuePath: ['assets', index, 'generationId'] as (string | number)[],
+      })),
+      ...(world.terrain.kind === 'heightfield'
+        ? [
+            {
+              path: world.terrain.artifact.uri,
+              issuePath: ['terrain', 'artifact', 'uri'] as (string | number)[],
+            },
+          ]
+        : []),
+      ...world.collisionArtifacts.map((artifact, index) => ({
+        path: artifact.artifact.uri,
+        issuePath: ['collisionArtifacts', index, 'artifact', 'uri'] as (string | number)[],
+      })),
+    ];
+    const seenPackagePaths = new Set<string>();
+    for (const entry of packagePaths) {
+      if (seenPackagePaths.has(entry.path)) {
+        ctx.addIssue({
+          code: 'custom',
+          path: entry.issuePath,
+          message: `duplicate package path "${entry.path}"`,
+        });
+      }
+      seenPackagePaths.add(entry.path);
+    }
   });
 
 export type WorldDocumentV2 = z.infer<typeof WorldDocumentV2Schema>;

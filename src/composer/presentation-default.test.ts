@@ -1,6 +1,7 @@
 import { describe, expect, test } from 'bun:test';
 import {
   DEFAULT_PRESENTATION_PARAMETERS_V1,
+  PRESENTATION_MAX_TOTAL_PIXELS_V1,
   canonicalPresentationDocumentV1Json,
   createDefaultPresentationDocumentV1,
   createDefaultPresentationParametersV1,
@@ -84,5 +85,37 @@ describe('default PresentationDocumentV1', () => {
         path: '../escape.glb',
       }),
     ).toThrow();
+  });
+
+  test('enforces the renderer-aligned aggregate camera pixel ceiling', () => {
+    const cameras = Array.from({ length: 12 }, (_, index) => ({
+      id: `camera-${index}`,
+      cell: { column: index % 4, row: Math.floor(index / 4) },
+      position: [index + 1, 2, 3] as [number, number, number],
+      target: [0, 0, 0] as [number, number, number],
+      up: [0, 1, 0] as [number, number, number],
+      fovDeg: 50,
+      aspect: 1,
+      near: 0.05,
+      far: 100,
+    }));
+    expect(PRESENTATION_MAX_TOTAL_PIXELS_V1).toBe(16_777_216);
+    expect(() =>
+      parsePresentationParametersV1({
+        ...createDefaultPresentationParametersV1(),
+        grid: { columns: 4, rows: 3, cellWidth: 4096, cellHeight: 4096 },
+        cameras,
+      }),
+    ).toThrow(/total pixel budget/i);
+    expect(
+      parsePresentationParametersV1({
+        ...createDefaultPresentationParametersV1(),
+        grid: { columns: 4, rows: 1, cellWidth: 2048, cellHeight: 2048 },
+        cameras: cameras.slice(0, 4).map((camera) => ({
+          ...camera,
+          cell: { column: camera.cell.column, row: 0 },
+        })),
+      }).cameras,
+    ).toHaveLength(4);
   });
 });
