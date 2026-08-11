@@ -43,13 +43,14 @@ const call = (tools: Tool[], name: string, input: unknown) =>
   >;
 
 describe('Composer V2 world tools', () => {
-  test('exposes a bounded seven-tool integration surface and authors canonical state', async () => {
+  test('exposes a bounded eight-tool integration surface and authors canonical state', async () => {
     const target = state();
     const tools = makeWorldIntegrationToolsV2({ state: target });
     expect(tools.map(({ name }) => name).sort()).toEqual(
       [
         'scene_world_set_heightfield',
         'scene_world_set_paths',
+        'scene_world_set_presentation',
         'scene_world_set_sockets',
         'scene_world_set_spawns',
         'scene_world_set_zones',
@@ -80,6 +81,35 @@ describe('Composer V2 world tools', () => {
       socketId: 'slot',
       transform: { position: [0, 0, 0], rotationYDeg: 90 },
     });
+    expect(
+      (
+        await call(tools, 'scene_world_set_presentation', {
+          presentation: {
+            schemaVersion: 'kiln.presentation.v1',
+            grid: { columns: 1, rows: 1, cellWidth: 320, cellHeight: 180 },
+            lightingPresetId: 'neutral-studio-v1',
+            receiptPolicy: {
+              requirePerCameraOutputSha256: true,
+              requireOutputSetSha256: true,
+            },
+            cameras: [
+              {
+                id: 'hero',
+                cell: { column: 0, row: 0 },
+                position: [8, 5, 8],
+                target: [0, 1, 0],
+                up: [0, 1, 0],
+                fovDeg: 50,
+                aspect: 16 / 9,
+                near: 0.1,
+                far: 100,
+              },
+            ],
+          },
+        })
+      ).ok,
+    ).toBe(true);
+    expect(target.world.presentation?.cameras[0]?.id).toBe('hero');
   });
 
   test('publishes the exact heightfield bytes and binds the returned URI/hash', async () => {

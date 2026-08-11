@@ -22,6 +22,7 @@ import {
   type SceneRenderPort,
   type SceneRenderResult,
   type WorldDocumentV2,
+  validatePresentationReceiptV1,
   validateWorldIntegrationV2,
   worldDocumentV2ToSceneModelJSON,
 } from '..';
@@ -111,6 +112,13 @@ function lifecycleTools(
           sockets: state.world.authored.sockets.length,
           spawns: state.world.spawns.length,
           terrain: state.world.terrain.kind,
+          presentation: state.world.presentation
+            ? {
+                cameras: state.world.presentation.cameras.length,
+                grid: state.world.presentation.grid,
+                lightingPresetId: state.world.presentation.lightingPresetId,
+              }
+            : null,
         }) as JSONValue,
     }),
     tool({
@@ -130,12 +138,36 @@ function lifecycleTools(
       inputSchema: empty,
       callback: async () => {
         const worldHash = await hashWorldDocumentV2(state.world);
+        const presentation = state.world.presentation;
         const result = await render({
           placements: placements(state.world),
           worldDocument: state.world,
           worldHash,
+          ...(presentation
+            ? {
+                cameras: presentation.cameras.map(({ id: _id, cell: _cell, ...camera }) => camera),
+                width: presentation.grid.cellWidth,
+                height: presentation.grid.cellHeight,
+                lightingPresetId: presentation.lightingPresetId,
+              }
+            : {}),
         });
         if (!result.ok) return { ok: false, error: result.error ?? 'render failed' } as JSONValue;
+        if (presentation && result.receipt) {
+          const receiptValidation = validatePresentationReceiptV1(
+            {
+              ...presentation,
+              artifactBinding: { kind: 'world', sha256: worldHash },
+            },
+            result.receipt,
+          );
+          if (!receiptValidation.ok) {
+            return {
+              ok: false,
+              error: `presentation receipt rejected: ${receiptValidation.reason}`,
+            } as JSONValue;
+          }
+        }
         const frames = result.perCameraBase64?.length
           ? result.perCameraBase64
           : result.pngBase64

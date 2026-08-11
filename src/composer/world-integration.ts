@@ -1,5 +1,6 @@
 /** Pure deterministic authoring and validation operations for Composer V2 world primitives. */
 import { worldAabbFromLocal } from './overlap';
+import { parsePresentationParametersV1 } from './presentation';
 import {
   parseWorldDocumentV2,
   reconcileWorldDocumentV2Objects,
@@ -81,6 +82,15 @@ export function setWorldSpawnsV2(input: unknown, spawns: readonly WorldSpawnV2[]
   return assertWorldIntegrationValid(
     parseWorldDocumentV2({ ...world, spawns: [...spawns].sort(compareId) }),
   );
+}
+
+/** Persist one strict ordered presentation document without changing world transforms. */
+export function setWorldPresentationV1(input: unknown, presentation: unknown): WorldDocumentV2 {
+  const world = parseWorldDocumentV2(input);
+  return parseWorldDocumentV2({
+    ...world,
+    presentation: parsePresentationParametersV1(presentation),
+  });
 }
 
 /** Replace terrain without changing any other canonical world state. */

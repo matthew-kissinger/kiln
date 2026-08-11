@@ -16,6 +16,7 @@ import type {
   Statement,
 } from './model';
 import { placementRoleForAsset, PlacementModel } from './model';
+import { PresentationParametersV1Schema } from './presentation';
 
 export const WORLD_DOCUMENT_V2_SCHEMA_VERSION = 'kiln.world.v2' as const;
 
@@ -413,6 +414,8 @@ export const WorldDocumentV2Schema = z
       .strict(),
     collisionArtifacts: z.array(collisionArtifactSchema).max(512),
     spawns: z.array(spawnSchema).max(128),
+    /** Additive Phase 2 presentation state. Historical v2 worlds may omit it. */
+    presentation: PresentationParametersV1Schema.optional(),
     runtimePolicy: z.object({ mode: z.literal('static-explore') }).strict(),
     provenance: z
       .object({

@@ -1,7 +1,7 @@
 import { describe, expect, test } from 'bun:test';
 import type { Message, ModelStreamEvent, StreamOptions } from '@strands-agents/sdk';
 import type { SceneModelJSON, SceneRenderPort } from '../composer';
-import { migrateSceneModelV1ToWorldDocumentV2 } from '../composer';
+import { migrateSceneModelV1ToWorldDocumentV2, setWorldPresentationV1 } from '../composer';
 import { createGenerationCallBudget } from '../agent/call-budget';
 import {
   runKilnComposer,
@@ -176,6 +176,78 @@ describe('runKilnWorldIntegration', () => {
     expect(result.renderEvidence[0]!.receipt!.perCameraOutputSha256).toEqual([
       `sha256:${'c'.repeat(64)}`,
     ]);
+  });
+
+  test('forwards persisted presentation parameters and accepts only their exact receipt', async () => {
+    const presented = setWorldPresentationV1(world(), {
+      schemaVersion: 'kiln.presentation.v1',
+      grid: { columns: 1, rows: 1, cellWidth: 320, cellHeight: 180 },
+      lightingPresetId: 'neutral-studio-v1',
+      receiptPolicy: {
+        requirePerCameraOutputSha256: true,
+        requireOutputSetSha256: true,
+      },
+      cameras: [
+        {
+          id: 'hero',
+          cell: { column: 0, row: 0 },
+          position: [8, 5, 8],
+          target: [0, 1, 0],
+          up: [0, 1, 0],
+          fovDeg: 50,
+          aspect: 16 / 9,
+          near: 0.1,
+          far: 100,
+        },
+      ],
+    });
+    const model = new ToolCapturingModel([
+      { toolCalls: [{ name: 'scene_world_render' }] },
+      { toolCalls: [{ name: 'scene_world_finalize' }] },
+      { text: 'done' },
+    ]);
+    let captured: Parameters<SceneRenderPort>[0] | undefined;
+    const result = await runKilnWorldIntegration({
+      model,
+      prompt: 'inspect the authored presentation',
+      world: presented,
+      render: async (request) => {
+        captured = request;
+        return {
+          ok: true,
+          pngBase64: Buffer.from('png').toString('base64'),
+          receipt: {
+            worldHash: request.worldHash!,
+            cameras: request.cameras!.map((camera) => ({
+              position: camera.position,
+              target: camera.target,
+              up: camera.up!,
+              fovDeg: camera.fovDeg!,
+              aspect: camera.aspect!,
+              near: camera.near!,
+              far: camera.far!,
+            })),
+            width: request.width!,
+            height: request.height!,
+            lightingPresetId: request.lightingPresetId!,
+            backend: 'vulkan',
+            rendererId: 'gpu:test',
+            perCameraOutputSha256: [`sha256:${'b'.repeat(64)}`],
+            outputSetSha256: `sha256:${'c'.repeat(64)}`,
+            outputSha256: `sha256:${'d'.repeat(64)}`,
+          },
+        };
+      },
+      maxSteps: 6,
+    });
+    expect(result.finalized).toBe(true);
+    expect(result.renderEvidence).toHaveLength(1);
+    expect(captured).toMatchObject({
+      width: 320,
+      height: 180,
+      lightingPresetId: 'neutral-studio-v1',
+    });
+    expect(captured?.cameras).toHaveLength(1);
   });
 
   test('rejects mismatched per-camera output evidence and exact/fallback ambiguity', async () => {

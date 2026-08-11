@@ -8,12 +8,14 @@ import {
   type HeightfieldArtifactV1,
   fillWorldPathV2,
   setWorldPathsV2,
+  setWorldPresentationV1,
   setWorldSocketsV2,
   setWorldSpawnsV2,
   setWorldTerrainV2,
   setWorldZonesV2,
   snapWorldObjectToSocketV2,
   type WorldDocumentV2,
+  PresentationParametersV1Schema,
 } from '..';
 
 export interface WorldIntegrationToolState {
@@ -143,6 +145,14 @@ export function makeWorldIntegrationToolsV2(options: MakeWorldIntegrationToolsV2
       .strict(),
     callback: (input) => guarded(() => setWorldSpawnsV2(options.state.world, input.spawns)),
   });
+  const setPresentation: Tool = tool({
+    name: 'scene_world_set_presentation',
+    description:
+      'Replace the ordered camera grid, exact camera values, lighting profile, artifact binding, and receipt requirements.',
+    inputSchema: z.object({ presentation: PresentationParametersV1Schema }).strict(),
+    callback: (input) =>
+      guarded(() => setWorldPresentationV1(options.state.world, input.presentation)),
+  });
   const snap: Tool = tool({
     name: 'scene_world_snap',
     description:
@@ -230,5 +240,14 @@ export function makeWorldIntegrationToolsV2(options: MakeWorldIntegrationToolsV2
       }
     },
   });
-  return [setZones, setPaths, setSockets, setSpawns, snap, fillPath, setHeightfield];
+  return [
+    setZones,
+    setPaths,
+    setSockets,
+    setSpawns,
+    setPresentation,
+    snap,
+    fillPath,
+    setHeightfield,
+  ];
 }
