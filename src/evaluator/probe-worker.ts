@@ -5,13 +5,13 @@ import { validate } from '../validation';
 import { writeFileSync } from 'node:fs';
 
 const VERSION = 'kiln.evaluator.isolation-readiness.v1';
-const NAMESPACE_CHECKS = new Set([
-  'user-namespace',
-  'no-new-privileges',
-  'capabilities-empty',
-  'network-namespace-empty',
-  'metadata-and-local-network-denied',
-]);
+type ProbeFailure =
+  | 'loader-probe-boot'
+  | 'invariant-namespace'
+  | 'invariant-environment'
+  | 'invariant-filesystem'
+  | 'invariant-network'
+  | 'invariant-generated-policy';
 
 async function deniedRead(path: string): Promise<boolean> {
   try {
@@ -72,10 +72,35 @@ function isolationInterfaces(): ReturnType<typeof networkInterfaces> | undefined
   }
 }
 
-function writeFailure(failure: 'namespace' | 'probe-protocol'): void {
+function writeFailure(failure: ProbeFailure): void {
   writeFileSync(3, JSON.stringify({ version: VERSION, mode: 'isolated', failure }), {
     encoding: 'utf8',
   });
+}
+
+function groupedFailure(failedChecks: readonly string[]): ProbeFailure {
+  const failed = new Set(failedChecks);
+  if (
+    ['user-namespace', 'no-new-privileges', 'capabilities-empty'].some((name) => failed.has(name))
+  ) {
+    return 'invariant-namespace';
+  }
+  if (failed.has('environment-exact')) return 'invariant-environment';
+  if (
+    ['product-filesystem-denied', 'host-filesystem-denied', 'runtime-filesystem-read-only'].some(
+      (name) => failed.has(name),
+    )
+  ) {
+    return 'invariant-filesystem';
+  }
+  if (
+    ['network-namespace-empty', 'metadata-and-local-network-denied'].some((name) =>
+      failed.has(name),
+    )
+  ) {
+    return 'invariant-network';
+  }
+  return 'invariant-generated-policy';
 }
 
 function generatedDenials(): boolean {
@@ -113,10 +138,7 @@ async function main(): Promise<void> {
   ];
   const failedChecks = checks.filter(([, ok]) => !ok).map(([name]) => name);
   if (failedChecks.length > 0) {
-    const failure = failedChecks.some((name) => NAMESPACE_CHECKS.has(name))
-      ? 'namespace'
-      : 'probe-protocol';
-    writeFailure(failure);
+    writeFailure(groupedFailure(failedChecks));
     process.exitCode = 1;
   } else {
     writeFileSync(
@@ -129,7 +151,7 @@ async function main(): Promise<void> {
 
 await main().catch(() => {
   try {
-    writeFailure('probe-protocol');
+    writeFailure('loader-probe-boot');
   } catch {}
   process.exitCode = 1;
 });

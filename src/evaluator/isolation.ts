@@ -17,9 +17,22 @@ const DEFAULT_SETPRIV_PATH = '/usr/bin/setpriv';
 const DEFAULT_PRLIMIT_PATH = '/usr/bin/prlimit';
 const DEFAULT_NODE_PATH = '/usr/local/bin/node';
 const READINESS_VERSION = 'kiln.evaluator.isolation-readiness.v1';
+const TRANSPORT_VERSION = 'kiln.evaluator.isolation-transport.v1';
+const TRANSPORT_STDOUT_MARKER = 'kiln-evaluator-transport-boot-v1\n';
 const PROBE_DEADLINE_MS = 8_000;
-const MAX_READINESS_STDERR_BYTES = 4 * 1024;
-const READINESS_FAILURE_CODES = ['spawn', 'namespace', 'probe-protocol', 'deadline'] as const;
+const MAX_READINESS_PROTOCOL_BYTES = 16 * 1024;
+const MAX_TRANSPORT_STDOUT_BYTES = 256;
+const READINESS_FAILURE_CODES = [
+  'wrapper-launch',
+  'fd3-transport',
+  'loader-probe-boot',
+  'invariant-namespace',
+  'invariant-environment',
+  'invariant-filesystem',
+  'invariant-network',
+  'invariant-generated-policy',
+  'deadline',
+] as const;
 const READINESS_CHECKS = [
   'user-namespace',
   'no-new-privileges',
@@ -56,10 +69,24 @@ export interface EvaluatorIsolationReadiness {
 interface EvaluatorIsolationReadinessFailure {
   version: typeof READINESS_VERSION;
   mode: 'isolated';
-  failure: Extract<EvaluatorIsolationReadinessFailureCode, 'namespace' | 'probe-protocol'>;
+  failure: EvaluatorIsolationProbeFailureCode;
+}
+
+interface EvaluatorIsolationTransport {
+  version: typeof TRANSPORT_VERSION;
+  transport: 'fd3';
 }
 
 export type EvaluatorIsolationReadinessFailureCode = (typeof READINESS_FAILURE_CODES)[number];
+type EvaluatorIsolationProbeFailureCode = Extract<
+  EvaluatorIsolationReadinessFailureCode,
+  | 'loader-probe-boot'
+  | 'invariant-namespace'
+  | 'invariant-environment'
+  | 'invariant-filesystem'
+  | 'invariant-network'
+  | 'invariant-generated-policy'
+>;
 
 export class EvaluatorIsolationReadinessError extends EvaluatorSubprocessError {
   readonly readinessCode: EvaluatorIsolationReadinessFailureCode;
@@ -76,10 +103,6 @@ export function isolationReadinessFailureCode(
 ): EvaluatorIsolationReadinessFailureCode | undefined {
   if (!(error instanceof EvaluatorIsolationReadinessError)) return undefined;
   return READINESS_FAILURE_CODES.includes(error.readinessCode) ? error.readinessCode : undefined;
-}
-
-function namespaceFailure(stderr: string): boolean {
-  return /(?:namespace|unshare|uid map|operation not permitted|permission denied)/i.test(stderr);
 }
 
 function isolationUnavailable(): never {
@@ -120,9 +143,10 @@ function runtimeMounts(runtimeRoot: string, pathExists: (path: string) => boolea
  * network, mount, IPC, UTS, and cgroup namespaces. Only the language runtime
  * and installed dependency tree are mounted read-only; scratch is tmpfs.
  */
-export function isolatedEvaluatorLaunch(
+function isolatedEvaluatorLaunchWithLoader(
   workerPath: string,
   host: IsolatedEvaluatorHost = {},
+  loader: 'tsx' | 'module' = 'tsx',
 ): EvaluatorProcessLaunch {
   const platform = host.platform ?? process.platform;
   if (platform !== 'linux') isolationUnavailable();
@@ -166,6 +190,9 @@ export function isolatedEvaluatorLaunch(
   for (const mount of runtimeMounts(runtimeRoot, pathExists)) {
     bwrapArgs.push('--ro-bind', mount, mount);
   }
+  const nodeArgs = [nodePath, '--max-old-space-size=512', '--disable-proto=throw'];
+  if (loader === 'tsx') nodeArgs.push('--import', 'tsx');
+  nodeArgs.push(resolvedWorkerPath);
   bwrapArgs.push(
     '--chdir',
     runtimeRoot,
@@ -179,12 +206,7 @@ export function isolatedEvaluatorLaunch(
     '--nofile=64:64',
     '--nproc=64:64',
     '--',
-    nodePath,
-    '--max-old-space-size=512',
-    '--disable-proto=throw',
-    '--import',
-    'tsx',
-    resolvedWorkerPath,
+    ...nodeArgs,
   );
 
   return {
@@ -203,6 +225,13 @@ export function isolatedEvaluatorLaunch(
     env: sanitizedEvaluatorEnv({}),
     detached: true,
   };
+}
+
+export function isolatedEvaluatorLaunch(
+  workerPath: string,
+  host: IsolatedEvaluatorHost = {},
+): EvaluatorProcessLaunch {
+  return isolatedEvaluatorLaunchWithLoader(workerPath, host, 'tsx');
 }
 
 export async function renderGLBViaIsolatedEvaluator(
@@ -225,7 +254,14 @@ export function decodeEvaluatorIsolationReadiness(
     Object.keys(record).sort().join(',') === 'failure,mode,version' &&
     record.version === READINESS_VERSION &&
     record.mode === 'isolated' &&
-    (record.failure === 'namespace' || record.failure === 'probe-protocol')
+    [
+      'loader-probe-boot',
+      'invariant-namespace',
+      'invariant-environment',
+      'invariant-filesystem',
+      'invariant-network',
+      'invariant-generated-policy',
+    ].includes(String(record.failure))
   ) {
     return record as unknown as EvaluatorIsolationReadinessFailure;
   }
@@ -242,33 +278,38 @@ export function decodeEvaluatorIsolationReadiness(
   return record as unknown as EvaluatorIsolationReadiness;
 }
 
-/** Fail-closed boot/readiness proof. Package presence alone is not accepted. */
-export async function assertIsolatedEvaluatorReady(
-  host: IsolatedEvaluatorHost = {},
-): Promise<EvaluatorIsolationReadiness> {
-  if (typeof process.getuid !== 'function' || process.getuid() === 0) {
-    throw new EvaluatorIsolationReadinessError('namespace');
+export function decodeEvaluatorIsolationTransport(value: unknown): EvaluatorIsolationTransport {
+  if (
+    typeof value !== 'object' ||
+    value === null ||
+    Array.isArray(value) ||
+    Object.keys(value).sort().join(',') !== 'transport,version'
+  ) {
+    isolationUnavailable();
   }
-  const probePath = fileURLToPath(new URL('./probe-worker.ts', import.meta.url));
-  let launch: EvaluatorProcessLaunch;
+  const record = value as Record<string, unknown>;
+  if (record.version !== TRANSPORT_VERSION || record.transport !== 'fd3') isolationUnavailable();
+  return record as unknown as EvaluatorIsolationTransport;
+}
+
+function terminateReadinessChild(child: ReturnType<typeof spawn>): void {
   try {
-    launch = isolatedEvaluatorLaunch(probePath, host);
-  } catch {
-    throw new EvaluatorIsolationReadinessError('spawn');
-  }
-  return await new Promise<EvaluatorIsolationReadiness>((resolve, reject) => {
+    if (child.pid) process.kill(-child.pid, 'SIGKILL');
+  } catch {}
+}
+
+async function assertIsolationTransport(launch: EvaluatorProcessLaunch): Promise<void> {
+  return await new Promise<void>((resolve, reject) => {
     const child = spawn(launch.command, launch.args, {
       env: launch.env,
       windowsHide: true,
       detached: true,
-      stdio: ['ignore', 'ignore', 'pipe', 'pipe'],
+      stdio: ['ignore', 'pipe', 'ignore', 'pipe'],
     });
-    const protocol = child.stdio[3];
-    const stderr = child.stderr;
-    const chunks: Buffer[] = [];
-    const stderrChunks: Buffer[] = [];
-    let bytes = 0;
-    let stderrBytes = 0;
+    const stdoutChunks: Buffer[] = [];
+    const protocolChunks: Buffer[] = [];
+    let stdoutBytes = 0;
+    let protocolBytes = 0;
     let settled = false;
     const fail = (readinessCode: EvaluatorIsolationReadinessFailureCode) => {
       if (settled) return;
@@ -277,56 +318,128 @@ export async function assertIsolatedEvaluatorReady(
       reject(new EvaluatorIsolationReadinessError(readinessCode));
     };
     const timer = setTimeout(() => {
+      terminateReadinessChild(child);
+      fail('deadline');
+    }, PROBE_DEADLINE_MS);
+    child.stdout?.on('data', (chunk: Buffer) => {
+      stdoutBytes += chunk.byteLength;
+      if (stdoutBytes > MAX_TRANSPORT_STDOUT_BYTES) {
+        terminateReadinessChild(child);
+        fail('wrapper-launch');
+        return;
+      }
+      stdoutChunks.push(Buffer.from(chunk));
+    });
+    const protocol = child.stdio[3];
+    if (!protocol) {
+      terminateReadinessChild(child);
+      fail('fd3-transport');
+      return;
+    }
+    protocol.on('data', (chunk: Buffer) => {
+      protocolBytes += chunk.byteLength;
+      if (protocolBytes > MAX_READINESS_PROTOCOL_BYTES) {
+        terminateReadinessChild(child);
+        fail('fd3-transport');
+        return;
+      }
+      protocolChunks.push(Buffer.from(chunk));
+    });
+    child.once('error', () => fail('wrapper-launch'));
+    child.once('close', (code) => {
+      if (settled) return;
+      const stdout = Buffer.concat(stdoutChunks).toString('utf8');
+      if (stdout !== TRANSPORT_STDOUT_MARKER) return fail('wrapper-launch');
+      if (code !== 0 || protocolChunks.length === 0) return fail('fd3-transport');
       try {
-        if (child.pid) process.kill(-child.pid, 'SIGKILL');
-      } catch {}
+        decodeEvaluatorIsolationTransport(
+          JSON.parse(Buffer.concat(protocolChunks).toString('utf8')),
+        );
+        settled = true;
+        clearTimeout(timer);
+        resolve();
+      } catch {
+        fail('fd3-transport');
+      }
+    });
+  });
+}
+
+async function runIsolationProbe(
+  launch: EvaluatorProcessLaunch,
+): Promise<EvaluatorIsolationReadiness> {
+  return await new Promise<EvaluatorIsolationReadiness>((resolve, reject) => {
+    const child = spawn(launch.command, launch.args, {
+      env: launch.env,
+      windowsHide: true,
+      detached: true,
+      stdio: ['ignore', 'ignore', 'ignore', 'pipe'],
+    });
+    const protocol = child.stdio[3];
+    const chunks: Buffer[] = [];
+    let bytes = 0;
+    let settled = false;
+    const fail = (readinessCode: EvaluatorIsolationReadinessFailureCode) => {
+      if (settled) return;
+      settled = true;
+      clearTimeout(timer);
+      reject(new EvaluatorIsolationReadinessError(readinessCode));
+    };
+    const timer = setTimeout(() => {
+      terminateReadinessChild(child);
       fail('deadline');
     }, PROBE_DEADLINE_MS);
     if (!protocol) {
-      fail('probe-protocol');
+      terminateReadinessChild(child);
+      fail('fd3-transport');
       return;
     }
-    stderr?.on('data', (chunk: Buffer) => {
-      if (stderrBytes >= MAX_READINESS_STDERR_BYTES) return;
-      const remaining = MAX_READINESS_STDERR_BYTES - stderrBytes;
-      const bounded = Buffer.from(chunk).subarray(0, remaining);
-      stderrBytes += bounded.byteLength;
-      stderrChunks.push(bounded);
-    });
     protocol.on('data', (chunk: Buffer) => {
       bytes += chunk.byteLength;
-      if (bytes > 16 * 1024) {
-        try {
-          if (child.pid) process.kill(-child.pid, 'SIGKILL');
-        } catch {}
-        fail('probe-protocol');
+      if (bytes > MAX_READINESS_PROTOCOL_BYTES) {
+        terminateReadinessChild(child);
+        fail('loader-probe-boot');
         return;
       }
       chunks.push(Buffer.from(chunk));
     });
-    child.once('error', () => fail('spawn'));
+    child.once('error', () => fail('wrapper-launch'));
     child.once('close', (code) => {
       if (settled) return;
+      if (chunks.length === 0) return fail('loader-probe-boot');
       try {
-        if (chunks.length > 0) {
-          const result = decodeEvaluatorIsolationReadiness(
-            JSON.parse(Buffer.concat(chunks).toString('utf8')),
-          );
-          if ('failure' in result) return fail(result.failure);
-          if (code !== 0) return fail('probe-protocol');
-          settled = true;
-          clearTimeout(timer);
-          resolve(result);
-          return;
-        }
-        if (code !== 0) {
-          const boundedStderr = Buffer.concat(stderrChunks).toString('utf8');
-          return fail(namespaceFailure(boundedStderr) ? 'namespace' : 'probe-protocol');
-        }
-        fail('probe-protocol');
+        const result = decodeEvaluatorIsolationReadiness(
+          JSON.parse(Buffer.concat(chunks).toString('utf8')),
+        );
+        if ('failure' in result) return fail(result.failure);
+        if (code !== 0) return fail('loader-probe-boot');
+        settled = true;
+        clearTimeout(timer);
+        resolve(result);
       } catch {
-        fail('probe-protocol');
+        fail('loader-probe-boot');
       }
     });
   });
+}
+
+/** Fail-closed boot/readiness proof. Package presence alone is not accepted. */
+export async function assertIsolatedEvaluatorReady(
+  host: IsolatedEvaluatorHost = {},
+): Promise<EvaluatorIsolationReadiness> {
+  if (typeof process.getuid !== 'function' || process.getuid() === 0) {
+    throw new EvaluatorIsolationReadinessError('invariant-namespace');
+  }
+  const transportPath = fileURLToPath(new URL('./transport-worker.mjs', import.meta.url));
+  const probePath = fileURLToPath(new URL('./probe-worker.ts', import.meta.url));
+  let transportLaunch: EvaluatorProcessLaunch;
+  let probeLaunch: EvaluatorProcessLaunch;
+  try {
+    transportLaunch = isolatedEvaluatorLaunchWithLoader(transportPath, host, 'module');
+    probeLaunch = isolatedEvaluatorLaunch(probePath, host);
+  } catch {
+    throw new EvaluatorIsolationReadinessError('wrapper-launch');
+  }
+  await assertIsolationTransport(transportLaunch);
+  return await runIsolationProbe(probeLaunch);
 }

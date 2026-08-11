@@ -3,6 +3,7 @@ import { resolveEvaluatorMode } from '../render';
 import { EvaluatorSubprocessError } from './subprocess';
 import {
   decodeEvaluatorIsolationReadiness,
+  decodeEvaluatorIsolationTransport,
   EvaluatorIsolationReadinessError,
   isolationReadinessFailureCode,
   isolatedEvaluatorLaunch,
@@ -28,7 +29,17 @@ function launch() {
 
 describe('isolated evaluator process contract', () => {
   test('exposes only the reviewed readiness failure vocabulary', () => {
-    for (const code of ['spawn', 'namespace', 'probe-protocol', 'deadline'] as const) {
+    for (const code of [
+      'wrapper-launch',
+      'fd3-transport',
+      'loader-probe-boot',
+      'invariant-namespace',
+      'invariant-environment',
+      'invariant-filesystem',
+      'invariant-network',
+      'invariant-generated-policy',
+      'deadline',
+    ] as const) {
       const error = new EvaluatorIsolationReadinessError(code);
       expect(error).toMatchObject({
         code: 'ISOLATION_UNAVAILABLE',
@@ -41,7 +52,14 @@ describe('isolated evaluator process contract', () => {
   });
 
   test('accepts only bounded v1 negative readiness envelopes', () => {
-    for (const failure of ['namespace', 'probe-protocol'] as const) {
+    for (const failure of [
+      'loader-probe-boot',
+      'invariant-namespace',
+      'invariant-environment',
+      'invariant-filesystem',
+      'invariant-network',
+      'invariant-generated-policy',
+    ] as const) {
       expect(
         decodeEvaluatorIsolationReadiness({
           version: 'kiln.evaluator.isolation-readiness.v1',
@@ -54,16 +72,37 @@ describe('isolated evaluator process contract', () => {
       {
         version: 'kiln.evaluator.isolation-readiness.v1',
         mode: 'isolated',
-        failure: 'spawn',
+        failure: 'wrapper-launch',
       },
       {
         version: 'kiln.evaluator.isolation-readiness.v1',
         mode: 'isolated',
-        failure: 'namespace',
+        failure: 'invariant-namespace',
         detail: '/private/path',
       },
     ]) {
       expect(() => decodeEvaluatorIsolationReadiness(value)).toThrow(
+        'Isolated evaluator is unavailable.',
+      );
+    }
+  });
+
+  test('accepts only the exact fd3 transport marker envelope', () => {
+    expect(
+      decodeEvaluatorIsolationTransport({
+        version: 'kiln.evaluator.isolation-transport.v1',
+        transport: 'fd3',
+      }),
+    ).toEqual({ version: 'kiln.evaluator.isolation-transport.v1', transport: 'fd3' });
+    for (const value of [
+      { version: 'kiln.evaluator.isolation-transport.v1', transport: 'stdout' },
+      {
+        version: 'kiln.evaluator.isolation-transport.v1',
+        transport: 'fd3',
+        detail: '/private/path',
+      },
+    ]) {
+      expect(() => decodeEvaluatorIsolationTransport(value)).toThrow(
         'Isolated evaluator is unavailable.',
       );
     }
