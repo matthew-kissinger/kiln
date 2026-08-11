@@ -270,12 +270,12 @@ describe('generateKilnAsset viewRenderPort (B3b/B4)', () => {
     });
   }
 
-  test('option absent: CPU grid remains byte-identical and fidelity is explicitly geometry-only', async () => {
+  test('option absent: CPU grid comes from exact final bytes and fidelity is explicitly geometry-only', async () => {
     runImpl = okRun;
     const r = await generateKilnAsset({ prompt: 'a crate', captureViews: true });
 
-    const { renderCodeViewGrid } = await import('../views');
-    const cpu = (await renderCodeViewGrid(CANNED_CODE)).png;
+    const { renderGlbViewGrid } = await import('../views');
+    const cpu = (await renderGlbViewGrid(r.glb)).png;
     expect(r.views).toBeInstanceOf(Buffer);
     expect(Buffer.compare(r.views!, cpu)).toBe(0);
     // Legacy port-specific fields remain absent; the additive fidelity contract
@@ -289,11 +289,45 @@ describe('generateKilnAsset viewRenderPort (B3b/B4)', () => {
       requested: 'full-preferred',
       delivered: 'geometry-flat',
       materialFaithful: false,
-      exactArtifact: false,
+      exactArtifact: true,
       degraded: true,
       degradeReason: 'material-faithful view render port unavailable',
+      reasonCodes: ['FULL_MATERIAL_RENDER_UNAVAILABLE'],
     });
-    expect(r.viewsFidelity?.inputGlbSha256).toMatch(/^sha256:[0-9a-f]{64}$/);
+    expect(r.viewsFidelity?.inputGlbSha256).toBe(r.artifactGlbSha256);
+  });
+
+  test('R2.11: final CPU fallback does not execute authored source a second time', async () => {
+    const counterKey = '__kilnR211BuildCount';
+    delete (globalThis as Record<string, unknown>)[counterKey];
+    const countedCode = CANNED_CODE.replace(
+      'function build() {',
+      `function build() { globalThis.${counterKey} = (globalThis.${counterKey} ?? 0) + 1;`,
+    );
+    runImpl = async () => ({ code: countedCode, toolCalls: ['kiln_submit'], steps: 1 });
+    try {
+      const result = await generateKilnAsset({ prompt: 'a crate', captureViews: true });
+      expect(result.views).toBeInstanceOf(Buffer);
+      expect((globalThis as Record<string, unknown>)[counterKey]).toBe(1);
+      expect(result.viewsFidelity?.exactArtifact).toBe(true);
+      expect(result.viewsFidelity?.inputGlbSha256).toBe(result.artifactGlbSha256);
+    } finally {
+      delete (globalThis as Record<string, unknown>)[counterKey];
+    }
+  });
+
+  test('R2.11: textured exact-byte fallback reports its unsupported sampling code', async () => {
+    runImpl = async () => ({ code: PROCEDURAL_CODE, toolCalls: ['kiln_submit'], steps: 1 });
+    const result = await generateKilnAsset({ prompt: 'a textured crate', captureViews: true });
+
+    expect(result.views).toBeInstanceOf(Buffer);
+    expect(result.viewsFidelity).toMatchObject({
+      delivered: 'geometry-flat',
+      exactArtifact: true,
+      materialFaithful: false,
+      inputGlbSha256: result.artifactGlbSha256,
+      reasonCodes: ['FULL_MATERIAL_RENDER_UNAVAILABLE', 'GLB_FLAT_TEXTURE_SAMPLING_UNSUPPORTED'],
+    });
   });
 
   test('port success: composited port views, port rendererId, renderDegraded false', async () => {
@@ -358,7 +392,7 @@ describe('generateKilnAsset viewRenderPort (B3b/B4)', () => {
       },
     });
 
-    const { renderCodeViewGrid, CPU_RASTER_RENDERER_ID } = await import('../views');
+    const { renderGlbViewGrid, CPU_RASTER_RENDERER_ID } = await import('../views');
     expect(r.renderDegraded).toBe(true);
     expect(r.renderDegradedReason).toContain('GPU service unreachable');
     expect(r.viewsRendererId).toBe(CPU_RASTER_RENDERER_ID);
@@ -366,11 +400,12 @@ describe('generateKilnAsset viewRenderPort (B3b/B4)', () => {
     expect(r.viewsFidelity).toMatchObject({
       delivered: 'geometry-flat',
       materialFaithful: false,
-      exactArtifact: false,
+      exactArtifact: true,
       degraded: true,
     });
     expect(r.viewsFidelity?.degradeReason).toContain('GPU service unreachable');
-    const cpu = (await renderCodeViewGrid(CANNED_CODE)).png;
+    expect(r.viewsFidelity?.inputGlbSha256).toBe(r.artifactGlbSha256);
+    const cpu = (await renderGlbViewGrid(r.glb)).png;
     expect(Buffer.compare(r.views!, cpu)).toBe(0);
   });
 
@@ -574,8 +609,8 @@ describe('generateKilnAsset viewRenderPort (B3b/B4)', () => {
 
     // The whole point: a GPU outage must not reshape the artifact. The degraded
     // sheet is exactly what the CPU path produces for the same request.
-    const { renderCodeViewGrid } = await import('../views');
-    const cpu = await renderCodeViewGrid(CANNED_CODE, { capture });
+    const { renderGlbViewGrid } = await import('../views');
+    const cpu = await renderGlbViewGrid(degraded.glb, { capture });
     expect(Buffer.compare(degraded.views!, cpu.png)).toBe(0);
   });
 
@@ -598,10 +633,8 @@ describe('generateKilnAsset viewRenderPort (B3b/B4)', () => {
     expect(portCalls).toBe(0);
     expect(r.renderDegraded).toBe(true);
     expect(r.renderDegradedReason).toContain('zoom is not supported');
-    const { renderCodeViewGrid } = await import('../views');
-    expect(Buffer.compare(r.views!, (await renderCodeViewGrid(CANNED_CODE, { capture })).png)).toBe(
-      0,
-    );
+    const { renderGlbViewGrid } = await import('../views');
+    expect(Buffer.compare(r.views!, (await renderGlbViewGrid(r.glb, { capture })).png)).toBe(0);
   });
 
   test('T3.3: an invalid capture warns and falls back — it never fails the run', async () => {

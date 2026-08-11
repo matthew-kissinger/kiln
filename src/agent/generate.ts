@@ -445,10 +445,17 @@ export async function generateKilnAsset(
         // Keep the renderer id on this same lazy entrypoint. renderer-id.ts reads
         // package metadata at module initialization; an eager import changes the
         // production agent boot graph even when no CPU fallback is needed.
-        const { renderCodeViewGrid, CPU_RASTER_RENDERER_ID } = await import('../views');
+        const { renderGlbViewGrid, CPU_RASTER_RENDERER_ID } = await import('../views');
         // The degrade path must reproduce the SAME layout the port was asked
         // for, or a GPU outage silently reshapes the artifact.
-        const grid = await renderCodeViewGrid(agent.code, capture ? { capture } : {});
+        // R2.11: parse the exact final artifact. Generated source has already
+        // been executed once to produce render.glb and is never run again here.
+        const grid = await renderGlbViewGrid(render.glb, capture ? { capture } : {});
+        if (grid.inputGlbSha256 !== inputGlbSha256) {
+          throw new Error(
+            `GLB-native fallback hash mismatch (${grid.inputGlbSha256} != ${inputGlbSha256})`,
+          );
+        }
         views = grid.png;
         viewsCapture = grid.capture;
         // Honest producer provenance, but only on the port-enabled path — the
@@ -461,17 +468,20 @@ export async function generateKilnAsset(
           requested: 'full-preferred',
           delivered: 'geometry-flat',
           materialFaithful: false,
-          // The current CPU path re-executes source. R2.11 replaces it with a
-          // GLB-native fallback; until then it cannot claim exact-artifact.
-          exactArtifact: false,
+          exactArtifact: true,
           rendererId: CPU_RASTER_RENDERER_ID,
-          inputGlbSha256,
+          inputGlbSha256: grid.inputGlbSha256,
           degraded: true,
           degradeReason,
+          reasonCodes: ['FULL_MATERIAL_RENDER_UNAVAILABLE', ...grid.reasonCodes],
         };
-      } catch {
+      } catch (error) {
         views = undefined;
         viewsCapture = undefined;
+        const reasonCode =
+          error && typeof error === 'object' && 'code' in error && typeof error.code === 'string'
+            ? error.code
+            : undefined;
         viewsFidelity = {
           version: 'kiln.view-fidelity.v1',
           requested: 'full-preferred',
@@ -482,7 +492,12 @@ export async function generateKilnAsset(
           inputGlbSha256,
           degraded: true,
           degradeReason:
-            renderDegradedReason ?? 'material-faithful and geometry fallback renders unavailable',
+            renderDegradedReason ??
+            `material-faithful and geometry fallback renders unavailable${error instanceof Error ? `: ${error.message}` : ''}`,
+          reasonCodes: [
+            'FULL_MATERIAL_RENDER_UNAVAILABLE',
+            ...(reasonCode ? [reasonCode] : []),
+          ] as ViewFidelityV1['reasonCodes'],
         };
       }
     }

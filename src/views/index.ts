@@ -41,6 +41,7 @@ import {
   type SnapPaletteSlot,
   type Vec3,
 } from '../palette-snap';
+import { loadGlbGeometryFlatScene, type GlbGeometryFlatReasonCode } from './glb';
 
 export {
   rasterizeView,
@@ -80,6 +81,18 @@ export type {
 export { compositeCellGrid, compositeViewPngGrid, GRID_COLS } from './grid';
 export type { ComposedCellGrid, ComposedPngGrid } from './grid';
 export { CPU_RASTER_RENDERER_ID } from './renderer-id';
+export {
+  GLB_GEOMETRY_FLAT_REASON,
+  GlbGeometryFlatError,
+  geometryFlatTextureReasonCode,
+  loadGlbGeometryFlatScene,
+} from './glb';
+export type {
+  GlbGeometryFlatErrorCode,
+  GlbGeometryFlatReasonCode,
+  GlbGeometryFlatRoot,
+  LoadedGlbGeometryFlatScene,
+} from './glb';
 export {
   ARCHITECTURE_ROOF_ROLE_PREFIXES,
   hasArchitectureRoofRole,
@@ -336,6 +349,41 @@ export async function renderViewGrid(
     height,
     views: views.map((v) => v.name),
     capture: { preset: resolved.preset, cols, cells: views.length },
+  };
+}
+
+export interface GlbViewGridResult extends ViewGridResult {
+  /** Identity of the exact byte array parsed for this fallback. */
+  inputGlbSha256: `sha256:${string}`;
+  /** Stable limitations of geometry-flat rendering for this artifact. */
+  reasonCodes: GlbGeometryFlatReasonCode[];
+  meshCount: number;
+  instanceCount: number;
+}
+
+async function hashGlbViewInput(bytes: Uint8Array): Promise<`sha256:${string}`> {
+  const copy = Uint8Array.from(bytes);
+  const digest = new Uint8Array(await globalThis.crypto.subtle.digest('SHA-256', copy));
+  return `sha256:${[...digest].map((value) => value.toString(16).padStart(2, '0')).join('')}`;
+}
+
+/** Render the geometry-flat contact sheet from exact final GLB bytes. */
+export async function renderGlbViewGrid(
+  bytes: Uint8Array,
+  options: ViewGridOptions = {},
+): Promise<GlbViewGridResult> {
+  // One immutable snapshot owns both parsing and identity. Even a caller that
+  // mutates its Buffer while this async render is running cannot make the
+  // rasterized geometry and reported hash refer to different byte sequences.
+  const exactBytes = Uint8Array.from(bytes);
+  const loaded = await loadGlbGeometryFlatScene(exactBytes);
+  const grid = await renderViewGrid(loaded.root, options);
+  return {
+    ...grid,
+    inputGlbSha256: await hashGlbViewInput(exactBytes),
+    reasonCodes: loaded.reasonCodes,
+    meshCount: loaded.meshCount,
+    instanceCount: loaded.instanceCount,
   };
 }
 

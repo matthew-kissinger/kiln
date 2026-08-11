@@ -106,6 +106,19 @@ export type ViewFidelityPolicy = 'full-preferred' | 'full-required' | 'geometry-
 /** What the renderer actually delivered. */
 export type DeliveredViewFidelity = 'full-material' | 'geometry-flat' | 'none';
 
+/** Stable machine-readable explanation for a degraded or unavailable view. */
+export type ViewFidelityReasonCode =
+  | 'FULL_MATERIAL_RENDER_UNAVAILABLE'
+  | 'GLB_FLAT_TEXTURE_SAMPLING_UNSUPPORTED'
+  | 'GLB_FLAT_KTX2_SAMPLING_UNSUPPORTED'
+  | 'GLB_FLAT_NON_TRIANGLE_PRIMITIVE_UNSUPPORTED'
+  | 'GLB_FLAT_SKIN_DEFORMATION_UNSUPPORTED'
+  | 'GLB_FLAT_MORPH_TARGETS_UNSUPPORTED'
+  | 'GLB_FLAT_PARSE_FAILED'
+  | 'GLB_FLAT_NO_SCENE'
+  | 'GLB_FLAT_NO_RENDERABLE_GEOMETRY'
+  | 'GLB_FLAT_INVALID_INSTANCING';
+
 /**
  * Truthful, model-visible provenance for a rendered view.
  *
@@ -123,6 +136,8 @@ export interface ViewFidelityV1 {
   inputGlbSha256: `sha256:${string}`;
   degraded: boolean;
   degradeReason?: string;
+  /** Stable codes for policy and telemetry; no credentials or provider details. */
+  reasonCodes?: ViewFidelityReasonCode[];
 }
 
 /**
