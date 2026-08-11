@@ -156,6 +156,81 @@ export function parsePresentationDocumentV1(input: unknown): PresentationDocumen
   return PresentationDocumentV1Schema.parse(input);
 }
 
+function deepFreeze<T>(value: T): T {
+  if (value === null || typeof value !== 'object' || Object.isFrozen(value)) return value;
+  for (const nested of Object.values(value)) deepFreeze(nested);
+  return Object.freeze(value);
+}
+
+/**
+ * Engine-owned baseline for new Composer worlds. The ordered cameras mirror the
+ * three bounded inspection directions used by the canonical scene renderer,
+ * while exact output hashes remain mandatory. Hosts should persist a fresh copy
+ * from {@link createDefaultPresentationParametersV1} rather than duplicating
+ * these values.
+ */
+export const DEFAULT_PRESENTATION_PARAMETERS_V1 = deepFreeze(
+  parsePresentationParametersV1({
+    schemaVersion: PRESENTATION_DOCUMENT_V1_SCHEMA_VERSION,
+    grid: { columns: 3, rows: 1, cellWidth: 512, cellHeight: 512 },
+    lightingPresetId: 'neutral-studio-v1',
+    receiptPolicy: {
+      requirePerCameraOutputSha256: true,
+      requireOutputSetSha256: true,
+    },
+    cameras: [
+      {
+        id: 'front-right',
+        cell: { column: 0, row: 0 },
+        position: [10, 7, 10],
+        target: [0, 0, 0],
+        up: [0, 1, 0],
+        fovDeg: 50,
+        aspect: 1,
+        near: 0.05,
+        far: 100,
+      },
+      {
+        id: 'front-left',
+        cell: { column: 1, row: 0 },
+        position: [-10, 5.5, 10],
+        target: [0, 0, 0],
+        up: [0, 1, 0],
+        fovDeg: 50,
+        aspect: 1,
+        near: 0.05,
+        far: 100,
+      },
+      {
+        id: 'rear-overview',
+        cell: { column: 2, row: 0 },
+        position: [2, 11, -10],
+        target: [0, 0, 0],
+        up: [0, 1, 0],
+        fovDeg: 50,
+        aspect: 1,
+        near: 0.05,
+        far: 100,
+      },
+    ],
+  }),
+);
+
+/** Return an independently mutable, strictly parsed copy of the Engine default. */
+export function createDefaultPresentationParametersV1(): PresentationParametersV1 {
+  return parsePresentationParametersV1(DEFAULT_PRESENTATION_PARAMETERS_V1);
+}
+
+/** Bind the Engine default presentation to exact canonical world or GLB bytes. */
+export function createDefaultPresentationDocumentV1(
+  artifactBinding: unknown,
+): PresentationDocumentV1 {
+  return parsePresentationDocumentV1({
+    ...createDefaultPresentationParametersV1(),
+    artifactBinding,
+  });
+}
+
 export function canonicalPresentationDocumentV1Json(input: unknown): string {
   return canonicalContractJson(parsePresentationDocumentV1(input));
 }
