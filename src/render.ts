@@ -87,6 +87,7 @@ import {
   collectMaterialResourceProvenance,
   type MaterialResourceProvenanceV1,
 } from './material-resources';
+import { DEFAULT_TEXTURE_RESOLVER, type TextureResolver } from './texture-resolver';
 import { analyzePartPenetration, type PartPenetrationEvidenceV1 } from './qa/self-intersection';
 import { applyKitContract, type KitPackOptions, type KitPackSummary } from './kit';
 import {
@@ -316,7 +317,16 @@ export interface ExecutedKilnCode {
  * return value is a Promise it is awaited, otherwise it is used as-is.
  * Same for `animate()`.
  */
-export async function executeKilnCode(code: string): Promise<ExecutedKilnCode> {
+export interface ExecuteKilnCodeOptions {
+  /** Trusted host injection. Generated source receives only the closed
+   *  loadApprovedTexture(resourceId) function. */
+  textureResolver?: TextureResolver;
+}
+
+export async function executeKilnCode(
+  code: string,
+  options: ExecuteKilnCodeOptions = {},
+): Promise<ExecutedKilnCode> {
   if (!code || typeof code !== 'string') {
     throw new Error('executeKilnCode: code must be a non-empty string');
   }
@@ -326,7 +336,9 @@ export async function executeKilnCode(code: string): Promise<ExecutedKilnCode> {
   const normalized = code.replace(/\r\n/g, '\n');
 
   const primitiveUsage: Record<string, number> = {};
-  const globals = buildSandboxGlobals(primitiveUsage);
+  const globals = buildSandboxGlobals(primitiveUsage, {
+    textureResolver: options.textureResolver ?? DEFAULT_TEXTURE_RESOLVER,
+  });
   const globalNames = Object.keys(globals);
   const globalValues = Object.values(globals);
 
@@ -1357,9 +1369,13 @@ export async function renderGLB(
     instance?: InstanceMode;
     intent?: AssetIntentV1;
     category?: AssetCategory;
+    /** Trusted evaluator dependency; never derived from generated code. */
+    textureResolver?: TextureResolver;
   } = {},
 ): Promise<RenderResult> {
-  const { meta, root, clips, primitiveUsage } = await executeKilnCode(code);
+  const { meta, root, clips, primitiveUsage } = await executeKilnCode(code, {
+    textureResolver: opts.textureResolver ?? DEFAULT_TEXTURE_RESOLVER,
+  });
   const requestedCategory = opts.intent?.category ?? opts.category;
   const scene = await renderSceneToGLB(root, {
     sceneName: meta.name || 'Scene',

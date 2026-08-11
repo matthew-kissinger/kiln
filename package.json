@@ -27,6 +27,7 @@
     "./vehicle": "./src/vehicle.ts",
     "./material-recipes": "./src/material-recipes.ts",
     "./material-resources": "./src/material-resources.ts",
+    "./texture-resolver": "./src/texture-resolver.ts",
     "./material-recipe-runtime": "./src/material-recipe-runtime.ts",
     "./material-recipe-prompt": "./src/material-recipe-prompt.ts",
     "./material-metrics": "./src/material-metrics.ts",

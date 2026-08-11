@@ -145,7 +145,7 @@ export const KILN_API_IDIOMS = `// Usage idioms:
 // Textured asset pipeline:
 //   1. Build a geometry (boxGeo / CSG / subdivide / curveToMesh / etc)
 //   2. \`await autoUnwrap(geo)\` → adds a uv attribute
-//   3. \`await loadTexture(path)\` → load albedo/normal/etc PNG
+//   3. \`await loadApprovedTexture(resourceId)\` → load a listed approved texture
 //   4. \`pbrMaterial({ albedo: tex, ... })\` → build PBR material
 //   5. new THREE.Mesh(unwrappedGeo, mat) → attach to scene
 // THREE namespace is exposed — use \`new THREE.Mesh(geo, mat)\` when an op needs a
@@ -762,7 +762,8 @@ The sandbox exposes ~70 primitive helpers as globals (no imports), grouped:
   corner bevel, twist, taper), revolveProfile (solid lathe with a bevelled
   rim), circleProfile (sync outline helper)
 - Mesh ops & curves: subdivide, mergeVertices, curveToMesh, pipeAlongPath, lathe, revolveGeo
-- UV + textures: autoUnwrap, boxUnwrap, cylinderUnwrap, planeUnwrap, panelRemapV, loadTexture
+- UV + textures: autoUnwrap, boxUnwrap, cylinderUnwrap, planeUnwrap, panelRemapV,
+  loadApprovedTexture, proceduralTexture, normalMapFromHeight
 - Animation: rotationTrack/positionTrack/scaleTrack (keys are "rotation"/"position"/"scale",
   NOT "value"), createClip, spinAnimation, bobbingAnimation, idleBreathing
 

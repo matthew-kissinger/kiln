@@ -947,17 +947,15 @@ const PRIMITIVES: PrimitiveSpec[] = [
   // Textures + PBR (Wave 3B)
   // ---------------------------------------------------------------------------
   {
-    name: 'loadTexture',
-    signature:
-      "await loadTexture(source, { usage?: 'albedo'|'emissive'|'normal'|'roughness'|'metalness'|'metallicRoughness'|'occlusion', name? })",
+    name: 'loadApprovedTexture',
+    signature: 'await loadApprovedTexture(resourceId)',
     returns: 'Promise<THREE.DataTexture>',
     category: 'textures',
     description:
-      'Loads a PNG/JPG/WebP image with explicit slot usage. Albedo/emissive preview as sRGB; normal/roughness/metalness/occlusion are linear data. Stashes encoded bytes and QA metadata for lossless GLB export.',
-    example:
-      '// Host-only compatibility API: pass encoded PNG/JPG/WebP bytes supplied by the caller.',
+      'Loads one approved kiln.texture.* resource ID through the host-injected closed resolver. The registry fixes bytes, MIME, usage, dimensions, hash, and deadline; paths, URLs, byte arrays, resolver objects, hashes, and options are rejected.',
+    example: "const bark = await loadApprovedTexture('kiln.texture.bark-brown-01-albedo.v1');",
     promptNotes:
-      'Trusted host compatibility API only: generated asset code must not invent paths or URLs. Prefer approved materialRecipe resources or proceduralTexture V2. NEVER texture.clone() a loaded texture (clone() corrupts encoded bytes and breaks GLB export).',
+      'Use only a concrete resource ID listed in material capabilities; never invent one. Prefer materialRecipe when a recipe already binds the family, or proceduralTexture V2 for authored surfaces. NEVER texture.clone() a loaded texture (clone() corrupts encoded bytes and breaks GLB export).',
   },
   {
     name: 'proceduralTexture',
@@ -970,7 +968,7 @@ const PRIMITIVES: PrimitiveSpec[] = [
     example:
       "const bark = proceduralTexture({ schemaVersion: 2, size: 256, usage: 'albedo', name: 'Bark', layers: [{ op: 'solid', color: 0x5a4632 }, { op: 'noise', colorA: 0x3d2f21, colorB: 0x7a6248, scale: 6, octaves: 4, blend: 'overlay' }] });",
     promptNotes:
-      'Sync — no await. Strict V2 JSON boundary: unknown/prototype keys, callbacks, paths, URLs, and shader source are rejected. Prefer this over loadTexture for describable surfaces. Max 8 layers, power-of-two size up to 1024. Only the six listed ops exist.',
+      'Sync — no await. Strict V2 JSON boundary: unknown/prototype keys, callbacks, paths, URLs, and shader source are rejected. Prefer this over approved resources for describable surfaces. Max 8 layers, power-of-two size up to 1024. Only the six listed ops exist.',
   },
   {
     name: 'normalMapFromHeight',

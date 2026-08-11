@@ -65,23 +65,13 @@ test('sandbox new THREE.Mesh() with pbrMaterial+texture survives — texture ser
   // Reproduces the textured-aircraft cycle issue: LLM does
   //   new THREE.Mesh(unwrappedGeo, pbrMaterial({ albedo: loadedTex }))
   // and the resulting GLB needs to actually carry the texture.
-  // Build a tiny in-memory PNG via sharp to avoid coupling to disk paths.
-  const { default: sharp } = await import('sharp');
-  const pngBytes = await sharp({
-    create: { width: 16, height: 16, channels: 4, background: { r: 200, g: 80, b: 80, alpha: 1 } },
-  })
-    .png()
-    .toBuffer();
-  const tmpPath = `${process.cwd()}/.tmp-sandbox-three-bridge.png`;
-  const fs = await import('node:fs');
-  fs.writeFileSync(tmpPath, pngBytes);
-
-  try {
-    const code = `
+  // Use the closed approved-ID surface: raw paths are intentionally absent
+  // from new-generation globals.
+  const code = `
 const meta = { name: 'sandbox-textured-mesh-test', category: 'prop' };
 async function build() {
   const root = createRoot('Root');
-  const tex = await loadTexture(${JSON.stringify(tmpPath)});
+  const tex = await loadApprovedTexture('kiln.texture.bark-albedo.v1');
   const mat = pbrMaterial({ albedo: tex, roughness: 0.85, metalness: 0 });
   const geo = cylinderUnwrap(boxGeo(1, 1, 1));
   const m = new THREE.Mesh(geo, mat);
@@ -90,18 +80,15 @@ async function build() {
   return root;
 }
 `;
-    const result = await renderGLB(code);
-    expect(result.warnings).toEqual([]);
+  const result = await renderGLB(code);
+  expect(result.warnings).toEqual([]);
 
-    const io = new NodeIO();
-    const doc = await io.readBinary(result.glb);
-    const root = doc.getRoot();
-    // Texture carried through?
-    expect(root.listTextures().length).toBeGreaterThan(0);
-    // Material with base-color texture present?
-    const matWithTex = root.listMaterials().find((m) => m.getBaseColorTexture());
-    expect(matWithTex).toBeDefined();
-  } finally {
-    if (fs.existsSync(tmpPath)) fs.unlinkSync(tmpPath);
-  }
+  const io = new NodeIO();
+  const doc = await io.readBinary(result.glb);
+  const root = doc.getRoot();
+  // Texture carried through?
+  expect(root.listTextures().length).toBeGreaterThan(0);
+  // Material with base-color texture present?
+  const matWithTex = root.listMaterials().find((m) => m.getBaseColorTexture());
+  expect(matWithTex).toBeDefined();
 });

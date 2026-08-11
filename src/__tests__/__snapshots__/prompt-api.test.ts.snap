@@ -318,20 +318,21 @@ panelRemapV(geo, vScale=0.30, vOffset=0, uScale=1, uOffset=0)
   // v=0.30..1 has windows/markings — small parts call panelRemapV(unwrap(geo), 0.30) to sample
   // only the clean strip.
 
-// Textures (loadTexture is async)
-await loadTexture(source, { usage?: 'albedo'|'emissive'|'normal'|'roughness'|'metalness'|'metallicRoughness'|'occlusion', name? })
-  // Loads a PNG/JPG/WebP image with explicit slot usage. Albedo/emissive preview as sRGB;
-  // normal/roughness/metalness/occlusion are linear data. Stashes encoded bytes and QA metadata
-  // for lossless GLB export.
-  // NOTE: Trusted host compatibility API only: generated asset code must not invent paths or
-  // URLs. Prefer approved materialRecipe resources or proceduralTexture V2. NEVER
-  // texture.clone() a loaded texture (clone() corrupts encoded bytes and breaks GLB export).
+// Textures (approved resource loading is async)
+await loadApprovedTexture(resourceId)
+  // Loads one approved kiln.texture.* resource ID through the host-injected closed resolver.
+  // The registry fixes bytes, MIME, usage, dimensions, hash, and deadline; paths, URLs, byte
+  // arrays, resolver objects, hashes, and options are rejected.
+  // NOTE: Use only a concrete resource ID listed in material capabilities; never invent one.
+  // Prefer materialRecipe when a recipe already binds the family, or proceduralTexture V2 for
+  // authored surfaces. NEVER texture.clone() a loaded texture (clone() corrupts encoded bytes
+  // and breaks GLB export).
 proceduralTexture({ schemaVersion: 2, size?: 4..1024 pow2, usage?, name?, layers: [{ op: 'solid'|'checker'|'stripes'|'gradient'|'bricks'|'noise', ...params, blend?: 'normal'|'multiply'|'screen'|'overlay', opacity?: 0..1 }] })
   // Builds a tiling texture from a bounded layer stack — no image file needed. Layers composite
   // bottom-first. Noise is seeded and tileable, so the same spec always produces the same bytes
   // and a repeating material shows no seam. Baked to PNG and embedded in the GLB automatically.
   // NOTE: Sync — no await. Strict V2 JSON boundary: unknown/prototype keys, callbacks, paths,
-  // URLs, and shader source are rejected. Prefer this over loadTexture for describable
+  // URLs, and shader source are rejected. Prefer this over approved resources for describable
   // surfaces. Max 8 layers, power-of-two size up to 1024. Only the six listed ops exist.
 normalMapFromHeight(source: THREE.Texture, { strength?: number, name?: string })
   // Derives a tangent-space normal map from the source texture's brightness, treating it as
@@ -819,22 +820,22 @@ panelRemapV(geo, vScale=0.30, vOffset=0, uScale=1, uOffset=0)
   // e.g. const cowlGeo = panelRemapV(cylinderUnwrap(capsuleXGeo(0.45, 1.0)), 0.30); const cowl
   // = new THREE.Mesh(cowlGeo, bodyMat); // SAME bodyMat as fuselage, no clone needed
 
-// Textures (loadTexture is async)
-await loadTexture(source, { usage?: 'albedo'|'emissive'|'normal'|'roughness'|'metalness'|'metallicRoughness'|'occlusion', name? })
-  // Loads a PNG/JPG/WebP image with explicit slot usage. Albedo/emissive preview as sRGB;
-  // normal/roughness/metalness/occlusion are linear data. Stashes encoded bytes and QA metadata
-  // for lossless GLB export.
-  // NOTE: Trusted host compatibility API only: generated asset code must not invent paths or
-  // URLs. Prefer approved materialRecipe resources or proceduralTexture V2. NEVER
-  // texture.clone() a loaded texture (clone() corrupts encoded bytes and breaks GLB export).
-  // e.g. // Host-only compatibility API: pass encoded PNG/JPG/WebP bytes supplied by the
-  // caller.
+// Textures (approved resource loading is async)
+await loadApprovedTexture(resourceId)
+  // Loads one approved kiln.texture.* resource ID through the host-injected closed resolver.
+  // The registry fixes bytes, MIME, usage, dimensions, hash, and deadline; paths, URLs, byte
+  // arrays, resolver objects, hashes, and options are rejected.
+  // NOTE: Use only a concrete resource ID listed in material capabilities; never invent one.
+  // Prefer materialRecipe when a recipe already binds the family, or proceduralTexture V2 for
+  // authored surfaces. NEVER texture.clone() a loaded texture (clone() corrupts encoded bytes
+  // and breaks GLB export).
+  // e.g. const bark = await loadApprovedTexture('kiln.texture.bark-brown-01-albedo.v1');
 proceduralTexture({ schemaVersion: 2, size?: 4..1024 pow2, usage?, name?, layers: [{ op: 'solid'|'checker'|'stripes'|'gradient'|'bricks'|'noise', ...params, blend?: 'normal'|'multiply'|'screen'|'overlay', opacity?: 0..1 }] })
   // Builds a tiling texture from a bounded layer stack — no image file needed. Layers composite
   // bottom-first. Noise is seeded and tileable, so the same spec always produces the same bytes
   // and a repeating material shows no seam. Baked to PNG and embedded in the GLB automatically.
   // NOTE: Sync — no await. Strict V2 JSON boundary: unknown/prototype keys, callbacks, paths,
-  // URLs, and shader source are rejected. Prefer this over loadTexture for describable
+  // URLs, and shader source are rejected. Prefer this over approved resources for describable
   // surfaces. Max 8 layers, power-of-two size up to 1024. Only the six listed ops exist.
   // e.g. const bark = proceduralTexture({ schemaVersion: 2, size: 256, usage: 'albedo', name:
   // 'Bark', layers: [{ op: 'solid', color: 0x5a4632 }, { op: 'noise', colorA: 0x3d2f21, colorB:

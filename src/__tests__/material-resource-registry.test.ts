@@ -20,6 +20,7 @@ import {
 import {
   ApprovedTextureResourceCache,
   ApprovedTextureResourceUnavailableError,
+  TEXTURE_RESOLVER_LIMITS_V1,
   approvedTextureCatalogV1,
 } from '../material-resources';
 import { buildMaterialRecipePromptContextV1 } from '../material-recipe-prompt';
@@ -70,7 +71,7 @@ describe('runtime-delivered approved resources', () => {
   test('resolved bytes carry the same provenance as embedded ones, marked by delivery', async () => {
     const cache = new ApprovedTextureResourceCache({
       registry: RUNTIME_REGISTRY,
-      resolver: async () => goodBytes(),
+      resolver: async () => ({ bytes: goodBytes(), mime: 'image/png' }),
     });
 
     const resolved = await cache.resolveAsync(SUBJECT);
@@ -92,20 +93,86 @@ describe('runtime-delivered approved resources', () => {
         const bytes = goodBytes();
         const last = bytes.byteLength - 1;
         bytes.set([(bytes[last] ?? 0) ^ 0xff], last);
-        return bytes;
+        return { bytes, mime: 'image/png' };
       },
     });
     await expect(wrong.resolveAsync(SUBJECT)).rejects.toThrow(/does not match the pinned/);
 
     const truncated = new ApprovedTextureResourceCache({
       registry: RUNTIME_REGISTRY,
-      resolver: async () => goodBytes().subarray(0, 40),
+      resolver: async () => ({ bytes: goodBytes().subarray(0, 40), mime: 'image/png' }),
     });
     // Reported as a length, because the usual cause is an error document or a
     // partial body, and a hash mismatch would read as corruption instead.
     await expect(truncated.resolveAsync(SUBJECT)).rejects.toThrow(
       /expected 100 bytes, received 40/,
     );
+  });
+
+  test('host payloads reject oversize bytes, unsupported MIME/format, and unsafe dimensions', async () => {
+    const oversized = new ApprovedTextureResourceCache({
+      registry: RUNTIME_REGISTRY,
+      resolver: async () => ({
+        bytes: new Uint8Array(TEXTURE_RESOLVER_LIMITS_V1.maxEncodedBytes + 1),
+        mime: 'image/png',
+      }),
+    });
+    await expect(oversized.resolveAsync(SUBJECT)).rejects.toThrow(/encoded-byte limit/);
+
+    const wrongMime = new ApprovedTextureResourceCache({
+      registry: RUNTIME_REGISTRY,
+      resolver: async () => ({ bytes: goodBytes(), mime: 'image/jpeg' as never }),
+    });
+    await expect(wrongMime.resolveAsync(SUBJECT)).rejects.toThrow(/MIME/);
+
+    const wrongFormat = new ApprovedTextureResourceCache({
+      registry: RUNTIME_REGISTRY,
+      resolver: async () => ({ bytes: new Uint8Array(goodBytes().byteLength), mime: 'image/png' }),
+    });
+    await expect(wrongFormat.resolveAsync(SUBJECT)).rejects.toThrow(/PNG signature|format/);
+
+    const hugeDimensions = goodBytes();
+    new DataView(hugeDimensions.buffer, hugeDimensions.byteOffset).setUint32(16, 8192, false);
+    const dimensions = new ApprovedTextureResourceCache({
+      registry: RUNTIME_REGISTRY,
+      resolver: async () => ({ bytes: hugeDimensions, mime: 'image/png' }),
+    });
+    await expect(dimensions.resolveAsync(SUBJECT)).rejects.toThrow(/dimension limit/);
+
+    const tooManyPixels = goodBytes();
+    const pixelView = new DataView(tooManyPixels.buffer, tooManyPixels.byteOffset);
+    pixelView.setUint32(16, 4096, false);
+    pixelView.setUint32(20, 4096, false);
+    const pixels = new ApprovedTextureResourceCache({
+      registry: RUNTIME_REGISTRY,
+      resolver: async () => ({ bytes: tooManyPixels, mime: 'image/png' }),
+    });
+    await expect(pixels.resolveAsync(SUBJECT)).rejects.toThrow(/pixel limit/);
+
+    const suppliedHash = new ApprovedTextureResourceCache({
+      registry: RUNTIME_REGISTRY,
+      resolver: async () =>
+        ({
+          bytes: goodBytes(),
+          mime: 'image/png',
+          sha256: shipped.contentHash,
+        }) as never,
+    });
+    await expect(suppliedHash.resolveAsync(SUBJECT)).rejects.toThrow(/only bytes and MIME/);
+  });
+
+  test('host resolution has a hard deadline and exposes only an abort signal to the host', async () => {
+    let signal: AbortSignal | undefined;
+    const cache = new ApprovedTextureResourceCache({
+      registry: RUNTIME_REGISTRY,
+      resolverDeadlineMs: 10,
+      resolver: async (_descriptor, context) => {
+        signal = context.signal;
+        return await new Promise(() => {});
+      },
+    });
+    await expect(cache.resolveAsync(SUBJECT)).rejects.toThrow(/deadline exceeded/);
+    expect(signal?.aborted).toBe(true);
   });
 
   test('concurrent requests for one resource share a single fetch', async () => {
@@ -115,7 +182,7 @@ describe('runtime-delivered approved resources', () => {
       resolver: async () => {
         calls += 1;
         await Promise.resolve();
-        return goodBytes();
+        return { bytes: goodBytes(), mime: 'image/png' };
       },
     });
 
@@ -137,7 +204,7 @@ describe('runtime-delivered approved resources', () => {
       resolver: async () => {
         calls += 1;
         if (calls === 1) throw new Error('transient network failure');
-        return goodBytes();
+        return { bytes: goodBytes(), mime: 'image/png' };
       },
     });
 
@@ -154,7 +221,7 @@ describe('runtime-delivered approved resources', () => {
       registry: RUNTIME_REGISTRY,
       resolver: async (descriptor) => {
         seen.push(descriptor.id);
-        return goodBytes();
+        return { bytes: goodBytes(), mime: 'image/png' };
       },
     });
 
@@ -211,7 +278,7 @@ describe('what the model is told it can bind', () => {
 
     const withResolver = new ApprovedTextureResourceCache({
       registry: production,
-      resolver: async () => goodBytes(),
+      resolver: async () => ({ bytes: goodBytes(), mime: 'image/png' }),
     });
     const catalog = approvedTextureCatalogV1({ cache: withResolver });
     expect(catalog).toHaveLength(25);

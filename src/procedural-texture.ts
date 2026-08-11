@@ -33,7 +33,7 @@
  * Unlike `texture-bake.ts` — which must never guess, because it is handed
  * finished pixels whose meaning it cannot know — this function is told the
  * usage up front and therefore sets `colorSpace` itself, exactly as
- * `loadTexture` does. Getting it wrong here is an authoring error the QA gate
+ * approved texture loading does. Getting it wrong here is an authoring error the QA gate
  * still catches.
  */
 
@@ -368,7 +368,7 @@ export function normalMapFromHeight(
   const height = image?.height ?? 0;
   if (!data || !width || !height) {
     throw new ProceduralTextureError(
-      'normalMapFromHeight: the source texture has no readable pixels. Pass a proceduralTexture() result or a loadTexture() result, not a texture built from an image element.',
+      'normalMapFromHeight: the source texture has no readable pixels. Pass a proceduralTexture() result or a loadApprovedTexture() result, not a texture built from an image element.',
     );
   }
   const channels = data.length / (width * height);

@@ -58,6 +58,7 @@ The engine ships TypeScript source (Bun/tsx transpile on the fly); consume by su
 | `@kiln/engine/arena` | Bradley-Terry + adaptive pairwise sampling (pure math) |
 | `@kiln/engine/validation` | structural validator + AST analysis (acorn) |
 | `@kiln/engine/primitives` | the 70+ primitive/helper registry |
+| `@kiln/engine/material-resources`, `/texture-resolver` | trusted-host approved texture registry and bounded resolver injection; generated code sees only approved resource IDs |
 | `@kiln/engine/prompt`, `/prompt-api`, `/list-primitives` | system-prompt generation + catalog |
 | `@kiln/engine/metrics`, `/inspect` | instanceability grade + scene-structure analysis |
 | `@kiln/engine/contracts` | browser-safe asset and integration contracts, including `IntegrationManifestV1` and the semantic role vocabulary (`KILN_SEMANTIC_ROLES`, `semanticRole`, `semanticRoleMatches`, `hasSemanticRole`) |
