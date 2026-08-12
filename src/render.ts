@@ -815,6 +815,51 @@ function bridgeAnimations(
   }
 }
 
+const REVIEW_CLIPS_EXTRAS_KEY = 'kilnReviewClipsV1';
+const REVIEW_CLIP_LIMITS = {
+  clips: 32,
+  tracks: 256,
+  samplesPerTrack: 4_096,
+  valuesPerTrack: 16_384,
+} as const;
+
+/** Preserve the authored review clip vocabulary in artifact bytes, including
+ * unresolved tracks that glTF cannot encode as native channels. Review tools
+ * use this bounded data only to reconstruct deterministic poses/warnings; it
+ * is not executable source and native valid channels remain authoritative to
+ * ordinary glTF consumers. */
+function reviewClipExtras(clips: THREE.AnimationClip[]): Record<string, unknown> {
+  if (clips.length > REVIEW_CLIP_LIMITS.clips) {
+    throw new Error(`Animation review clip limit exceeded (${REVIEW_CLIP_LIMITS.clips}).`);
+  }
+  let trackCount = 0;
+  return {
+    version: 1,
+    clips: clips.map((clip) => ({
+      name: clip.name,
+      duration: clip.duration,
+      tracks: clip.tracks.map((track) => {
+        trackCount++;
+        if (trackCount > REVIEW_CLIP_LIMITS.tracks) {
+          throw new Error(`Animation review track limit exceeded (${REVIEW_CLIP_LIMITS.tracks}).`);
+        }
+        if (
+          track.times.length > REVIEW_CLIP_LIMITS.samplesPerTrack ||
+          track.values.length > REVIEW_CLIP_LIMITS.valuesPerTrack
+        ) {
+          throw new Error('Animation review sample limit exceeded.');
+        }
+        const times = Array.from(track.times);
+        const values = Array.from(track.values);
+        if (!times.every(Number.isFinite) || !values.every(Number.isFinite)) {
+          throw new Error('Animation review tracks must contain only finite values.');
+        }
+        return { name: track.name, times, values };
+      }),
+    })),
+  };
+}
+
 // =============================================================================
 // Public API
 // =============================================================================
@@ -1187,6 +1232,7 @@ export async function renderSceneToGLB(
   doc.getRoot().setDefaultScene(gltfScene);
 
   if (clips.length > 0) {
+    gltfScene.setExtras({ [REVIEW_CLIPS_EXTRAS_KEY]: reviewClipExtras(clips) });
     bridgeAnimations(doc, buf, clips, nodeMap, warnings);
   }
 
