@@ -14,7 +14,12 @@
  * non-agent `kiln` module must import it lazily (dynamic `import()`), so the
  * `@strands-agents/sdk` dependency never enters the browser/editor bundle graph.
  */
-import { renderGLB, type KilnCodeMeta, type RenderResult } from '../render';
+import type { KilnCodeMeta, RenderResult } from '../render';
+import {
+  resolveEvaluatorPortV1,
+  type EvaluatorExecutionProfileV1,
+  type EvaluatorPortV1,
+} from '../evaluator';
 import type { PbrRenderPort, ViewFidelityV1 } from '../composer/render-port';
 import {
   CaptureConfigError,
@@ -102,6 +107,10 @@ export interface GenerateKilnAssetOptions {
   exemplarCode?: string;
   /** Optional reference image fed to the model as multimodal context (fresh gen + refine). */
   inputImage?: KilnInputImage;
+  /** Generated-source execution boundary. Production must inject the port and
+   * select `evaluator-required`; trusted local/test remains compatible. */
+  evaluatorPort?: EvaluatorPortV1;
+  evaluatorProfile?: EvaluatorExecutionProfileV1;
 }
 
 export interface GenerateKilnAssetResult {
@@ -179,6 +188,8 @@ export async function generateKilnCodeAgent(opts: {
   inputImage?: KilnInputImage;
   /** Strands model id; defaults like {@link generateKilnAsset}. */
   model?: string;
+  evaluatorPort?: EvaluatorPortV1;
+  evaluatorProfile?: EvaluatorExecutionProfileV1;
 }): Promise<{
   success: boolean;
   code?: string;
@@ -206,6 +217,8 @@ export async function generateKilnCodeAgent(opts: {
     ...(opts.existingCode ? { existingCode: opts.existingCode } : {}),
     ...(opts.originalPrompt ? { originalPrompt: opts.originalPrompt } : {}),
     ...(opts.inputImage ? { inputImage: opts.inputImage } : {}),
+    ...(opts.evaluatorPort ? { evaluatorPort: opts.evaluatorPort } : {}),
+    ...(opts.evaluatorProfile ? { evaluatorProfile: opts.evaluatorProfile } : {}),
   });
 
   if (agent.error || !agent.code) {
@@ -438,6 +451,8 @@ export async function generateKilnAsset(
     ...(opts.agentName ? { agentName: opts.agentName } : {}),
     ...(opts.exemplarCode ? { exemplarCode: opts.exemplarCode } : {}),
     ...(opts.inputImage ? { inputImage: opts.inputImage } : {}),
+    ...(opts.evaluatorPort ? { evaluatorPort: opts.evaluatorPort } : {}),
+    ...(opts.evaluatorProfile ? { evaluatorProfile: opts.evaluatorProfile } : {}),
   });
 
   // A salvaged run carries BOTH code and the original error (H-10) — only a
@@ -448,7 +463,10 @@ export async function generateKilnAsset(
 
   // Grade-aware consolidation by default: lifts material-sprawl heroes from
   // grade C/D/F to A/B, byte-stable on already-lean assets (M1a, plan/05 §3.1).
-  const render = await renderGLB(agent.code, { optimize: 'auto', intent });
+  const render = await resolveEvaluatorPortV1(
+    opts.evaluatorPort,
+    opts.evaluatorProfile ?? 'trusted-local',
+  ).render(agent.code, { optimize: 'auto', intent });
 
   // Best-effort views artifact: what the vision loop / review UIs show.
   // Never fails the run — a rasterizer error just drops the sidecar.

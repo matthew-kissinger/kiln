@@ -22,7 +22,7 @@ function build() {
   return root;
 }
 function animate() {
-  return [createClip('move', 1, [rotationTrack('Arm', [
+  return [createClip('move', 1, [rotationTrack('Joint_Arm', [
     { time: 0, rotation: [0, 0, 0] }, { time: 1, rotation: [0, 90, 0] }
   ])])];
 }`;
@@ -45,7 +45,7 @@ function solidPng(size: number): Uint8Array {
 }
 
 describe('derivative review surfaces', () => {
-  test('animation executes source once and binds every GPU frame receipt to its derivative GLB', async () => {
+  test('animation evaluates once and never re-executes source while binding derivative receipts', async () => {
     const requests: PbrRenderRequest[] = [];
     const port: PbrRenderPort = async (request) => {
       requests.push(request);

@@ -21,7 +21,7 @@ import { z } from 'zod';
 import * as THREE from 'three';
 
 import { validate } from '../validation';
-import { executeKilnCode, inspectSceneStructure, renderSceneToGLB } from '../render';
+import { inspectSceneStructure, renderSceneToGLB, type RenderResult } from '../render';
 import { listPrimitives, type PrimitiveSpec } from '../list-primitives';
 import type { AssetCategory, AssetIntentV1 } from '../contracts';
 import type { AssetQaReportV1 } from '../qa';
@@ -34,6 +34,8 @@ import type {
   ViewEvidenceHistoryV1,
 } from '../composer/render-port';
 import type { ViewGridResult } from '../views';
+import type { EvaluatorExecutionProfileV1, EvaluatorPortV1 } from '../evaluator';
+import { resolveEvaluatorPortV1 } from '../evaluator';
 import { sceneNeedsPbrShading } from '../material-resources';
 import type { GenerationCallBudget } from '../agent/call-budget';
 import {
@@ -132,6 +134,11 @@ export interface KilnToolContext {
   generationCallBudget?: GenerationCallBudget;
   /** Shared bounded hash-only evidence ledger for one agent/tool session. */
   viewEvidenceHistory?: ViewEvidenceHistoryStore;
+  /** Host-owned generated-source execution boundary. Production selects
+   * `evaluator-required`; trusted local/test callers may retain the explicit
+   * compatibility profile. */
+  evaluatorPort?: EvaluatorPortV1;
+  evaluatorProfile?: EvaluatorExecutionProfileV1;
 }
 
 /** JSON-safe value accepted from a host visual observer. */
@@ -203,6 +210,28 @@ function resolveInLoopViewRenderTimeoutMs(
 
 function trustedCategory(context: KilnToolContext): AssetCategory | undefined {
   return context.intent?.category ?? context.category;
+}
+
+async function evaluateGeneratedSource(
+  code: string,
+  context: KilnToolContext,
+  optimize: 'off' | 'auto' = 'off',
+): Promise<RenderResult> {
+  return resolveEvaluatorPortV1(
+    context.evaluatorPort,
+    context.evaluatorProfile ?? 'trusted-local',
+  ).render(code, {
+    optimize,
+    ...(trustedCategory(context) ? { category: trustedCategory(context) } : {}),
+    ...(context.intent ? { intent: context.intent } : {}),
+  });
+}
+
+async function loadEvaluatedReviewScene(code: string, context: KilnToolContext) {
+  const rendered = await evaluateGeneratedSource(code, context);
+  const { loadGlbReviewScene } = await import('../views');
+  const scene = await loadGlbReviewScene(rendered.glb);
+  return { rendered, ...scene };
 }
 
 const viewEvidenceHistoryByContext = new WeakMap<KilnToolContext, ViewEvidenceHistoryStore>();
@@ -601,22 +630,15 @@ async function runRender(
   context: KilnToolContext,
 ): Promise<KilnRenderMetrics> {
   try {
-    const { root, clips } = await executeKilnCode(input.code);
+    const { root, rendered } = await loadEvaluatedReviewScene(input.code, context);
     const category = trustedCategory(context);
 
     // Structural advisories (floating parts / stray planes at origin).
     const structuralWarnings = inspectSceneStructure(root, { category });
     const metrics = collectSceneMetrics(root);
 
-    // Render to GLB bytes for the triangle count. Output is discarded — pure
-    // metrics, no files written.
-    const rendered = await renderSceneToGLB(root, {
-      clips,
-      ...(category ? { category } : {}),
-      ...(context.intent ? { intent: context.intent } : {}),
-    });
-
     const warnings = [...structuralWarnings, ...rendered.warnings];
+    const instanceability = rendered.meta.instanceability;
 
     return {
       ok: true,
@@ -625,16 +647,16 @@ async function runRender(
       materials: metrics.materials,
       bbox: metrics.bbox,
       lowestPart: metrics.lowestPart,
-      ...(rendered.instanceability
+      ...(instanceability
         ? {
             instanceability: {
-              grade: rendered.instanceability.grade,
-              summary: rendered.instanceability.summary,
+              grade: instanceability.grade,
+              summary: instanceability.summary,
             },
           }
         : {}),
       warnings,
-      qaReport: rendered.qaReport,
+      qaReport: rendered.meta.qaReport as AssetQaReportV1 | undefined,
     };
   } catch (err) {
     return {
@@ -674,12 +696,12 @@ async function runScreenshot(
   context: KilnToolContext,
 ): Promise<KilnScreenshotResult> {
   try {
-    const { renderViewGrid } = await import('../views');
-    const { root } = await executeKilnCode(input.code);
+    const { renderGlbViewGrid } = await import('../views');
+    const { root, rendered } = await loadEvaluatedReviewScene(input.code, context);
     const warnings = inspectSceneStructure(root, { category: trustedCategory(context) });
     // No capture config here on purpose: kiln_screenshot belongs to the frozen
     // four-tool baseline, whose schemas stay byte-for-byte unchanged.
-    const grid = await renderViewGrid(root);
+    const grid = await renderGlbViewGrid(rendered.glb);
     return {
       ok: true,
       views: grid.views,
@@ -757,26 +779,25 @@ async function runRenderViews(
     // put a `node:fs` edge — evaluated on import, not on call — into this
     // module's graph, which is exactly what the lazy `../views` import at the top
     // of this file exists to prevent.
-    const { renderViewGrid, CPU_RASTER_RENDERER_ID, resolveGridCapture } = await import('../views');
-    const { root, clips } = await executeKilnCode(input.code);
+    const { renderGlbViewGrid, CPU_RASTER_RENDERER_ID, resolveGridCapture } = await import(
+      '../views'
+    );
+    const { root, rendered, reasonCodes } = await loadEvaluatedReviewScene(input.code, context);
     const category = trustedCategory(context);
 
     const structuralWarnings = inspectSceneStructure(root, { category });
     const metrics = collectSceneMetrics(root);
-
-    // Single execution, two consumers — both read-only on `root`.
-    const rendered = await renderSceneToGLB(root, {
-      clips,
-      ...(category ? { category } : {}),
-      ...(context.intent ? { intent: context.intent } : {}),
-    });
 
     // Route to the GPU only when a flat-shaded raster would misrepresent the
     // scene. A prop made of untextured `gameMaterial` looks the same either way,
     // so sending it costs a round trip and a warm GPU to draw a picture the CPU
     // already draws correctly. `renderSceneToGLB` above ALREADY produced the
     // bytes the port needs — this reuses them rather than paying a second bake.
-    const neededPbr = sceneNeedsPbrShading(root);
+    const neededPbr =
+      sceneNeedsPbrShading(root) ||
+      (rendered.materialMetrics?.texturedMaterials ?? 0) > 0 ||
+      (rendered.materialMetrics?.materialExtensionCount ?? 0) > 0 ||
+      reasonCodes.length > 0;
     let grid: ViewGridResult | undefined;
     let drawnBy: InLoopViewRender | undefined;
     let materialFaithful = false;
@@ -790,7 +811,7 @@ async function runRenderViews(
       const { captureViewsViaPort } = await import('../agent/generate');
       const ported = await captureViewsViaPort(
         context.viewRenderPort,
-        rendered.bytes,
+        rendered.glb,
         resolveInLoopViewRenderTimeoutMs(context, 'in-loop-grid'),
         input.capture,
       );
@@ -822,7 +843,7 @@ async function runRenderViews(
     // not need PBR, every host with no port, and every port call that did not
     // come back. It is never skipped as an optimisation — it is the fallback.
     if (!grid) {
-      grid = await renderViewGrid(root, input.capture ? { capture: input.capture } : {});
+      grid = await renderGlbViewGrid(rendered.glb, input.capture ? { capture: input.capture } : {});
     }
     drawnBy ??= context.viewRenderPort
       ? { renderer: CPU_RASTER_RENDERER_ID, degraded: false, neededPbr }
@@ -838,8 +859,8 @@ async function runRenderViews(
     // Copy into an ArrayBuffer-backed view: render bytes are typed as
     // `Uint8Array<ArrayBufferLike>`, while Web Crypto deliberately rejects a
     // possible SharedArrayBuffer at its boundary.
-    const hashInput = new Uint8Array(rendered.bytes.byteLength);
-    hashInput.set(rendered.bytes);
+    const hashInput = new Uint8Array(rendered.glb.byteLength);
+    hashInput.set(rendered.glb);
     const digest = new Uint8Array(await globalThis.crypto.subtle.digest('SHA-256', hashInput));
     const inputGlbSha256 = `sha256:${[...digest]
       .map((byte) => byte.toString(16).padStart(2, '0'))
@@ -874,11 +895,11 @@ async function runRenderViews(
       materials: metrics.materials,
       bbox: metrics.bbox,
       lowestPart: metrics.lowestPart,
-      ...(rendered.instanceability
+      ...(rendered.meta.instanceability
         ? {
             instanceability: {
-              grade: rendered.instanceability.grade,
-              summary: rendered.instanceability.summary,
+              grade: rendered.meta.instanceability.grade,
+              summary: rendered.meta.instanceability.summary,
             },
           }
         : {}),
@@ -890,7 +911,7 @@ async function runRenderViews(
       viewFidelity,
       ...(viewEvidence ? { viewEvidence } : {}),
       warnings,
-      qaReport: rendered.qaReport,
+      qaReport: rendered.meta.qaReport as AssetQaReportV1 | undefined,
     };
   } catch (err) {
     return {
@@ -983,7 +1004,7 @@ async function runScreenshotAnimation(
 ): Promise<KilnScreenshotAnimationResult> {
   try {
     const { renderClipAnimation } = await import('../views');
-    const { root, clips } = await executeKilnCode(input.code);
+    const { root, clips } = await loadEvaluatedReviewScene(input.code, context);
     const warnings = inspectSceneStructure(root, { category: trustedCategory(context) });
     const r = await renderClipAnimation(root, clips, {
       clip: input.clip,
@@ -1132,7 +1153,7 @@ async function runViewInterior(
 ): Promise<KilnViewInteriorResult> {
   try {
     const { renderInteriorGrid } = await import('../views');
-    const { root } = await executeKilnCode(input.code);
+    const { root } = await loadEvaluatedReviewScene(input.code, context);
     // No default name. An explicit nodeName stays an exact-name override; with
     // none, the grid resolves the roof from its semantic role (and only then
     // falls back to historical "Roof" naming) — so a correctly-roled roof named
@@ -1305,7 +1326,7 @@ async function runInspect(
 ): Promise<KilnInspectResult> {
   try {
     const { prepareInspectView } = await import('../views/inspect');
-    const { root } = await executeKilnCode(input.code);
+    const { root } = await loadEvaluatedReviewScene(input.code, context);
     const r = prepareInspectView(root, {
       ...(input.part !== undefined ? { part: input.part } : {}),
       ...(input.view !== undefined ? { view: input.view } : {}),

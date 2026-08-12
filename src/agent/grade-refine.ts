@@ -18,7 +18,11 @@ import { WebIO } from '@gltf-transform/core';
 import type { AssetCategory, AssetIntentV1 } from '../contracts';
 import type { InstanceabilityGrade, InstanceabilityReport } from '../metrics';
 import { AssetQaBlockedError } from '../qa/run';
-import { renderGLB } from '../render';
+import {
+  resolveEvaluatorPortV1,
+  type EvaluatorExecutionProfileV1,
+  type EvaluatorPortV1,
+} from '../evaluator';
 
 /** Grades at or above this never trigger a refine turn. */
 export const GRADE_REFINE_TARGET: InstanceabilityGrade = 'B';
@@ -89,10 +93,19 @@ async function listMaterialLabels(glb: Uint8Array): Promise<string[]> {
  */
 export async function assessProgramGrade(
   code: string,
-  opts: { intent?: AssetIntentV1; category?: AssetCategory } = {},
+  opts: {
+    intent?: AssetIntentV1;
+    category?: AssetCategory;
+    evaluatorPort?: EvaluatorPortV1;
+    evaluatorProfile?: EvaluatorExecutionProfileV1;
+  } = {},
 ): Promise<ProgramGradeAssessment> {
   try {
-    const render = await renderGLB(code, { optimize: 'auto', ...opts });
+    const { evaluatorPort, evaluatorProfile, ...renderOptions } = opts;
+    const render = await resolveEvaluatorPortV1(
+      evaluatorPort,
+      evaluatorProfile ?? 'trusted-local',
+    ).render(code, { optimize: 'auto', ...renderOptions });
     const report = render.meta.instanceability;
     // Metrics computation failing is non-fatal everywhere else — same here: the
     // program is valid, there is just no grade signal to act on.

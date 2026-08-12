@@ -43,6 +43,11 @@ import {
   type Vec3,
 } from '../palette-snap';
 import { loadGlbGeometryFlatScene, type GlbGeometryFlatReasonCode } from './glb';
+import {
+  resolveEvaluatorPortV1,
+  type EvaluatorExecutionProfileV1,
+  type EvaluatorPortV1,
+} from '../evaluator';
 
 export {
   rasterizeView,
@@ -88,12 +93,14 @@ export {
   GlbGeometryFlatError,
   geometryFlatTextureReasonCode,
   loadGlbGeometryFlatScene,
+  loadGlbReviewScene,
 } from './glb';
 export type {
   GlbGeometryFlatErrorCode,
   GlbGeometryFlatReasonCode,
   GlbGeometryFlatRoot,
   LoadedGlbGeometryFlatScene,
+  LoadedGlbReviewScene,
 } from './glb';
 export {
   ARCHITECTURE_ROOF_ROLE_PREFIXES,
@@ -442,13 +449,21 @@ function expandFrameBounds(
 }
 
 /** Execute a Kiln program and render its scene into the 3x2 grid. */
+export interface CodeViewGridOptions extends ViewGridOptions {
+  evaluatorPort?: EvaluatorPortV1;
+  evaluatorProfile?: EvaluatorExecutionProfileV1;
+}
+
 export async function renderCodeViewGrid(
   code: string,
-  opts: ViewGridOptions = {},
+  opts: CodeViewGridOptions = {},
 ): Promise<ViewGridResult> {
-  const { executeKilnCode } = await import('../render');
-  const { root } = await executeKilnCode(code);
-  return renderViewGrid(root, opts);
+  const { evaluatorPort, evaluatorProfile, ...viewOptions } = opts;
+  const rendered = await resolveEvaluatorPortV1(
+    evaluatorPort,
+    evaluatorProfile ?? 'trusted-local',
+  ).render(code);
+  return renderGlbViewGrid(rendered.glb, viewOptions);
 }
 
 // =============================================================================

@@ -1,5 +1,11 @@
 import { describe, expect, test } from 'bun:test';
+import { renderGLBInProcess } from '../render';
+import { AssetQaBlockedError } from '../qa/run';
+import { createAssetIntentV1 } from '../contracts';
+import { createAssetQaReportV1 } from '../qa/types';
 import {
+  createEvaluatorPortV1,
+  createEvaluatorRequestV1,
   decodeEvaluatorRequestV1,
   decodeEvaluatorResultV1,
   encodeRenderResultV1,
@@ -15,6 +21,13 @@ const request = {
   options: { optimize: 'off' as const },
   limits: { maxGlbBytes: 1024 },
 };
+const BOX_CODE = `
+const meta={name:'Box'};
+function build(){
+  const root=createRoot('Box');
+  createPart('Body', boxGeo(1,1,1), gameMaterial('#777777'), {parent:root});
+  return root;
+}`;
 
 describe('evaluator protocol v1', () => {
   test('accepts the exact versioned request shape', () => {
@@ -86,5 +99,102 @@ describe('evaluator protocol v1', () => {
     expect(() => decodeEvaluatorResultV1(JSON.stringify(failure), 1024)).toThrow(
       'invalid evaluator result',
     );
+  });
+
+  test('rejects malformed or unbound QA evidence from a remote worker', () => {
+    const malformed = {
+      version: EVALUATOR_RESULT_VERSION,
+      requestId: 'render-1',
+      ok: false,
+      error: {
+        code: 'QA_BLOCKED',
+        message: 'Generated asset did not pass quality checks.',
+        qa: { report: { disposition: 'block', source: 'untrusted' }, stage: 'scene' },
+      },
+    };
+    expect(() => decodeEvaluatorResultV1(JSON.stringify(malformed), 1024, 'render-1')).toThrow(
+      'invalid evaluator result',
+    );
+    expect(() =>
+      decodeEvaluatorResultV1(
+        JSON.stringify({
+          ...malformed,
+          error: {
+            code: 'EXECUTION_REJECTED',
+            message: 'Generated asset execution was rejected.',
+            qa: malformed.error.qa,
+          },
+        }),
+        1024,
+        'render-1',
+      ),
+    ).toThrow('invalid evaluator result');
+  });
+
+  test('builds exact transport-neutral requests and rejects host capabilities', () => {
+    const built = createEvaluatorRequestV1({
+      requestId: 'remote-42',
+      code: BOX_CODE,
+      options: { optimize: 'auto' },
+      maxGlbBytes: 2048,
+    });
+    expect(JSON.parse(built.json)).toEqual(built.request);
+    expect(built.request).toMatchObject({
+      version: 'kiln.evaluator.request.v1',
+      requestId: 'remote-42',
+      operation: 'execute-export-glb',
+      limits: { maxGlbBytes: 2048 },
+    });
+    expect(() =>
+      createEvaluatorRequestV1({
+        requestId: 'remote-43',
+        code: BOX_CODE,
+        options: { textureResolver: (async () => undefined) as never },
+      }),
+    ).toThrow('host resolver');
+  });
+
+  test('binds the response to the caller request id and enforces transport caps', async () => {
+    const direct = await renderGLBInProcess(BOX_CODE);
+    const port = createEvaluatorPortV1(async (requestJson) => {
+      const request = decodeEvaluatorRequestV1(requestJson);
+      return JSON.stringify(encodeRenderResultV1(`${request.requestId}-wrong`, direct));
+    });
+    await expect(port.render(BOX_CODE)).rejects.toMatchObject({ code: 'PROTOCOL_ERROR' });
+
+    const oversized = createEvaluatorPortV1(async () => 'x'.repeat(2049), {
+      maxResponseBytes: 2048,
+    });
+    await expect(oversized.render(BOX_CODE)).rejects.toMatchObject({
+      code: 'OUTPUT_LIMIT_EXCEEDED',
+    });
+
+    const stalled = createEvaluatorPortV1(() => new Promise(() => {}), { deadlineMs: 10 });
+    await expect(stalled.render(BOX_CODE)).rejects.toMatchObject({ code: 'DEADLINE_EXCEEDED' });
+  });
+
+  test('preserves bounded QA evidence for the existing repair loop', async () => {
+    const direct = await renderGLBInProcess(BOX_CODE);
+    const report = createAssetQaReportV1(createAssetIntentV1({ category: 'prop' }));
+    const port = createEvaluatorPortV1(async (requestJson) => {
+      const decoded = decodeEvaluatorRequestV1(requestJson);
+      return JSON.stringify({
+        version: EVALUATOR_RESULT_VERSION,
+        requestId: decoded.requestId,
+        ok: false,
+        error: {
+          code: 'QA_BLOCKED',
+          message: 'Generated asset did not pass quality checks.',
+          qa: { report, stage: 'scene' },
+        },
+      });
+    });
+    try {
+      await port.render(BOX_CODE);
+      throw new Error(`expected QA block for ${direct.artifactGlbSha256}`);
+    } catch (error) {
+      expect(error).toBeInstanceOf(AssetQaBlockedError);
+      expect((error as AssetQaBlockedError).report).toEqual(report);
+    }
   });
 });

@@ -84,6 +84,8 @@ export function buildAgentTools(
     ...(opts.onViewsRendered ? { onViewsRendered: opts.onViewsRendered } : {}),
     ...(opts.renderObservationPort ? { renderObservationPort: opts.renderObservationPort } : {}),
     ...(opts.generationCallBudget ? { generationCallBudget: opts.generationCallBudget } : {}),
+    ...(opts.evaluatorPort ? { evaluatorPort: opts.evaluatorPort } : {}),
+    ...(opts.evaluatorProfile ? { evaluatorProfile: opts.evaluatorProfile } : {}),
   };
   if (surface === 'unified') {
     return makeKilnUnifiedTools({

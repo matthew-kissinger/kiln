@@ -8,6 +8,7 @@ import {
   GLB_GEOMETRY_FLAT_REASON,
   geometryFlatTextureReasonCode,
   loadGlbGeometryFlatScene,
+  loadGlbReviewScene,
   measureBounds,
   renderGlbViewGrid,
 } from '..';
@@ -130,5 +131,19 @@ describe('GLB-native geometry-flat view input', () => {
     expect(geometryFlatTextureReasonCode('image/ktx2')).toBe(
       GLB_GEOMETRY_FLAT_REASON.KTX2_SAMPLING_UNSUPPORTED,
     );
+  });
+
+  test('review scene retains embedded texture bytes for derivative re-export', async () => {
+    const source = triangleDocument({ texture: true });
+    const expected = source.getRoot().listTextures()[0]!.getImage()!;
+    const loaded = await loadGlbReviewScene(await io().writeBinary(source));
+    let encoded: Uint8Array | undefined;
+    loaded.root.traverse((node) => {
+      const map = (node as { material?: { map?: { userData?: Record<string, unknown> } } }).material
+        ?.map;
+      const record = map?.userData?.encoded as { bytes?: Uint8Array } | undefined;
+      if (record?.bytes) encoded = record.bytes;
+    });
+    expect(encoded).toEqual(expected);
   });
 });
