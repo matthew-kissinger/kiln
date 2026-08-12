@@ -1,12 +1,34 @@
 /** GLB-native input adapter for the deterministic CPU geometry-flat renderer. */
 
-import { Primitive, WebIO, type Accessor, type Material } from '@gltf-transform/core';
+import {
+  Primitive,
+  WebIO,
+  type Accessor,
+  type Material,
+  type Texture as GltfTexture,
+} from '@gltf-transform/core';
 import {
   EXTMeshGPUInstancing,
   KHRMaterialsVariants,
   KHRTextureBasisu,
 } from '@gltf-transform/extensions';
-import { Matrix4, Quaternion, Vector3 } from 'three';
+import {
+  BufferAttribute,
+  BufferGeometry,
+  Group,
+  Matrix4,
+  Mesh,
+  MeshStandardMaterial,
+  NoColorSpace,
+  SRGBColorSpace,
+  Texture,
+  type Object3D,
+  AnimationClip,
+  QuaternionKeyframeTrack,
+  VectorKeyframeTrack,
+  Quaternion,
+  Vector3,
+} from 'three';
 
 export const GLB_GEOMETRY_FLAT_REASON = {
   TEXTURE_SAMPLING_UNSUPPORTED: 'GLB_FLAT_TEXTURE_SAMPLING_UNSUPPORTED',
@@ -53,6 +75,11 @@ interface FlatMaterial {
   color: { r: number; g: number; b: number };
   opacity: number;
   doubleSided: boolean;
+  metalness: number;
+  roughness: number;
+  alphaMode: 'OPAQUE' | 'MASK' | 'BLEND';
+  alphaCutoff: number;
+  emissive: [number, number, number];
 }
 
 interface FlatMesh {
@@ -76,6 +103,11 @@ export interface LoadedGlbGeometryFlatScene {
   reasonCodes: GlbGeometryFlatReasonCode[];
   meshCount: number;
   instanceCount: number;
+}
+
+export interface LoadedGlbReviewScene extends LoadedGlbGeometryFlatScene {
+  root: Object3D;
+  clips: AnimationClip[];
 }
 
 const glbIO = (): WebIO =>
@@ -136,7 +168,16 @@ function triangleIndices(
 
 function flatMaterial(material: Material | null): FlatMaterial {
   if (!material) {
-    return { color: { r: 0.7, g: 0.7, b: 0.7 }, opacity: 1, doubleSided: false };
+    return {
+      color: { r: 0.7, g: 0.7, b: 0.7 },
+      opacity: 1,
+      doubleSided: false,
+      metalness: 0,
+      roughness: 1,
+      alphaMode: 'OPAQUE',
+      alphaCutoff: 0.5,
+      emissive: [0, 0, 0],
+    };
   }
   const [r, g, b, factorAlpha] = material.getBaseColorFactor();
   const alphaMode = material.getAlphaMode();
@@ -150,7 +191,36 @@ function flatMaterial(material: Material | null): FlatMaterial {
     color: { r, g, b },
     opacity,
     doubleSided: material.getDoubleSided(),
+    metalness: material.getMetallicFactor(),
+    roughness: material.getRoughnessFactor(),
+    alphaMode,
+    alphaCutoff: material.getAlphaCutoff(),
+    emissive: material.getEmissiveFactor(),
   };
+}
+
+function preserveTexture(
+  source: GltfTexture | null,
+  usage: 'color' | 'data',
+  cache: Map<GltfTexture, Map<'color' | 'data', Texture>>,
+): Texture | null {
+  if (!source) return null;
+  const encoded = source.getImage();
+  const mime = source.getMimeType();
+  if (!encoded || !mime) return null;
+  let byUsage = cache.get(source);
+  if (!byUsage) {
+    byUsage = new Map();
+    cache.set(source, byUsage);
+  }
+  const existing = byUsage.get(usage);
+  if (existing) return existing;
+  const texture = new Texture();
+  texture.name = source.getName();
+  texture.colorSpace = usage === 'color' ? SRGBColorSpace : NoColorSpace;
+  texture.userData.encoded = { mime, bytes: Uint8Array.from(encoded) };
+  byUsage.set(usage, texture);
+  return texture;
 }
 
 function noteMaterialTextures(
@@ -307,6 +377,194 @@ export async function loadGlbGeometryFlatScene(
     root,
     reasonCodes: REASON_ORDER.filter((reason) => reasons.has(reason)),
     meshCount: meshes.length,
+    instanceCount,
+  };
+}
+
+function localInstanceMatrices(node: import('@gltf-transform/core').Node): Matrix4[] {
+  const extension = node.getExtension('EXT_mesh_gpu_instancing') as {
+    getAttribute(name: string): Accessor | null;
+    listAttributes(): Accessor[];
+  } | null;
+  if (!extension) return [new Matrix4()];
+  const attributes = extension.listAttributes();
+  if (attributes.length === 0) {
+    throw new GlbGeometryFlatError('GLB_FLAT_INVALID_INSTANCING', 'Invalid empty instancing data.');
+  }
+  const count = attributes[0]!.getCount();
+  if (attributes.some((attribute) => attribute.getCount() !== count)) {
+    throw new GlbGeometryFlatError('GLB_FLAT_INVALID_INSTANCING', 'Mismatched instancing data.');
+  }
+  const translations = extension.getAttribute('TRANSLATION');
+  const rotations = extension.getAttribute('ROTATION');
+  const scales = extension.getAttribute('SCALE');
+  const translation: number[] = [];
+  const rotation: number[] = [];
+  const scale: number[] = [];
+  return Array.from({ length: count }, (_, index) => {
+    translations?.getElement(index, translation);
+    rotations?.getElement(index, rotation);
+    scales?.getElement(index, scale);
+    return new Matrix4().compose(
+      new Vector3(
+        ...(translations ? (translation.slice(0, 3) as [number, number, number]) : [0, 0, 0]),
+      ),
+      new Quaternion(
+        ...(rotations ? (rotation.slice(0, 4) as [number, number, number, number]) : [0, 0, 0, 1]),
+      ).normalize(),
+      new Vector3(...(scales ? (scale.slice(0, 3) as [number, number, number]) : [1, 1, 1])),
+    );
+  });
+}
+
+/** Load exact GLB bytes into a named, transformable review scene. This is the
+ * production replacement for re-executing generated source in animation,
+ * interior, inspect, and composed-scene review tools. Textures are deliberately
+ * not sampled by the CPU scene; the same reason codes remain explicit. */
+export async function loadGlbReviewScene(bytes: Uint8Array): Promise<LoadedGlbReviewScene> {
+  let document: import('@gltf-transform/core').Document;
+  try {
+    document = await glbIO().readBinary(Uint8Array.from(bytes));
+  } catch {
+    throw new GlbGeometryFlatError('GLB_FLAT_PARSE_FAILED', 'Could not parse final GLB bytes.');
+  }
+  const sourceScene = document.getRoot().getDefaultScene() ?? document.getRoot().listScenes()[0];
+  if (!sourceScene) throw new GlbGeometryFlatError('GLB_FLAT_NO_SCENE', 'Final GLB has no scene.');
+  const reasons = new Set<GlbGeometryFlatReasonCode>();
+  const root = new Group();
+  root.name = sourceScene.getName() || 'Scene';
+  const nodeMap = new Map<import('@gltf-transform/core').Node, Object3D>();
+  const textureCache = new Map<GltfTexture, Map<'color' | 'data', Texture>>();
+  let meshCount = 0;
+  let instanceCount = 0;
+
+  const buildNode = (source: import('@gltf-transform/core').Node): Object3D => {
+    const existing = nodeMap.get(source);
+    if (existing) return existing;
+    const target = new Group();
+    target.name = source.getName();
+    target.position.fromArray(source.getTranslation());
+    target.quaternion.fromArray(source.getRotation());
+    target.scale.fromArray(source.getScale());
+    target.userData = { ...source.getExtras() };
+    nodeMap.set(source, target);
+    const sourceMesh = source.getMesh();
+    if (sourceMesh) {
+      target.userData.kilnGlbMeshNode = true;
+      if (source.getSkin()) reasons.add(GLB_GEOMETRY_FLAT_REASON.SKIN_DEFORMATION_UNSUPPORTED);
+      const matrices = localInstanceMatrices(source);
+      instanceCount += matrices.length;
+      for (const [primitiveIndex, primitive] of sourceMesh.listPrimitives().entries()) {
+        if (primitive.listTargets().length)
+          reasons.add(GLB_GEOMETRY_FLAT_REASON.MORPH_TARGETS_UNSUPPORTED);
+        const position = primitive.getAttribute('POSITION');
+        if (position?.getElementSize() !== 3) continue;
+        const indices = triangleIndices(primitive, position.getCount());
+        if (!indices) {
+          reasons.add(GLB_GEOMETRY_FLAT_REASON.NON_TRIANGLE_PRIMITIVE_UNSUPPORTED);
+          continue;
+        }
+        const material = primitive.getMaterial();
+        noteMaterialTextures(material, reasons);
+        const flat = flatMaterial(material);
+        const geometry = new BufferGeometry();
+        geometry.setAttribute(
+          'position',
+          new BufferAttribute(Float32Array.from(decodedAccessor(position)), 3),
+        );
+        geometry.setIndex(new BufferAttribute(indices, 1));
+        const threeMaterial = new MeshStandardMaterial({
+          opacity: flat.opacity,
+          transparent: flat.alphaMode === 'BLEND',
+          alphaTest: flat.alphaMode === 'MASK' ? flat.alphaCutoff : 0,
+          side: flat.doubleSided ? 2 : 0,
+          metalness: flat.metalness,
+          roughness: flat.roughness,
+        });
+        threeMaterial.color.setRGB(flat.color.r, flat.color.g, flat.color.b);
+        threeMaterial.emissive.fromArray(flat.emissive);
+        if (material) {
+          threeMaterial.map = preserveTexture(
+            material.getBaseColorTexture(),
+            'color',
+            textureCache,
+          );
+          threeMaterial.normalMap = preserveTexture(
+            material.getNormalTexture(),
+            'data',
+            textureCache,
+          );
+          threeMaterial.normalScale.setScalar(material.getNormalScale());
+          const metallicRoughness = preserveTexture(
+            material.getMetallicRoughnessTexture(),
+            'data',
+            textureCache,
+          );
+          threeMaterial.metalnessMap = metallicRoughness;
+          threeMaterial.roughnessMap = metallicRoughness;
+          threeMaterial.emissiveMap = preserveTexture(
+            material.getEmissiveTexture(),
+            'color',
+            textureCache,
+          );
+          threeMaterial.aoMap = preserveTexture(
+            material.getOcclusionTexture(),
+            'data',
+            textureCache,
+          );
+          threeMaterial.aoMapIntensity = material.getOcclusionStrength();
+        }
+        for (const [index, matrix] of matrices.entries()) {
+          const mesh = new Mesh(geometry, threeMaterial);
+          const baseName = sourceMesh.getName() || source.getName() || 'Mesh';
+          mesh.name = `${baseName}:primitive-${primitiveIndex}${
+            matrices.length === 1 ? '' : `:instance-${index}`
+          }`;
+          mesh.matrixAutoUpdate = false;
+          mesh.matrix.copy(matrix);
+          target.add(mesh);
+          meshCount++;
+        }
+      }
+    }
+    for (const child of source.listChildren()) target.add(buildNode(child));
+    return target;
+  };
+  for (const child of sourceScene.listChildren()) root.add(buildNode(child));
+  root.updateMatrixWorld(true);
+  if (meshCount === 0)
+    throw new GlbGeometryFlatError(
+      'GLB_FLAT_NO_RENDERABLE_GEOMETRY',
+      'Final GLB contains no renderable geometry.',
+    );
+
+  const clips = document
+    .getRoot()
+    .listAnimations()
+    .map(
+      (animation) =>
+        new AnimationClip(
+          animation.getName(),
+          -1,
+          animation.listChannels().flatMap((channel) => {
+            const node = channel.getTargetNode();
+            const path = channel.getTargetPath();
+            const sampler = channel.getSampler();
+            const input = sampler?.getInput()?.getArray();
+            const output = sampler?.getOutput()?.getArray();
+            const property =
+              path === 'translation' ? 'position' : path === 'rotation' ? 'quaternion' : path;
+            if (!node || !property || property === 'weights' || !input || !output) return [];
+            const Track = path === 'rotation' ? QuaternionKeyframeTrack : VectorKeyframeTrack;
+            return [new Track(`${node.getName()}.${property}`, input, output)];
+          }),
+        ),
+    );
+  return {
+    root,
+    clips,
+    reasonCodes: REASON_ORDER.filter((reason) => reasons.has(reason)),
+    meshCount,
     instanceCount,
   };
 }

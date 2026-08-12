@@ -105,6 +105,8 @@ export interface RunKilnAgentOptions
     | 'onViewsRendered'
     | 'renderObservationPort'
     | 'generationCallBudget'
+    | 'evaluatorPort'
+    | 'evaluatorProfile'
   > {
   /** A constructed Strands `Model` instance (provider-agnostic). */
   model: unknown;
@@ -258,6 +260,8 @@ export async function runKilnAgent(opts: RunKilnAgentOptions): Promise<RunKilnAg
   const gradeAssessmentOptions = {
     category: trustedCategory,
     ...(opts.intent ? { intent: opts.intent } : {}),
+    ...(opts.evaluatorPort ? { evaluatorPort: opts.evaluatorPort } : {}),
+    ...(opts.evaluatorProfile ? { evaluatorProfile: opts.evaluatorProfile } : {}),
   };
   // Edit mode is a `current`-surface concept (the unified surface always uses the
   // buffer factory, regardless of refineMode). Engages only when refining.
