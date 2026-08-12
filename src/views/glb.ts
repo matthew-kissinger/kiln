@@ -48,6 +48,13 @@ const REASON_ORDER: readonly GlbGeometryFlatReasonCode[] = [
   GLB_GEOMETRY_FLAT_REASON.SKIN_DEFORMATION_UNSUPPORTED,
   GLB_GEOMETRY_FLAT_REASON.MORPH_TARGETS_UNSUPPORTED,
 ];
+const REVIEW_CLIPS_EXTRAS_KEY = 'kilnReviewClipsV1';
+const REVIEW_CLIP_LIMITS = {
+  clips: 32,
+  tracks: 256,
+  samplesPerTrack: 4_096,
+  valuesPerTrack: 16_384,
+} as const;
 
 export type GlbGeometryFlatErrorCode =
   | 'GLB_FLAT_PARSE_FAILED'
@@ -112,6 +119,59 @@ export interface LoadedGlbReviewScene extends LoadedGlbGeometryFlatScene {
 
 const glbIO = (): WebIO =>
   new WebIO().registerExtensions([EXTMeshGPUInstancing, KHRMaterialsVariants, KHRTextureBasisu]);
+
+function record(value: unknown): value is Record<string, unknown> {
+  return typeof value === 'object' && value !== null && !Array.isArray(value);
+}
+
+function reviewClipsFromExtras(extras: unknown): AnimationClip[] | undefined {
+  if (!record(extras)) return undefined;
+  const envelope = extras[REVIEW_CLIPS_EXTRAS_KEY];
+  if (!record(envelope) || envelope.version !== 1 || !Array.isArray(envelope.clips)) {
+    return undefined;
+  }
+  if (envelope.clips.length > REVIEW_CLIP_LIMITS.clips) {
+    throw new GlbGeometryFlatError(
+      'GLB_FLAT_PARSE_FAILED',
+      'Animation review clip limit exceeded.',
+    );
+  }
+  let trackCount = 0;
+  return envelope.clips.map((candidate) => {
+    if (
+      !record(candidate) ||
+      typeof candidate.name !== 'string' ||
+      candidate.name.length > 256 ||
+      typeof candidate.duration !== 'number' ||
+      !Number.isFinite(candidate.duration) ||
+      candidate.duration < 0 ||
+      !Array.isArray(candidate.tracks)
+    ) {
+      throw new GlbGeometryFlatError('GLB_FLAT_PARSE_FAILED', 'Invalid animation review clip.');
+    }
+    const tracks = candidate.tracks.map((track) => {
+      trackCount++;
+      if (
+        trackCount > REVIEW_CLIP_LIMITS.tracks ||
+        !record(track) ||
+        typeof track.name !== 'string' ||
+        track.name.length > 512 ||
+        !Array.isArray(track.times) ||
+        !Array.isArray(track.values) ||
+        track.times.length > REVIEW_CLIP_LIMITS.samplesPerTrack ||
+        track.values.length > REVIEW_CLIP_LIMITS.valuesPerTrack ||
+        !track.times.every((value) => typeof value === 'number' && Number.isFinite(value)) ||
+        !track.values.every((value) => typeof value === 'number' && Number.isFinite(value))
+      ) {
+        throw new GlbGeometryFlatError('GLB_FLAT_PARSE_FAILED', 'Invalid animation review track.');
+      }
+      const property = track.name.slice(track.name.lastIndexOf('.') + 1);
+      const Track = property === 'quaternion' ? QuaternionKeyframeTrack : VectorKeyframeTrack;
+      return new Track(track.name, track.times, track.values);
+    });
+    return new AnimationClip(candidate.name, candidate.duration, tracks);
+  });
+}
 
 export function geometryFlatTextureReasonCode(mimeType: string | null): GlbGeometryFlatReasonCode {
   return mimeType === 'image/ktx2'
@@ -538,7 +598,7 @@ export async function loadGlbReviewScene(bytes: Uint8Array): Promise<LoadedGlbRe
       'Final GLB contains no renderable geometry.',
     );
 
-  const clips = document
+  const nativeClips = document
     .getRoot()
     .listAnimations()
     .map(
@@ -560,6 +620,7 @@ export async function loadGlbReviewScene(bytes: Uint8Array): Promise<LoadedGlbRe
           }),
         ),
     );
+  const clips = reviewClipsFromExtras(sourceScene.getExtras()) ?? nativeClips;
   return {
     root,
     clips,

@@ -2,6 +2,7 @@ import { createHash } from 'node:crypto';
 import { describe, expect, spyOn, test } from 'bun:test';
 
 import * as renderModule from '../../render';
+import { trustedInProcessEvaluatorPortV1 } from '../../evaluator';
 import type { PbrRenderPort, PbrRenderRequest } from '../../composer/render-port';
 import { encodePng } from '../../views';
 import {
@@ -45,6 +46,20 @@ function solidPng(size: number): Uint8Array {
 }
 
 describe('derivative review surfaces', () => {
+  test('evaluator GLB preserves a bare pivot-name clip and reports its unresolved track', async () => {
+    const result = (await createKilnScreenshotAnimationDef({
+      evaluatorPort: trustedInProcessEvaluatorPortV1,
+      evaluatorProfile: 'evaluator-required',
+    }).run({
+      code: ANIMATED.replace("rotationTrack('Joint_Arm'", "rotationTrack('Arm'"),
+      clip: 'move',
+    })) as KilnScreenshotAnimationResult;
+    expect(result.ok).toBe(true);
+    expect(result.clip).toBe('move');
+    expect(result.frames).toBe(6);
+    expect(result.unresolvedTracks).toEqual(['Arm.quaternion']);
+  });
+
   test('animation evaluates once and never re-executes source while binding derivative receipts', async () => {
     const requests: PbrRenderRequest[] = [];
     const port: PbrRenderPort = async (request) => {
