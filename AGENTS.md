@@ -27,8 +27,9 @@ slow render blocks the agent mid-thought — that deadline is its own per-call a
 lower. Never collapse the two onto one value. Routing there is conditional on
 `sceneNeedsPbrShading(root)`: bound texture or `metalness > 0`, never material type, because
 `gameMaterial` and `pbrMaterial` both construct a `MeshStandardMaterial` and are indistinguishable
-after construction. Who drew a grid is reported through the context's `onViewsRendered` callback, not
-the tool result, so the cached tool definition stays byte-identical.
+after construction. Host telemetry still rides `onViewsRendered`, while every unified `kiln_render`
+result also carries model-visible `ViewFidelityV1`; a geometry-flat CPU image must never be treated as
+material evidence. Keep the input schema stable unless the active program explicitly versions it.
 
 `src/views/renderer-id.ts` runs `readFileSync` at MODULE LOAD. Reach `CPU_RASTER_RENDERER_ID` through
 the lazy `await import('../views')` that render paths already use; a static import puts a `node:fs`

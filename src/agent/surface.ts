@@ -75,6 +75,12 @@ export function buildAgentTools(
     ...(opts.viewRenderTimeoutMs !== undefined
       ? { viewRenderTimeoutMs: opts.viewRenderTimeoutMs }
       : {}),
+    ...(opts.viewRenderTimeoutContext
+      ? { viewRenderTimeoutContext: opts.viewRenderTimeoutContext }
+      : {}),
+    ...(opts.viewRenderTimeoutResolver
+      ? { viewRenderTimeoutResolver: opts.viewRenderTimeoutResolver }
+      : {}),
     ...(opts.onViewsRendered ? { onViewsRendered: opts.onViewsRendered } : {}),
     ...(opts.renderObservationPort ? { renderObservationPort: opts.renderObservationPort } : {}),
     ...(opts.generationCallBudget ? { generationCallBudget: opts.generationCallBudget } : {}),

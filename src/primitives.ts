@@ -24,7 +24,8 @@ import * as profile from './profile';
 import * as solids from './solids';
 import * as proceduralTextures from './procedural-texture';
 import * as textures from './textures';
-import { materialRecipe } from './material-recipe-runtime';
+import type { TextureResolver } from './texture-resolver';
+import { compilePortableMaterialSpecV2 } from './portable-material-runtime';
 import { createVehicleFrame, createWheelAssembly, createWheelGeometrySet } from './vehicle';
 import {
   stampSemanticMetadataV1,
@@ -62,6 +63,31 @@ export {
 export { materialRecipe } from './material-recipe-runtime';
 export type { ApplyMaterialRecipeOptions } from './material-recipe-runtime';
 export type { MaterialRecipeId, MaterialRecipeOverridesV1 } from './material-recipes';
+export { compilePortableMaterialSpecV2 } from './portable-material-runtime';
+export {
+  MAX_PORTABLE_MATERIAL_TEXELS,
+  MAX_PORTABLE_MATERIAL_TEXTURES,
+  MAX_PROCEDURAL_LAYERS,
+  MAX_PROCEDURAL_SIZE,
+  PORTABLE_MATERIAL_SPEC_VERSION,
+  PROCEDURAL_TEXTURE_SPEC_VERSION,
+  ProceduralTextureError,
+  canonicalProceduralTextureJsonV2,
+  canonicalizePortableMaterialSpecV2,
+  canonicalizeProceduralTextureSpecV2,
+  compileProceduralTextureSpecV2,
+  hashProceduralTextureSpecV2,
+  migrateProceduralTextureSpecV1,
+} from './procedural-texture';
+export type {
+  CanonicalPortableMaterialSpecV2,
+  CanonicalProceduralTextureSpecV2,
+  PortableMaterialSpecV2,
+  ProceduralLayer,
+  ProceduralTextureSpec,
+  ProceduralTextureSpecV1,
+  ProceduralTextureSpecV2,
+} from './procedural-texture';
 export type {
   VehicleFrameOptions,
   VehicleFrameResult,
@@ -1503,7 +1529,16 @@ export function validateAsset(
  * so render.ts can stash it into `render.meta.primitiveUsage` for
  * downstream analysis. When omitted, wrapping is skipped (zero overhead).
  */
-export function buildSandboxGlobals(usage?: Record<string, number>): Record<string, unknown> {
+export interface SandboxGlobalsOptions {
+  /** Host-owned closed resolver. Generated code receives only the bound
+   *  loadApprovedTexture(resourceId) closure, never this object. */
+  textureResolver?: TextureResolver;
+}
+
+export function buildSandboxGlobals(
+  usage?: Record<string, number>,
+  options: SandboxGlobalsOptions = {},
+): Record<string, unknown> {
   // CSG ops remain lazy at their own call sites, so importing the wrapper here
   // is safe for Node ESM builds and still avoids manifold WASM init unless used.
 
@@ -1584,6 +1619,32 @@ export function buildSandboxGlobals(usage?: Record<string, number>): Record<stri
   const wrapGeo = <F extends (...args: any[]) => THREE.BufferGeometry>(name: string, fn: F): F =>
     wrap(name, cacheGeo(name, fn));
 
+  const loadApprovedTexture = (...args: unknown[]): Promise<THREE.DataTexture> => {
+    if (args.length !== 1 || typeof args[0] !== 'string') {
+      return Promise.reject(
+        new TypeError('loadApprovedTexture accepts exactly one approved resource ID string'),
+      );
+    }
+    if (!options.textureResolver) {
+      return Promise.reject(new Error('loadApprovedTexture: no host TextureResolver is installed'));
+    }
+    return options.textureResolver.loadApprovedTexture(args[0]);
+  };
+
+  const sandboxMaterialRecipe = (...args: unknown[]): Promise<THREE.MeshStandardMaterial> => {
+    if (args.length < 1 || args.length > 2 || typeof args[0] !== 'string') {
+      return Promise.reject(
+        new TypeError(
+          'materialRecipe accepts an approved recipe ID and optional bounded overrides',
+        ),
+      );
+    }
+    if (!options.textureResolver) {
+      return Promise.reject(new Error('materialRecipe: no host TextureResolver is installed'));
+    }
+    return options.textureResolver.materialRecipe(args[0], args[1]);
+  };
+
   return {
     createRoot: wrap('createRoot', createRoot),
     createPivot: wrap('createPivot', createPivot),
@@ -1628,7 +1689,11 @@ export function buildSandboxGlobals(usage?: Record<string, number>): Record<stri
     createRoofSurfaceLayout: wrap('createRoofSurfaceLayout', createRoofSurfaceLayout),
     createStairs: wrap('createStairs', createStairs),
     gameMaterial: wrap('gameMaterial', gameMaterial),
-    materialRecipe: wrap('materialRecipe', materialRecipe),
+    materialRecipe: wrap('materialRecipe', sandboxMaterialRecipe),
+    compilePortableMaterialSpecV2: wrap(
+      'compilePortableMaterialSpecV2',
+      compilePortableMaterialSpecV2,
+    ),
     basicMaterial: wrap('basicMaterial', basicMaterial),
     glassMaterial: wrap('glassMaterial', glassMaterial),
     lambertMaterial: wrap('lambertMaterial', lambertMaterial),
@@ -1675,8 +1740,9 @@ export function buildSandboxGlobals(usage?: Record<string, number>): Record<stri
     // Parametric primitives
     gearGeo: wrapGeo('gearGeo', gears.gearGeo),
     bladeGeo: wrapGeo('bladeGeo', gears.bladeGeo),
-    // Textures + PBR (loadTexture is async)
-    loadTexture: wrap('loadTexture', textures.loadTexture),
+    // Closed approved textures. Paths, URLs, bytes, hashes, and resolver
+    // objects are intentionally not accepted by this one-argument closure.
+    loadApprovedTexture: wrap('loadApprovedTexture', loadApprovedTexture),
     // Procedural textures (sync — no I/O, so no await)
     proceduralTexture: wrap('proceduralTexture', proceduralTextures.proceduralTexture),
     normalMapFromHeight: wrap('normalMapFromHeight', proceduralTextures.normalMapFromHeight),

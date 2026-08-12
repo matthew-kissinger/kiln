@@ -25,7 +25,7 @@ export const INSPECT_MAX_ZOOM = 4;
 export const INSPECT_MAX_PART_NAMES = 40;
 
 /** Camera names accepted by kiln_inspect (same directions as the six-view grid). */
-const INSPECT_CAMERAS: Record<string, [number, number, number]> = {
+export const INSPECT_CAMERAS: Record<string, [number, number, number]> = {
   front: [1, 0, 0],
   right: [0, 0, 1],
   back: [-1, 0, 0],
@@ -95,6 +95,28 @@ export type InspectViewResult =
       zoom: number;
       error: string;
       /** Named nodes available for framing (deduped, scene order, capped). */
+      availableParts: string[];
+    };
+
+export type PreparedInspectView =
+  | {
+      ok: true;
+      root: unknown;
+      part?: string;
+      view: string;
+      viewSpec: { name: string; dir: [number, number, number] };
+      azimuthDeg: number;
+      elevationDeg: number;
+      zoom: number;
+      isolated: boolean;
+      size: number;
+      frameBounds: Bounds;
+    }
+  | {
+      ok: false;
+      view: string;
+      zoom: number;
+      error: string;
       availableParts: string[];
     };
 
@@ -172,7 +194,10 @@ function isolateSubtree(root: unknown, keep: DuckNamedNode): void {
  * asset when no part is given). Never throws on a bad part name — that comes
  * back as { ok:false, availableParts } so the agent loop can retry by name.
  */
-export function renderInspectView(root: unknown, opts: InspectViewOptions = {}): InspectViewResult {
+export function prepareInspectView(
+  root: unknown,
+  opts: InspectViewOptions = {},
+): PreparedInspectView {
   const size = opts.size ?? INSPECT_SIZE;
 
   // Orbit angles win over the named presets, but ONLY when at least one is
@@ -233,19 +258,37 @@ export function renderInspectView(root: unknown, opts: InspectViewOptions = {}):
     bounds = measureBounds(root);
   }
 
-  const rgb = rasterizeView(root, dir, {
-    size,
-    frameBounds: expandBounds(bounds, zoom),
-  });
   return {
     ok: true,
+    root,
     ...(part ? { part } : {}),
     view,
+    viewSpec: { name: view, dir },
     ...angles,
     zoom,
     isolated,
-    width: size,
-    height: size,
-    png: encodePng(rgb, size, size),
+    size,
+    frameBounds: expandBounds(bounds, zoom),
+  };
+}
+
+export function renderInspectView(root: unknown, opts: InspectViewOptions = {}): InspectViewResult {
+  const prepared = prepareInspectView(root, opts);
+  if (!prepared.ok) return prepared;
+  const rgb = rasterizeView(prepared.root, prepared.viewSpec.dir, {
+    size: prepared.size,
+    frameBounds: prepared.frameBounds,
+  });
+  return {
+    ok: true,
+    ...(prepared.part ? { part: prepared.part } : {}),
+    view: prepared.view,
+    azimuthDeg: prepared.azimuthDeg,
+    elevationDeg: prepared.elevationDeg,
+    zoom: prepared.zoom,
+    isolated: prepared.isolated,
+    width: prepared.size,
+    height: prepared.size,
+    png: encodePng(rgb, prepared.size, prepared.size),
   };
 }

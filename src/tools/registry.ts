@@ -25,10 +25,23 @@ import { executeKilnCode, inspectSceneStructure, renderSceneToGLB } from '../ren
 import { listPrimitives, type PrimitiveSpec } from '../list-primitives';
 import type { AssetCategory, AssetIntentV1 } from '../contracts';
 import type { AssetQaReportV1 } from '../qa';
-import type { PbrRenderPort } from '../composer/render-port';
+import type {
+  DerivativeReviewFidelityV1,
+  DerivativeViewReceiptV1,
+  PbrRenderPort,
+  ViewFidelityReasonCode,
+  ViewFidelityV1,
+  ViewEvidenceHistoryV1,
+} from '../composer/render-port';
 import type { ViewGridResult } from '../views';
 import { sceneNeedsPbrShading } from '../material-resources';
 import type { GenerationCallBudget } from '../agent/call-budget';
+import {
+  resolveViewRenderTimeoutMs,
+  type ViewRenderTimeoutContextProvider,
+  type ViewRenderTimeoutResolver,
+} from '../agent/view-render-timeout';
+import { ViewEvidenceHistoryStore } from '../views/evidence-history';
 
 // =============================================================================
 // Tool definition contract
@@ -89,6 +102,10 @@ export interface KilnToolContext {
    * {@link DEFAULT_INLOOP_VIEW_RENDER_TIMEOUT_MS}.
    */
   viewRenderTimeoutMs?: number;
+  /** Dynamic host state sampled immediately before every port call. */
+  viewRenderTimeoutContext?: ViewRenderTimeoutContextProvider;
+  /** Host policy for deriving one deadline from warm-up/budget state. */
+  viewRenderTimeoutResolver?: ViewRenderTimeoutResolver;
   /**
    * Host tally hook, called once per in-loop grid with whoever actually drew it.
    *
@@ -113,6 +130,8 @@ export interface KilnToolContext {
   renderObservationPort?: RenderObservationPort;
   /** Shared generation-global allowance, forwarded to the host observer port. */
   generationCallBudget?: GenerationCallBudget;
+  /** Shared bounded hash-only evidence ledger for one agent/tool session. */
+  viewEvidenceHistory?: ViewEvidenceHistoryStore;
 }
 
 /** JSON-safe value accepted from a host visual observer. */
@@ -165,8 +184,176 @@ export interface InLoopViewRender {
  */
 export const DEFAULT_INLOOP_VIEW_RENDER_TIMEOUT_MS = 6000;
 
+function resolveInLoopViewRenderTimeoutMs(
+  context: KilnToolContext,
+  requestKind: 'in-loop-grid' | 'derivative-cell',
+): number {
+  return resolveViewRenderTimeoutMs({
+    requestKind,
+    defaultTimeoutMs: DEFAULT_INLOOP_VIEW_RENDER_TIMEOUT_MS,
+    ...(context.viewRenderTimeoutMs !== undefined
+      ? { timeoutMs: context.viewRenderTimeoutMs }
+      : {}),
+    ...(context.viewRenderTimeoutContext
+      ? { contextProvider: context.viewRenderTimeoutContext }
+      : {}),
+    ...(context.viewRenderTimeoutResolver ? { resolver: context.viewRenderTimeoutResolver } : {}),
+  });
+}
+
 function trustedCategory(context: KilnToolContext): AssetCategory | undefined {
   return context.intent?.category ?? context.category;
+}
+
+const viewEvidenceHistoryByContext = new WeakMap<KilnToolContext, ViewEvidenceHistoryStore>();
+const VIEW_EVIDENCE_GUIDANCE =
+  ' viewEvidence.current describes ONLY this request. lastFaithful is older hash-only evidence for reference, not reused pixels and not current verification.';
+
+function withViewEvidenceHistory(context: KilnToolContext): KilnToolContext {
+  if (context.viewEvidenceHistory) return context;
+  let history = viewEvidenceHistoryByContext.get(context);
+  if (!history) {
+    history = new ViewEvidenceHistoryStore();
+    viewEvidenceHistoryByContext.set(context, history);
+  }
+  return { ...context, viewEvidenceHistory: history };
+}
+
+async function sha256Glb(bytes: Uint8Array): Promise<`sha256:${string}`> {
+  const digest = new Uint8Array(
+    await globalThis.crypto.subtle.digest('SHA-256', Uint8Array.from(bytes)),
+  );
+  return `sha256:${[...digest].map((byte) => byte.toString(16).padStart(2, '0')).join('')}`;
+}
+
+/** Render one purpose-built review GLB. Generated source has already executed;
+ * both GPU and geometry-flat fallback consume only the serialized derivative. */
+async function renderDerivativeCell(
+  input: import('../views').DerivativeCellRenderInput,
+  context: KilnToolContext,
+): Promise<import('../views').DerivativeCellRenderResult> {
+  const rendered = await renderSceneToGLB(input.root as THREE.Object3D, {
+    ...(trustedCategory(context) ? { category: trustedCategory(context) } : {}),
+    ...(context.intent ? { intent: context.intent } : {}),
+  });
+  const derivativeGlb = Uint8Array.from(rendered.bytes);
+  const inputGlbSha256 = await sha256Glb(derivativeGlb);
+  let degradeReason: string | undefined;
+  const derivativeReasonCodes: ViewFidelityReasonCode[] = [];
+
+  if (context.viewRenderPort && !input.gpuUnsupportedReasonCode) {
+    const { captureViewPngsViaPort } = await import('../agent/generate');
+    const ported = await captureViewPngsViaPort(
+      context.viewRenderPort,
+      derivativeGlb,
+      resolveInLoopViewRenderTimeoutMs(context, 'derivative-cell'),
+      [input.view.dir],
+      input.size,
+    );
+    if (ported.ok && ported.derivativeFidelityAttested) {
+      if (ported.inputGlbSha256 !== inputGlbSha256) {
+        throw new Error(
+          `validated derivative receipt hash mismatch (${ported.inputGlbSha256} != ${inputGlbSha256})`,
+        );
+      }
+      const receipt: DerivativeViewReceiptV1 = {
+        version: 'kiln.view-fidelity.v1',
+        derivativeLabel: input.label,
+        requested: 'full-preferred',
+        delivered: 'full-material',
+        materialFaithful: true,
+        exactArtifact: false,
+        rendererId: ported.rendererId,
+        inputGlbSha256,
+        degraded: false,
+      };
+      try {
+        context.onViewsRendered?.({
+          renderer: ported.rendererId,
+          degraded: false,
+          neededPbr: true,
+        });
+      } catch {
+        /* best effort */
+      }
+      return { png: Buffer.from(ported.pngs[0]!), receipt };
+    }
+    if (ported.ok) {
+      degradeReason = 'view render port returned no derivative material/hash receipt';
+      derivativeReasonCodes.push('DERIVATIVE_RECEIPT_UNAVAILABLE');
+    } else {
+      degradeReason = ported.reason;
+      if (ported.reason.includes('derivative receipt hash mismatch')) {
+        derivativeReasonCodes.push('DERIVATIVE_RECEIPT_INVALID');
+      }
+    }
+  } else if (input.gpuUnsupportedReasonCode) {
+    degradeReason = 'GPU auto-framing cannot preserve the requested derivative focus bounds';
+  } else {
+    degradeReason = 'material-faithful view render port unavailable';
+  }
+
+  const { renderGlbViewCell, CPU_RASTER_RENDERER_ID } = await import('../views');
+  const flat = await renderGlbViewCell(derivativeGlb, input.view, {
+    size: input.size,
+    ...(input.backfaceCull !== undefined ? { backfaceCull: input.backfaceCull } : {}),
+    ...(input.frameBounds ? { frameBounds: input.frameBounds } : {}),
+  });
+  if (flat.inputGlbSha256 !== inputGlbSha256) {
+    throw new Error(
+      `derivative GLB fallback hash mismatch (${flat.inputGlbSha256} != ${inputGlbSha256})`,
+    );
+  }
+  const reasonCodes = [
+    'FULL_MATERIAL_RENDER_UNAVAILABLE',
+    ...(input.gpuUnsupportedReasonCode ? [input.gpuUnsupportedReasonCode] : []),
+    ...derivativeReasonCodes,
+    ...flat.reasonCodes,
+  ] as ViewFidelityReasonCode[];
+  const receipt: DerivativeViewReceiptV1 = {
+    version: 'kiln.view-fidelity.v1',
+    derivativeLabel: input.label,
+    requested: 'full-preferred',
+    delivered: 'geometry-flat',
+    materialFaithful: false,
+    exactArtifact: false,
+    rendererId: CPU_RASTER_RENDERER_ID,
+    inputGlbSha256,
+    degraded: true,
+    degradeReason,
+    reasonCodes,
+  };
+  try {
+    context.onViewsRendered?.({
+      renderer: CPU_RASTER_RENDERER_ID,
+      degraded: true,
+      degradedReason: degradeReason,
+      neededPbr: true,
+    });
+  } catch {
+    /* best effort */
+  }
+  return { png: flat.png, receipt };
+}
+
+function derivativeReviewFidelity(
+  receipts: DerivativeViewReceiptV1[] | undefined,
+): DerivativeReviewFidelityV1 | undefined {
+  if (!receipts?.length) return undefined;
+  const materialFaithful = receipts.every((receipt) => receipt.materialFaithful);
+  const reasonCodes = [
+    ...new Set(receipts.flatMap((receipt) => receipt.reasonCodes ?? [])),
+  ] as ViewFidelityReasonCode[];
+  return {
+    version: 'kiln.derivative-review-fidelity.v1',
+    requested: 'full-preferred',
+    delivered: materialFaithful ? 'full-material' : 'geometry-flat',
+    materialFaithful,
+    exactArtifact: false,
+    degraded: receipts.some((receipt) => receipt.degraded),
+    receipts,
+    ...(reasonCodes.length ? { reasonCodes } : {}),
+  };
 }
 
 // =============================================================================
@@ -542,6 +729,9 @@ export interface KilnRenderViewsResult {
   gridHeight?: number;
   /** The 3x2 grid PNG, base64-encoded (transports with image support strip this and attach the bytes). */
   pngBase64?: string;
+  /** Truthful material fidelity delivered by this render, visible to the model. */
+  viewFidelity?: ViewFidelityV1;
+  viewEvidence?: ViewEvidenceHistoryV1;
   warnings: string[];
   error?: string;
 }
@@ -586,9 +776,10 @@ async function runRenderViews(
     // so sending it costs a round trip and a warm GPU to draw a picture the CPU
     // already draws correctly. `renderSceneToGLB` above ALREADY produced the
     // bytes the port needs — this reuses them rather than paying a second bake.
-    const neededPbr = context.viewRenderPort ? sceneNeedsPbrShading(root) : false;
+    const neededPbr = sceneNeedsPbrShading(root);
     let grid: ViewGridResult | undefined;
     let drawnBy: InLoopViewRender | undefined;
+    let materialFaithful = false;
 
     if (context.viewRenderPort && neededPbr) {
       // Lazy import: `../agent/generate` sits upstream of this module in the
@@ -600,7 +791,7 @@ async function runRenderViews(
       const ported = await captureViewsViaPort(
         context.viewRenderPort,
         rendered.bytes,
-        context.viewRenderTimeoutMs ?? DEFAULT_INLOOP_VIEW_RENDER_TIMEOUT_MS,
+        resolveInLoopViewRenderTimeoutMs(context, 'in-loop-grid'),
         input.capture,
       );
       if (ported.ok) {
@@ -615,6 +806,7 @@ async function runRenderViews(
           height: ported.height,
           capture: ported.capture,
         };
+        materialFaithful = true;
         drawnBy = { renderer: ported.rendererId, degraded: false, neededPbr };
       } else {
         drawnBy = {
@@ -632,7 +824,38 @@ async function runRenderViews(
     if (!grid) {
       grid = await renderViewGrid(root, input.capture ? { capture: input.capture } : {});
     }
-    drawnBy ??= { renderer: CPU_RASTER_RENDERER_ID, degraded: false, neededPbr };
+    drawnBy ??= context.viewRenderPort
+      ? { renderer: CPU_RASTER_RENDERER_ID, degraded: false, neededPbr }
+      : {
+          renderer: CPU_RASTER_RENDERER_ID,
+          degraded: neededPbr,
+          ...(neededPbr
+            ? { degradedReason: 'material-faithful view render port unavailable' }
+            : {}),
+          neededPbr,
+        };
+
+    // Copy into an ArrayBuffer-backed view: render bytes are typed as
+    // `Uint8Array<ArrayBufferLike>`, while Web Crypto deliberately rejects a
+    // possible SharedArrayBuffer at its boundary.
+    const hashInput = new Uint8Array(rendered.bytes.byteLength);
+    hashInput.set(rendered.bytes);
+    const digest = new Uint8Array(await globalThis.crypto.subtle.digest('SHA-256', hashInput));
+    const inputGlbSha256 = `sha256:${[...digest]
+      .map((byte) => byte.toString(16).padStart(2, '0'))
+      .join('')}` as const;
+    const viewFidelity: ViewFidelityV1 = {
+      version: 'kiln.view-fidelity.v1',
+      requested: 'full-preferred',
+      delivered: materialFaithful ? 'full-material' : 'geometry-flat',
+      materialFaithful,
+      exactArtifact: false,
+      rendererId: drawnBy.renderer,
+      inputGlbSha256,
+      degraded: drawnBy.degraded,
+      ...(drawnBy.degradedReason ? { degradeReason: drawnBy.degradedReason } : {}),
+    };
+    const viewEvidence = context.viewEvidenceHistory?.record('kiln_render', viewFidelity);
 
     // A host bookkeeping hook must never be able to fail a render the model is
     // waiting on.
@@ -664,6 +887,8 @@ async function runRenderViews(
       gridWidth: grid.width,
       gridHeight: grid.height,
       pngBase64: grid.png.toString('base64'),
+      viewFidelity,
+      ...(viewEvidence ? { viewEvidence } : {}),
       warnings,
       qaReport: rendered.qaReport,
     };
@@ -696,15 +921,17 @@ const KILN_RENDER_VIEWS_DESCRIPTION =
   'elevation 0 = eye level, positive looks down. Use it to aim every cell at what actually needs ' +
   'checking — a seam, an underside, a joint the standard six leave occluded — instead of spending ' +
   'cells on angles that show nothing. Max 9 cells. The reply echoes the grid shape it rendered. ' +
-  'If the build fails you get an error and NO image — fix the code and render again. Uses GPU PBR shading when the scene has textured or metallic materials and the renderer is reachable; otherwise uses a flat-shaded CPU render. Writes no files.';
+  'If the build fails you get an error and NO image — fix the code and render again. Uses GPU PBR shading when the scene has textured or metallic materials and the renderer is reachable; otherwise uses a flat-shaded CPU render. Always read viewFidelity: when materialFaithful is false, use the image for geometry and silhouette only; do not judge material color, textures, normal relief, roughness, metalness, AO, or emissive response from it. Writes no files.' +
+  VIEW_EVIDENCE_GUIDANCE;
 
 /** Create the unified render/view definition with host-owned QA context. */
 export function createKilnRenderViewsDef(context: KilnToolContext = {}): KilnToolDef {
+  const statefulContext = withViewEvidenceHistory(context);
   return {
     name: 'kiln_render',
     description: KILN_RENDER_VIEWS_DESCRIPTION,
     inputSchema: renderViewsInput,
-    run: async (input) => runRenderViews(renderViewsInput.parse(input), context),
+    run: async (input) => runRenderViews(renderViewsInput.parse(input), statefulContext),
     media: screenshotMedia,
   };
 }
@@ -733,6 +960,9 @@ export interface KilnScreenshotAnimationResult {
   pngBase64?: string;
   /** Per-frame PNGs, base64 (perFrame mode; image transports attach each separately). */
   framesBase64?: string[];
+  /** Material fidelity and SHA-256 receipt for every posed derivative GLB. */
+  viewFidelity?: DerivativeReviewFidelityV1;
+  viewEvidence?: ViewEvidenceHistoryV1;
   /** Clip names available in the scene (set when the requested clip wasn't found). */
   availableClips?: string[];
   warnings: string[];
@@ -759,6 +989,7 @@ async function runScreenshotAnimation(
       clip: input.clip,
       ...(input.camera ? { camera: input.camera } : {}),
       ...(input.perFrame ? { perFrame: true } : {}),
+      renderDerivativeCell: (cell) => renderDerivativeCell(cell, context),
     });
     if (!r.ok) {
       return {
@@ -770,6 +1001,10 @@ async function runScreenshotAnimation(
         ...(r.availableClips ? { availableClips: r.availableClips } : {}),
       };
     }
+    const viewFidelity = derivativeReviewFidelity(r.derivativeReceipts);
+    const viewEvidence = viewFidelity
+      ? context.viewEvidenceHistory?.record('kiln_screenshot_animation', viewFidelity)
+      : undefined;
     const base: KilnScreenshotAnimationResult = {
       ok: true,
       frames: r.frames,
@@ -781,6 +1016,8 @@ async function runScreenshotAnimation(
       ...(r.unresolvedTracks ? { unresolvedTracks: r.unresolvedTracks } : {}),
       ...(r.width ? { width: r.width } : {}),
       ...(r.height ? { height: r.height } : {}),
+      ...(viewFidelity ? { viewFidelity } : {}),
+      ...(viewEvidence ? { viewEvidence } : {}),
     };
     if (r.pngs) return { ...base, framesBase64: r.pngs.map((p) => p.toString('base64')) };
     return { ...base, pngBase64: r.png!.toString('base64') };
@@ -834,15 +1071,19 @@ const KILN_SCREENSHOT_ANIMATION_DESCRIPTION =
   'swing. args: clip (required, the clip name), camera (default right; also front/back/left/top/' +
   'three-quarter), perFrame (optional, separate high-res frames). If unresolvedTracks comes back ' +
   'non-empty the clip targets joints that do not exist (a name mismatch) and looks frozen — fix the ' +
-  'track names. Flat-shaded CPU render; writes no files.';
+  'track names. Each frame is rendered from deterministic posed GLB bytes: GPU PBR when available, ' +
+  'otherwise a GLB-native geometry-flat fallback. Read viewFidelity before judging materials; writes no files.' +
+  VIEW_EVIDENCE_GUIDANCE;
 
 /** Create an animation-view definition with host-owned QA context. */
 export function createKilnScreenshotAnimationDef(context: KilnToolContext = {}): KilnToolDef {
+  const statefulContext = withViewEvidenceHistory(context);
   return {
     name: 'kiln_screenshot_animation',
     description: KILN_SCREENSHOT_ANIMATION_DESCRIPTION,
     inputSchema: screenshotAnimationInput,
-    run: async (input) => runScreenshotAnimation(screenshotAnimationInput.parse(input), context),
+    run: async (input) =>
+      runScreenshotAnimation(screenshotAnimationInput.parse(input), statefulContext),
     media: screenshotAnimationMedia,
     mediaMulti: screenshotAnimationMediaMulti,
   };
@@ -867,6 +1108,9 @@ export interface KilnViewInteriorResult {
   wallsHidden?: number;
   /** The single-row grid PNG, base64 (image transports strip this and attach the bytes). */
   pngBase64?: string;
+  /** Material fidelity and SHA-256 receipt for every cutaway derivative GLB. */
+  viewFidelity?: DerivativeReviewFidelityV1;
+  viewEvidence?: ViewEvidenceHistoryV1;
   warnings: string[];
   error?: string;
 }
@@ -894,7 +1138,10 @@ async function runViewInterior(
     // falls back to historical "Roof" naming) — so a correctly-roled roof named
     // anything at all still lifts.
     const nodeName = input.nodeName?.trim() ? input.nodeName : undefined;
-    const grid = await renderInteriorGrid(root, { ...(nodeName ? { nodeName } : {}) });
+    const grid = await renderInteriorGrid(root, {
+      ...(nodeName ? { nodeName } : {}),
+      renderDerivativeCell: (cell) => renderDerivativeCell(cell, context),
+    });
     const warnings = inspectSceneStructure(root, { category: trustedCategory(context) });
     if (grid.roofsHidden === 0) {
       warnings.push(
@@ -903,6 +1150,10 @@ async function runViewInterior(
           : 'No roof was found, so nothing could be lifted and the interior is still occluded. Build the roof with createRoofPlanes/createGableRoof (which tag it as a roof), or name the roof group "Roof".',
       );
     }
+    const viewFidelity = derivativeReviewFidelity(grid.derivativeReceipts);
+    const viewEvidence = viewFidelity
+      ? context.viewEvidenceHistory?.record('kiln_view_interior', viewFidelity)
+      : undefined;
     return {
       ok: true,
       views: grid.views,
@@ -911,6 +1162,8 @@ async function runViewInterior(
       roofsHidden: grid.roofsHidden,
       wallsHidden: grid.wallsHidden,
       pngBase64: grid.png.toString('base64'),
+      ...(viewFidelity ? { viewFidelity } : {}),
+      ...(viewEvidence ? { viewEvidence } : {}),
       warnings,
     };
   } catch (err) {
@@ -937,15 +1190,19 @@ const KILN_VIEW_INTERIOR_DESCRIPTION =
   'Call this before finalizing any building. Take no argument: the roof is found from its semantic ' +
   'role, so any roof built with createRoofPlanes/createGableRoof lifts whatever it is named. If ' +
   'roofsHidden comes back 0 no roof was resolvable and the interior stays hidden — build the roof ' +
-  'with a roof primitive (or name the group "Roof"). Flat-shaded CPU render; writes no files.';
+  'with a roof primitive (or name the group "Roof"). Each cell is rendered from deterministic cutaway ' +
+  'GLB bytes: GPU PBR when available, otherwise a GLB-native geometry-flat fallback. Read viewFidelity ' +
+  'before judging materials; writes no files.' +
+  VIEW_EVIDENCE_GUIDANCE;
 
 /** Create the interior-view definition with host-owned QA context. */
 export function createKilnViewInteriorDef(context: KilnToolContext = {}): KilnToolDef {
+  const statefulContext = withViewEvidenceHistory(context);
   return {
     name: 'kiln_view_interior',
     description: KILN_VIEW_INTERIOR_DESCRIPTION,
     inputSchema: viewInteriorInput,
-    run: async (input) => runViewInterior(viewInteriorInput.parse(input), context),
+    run: async (input) => runViewInterior(viewInteriorInput.parse(input), statefulContext),
     media: screenshotMedia,
   };
 }
@@ -1026,6 +1283,9 @@ export interface KilnInspectResult {
   height?: number;
   /** The close-up PNG, base64 (image transports strip this and attach the bytes). */
   pngBase64?: string;
+  /** Fidelity and exact derivative-byte receipt for this close-up. */
+  viewFidelity?: DerivativeReviewFidelityV1;
+  viewEvidence?: ViewEvidenceHistoryV1;
   /** Part names available for framing (set when the requested part was not found). */
   availableParts?: string[];
   error?: string;
@@ -1039,11 +1299,14 @@ export interface KilnInspectResult {
  * the model can retry by name. The views module is imported lazily (node:zlib)
  * to keep it out of the browser bundle graph.
  */
-async function runInspect(input: z.infer<typeof inspectInput>): Promise<KilnInspectResult> {
+async function runInspect(
+  input: z.infer<typeof inspectInput>,
+  context: KilnToolContext,
+): Promise<KilnInspectResult> {
   try {
-    const { renderInspectView } = await import('../views/inspect');
+    const { prepareInspectView } = await import('../views/inspect');
     const { root } = await executeKilnCode(input.code);
-    const r = renderInspectView(root, {
+    const r = prepareInspectView(root, {
       ...(input.part !== undefined ? { part: input.part } : {}),
       ...(input.view !== undefined ? { view: input.view } : {}),
       ...(input.azimuthDeg !== undefined ? { azimuthDeg: input.azimuthDeg } : {}),
@@ -1060,6 +1323,26 @@ async function runInspect(input: z.infer<typeof inspectInput>): Promise<KilnInsp
         availableParts: r.availableParts,
       };
     }
+    const rendered = await renderDerivativeCell(
+      {
+        root: r.root,
+        label: r.part ? `inspect:${r.part}` : 'inspect:whole-asset',
+        view: r.viewSpec,
+        size: r.size,
+        frameBounds: r.frameBounds,
+        // The PBR port's direction mode auto-frames the complete GLB. That is
+        // truthful for a whole asset and for an isolated part derivative, but
+        // cannot preserve a part close-up while contextual geometry remains.
+        ...(!r.part || r.isolated
+          ? {}
+          : { gpuUnsupportedReasonCode: 'DERIVATIVE_GPU_FRAMING_UNSUPPORTED' as const }),
+      },
+      context,
+    );
+    const viewFidelity = derivativeReviewFidelity([rendered.receipt]);
+    const viewEvidence = viewFidelity
+      ? context.viewEvidenceHistory?.record('kiln_inspect', viewFidelity)
+      : undefined;
     // Always state the angles, named camera or not, so the model can step from
     // where it actually is instead of guessing the next view by name.
     const from = `the ${r.view} view (azimuth ${r.azimuthDeg}deg, elevation ${r.elevationDeg}deg)`;
@@ -1078,9 +1361,11 @@ async function runInspect(input: z.infer<typeof inspectInput>): Promise<KilnInsp
       zoom: r.zoom,
       isolated: r.isolated,
       framed,
-      width: r.width,
-      height: r.height,
-      pngBase64: r.png.toString('base64'),
+      width: r.size,
+      height: r.size,
+      pngBase64: rendered.png.toString('base64'),
+      ...(viewFidelity ? { viewFidelity } : {}),
+      ...(viewEvidence ? { viewEvidence } : {}),
     };
   } catch (err) {
     return { ok: false, error: err instanceof Error ? err.message : String(err) };
@@ -1110,16 +1395,19 @@ const KILN_INSPECT_DESCRIPTION =
   'If the part name does not resolve you get the list of available part names back — pick one and ' +
   'retry. By default surrounding geometry stays visible for context and can occlude the part: ' +
   'either pick a different view, or set isolate:true to hide everything else and see the part ' +
-  'unobstructed (use it for anything buried inside or behind other geometry). Flat-shaded CPU ' +
-  'render; writes no files.';
+  'unobstructed (use it for anything buried inside or behind other geometry). The view is rendered ' +
+  'from deterministic derivative GLB bytes; GPU PBR is used only when it can preserve the requested ' +
+  'framing, otherwise the GLB-native geometry-flat fallback reports why in viewFidelity. Writes no files.' +
+  VIEW_EVIDENCE_GUIDANCE;
 
 /** Create the close-up inspection definition. */
-export function createKilnInspectDef(): KilnToolDef {
+export function createKilnInspectDef(context: KilnToolContext = {}): KilnToolDef {
+  const statefulContext = withViewEvidenceHistory(context);
   return {
     name: 'kiln_inspect',
     description: KILN_INSPECT_DESCRIPTION,
     inputSchema: inspectInput,
-    run: async (input) => runInspect(inspectInput.parse(input)),
+    run: async (input) => runInspect(inspectInput.parse(input), statefulContext),
     media: screenshotMedia,
   };
 }

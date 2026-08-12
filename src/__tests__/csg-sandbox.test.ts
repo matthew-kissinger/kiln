@@ -14,18 +14,16 @@ const meta = { name: 'Gear', category: 'prop' };
 async function build() {
   const root = createRoot('Gear');
   const steel = gameMaterial(0xb0b0b0, { metalness: 0.7, roughness: 0.3 });
-  const body = new (Object.getPrototypeOf(createPart('X', boxGeo(0,0,0), steel)).constructor)(cylinderGeo(1, 1, 0.3, 32), steel);
-  // Use THREE.Mesh via createPart-less construction since the sandbox
-  // does expose a Three-compatible Mesh through createPart.
-  // Simpler: use createPart which returns a Mesh, grab it as an operand.
+  const body = createPart('Body', cylinderGeo(1, 1, 0.3, 32), steel, {});
+  const notch = createPart('Notch', boxGeo(0.3, 2.2, 0.5), steel, {});
+  const gear = await boolDiff('GearBody', body, notch);
+  root.add(gear);
   return root;
 }
 `;
-    // The above stub just verifies the async path works at all. A more
-    // realistic sandbox path would involve THREE.Mesh, but the sandbox
-    // doesn't expose THREE directly. See the follow-up scenario below.
     const { root } = await executeKilnCode(code);
     expect(root.name).toBe('Gear');
+    expect(root.children[0]?.name).toBe('Mesh_GearBody');
   });
 
   it('agent-style code using createPart siblings + boolDiff', async () => {

@@ -36,27 +36,18 @@ function build() {
 }
 `;
 
-// A real, QA-decodable DataTexture (8-bit RGBA, srgb) — an empty `new
-// THREE.Texture()` has no pixel payload and gets blocked by
-// MAT_TEXTURE_DECODE_FAILED before routing is ever reached.
+// A real, QA-decodable approved procedural texture. Generated source may not
+// construct raw THREE.DataTexture instances at the evaluator boundary.
 const TEXTURED_CODE = `
 const meta = { name: 'textured-box', category: 'prop' };
 function build() {
   const root = createRoot('Root');
-  const mat = gameMaterial('#ffffff');
-  const size = 8;
-  const data = new Uint8Array(size * size * 4);
-  for (let i = 0; i < size * size; i++) {
-    data[i * 4] = 200;
-    data[i * 4 + 1] = 100;
-    data[i * 4 + 2] = 50;
-    data[i * 4 + 3] = 255;
-  }
-  const tex = new THREE.DataTexture(data, size, size, THREE.RGBAFormat, THREE.UnsignedByteType);
-  tex.needsUpdate = true;
-  tex.colorSpace = THREE.SRGBColorSpace;
-  mat.map = tex;
-  createPart('Body', boxGeo(1, 1, 1), mat, { parent: root });
+  const albedo = proceduralTexture({
+    size: 8,
+    name: 'RoutingFixture',
+    layers: [{ op: 'checker', colorA: 0xc86432, colorB: 0x643219, squares: 2 }],
+  });
+  createPart('Body', boxGeo(1, 1, 1), pbrMaterial({ albedo }), { parent: root });
   return root;
 }
 `;
@@ -94,6 +85,16 @@ describe('kiln_render in-loop GPU port routing', () => {
     expect(events[0]!.renderer).toMatch(/^cpu-raster:/);
     expect(events[0]!.degraded).toBe(false);
     expect(events[0]!.neededPbr).toBe(false);
+    expect(out.viewFidelity).toMatchObject({
+      version: 'kiln.view-fidelity.v1',
+      requested: 'full-preferred',
+      delivered: 'geometry-flat',
+      materialFaithful: false,
+      exactArtifact: false,
+      rendererId: CPU_RASTER_RENDERER_ID,
+      degraded: false,
+    });
+    expect(out.viewFidelity?.inputGlbSha256).toMatch(/^sha256:[0-9a-f]{64}$/);
   });
 
   test('port injected + untextured metalness-0 scene: port is never called, CPU still draws', async () => {
@@ -143,6 +144,15 @@ describe('kiln_render in-loop GPU port routing', () => {
     expect(events[0]!.renderer).toBe('dawn-vulkan:test-gpu:1.0');
     expect(events[0]!.degraded).toBe(false);
     expect(events[0]!.neededPbr).toBe(true);
+    expect(out.viewFidelity).toMatchObject({
+      version: 'kiln.view-fidelity.v1',
+      requested: 'full-preferred',
+      delivered: 'full-material',
+      materialFaithful: true,
+      exactArtifact: false,
+      rendererId: 'dawn-vulkan:test-gpu:1.0',
+      degraded: false,
+    });
   });
 
   test('port injected + untextured metalness>0 scene: port IS called (the metal case)', async () => {
@@ -178,6 +188,27 @@ describe('kiln_render in-loop GPU port routing', () => {
     expect(events[0]!.degraded).toBe(true);
     expect(events[0]!.degradedReason).toContain('device lost');
     expect(events[0]!.neededPbr).toBe(true);
+    expect(out.viewFidelity).toMatchObject({
+      delivered: 'geometry-flat',
+      materialFaithful: false,
+      rendererId: CPU_RASTER_RENDERER_ID,
+      degraded: true,
+    });
+    expect(out.viewFidelity?.degradeReason).toContain('device lost');
+  });
+
+  test('no port + textured scene returns explicit model-visible geometry-only fidelity', async () => {
+    const def = createKilnRenderViewsDef();
+    const out = (await def.run({ code: TEXTURED_CODE })) as KilnRenderViewsResult;
+
+    expect(out.ok).toBe(true);
+    expect(out.viewFidelity).toMatchObject({
+      requested: 'full-preferred',
+      delivered: 'geometry-flat',
+      materialFaithful: false,
+      degraded: true,
+      degradeReason: 'material-faithful view render port unavailable',
+    });
   });
 
   test('port throws: falls back to CPU, no throw escapes the tool', async () => {
@@ -211,6 +242,28 @@ describe('kiln_render in-loop GPU port routing', () => {
     expect(out.pngBase64).toBeDefined();
     expect(events[0]!.degraded).toBe(true);
     expect(events[0]!.degradedReason).toContain('timed out after 25ms');
+  });
+
+  test('samples warm-up and remaining budget for each in-loop request', async () => {
+    const requests: string[] = [];
+    const def = createKilnRenderViewsDef({
+      viewRenderPort: () => new Promise(() => {}),
+      viewRenderTimeoutMs: 25,
+      viewRenderTimeoutContext: () => ({
+        warmUpState: 'ready',
+        remainingGenerationBudgetMs: 13,
+        rendererDeadlineMs: 20,
+      }),
+      viewRenderTimeoutResolver: (context) => {
+        requests.push(context.requestKind);
+        return 19;
+      },
+    });
+    const out = (await def.run({ code: TEXTURED_CODE })) as KilnRenderViewsResult;
+
+    expect(out.ok).toBe(true);
+    expect(out.viewFidelity?.degradeReason).toContain('timed out after 13ms');
+    expect(requests).toEqual(['in-loop-grid']);
   });
 
   test('an onViewsRendered callback that throws does not fail the render', async () => {

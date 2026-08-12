@@ -43,6 +43,13 @@ import { createHash } from 'node:crypto';
 import * as THREE from 'three';
 import type { EncodedTextureData, KilnTextureMetadata, TextureUsage } from './textures';
 
+export interface BakedTextureBindingV1 {
+  node: string;
+  material: string;
+  slot: string;
+  usage: TextureUsage;
+}
+
 /** Provenance for one texture this pass encoded. Deterministic and sorted. */
 export interface BakedTextureProvenanceV1 {
   schemaVersion: 1;
@@ -50,14 +57,25 @@ export interface BakedTextureProvenanceV1 {
   texture: string;
   /** Owning material name, for locating it in the source. */
   material: string;
+  /** Owning scene node name. This is a bounded semantic locator, never a host path. */
+  node: string;
   /** glTF-facing slot the texture fills (`map`, `normalMap`, ...). */
   slot: string;
   usage: TextureUsage;
+  /** Every scene binding of these encoded bytes, in deterministic traversal order. */
+  bindings: BakedTextureBindingV1[];
   width: number;
   height: number;
   channels: 3 | 4;
   /** Encoded PNG size in bytes. */
   bytes: number;
+  /** Encoding and interpretation of the exact embedded image bytes. */
+  mime: 'image/png';
+  colorSpace: 'srgb' | 'linear';
+  /** SHA-256 identity of the encoded PNG bytes. */
+  imageSha256: `sha256:${string}`;
+  /** SHA-256 identity of the final GLB containing this binding. Filled after export. */
+  artifactGlbSha256?: `sha256:${string}`;
   /** SHA-1 of the PNG bytes — the handle a determinism test compares. */
   sha1: string;
   /**
@@ -72,10 +90,14 @@ export interface BakedTextureProvenanceV1 {
 
 /** The `userData.kilnProcedural` stamp `proceduralTexture()` leaves behind. */
 interface ProceduralRecipeRecord {
-  schemaVersion: 1;
+  schemaVersion: 1 | 2;
   size: number;
   usage: TextureUsage;
+  name?: string;
   layers: unknown[];
+  /** V2 canonical identity; absent on historical V1 texture stamps. */
+  canonicalJson?: string;
+  recipeHash?: `sha256:${string}`;
 }
 
 /**
@@ -200,13 +222,18 @@ export async function bakeSceneTextures(
 ): Promise<BakedTextureProvenanceV1[]> {
   // Collect first, encode second: traversal is sync, encoding is not, and doing
   // them together would interleave awaits with a mutating walk.
-  const pending: Array<{
-    texture: THREE.Texture;
-    material: string;
-    slot: string;
-    usage: TextureUsage;
-  }> = [];
-  const seen = new Set<THREE.Texture>();
+  const pending = new Map<
+    THREE.Texture,
+    {
+      texture: THREE.Texture;
+      bindings: Array<{
+        node: string;
+        material: string;
+        slot: string;
+        usage: TextureUsage;
+      }>;
+    }
+  >();
 
   root.traverse((node) => {
     const material = (node as THREE.Mesh).material;
@@ -215,26 +242,29 @@ export async function bakeSceneTextures(
       const bag = item as unknown as Record<string, unknown>;
       for (const [slot, usage] of SLOT_USAGE) {
         const texture = bag[slot];
-        if (!isTexture(texture) || seen.has(texture)) continue;
-        seen.add(texture);
+        if (!isTexture(texture)) continue;
         if ((texture.userData as Record<string, unknown>)['encoded']) continue;
-        pending.push({
-          texture,
+        const existing = pending.get(texture) ?? { texture, bindings: [] };
+        existing.bindings.push({
+          node: node.name || '(unnamed node)',
           material: item.name || '(unnamed material)',
           slot,
           usage,
         });
+        pending.set(texture, existing);
       }
     }
   });
 
   const baked: BakedTextureProvenanceV1[] = [];
-  for (const entry of pending) {
+  for (const entry of pending.values()) {
     const name = entry.texture.name || '(unnamed texture)';
     const raw = readPixels(entry.texture);
+    const firstBinding = entry.bindings[0]!;
+    const bindingSummary = `material ${JSON.stringify(firstBinding.material)} (${firstBinding.slot})${entry.bindings.length > 1 ? ` and ${entry.bindings.length - 1} other binding(s)` : ''}`;
     if (typeof raw === 'string') {
       warnings.push(
-        `Texture ${JSON.stringify(name)} on material ${JSON.stringify(entry.material)} (${entry.slot}) was dropped from the GLB: ${raw}.`,
+        `Texture ${JSON.stringify(name)} on ${bindingSummary} was dropped from the GLB: ${raw}.`,
       );
       continue;
     }
@@ -244,7 +274,7 @@ export async function bakeSceneTextures(
       bytes = await encodePngFromRaw(raw);
     } catch (err) {
       warnings.push(
-        `Texture ${JSON.stringify(name)} on material ${JSON.stringify(entry.material)} (${entry.slot}) was dropped from the GLB: PNG encoding failed (${err instanceof Error ? err.message : String(err)}).`,
+        `Texture ${JSON.stringify(name)} on ${bindingSummary} was dropped from the GLB: PNG encoding failed (${err instanceof Error ? err.message : String(err)}).`,
       );
       continue;
     }
@@ -256,9 +286,14 @@ export async function bakeSceneTextures(
     // Describe what the texture IS, not what the slot wants — QA compares this
     // against `texture.colorSpace`, and reporting the slot's expectation here
     // would make a mismatched color space pass by asserting itself.
+    const colorSpace = entry.texture.colorSpace === THREE.SRGBColorSpace ? 'srgb' : 'linear';
+    // A shared texture can legally occupy several bindings. Its own declared
+    // usage is taken from the first deterministic traversal binding; every
+    // binding remains present in provenance below.
+    const primaryUsage = entry.bindings[0]?.usage ?? 'albedo';
     (entry.texture.userData as Record<string, unknown>)['kilnTexture'] = {
-      usage: entry.usage,
-      colorSpace: entry.texture.colorSpace === THREE.SRGBColorSpace ? 'srgb' : 'linear',
+      usage: primaryUsage,
+      colorSpace,
       width: raw.width,
       height: raw.height,
       hasAlpha: hasTranslucentPixel(raw),
@@ -268,22 +303,33 @@ export async function bakeSceneTextures(
       | ProceduralRecipeRecord
       | undefined;
 
+    const sha1 = createHash('sha1').update(bytes).digest('hex');
+    const imageSha256 = `sha256:${createHash('sha256').update(bytes).digest('hex')}` as const;
     baked.push({
       schemaVersion: 1,
       texture: name,
-      material: entry.material,
-      slot: entry.slot,
-      usage: entry.usage,
+      node: firstBinding.node,
+      material: firstBinding.material,
+      slot: firstBinding.slot,
+      usage: firstBinding.usage,
+      bindings: entry.bindings,
       width: raw.width,
       height: raw.height,
       channels: raw.channels,
       bytes: bytes.length,
-      sha1: createHash('sha1').update(bytes).digest('hex'),
+      mime: 'image/png',
+      colorSpace,
+      imageSha256,
+      sha1,
       ...(recipe ? { procedural: recipe } : {}),
     });
   }
 
-  return baked.sort((a, b) => `${a.texture}:${a.slot}`.localeCompare(`${b.texture}:${b.slot}`));
+  return baked.sort((a, b) =>
+    `${a.node}:${a.material}:${a.texture}:${a.slot}`.localeCompare(
+      `${b.node}:${b.material}:${b.texture}:${b.slot}`,
+    ),
+  );
 }
 
 // -----------------------------------------------------------------------------

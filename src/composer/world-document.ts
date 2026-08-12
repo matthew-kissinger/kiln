@@ -16,6 +16,7 @@ import type {
   Statement,
 } from './model';
 import { placementRoleForAsset, PlacementModel } from './model';
+import { PresentationParametersV1Schema } from './presentation';
 
 export const WORLD_DOCUMENT_V2_SCHEMA_VERSION = 'kiln.world.v2' as const;
 
@@ -413,6 +414,8 @@ export const WorldDocumentV2Schema = z
       .strict(),
     collisionArtifacts: z.array(collisionArtifactSchema).max(512),
     spawns: z.array(spawnSchema).max(128),
+    /** Additive Phase 2 presentation state. Historical v2 worlds may omit it. */
+    presentation: PresentationParametersV1Schema.optional(),
     runtimePolicy: z.object({ mode: z.literal('static-explore') }).strict(),
     provenance: z
       .object({
@@ -520,6 +523,36 @@ export const WorldDocumentV2Schema = z
           message: `unreferenced collision artifact "${artifact.refId}"`,
         });
       }
+    }
+
+    const packagePaths = [
+      ...world.assets.map((asset, index) => ({
+        path: `models/${asset.generationId}.glb`,
+        issuePath: ['assets', index, 'generationId'] as (string | number)[],
+      })),
+      ...(world.terrain.kind === 'heightfield'
+        ? [
+            {
+              path: world.terrain.artifact.uri,
+              issuePath: ['terrain', 'artifact', 'uri'] as (string | number)[],
+            },
+          ]
+        : []),
+      ...world.collisionArtifacts.map((artifact, index) => ({
+        path: artifact.artifact.uri,
+        issuePath: ['collisionArtifacts', index, 'artifact', 'uri'] as (string | number)[],
+      })),
+    ];
+    const seenPackagePaths = new Set<string>();
+    for (const entry of packagePaths) {
+      if (seenPackagePaths.has(entry.path)) {
+        ctx.addIssue({
+          code: 'custom',
+          path: entry.issuePath,
+          message: `duplicate package path "${entry.path}"`,
+        });
+      }
+      seenPackagePaths.add(entry.path);
     }
   });
 

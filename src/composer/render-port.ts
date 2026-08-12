@@ -93,12 +93,119 @@ export interface SceneRenderResult {
   degraded?: boolean;
   /** Stable, credential-free fallback explanation. Meaningful when degraded is true. */
   degradeReason?: string;
+  /** Material truth for ordinary Composer review pixels. The host owns scene
+   * GLB assembly and therefore binds receipts to its derivative bytes. */
+  viewFidelity?: DerivativeReviewFidelityV1;
   error?: string;
 }
 
 /** Inject this at `runKilnComposer` call time. A build/render failure returns
  *  `{ ok:false, error }` (no image) so the agent gets a fixable error. */
 export type SceneRenderPort = (req: SceneRenderRequest) => Promise<SceneRenderResult>;
+
+/** Requested material-review policy for one view operation. */
+export type ViewFidelityPolicy = 'full-preferred' | 'full-required' | 'geometry-only';
+
+/** What the renderer actually delivered. */
+export type DeliveredViewFidelity = 'full-material' | 'geometry-flat' | 'none';
+
+/** Stable machine-readable explanation for a degraded or unavailable view. */
+export type ViewFidelityReasonCode =
+  | 'FULL_MATERIAL_RENDER_UNAVAILABLE'
+  | 'DERIVATIVE_GPU_FRAMING_UNSUPPORTED'
+  | 'DERIVATIVE_RECEIPT_UNAVAILABLE'
+  | 'DERIVATIVE_RECEIPT_INVALID'
+  | 'GLB_FLAT_TEXTURE_SAMPLING_UNSUPPORTED'
+  | 'GLB_FLAT_KTX2_SAMPLING_UNSUPPORTED'
+  | 'GLB_FLAT_NON_TRIANGLE_PRIMITIVE_UNSUPPORTED'
+  | 'GLB_FLAT_SKIN_DEFORMATION_UNSUPPORTED'
+  | 'GLB_FLAT_MORPH_TARGETS_UNSUPPORTED'
+  | 'GLB_FLAT_PARSE_FAILED'
+  | 'GLB_FLAT_NO_SCENE'
+  | 'GLB_FLAT_NO_RENDERABLE_GEOMETRY'
+  | 'GLB_FLAT_INVALID_INSTANCING';
+
+/**
+ * Truthful, model-visible provenance for a rendered view.
+ *
+ * `exactArtifact` distinguishes a view of persisted/final bytes from an
+ * in-loop or purpose-built derivative GLB. A GPU producer is not enough to
+ * make that claim by itself.
+ */
+export interface ViewFidelityV1 {
+  version: 'kiln.view-fidelity.v1';
+  requested: ViewFidelityPolicy;
+  delivered: DeliveredViewFidelity;
+  materialFaithful: boolean;
+  exactArtifact: boolean;
+  rendererId: string;
+  inputGlbSha256: `sha256:${string}`;
+  degraded: boolean;
+  degradeReason?: string;
+  /** Stable codes for policy and telemetry; no credentials or provider details. */
+  reasonCodes?: ViewFidelityReasonCode[];
+}
+
+/** One purpose-built review GLB and the pixels derived from those exact bytes. */
+export interface DerivativeViewReceiptV1 extends ViewFidelityV1 {
+  /** Stable cell/frame identity within the review surface. */
+  derivativeLabel: string;
+  /** Derivative bytes are never the persisted/final artifact. */
+  exactArtifact: false;
+}
+
+/** Aggregate material-fidelity truth for a derivative review surface. */
+export interface DerivativeReviewFidelityV1 {
+  version: 'kiln.derivative-review-fidelity.v1';
+  requested: ViewFidelityPolicy;
+  delivered: DeliveredViewFidelity;
+  materialFaithful: boolean;
+  exactArtifact: false;
+  degraded: boolean;
+  /** One receipt per deterministic derivative GLB, in displayed order. */
+  receipts: DerivativeViewReceiptV1[];
+  reasonCodes?: ViewFidelityReasonCode[];
+}
+
+export type ViewEvidenceSurface =
+  | 'kiln_render'
+  | 'kiln_inspect'
+  | 'kiln_screenshot_animation'
+  | 'kiln_view_interior'
+  | 'scene_render'
+  | 'scene_screenshot_camera';
+
+/** Hash-only pointer to one prior fully material-faithful review request. */
+export interface FaithfulViewEvidenceReferenceV1 {
+  version: 'kiln.faithful-view-evidence-ref.v1';
+  sequence: number;
+  surface: ViewEvidenceSurface;
+  materialFaithful: true;
+  exactArtifact: boolean;
+  inputGlbSha256: `sha256:${string}`[];
+  rendererIds: string[];
+}
+
+/** Unambiguous evidence status for the request that just completed. */
+export interface CurrentViewEvidenceV1 {
+  sequence: number;
+  surface: ViewEvidenceSurface;
+  delivered: DeliveredViewFidelity;
+  materialFaithful: boolean;
+  exactArtifact: boolean;
+  degraded: boolean;
+  inputGlbSha256: `sha256:${string}`[];
+  rendererIds: string[];
+  reasonCodes?: ViewFidelityReasonCode[];
+}
+
+/** Bounded, model-visible metadata only. Contains no source or pixel bytes. */
+export interface ViewEvidenceHistoryV1 {
+  version: 'kiln.view-evidence-history.v1';
+  current: CurrentViewEvidenceV1;
+  lastFaithful?: FaithfulViewEvidenceReferenceV1;
+  faithfulHistory: FaithfulViewEvidenceReferenceV1[];
+}
 
 /**
  * PbrRenderRequest — one PBR/beauty render of an ALREADY-PRODUCED GLB.
@@ -320,6 +427,12 @@ export interface PbrRenderResult {
   lightingPresetId?: string;
   /** One PNG per requested view direction, in request order. */
   viewsPng?: Uint8Array[];
+  /** Optional derivative-byte attestation. Required before a derivative review
+   * may claim materialFaithful:true; legacy contact sheets remain compatible. */
+  derivativeFidelity?: {
+    materialFaithful: true;
+    inputGlbSha256: `sha256:${string}`;
+  };
   /** The optional beauty shot. */
   beautyPng?: Uint8Array;
   /** Host-measured phase timings in milliseconds. */

@@ -88,7 +88,7 @@ Generate assets with realistic proportions and detail:
 
 export const KILN_PROMPT_HEADER = `You are an expert procedural 3D asset generator. Create game-ready models with character and style.
 
-CRITICAL: NO import/export statements. Code runs in a sandbox with primitives as globals.`;
+CRITICAL: NO import/export statements. Code runs with documented primitives as globals. Use only those globals: never access globalThis/global/process/network APIs, dynamic import/eval/Function, constructor chains, or raw THREE.DataTexture/ShaderMaterial/RawShaderMaterial constructors.`;
 
 export const KILN_FILE_FORMAT = `<file-format>
 const meta = { name: "AssetName", category: "prop", role: "prop" };
@@ -145,7 +145,7 @@ export const KILN_API_IDIOMS = `// Usage idioms:
 // Textured asset pipeline:
 //   1. Build a geometry (boxGeo / CSG / subdivide / curveToMesh / etc)
 //   2. \`await autoUnwrap(geo)\` → adds a uv attribute
-//   3. \`await loadTexture(path)\` → load albedo/normal/etc PNG
+//   3. \`await loadApprovedTexture(resourceId)\` → load a listed approved texture
 //   4. \`pbrMaterial({ albedo: tex, ... })\` → build PBR material
 //   5. new THREE.Mesh(unwrappedGeo, mat) → attach to scene
 // THREE namespace is exposed — use \`new THREE.Mesh(geo, mat)\` when an op needs a
@@ -202,9 +202,12 @@ Model the requested construction, not just its outline:
 Author portable material response, not render-only decoration:
 - Use gameMaterial for deliberate flat/stylized colour. For metal, wood, stone, bark, cloth, skin,
   glass, paint, or textured-hero requests, follow the resolved portable material recipe guidance.
-- proceduralTexture() creates deterministic image data that is baked into the GLB. Build restrained
-  albedo/roughness patterns (and normalMapFromHeight when useful), unwrap the geometry, and bind them
-  through pbrMaterial. Prefer a few coherent material roles over unique noisy textures per part.
+- proceduralTexture({ schemaVersion: 2, ... }) is the strict portable texture DSL: six finite layer
+  ops, no callbacks, shader source, URLs, filesystem paths, or unknown fields. It creates deterministic
+  image data that is baked into the GLB. Build restrained albedo/roughness patterns (and
+  normalMapFromHeight when useful), unwrap the geometry, and bind them through pbrMaterial. Prefer a
+  few coherent material roles over unique noisy textures per part. Historical recipes without a
+  schemaVersion still migrate, but author all new recipes as V2.
 - Surface detail supports form: align grain, wear, seams, and pattern scale with the object's
   construction. Do not fake texture by scattering hundreds of tiny meshes or by inventing filesystem
   paths/resource IDs.
@@ -443,7 +446,19 @@ const meta = { name: "Crate", category: "prop" };
 
 async function build() {
   const root = createRoot("Crate");
-  const wood = await loadTexture('./war-assets/textures/wood-planks.png');
+  const wood = proceduralTexture({
+    schemaVersion: 2,
+    size: 256,
+    usage: 'albedo',
+    name: 'WoodPlanks',
+    layers: [
+      { op: 'solid', color: 0x70482d },
+      { op: 'noise', colorA: 0x4a2d1c, colorB: 0xa06f45, scale: 8, octaves: 3, seed: 7,
+        blend: 'overlay', opacity: 0.35 },
+      { op: 'stripes', colorA: 0x3a2115, colorB: 0xc69762, count: 12, angleDeg: 0,
+        blend: 'multiply', opacity: 0.18 },
+    ],
+  });
   const mat = pbrMaterial({ albedo: wood, roughness: 0.88, metalness: 0 });
   const geo = await autoUnwrap(boxGeo(1, 1, 1), { resolution: 1024 });
   const mesh = new THREE.Mesh(geo, mat);
@@ -747,7 +762,8 @@ The sandbox exposes ~70 primitive helpers as globals (no imports), grouped:
   corner bevel, twist, taper), revolveProfile (solid lathe with a bevelled
   rim), circleProfile (sync outline helper)
 - Mesh ops & curves: subdivide, mergeVertices, curveToMesh, pipeAlongPath, lathe, revolveGeo
-- UV + textures: autoUnwrap, boxUnwrap, cylinderUnwrap, planeUnwrap, panelRemapV, loadTexture
+- UV + textures: autoUnwrap, boxUnwrap, cylinderUnwrap, planeUnwrap, panelRemapV,
+  loadApprovedTexture, proceduralTexture, normalMapFromHeight
 - Animation: rotationTrack/positionTrack/scaleTrack (keys are "rotation"/"position"/"scale",
   NOT "value"), createClip, spinAnimation, bobbingAnimation, idleBreathing
 

@@ -10,7 +10,7 @@
 
 import { describe, expect, test } from 'bun:test';
 import * as THREE from 'three';
-import { renderSceneToGLB } from '../render';
+import { renderGLB, renderSceneToGLB } from '../render';
 import { bakeSceneTextures, ensureNormalMapTangents } from '../texture-bake';
 
 // -----------------------------------------------------------------------------
@@ -71,6 +71,41 @@ const glbText = (bytes: Uint8Array): string => Buffer.from(bytes).toString('lati
 // -----------------------------------------------------------------------------
 
 describe('procedural textures are baked into the GLB', () => {
+  test('public renderGLB preserves baked procedural lineage instead of dropping the sidecar', async () => {
+    const out = await renderGLB(`
+const meta = { name: 'PublicLineage', category: 'prop' };
+async function build() {
+  const root = createRoot('PublicLineage');
+  const albedo = proceduralTexture({
+    size: 8,
+    name: 'AuthoredChecker',
+    layers: [
+      { op: 'solid', color: 0x224466 },
+      { op: 'checker', colorA: 0xffffff, colorB: 0x000000, squares: 2, blend: 'overlay' },
+    ],
+  });
+  root.add(createPart('Body', boxGeo(1, 1, 1), pbrMaterial({ albedo }), {}));
+  return root;
+}
+`);
+
+    expect(out.bakedTextures).toHaveLength(1);
+    expect(out.bakedTextures?.[0]).toMatchObject({
+      schemaVersion: 1,
+      texture: 'AuthoredChecker',
+      node: 'Mesh_Body',
+      slot: 'map',
+      usage: 'albedo',
+      mime: 'image/png',
+      colorSpace: 'srgb',
+      procedural: { schemaVersion: 2, size: 8, usage: 'albedo' },
+    });
+    expect(out.bakedTextures?.[0]?.procedural?.recipeHash).toMatch(/^sha256:[0-9a-f]{64}$/);
+    expect(out.bakedTextures?.[0]?.imageSha256).toMatch(/^sha256:[0-9a-f]{64}$/);
+    expect(out.artifactGlbSha256).toMatch(/^sha256:[0-9a-f]{64}$/);
+    expect(out.bakedTextures?.[0]?.artifactGlbSha256).toBe(out.artifactGlbSha256);
+  });
+
   test('a hand-built DataTexture is encoded, embedded, and reported — not dropped', async () => {
     const mat = stdMaterial('ProcMat');
     mat.map = albedoTexture('ProcChecker');
@@ -98,6 +133,8 @@ describe('procedural textures are baked into the GLB', () => {
     });
     expect(rec!.bytes).toBeGreaterThan(0);
     expect(rec!.sha1).toMatch(/^[0-9a-f]{40}$/);
+    expect(rec!.imageSha256).toMatch(/^sha256:[0-9a-f]{64}$/);
+    expect(rec!.artifactGlbSha256).toBe(out.artifactGlbSha256);
   });
 
   test('three-channel RGB pixels bake as well as RGBA', async () => {
@@ -142,6 +179,33 @@ describe('procedural textures are baked into the GLB', () => {
       ['normalMap', 'normal'],
       ['roughnessMap', 'roughness'],
     ]);
+  });
+
+  test('shared textures retain every node/material/slot binding while encoding once', async () => {
+    const shared = albedoTexture('SharedSurface');
+    const first = stdMaterial('FirstMaterial');
+    first.map = shared;
+    const second = stdMaterial('SecondMaterial');
+    second.map = shared;
+    const root = new THREE.Group();
+    root.name = 'Root';
+    root.add(
+      new THREE.Mesh(new THREE.BoxGeometry(1, 1, 1), first),
+      new THREE.Mesh(new THREE.BoxGeometry(1, 1, 1), second),
+    );
+    root.children[0]!.name = 'FirstNode';
+    root.children[1]!.name = 'SecondNode';
+
+    const warnings: string[] = [];
+    const baked = await bakeSceneTextures(root, warnings);
+
+    expect(warnings).toEqual([]);
+    expect(baked).toHaveLength(1);
+    expect(baked[0]?.bindings.map(({ node, material, slot }) => [node, material, slot])).toEqual([
+      ['FirstNode', 'FirstMaterial', 'map'],
+      ['SecondNode', 'SecondMaterial', 'map'],
+    ]);
+    expect(baked[0]?.imageSha256).toMatch(/^sha256:[0-9a-f]{64}$/);
   });
 });
 

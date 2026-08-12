@@ -35,6 +35,8 @@ describe('kilnRenderViewsDef (unified kiln_render)', () => {
     expect(kilnRenderViewsDef.description).toContain('GPU PBR shading');
     expect(kilnRenderViewsDef.description).toContain('textured or metallic materials');
     expect(kilnRenderViewsDef.description).toContain('flat-shaded CPU render');
+    expect(kilnRenderViewsDef.description).toContain('viewFidelity');
+    expect(kilnRenderViewsDef.description).toContain('do not judge material');
   });
 
   test('valid code returns metrics AND the six-view grid PNG from one execution', async () => {
