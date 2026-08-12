@@ -45,7 +45,7 @@ async function build() {
     size: 64,
     layers: [
       { op: 'solid', color: 0x8a5a2b },
-      { op: 'bricks', brick: 0xc09050, mortar: 0x6a4020, scale: 4, blend: 'overlay' },
+      { op: 'bricks', brick: 0xc09050, mortar: 0x6a4020, rows: 4, cols: 4, blend: 'overlay' },
     ],
   });
   root.add(createPart('Body', boxGeo(1, 1, 1), pbrMaterial({ albedo, roughness: 0.8 }), {}));
@@ -75,7 +75,7 @@ async function build() {
     size: 64,
     layers: [
       { op: 'solid', color: 0x8a5a2b },
-      { op: 'bricks', brick: 0xc09050, mortar: 0x6a4020, scale: 4, blend: 'overlay' },
+      { op: 'bricks', brick: 0xc09050, mortar: 0x6a4020, rows: 4, cols: 4, blend: 'overlay' },
     ],
   });
   root.add(createPart('Body', boxGeo(1, 1, 1), pbrMaterial({ albedo, roughness: 0.8 }), {}));
@@ -104,7 +104,7 @@ async function build() {
     usage: 'occlusion',
     layers: [
       { op: 'solid', color: 0xffffff },
-      { op: 'stripes', colorA: 0x808080, colorB: 0xffffff, scale: 6, blend: 'multiply' },
+      { op: 'stripes', colorA: 0x808080, colorB: 0xffffff, count: 6, blend: 'multiply' },
     ],
   });
   root.add(createPart('Body', boxGeo(1, 1, 1), pbrMaterial({ albedo: 0x8a5a2b, metallicRoughness: mr, aoMap: ao }), {}));

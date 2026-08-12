@@ -7,8 +7,10 @@
  */
 import { describe, expect, test } from 'bun:test';
 import { ImageBlock, JsonBlock } from '@strands-agents/sdk';
+import { createHash } from 'node:crypto';
 
 import { KilnDraftBuffer, KilnEditBuffer, makeKilnUnifiedTools, type UnifiedSink } from './tools';
+import { encodePng } from '../views';
 
 const BOX_CODE = `
 const meta = { name: 'test-box', category: 'prop' };
@@ -216,6 +218,61 @@ describe('makeKilnUnifiedTools', () => {
     expect(out.error).toBeDefined();
     expect(sink.rendered).toBeUndefined();
     expect(sink.capture).toEqual({ preset: '2x2' }); // failed renders never replace the last good layout
+  });
+
+  test('shares last faithful evidence across kiln_render then degraded kiln_inspect', async () => {
+    const sink: UnifiedSink = { edits: [] };
+    const materialCode = TWO_PART_CODE.replace(
+      "gameMaterial('#9aa0a6')",
+      "gameMaterial('#9aa0a6', { metalness: 0.6 })",
+    );
+    let calls = 0;
+    const tools = makeKilnUnifiedTools({
+      seedCode: materialCode,
+      sink,
+      viewRenderPort: async (request) => {
+        calls++;
+        if (calls > 1) return { ok: false, rendererId: 'gpu:test', error: 'device lost' };
+        const size = request.size!;
+        const png = new Uint8Array(encodePng(new Uint8Array(size * size * 3), size, size));
+        return {
+          ok: true,
+          rendererId: 'gpu:test',
+          viewsPng: request.viewDirs!.map(() => png),
+          derivativeFidelity: {
+            materialFaithful: true,
+            inputGlbSha256: `sha256:${createHash('sha256').update(request.glb).digest('hex')}`,
+          },
+        };
+      },
+    });
+    const render = (await findTool(tools, 'kiln_render').invoke({})) as unknown[];
+    const inspect = (await findTool(tools, 'kiln_inspect').invoke({ isolate: true })) as unknown[];
+    type EvidenceJson = {
+      viewEvidence: {
+        current: Record<string, unknown>;
+        lastFaithful?: Record<string, unknown>;
+      };
+    };
+    const renderJson = (render[1] as JsonBlock).json as unknown as EvidenceJson;
+    const inspectJson = (inspect[1] as JsonBlock).json as unknown as EvidenceJson;
+
+    expect(renderJson.viewEvidence.current).toMatchObject({
+      sequence: 1,
+      surface: 'kiln_render',
+      materialFaithful: true,
+    });
+    expect(inspectJson.viewEvidence.current).toMatchObject({
+      sequence: 2,
+      surface: 'kiln_inspect',
+      materialFaithful: false,
+      degraded: true,
+    });
+    expect(inspectJson.viewEvidence.lastFaithful).toMatchObject({
+      sequence: 1,
+      surface: 'kiln_render',
+      inputGlbSha256: renderJson.viewEvidence.current['inputGlbSha256'],
+    });
   });
 
   test('kiln_render emits a render candidate (buffer code + six-view png) via onCandidate', async () => {

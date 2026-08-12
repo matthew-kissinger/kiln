@@ -1,7 +1,12 @@
 import { describe, expect, test } from 'bun:test';
 import type { Message, ModelStreamEvent, StreamOptions } from '@strands-agents/sdk';
 import type { SceneModelJSON, SceneRenderPort } from '../composer';
-import { migrateSceneModelV1ToWorldDocumentV2 } from '../composer';
+import {
+  decodeColliderArtifactV1,
+  migrateSceneModelV1ToWorldDocumentV2,
+  setWorldPresentationV1,
+  worldColliderAabbV1,
+} from '../composer';
 import { createGenerationCallBudget } from '../agent/call-budget';
 import {
   runKilnComposer,
@@ -106,6 +111,12 @@ describe('runKilnWorldIntegration', () => {
       expect.arrayContaining(['scene_world_snap', 'scene_world_render', 'scene_world_finalize']),
     );
     expect(String(model.seenSystemPrompts[0])).toContain(WORLD_INTEGRATION_PROMPT_V2.slice(0, 30));
+    expect(WORLD_INTEGRATION_PROMPT_V2).toContain('scene_world_view');
+    expect(WORLD_INTEGRATION_PROMPT_V2).toContain('scene_world_set_presentation');
+    expect(WORLD_INTEGRATION_PROMPT_V2).toContain('16,777,216');
+    expect(WORLD_INTEGRATION_PROMPT_V2).toContain('Do not send artifactBinding');
+    expect(WORLD_INTEGRATION_PROMPT_V2).toContain('scene_world_set_collision');
+    expect(WORLD_INTEGRATION_PROMPT_V2).toContain('authored-submesh');
   });
 
   test('surfaces and returns an exact GPU receipt for persistence', async () => {
@@ -176,6 +187,194 @@ describe('runKilnWorldIntegration', () => {
     expect(result.renderEvidence[0]!.receipt!.perCameraOutputSha256).toEqual([
       `sha256:${'c'.repeat(64)}`,
     ]);
+  });
+
+  test('makes exact current presentation values and aggregate limits model-visible', async () => {
+    const presented = setWorldPresentationV1(world(), {
+      schemaVersion: 'kiln.presentation.v1',
+      grid: { columns: 1, rows: 1, cellWidth: 640, cellHeight: 360 },
+      lightingPresetId: 'neutral-studio-v1',
+      receiptPolicy: {
+        requirePerCameraOutputSha256: true,
+        requireOutputSetSha256: true,
+      },
+      cameras: [
+        {
+          id: 'model-authored-hero',
+          cell: { column: 0, row: 0 },
+          position: [9, 6, 7],
+          target: [1, 2, 3],
+          up: [0, 1, 0],
+          fovDeg: 47,
+          aspect: 16 / 9,
+          near: 0.2,
+          far: 250,
+        },
+      ],
+    });
+    const model = new ToolCapturingModel([
+      { toolCalls: [{ name: 'scene_world_view' }] },
+      { toolCalls: [{ name: 'scene_world_finalize' }] },
+      { text: 'done' },
+    ]);
+    const result = await runKilnWorldIntegration({
+      model,
+      prompt: 'inspect the authored presentation',
+      world: presented,
+      render: async () => ({ ok: true }),
+      maxSteps: 5,
+    });
+
+    expect(result.finalized).toBe(true);
+    const modelContext = JSON.stringify(model.messages);
+    expect(modelContext).toContain('model-authored-hero');
+    expect(modelContext).toContain('"position":[9,6,7]');
+    expect(modelContext).toContain('"target":[1,2,3]');
+    expect(modelContext).toContain('"maxTotalPixels":16777216');
+    expect(modelContext).toContain('"authoredByModel":false');
+  });
+
+  test('routes authored GLB node geometry through the bounded production collider ports', async () => {
+    const model = new ToolCapturingModel([
+      {
+        toolCalls: [
+          {
+            name: 'scene_world_set_collision',
+            input: {
+              objectId: 'crate',
+              policy: {
+                kind: 'authored-submesh',
+                transformFrame: 'asset-local',
+                nodeNames: ['Collider_Main'],
+              },
+            },
+          },
+        ],
+      },
+      { toolCalls: [{ name: 'scene_world_finalize' }] },
+      { text: 'done' },
+    ]);
+    let resolverRequest: unknown;
+    let published: Uint8Array | undefined;
+    const result = await runKilnWorldIntegration({
+      model,
+      prompt: 'use the authored collider node',
+      world: world(),
+      render: async () => ({ ok: true }),
+      resolveAuthoredColliderGeometry: async (request) => {
+        resolverRequest = request;
+        return {
+          schemaVersion: 'kiln.authored-collider-geometry.v1',
+          sourceArtifactSha256: request.sourceArtifactSha256,
+          transformFrame: 'asset-local',
+          submeshes: [
+            {
+              nodeName: 'Collider_Main',
+              positions: [-1, 0, -1, 1, 0, -1, 0, 2, 1],
+              indices: [0, 1, 2],
+            },
+          ],
+        };
+      },
+      publishColliderArtifact: async (_artifact, bytes) => {
+        published = bytes;
+        return { uri: 'colliders/crate-authored.collider.json' };
+      },
+      maxSteps: 5,
+    });
+
+    expect(result.finalized).toBe(true);
+    expect(resolverRequest).toMatchObject({
+      sourceArtifactSha256: `sha256:${'a'.repeat(64)}`,
+      transformFrame: 'asset-local',
+      nodeNames: ['Collider_Main'],
+    });
+    const artifact = decodeColliderArtifactV1(published!);
+    expect(artifact.policy).toEqual({
+      kind: 'authored-submesh',
+      transformFrame: 'asset-local',
+      nodeNames: ['Collider_Main'],
+    });
+    expect(
+      worldColliderAabbV1(artifact, {
+        position: result.world.objects[0]!.transform.position,
+        rotationYDeg: result.world.objects[0]!.transform.rotationYDeg,
+        uniformScale: result.world.objects[0]!.transform.uniformScale,
+      }),
+    ).toEqual({ min: [4, 0, 4], max: [6, 2, 6] });
+    expect(result.world.objects[0]?.collision?.policy).toBe('artifact');
+  });
+
+  test('forwards persisted presentation parameters and accepts only their exact receipt', async () => {
+    const presented = setWorldPresentationV1(world(), {
+      schemaVersion: 'kiln.presentation.v1',
+      grid: { columns: 1, rows: 1, cellWidth: 320, cellHeight: 180 },
+      lightingPresetId: 'neutral-studio-v1',
+      receiptPolicy: {
+        requirePerCameraOutputSha256: true,
+        requireOutputSetSha256: true,
+      },
+      cameras: [
+        {
+          id: 'hero',
+          cell: { column: 0, row: 0 },
+          position: [8, 5, 8],
+          target: [0, 1, 0],
+          up: [0, 1, 0],
+          fovDeg: 50,
+          aspect: 16 / 9,
+          near: 0.1,
+          far: 100,
+        },
+      ],
+    });
+    const model = new ToolCapturingModel([
+      { toolCalls: [{ name: 'scene_world_render' }] },
+      { toolCalls: [{ name: 'scene_world_finalize' }] },
+      { text: 'done' },
+    ]);
+    let captured: Parameters<SceneRenderPort>[0] | undefined;
+    const result = await runKilnWorldIntegration({
+      model,
+      prompt: 'inspect the authored presentation',
+      world: presented,
+      render: async (request) => {
+        captured = request;
+        return {
+          ok: true,
+          pngBase64: Buffer.from('png').toString('base64'),
+          receipt: {
+            worldHash: request.worldHash!,
+            cameras: request.cameras!.map((camera) => ({
+              position: camera.position,
+              target: camera.target,
+              up: camera.up!,
+              fovDeg: camera.fovDeg!,
+              aspect: camera.aspect!,
+              near: camera.near!,
+              far: camera.far!,
+            })),
+            width: request.width!,
+            height: request.height!,
+            lightingPresetId: request.lightingPresetId!,
+            backend: 'vulkan',
+            rendererId: 'gpu:test',
+            perCameraOutputSha256: [`sha256:${'b'.repeat(64)}`],
+            outputSetSha256: `sha256:${'c'.repeat(64)}`,
+            outputSha256: `sha256:${'d'.repeat(64)}`,
+          },
+        };
+      },
+      maxSteps: 6,
+    });
+    expect(result.finalized).toBe(true);
+    expect(result.renderEvidence).toHaveLength(1);
+    expect(captured).toMatchObject({
+      width: 320,
+      height: 180,
+      lightingPresetId: 'neutral-studio-v1',
+    });
+    expect(captured?.cameras).toHaveLength(1);
   });
 
   test('rejects mismatched per-camera output evidence and exact/fallback ambiguity', async () => {

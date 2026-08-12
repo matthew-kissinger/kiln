@@ -231,10 +231,13 @@ describe('color space', () => {
       layers: [{ op: 'solid', color: 0x404040 }],
     });
     expect((tex.userData as Record<string, unknown>)['kilnProcedural']).toEqual({
-      schemaVersion: 1,
+      schemaVersion: 2,
       size: 8,
       usage: 'roughness',
-      layers: [{ op: 'solid', color: 0x404040 }],
+      layers: [{ op: 'solid', color: 0x404040, blend: 'normal', opacity: 1 }],
+      canonicalJson:
+        '{"layers":[{"blend":"normal","color":4210752,"op":"solid","opacity":1}],"schemaVersion":2,"size":8,"usage":"roughness"}',
+      recipeHash: 'sha256:0ba0122424c854c14ff660e67a38fee4079a1d8da8cc2359b922d73453bfbce4',
     });
   });
 });

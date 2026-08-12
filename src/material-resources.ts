@@ -44,12 +44,36 @@ export interface MaterialResourceProvenanceV1 {
  * length and hash before anything decodes them, so a resolver that is wrong,
  * stale, or compromised fails loudly instead of substituting pixels.
  */
-export type ApprovedTextureResolver = (
+export const TEXTURE_RESOLVER_LIMITS_V1 = Object.freeze({
+  maxEncodedBytes: 8 * 1024 * 1024,
+  maxWidth: 4096,
+  maxHeight: 4096,
+  maxPixels: 8 * 1024 * 1024,
+  defaultDeadlineMs: 5_000,
+  maxDeadlineMs: 30_000,
+});
+
+export interface HostTextureBytesV1 {
+  bytes: Uint8Array;
+  mime: 'image/png';
+}
+
+export interface TrustedTextureResolverContextV1 {
+  /** Host may cancel its own I/O early; the engine enforces the deadline even
+   *  when the host ignores this signal. */
+  signal: AbortSignal;
+  deadlineMs: number;
+}
+
+export type TrustedTextureByteResolver = (
   descriptor: ApprovedTextureResourceDescriptorV1,
-) => Promise<Uint8Array>;
+  context: TrustedTextureResolverContextV1,
+) => Promise<HostTextureBytesV1>;
 
 export interface ApprovedTextureResourceCacheOptions {
-  resolver?: ApprovedTextureResolver;
+  resolver?: TrustedTextureByteResolver;
+  /** Host-owned and bounded. Generated code cannot set or observe this value. */
+  resolverDeadlineMs?: number;
   /**
    * Descriptor table this cache reads. Defaults to the shipped registry.
    *
@@ -135,14 +159,84 @@ function provenance(
  * fail here with a number a human can act on, rather than as an opaque hash
  * mismatch that reads like corruption.
  */
-function verifyResourceBytes(
+function readPngDimensions(
   descriptor: ApprovedTextureResourceDescriptorV1,
   bytes: Uint8Array,
+): { width: number; height: number } {
+  const signature = [0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a];
+  if (
+    bytes.byteLength < 24 ||
+    !signature.every((value, index) => bytes[index] === value) ||
+    String.fromCharCode(...bytes.subarray(12, 16)) !== 'IHDR'
+  ) {
+    throw new ApprovedTextureResourceUnavailableError(
+      descriptor.id,
+      'declared image/png bytes do not have a valid PNG signature and IHDR format',
+    );
+  }
+  const view = new DataView(bytes.buffer, bytes.byteOffset, bytes.byteLength);
+  return { width: view.getUint32(16, false), height: view.getUint32(20, false) };
+}
+
+function verifyResourcePayload(
+  descriptor: ApprovedTextureResourceDescriptorV1,
+  payload: HostTextureBytesV1,
 ): string {
+  if (!payload || typeof payload !== 'object' || Array.isArray(payload)) {
+    throw new ApprovedTextureResourceUnavailableError(
+      descriptor.id,
+      'host payload must be { bytes, mime }',
+    );
+  }
+  const keys = Object.keys(payload).sort();
+  if (keys.length !== 2 || keys[0] !== 'bytes' || keys[1] !== 'mime') {
+    throw new ApprovedTextureResourceUnavailableError(
+      descriptor.id,
+      'host payload must contain only bytes and MIME',
+    );
+  }
+  if (!(payload.bytes instanceof Uint8Array)) {
+    throw new ApprovedTextureResourceUnavailableError(
+      descriptor.id,
+      'host bytes must be Uint8Array',
+    );
+  }
+  if (payload.mime !== descriptor.mime) {
+    throw new ApprovedTextureResourceUnavailableError(
+      descriptor.id,
+      `host MIME ${String(payload.mime)} does not match approved ${descriptor.mime}`,
+    );
+  }
+  const bytes = payload.bytes;
+  if (bytes.byteLength > TEXTURE_RESOLVER_LIMITS_V1.maxEncodedBytes) {
+    throw new ApprovedTextureResourceUnavailableError(
+      descriptor.id,
+      `encoded-byte limit is ${TEXTURE_RESOLVER_LIMITS_V1.maxEncodedBytes}; received ${bytes.byteLength}`,
+    );
+  }
   if (bytes.byteLength !== descriptor.byteLength) {
     throw new ApprovedTextureResourceUnavailableError(
       descriptor.id,
       `expected ${descriptor.byteLength} bytes, received ${bytes.byteLength}`,
+    );
+  }
+  const { width, height } = readPngDimensions(descriptor, bytes);
+  if (
+    width < 1 ||
+    height < 1 ||
+    width > TEXTURE_RESOLVER_LIMITS_V1.maxWidth ||
+    height > TEXTURE_RESOLVER_LIMITS_V1.maxHeight
+  ) {
+    throw new ApprovedTextureResourceUnavailableError(
+      descriptor.id,
+      `dimension limit is ${TEXTURE_RESOLVER_LIMITS_V1.maxWidth}x${TEXTURE_RESOLVER_LIMITS_V1.maxHeight}; received ${width}x${height}`,
+    );
+  }
+  const pixels = width * height;
+  if (!Number.isSafeInteger(pixels) || pixels > TEXTURE_RESOLVER_LIMITS_V1.maxPixels) {
+    throw new ApprovedTextureResourceUnavailableError(
+      descriptor.id,
+      `pixel limit is ${TEXTURE_RESOLVER_LIMITS_V1.maxPixels}; received ${pixels}`,
     );
   }
   const hash = sha256(bytes);
@@ -171,18 +265,32 @@ export class ApprovedTextureResourceCache {
   readonly #registry: Readonly<
     Record<ApprovedTextureResourceId, ApprovedTextureResourceDescriptorV1>
   >;
-  #resolver: ApprovedTextureResolver | undefined;
+  #resolver: TrustedTextureByteResolver | undefined;
+  readonly #resolverDeadlineMs: number;
 
   constructor(options: ApprovedTextureResourceCacheOptions = {}) {
     this.#resolver = options.resolver;
     this.#registry = options.registry ?? APPROVED_TEXTURE_RESOURCES_V1;
+    const deadline = options.resolverDeadlineMs ?? TEXTURE_RESOLVER_LIMITS_V1.defaultDeadlineMs;
+    if (
+      !Number.isFinite(deadline) ||
+      deadline < 1 ||
+      deadline > TEXTURE_RESOLVER_LIMITS_V1.maxDeadlineMs
+    ) {
+      throw new RangeError(
+        `resolverDeadlineMs must be in [1,${TEXTURE_RESOLVER_LIMITS_V1.maxDeadlineMs}]`,
+      );
+    }
+    this.#resolverDeadlineMs = deadline;
   }
 
   /**
    * Registered once by the host process at startup, never by generated code.
    * Returns the previous resolver so a test can restore it.
    */
-  setResolver(resolver: ApprovedTextureResolver | undefined): ApprovedTextureResolver | undefined {
+  setResolver(
+    resolver: TrustedTextureByteResolver | undefined,
+  ): TrustedTextureByteResolver | undefined {
     const previous = this.#resolver;
     this.#resolver = resolver;
     return previous;
@@ -244,7 +352,11 @@ export class ApprovedTextureResourceCache {
       );
     }
     const decoded = bytesFromBase64(EMBEDDED_RESOURCE_BASE64[id]);
-    this.#cacheBytes(id, verifyResourceBytes(descriptor, decoded), decoded);
+    this.#cacheBytes(
+      id,
+      verifyResourcePayload(descriptor, { bytes: decoded, mime: descriptor.mime }),
+      decoded,
+    );
     return this.#resolution(id, this.#hashById.get(id)!);
   }
 
@@ -270,8 +382,37 @@ export class ApprovedTextureResourceCache {
             'no runtime texture resolver is registered in this environment',
           );
         }
-        const bytes = await resolver(descriptor);
-        this.#cacheBytes(id, verifyResourceBytes(descriptor, bytes), bytes);
+        const controller = new AbortController();
+        let timer: ReturnType<typeof setTimeout> | undefined;
+        const timeout = new Promise<never>((_resolve, reject) => {
+          timer = setTimeout(() => {
+            controller.abort();
+            reject(
+              new ApprovedTextureResourceUnavailableError(
+                id,
+                `host resolver deadline exceeded after ${this.#resolverDeadlineMs}ms`,
+              ),
+            );
+          }, this.#resolverDeadlineMs);
+        });
+        let payload: HostTextureBytesV1;
+        try {
+          payload = await Promise.race([
+            Promise.resolve().then(() =>
+              resolver(
+                descriptor,
+                Object.freeze({
+                  signal: controller.signal,
+                  deadlineMs: this.#resolverDeadlineMs,
+                }),
+              ),
+            ),
+            timeout,
+          ]);
+        } finally {
+          if (timer !== undefined) clearTimeout(timer);
+        }
+        this.#cacheBytes(id, verifyResourcePayload(descriptor, payload), payload.bytes);
         return this.#resolution(id, this.#hashById.get(id)!);
       })().finally(() => {
         // Dropped either way: a success is served from #hashById afterwards, and
@@ -337,12 +478,15 @@ export async function loadApprovedTextureResource(
   return DEFAULT_APPROVED_TEXTURE_CACHE.load(id);
 }
 
-/** Registers the host's byte source for runtime-delivered resources. */
-export function setApprovedTextureResolver(
-  resolver: ApprovedTextureResolver | undefined,
-): ApprovedTextureResolver | undefined {
+/** Registers the trusted host's bounded byte source for runtime resources. */
+export function setTrustedTextureByteResolver(
+  resolver: TrustedTextureByteResolver | undefined,
+): TrustedTextureByteResolver | undefined {
   return DEFAULT_APPROVED_TEXTURE_CACHE.setResolver(resolver);
 }
+
+/** @deprecated Use setTrustedTextureByteResolver; never expose this setter to generated code. */
+export const setApprovedTextureResolver = setTrustedTextureByteResolver;
 
 export interface ApprovedTextureCatalogEntryV1 {
   id: ApprovedTextureResourceId;

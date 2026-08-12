@@ -100,6 +100,8 @@ export interface RunKilnAgentOptions
     KilnToolContext,
     | 'viewRenderPort'
     | 'viewRenderTimeoutMs'
+    | 'viewRenderTimeoutContext'
+    | 'viewRenderTimeoutResolver'
     | 'onViewsRendered'
     | 'renderObservationPort'
     | 'generationCallBudget'

@@ -14,6 +14,7 @@ import type { GenerationCallBudget, GenerationCallBudgetReceipt } from '../../ag
 import { toCachedSystemPrompt } from '../../agent/providers';
 import {
   hashWorldDocumentV2,
+  PRESENTATION_MAX_TOTAL_PIXELS_V1,
   parseWorldDocumentV2,
   PlacementModel,
   type Placement,
@@ -22,6 +23,7 @@ import {
   type SceneRenderPort,
   type SceneRenderResult,
   type WorldDocumentV2,
+  validatePresentationReceiptV1,
   validateWorldIntegrationV2,
   worldDocumentV2ToSceneModelJSON,
 } from '..';
@@ -101,17 +103,31 @@ function lifecycleTools(
       name: 'scene_world_view',
       description: 'Inspect the complete canonical world and authored integration counts.',
       inputSchema: empty,
-      callback: async () =>
-        ({
+      callback: async () => {
+        const worldHash = await hashWorldDocumentV2(state.world);
+        return {
           ok: true,
-          worldHash: await hashWorldDocumentV2(state.world),
+          worldHash,
           objects: state.world.objects.length,
           zones: state.world.authored.zones.length,
           paths: state.world.authored.paths.length,
           sockets: state.world.authored.sockets.length,
           spawns: state.world.spawns.length,
           terrain: state.world.terrain.kind,
-        }) as JSONValue,
+          presentation: state.world.presentation ?? null,
+          presentationLimits: {
+            maxCameras: 12,
+            maxGridColumns: 4,
+            maxGridRows: 3,
+            maxCellWidth: 4096,
+            maxCellHeight: 4096,
+            maxTotalPixels: PRESENTATION_MAX_TOTAL_PIXELS_V1,
+          },
+          presentationBinding: state.world.presentation
+            ? { kind: 'world', sha256: worldHash, authoredByModel: false }
+            : null,
+        } as JSONValue;
+      },
     }),
     tool({
       name: 'scene_world_validate',
@@ -130,12 +146,36 @@ function lifecycleTools(
       inputSchema: empty,
       callback: async () => {
         const worldHash = await hashWorldDocumentV2(state.world);
+        const presentation = state.world.presentation;
         const result = await render({
           placements: placements(state.world),
           worldDocument: state.world,
           worldHash,
+          ...(presentation
+            ? {
+                cameras: presentation.cameras.map(({ id: _id, cell: _cell, ...camera }) => camera),
+                width: presentation.grid.cellWidth,
+                height: presentation.grid.cellHeight,
+                lightingPresetId: presentation.lightingPresetId,
+              }
+            : {}),
         });
         if (!result.ok) return { ok: false, error: result.error ?? 'render failed' } as JSONValue;
+        if (presentation && result.receipt) {
+          const receiptValidation = validatePresentationReceiptV1(
+            {
+              ...presentation,
+              artifactBinding: { kind: 'world', sha256: worldHash },
+            },
+            result.receipt,
+          );
+          if (!receiptValidation.ok) {
+            return {
+              ok: false,
+              error: `presentation receipt rejected: ${receiptValidation.reason}`,
+            } as JSONValue;
+          }
+        }
         const frames = result.perCameraBase64?.length
           ? result.perCameraBase64
           : result.pngBase64
@@ -233,6 +273,12 @@ export async function runKilnWorldIntegration(
       state,
       ...(options.publishHeightfieldArtifact
         ? { publishHeightfieldArtifact: options.publishHeightfieldArtifact }
+        : {}),
+      ...(options.publishColliderArtifact
+        ? { publishColliderArtifact: options.publishColliderArtifact }
+        : {}),
+      ...(options.resolveAuthoredColliderGeometry
+        ? { resolveAuthoredColliderGeometry: options.resolveAuthoredColliderGeometry }
         : {}),
       ...(options.onWorldChanged ? { onWorldChanged: options.onWorldChanged } : {}),
     });

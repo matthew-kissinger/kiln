@@ -26,7 +26,7 @@ const CATEGORY_HEADERS: Array<[PrimitiveSpec['category'], string]> = [
   ['mesh-ops', '// Mesh ops'],
   ['curves', '// Curves'],
   ['uv', '// UV unwrapping'],
-  ['textures', '// Textures (loadTexture is async)'],
+  ['textures', '// Textures (approved resource loading is async)'],
   ['animation', '// Animation — keyframes use "rotation"/"position"/"scale" keys, NOT "value"'],
   ['utility', '// Inspection utilities'],
 ];

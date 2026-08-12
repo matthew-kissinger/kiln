@@ -278,6 +278,64 @@ describe('render tools call the port and return content blocks', () => {
     expect(r.ok).toBe(false);
     expect(r.error).toBe('boom');
   });
+
+  test('scene views expose valid derivative fidelity but never exactArtifact', async () => {
+    const model = new PlacementModel('T', { catalog: [asset('well')] });
+    const sink: ComposerSink = {};
+    const hash = `sha256:${'a'.repeat(64)}` as const;
+    const render: SceneRenderPort = async () => ({
+      ok: true,
+      pngBase64: PNG_B64,
+      viewFidelity: {
+        version: 'kiln.derivative-review-fidelity.v1',
+        requested: 'full-preferred',
+        delivered: 'full-material',
+        materialFaithful: true,
+        exactArtifact: false,
+        degraded: false,
+        receipts: [
+          {
+            version: 'kiln.view-fidelity.v1',
+            derivativeLabel: 'Hero 3/4',
+            requested: 'full-preferred',
+            delivered: 'full-material',
+            materialFaithful: true,
+            exactArtifact: false,
+            rendererId: 'gpu:composer',
+            inputGlbSha256: hash,
+            degraded: false,
+          },
+        ],
+      },
+    });
+    const tools = makeSceneComposerTools({ model, render, sink });
+    await call(tools, 'scene_place', { asset: 'well', at: [0, 0] });
+    const result = await call(tools, 'scene_render');
+    expect(result[1].json.viewFidelity).toMatchObject({
+      materialFaithful: true,
+      exactArtifact: false,
+      receipts: [{ derivativeLabel: 'Hero 3/4', inputGlbSha256: hash, exactArtifact: false }],
+    });
+  });
+
+  test('scene views downgrade missing or malformed derivative receipts', async () => {
+    const model = new PlacementModel('T', { catalog: [asset('well')] });
+    const sink: ComposerSink = {};
+    const render: SceneRenderPort = async () => ({ ok: true, pngBase64: PNG_B64 });
+    const tools = makeSceneComposerTools({ model, render, sink });
+    await call(tools, 'scene_place', { asset: 'well', at: [0, 0] });
+    const result = await call(tools, 'scene_render');
+    expect(result[1].json.viewFidelity).toEqual({
+      version: 'kiln.derivative-review-fidelity.v1',
+      requested: 'full-preferred',
+      delivered: 'none',
+      materialFaithful: false,
+      exactArtifact: false,
+      degraded: true,
+      receipts: [],
+      reasonCodes: ['DERIVATIVE_RECEIPT_UNAVAILABLE'],
+    });
+  });
 });
 
 describe('finalize', () => {

@@ -460,7 +460,7 @@ const PRIMITIVES: PrimitiveSpec[] = [
     description:
       'Single-quad foliage card with a configurable Y pivot. yPivot=0 plants the quad on the ground. Pair with an alpha-tested material and a leaf/plant sprite.',
     example:
-      "const leaves = await loadTexture('./fern.png', { usage: 'albedo' });\nconst quad = foliageCardGeo({ width: 4, height: 6, yPivot: 0 });\ncreatePart('Mesh_Fern', quad, foliageMaterial(leaves), { parent: root });",
+      "const leaves = await materialRecipe('kiln.material.leaf.v1');\nconst quad = foliageCardGeo({ width: 4, height: 6, yPivot: 0 });\ncreatePart('Mesh_Fern', quad, leaves, { parent: root });",
   },
   {
     name: 'crossedQuadsGeo',
@@ -470,7 +470,7 @@ const PRIMITIVES: PrimitiveSpec[] = [
     description:
       'Cross-billboard bush primitive: 2 or 3 planes intersecting along the Y axis. Reads as a dense plant from any angle, cheaper than real geometry.',
     example:
-      "const leaves = await loadTexture('./bush.png', { usage: 'albedo' });\nconst bush = crossedQuadsGeo({ width: 2, height: 2, planes: 3 });\ncreatePart('Mesh_Bush', bush, foliageMaterial(leaves), { parent: root });",
+      "const leaves = await materialRecipe('kiln.material.leaf.v1');\nconst bush = crossedQuadsGeo({ width: 2, height: 2, planes: 3 });\ncreatePart('Mesh_Bush', bush, leaves, { parent: root });",
   },
   {
     name: 'octaGridPlane',
@@ -538,6 +538,19 @@ const PRIMITIVES: PrimitiveSpec[] = [
       "const bark = await materialRecipe('kiln.material.bark.v1', { baseColor: '#6b4328' });",
     promptNotes:
       'Use only listed kiln.material.*.v1 IDs and approved kiln.texture.* resource IDs. Leaf is MASK, glass is BLEND, and host file paths are forbidden.',
+  },
+  {
+    name: 'compilePortableMaterialSpecV2',
+    signature:
+      "await compilePortableMaterialSpecV2({ schemaVersion: 2, model: 'pbrMetallicRoughness', name?, baseColor?, roughness?, metalness?, emissive?, emissiveIntensity?, alphaMode?, alphaCutoff?, doubleSided?, textures?: { baseColor?, normal?, metallicRoughness?, emissive?, occlusion? } })",
+    returns: 'Promise<THREE.MeshStandardMaterial>',
+    category: 'material',
+    description:
+      'Compiles the strict portable material contract. Texture refs are either typed procedural V2 specs or closed approved kiln.texture.* IDs; paths, URLs, raw textures, callbacks, and shader source are rejected.',
+    example:
+      "const steel = await compilePortableMaterialSpecV2({ schemaVersion: 2, model: 'pbrMetallicRoughness', roughness: 0.45, metalness: 0.85, textures: { metallicRoughness: { kind: 'procedural', spec: { schemaVersion: 2, usage: 'metallicRoughness', size: 64, layers: [{ op: 'solid', color: 0x0080cc }] } } } });",
+    promptNotes:
+      'Use metallicRoughness as one packed G=roughness/B=metalness map. Every procedural ref usage must match its slot; resource refs must be approved for that exact slot.',
   },
   {
     name: 'basicMaterial',
@@ -934,29 +947,28 @@ const PRIMITIVES: PrimitiveSpec[] = [
   // Textures + PBR (Wave 3B)
   // ---------------------------------------------------------------------------
   {
-    name: 'loadTexture',
-    signature:
-      "await loadTexture(source, { usage?: 'albedo'|'emissive'|'normal'|'roughness'|'metalness'|'metallicRoughness'|'occlusion', name? })",
+    name: 'loadApprovedTexture',
+    signature: 'await loadApprovedTexture(resourceId)',
     returns: 'Promise<THREE.DataTexture>',
     category: 'textures',
     description:
-      'Loads a PNG/JPG/WebP image with explicit slot usage. Albedo/emissive preview as sRGB; normal/roughness/metalness/occlusion are linear data. Stashes encoded bytes and QA metadata for lossless GLB export.',
-    example: "const wood = await loadTexture('./textures/oak-albedo.png', { usage: 'albedo' });",
+      'Loads one approved kiln.texture.* resource ID through the host-injected closed resolver. The registry fixes bytes, MIME, usage, dimensions, hash, and deadline; paths, URLs, byte arrays, resolver objects, hashes, and options are rejected.',
+    example: "const bark = await loadApprovedTexture('kiln.texture.bark-brown-01-albedo.v1');",
     promptNotes:
-      'NEVER texture.clone() a loaded texture (clone() corrupts the encoded bytes and breaks GLB export). Share the same Texture object and remap UVs with panelRemapV on the smaller mesh instead.',
+      'Use only a concrete resource ID listed in material capabilities; never invent one. Prefer materialRecipe when a recipe already binds the family, or proceduralTexture V2 for authored surfaces. NEVER texture.clone() a loaded texture (clone() corrupts encoded bytes and breaks GLB export).',
   },
   {
     name: 'proceduralTexture',
     signature:
-      "proceduralTexture({ size?: 4..1024 pow2, usage?, name?, layers: [{ op: 'solid'|'checker'|'stripes'|'gradient'|'bricks'|'noise', ...params, blend?: 'normal'|'multiply'|'screen'|'overlay', opacity?: 0..1 }] })",
+      "proceduralTexture({ schemaVersion: 2, size?: 4..1024 pow2, usage?, name?, layers: [{ op: 'solid'|'checker'|'stripes'|'gradient'|'bricks'|'noise', ...params, blend?: 'normal'|'multiply'|'screen'|'overlay', opacity?: 0..1 }] })",
     returns: 'THREE.DataTexture (tiling, sRGB or linear per usage)',
     category: 'textures',
     description:
       'Builds a tiling texture from a bounded layer stack — no image file needed. Layers composite bottom-first. Noise is seeded and tileable, so the same spec always produces the same bytes and a repeating material shows no seam. Baked to PNG and embedded in the GLB automatically.',
     example:
-      "const bark = proceduralTexture({ size: 256, usage: 'albedo', name: 'Bark', layers: [{ op: 'solid', color: 0x5a4632 }, { op: 'noise', colorA: 0x3d2f21, colorB: 0x7a6248, scale: 6, octaves: 4, blend: 'overlay' }] });",
+      "const bark = proceduralTexture({ schemaVersion: 2, size: 256, usage: 'albedo', name: 'Bark', layers: [{ op: 'solid', color: 0x5a4632 }, { op: 'noise', colorA: 0x3d2f21, colorB: 0x7a6248, scale: 6, octaves: 4, blend: 'overlay' }] });",
     promptNotes:
-      'Sync — no await. Prefer this over loadTexture for any surface you can describe (wood, rust, brick, fabric, dirt): it needs no asset files and cannot fail at load. Max 8 layers, size must be a power of two up to 1024. Only the six listed ops exist; there is no custom per-pixel callback.',
+      'Sync — no await. Strict V2 JSON boundary: unknown/prototype keys, callbacks, paths, URLs, and shader source are rejected. Prefer this over approved resources for describable surfaces. Max 8 layers, power-of-two size up to 1024. Only the six listed ops exist.',
   },
   {
     name: 'normalMapFromHeight',
@@ -966,7 +978,7 @@ const PRIMITIVES: PrimitiveSpec[] = [
     description:
       "Derives a tangent-space normal map from the source texture's brightness, treating it as height. The cheap way to get real PBR surface relief out of a procedural albedo. Wraps at the edges, so a tiling source gives a tiling normal map.",
     example:
-      "const bark = proceduralTexture({ usage: 'albedo', layers: [{ op: 'noise', colorA: 0x3d2f21, colorB: 0x7a6248, scale: 6, octaves: 4 }] });\nconst mat = pbrMaterial({ albedo: bark, normal: normalMapFromHeight(bark, { strength: 4 }) });",
+      "const bark = proceduralTexture({ schemaVersion: 2, usage: 'albedo', layers: [{ op: 'noise', colorA: 0x3d2f21, colorB: 0x7a6248, scale: 6, octaves: 4 }] });\nconst mat = pbrMaterial({ albedo: bark, normal: normalMapFromHeight(bark, { strength: 4 }) });",
     promptNotes:
       'strength 1 is subtle, 4-8 reads clearly at normal viewing distance. Output is always linear data — never assign it to an albedo/emissive slot.',
   },
@@ -979,7 +991,7 @@ const PRIMITIVES: PrimitiveSpec[] = [
     description:
       'Portable glTF PBR material. Use an explicit packed metallicRoughness texture (G=roughness, B=metalness); separate data maps are rejected instead of silently dropping a channel. Supports OPAQUE/MASK/BLEND and double-sided output.',
     example:
-      "const wood = await loadTexture('./oak.png');\nconst crate = pbrMaterial({ albedo: wood, roughness: 0.85, metalness: 0 });",
+      "const wood = proceduralTexture({ schemaVersion: 2, usage: 'albedo', layers: [{ op: 'noise', colorA: 0x4f301c, colorB: 0x9a6b3e, scale: 8, octaves: 3, seed: 4 }] });\nconst crate = pbrMaterial({ albedo: wood, roughness: 0.85, metalness: 0 });",
   },
   {
     name: 'foliageMaterial',
@@ -988,8 +1000,7 @@ const PRIMITIVES: PrimitiveSpec[] = [
     category: 'material',
     description:
       'Portable foliage material that defaults to glTF MASK, cutoff 0.5, rough nonmetal, and double-sided. Use an alpha-bearing albedo texture.',
-    example:
-      "const leaves = await loadTexture('./leaf.png', { usage: 'albedo' });\nconst mat = foliageMaterial(leaves, { alphaCutoff: 0.45 });",
+    example: "const mat = await materialRecipe('kiln.material.leaf.v1');",
   },
 
   // ---------------------------------------------------------------------------

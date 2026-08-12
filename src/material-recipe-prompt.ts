@@ -48,13 +48,13 @@ const glow = await materialRecipe('kiln.material.emissive.v1');
 function textureSlotContext(catalog: readonly MaterialPromptTextureEntry[]): string {
   if (catalog.length === 0) {
     return `Texture slots take approved kiln.texture.* resource IDs, and none are available in this
-environment: leave textureResources unset and build any surface detail with proceduralTexture().`;
+environment: leave textureResources unset and build any surface detail with proceduralTexture({ schemaVersion: 2, ... }).`;
   }
   const lines = catalog.map(
     (entry) => `- ${entry.id} (${entry.usage}) for slots: ${entry.allowedSlots.join(', ')}`,
   );
   return `Texture slots accept only these approved resource IDs; do not invent one and do not pass a
-host path. For any surface not covered here, build it with proceduralTexture() rather than
+host path. For any surface not covered here, build it with proceduralTexture({ schemaVersion: 2, ... }) rather than
 substituting an unrelated ID:
 ${lines.join('\n')}`;
 }
@@ -67,6 +67,9 @@ export function buildMaterialRecipePromptContextV1(
 Use ${MATERIAL_RECIPE_HELPER_SIGNATURE}. Recipe IDs are versioned and executable; do not invent an
 ID or pass a host path. Available IDs: ${MATERIAL_RECIPE_IDS.join(', ')}. Recipes export through core
 glTF pbrMetallicRoughness. Leaf uses MASK (not BLEND); glass is the explicit blended recipe.
+
+For authored maps, use proceduralTexture({ schemaVersion: 2, ... }). It is a strict finite DSL:
+callbacks, shader source, URLs, filesystem paths, prototype keys, and unknown fields are rejected.
 
 ${textureSlotContext(catalog)}
 

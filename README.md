@@ -58,10 +58,11 @@ The engine ships TypeScript source (Bun/tsx transpile on the fly); consume by su
 | `@kiln/engine/arena` | Bradley-Terry + adaptive pairwise sampling (pure math) |
 | `@kiln/engine/validation` | structural validator + AST analysis (acorn) |
 | `@kiln/engine/primitives` | the 70+ primitive/helper registry |
+| `@kiln/engine/material-resources`, `/texture-resolver` | trusted-host approved texture registry and bounded resolver injection; generated code sees only approved resource IDs |
 | `@kiln/engine/prompt`, `/prompt-api`, `/list-primitives` | system-prompt generation + catalog |
 | `@kiln/engine/metrics`, `/inspect` | instanceability grade + scene-structure analysis |
 | `@kiln/engine/contracts` | browser-safe asset and integration contracts, including `IntegrationManifestV1` and the semantic role vocabulary (`KILN_SEMANTIC_ROLES`, `semanticRole`, `semanticRoleMatches`, `hasSemanticRole`) |
-| `@kiln/engine/composer`, `/composer/agent` | THREE-free scene-composition core (canonical `WorldDocumentV2`, strict reconciliation, sockets/zones/paths/spawns, deterministic terrain, layout/overlap/DSL) + bounded compose and post-compose integration loops (`runKilnComposer`, `runKilnWorldIntegration`) |
+| `@kiln/engine/composer`, `/composer/agent` | THREE-free scene-composition core (canonical `WorldDocumentV2`, strict reconciliation, sockets/zones/paths/spawns, deterministic terrain, collider/reachability contracts, presentation receipts, `WorldPackageV2`, layout/overlap/DSL) + bounded compose and post-compose integration loops (`runKilnComposer`, `runKilnWorldIntegration`) |
 | `@kiln/engine/world-runtime` | dependency-free browser-safe heightfield V1 parser/codec/hash/sampler/mesh projection; Studio `sync:engine` may copy this exact leaf and stamp its source SHA so frontend/Play run the Engine-owned implementation without importing the Engine package |
 
 Composer V2 uses one canonical-world authority. For a fresh scene, run the ordinary composer,
@@ -72,6 +73,10 @@ locked asset-swap semantics. The bounded integration loop renders and finalizes 
 its `scene_world_*` tools mutate. Pass one `generationCallBudget` through both `runKilnComposer` and
 `runKilnWorldIntegration` so the host settles one aggregate allowance; the integration stage otherwise
 requires an explicit positive `maxSteps`, with no hidden second-stage call allowance.
+Collider artifacts, reachability reports, presentation documents, and `WorldPackageV2` are strict,
+canonical, hash-bound contracts. They preserve source compatibility by extending `WorldDocumentV2`
+additively; browser capture and runtime consumption must still verify the declared external artifact
+bytes rather than trusting paths or labels.
 Heightfield artifact SHA-256 binds the exact bytes from
 `encodeHeightfieldArtifactV1`; portable asset paths remain the additive package contract
 `models/<generationId>.glb`.

@@ -157,6 +157,9 @@ interface DuckGeometry {
 }
 interface DuckMaterial {
   color?: { r: number; g: number; b: number };
+  /** Effective glTF base-color alpha after OPAQUE/MASK/BLEND handling. */
+  opacity?: number;
+  doubleSided?: boolean;
   visible?: boolean;
 }
 interface DuckMesh {
@@ -176,6 +179,8 @@ interface Tri {
   // World-space vertices, flattened [x0,y0,z0, x1,y1,z1, x2,y2,z2]
   v: Float64Array;
   color: [number, number, number];
+  alpha: number;
+  doubleSided: boolean;
 }
 
 /** Collect world-space triangles + base colors from a (possibly cross-realm) scene. */
@@ -203,16 +208,15 @@ function collectTriangles(root: DuckObject3D): { tris: Tri[]; bbox: { min: Vec3;
     // own `materialIndex`. Colors are already per-triangle here, so resolve the
     // group covering each triangle's first buffer position; meshes without
     // groups (the common single-material case) keep the flat first material.
-    const fallback = colorOf(mats[0]);
     const groups = mats.length > 1 && geo.groups?.length ? geo.groups : undefined;
-    const colorAt = (bufferPos: number): [number, number, number] => {
-      if (!groups) return fallback;
+    const materialAt = (bufferPos: number): DuckMaterial | undefined => {
+      if (!groups) return mats[0];
       for (const g of groups) {
         if (bufferPos >= g.start && bufferPos < g.start + g.count) {
-          return colorOf(mats[g.materialIndex ?? 0]);
+          return mats[g.materialIndex ?? 0];
         }
       }
-      return fallback;
+      return mats[0];
     };
 
     const m = mesh.matrixWorld?.elements;
@@ -238,7 +242,7 @@ function collectTriangles(root: DuckObject3D): { tris: Tri[]; bbox: { min: Vec3;
       if (wz > max[2]) max[2] = wz;
     }
 
-    const pushTri = (a: number, b: number, c2: number, color: [number, number, number]) => {
+    const pushTri = (a: number, b: number, c2: number, material: DuckMaterial | undefined) => {
       const v = new Float64Array(9);
       v[0] = world[a * 3]!;
       v[1] = world[a * 3 + 1]!;
@@ -249,7 +253,12 @@ function collectTriangles(root: DuckObject3D): { tris: Tri[]; bbox: { min: Vec3;
       v[6] = world[c2 * 3]!;
       v[7] = world[c2 * 3 + 1]!;
       v[8] = world[c2 * 3 + 2]!;
-      tris.push({ v, color });
+      tris.push({
+        v,
+        color: colorOf(material),
+        alpha: clamp01(material?.opacity ?? 1),
+        doubleSided: material?.doubleSided === true,
+      });
     };
 
     // Geometry groups address the index buffer for indexed geometry and the
@@ -259,11 +268,11 @@ function collectTriangles(root: DuckObject3D): { tris: Tri[]; bbox: { min: Vec3;
     if (index) {
       const ia = index.array;
       for (let i = 0; i + 2 < index.count; i += 3) {
-        pushTri(ia[i]!, ia[i + 1]!, ia[i + 2]!, colorAt(i));
+        pushTri(ia[i]!, ia[i + 1]!, ia[i + 2]!, materialAt(i));
       }
     } else {
       for (let i = 0; i + 2 < pos.count; i += 3) {
-        pushTri(i, i + 1, i + 2, colorAt(i));
+        pushTri(i, i + 1, i + 2, materialAt(i));
       }
     }
   });
@@ -354,7 +363,8 @@ export function rasterizeView(
     const N: Vec3 = [n[0] / nLen, n[1] / nLen, n[2] / nLen];
 
     const facing = dot(N, z);
-    if (cull && facing <= 0) continue;
+    if (cull && facing <= 0 && !tri.doubleSided) continue;
+    if (tri.alpha <= 0) continue;
 
     // Project to screen space.
     for (let i = 0; i < 3; i++) {
@@ -409,9 +419,16 @@ export function rasterizeView(
         const pi = py * size + px;
         if (depth <= zbuf[pi]!) continue;
         zbuf[pi] = depth;
-        out[pi * 3] = r;
-        out[pi * 3 + 1] = g;
-        out[pi * 3 + 2] = b;
+        if (tri.alpha >= 1) {
+          out[pi * 3] = r;
+          out[pi * 3 + 1] = g;
+          out[pi * 3 + 2] = b;
+        } else {
+          const inverse = 1 - tri.alpha;
+          out[pi * 3] = Math.round(r * tri.alpha + out[pi * 3]! * inverse);
+          out[pi * 3 + 1] = Math.round(g * tri.alpha + out[pi * 3 + 1]! * inverse);
+          out[pi * 3 + 2] = Math.round(b * tri.alpha + out[pi * 3 + 2]! * inverse);
+        }
       }
     }
   }

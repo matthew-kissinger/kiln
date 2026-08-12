@@ -15,7 +15,7 @@
  * `@strands-agents/sdk` dependency never enters the browser/editor bundle graph.
  */
 import { renderGLB, type KilnCodeMeta, type RenderResult } from '../render';
-import type { PbrRenderPort } from '../composer/render-port';
+import type { PbrRenderPort, ViewFidelityV1 } from '../composer/render-port';
 import {
   CaptureConfigError,
   resolveGridCapture,
@@ -24,6 +24,7 @@ import {
   type ResolvedCapture,
 } from '../views/capture';
 import { compositeViewPngGrid } from '../views/grid';
+import { decodePng } from '../views/png';
 import type { AssetStyle } from '../prompt';
 import { createAssetIntentV1, type AssetCategory, type AssetIntentV1 } from '../contracts';
 import { runKilnAgent, type RefineMode, type KilnKnowhow, type KilnInputImage } from './run';
@@ -35,6 +36,11 @@ import {
 } from './providers';
 import type { EditRecord } from './tools';
 import type { AgentUsage } from './hooks';
+import {
+  resolveViewRenderTimeoutMs,
+  type ViewRenderTimeoutContextProvider,
+  type ViewRenderTimeoutResolver,
+} from './view-render-timeout';
 
 /**
  * The hardcoded default Kiln agent model — the verified standout for GLB codegen.
@@ -86,6 +92,10 @@ export interface GenerateKilnAssetOptions {
   viewRenderPort?: PbrRenderPort;
   /** Deadline for one `viewRenderPort` call in ms. Default 8000. */
   viewRenderTimeoutMs?: number;
+  /** Dynamic host warm-up/deadline/budget state, sampled for the final request. */
+  viewRenderTimeoutContext?: ViewRenderTimeoutContextProvider;
+  /** Host policy for deriving the final request deadline from that state. */
+  viewRenderTimeoutResolver?: ViewRenderTimeoutResolver;
   /** Style anchor: a complete Kiln program rendered as "## Reference Asset" for
    *  FRESH generation (ignored on refine). ~5-15k input tokens/run, mostly
    *  absorbed by prompt caching when reused across a batch. */
@@ -99,6 +109,8 @@ export interface GenerateKilnAssetResult {
   code: string;
   /** Rendered GLB, ready to write to disk. */
   glb: Buffer;
+  /** SHA-256 identity of the exact returned GLB bytes. */
+  artifactGlbSha256: `sha256:${string}`;
   /** Extracted from the code's `const meta = {...}` block, plus `tris` + `primitiveUsage`. */
   meta: KilnCodeMeta;
   /** Non-fatal issues (structural warnings, animation target missing). */
@@ -136,10 +148,13 @@ export interface GenerateKilnAssetResult {
   renderDegraded?: boolean;
   /** Why the port was bypassed (rejection, ok:false, timeout, bad PNGs). */
   renderDegradedReason?: string;
+  /** Material fidelity and exact-byte relationship of the final view sheet. */
+  viewsFidelity?: ViewFidelityV1;
   /** Automatic trusted character skeleton/motion captures, when applicable. */
   diagnosticViews?: NonNullable<RenderResult['diagnosticViews']>;
   materialRecipeApplications?: NonNullable<RenderResult['materialRecipeApplications']>;
   materialResourceProvenance?: NonNullable<RenderResult['materialResourceProvenance']>;
+  bakedTextures?: NonNullable<RenderResult['bakedTextures']>;
   materialMetrics?: NonNullable<RenderResult['materialMetrics']>;
   integrationManifest: RenderResult['integrationManifest'];
 }
@@ -210,6 +225,13 @@ export async function generateKilnCodeAgent(opts: {
 
 export const DEFAULT_VIEW_RENDER_TIMEOUT_MS = 8000;
 
+async function sha256Bytes(bytes: Uint8Array): Promise<`sha256:${string}`> {
+  const input = new Uint8Array(bytes.byteLength);
+  input.set(bytes);
+  const digest = new Uint8Array(await globalThis.crypto.subtle.digest('SHA-256', input));
+  return `sha256:${[...digest].map((byte) => byte.toString(16).padStart(2, '0')).join('')}`;
+}
+
 export type PortViewsOutcome =
   | {
       ok: true;
@@ -223,6 +245,91 @@ export type PortViewsOutcome =
       height: number;
     }
   | { ok: false; reason: string };
+
+export type PortViewPngsOutcome =
+  | {
+      ok: true;
+      pngs: Uint8Array[];
+      rendererId: string;
+      derivativeFidelityAttested: boolean;
+      inputGlbSha256?: `sha256:${string}`;
+    }
+  | { ok: false; reason: string };
+
+/**
+ * Lowest-level owner of the PBR-port deadline and reply validation. It accepts
+ * exact GLB bytes plus explicit view directions and returns unmodified square
+ * PNG cells. Contact sheets and derivative review surfaces both build on this
+ * function so timeout/error/shape policy cannot drift between them.
+ */
+export async function captureViewPngsViaPort(
+  port: PbrRenderPort,
+  glb: Buffer | Uint8Array,
+  timeoutMs: number,
+  viewDirs: readonly [number, number, number][],
+  size: number,
+): Promise<PortViewPngsOutcome> {
+  let timer: ReturnType<typeof setTimeout> | undefined;
+  try {
+    const requestGlb = Uint8Array.from(glb);
+    const inputGlbSha256 = await sha256Bytes(requestGlb);
+    const deadline = new Promise<never>((_, reject) => {
+      timer = setTimeout(
+        () => reject(new Error(`view render port timed out after ${timeoutMs}ms`)),
+        timeoutMs,
+      );
+    });
+    const result = await Promise.race([
+      port({
+        glb: requestGlb,
+        viewDirs: viewDirs.map((dir) => [...dir] as [number, number, number]),
+        size,
+      }),
+      deadline,
+    ]);
+    if (!result?.ok) {
+      return { ok: false, reason: result?.error ?? 'view render port returned ok: false' };
+    }
+    if (typeof result.rendererId !== 'string' || !result.rendererId.trim()) {
+      return { ok: false, reason: 'view render port returned no rendererId' };
+    }
+    if (!result.viewsPng || result.viewsPng.length !== viewDirs.length) {
+      return {
+        ok: false,
+        reason: `view render port returned ${result.viewsPng?.length ?? 0} view PNGs, expected ${viewDirs.length}`,
+      };
+    }
+    if (result.derivativeFidelity && result.derivativeFidelity.inputGlbSha256 !== inputGlbSha256) {
+      return {
+        ok: false,
+        reason: `view render port derivative receipt hash mismatch (${result.derivativeFidelity.inputGlbSha256} != ${inputGlbSha256})`,
+      };
+    }
+    // Decode here even though callers may decode again for annotation. This is
+    // the transport trust boundary: an ok:true reply with malformed/non-square
+    // pixels is a degrade, never a successful material attestation.
+    for (const png of result.viewsPng) {
+      const decoded = decodePng(png);
+      if (decoded.width !== decoded.height) {
+        return {
+          ok: false,
+          reason: `view render port returned non-square ${decoded.width}x${decoded.height} PNG`,
+        };
+      }
+    }
+    return {
+      ok: true,
+      pngs: result.viewsPng.map((png) => Uint8Array.from(png)),
+      rendererId: result.rendererId,
+      derivativeFidelityAttested: result.derivativeFidelity?.materialFaithful === true,
+      ...(result.derivativeFidelity ? { inputGlbSha256 } : {}),
+    };
+  } catch (err) {
+    return { ok: false, reason: err instanceof Error ? err.message : String(err) };
+  } finally {
+    if (timer !== undefined) clearTimeout(timer);
+  }
+}
 
 /**
  * Call the host view-render port with the ALREADY-PRODUCED GLB bytes and
@@ -270,46 +377,22 @@ export async function captureViewsViaPort(
     };
   }
 
-  let timer: ReturnType<typeof setTimeout> | undefined;
+  const result = await captureViewPngsViaPort(
+    port,
+    glb,
+    timeoutMs,
+    views.map((view) => view.dir),
+    384,
+  );
+  if (!result.ok) return result;
   try {
-    const deadline = new Promise<never>((_, reject) => {
-      timer = setTimeout(
-        () => reject(new Error(`view render port timed out after ${timeoutMs}ms`)),
-        timeoutMs,
-      );
-    });
-    const result = await Promise.race([
-      port({
-        // Copy, not alias: a buggy port implementation must not be able to
-        // mutate the render.glb bytes returned as the generation artifact.
-        glb: Uint8Array.from(glb),
-        viewDirs: views.map((v) => [...v.dir] as [number, number, number]),
-        size: 384,
-      }),
-      deadline,
-    ]);
-    if (!result?.ok) {
-      return { ok: false, reason: result?.error ?? 'view render port returned ok: false' };
-    }
-    if (typeof result.rendererId !== 'string' || !result.rendererId.trim()) {
-      return { ok: false, reason: 'view render port returned no rendererId' };
-    }
-    // Count must equal the cells that were REQUESTED — not a hardcoded six.
-    // A host that truncates or pads the view list produces a differently-shaped
-    // sheet than the caller asked for, which is a degrade, not a success.
-    if (!result.viewsPng || result.viewsPng.length !== views.length) {
-      return {
-        ok: false,
-        reason: `view render port returned ${result.viewsPng?.length ?? 0} view PNGs, expected ${views.length}`,
-      };
-    }
     // Annotated with the SAME cell labels + gnomon the CPU path stamps. A host
     // returns pixels and knows nothing of the Kiln camera vocabulary, so
     // without this the GPU sheet arrives unlabelled and the model quietly loses
     // its orientation cues on the one path that cannot tell it happened.
     // Degrade stays reportable through `renderDegraded` / `viewsRendererId`,
     // which is a structured field rather than a visual tell.
-    const grid = compositeViewPngGrid(result.viewsPng, resolved.cols, views);
+    const grid = compositeViewPngGrid(result.pngs, resolved.cols, views);
     return {
       ok: true,
       png: grid.png,
@@ -320,8 +403,6 @@ export async function captureViewsViaPort(
     };
   } catch (err) {
     return { ok: false, reason: err instanceof Error ? err.message : String(err) };
-  } finally {
-    if (timer !== undefined) clearTimeout(timer);
   }
 }
 
@@ -376,8 +457,10 @@ export async function generateKilnAsset(
   let viewsRendererId: string | undefined;
   let renderDegraded: boolean | undefined;
   let renderDegradedReason: string | undefined;
+  let viewsFidelity: ViewFidelityV1 | undefined;
   const captureWarnings: string[] = [];
   if (opts.captureViews) {
+    const inputGlbSha256 = await sha256Bytes(render.glb);
     // T3.3: validate the requested layout ONCE, up front. A malformed config is
     // a caller bug, not a render hazard, so it must not reach two producers and
     // be reported differently by each. It also must not fail the run: the views
@@ -403,7 +486,17 @@ export async function generateKilnAsset(
       const port = await captureViewsViaPort(
         opts.viewRenderPort,
         render.glb,
-        opts.viewRenderTimeoutMs ?? DEFAULT_VIEW_RENDER_TIMEOUT_MS,
+        resolveViewRenderTimeoutMs({
+          requestKind: 'final-grid',
+          defaultTimeoutMs: DEFAULT_VIEW_RENDER_TIMEOUT_MS,
+          ...(opts.viewRenderTimeoutMs !== undefined
+            ? { timeoutMs: opts.viewRenderTimeoutMs }
+            : {}),
+          ...(opts.viewRenderTimeoutContext
+            ? { contextProvider: opts.viewRenderTimeoutContext }
+            : {}),
+          ...(opts.viewRenderTimeoutResolver ? { resolver: opts.viewRenderTimeoutResolver } : {}),
+        }),
         capture,
       );
       if (port.ok) {
@@ -411,6 +504,16 @@ export async function generateKilnAsset(
         viewsCapture = port.capture;
         viewsRendererId = port.rendererId;
         renderDegraded = false;
+        viewsFidelity = {
+          version: 'kiln.view-fidelity.v1',
+          requested: 'full-preferred',
+          delivered: 'full-material',
+          materialFaithful: true,
+          exactArtifact: true,
+          rendererId: port.rendererId,
+          inputGlbSha256,
+          degraded: false,
+        };
       } else {
         renderDegraded = true;
         renderDegradedReason = port.reason;
@@ -421,18 +524,60 @@ export async function generateKilnAsset(
         // Keep the renderer id on this same lazy entrypoint. renderer-id.ts reads
         // package metadata at module initialization; an eager import changes the
         // production agent boot graph even when no CPU fallback is needed.
-        const { renderCodeViewGrid, CPU_RASTER_RENDERER_ID } = await import('../views');
+        const { renderGlbViewGrid, CPU_RASTER_RENDERER_ID } = await import('../views');
         // The degrade path must reproduce the SAME layout the port was asked
         // for, or a GPU outage silently reshapes the artifact.
-        const grid = await renderCodeViewGrid(agent.code, capture ? { capture } : {});
+        // R2.11: parse the exact final artifact. Generated source has already
+        // been executed once to produce render.glb and is never run again here.
+        const grid = await renderGlbViewGrid(render.glb, capture ? { capture } : {});
+        if (grid.inputGlbSha256 !== inputGlbSha256) {
+          throw new Error(
+            `GLB-native fallback hash mismatch (${grid.inputGlbSha256} != ${inputGlbSha256})`,
+          );
+        }
         views = grid.png;
         viewsCapture = grid.capture;
         // Honest producer provenance, but only on the port-enabled path — the
         // port-absent path stays byte-identical to the historical result shape.
         if (opts.viewRenderPort) viewsRendererId = CPU_RASTER_RENDERER_ID;
-      } catch {
+        const degradeReason =
+          renderDegradedReason ?? 'material-faithful view render port unavailable';
+        viewsFidelity = {
+          version: 'kiln.view-fidelity.v1',
+          requested: 'full-preferred',
+          delivered: 'geometry-flat',
+          materialFaithful: false,
+          exactArtifact: true,
+          rendererId: CPU_RASTER_RENDERER_ID,
+          inputGlbSha256: grid.inputGlbSha256,
+          degraded: true,
+          degradeReason,
+          reasonCodes: ['FULL_MATERIAL_RENDER_UNAVAILABLE', ...grid.reasonCodes],
+        };
+      } catch (error) {
         views = undefined;
         viewsCapture = undefined;
+        const reasonCode =
+          error && typeof error === 'object' && 'code' in error && typeof error.code === 'string'
+            ? error.code
+            : undefined;
+        viewsFidelity = {
+          version: 'kiln.view-fidelity.v1',
+          requested: 'full-preferred',
+          delivered: 'none',
+          materialFaithful: false,
+          exactArtifact: false,
+          rendererId: 'none',
+          inputGlbSha256,
+          degraded: true,
+          degradeReason:
+            renderDegradedReason ??
+            `material-faithful and geometry fallback renders unavailable${error instanceof Error ? `: ${error.message}` : ''}`,
+          reasonCodes: [
+            'FULL_MATERIAL_RENDER_UNAVAILABLE',
+            ...(reasonCode ? [reasonCode] : []),
+          ] as ViewFidelityV1['reasonCodes'],
+        };
       }
     }
   }
@@ -449,6 +594,7 @@ export async function generateKilnAsset(
   return {
     code: agent.code,
     glb: render.glb,
+    artifactGlbSha256: render.artifactGlbSha256,
     meta: render.meta,
     warnings,
     toolCalls: agent.toolCalls,
@@ -465,6 +611,7 @@ export async function generateKilnAsset(
     ...(viewsRendererId ? { viewsRendererId } : {}),
     ...(renderDegraded !== undefined ? { renderDegraded } : {}),
     ...(renderDegradedReason ? { renderDegradedReason } : {}),
+    ...(viewsFidelity ? { viewsFidelity } : {}),
     ...(render.diagnosticViews ? { diagnosticViews: render.diagnosticViews } : {}),
     ...(render.materialRecipeApplications
       ? { materialRecipeApplications: render.materialRecipeApplications }
@@ -472,6 +619,7 @@ export async function generateKilnAsset(
     ...(render.materialResourceProvenance
       ? { materialResourceProvenance: render.materialResourceProvenance }
       : {}),
+    ...(render.bakedTextures ? { bakedTextures: render.bakedTextures } : {}),
     ...(render.materialMetrics ? { materialMetrics: render.materialMetrics } : {}),
     integrationManifest: render.integrationManifest,
   };

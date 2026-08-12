@@ -7,6 +7,7 @@
  *  - `value:` keyframe typos (regex, cheap)
  *  - Infinite loops (`while(true)`, `for(;;)` without break) — AST
  *  - Recursive `build()` calls that'd blow the stack — AST
+ *  - Ambient-runtime, dynamic-code, and raw material-constructor access — AST
  *  - Triangle budget estimate — AST sum of geometry calls
  *  - Syntax errors — acorn throws with line numbers
  *
@@ -263,6 +264,8 @@ export function validate(code: string, opts: { category?: string } = {}): Valida
 
   // --- Structural checks --------------------------------------------------
 
+  issues.push(...analyzeGeneratedSourceSafety(ast));
+
   const structure = analyzeTopLevel(ast);
 
   if (!structure.hasMetaConst) {
@@ -347,9 +350,350 @@ export function validate(code: string, opts: { category?: string } = {}): Valida
 // Backward-compat alias.
 export const validateKilnCode = validate;
 
+/**
+ * Sanitized execution-boundary error. It intentionally carries a stable code
+ * and line only; generated source text and dynamic-import specifiers are never
+ * copied into the message.
+ */
+export class GeneratedSourcePolicyError extends Error {
+  readonly code: string;
+  readonly line?: number;
+
+  constructor(issue: ValidationIssue) {
+    super(
+      `Generated source rejected by policy (${issue.code})${issue.line ? ` at line ${issue.line}` : ''}.`,
+    );
+    this.name = 'GeneratedSourcePolicyError';
+    this.code = issue.code;
+    this.line = issue.line;
+  }
+}
+
+/** Defense-in-depth gate used immediately before the Function evaluator. */
+export function assertGeneratedSourceSafe(code: string): void {
+  let ast: acorn.Program;
+  try {
+    ast = acorn.parse(code, {
+      ecmaVersion: 2022,
+      sourceType: 'script',
+      allowReturnOutsideFunction: false,
+      locations: true,
+    });
+  } catch (error) {
+    const line =
+      error && typeof error === 'object' && 'loc' in error
+        ? (error as { loc?: { line?: number } }).loc?.line
+        : undefined;
+    throw new GeneratedSourcePolicyError({
+      code: 'SYNTAX_ERROR',
+      message: 'Generated source has invalid syntax.',
+      line,
+    });
+  }
+  const issue = analyzeGeneratedSourceSafety(ast)[0];
+  if (issue) throw new GeneratedSourcePolicyError(issue);
+}
+
 // =============================================================================
 // Internals
 // =============================================================================
+
+const FORBIDDEN_AMBIENT_IDENTIFIERS = new Set([
+  'globalThis',
+  'global',
+  'process',
+  'fetch',
+  'XMLHttpRequest',
+  'WebSocket',
+  'Function',
+  'eval',
+  // Other common host-global aliases are denied for the same reason. This is
+  // a denylist safety net, not a claim that the evaluator is isolated.
+  'window',
+  'self',
+  'document',
+  'navigator',
+  'location',
+  'Bun',
+  'Deno',
+  'Reflect',
+  'require',
+  'module',
+]);
+
+const FORBIDDEN_THREE_CONSTRUCTORS = new Set([
+  'DataTexture',
+  'ShaderMaterial',
+  'RawShaderMaterial',
+]);
+
+function issueKey(issue: ValidationIssue): string {
+  return `${issue.code}:${issue.line ?? 0}:${issue.message}`;
+}
+
+function analyzeGeneratedSourceSafety(ast: acorn.Program): ValidationIssue[] {
+  const issues: ValidationIssue[] = [];
+  const seen = new Set<string>();
+  const staticStrings = collectStaticStringBindings(ast);
+  const add = (issue: ValidationIssue): void => {
+    const key = issueKey(issue);
+    if (seen.has(key)) return;
+    seen.add(key);
+    issues.push(issue);
+  };
+  const ambient = (name: string, line?: number): void =>
+    add({
+      code: 'UNSAFE_GLOBAL_ACCESS',
+      message: `Generated code cannot access ambient capability \`${name}\`.`,
+      fixHint: 'Use only the documented sandbox globals and approved resource helpers.',
+      line,
+    });
+  const dynamicCode = (line?: number): void =>
+    add({
+      code: 'DYNAMIC_CODE_ACCESS',
+      message: 'Generated code cannot access constructor chains or dynamic-code constructors.',
+      fixHint: 'Call documented sandbox helpers directly; do not derive constructors at runtime.',
+      line,
+    });
+  const unsafeThree = (name: string, line?: number): void =>
+    add({
+      code: 'UNSAFE_THREE_CONSTRUCTOR',
+      message: `Generated code cannot access raw THREE constructor \`${name}\`.`,
+      fixHint:
+        'Use approved texture loading, proceduralTexture, pbrMaterial, or materialRecipe instead.',
+      line,
+    });
+  const unsafeThreeNamespace = (
+    code: 'UNSAFE_THREE_ALIAS' | 'UNSAFE_THREE_COMPUTED_ACCESS',
+    line?: number,
+  ): void =>
+    add({
+      code,
+      message:
+        code === 'UNSAFE_THREE_ALIAS'
+          ? 'Generated code cannot alias the THREE namespace.'
+          : 'Generated code cannot use non-static computed access on the THREE namespace.',
+      fixHint: 'Use a documented direct THREE constructor or a sandbox material/texture helper.',
+      line,
+    });
+
+  walk.ancestor(ast, {
+    Identifier(node, _state, ancestors) {
+      const parent = ancestors.at(-2);
+      if (identifierIsNonReferenceKey(node, parent)) return;
+      if (FORBIDDEN_AMBIENT_IDENTIFIERS.has(node.name)) {
+        ambient(node.name, node.loc?.start.line);
+      }
+    },
+    ThisExpression(node) {
+      ambient('this', node.loc?.start.line);
+    },
+    ImportExpression(node) {
+      add({
+        code: 'DYNAMIC_IMPORT',
+        message: 'Generated code cannot use dynamic import.',
+        fixHint: 'Remove import(); all supported helpers are already sandbox globals.',
+        line: node.loc?.start.line,
+      });
+    },
+    MemberExpression(node) {
+      const property = staticPropertyName(node, staticStrings);
+      if (property === 'constructor') dynamicCode(node.loc?.start.line);
+      if (
+        property &&
+        FORBIDDEN_THREE_CONSTRUCTORS.has(property) &&
+        expressionReferencesThree(node.object)
+      ) {
+        unsafeThree(property, node.loc?.start.line);
+      }
+      if (node.computed && property === undefined && expressionReferencesThree(node.object)) {
+        unsafeThreeNamespace('UNSAFE_THREE_COMPUTED_ACCESS', node.loc?.start.line);
+      }
+    },
+    VariableDeclarator(node) {
+      if (node.id.type === 'Identifier' && expressionReferencesThree(node.init)) {
+        unsafeThreeNamespace('UNSAFE_THREE_ALIAS', node.loc?.start.line);
+      }
+      if (node.id.type !== 'ObjectPattern') return;
+      analyzeObjectPatternSafety(
+        node.id,
+        node.init?.type === 'Identifier' && node.init.name === 'THREE',
+        staticStrings,
+        dynamicCode,
+        unsafeThree,
+      );
+    },
+    AssignmentExpression(node) {
+      if (node.left.type === 'Identifier' && expressionReferencesThree(node.right)) {
+        unsafeThreeNamespace('UNSAFE_THREE_ALIAS', node.loc?.start.line);
+      }
+      if (node.left.type !== 'ObjectPattern') return;
+      analyzeObjectPatternSafety(
+        node.left,
+        node.right.type === 'Identifier' && node.right.name === 'THREE',
+        staticStrings,
+        dynamicCode,
+        unsafeThree,
+      );
+    },
+    CallExpression(node) {
+      if (node.callee.type !== 'MemberExpression' || node.callee.object.type !== 'Identifier') {
+        return;
+      }
+      const owner = node.callee.object.name;
+      const method = staticPropertyName(node.callee, staticStrings);
+      if (
+        !(
+          (owner === 'Reflect' && method === 'get') ||
+          (owner === 'Object' && method === 'getOwnPropertyDescriptor')
+        )
+      ) {
+        return;
+      }
+      const property = staticExpressionString(node.arguments[1], staticStrings);
+      if (property === 'constructor') dynamicCode(node.loc?.start.line);
+      if (
+        owner === 'Reflect' &&
+        property &&
+        FORBIDDEN_THREE_CONSTRUCTORS.has(property) &&
+        expressionReferencesThree(node.arguments[0])
+      ) {
+        unsafeThree(property, node.loc?.start.line);
+      }
+    },
+  });
+
+  return issues;
+}
+
+function expressionReferencesThree(node: unknown): boolean {
+  if (!node || typeof node !== 'object') return false;
+  const expression = node as acorn.Expression;
+  if (expression.type === 'Identifier') return expression.name === 'THREE';
+  if (expression.type === 'ChainExpression')
+    return expressionReferencesThree(expression.expression);
+  if (expression.type === 'SequenceExpression') {
+    return expressionReferencesThree(expression.expressions.at(-1));
+  }
+  return false;
+}
+
+function identifierIsNonReferenceKey(
+  node: acorn.Identifier,
+  parent: acorn.Node | undefined,
+): boolean {
+  if (!parent) return false;
+  if (parent.type === 'MemberExpression') {
+    const member = parent as acorn.MemberExpression;
+    if (member.property === node && !member.computed) return true;
+  }
+  if (parent.type === 'Property') {
+    const property = parent as acorn.Property;
+    if (property.key === node && !property.computed && !property.shorthand) return true;
+  }
+  if (parent.type === 'MethodDefinition') {
+    const method = parent as acorn.MethodDefinition;
+    if (method.key === node && !method.computed) return true;
+  }
+  if (parent.type === 'LabeledStatement') {
+    if ((parent as acorn.LabeledStatement).label === node) return true;
+  }
+  if (parent.type === 'BreakStatement' || parent.type === 'ContinueStatement') {
+    if ((parent as acorn.BreakStatement | acorn.ContinueStatement).label === node) return true;
+  }
+  return false;
+}
+
+function analyzeObjectPatternSafety(
+  pattern: acorn.ObjectPattern,
+  fromThree: boolean,
+  staticStrings: ReadonlyMap<string, string>,
+  dynamicCode: (line?: number) => void,
+  unsafeThree: (name: string, line?: number) => void,
+): void {
+  for (const entry of pattern.properties) {
+    if (entry.type !== 'Property') continue;
+    const property =
+      !entry.computed && entry.key.type === 'Identifier'
+        ? entry.key.name
+        : staticExpressionString(entry.key, staticStrings);
+    if (property === 'constructor') dynamicCode(entry.loc?.start.line);
+    if (fromThree && property && FORBIDDEN_THREE_CONSTRUCTORS.has(property)) {
+      unsafeThree(property, entry.loc?.start.line);
+    }
+  }
+}
+
+function staticPropertyName(
+  node: acorn.MemberExpression,
+  staticStrings: ReadonlyMap<string, string>,
+): string | undefined {
+  if (!node.computed && node.property.type === 'Identifier') return node.property.name;
+  return staticExpressionString(node.property, staticStrings);
+}
+
+function staticExpressionString(
+  node: unknown,
+  staticStrings: ReadonlyMap<string, string> = new Map(),
+): string | undefined {
+  if (!node || typeof node !== 'object') return undefined;
+  const expression = node as acorn.Expression;
+  if (expression.type === 'Literal') {
+    return typeof expression.value === 'string' || typeof expression.value === 'number'
+      ? String(expression.value)
+      : undefined;
+  }
+  if (expression.type === 'Identifier') return staticStrings.get(expression.name);
+  if (expression.type === 'TemplateLiteral') {
+    let value = expression.quasis[0]?.value.cooked ?? expression.quasis[0]?.value.raw ?? '';
+    for (let index = 0; index < expression.expressions.length; index++) {
+      const part = staticExpressionString(expression.expressions[index], staticStrings);
+      if (part === undefined) return undefined;
+      const quasi = expression.quasis[index + 1];
+      value += part + (quasi?.value.cooked ?? quasi?.value.raw ?? '');
+    }
+    return value;
+  }
+  if (expression.type === 'BinaryExpression' && expression.operator === '+') {
+    const left = staticExpressionString(expression.left, staticStrings);
+    const right = staticExpressionString(expression.right, staticStrings);
+    return left === undefined || right === undefined ? undefined : left + right;
+  }
+  return undefined;
+}
+
+/** Resolve unambiguous const string/number bindings for common bracket-access
+ * obfuscations. Duplicate names across scopes are intentionally left unknown
+ * to avoid attaching one scope's value to another. */
+function collectStaticStringBindings(ast: acorn.Program): ReadonlyMap<string, string> {
+  const candidates = new Map<string, acorn.Expression>();
+  const duplicateNames = new Set<string>();
+  walk.simple(ast, {
+    VariableDeclaration(node) {
+      if (node.kind !== 'const') return;
+      for (const declaration of node.declarations) {
+        if (declaration.id.type !== 'Identifier' || !declaration.init) continue;
+        if (candidates.has(declaration.id.name)) duplicateNames.add(declaration.id.name);
+        else candidates.set(declaration.id.name, declaration.init);
+      }
+    },
+  });
+  for (const name of duplicateNames) candidates.delete(name);
+
+  const values = new Map<string, string>();
+  for (let pass = 0; pass < candidates.size; pass++) {
+    let changed = false;
+    for (const [name, expression] of candidates) {
+      if (values.has(name)) continue;
+      const value = staticExpressionString(expression, values);
+      if (value === undefined) continue;
+      values.set(name, value);
+      changed = true;
+    }
+    if (!changed) break;
+  }
+  return values;
+}
 
 function toResult(issues: ValidationIssue[], warnings: ValidationIssue[]): ValidationResult {
   return {

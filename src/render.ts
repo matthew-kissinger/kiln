@@ -87,6 +87,8 @@ import {
   collectMaterialResourceProvenance,
   type MaterialResourceProvenanceV1,
 } from './material-resources';
+import { DEFAULT_TEXTURE_RESOLVER, type TextureResolver } from './texture-resolver';
+import { assertGeneratedSourceSafe } from './validation';
 import { analyzePartPenetration, type PartPenetrationEvidenceV1 } from './qa/self-intersection';
 import { applyKitContract, type KitPackOptions, type KitPackSummary } from './kit';
 import {
@@ -316,7 +318,16 @@ export interface ExecutedKilnCode {
  * return value is a Promise it is awaited, otherwise it is used as-is.
  * Same for `animate()`.
  */
-export async function executeKilnCode(code: string): Promise<ExecutedKilnCode> {
+export interface ExecuteKilnCodeOptions {
+  /** Trusted host injection. Generated source receives only the closed
+   *  loadApprovedTexture(resourceId) function. */
+  textureResolver?: TextureResolver;
+}
+
+export async function executeKilnCode(
+  code: string,
+  options: ExecuteKilnCodeOptions = {},
+): Promise<ExecutedKilnCode> {
   if (!code || typeof code !== 'string') {
     throw new Error('executeKilnCode: code must be a non-empty string');
   }
@@ -325,8 +336,14 @@ export async function executeKilnCode(code: string): Promise<ExecutedKilnCode> {
   // Function constructor.
   const normalized = code.replace(/\r\n/g, '\n');
 
+  // Defense in depth only: reject known ambient/dynamic-code escape patterns
+  // before the Function constructor sees source. This is not process isolation.
+  assertGeneratedSourceSafe(normalized);
+
   const primitiveUsage: Record<string, number> = {};
-  const globals = buildSandboxGlobals(primitiveUsage);
+  const globals = buildSandboxGlobals(primitiveUsage, {
+    textureResolver: options.textureResolver ?? DEFAULT_TEXTURE_RESOLVER,
+  });
   const globalNames = Object.keys(globals);
   const globalValues = Object.values(globals);
 
@@ -804,6 +821,8 @@ function bridgeAnimations(
 
 export interface RenderResult {
   glb: Buffer;
+  /** SHA-256 identity of the exact returned GLB bytes. */
+  artifactGlbSha256: `sha256:${string}`;
   tris: number;
   meta: KilnCodeMeta;
   warnings: string[];
@@ -812,6 +831,8 @@ export interface RenderResult {
   materialMetrics?: MaterialMetricsV1;
   materialRecipeApplications?: MaterialRecipeApplicationProvenanceV1[];
   materialResourceProvenance?: MaterialResourceProvenanceV1[];
+  /** Textures baked into the returned GLB, including bounded procedural lineage. */
+  bakedTextures?: BakedTextureProvenanceV1[];
   integrationManifest: IntegrationManifestV1;
 }
 
@@ -869,6 +890,8 @@ export interface InstancingSummary {
 export interface RenderSceneResult {
   /** Binary GLB bytes, platform-agnostic (Buffer-compatible in Node). */
   bytes: Uint8Array;
+  /** SHA-256 identity of `bytes`. */
+  artifactGlbSha256: `sha256:${string}`;
   tris: number;
   warnings: string[];
   /** Official Khronos report for these exact post-transform bytes. */
@@ -1253,6 +1276,11 @@ export async function renderSceneToGLB(
   const io = engineIO();
   ensureDefaultScene(doc);
   const bytes = await io.writeBinary(doc);
+  const artifactGlbSha256 = `sha256:${await sha256Hex(bytes)}` as const;
+  const boundBakedTextures = bakedTextures.map((entry) => ({
+    ...entry,
+    artifactGlbSha256,
+  }));
   const gltfValidation = await validateFinalGlbBytes(bytes);
   const finalGltfReport = appendFinalGltfQa(intent, sceneQaReport, gltfValidation);
   const runtimeQaReport = appendRuntimeCostQa(
@@ -1312,6 +1340,7 @@ export async function renderSceneToGLB(
 
   return {
     bytes,
+    artifactGlbSha256,
     tris,
     warnings,
     gltfValidation,
@@ -1324,7 +1353,7 @@ export async function renderSceneToGLB(
     ...(materialMetrics ? { materialMetrics } : {}),
     ...(materialRecipeApplications.length ? { materialRecipeApplications } : {}),
     ...(materialResourceProvenance.length ? { materialResourceProvenance } : {}),
-    ...(bakedTextures.length ? { bakedTextures } : {}),
+    ...(boundBakedTextures.length ? { bakedTextures: boundBakedTextures } : {}),
     integrationManifest,
   };
 }
@@ -1338,16 +1367,28 @@ export async function renderSceneToGLB(
  *
  * Pure function: no file I/O, no globals, no WebGL.
  */
-export async function renderGLB(
+export interface RenderGlbOptions {
+  optimize?: OptimizeMode;
+  instance?: InstanceMode;
+  intent?: AssetIntentV1;
+  category?: AssetCategory;
+  /** Trusted evaluator dependency; never derived from generated code. */
+  textureResolver?: TextureResolver;
+}
+
+/**
+ * Trusted in-process execute/export implementation.
+ *
+ * Hosts should normally call {@link renderGLB}. The subprocess evaluator calls
+ * this function directly to prevent recursive process creation.
+ */
+export async function renderGLBInProcess(
   code: string,
-  opts: {
-    optimize?: OptimizeMode;
-    instance?: InstanceMode;
-    intent?: AssetIntentV1;
-    category?: AssetCategory;
-  } = {},
+  opts: RenderGlbOptions = {},
 ): Promise<RenderResult> {
-  const { meta, root, clips, primitiveUsage } = await executeKilnCode(code);
+  const { meta, root, clips, primitiveUsage } = await executeKilnCode(code, {
+    textureResolver: opts.textureResolver ?? DEFAULT_TEXTURE_RESOLVER,
+  });
   const requestedCategory = opts.intent?.category ?? opts.category;
   const scene = await renderSceneToGLB(root, {
     sceneName: meta.name || 'Scene',
@@ -1362,6 +1403,7 @@ export async function renderGLB(
   const { category: modelCategory, ...modelMeta } = meta;
   return {
     glb: Buffer.from(scene.bytes),
+    artifactGlbSha256: scene.artifactGlbSha256,
     tris: scene.tris,
     meta: {
       ...modelMeta,
@@ -1387,8 +1429,40 @@ export async function renderGLB(
     ...(scene.materialResourceProvenance
       ? { materialResourceProvenance: scene.materialResourceProvenance }
       : {}),
+    ...(scene.bakedTextures ? { bakedTextures: scene.bakedTextures } : {}),
     integrationManifest: scene.integrationManifest,
   };
+}
+
+export type EvaluatorMode = 'in-process' | 'subprocess' | 'isolated';
+
+/** Resolve the trusted host evaluator flag. Unknown values fail closed. */
+export function resolveEvaluatorMode(
+  env: Record<string, string | undefined> = process.env,
+): EvaluatorMode {
+  const value = env['KILN_EVALUATOR_MODE'];
+  if (value === undefined || value === '' || value === 'in-process') return 'in-process';
+  if (value === 'subprocess') return 'subprocess';
+  if (value === 'isolated') return 'isolated';
+  throw new Error('Invalid KILN_EVALUATOR_MODE.');
+}
+
+/**
+ * Execute Kiln code and serialize it to GLB.
+ *
+ * Subprocess containment is disabled by default and selected only by the
+ * trusted host flag. A subprocess error is terminal; this boundary never
+ * falls back to unsafe in-process execution.
+ */
+export async function renderGLB(code: string, opts: RenderGlbOptions = {}): Promise<RenderResult> {
+  const mode = resolveEvaluatorMode();
+  if (mode === 'in-process') return renderGLBInProcess(code, opts);
+  if (mode === 'subprocess') {
+    const { renderGLBViaSubprocess } = await import('./evaluator/subprocess');
+    return renderGLBViaSubprocess(code, opts);
+  }
+  const { renderGLBViaIsolatedEvaluator } = await import('./evaluator/isolation');
+  return renderGLBViaIsolatedEvaluator(code, opts);
 }
 
 /**

@@ -2,18 +2,31 @@
 import { type JSONValue, type Tool, tool } from '@strands-agents/sdk';
 import { z } from 'zod';
 import {
+  AUTHORED_COLLIDER_GEOMETRY_LIMITS_V1,
+  AUTHORED_COLLIDER_GEOMETRY_V1_SCHEMA_VERSION,
+  ColliderCompileError,
+  ColliderPolicyV1Schema,
+  compileColliderArtifactV1,
+  encodeColliderArtifactV1,
+  hashColliderArtifactV1,
+  type ColliderArtifactV1,
+  parseAuthoredColliderGeometryV1,
+  type ResolveAuthoredColliderGeometryV1Port,
   createHeightfieldArtifactV1,
   encodeHeightfieldArtifactV1,
   hashHeightfieldArtifactV1,
   type HeightfieldArtifactV1,
   fillWorldPathV2,
   setWorldPathsV2,
+  setWorldPresentationV1,
   setWorldSocketsV2,
   setWorldSpawnsV2,
   setWorldTerrainV2,
   setWorldZonesV2,
   snapWorldObjectToSocketV2,
   type WorldDocumentV2,
+  PresentationParametersV1Schema,
+  parseWorldDocumentV2,
 } from '..';
 
 export interface WorldIntegrationToolState {
@@ -26,6 +39,12 @@ export interface MakeWorldIntegrationToolsV2Options {
     bytes: Uint8Array,
     sha256: string,
   ) => Promise<{ uri: string; mediaType?: string }>;
+  publishColliderArtifact?: (
+    artifact: ColliderArtifactV1,
+    bytes: Uint8Array,
+    sha256: `sha256:${string}`,
+  ) => Promise<{ uri: string; mediaType?: string }>;
+  resolveAuthoredColliderGeometry?: ResolveAuthoredColliderGeometryV1Port;
   onWorldChanged?: (world: WorldDocumentV2) => void;
 }
 
@@ -143,6 +162,154 @@ export function makeWorldIntegrationToolsV2(options: MakeWorldIntegrationToolsV2
       .strict(),
     callback: (input) => guarded(() => setWorldSpawnsV2(options.state.world, input.spawns)),
   });
+  const setPresentation: Tool = tool({
+    name: 'scene_world_set_presentation',
+    description:
+      'Replace persisted ordered camera/grid/lighting/receipt parameters. Do not send artifactBinding; Engine binds the post-edit world hash. Total requested pixels are capped at 16,777,216.',
+    inputSchema: z.object({ presentation: PresentationParametersV1Schema }).strict(),
+    callback: (input) =>
+      guarded(() => setWorldPresentationV1(options.state.world, input.presentation)),
+  });
+  const setCollision: Tool = tool({
+    name: 'scene_world_set_collision',
+    description:
+      'Set one object collision policy to none, asset bounds, selected authored GLB mesh nodes, or a deterministic generated bounds-box artifact. Artifact policies require bounded host ports.',
+    inputSchema: z.object({ objectId: id, policy: ColliderPolicyV1Schema }).strict(),
+    callback: async (input) => {
+      try {
+        const object = options.state.world.objects.find(
+          (candidate) => candidate.id === input.objectId,
+        );
+        if (!object) return { ok: false, error: `unknown object "${input.objectId}"` } as JSONValue;
+        const asset = options.state.world.assets.find(
+          (candidate) => candidate.refId === object.assetRefId,
+        );
+        if (!asset)
+          return { ok: false, error: `missing asset for "${input.objectId}"` } as JSONValue;
+
+        if (input.policy.kind === 'none' || input.policy.kind === 'bounds') {
+          const objects = options.state.world.objects.map((candidate) =>
+            candidate.id === object.id
+              ? { ...candidate, collision: { policy: input.policy.kind } }
+              : candidate,
+          );
+          const referenced = new Set(
+            objects.flatMap((candidate) =>
+              candidate.collision?.policy === 'artifact' ? [candidate.collision.artifactRefId] : [],
+            ),
+          );
+          return commit(
+            parseWorldDocumentV2({
+              ...options.state.world,
+              objects,
+              collisionArtifacts: options.state.world.collisionArtifacts.filter((artifact) =>
+                referenced.has(artifact.refId),
+              ),
+            }),
+          );
+        }
+
+        if (input.policy.kind === 'authored-submesh' && !options.resolveAuthoredColliderGeometry) {
+          return {
+            ok: false,
+            error: 'authored collider geometry resolver is not configured',
+          } as JSONValue;
+        }
+        if (!options.publishColliderArtifact) {
+          return { ok: false, error: 'collider artifact publisher is not configured' } as JSONValue;
+        }
+        const sourceArtifactSha256 = `sha256:${asset.artifactSha256}` as const;
+        let artifact: ColliderArtifactV1;
+        if (input.policy.kind === 'authored-submesh') {
+          const resolved = parseAuthoredColliderGeometryV1(
+            await options.resolveAuthoredColliderGeometry!(
+              Object.freeze({
+                schemaVersion: AUTHORED_COLLIDER_GEOMETRY_V1_SCHEMA_VERSION,
+                sourceArtifactSha256,
+                transformFrame: 'asset-local',
+                nodeNames: Object.freeze([...input.policy.nodeNames]),
+                limits: AUTHORED_COLLIDER_GEOMETRY_LIMITS_V1,
+              }),
+            ),
+          );
+          if (resolved.sourceArtifactSha256 !== sourceArtifactSha256) {
+            throw new ColliderCompileError(
+              'COLLIDER_SOURCE_HASH_MISMATCH',
+              'resolved collider geometry does not match the selected asset hash',
+            );
+          }
+          const requested = new Set(input.policy.nodeNames);
+          const returned = new Set(resolved.submeshes.map((entry) => entry.nodeName));
+          const missing = input.policy.nodeNames.filter((nodeName) => !returned.has(nodeName));
+          if (missing.length) {
+            throw new ColliderCompileError(
+              'COLLIDER_AUTHORED_SUBMESH_MISSING',
+              `missing authored collider node(s): ${missing.join(', ')}`,
+            );
+          }
+          const unexpected = resolved.submeshes
+            .map((entry) => entry.nodeName)
+            .filter((nodeName) => !requested.has(nodeName));
+          if (unexpected.length) {
+            throw new ColliderCompileError(
+              'COLLIDER_AUTHORED_SUBMESH_INVALID',
+              `resolver returned unrequested collider node(s): ${unexpected.join(', ')}`,
+            );
+          }
+          artifact = compileColliderArtifactV1(input.policy, {
+            sourceArtifactSha256,
+            bounds: asset.bounds,
+            authoredSubmeshes: resolved.submeshes,
+          });
+        } else {
+          artifact = compileColliderArtifactV1(input.policy, {
+            sourceArtifactSha256,
+            bounds: asset.bounds,
+          });
+        }
+        const bytes = encodeColliderArtifactV1(artifact);
+        const sha256 = await hashColliderArtifactV1(artifact);
+        const published = await options.publishColliderArtifact(artifact, bytes, sha256);
+        const refId = `collision:${sha256.slice('sha256:'.length)}`;
+        const objects = options.state.world.objects.map((candidate) =>
+          candidate.id === object.id
+            ? { ...candidate, collision: { policy: 'artifact' as const, artifactRefId: refId } }
+            : candidate,
+        );
+        const referenced = new Set(
+          objects.flatMap((candidate) =>
+            candidate.collision?.policy === 'artifact' ? [candidate.collision.artifactRefId] : [],
+          ),
+        );
+        const collisionArtifacts = [
+          ...options.state.world.collisionArtifacts.filter(
+            (candidate) => candidate.refId !== refId && referenced.has(candidate.refId),
+          ),
+          {
+            refId,
+            artifact: {
+              uri: published.uri,
+              sha256: sha256.slice('sha256:'.length),
+              mediaType: published.mediaType ?? 'application/vnd.kiln.collider+json',
+            },
+          },
+        ];
+        const result = commit(
+          parseWorldDocumentV2({
+            ...options.state.world,
+            objects,
+            collisionArtifacts,
+          }),
+        ) as Record<string, JSONValue>;
+        return { ...result, sha256, bytes: bytes.byteLength } as JSONValue;
+      } catch (error) {
+        return {
+          ok: false,
+          error: error instanceof Error ? error.message : String(error),
+        } as JSONValue;
+      }
+    },
+  });
   const snap: Tool = tool({
     name: 'scene_world_snap',
     description:
@@ -230,5 +397,15 @@ export function makeWorldIntegrationToolsV2(options: MakeWorldIntegrationToolsV2
       }
     },
   });
-  return [setZones, setPaths, setSockets, setSpawns, snap, fillPath, setHeightfield];
+  return [
+    setZones,
+    setPaths,
+    setSockets,
+    setSpawns,
+    setPresentation,
+    setCollision,
+    snap,
+    fillPath,
+    setHeightfield,
+  ];
 }

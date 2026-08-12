@@ -54,7 +54,10 @@ describe('getSystemPrompt', () => {
     expect(KILN_AUTHORING_STRATEGY).toContain('extrudeProfile');
     expect(KILN_AUTHORING_STRATEGY).toContain('revolveProfile');
     expect(KILN_AUTHORING_STRATEGY).toContain(
-      'proceduralTexture() creates deterministic image data',
+      'proceduralTexture({ schemaVersion: 2, ... }) is the strict portable texture DSL',
+    );
+    expect(KILN_AUTHORING_STRATEGY).toContain(
+      'no callbacks, shader source, URLs, filesystem paths',
     );
     expect(KILN_AUTHORING_STRATEGY).toContain('baked into the GLB');
     expect(KILN_AUTHORING_STRATEGY).toContain('Do not replace a simple primitive');

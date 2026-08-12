@@ -54,7 +54,7 @@ export interface KilnTextureMetadata {
  *     by the GLB bridge so we don't re-encode PNG on every export.
  *
  * @example
- * const wood = await loadTexture('./textures/oak-albedo.png');
+ * const wood = await loadTexture(hostSuppliedPngBytes, { usage: 'albedo', name: 'Oak' });
  * const barrel = new THREE.Mesh(unwrapped, pbrMaterial({ albedo: wood }));
  */
 export async function loadTexture(
@@ -210,7 +210,11 @@ function requireTextureUsage(texture: THREE.Texture, usage: TextureUsage): void 
  * Maps to MeshStandardMaterial and exports as glTF pbrMetallicRoughness.
  *
  * @example
- * const wood = await loadTexture('./textures/oak-albedo.png');
+ * const wood = proceduralTexture({
+ *   schemaVersion: 2,
+ *   usage: 'albedo',
+ *   layers: [{ op: 'noise', colorA: 0x4f301c, colorB: 0x9a6b3e, scale: 8, seed: 4 }],
+ * });
  * const crate = pbrMaterial({ albedo: wood, roughness: 0.85, metalness: 0 });
  */
 export function pbrMaterial(opts: PbrMaterialOptions = {}): THREE.MeshStandardMaterial {

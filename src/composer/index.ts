@@ -5,11 +5,15 @@
  * top of these.
  */
 export * from './dsl';
+export * from './collision';
 export * from './ground';
 export * from './layout';
 export * from './model';
 export * from './overlap';
+export * from './presentation';
+export * from './reachability';
 export * from './render-port';
 export * from './terrain';
 export * from './world-document';
 export * from './world-integration';
+export * from './world-package';
