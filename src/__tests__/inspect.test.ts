@@ -107,10 +107,14 @@ describe('kiln.inspect', () => {
     expect(track?.targetResolved).toBe(true);
   });
 
-  test('reports an evaluator warning when an unresolved track is omitted from final GLB', async () => {
+  test('preserves an unresolved review track and reports the evaluator warning', async () => {
     const r = await inspect(BROKEN_JOINT_CODE);
 
-    expect(r.animationTracks.length).toBe(0);
+    expect(r.animationTracks).toHaveLength(1);
+    expect(r.animationTracks[0]).toMatchObject({
+      targetName: 'Joint_DoesNotExist',
+      targetResolved: false,
+    });
     expect(r.warnings.length).toBeGreaterThan(0);
     expect(r.warnings.some((w) => w.includes('Joint_DoesNotExist'))).toBe(true);
   });
