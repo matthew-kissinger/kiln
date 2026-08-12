@@ -47,7 +47,8 @@ const BROKEN_JOINT_CODE = `
 const meta = { name: 'Broken' };
 function build() {
   const root = createRoot('Broken');
-  createPivot('Body', [0, 0, 0], root);
+  const body = createPivot('Body', [0, 0, 0], root);
+  createPart('Mesh', boxGeo(1, 1, 1), gameMaterial('#888888'), { parent: body });
   return root;
 }
 function animate() {
@@ -106,11 +107,10 @@ describe('kiln.inspect', () => {
     expect(track?.targetResolved).toBe(true);
   });
 
-  test('flags animation tracks whose target is missing from the scene', async () => {
+  test('reports an evaluator warning when an unresolved track is omitted from final GLB', async () => {
     const r = await inspect(BROKEN_JOINT_CODE);
 
-    expect(r.animationTracks.length).toBe(1);
-    expect(r.animationTracks[0]?.targetResolved).toBe(false);
+    expect(r.animationTracks.length).toBe(0);
     expect(r.warnings.length).toBeGreaterThan(0);
     expect(r.warnings.some((w) => w.includes('Joint_DoesNotExist'))).toBe(true);
   });
@@ -139,14 +139,7 @@ describe('kiln.inspect', () => {
     expect(r.boundingBox.max[1]).toBeGreaterThan(5);
   });
 
-  test('returns zeroed bounds for a pivots-only scene', async () => {
-    const r = await inspect(EMPTY_CODE);
-
-    expect(r.triangles).toBe(0);
-    expect(r.materials).toBe(0);
-    expect(r.boundingBox.min).toEqual([0, 0, 0]);
-    expect(r.boundingBox.max).toEqual([0, 0, 0]);
-    expect(r.boundingBox.size).toEqual([0, 0, 0]);
-    expect(r.animationTracks).toEqual([]);
+  test('fails closed when evaluator QA blocks a pivots-only scene', async () => {
+    await expect(inspect(EMPTY_CODE)).rejects.toMatchObject({ stage: 'scene' });
   });
 });

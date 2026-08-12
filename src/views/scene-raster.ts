@@ -15,7 +15,12 @@
  */
 import * as THREE from 'three';
 
-import { executeKilnCode } from '../render';
+import {
+  resolveEvaluatorPortV1,
+  type EvaluatorExecutionProfileV1,
+  type EvaluatorPortV1,
+} from '../evaluator';
+import { loadGlbReviewScene } from './glb';
 import { encodePng } from './png';
 import { rasterizeView, type ViewSpec } from './raster';
 
@@ -24,16 +29,25 @@ const PAD = 4;
 const PAD_COLOR: readonly [number, number, number] = [10, 11, 13];
 
 /** One placed asset: its Kiln program + the world transform to instance it at. */
-export interface ComposedPart {
-  /** The asset's Kiln source (defines `meta` + `build()`). */
-  code: string;
+export type ComposedPart = {
   /** World position [x, y, z] (kiln frame: +X forward, +Y up, +Z right). */
   pos: [number, number, number];
   /** Y-rotation in degrees. */
   rotYDeg: number;
   /** Uniform scale. */
   scale: number;
-}
+} & (
+  | {
+      /** Exact previously-evaluated GLB bytes. Preferred for production composition. */
+      glb: Uint8Array;
+      code?: never;
+    }
+  | {
+      /** Trusted-local compatibility or source routed through `evaluatorPort`. */
+      code: string;
+      glb?: never;
+    }
+);
 
 /** Three canonical scene angles (kiln frame): a hero 3/4, the reverse 3/4, and a
  *  top-down — enough to read spacing, facing, groupings, and overlaps at a glance. */
@@ -59,18 +73,35 @@ export interface ComposedSceneRasterResult {
  */
 export async function rasterizeComposedScene(
   parts: ComposedPart[],
-  opts: { views?: ViewSpec[]; size?: number } = {},
+  opts: {
+    views?: ViewSpec[];
+    size?: number;
+    evaluatorPort?: EvaluatorPortV1;
+    evaluatorProfile?: EvaluatorExecutionProfileV1;
+  } = {},
 ): Promise<ComposedSceneRasterResult> {
   const views = opts.views?.length ? opts.views : SCENE_VIEWS;
   const size = opts.size ?? 320;
 
   const group = new THREE.Group();
-  const baseByCode = new Map<string, THREE.Object3D>();
+  const baseByInput = new Map<string | Uint8Array, THREE.Object3D>();
   for (const part of parts) {
-    let base = baseByCode.get(part.code);
+    if ((part.code === undefined) === (part.glb === undefined)) {
+      throw new TypeError('Composed part must provide exactly one of code or glb.');
+    }
+    const key = part.glb ?? part.code!;
+    let base = baseByInput.get(key);
     if (!base) {
-      base = (await executeKilnCode(part.code)).root;
-      baseByCode.set(part.code, base);
+      const glb = part.glb
+        ? Uint8Array.from(part.glb)
+        : (
+            await resolveEvaluatorPortV1(
+              opts.evaluatorPort,
+              opts.evaluatorProfile ?? 'trusted-local',
+            ).render(part.code!)
+          ).glb;
+      base = (await loadGlbReviewScene(glb)).root;
+      baseByInput.set(key, base);
     }
     const inst = base.clone(true);
     inst.position.set(part.pos[0], part.pos[1], part.pos[2]);

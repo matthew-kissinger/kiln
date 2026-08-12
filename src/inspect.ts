@@ -18,8 +18,14 @@
 
 import * as THREE from 'three';
 
-import { executeKilnCode, inspectGeneratedAnimation } from './render';
+import { inspectGeneratedAnimation } from './render';
 import { listPrimitives } from './list-primitives';
+import {
+  resolveEvaluatorPortV1,
+  type EvaluatorExecutionProfileV1,
+  type EvaluatorPortV1,
+} from './evaluator';
+import { loadGlbReviewScene } from './views/glb';
 
 // =============================================================================
 // Types
@@ -101,10 +107,14 @@ function detectPrimitivesUsed(code: string): string[] {
 
 function classifyNode(obj: THREE.Object3D): 'pivot' | 'mesh' | 'group' {
   // Duck-typed `.isMesh` instead of `instanceof` — sandbox-created meshes
-  // (from `new Function(...)` in executeKilnCode) belong to a different
+  // Loaded GLB scene objects may belong to a different
   // module realm than this file's THREE import, so `instanceof` returns
   // false. See `kiln-cross-module-three.md` memory + render.ts comment.
-  if ((obj as { isMesh?: boolean }).isMesh) return 'mesh';
+  if (
+    (obj as { isMesh?: boolean }).isMesh ||
+    (obj.userData as { kilnGlbMeshNode?: boolean }).kilnGlbMeshNode
+  )
+    return 'mesh';
   if (obj.name.startsWith('Joint_')) return 'pivot';
   return 'group';
 }
@@ -156,14 +166,14 @@ function countUniqueMaterials(root: THREE.Object3D): number {
 function computeBoundingBox(root: THREE.Object3D): InspectBoundingBox {
   // Ensure world matrices are fresh before measuring — otherwise nested
   // pivots can misreport bounds when positions were set after the last
-  // auto-update. executeKilnCode hands us a detached tree, so we drive
+  // auto-update. The GLB loader hands us a detached tree, so we drive
   // updates explicitly.
   root.updateMatrixWorld(true);
   const box = new THREE.Box3().setFromObject(root);
 
   // If the scene has no geometry at all (pivots-only), Box3 stays at +Inf /
   // -Inf. Collapse to the origin so downstream consumers get finite numbers.
-  if (!isFinite(box.min.x) || !isFinite(box.max.x)) {
+  if (!Number.isFinite(box.min.x) || !Number.isFinite(box.max.x)) {
     return {
       min: [0, 0, 0],
       max: [0, 0, 0],
@@ -232,11 +242,20 @@ function collectAnimationTracks(
 /**
  * Execute Kiln code and return a structured inspection report.
  *
- * @throws {Error} if the code can't be executed (same errors as
- *                 {@link executeKilnCode}).
+ * @throws {Error} if the evaluator rejects the code or the returned GLB.
  */
-export async function inspect(code: string): Promise<InspectResult> {
-  const { meta, root, clips } = await executeKilnCode(code);
+export async function inspect(
+  code: string,
+  options: {
+    evaluatorPort?: EvaluatorPortV1;
+    evaluatorProfile?: EvaluatorExecutionProfileV1;
+  } = {},
+): Promise<InspectResult> {
+  const rendered = await resolveEvaluatorPortV1(
+    options.evaluatorPort,
+    options.evaluatorProfile ?? 'trusted-local',
+  ).render(code);
+  const { root, clips } = await loadGlbReviewScene(rendered.glb);
 
   const primitivesUsed = detectPrimitivesUsed(code);
   const namedParts = collectNamedParts(root);
@@ -244,7 +263,7 @@ export async function inspect(code: string): Promise<InspectResult> {
   const materials = countUniqueMaterials(root);
   const boundingBox = computeBoundingBox(root);
   const animationTracks = collectAnimationTracks(root, clips);
-  const warnings = inspectGeneratedAnimation(root, clips);
+  const warnings = [...rendered.warnings, ...inspectGeneratedAnimation(root, clips)];
 
   return {
     triangles,
@@ -254,6 +273,6 @@ export async function inspect(code: string): Promise<InspectResult> {
     animationTracks,
     primitivesUsed,
     warnings,
-    meta: meta as Record<string, unknown>,
+    meta: rendered.meta as Record<string, unknown>,
   };
 }
