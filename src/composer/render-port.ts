@@ -6,6 +6,33 @@
  */
 import type { Placement } from './model';
 import type { WorldDocumentV2 } from './world-document';
+import type { GenerationCallBudget } from '../agent/call-budget';
+
+/** JSON-safe evidence a host visual observer may return to a text-only author. */
+export type SceneRenderObservationValue =
+  | null
+  | boolean
+  | number
+  | string
+  | SceneRenderObservationValue[]
+  | { [key: string]: SceneRenderObservationValue };
+
+/** Evidence passed only to a host visual observer, never to the author model. */
+export interface SceneRenderObservationInput {
+  /** Model-facing scene tool that produced the render. */
+  toolName: 'scene_render' | 'scene_screenshot_camera';
+  /** Rendered PNG frames as bytes, never base64 and never sent to a text-only author. */
+  pngs: readonly Uint8Array[];
+  /** The base64-free metadata a direct-vision author would receive alongside images. */
+  json: SceneRenderObservationValue;
+  /** One aggregate host-owned call allowance shared with author and observer calls. */
+  generationCallBudget?: GenerationCallBudget;
+}
+
+/** Host-injected, model-free seam for bounded visual observations during composing. */
+export type SceneRenderObservationPort = (
+  input: SceneRenderObservationInput,
+) => Promise<SceneRenderObservationValue>;
 
 export interface SceneCamera {
   position: [number, number, number];

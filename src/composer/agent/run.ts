@@ -30,7 +30,7 @@ import {
   type SceneModelJSON,
 } from '../model';
 import type { OverlapViolation } from '../overlap';
-import type { PbrRenderPort, SceneRenderPort } from '../render-port';
+import type { PbrRenderPort, SceneRenderObservationPort, SceneRenderPort } from '../render-port';
 import { buildComposerUserPrompt, COMPOSER_SYSTEM_PROMPT } from './prompt';
 import { type ComposerSink, makeSceneComposerTools, type SceneRenderCandidate } from './tools';
 
@@ -72,6 +72,9 @@ export interface RunKilnComposerOptions {
   maxSteps?: number;
   /** Shared aggregate allowance across compose, integration, observer, and repair phases. */
   generationCallBudget?: GenerationCallBudget;
+  /** Optional host visual observer for a text-only composer author. When set, scene render PNGs
+   * are converted to bounded structured evidence and never included in author tool results. */
+  renderObservationPort?: SceneRenderObservationPort;
 }
 
 export interface RunKilnComposerResult {
@@ -162,6 +165,8 @@ export async function runKilnComposer(
       render: opts.render,
       sink,
       ...(opts.onCandidate ? { onCandidate: opts.onCandidate } : {}),
+      ...(opts.renderObservationPort ? { renderObservationPort: opts.renderObservationPort } : {}),
+      ...(opts.generationCallBudget ? { generationCallBudget: opts.generationCallBudget } : {}),
     });
     const allTools: unknown[] = opts.extraTools ? [...tools, ...opts.extraTools] : tools;
 
