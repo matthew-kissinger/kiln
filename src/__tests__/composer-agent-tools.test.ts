@@ -7,7 +7,9 @@
  * image tools call the injected render port and return content blocks.
  */
 import { describe, expect, test } from 'bun:test';
-import type { Tool } from '@strands-agents/sdk';
+import { JsonBlock, type Tool } from '@strands-agents/sdk';
+
+import { createGenerationCallBudget } from '../agent/call-budget';
 
 import {
   type CatalogEntry,
@@ -265,6 +267,61 @@ describe('render tools call the port and return content blocks', () => {
       target: [0, 0, 0],
       fovDeg: 45,
     });
+  });
+
+  test('text-only author gets bounded observer evidence, never image blocks, on the shared budget', async () => {
+    const model = new PlacementModel('T', { catalog: [asset('well')] });
+    const sink: ComposerSink = {};
+    const budget = createGenerationCallBudget(3);
+    let observed: unknown;
+    const render: SceneRenderPort = async () => ({ ok: true, pngBase64: PNG_B64 });
+    const tools = makeSceneComposerTools({
+      model,
+      render,
+      sink,
+      generationCallBudget: budget,
+      renderObservationPort: async (input) => {
+        observed = input;
+        expect(input.generationCallBudget).toBe(budget);
+        expect(input.generationCallBudget?.tryConsume('observer')).toBe(true);
+        return { verdict: 'cohesive', findings: [] };
+      },
+    });
+    await call(tools, 'scene_place', { asset: 'well', at: [0, 0] });
+    const result = await call(tools, 'scene_render');
+
+    expect(result).toHaveLength(1);
+    expect(result[0]).toBeInstanceOf(JsonBlock);
+    expect(result[0].json.visualObservation).toEqual({
+      ok: true,
+      value: { verdict: 'cohesive', findings: [] },
+    });
+    expect(JSON.stringify(result)).not.toContain(PNG_B64);
+    expect((observed as { pngs: Uint8Array[] }).pngs[0]).toEqual(
+      new Uint8Array(Buffer.from(PNG_B64, 'base64')),
+    );
+    expect(budget.receipt()).toMatchObject({ consumed: 1, byRole: { observer: 1 } });
+  });
+
+  test('observer failure is in-band and still never exposes image blocks', async () => {
+    const model = new PlacementModel('T', { catalog: [asset('well')] });
+    const sink: ComposerSink = {};
+    const render: SceneRenderPort = async () => ({ ok: true, pngBase64: PNG_B64 });
+    const tools = makeSceneComposerTools({
+      model,
+      render,
+      sink,
+      renderObservationPort: async () => {
+        throw new Error('provider detail');
+      },
+    });
+    await call(tools, 'scene_place', { asset: 'well', at: [0, 0] });
+    const result = await call(tools, 'scene_render');
+    expect(result).toHaveLength(1);
+    expect(result[0]).toBeInstanceOf(JsonBlock);
+    expect(result[0].json.visualObservation).toEqual({ ok: false, reason: 'observer-unavailable' });
+    expect(JSON.stringify(result)).not.toContain('provider detail');
+    expect(JSON.stringify(result)).not.toContain(PNG_B64);
   });
 
   test('a render failure returns an in-band ok:false (no image)', async () => {

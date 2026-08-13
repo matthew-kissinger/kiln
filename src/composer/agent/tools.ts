@@ -34,9 +34,11 @@ import type {
 import type { OverlapViolation } from '../overlap';
 import type {
   DerivativeReviewFidelityV1,
+  SceneRenderObservationPort,
   SceneRenderPort,
   SceneRenderResult,
 } from '../render-port';
+import type { GenerationCallBudget } from '../../agent/call-budget';
 import { ViewEvidenceHistoryStore } from '../../views/evidence-history';
 
 /**
@@ -156,11 +158,20 @@ function composerViewFidelity(res: SceneRenderResult): DerivativeReviewFidelityV
  *  returned view (perCamera grid or single frame) + a JsonBlock of metadata, or a
  *  plain `{ok:false}` when the render failed. Block arrays are a valid (untyped)
  *  Strands callback return — cast past JSONValue, same as the kiln_* tools. */
-function renderToCallback(
+function withVisualObservation(json: unknown, visualObservation: JSONValue): JSONValue {
+  if (json && typeof json === 'object' && !Array.isArray(json)) {
+    return { ...(json as Record<string, JSONValue>), visualObservation } as JSONValue;
+  }
+  return { result: json as JSONValue, visualObservation } as JSONValue;
+}
+
+async function renderToCallback(
   res: SceneRenderResult,
   surface: 'scene_render' | 'scene_screenshot_camera',
   evidenceHistory: ViewEvidenceHistoryStore,
-): JSONValue {
+  renderObservationPort?: SceneRenderObservationPort,
+  generationCallBudget?: GenerationCallBudget,
+): Promise<JSONValue> {
   if (!res.ok) {
     return { ok: false, error: res.error ?? 'render failed' } as JSONValue;
   }
@@ -177,6 +188,30 @@ function renderToCallback(
     viewEvidence: evidenceHistory.record(surface, viewFidelity),
     ...(res.tris != null ? { tris: res.tris } : {}),
   };
+  if (renderObservationPort) {
+    try {
+      const value = await renderObservationPort({
+        toolName: surface,
+        pngs: frames.map(png),
+        json: json as unknown as import('../render-port').SceneRenderObservationValue,
+        ...(generationCallBudget ? { generationCallBudget } : {}),
+      });
+      return [
+        new JsonBlock({
+          json: withVisualObservation(json, { ok: true, value } as JSONValue),
+        }),
+      ] as unknown as JSONValue;
+    } catch {
+      return [
+        new JsonBlock({
+          json: withVisualObservation(json, {
+            ok: false,
+            reason: 'observer-unavailable',
+          } as JSONValue),
+        }),
+      ] as unknown as JSONValue;
+    }
+  }
   return [
     ...frames.map((b64) => new ImageBlock({ format: 'png', source: { bytes: png(b64) } })),
     new JsonBlock({ json: json as unknown as JSONValue }),
@@ -203,6 +238,10 @@ export interface MakeComposerToolsOptions {
   sink: ComposerSink;
   /** Best-effort live render candidates (one per successful scene_render). */
   onCandidate?: (c: SceneRenderCandidate) => void;
+  /** Host VLM seam for text-only authors; strips all image blocks from tool output. */
+  renderObservationPort?: SceneRenderObservationPort;
+  /** Shared author/observer aggregate model-call budget. */
+  generationCallBudget?: GenerationCallBudget;
   /** Shared bounded hash-only material evidence ledger for this composer run. */
   viewEvidenceHistory?: ViewEvidenceHistoryStore;
 }
@@ -327,7 +366,13 @@ export function makeSceneComposerTools(opts: MakeComposerToolsOptions): Tool[] {
           }
         }
       }
-      return renderToCallback(res, 'scene_render', evidenceHistory);
+      return renderToCallback(
+        res,
+        'scene_render',
+        evidenceHistory,
+        opts.renderObservationPort,
+        opts.generationCallBudget,
+      );
     },
   });
 
@@ -360,7 +405,13 @@ export function makeSceneComposerTools(opts: MakeComposerToolsOptions): Tool[] {
           },
         ],
       });
-      return renderToCallback(res, 'scene_screenshot_camera', evidenceHistory);
+      return renderToCallback(
+        res,
+        'scene_screenshot_camera',
+        evidenceHistory,
+        opts.renderObservationPort,
+        opts.generationCallBudget,
+      );
     },
   });
 
