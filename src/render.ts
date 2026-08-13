@@ -11,6 +11,7 @@
  */
 
 import * as THREE from 'three';
+import { createHash } from 'node:crypto';
 import { Document, WebIO, getBounds } from '@gltf-transform/core';
 import {
   EXTMeshGPUInstancing,
@@ -991,6 +992,101 @@ export interface RenderSceneOptions {
   instance?: InstanceMode;
   /** Agent-declared asset role — drives the `instance: 'auto'` gate. */
   role?: AssetRole;
+}
+
+function finalTextureForSlot(material: GtMaterial, slot: string): GtTexture | null {
+  switch (slot) {
+    case 'map':
+      return material.getBaseColorTexture();
+    case 'normalMap':
+      return material.getNormalTexture();
+    case 'roughnessMap':
+    case 'metalnessMap':
+      return material.getMetallicRoughnessTexture();
+    case 'emissiveMap':
+      return material.getEmissiveTexture();
+    case 'aoMap':
+      return material.getOcclusionTexture();
+    default:
+      return null;
+  }
+}
+
+/**
+ * Rebind engine-authored texture lineage to a downstream final GLB.
+ *
+ * Studio may legally rewrite the first engine export through instancing, ORM
+ * packing, and KTX2 transcoding before persistence. The authored recipe and
+ * source PNG identity remain useful, but their original artifact hash is not a
+ * claim about those final bytes. Resolve each recorded material slot against
+ * the final document and attach the exact embedded image and GLB identities.
+ * No generated source is executed.
+ */
+export async function bindBakedTextureProvenanceToFinalGlb(
+  baked: readonly BakedTextureProvenanceV1[],
+  finalGlb: Uint8Array,
+): Promise<BakedTextureProvenanceV1[]> {
+  if (baked.length === 0) return [];
+  const doc = await engineIO().readBinary(finalGlb);
+  const root = doc.getRoot();
+  const byMaterialName = new Map<string, GtMaterial[]>();
+  for (const material of root.listMaterials()) {
+    const list = byMaterialName.get(material.getName()) ?? [];
+    list.push(material);
+    byMaterialName.set(material.getName(), list);
+  }
+  const nodesByName = new Map<string, GtNode[]>();
+  for (const node of root.listNodes()) {
+    const list = nodesByName.get(node.getName()) ?? [];
+    list.push(node);
+    nodesByName.set(node.getName(), list);
+  }
+  const artifactGlbSha256 = `sha256:${await sha256Hex(finalGlb)}` as const;
+
+  return baked.flatMap((entry) => {
+    const resolved = new Set<GtTexture>();
+    for (const binding of entry.bindings) {
+      const nodeMaterials = (nodesByName.get(binding.node) ?? []).flatMap(
+        (node) =>
+          node
+            .getMesh()
+            ?.listPrimitives()
+            .flatMap((primitive) => {
+              const material = primitive.getMaterial();
+              return material ? [material] : [];
+            }) ?? [],
+      );
+      const materials = nodeMaterials.filter((material) => material.getName() === binding.material);
+      const candidates = materials.length
+        ? materials
+        : (byMaterialName.get(binding.material) ?? []);
+      for (const material of candidates) {
+        const texture = finalTextureForSlot(material, binding.slot);
+        if (texture) resolved.add(texture);
+      }
+    }
+    // Texture names survive ordinary transforms and are a safe disambiguator
+    // when instancing replaced the authored node. Do not use the name alone if
+    // it is empty: unnamed textures are common and not identities.
+    if (resolved.size === 0 && entry.texture !== '(unnamed texture)') {
+      for (const texture of root.listTextures()) {
+        if (texture.getName() === entry.texture) resolved.add(texture);
+      }
+    }
+    if (resolved.size !== 1) return [];
+    const texture = [...resolved][0]!;
+    const image = texture.getImage();
+    const mime = texture.getMimeType();
+    if (!image || !mime) return [];
+    return [
+      {
+        ...entry,
+        artifactGlbSha256,
+        finalMime: mime,
+        finalImageSha256: `sha256:${createHash('sha256').update(image).digest('hex')}` as const,
+      },
+    ];
+  });
 }
 
 /** Minimum distinct material-value blocks before palette() generates a texture.

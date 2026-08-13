@@ -76,6 +76,14 @@ export interface BakedTextureProvenanceV1 {
   imageSha256: `sha256:${string}`;
   /** SHA-256 identity of the final GLB containing this binding. Filled after export. */
   artifactGlbSha256?: `sha256:${string}`;
+  /**
+   * Encoding of the image actually bound by the final GLB after downstream
+   * packing/transcoding. Absent only while this record still describes the
+   * first engine export.
+   */
+  finalMime?: string;
+  /** SHA-256 identity of those exact final embedded image bytes. */
+  finalImageSha256?: `sha256:${string}`;
   /** SHA-1 of the PNG bytes — the handle a determinism test compares. */
   sha1: string;
   /**
@@ -287,10 +295,18 @@ export async function bakeSceneTextures(
     // against `texture.colorSpace`, and reporting the slot's expectation here
     // would make a mismatched color space pass by asserting itself.
     const colorSpace = entry.texture.colorSpace === THREE.SRGBColorSpace ? 'srgb' : 'linear';
-    // A shared texture can legally occupy several bindings. Its own declared
-    // usage is taken from the first deterministic traversal binding; every
-    // binding remains present in provenance below.
-    const primaryUsage = entry.bindings[0]?.usage ?? 'albedo';
+    const recipe = (entry.texture.userData as Record<string, unknown>)['kilnProcedural'] as
+      | ProceduralRecipeRecord
+      | undefined;
+    // Prefer the authored portable usage over incidental slot order. A packed
+    // metallic-roughness map occupies both Three.js slots, where choosing the
+    // first (`roughnessMap`) loses the authored combined-channel meaning.
+    const primaryUsage =
+      recipe?.usage ??
+      (entry.bindings.some(({ slot }) => slot === 'roughnessMap') &&
+      entry.bindings.some(({ slot }) => slot === 'metalnessMap')
+        ? 'metallicRoughness'
+        : (entry.bindings[0]?.usage ?? 'albedo'));
     (entry.texture.userData as Record<string, unknown>)['kilnTexture'] = {
       usage: primaryUsage,
       colorSpace,
@@ -298,10 +314,6 @@ export async function bakeSceneTextures(
       height: raw.height,
       hasAlpha: hasTranslucentPixel(raw),
     } satisfies KilnTextureMetadata;
-
-    const recipe = (entry.texture.userData as Record<string, unknown>)['kilnProcedural'] as
-      | ProceduralRecipeRecord
-      | undefined;
 
     const sha1 = createHash('sha1').update(bytes).digest('hex');
     const imageSha256 = `sha256:${createHash('sha256').update(bytes).digest('hex')}` as const;
@@ -311,7 +323,7 @@ export async function bakeSceneTextures(
       node: firstBinding.node,
       material: firstBinding.material,
       slot: firstBinding.slot,
-      usage: firstBinding.usage,
+      usage: primaryUsage,
       bindings: entry.bindings,
       width: raw.width,
       height: raw.height,
