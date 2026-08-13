@@ -12,8 +12,9 @@ async function build() {
   const albedo = proceduralTexture({ schemaVersion: 2, size: 8, usage: 'albedo', name: 'Albedo', layers: [{ op: 'noise', colorA: 0x102030, colorB: 0x8090a0, scale: 2 }] });
   const normal = normalMapFromHeight(albedo, { name: 'Normal' });
   const mr = proceduralTexture({ schemaVersion: 2, size: 8, usage: 'metallicRoughness', name: 'MetallicRoughness', layers: [{ op: 'checker', colorA: 0x0040c0, colorB: 0x00c040, squares: 2 }] });
+  const ao = proceduralTexture({ schemaVersion: 2, size: 8, usage: 'occlusion', name: 'Occlusion', layers: [{ op: 'solid', color: 0x808080 }] });
   const emissive = proceduralTexture({ schemaVersion: 2, size: 8, usage: 'emissive', name: 'Emissive', layers: [{ op: 'stripes', colorA: 0x00ffff, colorB: 0x000000, count: 2 }] });
-  root.add(createPart('Body', boxUnwrap(boxGeo(1, 1, 1)), pbrMaterial({ albedo, normal, metallicRoughness: mr, emissive }), {}));
+  root.add(createPart('Body', boxUnwrap(boxGeo(1, 1, 1)), pbrMaterial({ albedo, normal, metallicRoughness: mr, aoMap: ao, emissive }), {}));
   return root;
 }
 `;
@@ -25,10 +26,16 @@ test('rebinds every baked material slot to exact final embedded image and GLB by
     'emissive',
     'metallicRoughness',
     'normal',
+    'occlusion',
   ]);
 
   const io = new WebIO().registerExtensions([KHRTextureBasisu]);
   const doc = await io.readBinary(source.glb);
+  const material = doc.getRoot().listMaterials()[0]!;
+  const packedMr = material.getMetallicRoughnessTexture()!;
+  const originalAo = material.getOcclusionTexture()!;
+  material.setOcclusionTexture(packedMr);
+  originalAo.dispose();
   for (const [index, texture] of doc.getRoot().listTextures().entries()) {
     texture.setImage(Uint8Array.from([0xab, 0x4b, 0x54, 0x58, index])).setMimeType('image/ktx2');
   }
@@ -38,8 +45,9 @@ test('rebinds every baked material slot to exact final embedded image and GLB by
 
   const rebound = await bindBakedTextureProvenanceToFinalGlb(source.bakedTextures ?? [], finalGlb);
 
-  expect(rebound).toHaveLength(4);
+  expect(rebound).toHaveLength(5);
   expect(rebound.map((texture) => texture.slot).sort()).toEqual([
+    'aoMap',
     'emissiveMap',
     'map',
     'normalMap',
@@ -51,4 +59,7 @@ test('rebinds every baked material slot to exact final embedded image and GLB by
     expect(texture.finalImageSha256).toMatch(/^sha256:[0-9a-f]{64}$/);
   }
   expect(new Set(rebound.map((texture) => texture.finalImageSha256)).size).toBe(4);
+  expect(rebound.find(({ usage }) => usage === 'occlusion')?.finalImageSha256).toBe(
+    rebound.find(({ usage }) => usage === 'metallicRoughness')?.finalImageSha256,
+  );
 });

@@ -1031,9 +1031,10 @@ export async function bindBakedTextureProvenanceToFinalGlb(
   const root = doc.getRoot();
   const byMaterialName = new Map<string, GtMaterial[]>();
   for (const material of root.listMaterials()) {
-    const list = byMaterialName.get(material.getName()) ?? [];
+    const name = material.getName() || '(unnamed material)';
+    const list = byMaterialName.get(name) ?? [];
     list.push(material);
-    byMaterialName.set(material.getName(), list);
+    byMaterialName.set(name, list);
   }
   const nodesByName = new Map<string, GtNode[]>();
   for (const node of root.listNodes()) {
@@ -1056,7 +1057,9 @@ export async function bindBakedTextureProvenanceToFinalGlb(
               return material ? [material] : [];
             }) ?? [],
       );
-      const materials = nodeMaterials.filter((material) => material.getName() === binding.material);
+      const materials = nodeMaterials.filter(
+        (material) => (material.getName() || '(unnamed material)') === binding.material,
+      );
       const candidates = materials.length
         ? materials
         : (byMaterialName.get(binding.material) ?? []);
