@@ -44,6 +44,7 @@ import {
   type ViewRenderTimeoutResolver,
 } from '../agent/view-render-timeout';
 import { ViewEvidenceHistoryStore } from '../views/evidence-history';
+import type { TextureUsage } from '../textures';
 
 // =============================================================================
 // Tool definition contract
@@ -84,6 +85,10 @@ export interface KilnToolDef {
 export interface KilnToolContext {
   intent?: AssetIntentV1;
   category?: AssetCategory;
+  /** Host-owned material acceptance contract. The model cannot weaken it through
+   * generated source or tool input. Each required usage must be backed by an
+   * exact baked procedural texture binding in the rendered GLB. */
+  requiredProceduralTextureUsages?: readonly RequiredProceduralTextureUsage[];
   /**
    * Host-injected GPU renderer for the in-loop view grid. Absent by default, and
    * absent means every render stays on the CPU rasterizer — byte-identical to the
@@ -139,6 +144,58 @@ export interface KilnToolContext {
    * compatibility profile. */
   evaluatorPort?: EvaluatorPortV1;
   evaluatorProfile?: EvaluatorExecutionProfileV1;
+}
+
+export type RequiredProceduralTextureUsage = Extract<
+  TextureUsage,
+  'albedo' | 'normal' | 'metallicRoughness' | 'emissive'
+>;
+
+export interface ProceduralTextureMaterialContract {
+  required: RequiredProceduralTextureUsage[];
+  present: RequiredProceduralTextureUsage[];
+  missing: RequiredProceduralTextureUsage[];
+}
+
+function proceduralTextureMaterialContract(
+  rendered: RenderResult,
+  context: KilnToolContext,
+): ProceduralTextureMaterialContract | undefined {
+  const required = [...new Set(context.requiredProceduralTextureUsages ?? [])];
+  if (required.length === 0) return undefined;
+  const available = new Set(
+    (rendered.bakedTextures ?? []).map((entry) => entry.usage as RequiredProceduralTextureUsage),
+  );
+  const present = required.filter((usage) => available.has(usage));
+  const missing = required.filter((usage) => !available.has(usage));
+  return { required, present, missing };
+}
+
+function missingProceduralTextureResult(
+  rendered: RenderResult,
+  context: KilnToolContext,
+):
+  | {
+      ok: false;
+      error: string;
+      materialContract: ProceduralTextureMaterialContract;
+      warnings: string[];
+      qaReport?: AssetQaReportV1;
+    }
+  | undefined {
+  const materialContract = proceduralTextureMaterialContract(rendered, context);
+  if (!materialContract || materialContract.missing.length === 0) return undefined;
+  const missing = materialContract.missing.join(', ');
+  return {
+    ok: false,
+    error:
+      `Material contract missing procedural texture usages: ${missing}. ` +
+      'Create and bind each missing usage through pbrMaterial; derive a normal with ' +
+      'normalMapFromHeight when appropriate, then render the corrected buffer again.',
+    materialContract,
+    warnings: [...rendered.warnings],
+    ...(rendered.meta.qaReport ? { qaReport: rendered.meta.qaReport as AssetQaReportV1 } : {}),
+  };
 }
 
 /** JSON-safe value accepted from a host visual observer. */
@@ -631,6 +688,8 @@ async function runRender(
 ): Promise<KilnRenderMetrics> {
   try {
     const { root, rendered } = await loadEvaluatedReviewScene(input.code, context);
+    const materialContractFailure = missingProceduralTextureResult(rendered, context);
+    if (materialContractFailure) return materialContractFailure;
     const category = trustedCategory(context);
 
     // Structural advisories (floating parts / stray planes at origin).
@@ -743,6 +802,7 @@ export interface KilnRenderViewsResult {
   instanceability?: { grade: string; summary: string };
   /** Structured deterministic report; five dimensions remain separate. */
   qaReport?: AssetQaReportV1;
+  materialContract?: ProceduralTextureMaterialContract;
   /** View names in grid order (row-major). Defaults to Front, Right, Back, Left, Top, 3/4. */
   views?: string[];
   /** Grid shape actually rendered — echoes the capture config back, or `3x2` by default. */
@@ -783,6 +843,8 @@ async function runRenderViews(
       '../views'
     );
     const { root, rendered, reasonCodes } = await loadEvaluatedReviewScene(input.code, context);
+    const materialContractFailure = missingProceduralTextureResult(rendered, context);
+    if (materialContractFailure) return materialContractFailure;
     const category = trustedCategory(context);
 
     const structuralWarnings = inspectSceneStructure(root, { category });
@@ -887,6 +949,7 @@ async function runRenderViews(
     }
 
     const warnings = [...structuralWarnings, ...rendered.warnings];
+    const materialContract = proceduralTextureMaterialContract(rendered, context);
 
     return {
       ok: true,
@@ -912,6 +975,7 @@ async function runRenderViews(
       ...(viewEvidence ? { viewEvidence } : {}),
       warnings,
       qaReport: rendered.meta.qaReport as AssetQaReportV1 | undefined,
+      ...(materialContract ? { materialContract } : {}),
     };
   } catch (err) {
     return {

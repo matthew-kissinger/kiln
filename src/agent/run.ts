@@ -68,6 +68,7 @@ import {
   gradeRank,
   shouldGradeRefine,
 } from './grade-refine';
+import type { RequiredProceduralTextureUsage } from '../tools/registry';
 
 /** How the agent learns Kiln conventions. */
 export type KilnKnowhow = 'inline' | 'skill';
@@ -183,6 +184,8 @@ export interface RunKilnAgentOptions
   gradeRefine?: 'auto' | 'off';
   /** Attribution role for this invocation within the shared generation budget. */
   modelCallRole?: GenerationModelCallRole;
+  /** Exact host-owned procedural texture usages that the rendered GLB must bind. */
+  requiredProceduralTextureUsages?: readonly RequiredProceduralTextureUsage[];
   /** Host-owned pre-dispatch admission. Used by quoted operations to bind
    * provider execution to their reserved-cost envelope. */
   modelCallAdmission?: GenerationModelCallAdmission;
@@ -374,6 +377,17 @@ export async function runKilnAgent(opts: RunKilnAgentOptions): Promise<RunKilnAg
           'wrong, then call the kiln_submit tool exactly once with your final, complete ' +
           'Kiln program.';
 
+    const materialContractNote = opts.requiredProceduralTextureUsages?.length
+      ? '\n\n## Required material contract\n' +
+        `The final GLB must contain exact baked procedural texture bindings for: ${[
+          ...new Set(opts.requiredProceduralTextureUsages),
+        ].join(', ')}. ` +
+        'This is a deterministic acceptance constraint, not optional visual guidance. ' +
+        'Use proceduralTexture with explicit usage values, bind the textures through pbrMaterial, ' +
+        'derive normal data with normalMapFromHeight when appropriate, and keep repairing until ' +
+        'kiln_render reports the material contract satisfied.'
+      : '';
+
     const userPrompt =
       buildUserPrompt({
         prompt: promptText,
@@ -393,6 +407,7 @@ export async function runKilnAgent(opts: RunKilnAgentOptions): Promise<RunKilnAg
               : KILN_REFERENCE_IMAGE_DIRECTIVE
           }`
         : '') +
+      materialContractNote +
       reviewNote;
 
     // With a reference image, send a [text, image] content-block pair (the same
@@ -434,9 +449,13 @@ export async function runKilnAgent(opts: RunKilnAgentOptions): Promise<RunKilnAg
       // it flagged `capped` (an honest best effort); only a cap with nothing
       // renderable stays a hard failure.
       const captured = readSinkCode();
-      const salvage = captured
-        ? await assessProgramGrade(captured, gradeAssessmentOptions)
-        : undefined;
+      const currentUnifiedRender =
+        surface !== 'unified' ||
+        (unifiedSink.rendered === true && unifiedSink.renderedCode === captured);
+      const salvage =
+        captured && currentUnifiedRender
+          ? await assessProgramGrade(captured, gradeAssessmentOptions)
+          : undefined;
       if (!salvage?.ok) {
         const collected = metrics.readMetrics();
         // A QA-blocked program is not a broken program — say so (the block
@@ -454,6 +473,15 @@ export async function runKilnAgent(opts: RunKilnAgentOptions): Promise<RunKilnAg
       }
       capped = true;
       code = captured;
+    } else if (surface === 'unified' && !unifiedSink.finalized) {
+      const collected = metrics.readMetrics();
+      return {
+        toolCalls: collected.toolCalls,
+        steps: collected.steps,
+        ...(collected.usage ? { usage: collected.usage } : {}),
+        ...(counters ? { counters } : {}),
+        error: 'kiln agent ended without a successful kiln_finalize of the current rendered buffer',
+      };
     } else if ((opts.gradeRefine ?? 'auto') === 'auto') {
       // M1b grade-aware refine (plan/05 §3.2): bake + grade the finalized program
       // exactly as the final artifact will be graded (auto consolidation). If it
@@ -563,7 +591,10 @@ export async function runKilnAgent(opts: RunKilnAgentOptions): Promise<RunKilnAg
     // a hard failure.
     const captured =
       surface === 'unified' ? unifiedSink.code : editMode ? editSink.code : sink.code;
-    if (captured) {
+    const currentUnifiedRender =
+      surface !== 'unified' ||
+      (unifiedSink.rendered === true && unifiedSink.renderedCode === captured);
+    if (captured && currentUnifiedRender) {
       const salvage = await assessProgramGrade(captured, gradeAssessmentOptions);
       if (salvage.ok) {
         return { ...base, code: captured, salvaged: 'error' as const, error: message };
