@@ -36,8 +36,12 @@ function fakeAgent() {
     for (const cb of hooks.get(EventClass) ?? []) cb(event);
   };
   /** Simulate one model call: Before (cancellable) then, if not cancelled, After. */
-  const modelCall = (): { cancelled: boolean; cancelText?: string } => {
-    const before: { cancel?: string | boolean } = {};
+  const modelCall = (
+    projectedInputTokens?: number,
+  ): { cancelled: boolean; cancelText?: string } => {
+    const before: { cancel?: string | boolean; projectedInputTokens?: number } = {
+      ...(projectedInputTokens != null ? { projectedInputTokens } : {}),
+    };
     dispatch(BeforeModelCallEvent, before);
     if (before.cancel) return { cancelled: true, cancelText: String(before.cancel) };
     dispatch(AfterModelCallEvent, {});
@@ -126,6 +130,36 @@ describe('MetricsCollector', () => {
     expect(locallyExhausted.cancelText).toContain('step cap');
     expect(integration.wasCapped()).toBe(true);
     expect(budget.receipt()).toMatchObject({ consumed: 2, remaining: 3, denied: 0 });
+  });
+
+  test('quoted-cost admission sees projected input and refuses before consuming the call allowance', () => {
+    const budget = createGenerationCallBudget(5);
+    const inspected: Array<{ role: string; projectedInputTokens?: number }> = [];
+    const admission = {
+      tryAdmit(call: { role: 'author'; projectedInputTokens?: number }) {
+        inspected.push(call);
+        return call.projectedInputTokens === 128_001
+          ? { ok: false as const, reason: 'quoted cost envelope input cap exceeded' }
+          : { ok: true as const };
+      },
+    };
+    const metrics = new MetricsCollector(undefined, 40, budget, 'author', admission);
+    const harness = fakeAgent();
+    metrics.attach(harness.agent as never);
+
+    expect(harness.modelCall(128_000).cancelled).toBe(false);
+    const blocked = harness.modelCall(128_001);
+
+    expect(blocked).toEqual({
+      cancelled: true,
+      cancelText: 'quoted cost envelope input cap exceeded',
+    });
+    expect(inspected).toEqual([
+      { role: 'author', projectedInputTokens: 128_000 },
+      { role: 'author', projectedInputTokens: 128_001 },
+    ]);
+    expect(metrics.capReason()).toBe('quoted cost envelope input cap exceeded');
+    expect(budget.receipt()).toMatchObject({ consumed: 1, remaining: 4, denied: 0 });
   });
 
   test('records token usage from the agent result', () => {

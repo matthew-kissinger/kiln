@@ -17,7 +17,11 @@ import {
   BeforeModelCallEvent,
   AfterModelCallEvent,
 } from '@strands-agents/sdk';
-import type { GenerationCallBudget, GenerationModelCallRole } from './call-budget';
+import type {
+  GenerationCallBudget,
+  GenerationModelCallAdmission,
+  GenerationModelCallRole,
+} from './call-budget';
 
 /** Token-usage subset we surface. The cache fields mirror the Strands `Usage`
  *  type (dist/src/models/streaming.d.ts): the Anthropic adapter fills them from
@@ -76,6 +80,7 @@ export class MetricsCollector {
   private steps = 0;
   private usage: AgentUsage | undefined;
   private capped = false;
+  private cappedReason: string | undefined;
   private cleanups: Array<() => void> = [];
 
   /**
@@ -92,6 +97,7 @@ export class MetricsCollector {
     private readonly maxSteps?: number,
     private readonly generationCallBudget?: GenerationCallBudget,
     private readonly modelCallRole: GenerationModelCallRole = 'author',
+    private readonly modelCallAdmission?: GenerationModelCallAdmission,
   ) {}
 
   private emit(event: KilnAgentEvent): void {
@@ -120,15 +126,31 @@ export class MetricsCollector {
     const offDispatch = agent.addHook(BeforeModelCallEvent, (event) => {
       if (this.maxSteps && this.maxSteps > 0 && this.steps >= this.maxSteps) {
         this.capped = true;
-        event.cancel = `kiln: agent step cap reached (${this.maxSteps} model calls) — aborted to bound cost`;
+        this.cappedReason = `kiln: agent step cap reached (${this.maxSteps} model calls) — aborted to bound cost`;
+        event.cancel = this.cappedReason;
         return;
+      }
+      if (this.modelCallAdmission) {
+        const decision = this.modelCallAdmission.tryAdmit({
+          role: this.modelCallRole,
+          ...(typeof event.projectedInputTokens === 'number'
+            ? { projectedInputTokens: event.projectedInputTokens }
+            : {}),
+        });
+        if (!decision.ok) {
+          this.capped = true;
+          this.cappedReason = decision.reason;
+          event.cancel = decision.reason;
+          return;
+        }
       }
       if (this.generationCallBudget && !this.generationCallBudget.tryConsume(this.modelCallRole)) {
         this.capped = true;
         const receipt = this.generationCallBudget.receipt();
-        event.cancel =
+        this.cappedReason =
           `kiln: generation model-call budget reached (${receipt.limit} aggregate calls) — ` +
           'aborted before provider dispatch to bound cost';
+        event.cancel = this.cappedReason;
         return;
       }
       // Count admitted provider dispatches, never the SDK's synthetic after-event
@@ -142,6 +164,11 @@ export class MetricsCollector {
   /** True if the loop was halted by the model-call cap (vs the model stopping). */
   wasCapped(): boolean {
     return this.capped;
+  }
+
+  /** Exact pre-dispatch refusal, suitable for a terminal/salvage diagnostic. */
+  capReason(): string | undefined {
+    return this.cappedReason;
   }
 
   /** Remove all attached hooks. Idempotent. */

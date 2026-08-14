@@ -52,6 +52,7 @@ import {
   createGenerationCallBudget,
   generationModelCallLimitFromEnv,
   type GenerationCallBudget,
+  type GenerationModelCallAdmission,
   type GenerationModelCallRole,
 } from './call-budget';
 import {
@@ -182,6 +183,9 @@ export interface RunKilnAgentOptions
   gradeRefine?: 'auto' | 'off';
   /** Attribution role for this invocation within the shared generation budget. */
   modelCallRole?: GenerationModelCallRole;
+  /** Host-owned pre-dispatch admission. Used by quoted operations to bind
+   * provider execution to their reserved-cost envelope. */
+  modelCallAdmission?: GenerationModelCallAdmission;
 }
 
 export interface RunKilnAgentResult {
@@ -254,6 +258,7 @@ export async function runKilnAgent(opts: RunKilnAgentOptions): Promise<RunKilnAg
     maxSteps,
     generationCallBudget,
     opts.modelCallRole ?? 'author',
+    opts.modelCallAdmission,
   );
   const surface = resolveToolSurface(opts.toolSurface);
   const trustedCategory = opts.intent?.category ?? opts.category ?? 'prop';
@@ -444,7 +449,7 @@ export async function runKilnAgent(opts: RunKilnAgentOptions): Promise<RunKilnAg
           steps: collected.steps,
           ...(collected.usage ? { usage: collected.usage } : {}),
           ...(counters ? { counters } : {}),
-          error: `kiln agent exceeded ${maxSteps} model calls (step cap) — aborted to bound cost${qaNote}`,
+          error: `${metrics.capReason() ?? `kiln agent exceeded ${maxSteps} model calls (step cap) — aborted to bound cost`}${qaNote}`,
         };
       }
       capped = true;

@@ -130,6 +130,9 @@ export {
 export type {
   GenerationCallBudget,
   GenerationCallBudgetReceipt,
+  GenerationModelCallAdmission,
+  GenerationModelCallAdmissionDecision,
+  GenerationModelCallAdmissionInput,
   GenerationModelCallRole,
 } from './call-budget';
 
