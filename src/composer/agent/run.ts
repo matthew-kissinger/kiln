@@ -13,9 +13,10 @@
  * captured beforehand (a step-capped or erroring run still returns its partial
  * program + placements).
  */
-import { Agent, type Message, type Tool } from '@strands-agents/sdk';
+import { Agent, ImageBlock, TextBlock, type Message, type Tool } from '@strands-agents/sdk';
 
 import { unifiedDiff } from '../../agent/diff';
+import type { KilnInputImage } from '../../agent/run';
 import type { GenerationCallBudget, GenerationCallBudgetReceipt } from '../../agent/call-budget';
 import { type AgentUsage, type KilnAgentEvent, MetricsCollector } from '../../agent/hooks';
 import { toCachedSystemPrompt } from '../../agent/providers';
@@ -39,6 +40,10 @@ export interface RunKilnComposerOptions {
   model: unknown;
   /** Natural-language description of the scene to compose. */
   prompt: string;
+  /** Optional scene reference. Direct-vision authors receive these exact bytes in
+   * the initial turn; observer-backed hosts should omit it and inject their bounded
+   * structured observation into `prompt` instead. */
+  inputImage?: KilnInputImage;
   /** The selectable asset catalog (generationId + asset-local bbox). The agent may
    *  ONLY place these. Optional when `seedScene` already carries a catalog. */
   catalog?: CatalogEntry[];
@@ -121,6 +126,14 @@ function lastMessageText(message: Message | undefined): string | undefined {
   }
   const joined = parts.join('\n').trim();
   return joined.length ? joined : undefined;
+}
+
+function imageFormatFromMime(mime: string): 'png' | 'jpeg' | 'gif' | 'webp' {
+  const normalized = mime.toLowerCase();
+  if (normalized.includes('jpeg') || normalized.includes('jpg')) return 'jpeg';
+  if (normalized.includes('gif')) return 'gif';
+  if (normalized.includes('webp')) return 'webp';
+  return 'png';
 }
 
 /** Build the model from a fresh catalog or a seeded scene (merging extra catalog). */
@@ -207,9 +220,20 @@ export async function runKilnComposer(
       ...(opts.sceneName ? { sceneName: opts.sceneName } : {}),
       ...(catalogLines ? { catalogSummary: catalogLines } : {}),
       ...(parentProgram ? { existingProgram: parentProgram } : {}),
-    });
+    }) + (opts.inputImage
+      ? '\n\nUse the attached scene reference as visual evidence for object identity, relative placement, scale, materials, and composition. Preserve ambiguity instead of inventing occluded geometry or exact depth.'
+      : '');
 
-    const result = await agent.invoke(userPrompt as never);
+    const initialTurn = opts.inputImage
+      ? [
+          new TextBlock(userPrompt),
+          new ImageBlock({
+            format: imageFormatFromMime(opts.inputImage.mime),
+            source: { bytes: new Uint8Array(Buffer.from(opts.inputImage.base64, 'base64')) },
+          }),
+        ]
+      : userPrompt;
+    const result = await agent.invoke(initialTurn as never);
     metrics.recordResultUsage(result.metrics?.latestAgentInvocation?.usage);
     const lastText = lastMessageText(result.lastMessage);
 

@@ -32,11 +32,13 @@ const asset = (id: string): CatalogEntry => ({
 /** ScriptedModel that also records the tool surface offered on every model call. */
 class ToolCapturingModel extends ScriptedModel {
   readonly toolNames: string[][] = [];
+  readonly seenMessages: Message[][] = [];
 
   override async *stream(
     messages: Message[],
     options?: StreamOptions,
   ): AsyncIterable<ModelStreamEvent> {
+    this.seenMessages.push(messages);
     this.toolNames.push((options?.toolSpecs ?? []).map((t) => t.name));
     yield* super.stream(messages, options);
   }
@@ -59,6 +61,31 @@ async function runOnce(pbrRender?: PbrRenderPort) {
 }
 
 describe('composer pbrRender seam (B3a)', () => {
+  test('reference images enter the initial composer turn as typed multimodal content', async () => {
+    const model = new ToolCapturingModel([{ text: 'scene looks good' }]);
+    await runKilnComposer({
+      model,
+      prompt: 'recreate the attached switchyard layout with the selected kit',
+      sceneName: 'Reference switchyard',
+      catalog: [asset('gantry'), asset('transformer')],
+      render,
+      inputImage: {
+        mime: 'image/jpeg',
+        base64: Buffer.from([0xff, 0xd8, 0xff, 0xd9]).toString('base64'),
+      },
+    });
+
+    const initial = model.seenMessages[0]?.find((message) => message.role === 'user');
+    expect(initial?.content.map((block) => (block as { type?: string }).type)).toEqual([
+      'textBlock',
+      'imageBlock',
+    ]);
+    expect((initial?.content[0] as { text?: string }).text).toContain(
+      'Use the attached scene reference as visual evidence',
+    );
+    expect((initial?.content[1] as { format?: string }).format).toBe('jpeg');
+  });
+
   test('PbrRenderPort types express the render-service contract', async () => {
     // Type-level: a conforming implementation assigns cleanly and round-trips.
     const port: PbrRenderPort = async (req: PbrRenderRequest): Promise<PbrRenderResult> => ({
