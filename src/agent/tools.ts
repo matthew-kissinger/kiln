@@ -546,10 +546,20 @@ export interface UnifiedSink {
   /** True after at least one successful unified render. This distinguishes a
    * successful default-layout render from a run that never produced a view. */
   rendered?: boolean;
+  /** Exact source bytes that produced the last successful kiln_render. */
+  renderedCode?: string;
+  /** True after any successful render, even when a later mutation invalidates it. */
+  everRendered?: boolean;
+  /** Whole-program rewrites admitted after the first successful render. */
+  postRenderRewrites?: number;
   /** Capture requested by the most recent successful unified render. Undefined
    * means that render used the standard 3x2 layout. */
   capture?: CaptureConfig;
 }
+
+/** Once a program renders, repair should become surgical. Repeated wholesale
+ * rewrites were the exact production churn pattern that consumed 40 calls. */
+export const MAX_POST_RENDER_REWRITES = 2;
 
 /**
  * A live render candidate surfaced out-of-band from the unified `kiln_render`
@@ -615,6 +625,12 @@ export function makeKilnUnifiedTools(
       warnings: string[];
     };
 
+  const invalidateCurrentRender = (): void => {
+    opts.sink.rendered = undefined;
+    opts.sink.renderedCode = undefined;
+    opts.sink.capture = undefined;
+  };
+
   const draftTool: Tool = tool({
     name: 'kiln_draft',
     description:
@@ -625,7 +641,26 @@ export function makeKilnUnifiedTools(
       '({ valid, errors, warnings }); fix any errors before rendering.',
     inputSchema: draftInput,
     callback: async (input) => {
-      const r = buffer.draft((input as { code: string }).code);
+      const nextCode = (input as { code: string }).code;
+      const changesCode = nextCode !== buffer.code;
+      if (
+        changesCode &&
+        opts.sink.everRendered &&
+        (opts.sink.postRenderRewrites ?? 0) >= MAX_POST_RENDER_REWRITES
+      ) {
+        return {
+          ok: false,
+          error: `whole-program rewrite limit reached after a successful render (${MAX_POST_RENDER_REWRITES})`,
+          hint: 'Keep the current working buffer, use kiln_view plus kiln_edit for targeted repairs, render it again, then finalize.',
+        } as JSONValue;
+      }
+      const r = buffer.draft(nextCode);
+      if (changesCode) {
+        if (opts.sink.everRendered) {
+          opts.sink.postRenderRewrites = (opts.sink.postRenderRewrites ?? 0) + 1;
+        }
+        invalidateCurrentRender();
+      }
       opts.sink.code = buffer.code; // capture the live buffer even if finalize is skipped
       return { ...r, validation: await validateBuffer() } as JSONValue;
     },
@@ -655,6 +690,7 @@ export function makeKilnUnifiedTools(
         input as { oldString: string; newString: string; replaceAll?: boolean },
       );
       if (r.ok) {
+        invalidateCurrentRender();
         opts.sink.code = buffer.code; // capture the live buffer even if finalize is skipped
         return { ...r, validation: await validateBuffer() } as JSONValue;
       }
@@ -681,6 +717,8 @@ export function makeKilnUnifiedTools(
         // Preserve only a validated, successful render request. A later default
         // render deliberately clears an earlier custom layout.
         opts.sink.rendered = true;
+        opts.sink.renderedCode = buffer.code;
+        opts.sink.everRendered = true;
         opts.sink.capture = i.capture as CaptureConfig | undefined;
       }
       // Out-of-band: surface a SUCCESSFUL render as a live candidate (the working
@@ -769,6 +807,14 @@ export function makeKilnUnifiedTools(
       'edited. Returns { ok, recorded, bytes, edits }.',
     inputSchema: viewInput,
     callback: () => {
+      if (!opts.sink.rendered || opts.sink.renderedCode !== buffer.code) {
+        return {
+          ok: false,
+          recorded: false,
+          error:
+            'The current buffer has not passed kiln_render. Render these exact source bytes, repair any build/QA/material contract error, then finalize.',
+        } as JSONValue;
+      }
       opts.sink.code = buffer.code;
       opts.sink.finalized = true;
       return {
