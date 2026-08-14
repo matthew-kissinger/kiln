@@ -15,6 +15,7 @@
 import { describe, expect, test } from 'bun:test';
 
 import { runKilnAgent } from '../run';
+import { createGenerationCallBudget } from '../call-budget';
 import { ScriptedModel } from './scripted-model';
 
 const BOX_CODE = `
@@ -101,6 +102,7 @@ describe('runKilnAgent over a ScriptedModel (unified surface)', () => {
       { toolCalls: [{ name: 'kiln_draft', input: { code: BOX_CODE } }, { name: 'kiln_view' }] },
       // Turn 2: the model follows the guard's instruction — mutator alone.
       { toolCalls: [{ name: 'kiln_draft', input: { code: BOX_CODE } }] },
+      { toolCalls: [{ name: 'kiln_render' }] },
       { toolCalls: [{ name: 'kiln_finalize' }] },
       { text: 'done' },
     ]);
@@ -116,11 +118,15 @@ describe('runKilnAgent over a ScriptedModel (unified surface)', () => {
     // The rejected batch never wrote the buffer; the retry did, and finalize
     // locked it in — so the run still converges on the drafted program.
     expect(result.code).toBe(BOX_CODE);
-    expect(result.steps).toBe(4);
+    expect(result.steps).toBe(5);
   });
 
   test('refine framing keeps the directive INSIDE the (cacheable) system prompt text', async () => {
-    const model = new ScriptedModel([{ toolCalls: [{ name: 'kiln_finalize' }] }, { text: 'done' }]);
+    const model = new ScriptedModel([
+      { toolCalls: [{ name: 'kiln_render' }] },
+      { toolCalls: [{ name: 'kiln_finalize' }] },
+      { text: 'done' },
+    ]);
 
     await runKilnAgent({
       model,
@@ -135,5 +141,58 @@ describe('runKilnAgent over a ScriptedModel (unified surface)', () => {
     // The refine directive is prepended to the same string that becomes the
     // cached TextBlock for cache-point providers.
     expect(sp.startsWith('You are MODIFYING an existing Kiln asset')).toBe(true);
+  });
+
+  test('a finalize admitted on the exact last call succeeds without a paid follow-up turn', async () => {
+    const budget = createGenerationCallBudget(3);
+    const model = new ScriptedModel([
+      { toolCalls: [{ name: 'kiln_draft', input: { code: BOX_CODE } }] },
+      { toolCalls: [{ name: 'kiln_render' }] },
+      { toolCalls: [{ name: 'kiln_finalize' }] },
+      { text: 'unreachable paid follow-up' },
+    ]);
+
+    const result = await runKilnAgent({
+      model,
+      prompt: 'a red test box',
+      toolSurface: 'unified',
+      generationCallBudget: budget,
+      gradeRefine: 'off',
+    });
+
+    expect(result.error).toBeUndefined();
+    expect(result.code).toBe(BOX_CODE);
+    expect(result.steps).toBe(3);
+    expect(result.toolCalls).toEqual(['kiln_draft', 'kiln_render', 'kiln_finalize']);
+    expect(budget.receipt()).toMatchObject({ consumed: 3, denied: 0, exhausted: true });
+  });
+
+  test('step-cap salvage refuses source mutated after the last successful render', async () => {
+    const budget = createGenerationCallBudget(3);
+    const model = new ScriptedModel([
+      { toolCalls: [{ name: 'kiln_draft', input: { code: BOX_CODE } }] },
+      { toolCalls: [{ name: 'kiln_render' }] },
+      {
+        toolCalls: [
+          {
+            name: 'kiln_edit',
+            input: { oldString: "gameMaterial('#ff0000')", newString: "gameMaterial('#0000ff')" },
+          },
+        ],
+      },
+      { text: 'unreachable paid follow-up' },
+    ]);
+
+    const result = await runKilnAgent({
+      model,
+      prompt: 'a blue test box',
+      toolSurface: 'unified',
+      generationCallBudget: budget,
+      gradeRefine: 'off',
+    });
+
+    expect(result.code).toBeUndefined();
+    expect(result.error).toContain('step cap');
+    expect(budget.receipt()).toMatchObject({ consumed: 3, denied: 0, exhausted: true });
   });
 });

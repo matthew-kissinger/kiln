@@ -71,6 +71,9 @@ export function buildAgentTools(
   const trustedContext = {
     ...(opts.intent ? { intent: opts.intent } : {}),
     ...(opts.category ? { category: opts.category } : {}),
+    ...(opts.requiredProceduralTextureUsages?.length
+      ? { requiredProceduralTextureUsages: opts.requiredProceduralTextureUsages }
+      : {}),
     ...(opts.viewRenderPort ? { viewRenderPort: opts.viewRenderPort } : {}),
     ...(opts.viewRenderTimeoutMs !== undefined
       ? { viewRenderTimeoutMs: opts.viewRenderTimeoutMs }

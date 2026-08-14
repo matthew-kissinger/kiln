@@ -21,6 +21,26 @@ function build() {
 }
 `;
 
+const TEXTURED_BOX_CODE = `
+const meta = { name: 'textured-box', category: 'prop' };
+function build() {
+  const root = createRoot('Root');
+  const albedo = proceduralTexture({
+    schemaVersion: 2,
+    size: 8,
+    usage: 'albedo',
+    name: 'PaintedSteel',
+    layers: [{ op: 'solid', color: 0x5b7088 }],
+  });
+  const normal = normalMapFromHeight(albedo, { strength: 2 });
+  createPart('Mesh_Box', boxGeo(1, 1, 1), pbrMaterial({ albedo, normal }), {
+    parent: root,
+    position: [0, 0.5, 0],
+  });
+  return root;
+}
+`;
+
 // Two named parts under one root — the shape kiln_inspect frames by name.
 const TWO_PART_CODE = `
 const meta = { name: 'test-hammer', category: 'prop' };
@@ -187,6 +207,42 @@ describe('makeKilnUnifiedTools', () => {
     expect(json['ok']).toBe(true);
     expect(json['tris']).toBeGreaterThan(0); // metrics ride alongside the image
     expect('pngBase64' in json).toBe(false);
+  });
+
+  test('kiln_render fails closed with exact missing procedural texture usages', async () => {
+    const sink: UnifiedSink = { edits: [] };
+    const tools = makeKilnUnifiedTools({
+      seedCode: TEXTURED_BOX_CODE,
+      sink,
+      requiredProceduralTextureUsages: ['albedo', 'normal', 'metallicRoughness'],
+    });
+    const out = (await findTool(tools, 'kiln_render').invoke({})) as {
+      ok: boolean;
+      error?: string;
+      materialContract?: { required: string[]; present: string[]; missing: string[] };
+    };
+    expect(Array.isArray(out)).toBe(false);
+    expect(out.ok).toBe(false);
+    expect(out.error).toContain('metallicRoughness');
+    expect(out.materialContract).toEqual({
+      required: ['albedo', 'normal', 'metallicRoughness'],
+      present: ['albedo', 'normal'],
+      missing: ['metallicRoughness'],
+    });
+    expect(sink.rendered).toBeUndefined();
+  });
+
+  test('kiln_render accepts the exact required procedural usages and records current code', async () => {
+    const sink: UnifiedSink = { edits: [] };
+    const tools = makeKilnUnifiedTools({
+      seedCode: TEXTURED_BOX_CODE,
+      sink,
+      requiredProceduralTextureUsages: ['normal', 'albedo'],
+    });
+    const out = (await findTool(tools, 'kiln_render').invoke({})) as unknown[];
+    expect(Array.isArray(out)).toBe(true);
+    expect(sink.rendered).toBe(true);
+    expect(sink.renderedCode).toBe(TEXTURED_BOX_CODE);
   });
 
   test('kiln_render exposes and honors the bounded capture contract on the working buffer', async () => {
@@ -463,10 +519,19 @@ describe('makeKilnUnifiedTools', () => {
     expect(warnings).toContain('createRoofPlanes');
   });
 
-  test('kiln_finalize captures the buffer and marks finalized', async () => {
+  test('kiln_finalize requires the current buffer to have rendered successfully', async () => {
     const sink: UnifiedSink = { edits: [] };
     const tools = makeKilnUnifiedTools({ sink });
     await findTool(tools, 'kiln_draft').invoke({ code: BOX_CODE });
+    const premature = (await findTool(tools, 'kiln_finalize').invoke({})) as {
+      ok: boolean;
+      error?: string;
+    };
+    expect(premature.ok).toBe(false);
+    expect(premature.error).toContain('kiln_render');
+    expect(sink.finalized).toBeUndefined();
+
+    await findTool(tools, 'kiln_render').invoke({});
     const fin = (await findTool(tools, 'kiln_finalize').invoke({})) as {
       ok: boolean;
       recorded: boolean;
@@ -476,5 +541,46 @@ describe('makeKilnUnifiedTools', () => {
     expect(fin.recorded).toBe(true);
     expect(sink.code).toBe(BOX_CODE);
     expect(sink.finalized).toBe(true);
+  });
+
+  test('a mutation invalidates the render receipt until the exact new buffer renders', async () => {
+    const sink: UnifiedSink = { edits: [] };
+    const tools = makeKilnUnifiedTools({ seedCode: BOX_CODE, sink });
+    await findTool(tools, 'kiln_render').invoke({});
+    await findTool(tools, 'kiln_edit').invoke({
+      oldString: 'boxGeo(1, 1, 1)',
+      newString: 'boxGeo(2, 1, 1)',
+    });
+    const stale = (await findTool(tools, 'kiln_finalize').invoke({})) as {
+      ok: boolean;
+      error?: string;
+    };
+    expect(stale.ok).toBe(false);
+    expect(stale.error).toContain('current buffer');
+    await findTool(tools, 'kiln_render').invoke({});
+    expect((await findTool(tools, 'kiln_finalize').invoke({})) as { ok: boolean }).toMatchObject({
+      ok: true,
+    });
+  });
+
+  test('after a successful render, repeated whole rewrites are bounded and preserve the last buffer', async () => {
+    const sink: UnifiedSink = { edits: [] };
+    const tools = makeKilnUnifiedTools({ seedCode: BOX_CODE, sink });
+    const draft = findTool(tools, 'kiln_draft');
+    await findTool(tools, 'kiln_render').invoke({});
+    expect(
+      (await draft.invoke({ code: BOX_CODE.replace('1, 1, 1', '2, 1, 1') })) as { ok: boolean },
+    ).toMatchObject({ ok: true });
+    expect(
+      (await draft.invoke({ code: BOX_CODE.replace('1, 1, 1', '3, 1, 1') })) as { ok: boolean },
+    ).toMatchObject({ ok: true });
+    const beforeRejectedRewrite = sink.code;
+    const rejected = (await draft.invoke({
+      code: BOX_CODE.replace('1, 1, 1', '4, 1, 1'),
+    })) as { ok: boolean; error?: string; hint?: string };
+    expect(rejected.ok).toBe(false);
+    expect(rejected.error).toContain('whole-program rewrite limit');
+    expect(rejected.hint).toContain('kiln_edit');
+    expect(sink.code).toBe(beforeRejectedRewrite);
   });
 });

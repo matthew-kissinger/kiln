@@ -116,6 +116,7 @@ describe('installMutatorBatchGuard on a real Agent (concurrent executor)', () =>
     const model = new ScriptedModel([
       { toolCalls: [{ name: 'kiln_draft', input: { code: BOX_CODE } }] },
       { toolCalls: [{ name: 'kiln_view' }, { name: 'kiln_view' }] },
+      { toolCalls: [{ name: 'kiln_render' }] },
       { toolCalls: [{ name: 'kiln_finalize' }] },
       { text: 'done' },
     ]);
@@ -130,9 +131,9 @@ describe('installMutatorBatchGuard on a real Agent (concurrent executor)', () =>
 
     expect(sink.code).toBe(BOX_CODE);
     expect(sink.finalized).toBe(true);
-    // Solo mutator + both readers + finalize all produced SUCCESS results.
+    // Solo mutator + both readers + render + finalize all produced SUCCESS results.
     const results = toolResults(agent.messages);
-    expect(results).toHaveLength(4);
+    expect(results).toHaveLength(5);
     expect(results.every((r) => r.status === 'success')).toBe(true);
   });
 });
