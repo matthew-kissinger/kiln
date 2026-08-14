@@ -26,6 +26,7 @@ import {
 } from './types';
 import { UNIVERSAL_QA_RULES } from './universal';
 import type { KhronosGltfValidationReport } from './gltf';
+import type { KhronosGltfIssue } from './gltf';
 import type { MaterialBudgetWarningV1, MaterialMetricsV1 } from '../material-metrics';
 
 export const DETERMINISTIC_QA_REGISTRY = new QaRegistry([
@@ -61,6 +62,7 @@ export function gltfReportFindings(
 ): QaFinding[] {
   return report.issues.messages
     .filter((issue) => issue.severity === 0 || issue.severity === 1)
+    .filter((issue) => !isExpectedKtx2ValidatorLimitation(report, issue))
     .map((issue) => ({
       code: `GLTF_${issue.code}`.replace(/[^A-Z0-9_]/g, '_'),
       disposition: issue.severity === 0 ? ('block' as const) : ('warn' as const),
@@ -71,20 +73,43 @@ export function gltfReportFindings(
     }));
 }
 
+/** gltf-validator 2.0.0-dev.3.10 does not understand the image/ktx2 MIME used by
+ * KHR_texture_basisu. Ignore only its exact, pointer-bound false warnings when
+ * the artifact explicitly requires that extension; every other warning remains. */
+function isExpectedKtx2ValidatorLimitation(
+  report: KhronosGltfValidationReport,
+  issue: KhronosGltfIssue,
+): boolean {
+  const required = report.info?.['extensionsRequired'];
+  if (!Array.isArray(required) || !required.includes('KHR_texture_basisu')) return false;
+  if (issue.code === 'VALUE_NOT_IN_LIST') {
+    return (
+      /^\/images\/\d+\/mimeType$/.test(issue.pointer ?? '') &&
+      issue.message === "Invalid value 'image/ktx2'. Valid values are ('image/jpeg', 'image/png')."
+    );
+  }
+  return (
+    issue.code === 'IMAGE_UNRECOGNIZED_FORMAT' &&
+    /^\/images\/\d+$/.test(issue.pointer ?? '') &&
+    issue.message === 'Image format not recognized.'
+  );
+}
+
 export function appendFinalGltfQa(
   intent: AssetIntentV1,
   sceneReport: AssetQaReportV1,
   gltfReport: KhronosGltfValidationReport,
 ): AssetQaReportV1 {
   const findings = Object.values(sceneReport.dimensions).flatMap((dimension) => dimension.findings);
-  findings.push(...gltfReportFindings(gltfReport, intent.qaProfile));
+  const gltfFindings = gltfReportFindings(gltfReport, intent.qaProfile);
+  findings.push(...gltfFindings);
   return createAssetQaReportV1(intent, {
     findings,
     evaluatedDimensions: ['exportIntegrity', 'categoryReadiness'],
     metrics: {
       exportIntegrity: {
         gltfErrors: gltfReport.issues.numErrors,
-        gltfWarnings: gltfReport.issues.numWarnings,
+        gltfWarnings: gltfFindings.filter((finding) => finding.disposition === 'warn').length,
       },
     },
   });
