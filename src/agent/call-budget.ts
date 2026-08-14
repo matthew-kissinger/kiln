@@ -4,6 +4,22 @@ export const DEFAULT_GENERATION_MODEL_CALL_LIMIT = 40;
 
 export type GenerationModelCallRole = 'author' | 'observer' | 'repair' | 'retry' | 'fallback';
 
+export interface GenerationModelCallAdmissionInput {
+  role: GenerationModelCallRole;
+  /** Strands' pre-dispatch input-token projection. An admission policy that
+   * requires a hard bound must reject a missing value. */
+  projectedInputTokens?: number;
+}
+
+export type GenerationModelCallAdmissionDecision = { ok: true } | { ok: false; reason: string };
+
+/** Optional host-owned admission policy evaluated immediately before provider
+ * dispatch. The engine supplies orchestration facts; pricing and reservations
+ * remain outside this package. */
+export interface GenerationModelCallAdmission {
+  tryAdmit(input: GenerationModelCallAdmissionInput): GenerationModelCallAdmissionDecision;
+}
+
 export interface GenerationCallBudgetReceipt {
   /** Aggregate ceiling. Zero preserves the legacy explicit unlimited setting. */
   limit: number;
