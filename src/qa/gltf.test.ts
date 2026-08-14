@@ -38,6 +38,80 @@ const INVALID_ACCESSOR_GLTF = new TextEncoder().encode(
 );
 
 describe('Khronos final-byte conformance fixtures', () => {
+  test('ignores only exact KTX2 validator limitations on a required BasisU artifact', () => {
+    const report = {
+      issues: {
+        numErrors: 0,
+        numWarnings: 3,
+        numInfos: 1,
+        numHints: 0,
+        messages: [
+          {
+            code: 'VALUE_NOT_IN_LIST',
+            message: "Invalid value 'image/ktx2'. Valid values are ('image/jpeg', 'image/png').",
+            severity: 1,
+            pointer: '/images/0/mimeType',
+          },
+          {
+            code: 'IMAGE_UNRECOGNIZED_FORMAT',
+            message: 'Image format not recognized.',
+            severity: 1,
+            pointer: '/images/0',
+          },
+          {
+            code: 'ACCESSOR_INVALID_FLOAT',
+            message: 'Accessor contains an invalid float.',
+            severity: 1,
+            pointer: '/accessors/0',
+          },
+        ],
+      },
+      info: { extensionsRequired: ['KHR_texture_basisu'] },
+    };
+
+    expect(gltfReportFindings(report, 'prop.default')).toEqual([
+      expect.objectContaining({ code: 'GLTF_ACCESSOR_INVALID_FLOAT', disposition: 'warn' }),
+    ]);
+    const intent = createAssetIntentV1({ category: 'prop' });
+    const finalReport = appendFinalGltfQa(
+      intent,
+      createAssetQaReportV1(intent, { evaluatedDimensions: ['categoryReadiness'] }),
+      report,
+    );
+    expect(finalReport.dimensions.exportIntegrity.metrics).toMatchObject({
+      gltfErrors: 0,
+      gltfWarnings: 1,
+    });
+  });
+
+  test('does not suppress lookalike KTX2 warnings without the exact extension and pointers', () => {
+    const base = {
+      issues: {
+        numErrors: 0,
+        numWarnings: 2,
+        numInfos: 0,
+        numHints: 0,
+        messages: [
+          {
+            code: 'VALUE_NOT_IN_LIST',
+            message: "Invalid value 'image/ktx2'. Valid values are ('image/jpeg', 'image/png').",
+            severity: 1,
+            pointer: '/materials/0/mimeType',
+          },
+          {
+            code: 'IMAGE_UNRECOGNIZED_FORMAT',
+            message: 'Image format not recognized.',
+            severity: 1,
+            pointer: '/images/not-an-index',
+          },
+        ],
+      },
+      info: { extensionsRequired: ['KHR_texture_basisu'] },
+    };
+    expect(gltfReportFindings(base, 'prop.default')).toHaveLength(2);
+    expect(gltfReportFindings({ ...base, info: {} }, 'prop.default')).toHaveLength(2);
+  });
+
   test('localizes a parsed but out-of-bounds accessor as a deterministic blocker', async () => {
     const validation = await validateFinalGlbBytes(INVALID_ACCESSOR_GLTF, 'invalid-accessor.gltf');
     expect(validation.issues.numErrors).toBeGreaterThan(0);
