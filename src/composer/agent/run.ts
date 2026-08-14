@@ -215,14 +215,16 @@ export async function runKilnComposer(
       })
       .join('\n');
 
-    const userPrompt = buildComposerUserPrompt({
-      prompt: opts.prompt,
-      ...(opts.sceneName ? { sceneName: opts.sceneName } : {}),
-      ...(catalogLines ? { catalogSummary: catalogLines } : {}),
-      ...(parentProgram ? { existingProgram: parentProgram } : {}),
-    }) + (opts.inputImage
-      ? '\n\nUse the attached scene reference as visual evidence for object identity, relative placement, scale, materials, and composition. Preserve ambiguity instead of inventing occluded geometry or exact depth.'
-      : '');
+    const userPrompt =
+      buildComposerUserPrompt({
+        prompt: opts.prompt,
+        ...(opts.sceneName ? { sceneName: opts.sceneName } : {}),
+        ...(catalogLines ? { catalogSummary: catalogLines } : {}),
+        ...(parentProgram ? { existingProgram: parentProgram } : {}),
+      }) +
+      (opts.inputImage
+        ? '\n\nUse the attached scene reference as visual evidence for object identity, relative placement, scale, materials, and composition. Preserve ambiguity instead of inventing occluded geometry or exact depth.'
+        : '');
 
     const initialTurn = opts.inputImage
       ? [

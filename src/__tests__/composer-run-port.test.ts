@@ -80,10 +80,11 @@ describe('composer pbrRender seam (B3a)', () => {
       'textBlock',
       'imageBlock',
     ]);
-    expect((initial?.content[0] as { text?: string }).text).toContain(
+    if (!initial) throw new Error('composer did not send an initial message');
+    expect((initial.content[0] as { text?: string }).text).toContain(
       'Use the attached scene reference as visual evidence',
     );
-    expect((initial?.content[1] as { format?: string }).format).toBe('jpeg');
+    expect((initial.content[1] as { format?: string }).format).toBe('jpeg');
   });
 
   test('PbrRenderPort types express the render-service contract', async () => {
