@@ -61,24 +61,24 @@ const exactRender: SceneRenderPort = async (request) => ({
   degraded: false,
   receipt: {
     worldHash: request.worldHash!,
-    cameras: [
-      {
-        position: [8, 5, 8],
-        target: [0, 1, 0],
-        up: [0, 1, 0],
-        fovDeg: 50,
-        aspect: 16 / 9,
-        near: 0.1,
-        far: 100,
-      },
-    ],
+    cameras: (request.cameras ?? [{ position: [8, 5, 8], target: [0, 1, 0] }]).map((camera) => ({
+      position: camera.position,
+      target: camera.target,
+      up: camera.up ?? [0, 1, 0],
+      fovDeg: camera.fovDeg ?? 50,
+      aspect: camera.aspect ?? 16 / 9,
+      near: camera.near ?? 0.1,
+      far: camera.far ?? 100,
+    })),
     width: request.width ?? 640,
     height: request.height ?? 360,
     lightingPresetId: request.lightingPresetId ?? 'neutral-studio-v1',
     backend: 'vulkan',
     rendererId: 'dawn-vulkan:test',
     outputSha256: `sha256:${'b'.repeat(64)}`,
-    perCameraOutputSha256: [`sha256:${'b'.repeat(64)}`],
+    perCameraOutputSha256: (request.cameras ?? [null]).map(
+      () => `sha256:${'b'.repeat(64)}` as const,
+    ),
     outputSetSha256: `sha256:${'c'.repeat(64)}`,
   },
 });
@@ -115,7 +115,7 @@ describe('runKilnWorldIntegration', () => {
     const calls: Parameters<SceneRenderPort>[0][] = [];
     const render: SceneRenderPort = async (request) => {
       calls.push(request);
-      return { ok: true, pngBase64: Buffer.from('png').toString('base64') };
+      return exactRender(request);
     };
     const result = await runKilnWorldIntegration({
       model,
@@ -250,7 +250,7 @@ describe('runKilnWorldIntegration', () => {
       model,
       prompt: 'inspect the authored presentation',
       world: presented,
-      render: async () => ({ ok: true }),
+      render: exactRender,
       maxSteps: 5,
     });
 
@@ -289,7 +289,7 @@ describe('runKilnWorldIntegration', () => {
       model,
       prompt: 'use the authored collider node',
       world: world(),
-      render: async () => ({ ok: true }),
+      render: exactRender,
       resolveAuthoredColliderGeometry: async (request) => {
         resolverRequest = request;
         return {
@@ -538,7 +538,7 @@ describe('runKilnWorldIntegration', () => {
     });
   });
 
-  test('host refuses to finalize when the exact render predates a later world mutation', async () => {
+  test('host renders and finalizes the exact world after a later model mutation', async () => {
     const model = new ToolCapturingModel([
       { toolCalls: [{ name: 'scene_world_render' }] },
       {
@@ -570,13 +570,20 @@ describe('runKilnWorldIntegration', () => {
       maxSteps: 5,
     });
 
-    expect(result.finalized).toBe(false);
-    expect(result.finalizedBy).toBeUndefined();
-    expect(result.error).toContain('hash-bound non-degraded render of the final world');
+    expect(result.finalized).toBe(true);
+    expect(result.finalizedBy).toBe('host');
+    expect(result.error).toBeUndefined();
+    expect(result.renderEvidence).toHaveLength(2);
     expect(result.renderEvidence[0]!.worldHash).not.toBe(result.worldHash);
+    expect(result.renderEvidence[1]).toMatchObject({
+      worldHash: result.worldHash,
+      views: 1,
+      degraded: false,
+      receipt: { worldHash: result.worldHash },
+    });
   });
 
-  test('host refuses to finalize a valid world that was never rendered', async () => {
+  test('host establishes the exact final render barrier when the model never rendered', async () => {
     const result = await runKilnWorldIntegration({
       model: new ToolCapturingModel([{ text: 'done' }]),
       prompt: 'finish without inspection',
@@ -585,8 +592,44 @@ describe('runKilnWorldIntegration', () => {
       maxSteps: 3,
     });
 
+    expect(result).toMatchObject({ finalized: true, finalizedBy: 'host' });
+    expect(result.error).toBeUndefined();
+    expect(result.renderEvidence).toHaveLength(1);
+    expect(result.renderEvidence[0]).toMatchObject({
+      worldHash: result.worldHash,
+      views: 1,
+      degraded: false,
+      receipt: { worldHash: result.worldHash },
+    });
+  });
+
+  test('host refuses a degraded terminal render and does not invent exact evidence', async () => {
+    const fallbackReceipt = {
+      cameraAttested: false as const,
+      backend: 'cpu',
+      rendererId: 'cpu-raster:test',
+      outputSha256: `sha256:${'d'.repeat(64)}` as const,
+    };
+    const result = await runKilnWorldIntegration({
+      model: new ToolCapturingModel([{ text: 'done' }]),
+      prompt: 'finish without inspection',
+      world: world(),
+      render: async () => ({
+        ok: true,
+        pngBase64: Buffer.from('png').toString('base64'),
+        degraded: true,
+        degradeReason: 'GPU deadline; deterministic CPU fallback',
+        fallbackReceipt,
+      }),
+      maxSteps: 3,
+    });
+
     expect(result.finalized).toBe(false);
+    expect(result.finalizedBy).toBeUndefined();
     expect(result.error).toContain('hash-bound non-degraded render');
+    expect(result.renderEvidence).toEqual([
+      expect.objectContaining({ degraded: true, fallbackReceipt, views: 1 }),
+    ]);
   });
 
   test('host commits an exact final render even when the model-call cap blocks a ceremonial follow-up', async () => {
