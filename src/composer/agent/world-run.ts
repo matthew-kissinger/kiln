@@ -147,43 +147,9 @@ function lifecycleTools(
         'Render the current canonical world with the host inspection profile; inspect before finalizing.',
       inputSchema: empty,
       callback: async () => {
-        const worldHash = await hashWorldDocumentV2(state.world);
-        const presentation = state.world.presentation;
-        const result = await render({
-          placements: placements(state.world),
-          worldDocument: state.world,
-          worldHash,
-          ...(presentation
-            ? {
-                cameras: presentation.cameras.map(({ id: _id, cell: _cell, ...camera }) => camera),
-                width: presentation.grid.cellWidth,
-                height: presentation.grid.cellHeight,
-                lightingPresetId: presentation.lightingPresetId,
-              }
-            : {}),
-        });
-        if (!result.ok) return { ok: false, error: result.error ?? 'render failed' } as JSONValue;
-        if (presentation && result.receipt) {
-          const receiptValidation = validatePresentationReceiptV1(
-            {
-              ...presentation,
-              artifactBinding: { kind: 'world', sha256: worldHash },
-            },
-            result.receipt,
-          );
-          if (!receiptValidation.ok) {
-            return {
-              ok: false,
-              error: `presentation receipt rejected: ${receiptValidation.reason}`,
-            } as JSONValue;
-          }
-        }
-        const frames = result.perCameraBase64?.length
-          ? result.perCameraBase64
-          : result.pngBase64
-            ? [result.pngBase64]
-            : [];
-        const evidence = renderEvidenceOf(worldHash, frames.length, result);
+        const attempt = await renderCanonicalWorld(state.world, render);
+        if (!attempt.ok) return { ok: false, error: attempt.error } as JSONValue;
+        const { evidence, frames } = attempt;
         renderEvidence.push(evidence);
         return [
           ...frames.map(
@@ -205,6 +171,53 @@ function lifecycleTools(
       },
     }),
   ];
+}
+
+type CanonicalWorldRenderAttempt =
+  | { ok: true; frames: string[]; evidence: WorldIntegrationRenderEvidence }
+  | { ok: false; error: string };
+
+async function renderCanonicalWorld(
+  world: WorldDocumentV2,
+  render: SceneRenderPort,
+): Promise<CanonicalWorldRenderAttempt> {
+  const worldHash = await hashWorldDocumentV2(world);
+  const presentation = world.presentation;
+  const result = await render({
+    placements: placements(world),
+    worldDocument: world,
+    worldHash,
+    ...(presentation
+      ? {
+          cameras: presentation.cameras.map(({ id: _id, cell: _cell, ...camera }) => camera),
+          width: presentation.grid.cellWidth,
+          height: presentation.grid.cellHeight,
+          lightingPresetId: presentation.lightingPresetId,
+        }
+      : {}),
+  });
+  if (!result.ok) return { ok: false, error: result.error ?? 'render failed' };
+  if (presentation && result.receipt) {
+    const receiptValidation = validatePresentationReceiptV1(
+      {
+        ...presentation,
+        artifactBinding: { kind: 'world', sha256: worldHash },
+      },
+      result.receipt,
+    );
+    if (!receiptValidation.ok) {
+      return {
+        ok: false,
+        error: `presentation receipt rejected: ${receiptValidation.reason}`,
+      };
+    }
+  }
+  const frames = result.perCameraBase64?.length
+    ? result.perCameraBase64
+    : result.pngBase64
+      ? [result.pngBase64]
+      : [];
+  return { ok: true, frames, evidence: renderEvidenceOf(worldHash, frames.length, result) };
 }
 
 function cloneReceipt(receipt: SceneRenderReceipt): SceneRenderReceipt {
@@ -268,6 +281,40 @@ function hostFinalizationError(
   return undefined;
 }
 
+async function establishHostFinalization(
+  world: WorldDocumentV2,
+  render: SceneRenderPort,
+  renderEvidence: WorldIntegrationRenderEvidence[],
+): Promise<{ worldHash: `sha256:${string}`; error?: string; renderedByHost: boolean }> {
+  const worldHash = await hashWorldDocumentV2(world);
+  const validationError = hostFinalizationError(world, worldHash, renderEvidence);
+  if (!validationError) return { worldHash, renderedByHost: false };
+  if (!validationError.startsWith('world integration ended before')) {
+    return { worldHash, error: validationError, renderedByHost: false };
+  }
+  // A render of this exact world already produced non-committable evidence.
+  // Preserve that terminal truth instead of hiding a degraded or malformed
+  // receipt behind an unchanged automatic retry.
+  if (renderEvidence.some((evidence) => evidence.worldHash === worldHash)) {
+    return { worldHash, error: validationError, renderedByHost: false };
+  }
+
+  const attempt = await renderCanonicalWorld(world, render);
+  if (!attempt.ok) {
+    return {
+      worldHash,
+      error: `final world render failed: ${attempt.error}`,
+      renderedByHost: true,
+    };
+  }
+  renderEvidence.push(attempt.evidence);
+  return {
+    worldHash,
+    error: hostFinalizationError(world, worldHash, renderEvidence),
+    renderedByHost: true,
+  };
+}
+
 /**
  * Run the bounded post-compose integration phase over one canonical authority.
  * Fresh flow: compose -> migrate v1 candidate -> run this. Refine flow: compose
@@ -323,19 +370,24 @@ export async function runKilnWorldIntegration(
     );
     metrics.recordResultUsage(result.metrics?.latestAgentInvocation?.usage);
     const collected = metrics.readMetrics();
-    const worldHash = await hashWorldDocumentV2(state.world);
+    const finalization = await establishHostFinalization(
+      state.world,
+      options.render,
+      renderEvidence,
+    );
+    const { worldHash } = finalization;
     const lastText = lastMessageText(result.lastMessage);
-    const finalizationError = finalized.value
-      ? undefined
-      : hostFinalizationError(state.world, worldHash, renderEvidence);
-    const hostFinalized = !finalized.value && finalizationError === undefined;
+    const finalizationError = finalization.error;
+    const hostFinalized =
+      finalizationError === undefined && (!finalized.value || finalization.renderedByHost);
     return {
       world: state.world,
       worldHash,
       placements: placements(state.world),
-      finalized: finalized.value || hostFinalized,
-      ...(finalized.value ? { finalizedBy: 'model' as const } : {}),
-      ...(hostFinalized ? { finalizedBy: 'host' as const } : {}),
+      finalized: finalizationError === undefined,
+      ...(finalizationError === undefined
+        ? { finalizedBy: hostFinalized ? ('host' as const) : ('model' as const) }
+        : {}),
       toolCalls: collected.toolCalls,
       steps: collected.steps,
       renderEvidence,
