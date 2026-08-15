@@ -55,6 +55,34 @@ function world() {
   });
 }
 
+const exactRender: SceneRenderPort = async (request) => ({
+  ok: true,
+  pngBase64: Buffer.from('png').toString('base64'),
+  degraded: false,
+  receipt: {
+    worldHash: request.worldHash!,
+    cameras: [
+      {
+        position: [8, 5, 8],
+        target: [0, 1, 0],
+        up: [0, 1, 0],
+        fovDeg: 50,
+        aspect: 16 / 9,
+        near: 0.1,
+        far: 100,
+      },
+    ],
+    width: request.width ?? 640,
+    height: request.height ?? 360,
+    lightingPresetId: request.lightingPresetId ?? 'neutral-studio-v1',
+    backend: 'vulkan',
+    rendererId: 'dawn-vulkan:test',
+    outputSha256: `sha256:${'b'.repeat(64)}`,
+    perCameraOutputSha256: [`sha256:${'b'.repeat(64)}`],
+    outputSetSha256: `sha256:${'c'.repeat(64)}`,
+  },
+});
+
 describe('runKilnWorldIntegration', () => {
   test('mutates, renders, and finalizes one canonical world authority', async () => {
     const initialWorld = world();
@@ -98,6 +126,7 @@ describe('runKilnWorldIntegration', () => {
     });
     expect(result.error).toBeUndefined();
     expect(result.finalized).toBe(true);
+    expect(result.finalizedBy).toBe('model');
     expect(result.world.objects[0]).toMatchObject({
       socketId: 'slot',
       transform: { position: [0, 0, 0], rotationYDeg: 90 },
@@ -478,6 +507,108 @@ describe('runKilnWorldIntegration', () => {
     expect(modelContext).toContain('outputSha256');
     expect(modelContext).toContain('"cameraAttested":false');
     expect(modelContext).not.toContain('"receipt":');
+    expect(result.finalized).toBe(false);
+    expect(result.error).toContain('hash-bound non-degraded render');
+  });
+
+  test('host finalizes a valid exactly rendered final world when the model omits the ceremonial commit call', async () => {
+    const model = new ToolCapturingModel([
+      { toolCalls: [{ name: 'scene_world_render' }] },
+      { text: 'The world is ready.' },
+    ]);
+    const result = await runKilnWorldIntegration({
+      model,
+      prompt: 'inspect and finish the world',
+      world: world(),
+      render: exactRender,
+      maxSteps: 4,
+    });
+
+    expect(result).toMatchObject({
+      finalized: true,
+      finalizedBy: 'host',
+    });
+    expect(result.error).toBeUndefined();
+    expect(result.toolCalls).toEqual(['scene_world_render']);
+    expect(result.renderEvidence[0]).toMatchObject({
+      worldHash: result.worldHash,
+      views: 1,
+      degraded: false,
+      receipt: { worldHash: result.worldHash },
+    });
+  });
+
+  test('host refuses to finalize when the exact render predates a later world mutation', async () => {
+    const model = new ToolCapturingModel([
+      { toolCalls: [{ name: 'scene_world_render' }] },
+      {
+        toolCalls: [
+          {
+            name: 'scene_world_set_sockets',
+            input: {
+              sockets: [
+                {
+                  id: 'late-slot',
+                  kind: 'anchor',
+                  position: [0, 0, 0],
+                  rotationYDeg: 0,
+                  compatibilityTags: ['cargo'],
+                  capacity: 1,
+                },
+              ],
+            },
+          },
+        ],
+      },
+      { text: 'done' },
+    ]);
+    const result = await runKilnWorldIntegration({
+      model,
+      prompt: 'edit after rendering',
+      world: world(),
+      render: exactRender,
+      maxSteps: 5,
+    });
+
+    expect(result.finalized).toBe(false);
+    expect(result.finalizedBy).toBeUndefined();
+    expect(result.error).toContain('hash-bound non-degraded render of the final world');
+    expect(result.renderEvidence[0]!.worldHash).not.toBe(result.worldHash);
+  });
+
+  test('host refuses to finalize a valid world that was never rendered', async () => {
+    const result = await runKilnWorldIntegration({
+      model: new ToolCapturingModel([{ text: 'done' }]),
+      prompt: 'finish without inspection',
+      world: world(),
+      render: exactRender,
+      maxSteps: 3,
+    });
+
+    expect(result.finalized).toBe(false);
+    expect(result.error).toContain('hash-bound non-degraded render');
+  });
+
+  test('host commits an exact final render even when the model-call cap blocks a ceremonial follow-up', async () => {
+    const result = await runKilnWorldIntegration({
+      model: new ToolCapturingModel([
+        { toolCalls: [{ name: 'scene_world_render' }] },
+        { toolCalls: [{ name: 'scene_world_finalize' }] },
+      ]),
+      prompt: 'render and finish within one admitted call',
+      world: world(),
+      render: exactRender,
+      maxSteps: 1,
+    });
+
+    expect(result).toMatchObject({
+      capped: true,
+      finalized: true,
+      finalizedBy: 'host',
+      steps: 1,
+      toolCalls: ['scene_world_render'],
+    });
+    expect(result.error).toBeUndefined();
   });
 
   test('shares one aggregate model-call allowance across compose and integration', async () => {
