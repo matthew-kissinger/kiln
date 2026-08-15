@@ -69,7 +69,7 @@ Honor the user's complete world intent; do not narrow the scene into a terrain-o
 - scene_world_set_presentation replaces persisted camera/grid/lighting/receipt PARAMETERS only. Do not send artifactBinding; the Engine binds the exact post-edit world SHA-256 at render/package time.
 - Camera order is output order. Each id and grid cell must be unique; camera aspect must equal cellWidth/cellHeight.
 - Limits: 1-12 cameras, grid up to 4x3, cells up to 4096x4096, and cameras x cellWidth x cellHeight must not exceed 16,777,216 total pixels.
-- Use the supported neutral-studio-v1 lighting profile unless the host advertises another versioned ID.
+- Use the host's default supported versioned lighting profile. Preserve an existing historical profile unless the user explicitly requests a newly rendered presentation.
 
 ## Collision, traversal, and terrain
 - scene_world_set_collision selects one object's explicit asset-local policy: none, bounds, selected authored-submesh GLB nodeNames, or deterministic generated-mesh bounds-box. Authored nodes are resolved only through the host's hash-bound geometry port; artifact modes require the host publisher. Do not invent paths, URLs, or hashes.
