@@ -60,6 +60,8 @@ export interface RunKilnWorldIntegrationResult {
   callBudget?: GenerationCallBudgetReceipt;
   /** Every successful canonical-world render attempt, in tool-call order. */
   renderEvidence: WorldIntegrationRenderEvidence[];
+  /** The model may request commit, but the host remains the final authority. */
+  finalizedBy?: 'model' | 'host';
   capped?: boolean;
   lastText?: string;
   error?: string;
@@ -244,6 +246,28 @@ function renderEvidenceOf(
   };
 }
 
+function hostFinalizationError(
+  world: WorldDocumentV2,
+  worldHash: `sha256:${string}`,
+  renderEvidence: readonly WorldIntegrationRenderEvidence[],
+): string | undefined {
+  const issues = validateWorldIntegrationV2(world);
+  if (issues.length) {
+    return `world integration validation failed: ${issues[0]!.code}`;
+  }
+  const exactFinalRender = renderEvidence.some(
+    (evidence) =>
+      evidence.worldHash === worldHash &&
+      evidence.views > 0 &&
+      evidence.degraded !== true &&
+      evidence.receipt?.worldHash === worldHash,
+  );
+  if (!exactFinalRender) {
+    return 'world integration ended before a hash-bound non-degraded render of the final world';
+  }
+  return undefined;
+}
+
 /**
  * Run the bounded post-compose integration phase over one canonical authority.
  * Fresh flow: compose -> migrate v1 candidate -> run this. Refine flow: compose
@@ -301,11 +325,17 @@ export async function runKilnWorldIntegration(
     const collected = metrics.readMetrics();
     const worldHash = await hashWorldDocumentV2(state.world);
     const lastText = lastMessageText(result.lastMessage);
+    const finalizationError = finalized.value
+      ? undefined
+      : hostFinalizationError(state.world, worldHash, renderEvidence);
+    const hostFinalized = !finalized.value && finalizationError === undefined;
     return {
       world: state.world,
       worldHash,
       placements: placements(state.world),
-      finalized: finalized.value,
+      finalized: finalized.value || hostFinalized,
+      ...(finalized.value ? { finalizedBy: 'model' as const } : {}),
+      ...(hostFinalized ? { finalizedBy: 'host' as const } : {}),
       toolCalls: collected.toolCalls,
       steps: collected.steps,
       renderEvidence,
@@ -315,6 +345,7 @@ export async function runKilnWorldIntegration(
         : {}),
       ...(metrics.wasCapped() ? { capped: true } : {}),
       ...(lastText ? { lastText } : {}),
+      ...(finalizationError ? { error: finalizationError } : {}),
     };
   } catch (error) {
     const collected = metrics.readMetrics();
