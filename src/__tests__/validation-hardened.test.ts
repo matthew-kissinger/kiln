@@ -217,41 +217,49 @@ function build() {
   });
 });
 
-describe('kiln validation — tri budget advisory', () => {
-  test('warns when a prop exceeds its tri budget', () => {
-    // 20x sphereGeo(1, 32, 32) -> 20 * 2048 = 40960 tris, dwarfs prop 3000.
-    const geo = Array.from({ length: 20 })
-      .map(
-        () =>
-          "  createPart('S' + Math.random(), sphereGeo(1, 32, 32), gameMaterial(0xff0000), { parent: root });",
-      )
-      .join('\n');
-    const r = validate(
-      `
+describe('kiln validation — no triangle budget', () => {
+  // Kiln deliberately has no triangle advisory. It used to, and the measured
+  // effect was models that stopped at the blockout stage to stay under a number
+  // that never gated anything. These tests exist so it does not come back.
+  //
+  // 20 x sphereGeo(1, 32, 32) is ~40,960 estimated triangles, which comfortably
+  // cleared every soft reference point the old table held.
+  const HEAVY = `
 const meta = { name: 'Heavy' };
 function build() {
   const root = createRoot('Heavy');
-${geo}
+  for (let i = 0; i < 20; i++) {
+    createPart('S' + i, sphereGeo(1, 32, 32), gameMaterial(0xff0000), { parent: root });
+  }
   return root;
 }
-`,
-      { category: 'prop' },
-    );
+`;
+
+  test('a 40k-triangle prop validates clean, with no size advisory', () => {
+    const r = validate(HEAVY, { category: 'prop' });
     expect(r.valid).toBe(true);
-    expect(r.warnings.some((w) => w.code === 'TRI_BUDGET_EXCEEDED')).toBe(true);
+    expect(r.warnings.some((w) => w.code === 'TRI_BUDGET_EXCEEDED')).toBe(false);
+    expect(r.warnings.some((w) => /triangle|budget/i.test(w.message))).toBe(false);
   });
 
-  test('does not warn without a category hint', () => {
-    // Same heavy scene, but no category → we don't have a budget to compare.
-    const r = validate(`
-const meta = { name: 'Heavy' };
-function build() {
-  const root = createRoot('Heavy');
-  createPart('S', sphereGeo(1, 32, 32), gameMaterial(0xff0000), { parent: root });
-  return root;
-}
-`);
-    expect(r.warnings.some((w) => w.code === 'TRI_BUDGET_EXCEEDED')).toBe(false);
+  test('no category produces a size advisory', () => {
+    const categories = ['prop', 'character', 'vfx', 'environment', 'vehicle'];
+    for (const category of categories) {
+      const r = validate(HEAVY, { category });
+      expect(r.valid).toBe(true);
+      expect(r.warnings.some((w) => /triangle|budget/i.test(w.message))).toBe(false);
+    }
+    const neutral = validate(HEAVY);
+    expect(neutral.valid).toBe(true);
+    expect(neutral.warnings.some((w) => /triangle|budget/i.test(w.message))).toBe(false);
+  });
+
+  test('triangles are still estimated, just never judged', () => {
+    // The estimate stays available to callers as information; nothing compares
+    // it to a limit.
+    const r = validate(HEAVY, { category: 'prop' });
+    expect(r.valid).toBe(true);
+    expect(r.warnings.every((w) => w.code !== 'TRI_BUDGET_EXCEEDED')).toBe(true);
   });
 });
 

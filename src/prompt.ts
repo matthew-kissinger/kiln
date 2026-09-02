@@ -79,7 +79,7 @@ Generate assets with realistic proportions and detail:
 - Multiple materials with PBR properties (metalness, roughness)
 - Include fine details (seams, edges, bevels)
 - Subtle color gradients
-- Higher triangle budgets allowed`,
+- Spend geometry freely; there is no triangle limit`,
 };
 
 // =============================================================================

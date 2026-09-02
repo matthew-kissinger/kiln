@@ -158,6 +158,10 @@ describe('settleContacts', () => {
 });
 
 describe('tri estimate upgrades', () => {
+  // These used to observe the estimator through the TRI_BUDGET_EXCEEDED advisory,
+  // which no longer exists — Kiln has no triangle budget on purpose. The estimate
+  // itself is still computed and is now surfaced directly on the result as
+  // information, so these assert on the number rather than on a verdict about it.
   const wrap = (body: string) => `
     const meta = { name: 'est', category: 'prop' };
     function build() {
@@ -173,28 +177,37 @@ describe('tri estimate upgrades', () => {
       wrap(`for (let i = 0; i < 8; i++) {
         createPart('P' + i, cylinderGeo(0.1, 0.1, 1, 16), gameMaterial('#999999'), { parent: root });
       }`),
-      { category: 'vfx' }, // 2000 budget — single counting stays silent
+      { category: 'vfx' },
     );
     expect(r.valid).toBe(true);
-    // 50 spheres at 32x16 → 50 * 1024 = 51200 > prop budget (25000) * 1.5 → advisory fires.
+    expect(r.estimatedTris).toBe(512);
+
+    // 50 spheres at 32x16 -> 50 * 1024 = 51200. Dense, and entirely unremarkable:
+    // it validates clean and draws no advisory of any kind.
     const heavy = validate(
       wrap(`for (let i = 0; i < 50; i++) {
         createPart('S' + i, sphereGeo(0.5, 32, 16), gameMaterial('#999999'), { parent: root });
       }`),
       { category: 'prop' },
     );
-    expect(heavy.warnings.some((w) => w.message.includes('tris'))).toBe(true);
+    expect(heavy.valid).toBe(true);
+    expect(heavy.estimatedTris).toBe(51200);
+    expect(heavy.warnings.some((w) => /triangle|budget/i.test(w.message))).toBe(false);
   });
 
   test('gearGeo and subdivide contribute estimates', () => {
     const r = validate(
       wrap(`
         createPart('Gear', gearGeo({ teeth: 64 }), gameMaterial('#999999'), { parent: root }); // ~2048
-        const blob = subdivide(sphereGeo(1, 16, 12), 3); // 384 base * 64 → ~24576
+        const blob = subdivide(sphereGeo(1, 16, 12), 3); // 384 base * 64 -> ~24576
         createPart('Blob', blob, gameMaterial('#999999'), { parent: root });
       `),
-      { category: 'vfx' }, // budget 15000 * 1.5 = 22500 → combined ~26600 trips the advisory
+      { category: 'vfx' },
     );
-    expect(r.warnings.some((w) => w.message.includes('tris'))).toBe(true);
+    expect(r.valid).toBe(true);
+    // Both call sites contribute: the gear's teeth-driven estimate and the
+    // subdivision's 4^n multiplier.
+    expect(r.estimatedTris).toBeGreaterThan(22500);
+    expect(r.warnings.some((w) => /triangle|budget/i.test(w.message))).toBe(false);
   });
 });

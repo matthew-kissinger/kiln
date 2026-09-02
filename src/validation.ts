@@ -53,20 +53,34 @@ export interface ValidationResult {
    */
   issues: ValidationIssue[];
   /**
-   * Non-fatal advisories (tri budget, style suggestions). Never block
+   * Non-fatal advisories (style and unit suggestions). Never block
    * execution, always worth surfacing to agents.
    */
   warnings: ValidationIssue[];
+  /**
+   * Static triangle estimate for `build()`, summed from primitive call sites and
+   * scaled by literal loop bounds. Present only when the body parsed.
+   *
+   * This is information and nothing else. No advisory, warning, or gate reads
+   * it, and none should: Kiln has no triangle budget by design, because every
+   * number it used to print read to a model as a target to stay under. Surface
+   * it to a caller who asked how big something is; never compare it to a limit.
+   */
+  estimatedTris?: number;
 }
 
 // =============================================================================
-// Budget table
+// Triangle estimation
 // =============================================================================
 
 /**
- * Rough static triangle estimates for every geometry primitive. Used to add a
- * "your asset is likely to blow the category budget" warning before a render
- * is attempted. Exact numbers come from Three.js's own primitive builders.
+ * Rough static triangle estimates for every geometry primitive. Exact numbers
+ * come from Three.js's own primitive builders.
+ *
+ * Reported, never judged: `analyzeBody` sums these into `estimatedTris` so a
+ * caller can SEE the scale of what a program will build. Nothing compares the
+ * result to a limit — see the note above `validate` on why the budget advisory
+ * was removed.
  */
 function estimateGeometryTris(name: string, args: readonly acorn.Expression[]): number | null {
   function asNum(node: acorn.Expression | undefined): number | null {
@@ -154,27 +168,19 @@ function estimateGeometryTris(name: string, args: readonly acorn.Expression[]): 
   }
 }
 
-// Advisory-only soft reference points, NOT limits. Raised substantially in the
-// 2026-06 instanceability cycle: the old values (character 5000 / prop 3000 /
-// vfx 2000 / environment 15000) predated the More-detail toggle and the finding
-// that triangles are not a cost driver (input tokens dominate generation cost,
-// and runtime cost is draw-calls-not-tris). These exist only so a wildly over-
-// budget asset gets a gentle informational nudge; they never gate. See
-// docs/kiln-instanceability-and-runtime-instancing-cycle.md.
-const CATEGORY_TRI_BUDGETS: Record<string, number> = {
-  character: 40000,
-  prop: 25000,
-  vfx: 15000,
-  environment: 120000,
-  vegetation: 40000,
-  vehicle: 40000,
-  weapon: 20000,
-  building: 60000,
-  architecture: 60000,
-};
-// Fallback when a category has no specific entry, so the advisory still has a
-// reference point instead of silently never firing.
-const DEFAULT_TRI_BUDGET = 40000;
+// There is deliberately no triangle budget here.
+//
+// Kiln used to emit a TRI_BUDGET_EXCEEDED advisory against per-category soft
+// reference points. It was removed because it was actively harmful: triangles
+// are not a cost driver (input tokens dominate generation cost, and runtime cost
+// is draw-calls-not-triangles), and every number the advisory printed read to a
+// model as a target to stay under. The measured effect was assets that stopped
+// at the blockout stage — a few hundred triangles for something that wanted tens
+// of thousands. `analyzeBody` still estimates triangles, and the render path
+// still reports the real count; nothing judges either against a limit.
+//
+// If you want a cap, pass one explicitly through `request.budget.maxTriangles`.
+// That is a caller's deliberate constraint, not a default the validator invents.
 
 // =============================================================================
 // Core validator
@@ -184,9 +190,14 @@ const DEFAULT_TRI_BUDGET = 40000;
  * Validate Kiln code before rendering.
  *
  * @param code      raw JS string as returned by the LLM
- * @param opts      optional hints the validator can use for richer checks
+ * @param _opts     accepted and currently unread. Every category-dependent
+ *                  advisory this validator had was the triangle budget, and that
+ *                  is gone. The option stays in the signature because callers
+ *                  pass it and because category-aware STRUCTURAL advisories are
+ *                  the natural place for it to come back. It must not come back
+ *                  as a size limit.
  */
-export function validate(code: string, opts: { category?: string } = {}): ValidationResult {
+export function validate(code: string, _opts: { category?: string } = {}): ValidationResult {
   const issues: ValidationIssue[] = [];
   const warnings: ValidationIssue[] = [];
 
@@ -291,7 +302,7 @@ export function validate(code: string, opts: { category?: string } = {}): Valida
     });
   }
 
-  // --- Body analysis — infinite loops, recursion, tri budget --------------
+  // --- Body analysis — infinite loops, recursion ---------------------------
 
   const analysis = analyzeBody(ast);
 
@@ -315,22 +326,6 @@ export function validate(code: string, opts: { category?: string } = {}): Valida
     });
   }
 
-  // Tri-count advisory — INFORMATIONAL ONLY, never a gate (it is a warning, so
-  // it never sets valid:false). LLMs over- and under-estimate both ways, tris
-  // are not a cost driver, and the More-detail toggle deliberately pushes tris
-  // up — so this only nudges on assets well past a generous soft reference.
-  if (analysis.estimatedTris > 0 && opts.category) {
-    const budget = CATEGORY_TRI_BUDGETS[opts.category] ?? DEFAULT_TRI_BUDGET;
-    if (analysis.estimatedTris > budget * 1.5) {
-      warnings.push({
-        code: 'TRI_BUDGET_EXCEEDED',
-        message: `Estimated ${analysis.estimatedTris} tris (informational; "${opts.category}" assets typically land under ~${budget}). This is not a limit — keep the detail if the silhouette needs it.`,
-        fixHint:
-          'Only if the asset feels over-dense: reduce segments on cylinderGeo/sphereGeo, or drop hidden interior parts.',
-      });
-    }
-  }
-
   // Rotation-units advisory: createPart/createInstance rotation is DEGREES,
   // but models steeped in raw THREE habitually write radians — which silently
   // flatten to ~0°. Caught live 2026-06-11 (AC-47 prop blades all vertical).
@@ -344,7 +339,7 @@ export function validate(code: string, opts: { category?: string } = {}): Valida
     });
   }
 
-  return toResult(issues, warnings);
+  return toResult(issues, warnings, analysis.estimatedTris);
 }
 
 // Backward-compat alias.
@@ -695,12 +690,17 @@ function collectStaticStringBindings(ast: acorn.Program): ReadonlyMap<string, st
   return values;
 }
 
-function toResult(issues: ValidationIssue[], warnings: ValidationIssue[]): ValidationResult {
+function toResult(
+  issues: ValidationIssue[],
+  warnings: ValidationIssue[],
+  estimatedTris?: number,
+): ValidationResult {
   return {
     valid: issues.length === 0,
     errors: issues.map((i) => i.message),
     issues,
     warnings,
+    ...(estimatedTris === undefined ? {} : { estimatedTris }),
   };
 }
 

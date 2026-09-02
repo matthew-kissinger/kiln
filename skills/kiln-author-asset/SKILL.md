@@ -46,15 +46,106 @@ Check, in this order:
 Use **`kiln_inspect`** for a close-up orbit on a named part when a cell is too small to judge, and
 **`kiln_screenshot_animation`** when the program has an `animate()`.
 
+## The quality bar
+
+**Build it as though it ships in a AAA title.** Not "a recognizable X" — the version of X a studio
+artist would put in front of a camera. Every asset you author should survive being placed next to a
+real production asset without looking like the cheap one.
+
+That bar is not rhetoric; it is the actual standard you check against in the critic loop below. An
+asset that validates, renders, and is recognizable has cleared the *floor*, not the bar. Most
+programs stop at the floor. Do not.
+
+### There is no triangle budget
+
+Kiln does not have one. Not a soft one, not an advisory, not a number you should feel is generous.
+`kiln_validate` will not warn you for density and `validateAsset` will not either — those advisories
+existed and were deliberately deleted, because every number they printed read as a target to stay
+under, and the result was assets that stopped at the blockout stage.
+
+Triangles are not a runtime cost driver. Draw calls are, and those track distinct **materials**, not
+geometry. So:
+
+- **Detail is free. Spend it.** Ten thousand triangles on a hero prop is normal, not extravagant.
+- If a render comes back at a few hundred triangles and nobody asked for low-poly, you built a
+  blockout and stopped. Go back.
+- The only real limits are the ones you were explicitly given in the request.
+
+Reuse materials where surfaces genuinely match — that is the number worth economizing. Never trade
+away geometry to protect a grade.
+
+### Work in three passes
+
+Most failures are stopping after pass one.
+
+1. **Silhouette.** Primary masses only. Get proportion and orientation right — detail on a wrong
+   shape is wasted work, and this is what the contact sheet judges hardest.
+2. **Structure.** Break the masses into the parts the real object actually has: individual planks
+   rather than one slab, staves rather than a cylinder, panels, frames, joints, trim, thickness.
+   **Count the parts on the real thing and match that count.**
+3. **Detail.** Bolts, hinges, brackets, rivets, straps, chamfers, seams, wear, overhangs, sag,
+   asymmetry. Small repeated elements are what read as *made* rather than *generated*, and they cost
+   nothing you have to save.
+
+### Reach for the tools that make detail cheap
+
+Boxes and cylinders alone produce blockouts. The catalog exists to get past that:
+
+- `roundedBoxGeo` instead of `boxGeo` on anything manufactured — a chamfer catches light and reads as
+  a real object instead of a primitive. This is the single highest-value substitution available.
+- `subdivide` for organic or worn forms. Each iteration is roughly 4x the triangles; that is the
+  point.
+- `boolDiff` / `boolUnion` / `boolIntersect` for openings, sockets, recesses, and cut joinery — real
+  joinery instead of parts parked against each other.
+- `revolveProfile` / `extrudeProfile` for anything turned or extruded: posts, rims, mouldings,
+  finials. A revolved profile looks crafted in a way a stack of cylinders never does.
+- `hull` for organic bulk from a few control points.
+- Arrays for repeated structure: staves, planks, rivets, palings, tiles, links.
+
+Run `kiln_list_primitives` filtered to `csg`, `mesh-ops`, `curves`, and `arrays` before concluding a
+shape is "as good as primitives allow". It usually is not.
+
+## The critic loop
+
+This is the part that produces quality, and it is the part that gets skipped.
+
+After a render that builds and looks broadly right, **stop being the author and become a hostile art
+director reviewing someone else's work.** Not a light polish pass — an adversarial one. If your
+harness can hand the render to a fresh agent or a separate reviewing pass with no memory of writing
+the program, do that; a fresh reader is much harder to fool than the author. If it cannot, run the
+pass explicitly and in writing anyway.
+
+The critic's job:
+
+1. **Name a real reference.** Say out loud what real object or production asset this is competing
+   with. "A weathered oak barrel from a period drama set." Vague targets produce vague assets.
+2. **Compare side by side, and be specific.** For each of silhouette, proportion, part count,
+   joinery, surface detail, and wear: does the render hold up against that reference, or does it
+   read as the cheap version? Name the gap in words. "The staves are too uniform and there are no
+   hoops" is actionable; "needs more detail" is not.
+3. **Answer one question honestly: if these two were shown blind, which is obviously the generated
+   one — and what gave it away?** The giveaway is your next task.
+4. **Be harsh.** "Good enough" from the author is the default state of every asset and it is what
+   ceilings quality. If the critic pass produces no findings, the pass was not run properly — look
+   again at the cell you skimmed.
+
+Then go fix the findings and render again. **Loop.** Keep looping until the critic pass genuinely
+cannot name a gap that matters, not until you are tired of looping or the program stops erroring.
+
+Two things that end the loop legitimately: the critic has no substantive finding left, or you have
+hit a real limit of the primitives and can say concretely what it is. "It builds" is not one of them.
+
 ## Rules that save renders
 
-- Build the silhouette first, then subdivide. Detail on a wrong shape is wasted work.
+- Build the silhouette first, then add detail. See the three passes above.
 - Name parts for what they are. The names survive into the GLB and are how the next agent, and the
   game engine, address them.
-- Reuse materials. The instanceability grade is driven by distinct-material count, and fewer shared
-  materials grade higher.
-- Prefer a few well-placed primitives over many small ones. Triangle budget is a soft warning, not a
-  wall, but a 40k-triangle crate is a mistake.
+- **Proportion errors are more damaging than missing detail.** A roof that does not oversail the
+  walls it covers, posts too thin for what they carry, or a part that floats reads as broken no
+  matter how much detail sits on it. Check the orthographic cells against how the real object is
+  actually built and loaded.
+- Reuse materials where surfaces genuinely match. The instanceability grade rewards fewer distinct
+  materials, but grade is informational — a B that looks right beats an A that looks like a toy.
 - If two consecutive renders look the same, you are not changing what you think you are changing.
   Re-read the program instead of rendering a third time.
 

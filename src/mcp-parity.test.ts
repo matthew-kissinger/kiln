@@ -28,7 +28,9 @@ import { runTool, kilnMcpToolDefs, createKilnMcpServer } from './mcp-server';
  * making is against what the SDK actually puts on the wire. A test against our own
  * converter would have been a test of the converter, not of the surface.
  */
-async function listToolsOverMcp(): Promise<{ name: string; description?: string; inputSchema: unknown }[]> {
+async function listToolsOverMcp(): Promise<
+  { name: string; description?: string; inputSchema: unknown }[]
+> {
   const [clientTransport, serverTransport] = InMemoryTransport.createLinkedPair();
   const server = createKilnMcpServer();
   const client = new Client({ name: 'kiln-parity', version: '0' });
@@ -112,7 +114,7 @@ describe('tool surface parity across transports', () => {
     }
   });
 
-  it("the in-process generate surface keeps the baseline plus a terminal submit", () => {
+  it('the in-process generate surface keeps the baseline plus a terminal submit', () => {
     // Unchanged by the MCP recomposition: the engine's own loop still runs the
     // frozen baseline, and still needs an unambiguous stopping action.
     const baseline = new Set(createKilnToolRegistry().map((d) => d.name));

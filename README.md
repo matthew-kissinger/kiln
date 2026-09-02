@@ -6,11 +6,12 @@ Kiln turns a sentence into a game-ready GLB by having a model *write a program*,
 rendered, and fix it — not by sampling a mesh. The output is a small program with named parts, not
 an opaque blob: editable, diffable, parametric, and readable by the next agent that touches it.
 
-![Six-view contact sheet of a procedurally generated stone well](examples/hero-sheet.png)
+![Six-view contact sheet of a procedurally generated field gun](examples/hero-sheet.png)
 
-*The contact sheet the model looks at — `examples/well.kiln.js`, 472 triangles, three PBR materials
-with bound albedo/normal/ARM maps:*
-`bun run kiln render examples/well.kiln.js --views sheet.png`
+*The contact sheet the model looks at — `examples/field-gun.kiln.js`, 15,544 triangles: a revolved
+bronze barrel bored with a boolean, a stepped oak carriage carrying strapwork and bolt heads, and
+twelve-spoke wheels with iron tyres:*
+`bun run kiln render examples/field-gun.kiln.js --views sheet.png`
 
 ## What this is
 
@@ -26,8 +27,8 @@ The interesting parts are architectural, and they generalize past 3D:
   single source of truth. The in-process Strands skin and the MCP server both iterate it, so tool
   names and schemas cannot drift apart.
 - **Deterministic gates, kept separate from model judgment.** Self-intersection, part connectivity,
-  triangle budget, and AST validation all fail closed with no model call. `QaContext` is
-  deliberately image-free so a QA rule *structurally cannot* read a render buffer.
+  and AST validation all fail closed with no model call. `QaContext` is deliberately image-free so a
+  QA rule *structurally cannot* read a render buffer.
 - **A render port with a fail-closed degrade.** `captureViewsViaPort` owns the deadline, PNG
   validation, grid composition, and a never-throw fallback. Renderers are swappable; correctness
   does not depend on which one ran.
@@ -80,17 +81,21 @@ repository; none requires a cloud account.
 
 ### What the difference actually looks like
 
-The same program — the well above — rendered both ways:
+The same program — the field gun above — rendered both ways:
 
 | CPU rasterizer | GPU PBR |
 |---|---|
-| ![Well rendered flat-shaded, brickwork invisible](examples/well-cpu.png) | ![Same well with brick texture and normal relief visible](examples/well-gpu.png) |
+| ![Field gun flat-shaded, every material rendering as white plastic](examples/gun-cpu.png) | ![The same gun with oak, iron and bronze all reading distinctly](examples/gun-gpu.png) |
 
-Geometry is equally legible in both: silhouette, proportion, orientation, part contact. But on the
-CPU the brick curb is **flat grey** and the roof is **flat orange**. Not dimmer — *absent*. The
-albedo, normal, and ARM maps that make one stone and the other weathered planks simply do not exist
-in a flat-shaded render. Every material cue an artist would judge is gone, while every geometric one
-survives.
+Geometry is equally legible in both. On the CPU sheet you can still count the twelve spokes, see the
+bolt heads on the cheek straps, and read the stepped carriage — silhouette, proportion, orientation
+and part contact all survive intact.
+
+What does not survive is every material cue in the asset. The oak carriage, the iron tyres, and the
+bronze barrel render as **the same white plastic**. Not dimmer — *absent*. The procedural albedo and
+the derived normal maps that separate weathered wood from gun-metal simply do not exist in a
+flat-shaded render, so an agent looking at the left-hand sheet has no way to tell that this asset has
+three materials at all.
 
 **If your assets have textures or metal, use the GPU.** That is most real assets, and it is why
 `auto` reaches for a GPU first. The CPU rasterizer is the floor that guarantees the loop runs
@@ -158,7 +163,7 @@ maintained is collapsed. That is a deliberate trade for portability.
 | Tool | What it does |
 |---|---|
 | `kiln_list_primitives` | the primitive/helper catalog with signatures |
-| `kiln_validate` | AST validation — syntax, structure, infinite loops, recursion, triangle budget |
+| `kiln_validate` | AST validation — syntax, structure, infinite loops, recursion |
 | `kiln_render` | build the scene, return metrics **and** the six-view sheet, in one call |
 | `kiln_screenshot_animation` | frames of an `animate()` program, so motion is visible too |
 | `kiln_view_interior` | interior camera, for anything enterable |

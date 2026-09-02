@@ -361,7 +361,7 @@ countTriangles(root: Object3D)  // Sums triangle count across every mesh in the 
 countMaterials(root: Object3D)  // Unique material count (by reference) across the subtree.
 getJointNames(root: Object3D)  // All node names beginning with \`Joint_\`. Use to sanity-check animation targets.
 validateAsset(root: Object3D, category: 'character' | 'prop' | 'vfx' | 'environment' | 'architecture' | 'vegetation' | 'vehicle')
-  // Warns on category-appropriate triangle / material budgets."
+  // Warns on high distinct-material count (draw calls). No triangle limit; detail is free."
 `;
 
 exports[`unified api surface (examples folded in) unified api snapshot (review folded examples in this diff) 1`] = `
@@ -883,6 +883,6 @@ countMaterials(root: Object3D)  // Unique material count (by reference) across t
 getJointNames(root: Object3D)  // All node names beginning with \`Joint_\`. Use to sanity-check animation targets.
   // e.g. const joints = getJointNames(root);
 validateAsset(root: Object3D, category: 'character' | 'prop' | 'vfx' | 'environment' | 'architecture' | 'vegetation' | 'vehicle')
-  // Warns on category-appropriate triangle / material budgets.
+  // Warns on high distinct-material count (draw calls). No triangle limit; detail is free.
   // e.g. const v = validateAsset(root, 'prop');"
 `;
