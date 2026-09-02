@@ -1,125 +1,259 @@
-# @kiln/engine
+# Kiln
 
-The **Kiln 3D engine** — a sentence in, a game-ready GLB out. A model-agnostic
-Strands agent loop drives a tool surface (`list → validate → render → screenshot →
-finalize`) over a primitive/CSG library, a deterministic pure-CPU rasterizer that
-lets the model *see* its asset, and post-bake grading (instanceability, palette
-consolidation). Plus a Bradley-Terry pairwise **arena** for ranking. A scene **composer** (a THREE-free
-placement core — layout, overlap resolution, a small scene DSL — plus its own Strands
-agent loop) arranges many finished assets into one coherent, overlap-free scene.
+**A vision-in-the-loop code-generation agent that builds 3D assets as source code.**
 
-Extracted from the `pixel-forge` monorepo (`packages/core/src/kiln`) as a lean,
-self-contained package: **no Playwright, no 2D image SDKs, no FBX/imposter/LOD
-pipeline** — just the text-to-GLB engine Kiln Studio runs in production.
+Kiln turns a sentence into a game-ready GLB by having a model *write a program*, look at what it
+rendered, and fix it — not by sampling a mesh. The output is a small program with named parts, not
+an opaque blob: editable, diffable, parametric, and readable by the next agent that touches it.
 
-> **Private package.** Not published to npm. Consumed by the `kiln-studio` app via a
-> **committed tarball** (`agent-runtime/vendor/kiln-engine.tgz`, refreshed by `sync:engine`)
-> for local dev, CI, and both Docker images — NOT a path-link (`file:../kiln` hits a Windows
-> `EPERM` copying native deps). See `../plan/`.
+![Six-view contact sheet of a procedurally generated stone well](examples/hero-sheet.png)
 
-## External Access Boundary
+*The contact sheet the model looks at — `examples/well.kiln.js`, 472 triangles, three PBR materials
+with bound albedo/normal/ARM maps:*
+`bun run kiln render examples/well.kiln.js --views sheet.png`
 
-Do not expose this engine package, its raw tool surface, or its composer harness directly to external
-users. The approved private developer interface lives in the sibling `kiln-studio` repo:
+## What this is
 
-- Studio `/v1` is the product contract for REST, SDK, and future AgentCore Gateway MCP tools.
-- Studio owns `DeveloperClient` auth, scopes, quotas, audit, S3/Dynamo ownership, and artifact URLs.
-- The generation AgentCore Runtime and this engine stay private execution infrastructure.
-- Product-level tools may expose asset/pack/scene planning, validation, generation, composition, and
-  downloads, but not raw `kiln_render`, `kiln_screenshot`, `scene_place`, `scene_render`,
-  `scene_finalize`, transcripts, storage keys, or provider keys.
+A working reference implementation of an agent loop that can **see its own work**:
 
-For current access and distribution decisions, see
-`../kiln-studio/docs/launch/11-private-developer-platform-prod-handoff.md`.
-
-## Install
-
-```bash
-bun install
-bun run typecheck   # tsc --noEmit
-bun run test        # bun test (offline; live agent tests gated behind KILN_SPIKE_LIVE=1)
-bun run test:coverage # LCOV report plus the checked coverage ratchet
+```
+list primitives -> write program -> validate (AST) -> render -> look at six views -> fix -> finalize
 ```
 
-The reliability baseline is **95.38% functions / 91.80% lines**. CI enforces
-non-regression ratchets of 92% functions and 91% lines and uploads `coverage/lcov.info`.
-Threshold decreases require an explicit measured rationale.
+The interesting parts are architectural, and they generalize past 3D:
+
+- **One tool definition, two transports.** [`src/tools/registry.ts`](src/tools/registry.ts) is the
+  single source of truth. The in-process Strands skin and the MCP server both iterate it, so tool
+  names and schemas cannot drift apart.
+- **Deterministic gates, kept separate from model judgment.** Self-intersection, part connectivity,
+  triangle budget, and AST validation all fail closed with no model call. `QaContext` is
+  deliberately image-free so a QA rule *structurally cannot* read a render buffer.
+- **A render port with a fail-closed degrade.** `captureViewsViaPort` owns the deadline, PNG
+  validation, grid composition, and a never-throw fallback. Renderers are swappable; correctness
+  does not depend on which one ran.
+- **Budgets and compaction** as first-class concerns, because agent loops that render images run
+  out of context and money.
+
+## What this is not
+
+- **Not photoreal reconstruction.** Output is stylized to mid-fidelity procedural geometry. If you
+  want a scanned-looking mesh, use a diffusion model — Trellis, Hunyuan3D and friends are better at
+  that, and it isn't close.
+- **Not a mesh generator.** No diffusion, no photogrammetry, no point cloud. A model writes code;
+  the code builds geometry.
+- **Not novel in category.** [img2threejs](https://github.com/img2threejs/img2threejs) is an
+  architectural peer running the same essential loop. Kiln differs in being TypeScript/Strands, in
+  running its vision loop with no browser required, and in its deterministic gate layer.
+- A single reference view cannot reveal hidden sides. Assets are inferred, not measured.
+
+## Quickstart
+
+**No API key required.** Render an existing Kiln program and look at the result:
+
+```bash
+git clone https://github.com/matthew-kissinger/kiln && cd kiln
+bun install
+bun run kiln render examples/crate.kiln.js --out crate.glb --views sheet.png
+```
+
+That exercises the geometry build, the QA gates, and the rasterizer with no model and no key. The
+default `--render auto` briefly looks for a local GPU render service and falls back to the CPU
+rasterizer when there is none, so this works unchanged on a machine with no GPU.
+
+To generate from a prompt, set one provider key and:
+
+```bash
+bun run kiln generate "a weathered wooden crate" --out crate.glb
+```
+
+## Rendering: three modes
+
+Kiln renders the views the model looks at, and there are three ways to do it. All three are in this
+repository; none requires a cloud account.
+
+```bash
+--render auto          # default: local GPU service if one is up, else CPU
+--render cpu           # force the deterministic CPU rasterizer
+--render gpu           # force GPU; error rather than degrade
+--render-port <url>    # a GPU render service anywhere, local or remote
+```
+
+### What the difference actually looks like
+
+The same program — the well above — rendered both ways:
+
+| CPU rasterizer | GPU PBR |
+|---|---|
+| ![Well rendered flat-shaded, brickwork invisible](examples/well-cpu.png) | ![Same well with brick texture and normal relief visible](examples/well-gpu.png) |
+
+Geometry is equally legible in both: silhouette, proportion, orientation, part contact. But the
+brick curb is **flat grey** on the CPU. Not dimmer — *absent*. The albedo, normal, and ARM maps that
+make it stone simply do not exist in a flat-shaded render, and neither does the metal on the
+windlass.
+
+**If your assets have textures or metal, use the GPU.** That is most real assets, and it is why
+`auto` reaches for a GPU first. The CPU rasterizer is the floor that guarantees the loop runs
+anywhere — CI, a container, a laptop with no GPU — not the target.
+
+This is also why every render reports `viewFidelity`. When `materialFaithful` is false the agent is
+told, in band, that it may judge geometry and **not** material. An agent that cannot see a texture
+must not conclude the texture is wrong.
+
+|  | CPU raster | GPU PBR |
+|---|---|---|
+| Why it exists | Runs where there is no GPU at all | Material, texture, and metal legibility |
+| Cost | None | A render service, local or remote |
+| Determinism | Byte-identical | Varies by driver and adapter |
+| Honest about | Silhouette, proportion, orientation, contact | All of that, plus material |
+| Role | Guaranteed floor and fallback | What you want for textured assets |
+
+### Running the GPU renderer
+
+[`render-service/`](render-service/) in this repository is the renderer: GLB bytes in, PBR PNG views
+out, headless three.js `WebGPURenderer` on Dawn. No browser and no X server.
+
+```bash
+cd render-service && npm install && npm start
+```
+
+That is **gpu (local)**. It listens on `:8000`, which is where `--render auto` looks, so nothing else
+needs configuring — the next `kiln render` picks it up and says so:
+
+```
+sheet.png  (GPU dawn-d3d12:nvidia-geforce-rtx-3070:D3D12 driver version 32.0.16.1074)
+```
+
+For **gpu (remote)**, run the same service on a GPU box (there is a `Dockerfile`) and point at it:
+
+```bash
+kiln render asset.kiln.js --render-port https://your-renderer.example --views sheet.png
+```
+
+The service refuses to boot on a software adapter, so a driver regression gives you a renderer that
+will not start rather than one that silently renders on CPU and lies about it.
+
+With nothing reachable, `auto` falls back to the CPU rasterizer, which is why a machine with no GPU
+needs no configuration at all. `captureViewsViaPort` owns the deadline, PNG validation, grid
+composition, and a never-throw fallback: a slow or broken renderer costs fidelity, never correctness.
+
+**The GPU is a view producer only — it is never gate evidence.** QA rules never see pixels.
+
+## Use it from your agent
+
+Kiln ships as an [Agent Plugin](https://agentplugins.codes/): an MCP server exposing the tool
+surface, plus skills that teach an agent how to use it well. It works in Claude Code, Codex CLI,
+Cursor, and any other client supporting the standard.
+
+The MCP server exposes the **raw tools**, which means *your* agent is the author — it writes the
+program, looks at the render, and iterates using its own model. No separate provider key, no nested
+agent loop.
+
+Note that in this mode your harness supplies both the author and the vision judge. The
+deterministic gates still run independently, but the eyes/judge separation the production system
+maintained is collapsed. That is a deliberate trade for portability.
+
+## Tool surface
+
+| Tool | What it does |
+|---|---|
+| `kiln_list_primitives` | the primitive/helper catalog with signatures |
+| `kiln_validate` | AST validation — syntax, structure, infinite loops, recursion, triangle budget |
+| `kiln_render` | build the scene, return metrics **and** the six-view sheet, in one call |
+| `kiln_screenshot_animation` | frames of an `animate()` program, so motion is visible too |
+| `kiln_view_interior` | interior camera, for anything enterable |
+| `kiln_inspect` | close-up orbit camera on a named part |
+
+Every one of these comes from a factory in [`src/tools/registry.ts`](src/tools/registry.ts); no
+transport hand-writes a definition, and `src/mcp-parity.test.ts` is what keeps that true.
+
+`kiln_render` here is the *unified* definition — the one that returns metrics and pixels together,
+accepts a custom camera capture, routes to the GPU when the scene needs PBR shading, and reports
+`viewFidelity` so the agent knows whether it may judge material from what it is looking at. The
+engine also carries a frozen four-tool bench baseline whose `kiln_screenshot` is CPU-only by
+construction; the in-process loop still runs that baseline plus a terminal `kiln_submit`. Shipping
+the baseline over MCP would have meant shipping a surface the render port can never reach.
 
 ## Subpath exports
 
-The engine ships TypeScript source (Bun/tsx transpile on the fly); consume by subpath:
+The engine ships TypeScript source; consume by subpath:
 
 | Import | What |
 |---|---|
-| `@kiln/engine/agent` | the Strands agent loop, model factory, tool surface, edit buffer, unified-diff |
-| `@kiln/engine/render` | GLB build + serialize, `grade`/`optimize`/`snap`, `composeScene` (the core bake) |
-| `@kiln/engine/palette` | canonical `OPTIMIZED_PALETTE` + directive (pure data, browser-safe) |
-| `@kiln/engine/views` | the pure-CPU six-view rasterizer + `node:zlib` PNG encoder (`kiln_screenshot`) |
-| `@kiln/engine/arena` | Bradley-Terry + adaptive pairwise sampling (pure math) |
-| `@kiln/engine/validation` | structural validator + AST analysis (acorn) |
-| `@kiln/engine/primitives` | the 70+ primitive/helper registry |
-| `@kiln/engine/material-resources`, `/texture-resolver` | trusted-host approved texture registry and bounded resolver injection; generated code sees only approved resource IDs |
-| `@kiln/engine/prompt`, `/prompt-api`, `/list-primitives` | system-prompt generation + catalog |
-| `@kiln/engine/metrics`, `/inspect` | instanceability grade + scene-structure analysis |
-| `@kiln/engine/contracts` | browser-safe asset and integration contracts, including `IntegrationManifestV1` and the semantic role vocabulary (`KILN_SEMANTIC_ROLES`, `semanticRole`, `semanticRoleMatches`, `hasSemanticRole`) |
-| `@kiln/engine/composer`, `/composer/agent` | THREE-free scene-composition core (canonical `WorldDocumentV2`, strict reconciliation, sockets/zones/paths/spawns, deterministic terrain, collider/reachability contracts, presentation receipts, `WorldPackageV2`, layout/overlap/DSL) + bounded compose and post-compose integration loops (`runKilnComposer`, `runKilnWorldIntegration`) |
-| `@kiln/engine/world-runtime` | dependency-free browser-safe heightfield V1 parser/codec/hash/sampler/mesh projection; Studio `sync:engine` may copy this exact leaf and stamp its source SHA so frontend/Play run the Engine-owned implementation without importing the Engine package |
+| `kiln/tools` | the tool registry — the single source of truth, and free of any agent SDK |
+| `kiln/agent` | the Strands agent loop, model factory, tool surface, edit buffer, unified diff |
+| `kiln/render` | GLB build + serialize, grade/optimize/snap, `composeScene` |
+| `kiln/views` | the pure-CPU six-view rasterizer + `node:zlib` PNG encoder |
+| `kiln/validation` | structural validator + AST analysis (acorn) |
+| `kiln/primitives` | the primitive/helper registry |
+| `kiln/qa` | the deterministic QA gate registry and corpora |
+| `kiln/arena` | Bradley-Terry + adaptive pairwise sampling, for model bake-offs |
+| `kiln/palette` | canonical `OPTIMIZED_PALETTE` + directive (pure data, browser-safe) |
+| `kiln/metrics`, `kiln/inspect` | instanceability grade + scene-structure analysis |
+| `kiln/contracts` | asset and integration contracts, `IntegrationManifestV1`, semantic roles |
+| `kiln/composer` | THREE-free scene composition — layout, overlap resolution, scene DSL |
 
-Composer V2 uses one canonical-world authority. For a fresh scene, run the ordinary composer,
-migrate its evaluated candidate with `migrateSceneModelV1ToWorldDocumentV2`, then pass that world to
-`runKilnWorldIntegration`. For refine, merge the migrated candidate into the parent with
-`reconcileWorldDocumentV2Candidate` first; that preserves terrain/authored/runtime state and applies
-locked asset-swap semantics. The bounded integration loop renders and finalizes the same world state
-its `scene_world_*` tools mutate. Pass one `generationCallBudget` through both `runKilnComposer` and
-`runKilnWorldIntegration` so the host settles one aggregate allowance; the integration stage otherwise
-requires an explicit positive `maxSteps`, with no hidden second-stage call allowance.
-Collider artifacts, reachability reports, presentation documents, and `WorldPackageV2` are strict,
-canonical, hash-bound contracts. They preserve source compatibility by extending `WorldDocumentV2`
-additively; browser capture and runtime consumption must still verify the declared external artifact
-bytes rather than trusting paths or labels.
-Heightfield artifact SHA-256 binds the exact bytes from
-`encodeHeightfieldArtifactV1`; portable asset paths remain the additive package contract
-`models/<generationId>.glb`.
+Finished renders include `integrationManifest`, a versioned sidecar carrying the artifact hash,
+metres/+Y-up axes, bounds, grounding offset, default scene, role, render metrics, and structural QA.
+Consumers holding only GLB bytes can derive the same sidecar with `inspectGlbIntegration(bytes)`;
+that path parses the artifact and never executes model-authored source.
 
-Finished renders include `integrationManifest`, a versioned sidecar with the artifact
-hash, metres/+Y-up axes, bounds, grounding offset, selected default scene, role, render
-metrics, and structural QA. Consumers that only have GLB bytes can derive the same
-sidecar with `inspectGlbIntegration(bytes)` from `@kiln/engine/render`; the inspection
-path parses the artifact and never executes model-authored source code. Visual quality
-remains explicitly `not_assessed` until a browser QA loop evaluates the asset in its
-actual scene.
+Visual quality stays explicitly `not_assessed` until something actually looks at the asset in its
+real scene. Structural validation is not a visual pass.
+
+## Determinism
+
+Render and rasterizer compute paths use no `Date.now()` or `Math.random()`, so CPU six-view output
+is byte-reproducible — the basis for golden-image tests. Inject seeds and timestamps at the
+boundary.
+
+## Tests
+
+```bash
+bun run typecheck
+bun run test           # offline; live agent tests gated behind KILN_SPIKE_LIVE=1
+bun run test:coverage  # LCOV plus the checked coverage ratchet
+```
+
+Baseline is **95.38% functions / 91.80% lines** across 130 test files. CI enforces non-regression
+ratchets of 92% and 91% and uploads `coverage/lcov.info`.
+Threshold decreases require an explicit measured rationale.
+Tests pin `KILN_RENDER=cpu` so coverage cannot vary by runner GPU.
 
 ## Dependencies
 
 Runtime: `three`, `@gltf-transform/*`, `manifold-3d` (CSG, WASM), `three-subdivide`,
-`acorn`/`acorn-walk`, `zod`, `@openrouter/ai-sdk-provider`, plus lazy-loaded `sharp`
-(texture decode) and `xatlasjs` (UV atlas). The agent stack —
-`@strands-agents/sdk` + `@ai-sdk/provider` — is an **optional peer**: install it only
-when you use `@kiln/engine/agent`.
+`acorn`/`acorn-walk`, `zod`, plus lazy-loaded `sharp` (texture decode) and `xatlasjs` (UV atlas).
+The agent stack — `@strands-agents/sdk` + `@ai-sdk/provider` — is an **optional peer**: install it
+only if you use `kiln/agent`.
+
+Textures are eight [Poly Haven](https://polyhaven.com) CC0 families, embedded with source provenance
+retained. Runtime output is self-contained and never calls Poly Haven.
 
 ### `@ai-sdk/provider` is pinned to v3 by Strands, not by us
 
-Do not bump `@ai-sdk/provider` to v4 or `@openrouter/ai-sdk-provider` to v3. The blocker is
-`@strands-agents/sdk`: every version through **1.11.1** peers `@ai-sdk/provider@^3.0.0`, and its
-`VercelModel` — which every OpenRouter model here is wrapped in — is typed against
-`LanguageModelV3`. A type cast does not help, because Strands emits V3 shapes at *runtime*:
-`vercel.js` sends `{type: 'file', data: <bare bytes>}` where V4 expects `{type: 'data', data}`, and
-`{type: 'file-data', ...}`, which does not exist in V4 at all.
+Do not bump `@ai-sdk/provider` to v4 or `@openrouter/ai-sdk-provider` to v3. Every
+`@strands-agents/sdk` version through 1.11.1 peers `@ai-sdk/provider@^3.0.0`, and its `VercelModel`
+is typed against `LanguageModelV3`. A cast does not help, because Strands emits V3 shapes at
+*runtime*: `vercel.js` sends `{type: 'file', data: <bare bytes>}` where V4 expects
+`{type: 'data', data}`, plus `{type: 'file-data', ...}`, which does not exist in V4 at all.
 
-`@ai-sdk/provider` v4 itself is purely additive, and our only real code change would be one string
-(`'file-data'` → `'file'`) in three files — which is exactly why this looks deceptively easy. Stay on
-`@openrouter/ai-sdk-provider@2.10.0` until Strands ships v4 support.
+v4 is purely additive and the only real change here would be one string in three files — which is
+exactly why it looks deceptively easy. Stay on `@openrouter/ai-sdk-provider@2.10.0` until Strands
+ships v4 support.
 
-Note also that the `ai` package is an unused devDependency here; the engine imports it nowhere, so
-"migrate `ai` v6 → v7" is not the task it appears to be.
+## History
 
-## Determinism
+Kiln was a commercial text-to-3D product. It is shut down; this is the engine, which is the half
+that stays true regardless of how the product did.
 
-Render/rasterizer compute paths are deterministic — no `Date.now()` / `Math.random()` —
-so six-view output is byte-reproducible (the basis for golden-image tests). Inject
-seeds/timestamps at the boundary.
+Some of the design here reflects constraints that no longer apply — most visibly the CPU rasterizer,
+which exists because the production agent runtime container had no GPU. Where an original decision
+made sense only for a hosted multi-tenant product, this repo does the thing that makes sense for an
+open one, and `docs/history/` records what the production system did and why.
 
-## Provenance
-
-Initial extraction from `pixel-forge@d396c10`, file history preserved via
+Initially extracted from the `pixel-forge` monorepo with file history preserved via
 `git subtree split`. See `CHANGELOG.md`.
+
+## License
+
+MIT. See [LICENSE](LICENSE).

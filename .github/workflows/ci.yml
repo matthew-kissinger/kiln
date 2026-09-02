@@ -13,6 +13,11 @@ concurrency:
 permissions:
   contents: read
 
+env:
+  # Views must be byte-reproducible in CI: never let a runner that happens to have
+  # a GPU render service reachable change what the golden-image tests compare.
+  KILN_RENDER: cpu
+
 jobs:
   checks:
     name: typecheck · lint · test

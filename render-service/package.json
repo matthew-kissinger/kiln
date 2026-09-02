@@ -1,0 +1,21 @@
+{
+  "name": "kiln-render-service",
+  "private": true,
+  "version": "0.1.0",
+  "type": "module",
+  "description": "GLB in, PBR PNG views out. Dawn/WebGPU + three.js, headless. No Kiln engine coupling.",
+  "scripts": {
+    "start": "node --import ./src/register-hooks.mjs src/server.mjs",
+    "test": "node --test test/contract.test.mjs test/material-fixture.test.mjs test/presentation-presets.test.mjs",
+    "smoke": "node --import ./src/register-hooks.mjs test/smoke.mjs",
+    "conformance:material": "node --import ./src/register-hooks.mjs test/material-conformance.mjs"
+  },
+  "dependencies": {
+    "pngjs": "^7.0.0",
+    "three": "0.185.1",
+    "webgpu": "0.4.0"
+  },
+  "allowScripts": {
+    "webgpu@0.4.0": true
+  }
+}

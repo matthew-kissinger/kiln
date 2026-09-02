@@ -147,7 +147,7 @@ export interface RunKilnAgentOptions
   /** Which agent tool surface to use. Resolved at call time: this option, else
    *  the KILN_TOOL_SURFACE env, else 'current'. The 'unified' surface is the
    *  buffer-based draft/view/edit/render/finalize set (render+screenshot
-   *  collapsed, no kiln_list_primitives) — the surface Kiln Studio runs in prod
+   *  collapsed, no kiln_list_primitives) — the surface the Kiln Studio product ran in prod
    *  (KILN_TOOL_SURFACE=unified); 'current' remains the library default. */
   toolSurface?: KilnToolSurface;
   /** Agent name (for tracing). Default 'kiln-agent'. */

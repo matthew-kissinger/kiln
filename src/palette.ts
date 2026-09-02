@@ -13,7 +13,7 @@
  * stable so the future texture is deterministic; the implementer may tune
  * individual color / metalness / roughness values without breaking that contract.
  *
- * The rendered directive string is mirrored verbatim in Kiln Studio's `shared/`
+ * The rendered directive string was mirrored verbatim in the Kiln Studio product's `shared/`
  * module as `OPTIMIZED_PALETTE_DIRECTIVE` (so that import-free, browser-critical
  * module stays dependency-free); a parity test in kiln-studio asserts the two
  * never drift.

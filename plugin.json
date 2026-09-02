@@ -1,0 +1,10 @@
+{
+  "$schema": "https://agentplugins.codes/schema/v1.0.0/plugin.json",
+  "name": "kiln",
+  "displayName": "Kiln",
+  "description": "Author 3D assets as code: your agent writes a Kiln program, renders it, looks at the six-view contact sheet, and fixes what it sees. Outputs a game-ready GLB.",
+  "version": "0.6.0",
+  "license": "MIT",
+  "homepage": "https://github.com/matthew-kissinger/kiln",
+  "keywords": ["3d", "glb", "gltf", "asset-generation", "three.js", "gamedev"]
+}

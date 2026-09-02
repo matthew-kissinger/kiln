@@ -1,0 +1,71 @@
+{
+  "schemaVersion": 1,
+  "fixtureId": "material-channels-v1",
+  "glbSha256": "sha256:8ef3e9e5f28303639fc1d28c8648dda2494aed4c11b74ad17cb30b7726a59a9e",
+  "render": {
+    "width": 768,
+    "height": 512,
+    "lightingPresetId": "neutral-studio-v1",
+    "cameras": [
+      {
+        "position": [
+          0,
+          0,
+          10
+        ],
+        "target": [
+          0,
+          0,
+          0
+        ],
+        "up": [
+          0,
+          1,
+          0
+        ],
+        "fovDeg": 35,
+        "aspect": 1.5,
+        "near": 0.1,
+        "far": 100
+      }
+    ]
+  },
+  "regions": {
+    "AlbedoChecker": [
+      115,
+      68,
+      231,
+      184
+    ],
+    "NormalResponse": [
+      326,
+      68,
+      442,
+      184
+    ],
+    "SharedOrmResponse": [
+      537,
+      68,
+      653,
+      184
+    ],
+    "AoResponse": [
+      115,
+      328,
+      231,
+      444
+    ],
+    "EmissiveResponse": [
+      326,
+      328,
+      442,
+      444
+    ],
+    "AlphaResponse": [
+      537,
+      328,
+      653,
+      444
+    ]
+  }
+}

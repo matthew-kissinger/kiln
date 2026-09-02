@@ -1,0 +1,31 @@
+{
+  "name": "kiln",
+  "description": "Author 3D assets as code: your agent writes a Kiln program, renders it, looks at the six-view contact sheet, and fixes what it sees. Outputs a game-ready GLB.",
+  "version": "0.6.0",
+  "author": {
+    "name": "Matt Kissinger"
+  },
+  "homepage": "https://github.com/matthew-kissinger/kiln",
+  "license": "MIT",
+  "keywords": [
+    "3d",
+    "glb",
+    "gltf",
+    "asset-generation",
+    "three.js",
+    "gamedev"
+  ],
+  "mcpServers": {
+    "kiln": {
+      "type": "stdio",
+      "command": "bun",
+      "args": [
+        "run",
+        "${CLAUDE_PLUGIN_ROOT}/src/mcp-server.ts"
+      ],
+      "env": {
+        "KILN_RENDER": "auto"
+      }
+    }
+  }
+}
