@@ -1,0 +1,6 @@
+node_modules/
+test/out/
+test/fixtures/*
+!test/fixtures/material-channels-v1.glb
+!test/fixtures/material-channels-v1.manifest.json
+*.log

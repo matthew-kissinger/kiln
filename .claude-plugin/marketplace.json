@@ -1,0 +1,17 @@
+{
+  "$schema": "https://anthropic.com/claude-code/marketplace.schema.json",
+  "name": "kiln",
+  "description": "Kiln — author 3D assets as code, with a vision-in-the-loop agent that renders its own work and looks at it",
+  "owner": {
+    "name": "Matt Kissinger"
+  },
+  "plugins": [
+    {
+      "name": "kiln",
+      "description": "Author 3D assets as code: your agent writes a Kiln program, renders it, looks at the six-view contact sheet, and fixes what it sees. Outputs a game-ready GLB.",
+      "author": { "name": "Matt Kissinger" },
+      "category": "development",
+      "source": "./"
+    }
+  ]
+}
