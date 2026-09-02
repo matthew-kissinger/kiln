@@ -15,9 +15,24 @@ async function build() {
       metallicRoughness: 'kiln.texture.brick-wall-arm.v1',
     },
   });
+  // Every material carries a full albedo/normal/ARM stack, deliberately. A flat
+  // baseColor here would render as plastic next to the textured curb -- and it
+  // would undercut the point the contact sheet is making, since half the asset
+  // would show no material information even on the GPU.
+  // No baseColor tint on the textured materials: the recipe multiplies the tint
+  // into the albedo, so a dark brown here crushes the plank texture to near-black
+  // in the flat orthographic cells. Let the map carry the colour.
   const wood = await materialRecipe('kiln.material.wood.v1', {
-    baseColor: '#6a4a2c',
+    textureResources: {
+      baseColor: 'kiln.texture.weathered-planks-albedo.v1',
+      normal: 'kiln.texture.weathered-planks-normal.v1',
+      metallicRoughness: 'kiln.texture.weathered-planks-arm.v1',
+    },
   });
+  // Iron stays untextured on purpose. The rusted-metal stack was tried here and
+  // read as a glowing red bar on a part this thin -- worse than the flat metal it
+  // replaced. Not every surface needs a map; the material story is carried by the
+  // stone and the planks, and forcing a texture onto the windlass hurt the sheet.
   const iron = await materialRecipe('kiln.material.painted-metal.v1', {
     baseColor: '#3f4348',
     roughness: 0.42,

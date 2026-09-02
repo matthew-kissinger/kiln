@@ -86,10 +86,11 @@ The same program — the well above — rendered both ways:
 |---|---|
 | ![Well rendered flat-shaded, brickwork invisible](examples/well-cpu.png) | ![Same well with brick texture and normal relief visible](examples/well-gpu.png) |
 
-Geometry is equally legible in both: silhouette, proportion, orientation, part contact. But the
-brick curb is **flat grey** on the CPU. Not dimmer — *absent*. The albedo, normal, and ARM maps that
-make it stone simply do not exist in a flat-shaded render, and neither does the metal on the
-windlass.
+Geometry is equally legible in both: silhouette, proportion, orientation, part contact. But on the
+CPU the brick curb is **flat grey** and the roof is **flat orange**. Not dimmer — *absent*. The
+albedo, normal, and ARM maps that make one stone and the other weathered planks simply do not exist
+in a flat-shaded render. Every material cue an artist would judge is gone, while every geometric one
+survives.
 
 **If your assets have textures or metal, use the GPU.** That is most real assets, and it is why
 `auto` reaches for a GPU first. The CPU rasterizer is the floor that guarantees the loop runs
