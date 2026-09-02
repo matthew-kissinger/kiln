@@ -1,7 +1,7 @@
 /**
  * Minimal PNG encoder + decoder (8-bit truecolor, no interlace) over node:zlib.
  *
- * Deliberately dependency-free: this module must load inside the kiln-studio
+ * Deliberately dependency-free: this module had to load inside the Kiln Studio
  * agent-runtime container and under Bun without native modules (sharp is NOT
  * acceptable here). ~150 lines is cheaper than a dependency. The decoder exists
  * so host-rendered per-view PNGs (PbrRenderPort) can be composited into the same

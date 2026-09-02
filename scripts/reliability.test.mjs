@@ -42,8 +42,12 @@ describe('repository reliability contracts', () => {
     const workflow = await readText('.github/workflows/ci.yml');
 
     expect(pkg.scripts['test:coverage']).toBe(
-      'KILN_SPIKE_LIVE=0 bun test --coverage && bun scripts/check-coverage.mjs',
+      'KILN_SPIKE_LIVE=0 KILN_RENDER=cpu bun test src scripts --coverage && bun scripts/check-coverage.mjs',
     );
+    // Views must be byte-reproducible: a runner that happens to reach a GPU render
+    // service must not be able to change what the golden-image tests compare.
+    expect(pkg.scripts['test']).toContain('KILN_RENDER=cpu');
+    expect(workflow).toContain('KILN_RENDER: cpu');
     expect(bunfig).toContain('coverageReporter = ["text", "lcov"]');
     expect(bunfig).not.toContain('coverageThreshold =');
     expect(bunfig).toContain('coveragePathIgnorePatterns = [');
@@ -64,8 +68,11 @@ describe('repository reliability contracts', () => {
     expect(Buffer.byteLength(agents)).toBeGreaterThan(0);
     expect(Buffer.byteLength(agents)).toBeLessThan(12 * 1024);
     expect(agents).toContain('bun run test:coverage');
-    expect(agents).toContain('bun run sync:engine');
-    expect(agents).toContain('npm --legacy-peer-deps');
-    expect(agents).toContain('Do not deploy, commit, push');
+    // The invariants an editor will otherwise trip over. These are the claims this
+    // repository actually makes, so AGENTS.md must keep naming them.
+    expect(agents).toContain('captureViewsViaPort');
+    expect(agents).toContain('never gate evidence');
+    expect(agents).toContain('src/tools/registry.ts');
+    expect(agents).toContain('Do not commit, push');
   });
 });

@@ -14,7 +14,7 @@
  * Three factories: {@link makeKilnTools} (the library-default `current` generate
  * surface), {@link makeKilnEditTools} (the `current` surgical-refine surface), and
  * {@link makeKilnUnifiedTools} (the buffer-based `unified` surface, selected
- * via KILN_TOOL_SURFACE='unified' — what Kiln Studio runs in prod). The first two
+ * via KILN_TOOL_SURFACE='unified' — what the Kiln Studio product ran in prod). The first two
  * stay byte-identical so the bench baseline does not move.
  */
 import { tool, ImageBlock, JsonBlock, type Tool, type JSONValue } from '@strands-agents/sdk';

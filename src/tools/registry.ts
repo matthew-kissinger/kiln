@@ -3,10 +3,10 @@
  *
  * Four model-facing tools (list, validate, render, screenshot), each a thin
  * wrapper over the existing kiln core functions. This registry is the single
- * source of truth for both the in-process-tool capability skin and the MCP
- * capability skin in the Kiln Bench spike: both adapters iterate
- * `kilnToolRegistry` so the tool names, descriptions, and behavior stay
- * identical across mechanisms.
+ * source of truth for every transport that exposes these tools: the in-process
+ * Strands skin (agent/tools.ts) and the stdio MCP server both iterate
+ * `kilnToolRegistry`, so tool names, descriptions, and behavior stay identical
+ * across mechanisms. Never hand-write a tool definition in a skin.
  *
  * A fifth def, `kilnRenderViewsDef`, collapses render + screenshot into one
  * "see it" tool (metrics + six-view image from a single execution). It is
