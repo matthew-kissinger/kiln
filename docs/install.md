@@ -128,11 +128,31 @@ absolute path — this is the file the CLI, the IDE, and Antigravity 2.0 all sha
 
 Remote servers use `serverUrl` rather than `url` or `httpUrl`, which are not supported.
 
-**Headless mode auto-denies MCP tool calls.** `agy -p=...` cannot prompt for the `mcp` permission
-and soft-denies it, so approve the server once in an interactive session, or run with
-`--dangerously-skip-permissions` if you understand that it auto-approves every tool for that run.
+**Headless mode needs a permission grant, and the error message points at the wrong file.**
+`agy -p=...` cannot prompt for the `mcp` permission, so it soft-denies and the model reports the
+tool as unavailable. The error tells you to add an allow-rule to `permissions.allow` in
+`settings.json`. That file is not where the CLI reads grants from. They live here:
+
+```jsonc
+// ~/.gemini/config/config.json
+{
+  "userSettings": {
+    "globalPermissionGrants": {
+      "allow": ["mcp(*)"]
+    }
+  }
+}
+```
+
+**Only the wildcard matches.** Verified against `agy` 1.1.15: `mcp(kiln)` (the server) and
+`mcp(kiln_list_primitives)` (the tool) are both ignored, and the call is still denied. `mcp(*)`
+works. There appears to be no way to grant MCP access to one server, so treat this as
+"MCP tools on or off" rather than a scoped permission.
+
 Note also that `-p` takes its prompt attached (`-p='...'`); passing it separately makes `agy` read
-the next flag as the prompt.
+the next flag as the prompt and ignore what you typed.
+
+Verified end to end with Gemini 3.8 Flash.
 
 ## In-process, without MCP
 
