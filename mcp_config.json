@@ -1,0 +1,11 @@
+{
+  "mcpServers": {
+    "kiln": {
+      "command": "bun",
+      "args": ["run", "${PLUGIN_ROOT}/src/mcp-server.ts"],
+      "env": {
+        "KILN_RENDER": "auto"
+      }
+    }
+  }
+}

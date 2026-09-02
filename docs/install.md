@@ -60,12 +60,12 @@ iterates with its own model. There is no nested agent loop and no second provide
 The repository is also a plugin package. Two manifest conventions exist as of late 2026 and Kiln
 ships both, because they disagree on filenames and on the path variable:
 
-| | Portable spec | Claude Code |
-|---|---|---|
-| Manifest | `plugin.json` | `.claude-plugin/plugin.json` |
-| MCP config | `mcp.json` | inline `mcpServers` in the manifest |
-| Plugin-root variable | `${PLUGIN_ROOT}` | `${CLAUDE_PLUGIN_ROOT}` |
-| Skills | `skills/<name>/SKILL.md` | same |
+| | Portable spec | Claude Code | Antigravity |
+|---|---|---|---|
+| Manifest | `plugin.json` | `.claude-plugin/plugin.json` | `plugin.json` (reuses the portable one) |
+| MCP config | `mcp.json` | inline `mcpServers` in the manifest | `mcp_config.json` |
+| Plugin-root variable | `${PLUGIN_ROOT}` | `${CLAUDE_PLUGIN_ROOT}` | none — absolute paths |
+| Skills | `skills/<name>/SKILL.md` | same | same |
 
 The skills are the same files in both cases. Installing the plugin gives you the MCP tools *and*
 the three skills that teach an agent to use them well:
@@ -92,6 +92,47 @@ root `.mcp.json`. That is deliberate: `.mcp.json` at a repository root is also C
 *project*-scoped config, where `${CLAUDE_PLUGIN_ROOT}` is undefined, so shipping one would hand
 every contributor who opens this repo a broken server entry and a warning. Declaring it in the
 manifest works identically for installed users and leaves the repo clean for contributors.
+
+### Antigravity (`agy`)
+
+Antigravity accepts the portable `plugin.json` unchanged — no Google-specific manifest is needed,
+which is the whole point of shipping to a spec:
+
+```bash
+agy plugin validate .    # ok - 3 skills, 1 mcpServer
+agy plugin install .
+```
+
+That installs the skills. **Getting the tools attached takes one more step**, for two reasons worth
+knowing before you start:
+
+1. Antigravity documents no plugin-root path variable, so a `${PLUGIN_ROOT}` in a plugin's
+   `mcp_config.json` does not expand.
+2. As of `agy` 1.1.15 a plugin's `mcp_config.json` is staged but not merged into the session's
+   server list.
+
+So register the server in Antigravity's central config, `~/.gemini/config/mcp_config.json`, with an
+absolute path — this is the file the CLI, the IDE, and Antigravity 2.0 all share:
+
+```json
+{
+  "mcpServers": {
+    "kiln": {
+      "command": "bun",
+      "args": ["/absolute/path/to/kiln/src/mcp-server.ts"],
+      "env": { "KILN_RENDER": "auto" }
+    }
+  }
+}
+```
+
+Remote servers use `serverUrl` rather than `url` or `httpUrl`, which are not supported.
+
+**Headless mode auto-denies MCP tool calls.** `agy -p=...` cannot prompt for the `mcp` permission
+and soft-denies it, so approve the server once in an interactive session, or run with
+`--dangerously-skip-permissions` if you understand that it auto-approves every tool for that run.
+Note also that `-p` takes its prompt attached (`-p='...'`); passing it separately makes `agy` read
+the next flag as the prompt.
 
 ## In-process, without MCP
 
