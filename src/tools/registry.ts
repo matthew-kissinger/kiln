@@ -1521,7 +1521,7 @@ export function createKilnToolRegistry(context: KilnToolContext = {}): KilnToolD
     {
       name: 'kiln_validate',
       description:
-        'Statically validate Kiln source code before rendering. Checks for the required `meta` const and `build()` function, `value:` keyframe typos, infinite loops, recursive build() calls, and syntax errors. Returns { valid, errors, warnings }. Warnings are advisory only (they never make code invalid), including a soft, generous triangle-count nudge. Run this to catch mistakes cheaply before kiln_render.',
+        'Statically validate Kiln source code before rendering. Checks for the required `meta` const and `build()` function, `value:` keyframe typos, infinite loops, recursive build() calls, and syntax errors. Returns { valid, errors, warnings }. Warnings are advisory only (they never make code invalid). There is NO triangle budget: density is never warned about, so build as much detail as the asset deserves. Run this to catch mistakes cheaply before kiln_render.',
       inputSchema: validateInput,
       run: async (input) => runValidate(validateInput.parse(input), context),
     },

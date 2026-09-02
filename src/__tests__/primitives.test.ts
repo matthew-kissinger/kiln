@@ -849,15 +849,25 @@ describe('validateAsset advisories', () => {
     expect(r.errors).toEqual([]);
   });
 
-  test('warns when triangle budget is exceeded for the category', () => {
+  test('never warns on triangle count, however dense', () => {
+    // A sphere(2, 64, 64) is ~8192 tris. Under the old `suggestedTris` table a
+    // prop was scolded at 3,001 — and a model iterating with this function in
+    // hand reads that as an instruction to delete detail. Triangles are not a
+    // draw-call cost, so the advisory was removed. Do not reinstate it.
     const root = createRoot('Heavy');
-    // A sphere(2, 64, 64) is ~8192 tris, blows the prop budget (3000).
     createPart('Big', sphereGeo(2, 64, 64), gameMaterial(0x00ff00), {
       parent: root,
     });
     const r = validateAsset(root, 'prop');
     expect(r.valid).toBe(true);
-    expect(r.warnings.some((w) => w.startsWith('High triangle count'))).toBe(true);
+    expect(r.warnings).toEqual([]);
+  });
+
+  test('triangle count stays measurable even though nothing judges it', () => {
+    const root = createRoot('Heavy');
+    createPart('Big', sphereGeo(2, 64, 64), gameMaterial(0x00ff00), { parent: root });
+    expect(countTriangles(root)).toBeGreaterThan(3000);
+    expect(validateAsset(root, 'prop').warnings).toEqual([]);
   });
 
   test('warns when material budget is exceeded', () => {
@@ -870,7 +880,7 @@ describe('validateAsset advisories', () => {
     expect(r.warnings.some((w) => w.startsWith('High material count'))).toBe(true);
   });
 
-  test('character / environment categories use their own budgets', () => {
+  test('character / environment categories use their own material limits', () => {
     // Drive both branches of the guidelines lookup.
     const root = createRoot('R');
     expect(validateAsset(root, 'character').valid).toBe(true);

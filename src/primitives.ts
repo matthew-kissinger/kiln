@@ -1486,6 +1486,16 @@ export function getJointNames(root: THREE.Object3D): string[] {
 /**
  * Validates asset against category guidelines.
  * Returns warnings for guidance but doesn't block on limits.
+ *
+ * There is no triangle advisory here, deliberately. This function used to warn
+ * above a per-category `suggestedTris` (a prop was scolded at 3,001 triangles),
+ * and a model that calls it while iterating reads that warning as an instruction
+ * to remove detail. Triangle count is not a runtime cost driver — draw calls
+ * are, which is what the material advisory below actually measures — so the
+ * triangle line cost real asset quality and bought nothing.
+ *
+ * `countTriangles` is still exported and still reported in render metrics. It is
+ * information, not a verdict.
  */
 export function validateAsset(
   root: THREE.Object3D,
@@ -1494,26 +1504,23 @@ export function validateAsset(
   const errors: string[] = [];
   const warnings: string[] = [];
 
-  const guidelines = {
-    character: { suggestedTris: 5000, suggestedMats: 8 },
-    prop: { suggestedTris: 3000, suggestedMats: 6 },
-    vfx: { suggestedTris: 2000, suggestedMats: 4 },
-    environment: { suggestedTris: 15000, suggestedMats: 12 },
-    architecture: { suggestedTris: 15000, suggestedMats: 12 },
-    vegetation: { suggestedTris: 12000, suggestedMats: 8 },
-    vehicle: { suggestedTris: 20000, suggestedMats: 10 },
+  // Distinct-material count drives draw calls and the instanceability grade,
+  // which is a real cost. Unlike triangles, this one is worth saying out loud.
+  const suggestedMats: Record<AssetCategory, number> = {
+    character: 8,
+    prop: 6,
+    vfx: 4,
+    environment: 12,
+    architecture: 12,
+    vegetation: 8,
+    vehicle: 10,
   };
 
-  const limits = guidelines[category];
-  const tris = countTriangles(root);
   const mats = countMaterials(root);
+  const matLimit = suggestedMats[category];
 
-  if (tris > limits.suggestedTris) {
-    warnings.push(`High triangle count: ${tris} (suggested: ${limits.suggestedTris})`);
-  }
-
-  if (mats > limits.suggestedMats) {
-    warnings.push(`High material count: ${mats} (suggested: ${limits.suggestedMats})`);
+  if (mats > matLimit) {
+    warnings.push(`High material count: ${mats} (suggested: ${matLimit})`);
   }
 
   return { valid: true, errors, warnings };

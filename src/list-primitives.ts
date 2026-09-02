@@ -1036,7 +1036,8 @@ const PRIMITIVES: PrimitiveSpec[] = [
       "validateAsset(root: Object3D, category: 'character' | 'prop' | 'vfx' | 'environment' | 'architecture' | 'vegetation' | 'vehicle')",
     returns: '{ valid, errors, warnings }',
     category: 'utility',
-    description: 'Warns on category-appropriate triangle / material budgets.',
+    description:
+      'Warns on high distinct-material count (draw calls). No triangle limit; detail is free.',
     example: "const v = validateAsset(root, 'prop');",
   },
 ];

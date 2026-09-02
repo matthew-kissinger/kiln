@@ -53,6 +53,23 @@ Nothing upstream has looked at the asset in its real scene. You are the first th
 - **Occlusion and collision.** Geometry that blocks the camera or traps the player.
 - **Draw calls.** A visually fine asset that costs 400 draws is a performance bug, not a win.
 
+## The visual bar
+
+`visualQa: not_assessed` means you own the aesthetic verdict, and a functional pass is not one.
+Once the asset loads correctly in the real scene, judge it the way an art director would:
+
+- **Name what it is competing with.** The real object, or a production asset from a comparable
+  title. Write it down.
+- **Ask which one is obviously the generated one, and what gives it away.** Uniformity, missing
+  secondary structure, absent wear, parts parked against each other instead of joined, edges with no
+  chamfer catching no light. Name the specific giveaway.
+- **Report it as a finding, not a footnote.** "Loads correctly; reads as a blockout next to the
+  surrounding set dressing" is the useful sentence. An asset that works and looks cheap is a real
+  defect, and it is the one nothing upstream can catch.
+
+Detail is not a cost here — Kiln has no triangle budget and draw calls track materials, not
+geometry. If the fix is "author more of it", that fix is available.
+
 ## Boundaries
 
 - A successful load is not a QA result. Neither is a passing type check.
