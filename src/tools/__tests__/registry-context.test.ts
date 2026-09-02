@@ -60,18 +60,23 @@ const warningStrings = (output: unknown): string[] =>
   ((output as { warnings?: string[] }).warnings ?? []).map(String);
 
 describe('trusted tool context', () => {
-  test('validation uses requested vehicle and ignores false model meta.category', async () => {
-    const vehicleValidate = find(createKilnToolRegistry({ category: 'vehicle' }), 'kiln_validate');
-    const propValidate = find(createKilnToolRegistry({ category: 'prop' }), 'kiln_validate');
-    const neutralValidate = find(createKilnToolRegistry(), 'kiln_validate');
+  test('a dense asset draws no size advisory under any trusted category', async () => {
+    // This used to assert that a trusted `prop` context produced a triangle
+    // advisory the model's own false `meta.category` could not dodge. The
+    // advisory is gone on purpose — it taught models to stop at the blockout
+    // stage — so what is worth pinning now is the inverse: no category, trusted
+    // or claimed, turns a heavy asset into a warning.
+    const contexts = [
+      find(createKilnToolRegistry({ category: 'vehicle' }), 'kiln_validate'),
+      find(createKilnToolRegistry({ category: 'prop' }), 'kiln_validate'),
+      find(createKilnToolRegistry(), 'kiln_validate'),
+    ];
 
-    const vehicle = await vehicleValidate.run({ code: FALSE_PROP_BUDGET_CODE });
-    const prop = await propValidate.run({ code: FALSE_PROP_BUDGET_CODE });
-    const neutral = await neutralValidate.run({ code: FALSE_PROP_BUDGET_CODE });
-
-    expect(warningStrings(vehicle).some((warning) => warning.includes('TRI_BUDGET'))).toBe(false);
-    expect(warningStrings(prop).some((warning) => warning.includes('Estimated'))).toBe(true);
-    expect(warningStrings(neutral).some((warning) => warning.includes('Estimated'))).toBe(false);
+    for (const def of contexts) {
+      const warnings = warningStrings(await def.run({ code: FALSE_PROP_BUDGET_CODE }));
+      expect(warnings.some((warning) => warning.includes('TRI_BUDGET'))).toBe(false);
+      expect(warnings.some((warning) => /triangle/i.test(warning))).toBe(false);
+    }
   });
 
   test('intent is authoritative and render/screenshot paths receive vehicle context', async () => {

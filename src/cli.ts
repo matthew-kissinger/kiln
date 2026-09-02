@@ -106,7 +106,8 @@ export function parseArgs(argv: readonly string[]): Args {
         break;
       case '--max-steps': {
         const n = Number(next());
-        if (!Number.isInteger(n) || n <= 0) throw new Error('--max-steps must be a positive integer');
+        if (!Number.isInteger(n) || n <= 0)
+          throw new Error('--max-steps must be a positive integer');
         args.maxSteps = n;
         break;
       }
