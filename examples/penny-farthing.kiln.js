@@ -15,6 +15,9 @@
 // checked against the wheel radius at t = 0.25, 0.5 and 0.75 before it was
 // rendered once, because a spline that passes through a 1.4 m wheel is not
 // something a six-view contact sheet will necessarily show you.
+//
+// Authored by: Claude Opus 5, via Claude Code. Every part below was written by the model itself,
+// looking at its own renders through the Kiln tools and revising.
 const meta = { name: 'PennyFarthing', category: 'vehicle', role: 'hero' };
 
 async function build() {

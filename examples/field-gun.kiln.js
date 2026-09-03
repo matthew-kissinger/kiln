@@ -9,6 +9,9 @@
 // Every surface carries a procedural albedo plus a derived normal map, so the
 // difference between the CPU rasterizer and a GPU PBR render is the whole story
 // the contact sheet tells.
+//
+// Authored by: Claude Opus 5, via Claude Code. Every part below was written by the model itself,
+// looking at its own renders through the Kiln tools and revising.
 const meta = { name: 'FieldGun', category: 'prop', role: 'poi' };
 
 async function build() {

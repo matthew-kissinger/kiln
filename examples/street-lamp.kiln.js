@@ -20,6 +20,9 @@
 // 2. The lantern was scaled off the column instead of off a person. A real gas
 //    lamp head is roughly two feet tall and reads as the subject of the object;
 //    a small one turns the whole asset into a pole.
+//
+// Authored by: Claude Opus 5, via Claude Code. Every part below was written by the model itself,
+// looking at its own renders through the Kiln tools and revising.
 const meta = { name: 'StreetLamp', category: 'prop', role: 'poi' };
 
 async function build() {

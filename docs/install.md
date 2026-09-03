@@ -128,31 +128,59 @@ absolute path — this is the file the CLI, the IDE, and Antigravity 2.0 all sha
 
 Remote servers use `serverUrl` rather than `url` or `httpUrl`, which are not supported.
 
-**Headless mode needs a permission grant, and the error message points at the wrong file.**
-`agy -p=...` cannot prompt for the `mcp` permission, so it soft-denies and the model reports the
-tool as unavailable. The error tells you to add an allow-rule to `permissions.allow` in
-`settings.json`. That file is not where the CLI reads grants from. They live here:
+#### Headless permissions
+
+`agy -p=...` cannot prompt, so any tool that would ask is soft-denied and the model reports it as
+unavailable. Grants live under `permissions.allow` in the CLI's own settings file:
 
 ```jsonc
-// ~/.gemini/config/config.json
+// ~/.gemini/antigravity-cli/settings.json
 {
-  "userSettings": {
-    "globalPermissionGrants": {
-      "allow": ["mcp(*)"]
-    }
-  }
+  "permissions": {
+    "allow": [
+      "mcp(kiln/*)",
+      "read_file(*)",
+      "write_file(/absolute/path/to/your/project)",
+      "command(*)"
+    ]
+  },
+  "trustedWorkspaces": ["/absolute/path/to/your/project"]
 }
 ```
 
-**Only the wildcard matches.** Verified against `agy` 1.1.15: `mcp(kiln)` (the server) and
-`mcp(kiln_list_primitives)` (the tool) are both ignored, and the call is still denied. `mcp(*)`
-works. There appears to be no way to grant MCP access to one server, so treat this as
-"MCP tools on or off" rather than a scoped permission.
+A second file, `~/.gemini/config/config.json`, contributes *shared* grants under
+`userSettings.globalPermissionGrants` and is merged with the above. Both are read; the CLI logs
+`applyUserSettings: stored shared config permissions` for the shared file and
+`CLI settings initialized: permissions=…` for the effective set. If a grant is not taking effect,
+`--log-file` and those two lines tell you what the CLI actually parsed.
 
-Note also that `-p` takes its prompt attached (`-p='...'`); passing it separately makes `agy` read
-the next flag as the prompt and ignore what you typed.
+**`command` is the one rule kind that does not accept a target in headless mode.** The documented
+syntax — each whitespace-separated token as an anchored regex, e.g. `command(git)` or
+`command(npm run (build|lint|test))` — parses correctly and still gets denied:
 
-Verified end to end with Gemini 3.8 Flash.
+```
+tool_confirmation_manager.go:188] Print mode: soft-denying tool confirmation "RunCommand" at step 2
+```
+
+Only `command(*)` passes. This is upstream
+[antigravity-cli#548](https://github.com/google-antigravity/antigravity-cli/issues/548). Scope the
+blast radius with `trustedWorkspaces`, a path-scoped `write_file`, and a `deny` list instead —
+those are honoured. `mcp(kiln/*)` and `write_file(<abs path>)` were both verified working in
+headless mode with the shared wildcard removed, so scope everything you can and treat `command(*)`
+as the known exception rather than the default.
+
+Three more sharp edges:
+
+- `--print` takes its prompt **attached** (`--print="..."`). Passed separately, Go's flag package
+  reads the next flag as the prompt and silently ignores what you typed.
+- The effort-suffixed model ids already encode effort, so `--model gemini-3.8-flash-high --effort high`
+  is rejected as a conflict. Pick one.
+- **Use absolute paths in prompts.** `agy` resolves relative paths against the *installed plugin
+  copy* under `~/.gemini/config/plugins/kiln`, not your working tree, so a prompt saying
+  `README.md` reads the wrong file.
+
+Verified end to end with Gemini 3.8 Flash, which authored
+[`examples/arcade-cabinet.kiln.js`](../examples/arcade-cabinet.kiln.js) through this path.
 
 ## In-process, without MCP
 
