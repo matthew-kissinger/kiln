@@ -41,6 +41,9 @@
 // chest and back panel and shoulders that are not on any conic section. Getting
 // that would mean lofting or deforming a shell rather than revolving one, which
 // is a different construction than the one this example exists to show.
+//
+// Authored by: Claude Opus 5, via Claude Code. Every part below was written by the model itself,
+// looking at its own renders through the Kiln tools and revising.
 const meta = { name: 'DivingHelmet', category: 'prop', role: 'poi' };
 
 async function build() {
