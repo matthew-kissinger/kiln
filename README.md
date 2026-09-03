@@ -6,6 +6,27 @@ Kiln turns a sentence into a game-ready GLB by having a model *write a program*,
 rendered, and fix it — not by sampling a mesh. The output is a small program with named parts, not
 an opaque blob: editable, diffable, parametric, and readable by the next agent that touches it.
 
+![Seven assets built by Kiln: a field gun, a street lamp, a diving helmet, a penny-farthing, a walking mech, an arcade cabinet and a sushi yatai](examples/gallery.png)
+
+Every asset above is a checked-in program in [`examples/`](examples/). No mesh was sampled, no
+geometry was hand-authored, and none of it was touched in a DCC tool. A model wrote each one,
+rendered it, looked at the result, and revised — which is also why each file's header comment reads
+like a post-mortem.
+
+| Asset | Tris | Authored by | What it exists to show |
+|---|---|---|---|
+| [`field-gun`](examples/field-gun.kiln.js) | 15,544 | Claude Opus 5 | booleans and arrays |
+| [`street-lamp`](examples/street-lamp.kiln.js) | 13,036 | Claude Opus 5 | revolved profiles, emissive + glass |
+| [`diving-helmet`](examples/diving-helmet.kiln.js) | 16,416 | Claude Opus 5 | material contrast |
+| [`penny-farthing`](examples/penny-farthing.kiln.js) | 12,450 | Claude Opus 5 | curves and radial arrays |
+| [`mech`](examples/mech.kiln.js) | 18,398 | Claude Opus 5 | armour oriented along a bone |
+| [`arcade-cabinet`](examples/arcade-cabinet.kiln.js) | 19,916 | **Gemini 3.8 Flash** | silhouette from a swept profile |
+| [`sushi-yatai`](examples/sushi-yatai.kiln.js) | 27,538 | Claude Opus 5 | repetition without looking generated |
+
+The arcade cabinet is the one that matters most here. It was authored end to end by a **different
+vendor's model in a different harness** — Gemini 3.8 Flash driving the same plugin through the
+Antigravity CLI — with no changes to the tools or the skills. The loop is not Claude-specific.
+
 ![Six-view contact sheet of a procedurally generated field gun](examples/hero-sheet.png)
 
 *The contact sheet the model looks at — `examples/field-gun.kiln.js`, 15,544 triangles: a revolved
@@ -144,11 +165,95 @@ composition, and a never-throw fallback: a slow or broken renderer costs fidelit
 
 **The GPU is a view producer only — it is never gate evidence.** QA rules never see pixels.
 
-## Use it from your agent
+## Install it in your agent
 
 Kiln ships as an [Agent Plugin](https://agentplugins.codes/): an MCP server exposing the tool
-surface, plus skills that teach an agent how to use it well. It works in Claude Code, Codex CLI,
-Cursor, and any other client supporting the standard.
+surface, plus three skills that teach an agent how to use it well. Pick your harness below;
+[`docs/install.md`](docs/install.md) has the long form, including the sharp edges.
+
+Everything needs [Bun](https://bun.sh) on `PATH` and a clone, because the package ships TypeScript
+source rather than a build artifact:
+
+```bash
+git clone https://github.com/matthew-kissinger/kiln && cd kiln && bun install
+bun run kiln render examples/crate.kiln.js --out crate.glb --views sheet.png
+```
+
+If that writes a GLB and a contact sheet, the engine is fine and anything that goes wrong later is
+transport configuration.
+
+<details>
+<summary><b>Claude Code</b></summary>
+
+```bash
+claude plugin marketplace add matthew-kissinger/kiln
+claude plugin install kiln@kiln
+```
+
+Verify with `claude mcp list` — you want `plugin:kiln:kiln … ✔ Connected`.
+</details>
+
+<details>
+<summary><b>Antigravity CLI (<code>agy</code>)</b></summary>
+
+The portable `plugin.json` is accepted unchanged:
+
+```bash
+agy plugin install .
+```
+
+Then register the server in `~/.gemini/config/mcp_config.json` with an **absolute** path, because
+Antigravity has no plugin-root variable:
+
+```json
+{
+  "mcpServers": {
+    "kiln": {
+      "command": "bun",
+      "args": ["/absolute/path/to/kiln/src/mcp-server.ts"],
+      "env": { "KILN_RENDER": "auto" }
+    }
+  }
+}
+```
+
+For headless (`agy -p`) runs you also need permission grants in
+`~/.gemini/antigravity-cli/settings.json`. Scoped `mcp()` and `write_file()` rules work; `command()`
+targets are soft-denied in print mode whatever the syntax, so only `command(*)` passes — see
+[`docs/install.md`](docs/install.md#headless-permissions) for the evidence and the upstream issue.
+</details>
+
+<details>
+<summary><b>Cursor, Codex CLI, Zed, or any MCP client</b></summary>
+
+Point the client at `src/mcp-server.ts` with an **absolute** path. The server resolves its own paths
+from `import.meta.url` and never reads `process.cwd()`, so the launch directory does not matter:
+
+```json
+{
+  "mcpServers": {
+    "kiln": {
+      "type": "stdio",
+      "command": "bun",
+      "args": ["run", "/absolute/path/to/kiln/src/mcp-server.ts"],
+      "env": { "KILN_RENDER": "auto" }
+    }
+  }
+}
+```
+</details>
+
+<details>
+<summary><b>In-process TypeScript, no MCP</b></summary>
+
+```ts
+import { createKilnToolRegistry } from 'kiln/tools';
+```
+
+`kiln/tools` imports no agent SDK, so porting to a harness that is not Strands does not drag Strands
+along. [`examples/strands-harness.ts`](examples/strands-harness.ts) is the whole integration in about
+sixty lines.
+</details>
 
 The MCP server exposes the **raw tools**, which means *your* agent is the author — it writes the
 program, looks at the render, and iterates using its own model. No separate provider key, no nested
