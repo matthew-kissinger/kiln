@@ -11,7 +11,7 @@
  * output is a picture of the asset rather than a diagnostic sheet.
  *
  *   bun scripts/hero-shots.ts                 # every hero
- *   bun scripts/hero-shots.ts mech lunar-lander
+ *   bun scripts/hero-shots.ts mech cathedral
  *   bun scripts/hero-shots.ts --size 1400 --cpu
  *
  * Renders come off the port as raw RGB PNGs -- 8 MB each at 1200 px, which is
@@ -43,15 +43,55 @@ const OUT_DIR = join(EXAMPLES, 'renders');
  */
 const HEROES = [
   'field-gun',
-  'diving-helmet',
-  'penny-farthing',
-  'street-lamp',
+  'cathedral',
   'mech',
-  'arcade-cabinet',
-  'sushi-store',
+  'diving-helmet',
   'cafe-racer',
-  'beam-engine',
-  'lunar-lander',
+  'penny-farthing',
+  'sushi-store',
+  'street-lamp',
+  'arcade-cabinet',
+  'robot-arm',
+  'carousel',
+  'ferris-wheel',
+  'orrery',
+  'longcase-clock',
+  'radio-telescope',
+  'anglerfish',
+  'hot-air-balloon',
+  'vending-machine',
+  'gramophone',
+  'typewriter',
+  'lighthouse',
+  'steam-locomotive',
+  'windmill',
+  'aircraft-carrier',
+  'air-defense-radar',
+  'fighter-jet',
+  'comms-satellite',
+  'victorian-greenhouse',
+  'gothic-gatehouse',
+  'cable-stayed-bridge',
+  'fire-lookout-tower',
+  'tram',
+  'tugboat',
+  'deep-sea-diver',
+  'pumpjack',
+  'drilling-rig',
+  'harbour-crane',
+  'crawler-crane',
+  'excavator',
+  'printing-press',
+  'pipe-organ',
+  'planetarium-projector',
+  'astronomical-clock',
+  'espresso-machine',
+  'pinball-machine',
+  'trebuchet',
+  'orbital-station',
+  'rigid-airship',
+  'blast-furnace',
+  'clock-tower',
 ] as const;
 
 /**
@@ -65,6 +105,37 @@ const HEROES = [
  */
 const HERO_DIR: [number, number, number] = [0.82, 0.44, 0.58];
 const HERO_ZOOM = 1.06;
+
+/**
+ * Per-asset camera, for the few subjects the shared angle does not suit.
+ *
+ * The default looks mostly down the +X axis, which is the right three-quarter
+ * for almost everything because +X is the contract's forward. It is wrong for a
+ * subject whose most important feature also points at +X: the gramophone's horn
+ * is a 0.32 m bell on the +X axis, so from the shared angle it faces the lens
+ * squarely and hides the turntable, the tonearm and the whole crane behind it.
+ * Swinging round toward +Z puts the horn in profile, where its flare reads and
+ * the deck is visible past it.
+ *
+ * This is a camera choice, not a retouch -- the render is still the program,
+ * straight through the same port.
+ */
+const HERO_OVERRIDES: Record<string, { dir?: [number, number, number]; zoom?: number }> = {
+  gramophone: { dir: [0.3, 0.4, 0.87], zoom: 1.02 },
+  // Same problem, different subject: the fish is modelled nose-at-+X, so the
+  // shared angle looks it straight in the mouth and a deep-sea anglerfish
+  // becomes a dark oval with a light in front of it. Almost side-on is the only
+  // view where the profile, the jaw line, the arched illicium and the fin rays
+  // all read at once, which is why every plate ever drawn of one is in profile.
+  anglerfish: { dir: [0.24, 0.3, 0.92], zoom: 1.04 },
+  // A 332 m hull is four times as long as it is wide, so the shared angle leaves
+  // it as a thin diagonal with the flight deck nearly edge-on. Swinging toward
+  // the beam opens the deck out; dropping the elevation to 27 degrees is what
+  // puts the ship back under it. From higher up the entire flank falls into the
+  // shadow of its own overhang and a carrier reads as a black lozenge with
+  // markings on it.
+  'aircraft-carrier': { dir: [0.6, 0.42, 0.55], zoom: 1.0 },
+};
 
 /** Width the shot is published at. Render size stays higher, for the downsample. */
 const DISPLAY_PX = 1000;
@@ -91,11 +162,23 @@ async function main(): Promise<void> {
   await mkdir(OUT_DIR, { recursive: true });
 
   const context = await buildRenderPort(cpu ? 'cpu' : 'auto', undefined);
-  if (!context.viewRenderPort) {
-    // The CPU rasterizer is geometry-flat: it draws shape, not materials. That
+  if (!context.viewRenderPort && !cpu) {
+    // The CPU rasterizer is geometry-flat: it draws shape, not materials, which
     // is the right fallback for an in-loop diagnostic and the wrong one for a
-    // gallery image, so say so rather than quietly shipping grey renders.
-    console.warn('no GPU render port — shots will be geometry-flat, not material-faithful');
+    // gallery image. Warning and carrying on was worse than useless: the
+    // detection probe is a health GET that times out whenever the service is
+    // busy -- which it is whenever a dispatch batch is rendering through it --
+    // so a transient miss silently replaced finished PBR heroes with grey ones,
+    // and the only evidence was a line of scrollback. Refuse instead. `--cpu`
+    // still says so deliberately, and KILN_RENDER_PORT_URL skips the probe.
+    console.error(
+      'no GPU render port reachable at http://127.0.0.1:8000.\n' +
+        'Gallery shots must be material-faithful, and overwriting them with flat\n' +
+        'CPU renders loses work that cannot be recovered from the tree.\n' +
+        'Start the render service, or set KILN_RENDER_PORT_URL to skip the probe\n' +
+        '(it is taken on trust), or pass --cpu if you really do want flat shots.',
+    );
+    process.exit(1);
   }
   const evaluator = resolveEvaluatorPortV1(undefined, 'trusted-local');
 
@@ -110,7 +193,7 @@ async function main(): Promise<void> {
         context.viewRenderPort,
         rendered.glb,
         context.viewRenderTimeoutMs ?? 120_000,
-        [HERO_DIR],
+        [HERO_OVERRIDES[name]?.dir ?? HERO_DIR],
         size,
       );
       if (ported.ok) png = ported.pngs[0];

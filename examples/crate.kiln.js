@@ -15,7 +15,12 @@ function build() {
 
   const plank = gameMaterial(0x8a6a43, { roughness: 0.85 });
   const plankDark = gameMaterial(0x6f5335, { roughness: 0.9 });
-  const iron = gameMaterial(0x4a4a4f, { metalness: 0.8, roughness: 0.45 });
+  // Metal albedo is reflectance, not paint. A metal has no diffuse term at all,
+  // so its entire appearance is a specular reflection tinted by its base colour
+  // -- and 0x4a4a4f, which looks like a reasonable dark iron as a swatch,
+  // returns almost nothing under a neutral studio dome and rendered these bands
+  // as black stripes. Real iron sits near 0x8f8f94.
+  const iron = gameMaterial(0x8f8f94, { metalness: 0.8, roughness: 0.45 });
 
   const S = 0.9; // crate edge length
   const H = S / 2;
@@ -42,6 +47,15 @@ function build() {
       });
     }
   }
+
+  // A liner just inside the boards. The 12 mm gaps between planks are what
+  // makes this read as a crate rather than a cube, but with nothing behind them
+  // they render as black slots -- the background showing through, which the eye
+  // reads as a hole rather than as shadow. A real crate has its contents there.
+  createPart('Liner', boxGeo(S - 2 * T, S - 2 * T, S - 2 * T), plankDark, {
+    position: [0, H, 0],
+    parent: root,
+  });
 
   // Lid and floor.
   createPart('Lid', boxGeo(S - 0.01, T, S - 0.01), plank, {

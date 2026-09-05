@@ -38,7 +38,12 @@ describe('repository reliability contracts', () => {
     const pkg = await readJson('package.json');
     const bunfig = await readText('bunfig.toml');
     const thresholds = JSON.parse((await readText('coverage-thresholds.json')) || '{}');
-    const readme = await readText('README.md');
+    // Collapse whitespace before matching prose. These assertions describe
+    // sentences, and a sentence in a hard-wrapped Markdown file contains
+    // newlines at positions nobody should have to predict -- the ratchet-policy
+    // check below silently stopped matching when a paragraph was reflowed during
+    // an edit, which is the opposite of what a documentation guard is for.
+    const readme = (await readText('README.md')).replace(/\s+/g, ' ');
     const workflow = await readText('.github/workflows/ci.yml');
 
     expect(pkg.scripts['test:coverage']).toBe(
@@ -52,11 +57,11 @@ describe('repository reliability contracts', () => {
     expect(bunfig).not.toContain('coverageThreshold =');
     expect(bunfig).toContain('coveragePathIgnorePatterns = [');
     expect(thresholds).toEqual({
-      measuredBaseline: { functions: 95.38, lines: 91.8 },
+      measuredBaseline: { functions: 95.96, lines: 92.54 },
       thresholds: { functions: 92, lines: 91 },
     });
-    expect(readme).toContain('95.38% functions / 91.80% lines');
-    expect(readme).toContain('Threshold decreases require an explicit measured rationale.');
+    expect(readme).toContain('95.96% functions / 92.54% lines');
+    expect(readme).toContain('threshold decreases require an explicit measured rationale.');
     expect(workflow).toContain('run: bun run test:coverage');
     expect(workflow).toContain('uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02');
     expect(workflow).toContain('path: coverage/lcov.info');
