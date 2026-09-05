@@ -71,7 +71,14 @@ presented as the current gallery source.
 See [the evaluation notes](dogfooding.md) for completed authoring runs and their
 limits, and [clean-room setup](clean-room.md) for how to create a separate project.
 
-The public gallery excludes the tidal observatory after visual review. Its source
-and historical evaluation records remain in the repository archive; archive
-presence does not imply gallery selection. The current public collection contains
-54 examples. New gallery thumbnails are framed as whole assets, without cropping.
+The public gallery excludes Tidal Observatory, Fire Lookout Tower, Brass Tellurion,
+and Victorian Greenhouse after visual review. Their source and historical records
+remain archived; archive presence does not imply gallery selection. See the
+[current collection](examples.md). Thumbnails show whole assets without cropping.
+
+Gallery publishing uses Windows and pinned Bun/dependencies to match the reviewed
+GLB bytes. Linux can serialize the last decimal place of a rotation differently
+even when the binary mesh data is identical. The build therefore records its
+platform and keeps source, GLB, and poster hash checks strict. CLI and MCP package
+support on Linux and macOS is tested separately; rebuilding on those platforms
+does not promise byte-identical GLB serialization.

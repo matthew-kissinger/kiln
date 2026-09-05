@@ -175,7 +175,7 @@ await writeFile(
       engineVersion: buildInputs.engineVersion,
       engineSourceHash: buildInputs.sourceHash,
       dependencyLockHash: buildInputs.dependencyHash,
-      runtime: { bun: process.versions.bun, node: process.versions.node },
+      runtime: { bun: process.versions.bun, node: process.versions.node, platform: process.platform, arch: process.arch },
       evaluator: 'trusted-local',
       indexHash: sha256(await readFile(join(OUT, 'index.json'))),
       note: 'Source and GLB hashes bind each downloadable pair. Poster receipts separately record the image, camera and renderer. The lock hash records dependency intent, not the installed dependency closure.',
