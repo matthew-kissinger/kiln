@@ -25,3 +25,4 @@ scripts/create-workspace.mjs -text
 package.json -text
 plugin.json -text
 .claude-plugin/** -text
+docs/**/*.mjs -text
