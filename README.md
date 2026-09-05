@@ -836,7 +836,7 @@ bun run test           # offline; live agent tests gated behind KILN_SPIKE_LIVE=
 bun run test:coverage  # LCOV plus the checked coverage ratchet
 ```
 
-1,549 tests across 144 files, at a measured **95.96% functions / 92.54% lines**. CI enforces
+1,549 tests across 144 files, at a measured **95.93% functions / 92.54% lines**. CI enforces
 non-regression ratchets of 92% and 91% and uploads `coverage/lcov.info`; threshold decreases require
 an explicit measured rationale. Tests pin `KILN_RENDER=cpu` so coverage cannot vary by runner GPU, and
 the example suite executes every checked-in program on every run, then checks this README's triangle
