@@ -48,8 +48,8 @@ if (build.indexHash !== hash(await readFile(join(root, 'assets/index.json')))) t
 const demo = JSON.parse(await readFile(join(root, 'assets/edit-demo.json'), 'utf8'));
 for (const row of demo.records) {
   if (
-    `sha256:${hash(await readFile(join(root, `assets/workbench-${row.name}.kiln.js`)))}` !==
-    row.programRef
+    hash(await readFile(join(root, `assets/workbench-${row.name}.kiln.js`))) !==
+    row.sourceHash
   )
     throw new Error(`Demo source mismatch: ${row.name}`);
   if (hash(await readFile(join(root, `assets/workbench-${row.name}.glb`))) !== row.artifactHash)
@@ -57,7 +57,7 @@ for (const row of demo.records) {
 }
 const geometry = JSON.parse(await readFile(join(root, 'assets/geometry-demo.json'), 'utf8'));
 for (const [file, digest] of [
-  ['equation-canopy.kiln.js', geometry.programRef.replace('sha256:', '')],
+  ['equation-canopy.kiln.js', geometry.sourceHash],
   ['equation-canopy.glb', geometry.artifactHash],
   ['equation-canopy.png', geometry.imageHash],
 ]) {

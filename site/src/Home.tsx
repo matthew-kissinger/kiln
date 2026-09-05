@@ -46,6 +46,7 @@ export function Home({ specimens }: { specimens: Specimen[] }) {
     'abyssal-surveyor',
     'kestrel-rescue-craft',
     'solar-sail-courier',
+    'mechanical-peacock',
     'orrery',
     'typewriter',
     'nautilus-habitat',

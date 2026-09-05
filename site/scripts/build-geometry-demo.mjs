@@ -56,6 +56,7 @@ export async function buildGeometryDemo(repo, out) {
       {
         attribution: 'Maintainer teaching example; not a model evaluation',
         programRef: first.programRef,
+        sourceHash: hash(code),
         artifactHash: hash(asset.glb),
         imageHash: hash(png),
         capture,

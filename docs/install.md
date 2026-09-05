@@ -7,12 +7,10 @@ Bun is needed only when building Kiln itself.
 Download the `.tgz` package from [GitHub Releases](https://github.com/matthew-kissinger/kiln/releases),
 or build one using the contributor steps below. npm registry publication is separate;
 do not run an unpublished registry command.
-Windows and Linux package receipts are recorded in the [platform matrix](evaluation/platform-matrix.md).
-The macOS setup below is documented but has not been verified on native Apple
-Silicon or Intel hardware. Native verification is welcome from the community and
-does not block this release. CI jobs are configured for both architectures; see
-[how to contribute a platform check](../CONTRIBUTING.md#help-verify-macos).
-CPU package setup and optional GPU support are separate checks.
+Windows, Linux, and hosted Apple Silicon/Intel Mac package checks pass; see the
+[platform receipts](evaluation/platform-matrix.md). Community reports on local
+Mac installations are still welcome. CPU package setup and optional GPU support
+are separate checks.
 
 ## Start on a Mac with a local package
 
@@ -226,8 +224,7 @@ The Mac jobs install no contributor dependencies and do not set up Bun. Their
 retained receipts include the tarball hash, native architecture and completed
 checks. These versioned runner labels follow [GitHub's runner catalog](https://docs.github.com/en/actions/reference/runners/github-hosted-runners);
 GitHub maintains the underlying images, so the labels are not immutable OS images.
-A configured job is not a passing platform receipt: Mac support remains pending
-until these jobs run successfully.
+Both architectures passed all 16 package checks in [CI run 33996715717](https://github.com/matthew-kissinger/kiln/actions/runs/33996715717). The retained receipts are linked in the platform matrix.
 
 ## Embed the tools
 

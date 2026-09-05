@@ -8,6 +8,7 @@ const CURATED = [
   'abyssal-surveyor',
   'kestrel-rescue-craft',
   'solar-sail-courier',
+  'mechanical-peacock',
   'orrery',
   'typewriter',
 ];

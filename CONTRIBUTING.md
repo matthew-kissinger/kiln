@@ -60,9 +60,9 @@ and publishes nothing.
 
 ## Help verify macOS
 
-Windows and Linux have recorded package checks. The [Mac setup guide](docs/install.md)
-is documented, but native Apple Silicon and Intel verification is still pending.
-This is a community contribution opportunity, not a release blocker.
+Windows, Linux and hosted macOS runners have passing package checks, including
+Apple Silicon and Intel. The [Mac setup guide](docs/install.md) still benefits from
+reports on real user installations and optional GPU support.
 
 If you have a Mac, try the built-package workflow and report the package hash,
 macOS version, Node/npm versions, architecture (`node -p process.arch`) and package

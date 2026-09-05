@@ -1,0 +1,9 @@
+{
+  "code": 1,
+  "timedOut": false,
+  "wrongModel": false,
+  "startedAt": "2026-09-05T22:54:44.467Z",
+  "finishedAt": "2026-09-05T23:04:48.160Z",
+  "terminalReason": "api_error",
+  "isError": true
+}

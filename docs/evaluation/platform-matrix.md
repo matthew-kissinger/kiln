@@ -1,6 +1,23 @@
 # Package platform checks
 
-## Tested runtime candidate — 5 September 2026
+## Short-reference update — 5 September 2026
+
+The newer short-reference runtime passes 16 package checks on each platform:
+
+| Platform | Receipt |
+| --- | --- |
+| Windows x64 | [Local Node package](results/short-references-2026-09-05/windows-package.json) |
+| Linux x64 | [Isolated Node package](results/short-references-2026-09-05/linux-package.json) |
+| macOS ARM64 | [Hosted native Node package](results/short-references-2026-09-05/macos-arm64.json) |
+| macOS x64 | [Hosted native Node package](results/short-references-2026-09-05/macos-x64.json) |
+
+Windows/Linux used tarball `19add77366f489f078ca50f58d6d0bcb4c4d3e86a18df4bc8da387285ab90822`.
+The [GitHub CI run](https://github.com/matthew-kissinger/kiln/actions/runs/33996715717)
+built and tested tarball `eddff8da662dd69f5f241d91eada7cca33400cefd5e9028422fd68bcd02bb78e`
+on both Mac architectures. These are distinct archives; the receipts retain their exact identities.
+The checks cover CPU rendering, CLI/MCP editing and persistence, not optional GPU rendering or a complete desktop-harness setup on a physical Mac.
+
+## Earlier runtime candidate — 5 September 2026
 
 The actual `@kiln/engine` 0.6.0 candidate installed without development dependencies
 and passed all 15 distribution checks on Windows and Linux x64. Both used Node

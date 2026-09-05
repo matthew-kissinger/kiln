@@ -55,6 +55,7 @@ export async function buildEditDemo(repo, out) {
     records.push({
       name,
       programRef: result.programRef,
+      sourceHash: createHash('sha256').update(code).digest('hex'),
       artifactHash: createHash('sha256').update(render.glb).digest('hex'),
       viewFidelity: result.viewFidelity,
     });

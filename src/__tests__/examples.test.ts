@@ -63,6 +63,24 @@ const sweepAdvisory =
   'SWEEP_SELF_INTERSECTION_UNCHECKED Transported frames and caps do not prove a sweep is free of self-intersections. Review tight turns and nearby path segments.';
 // Exact reviewed advisory lists. New meshes, warnings or changed warning text still fail.
 const documentedAdvisories: Record<string, string[]> = {
+  'mechanical-peacock': [
+    'Mesh_SpineStrip: SWEEP_SELF_INTERSECTION_UNCHECKED Transported frames and caps do not prove a sweep is free of self-intersections. Review tight turns and nearby path segments.',
+    'Mesh_BellyKeel: SWEEP_SELF_INTERSECTION_UNCHECKED Transported frames and caps do not prove a sweep is free of self-intersections. Review tight turns and nearby path segments.',
+    'Mesh_Neck: SWEEP_TIGHT_TURN Path station 5 turns tightly relative to the profile; reduce its size or widen the turn. Self-intersection is possible.',
+    'Mesh_Neck: SWEEP_TIGHT_TURN Path station 6 turns tightly relative to the profile; reduce its size or widen the turn. Self-intersection is possible.',
+    'Mesh_Neck: SWEEP_TIGHT_TURN Path station 7 turns tightly relative to the profile; reduce its size or widen the turn. Self-intersection is possible.',
+    'Mesh_Neck: SWEEP_TIGHT_TURN Path station 8 turns tightly relative to the profile; reduce its size or widen the turn. Self-intersection is possible.',
+    'Mesh_Neck: SWEEP_TIGHT_TURN Path station 9 turns tightly relative to the profile; reduce its size or widen the turn. Self-intersection is possible.',
+    'Mesh_Neck: SWEEP_TIGHT_TURN Path station 10 turns tightly relative to the profile; reduce its size or widen the turn. Self-intersection is possible.',
+    'Mesh_Neck: SWEEP_TIGHT_TURN Path station 11 turns tightly relative to the profile; reduce its size or widen the turn. Self-intersection is possible.',
+    'Mesh_Neck: SWEEP_TIGHT_TURN Path station 12 turns tightly relative to the profile; reduce its size or widen the turn. Self-intersection is possible.',
+    'Mesh_Neck: SWEEP_SELF_INTERSECTION_UNCHECKED Transported frames and caps do not prove a sweep is free of self-intersections. Review tight turns and nearby path segments.',
+    'Mesh_NeckCollar1: SWEEP_SELF_INTERSECTION_UNCHECKED Transported frames and caps do not prove a sweep is free of self-intersections. Review tight turns and nearby path segments.',
+    'Mesh_NeckCollar2: SWEEP_SELF_INTERSECTION_UNCHECKED Transported frames and caps do not prove a sweep is free of self-intersections. Review tight turns and nearby path segments.',
+    'Mesh_NeckCollar3: SWEEP_SELF_INTERSECTION_UNCHECKED Transported frames and caps do not prove a sweep is free of self-intersections. Review tight turns and nearby path segments.',
+    'Mesh_NeckCollar4: SWEEP_SELF_INTERSECTION_UNCHECKED Transported frames and caps do not prove a sweep is free of self-intersections. Review tight turns and nearby path segments.',
+    'Mesh_NeckCollar5: SWEEP_SELF_INTERSECTION_UNCHECKED Transported frames and caps do not prove a sweep is free of self-intersections. Review tight turns and nearby path segments.',
+  ],
   'alpine-cable-terminal': [
     ...['CableReturnLoop', 'GondolaHangerArm'].map((name) => `Mesh_${name}: ${sweepAdvisory}`),
   ],
@@ -133,7 +151,14 @@ describe('hero gallery', () => {
   );
 
   it('names every public example and matches the documented collection count', async () => {
-    const excluded = ['crate', 'well', 'tidal-observatory', 'fire-lookout-tower'];
+    const excluded = [
+      'crate',
+      'well',
+      'tidal-observatory',
+      'fire-lookout-tower',
+      'brass-tellurion',
+      'victorian-greenhouse',
+    ];
     const publicNames = names.filter((name) => !excluded.includes(name));
     expect([...(await heroes)].sort()).toEqual(publicNames);
     const count = /public gallery contains (\d+) selected examples/.exec(await readme);
@@ -143,7 +168,12 @@ describe('hero gallery', () => {
 
   it('has a render for every public hero and only the explicitly retained archive', async () => {
     const publicHeroes = await heroes;
-    const archives = ['tidal-observatory', 'fire-lookout-tower'];
+    const archives = [
+      'tidal-observatory',
+      'fire-lookout-tower',
+      'brass-tellurion',
+      'victorian-greenhouse',
+    ];
     for (const archive of archives) expect(publicHeroes).not.toContain(archive);
     const expected = [...publicHeroes, ...archives].map((h) => `${h}.png`).sort();
     const actual = (await readdir(RENDERS)).filter((f) => f.endsWith('.png')).sort();

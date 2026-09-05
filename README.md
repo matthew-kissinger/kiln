@@ -17,6 +17,12 @@ the model; Kiln does not require a separate model API key for its tools.
 | --- | --- | --- |
 | [![Curved-hull survey submersible with an articulated sampling arm](examples/renders/abyssal-surveyor.png)](examples/abyssal-surveyor.kiln.js) | [![Mechanical typewriter](examples/renders/typewriter.png)](examples/typewriter.kiln.js) | [![Faceted gold solar sails supported by dark trussed spars](examples/renders/solar-sail-courier.png)](examples/solar-sail-courier.kiln.js) |
 
+<p align="center"><a href="https://kilnstudio.tools/#/mechanical-peacock"><img src="examples/renders/mechanical-peacock.png" width="460" alt="Mechanical peacock with a jewel-coloured fan and brass frame"></a></p>
+
+Mechanical peacock · Claude Opus 5. A maintainer-agent repair joins the neck to the
+head; the [source revisions](site/examples/history/mechanical-peacock/history.json)
+record the original and repaired programs.
+
 [Browse the interactive gallery](https://kilnstudio.tools/#/gallery)
 · [All examples and model credits](docs/examples.md)
 
@@ -25,8 +31,9 @@ These are saved examples from different authoring runs, not a model ranking.
 
 Start with the [installation guide](docs/install.md) for a built package on macOS,
 Windows, or Linux. It uses Node.js and creates a project-local agent setup.
-Windows and Linux package checks pass. macOS setup is documented; native testing
-and fixes are welcome through [community contributions](CONTRIBUTING.md#help-verify-macos).
+Package checks pass on Windows, Linux, and hosted macOS runners for Apple Silicon
+and Intel. See the [platform receipts](docs/evaluation/platform-matrix.md);
+real-world setup reports and GPU checks remain welcome from contributors.
 
 ## Run from a checkout
 
