@@ -1,6 +1,6 @@
 # Saved revisions and focused views
 
-Replace `REF` and `PART_PATH` with values returned by Kiln. Source hashes are immutable; edits create new revisions rather than moving a global current asset.
+Replace `REF` and `PART_PATH` with values returned by Kiln, copied exactly. `REF` may be a short `p_` handle or a canonical SHA-256 reference; do not derive it from a displayed hash. Each handle maps permanently to one revision in its store. Edits return a new reference rather than moving a global current asset.
 
 ```js
 kiln_source({ programRef: REF, query: 'POST_WIDTH', limit: 3000 });

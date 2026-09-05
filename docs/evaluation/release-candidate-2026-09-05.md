@@ -4,6 +4,8 @@ Local integration review on 2026-09-05. This report records the candidate,
 its evidence and the limits of that evidence. It is not a publication announcement
 or a comparative model ranking.
 
+The [short-reference follow-up](results/short-references-2026-09-05.md) records the newer runtime and package checks. Earlier package receipts below apply to their original candidates.
+
 ## What changed
 
 The agent can submit a program once, retain its immutable reference, read a small
@@ -19,7 +21,7 @@ frames across render, inspection and animation, with bounded grids or separate
 images and explicit fidelity reporting.
 
 The website leads with a single station model and a real source-edit demonstration.
-Its ten featured examples use verified Astra, Gemini and Muse credits. The warm,
+Its nine featured examples use verified Astra, Gemini and Muse credits. The warm,
 varied homepage includes developer entry points and a plain-text agent reading guide. A new
 submersible joins the selection; the tidal observatory and fire lookout tower are removed from the public
 gallery and generated downloads, with source and evaluation history retained. The vessel,

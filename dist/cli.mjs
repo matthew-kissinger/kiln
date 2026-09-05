@@ -25969,16 +25969,27 @@ init_isolation();
 init_render();
 
 // src/program-store-node.ts
-import { link, mkdir, readFile as readFile2, readdir, stat, unlink, writeFile as writeFile2 } from "node:fs/promises";
+import { link, lstat, mkdir, readFile as readFile2, readdir, stat, unlink, writeFile as writeFile2 } from "node:fs/promises";
 import { randomUUID } from "node:crypto";
 import { join as join3, resolve } from "node:path";
 
 // src/program-store.ts
 var MAX_PROGRAM_BYTES = 1024 * 1024;
-var programRefPattern = /^sha256:[a-f0-9]{64}$/;
+var canonicalProgramRefPattern = /^sha256:[a-f0-9]{64}(?![\s\S])/;
+var programRefPattern = /^(?:sha256:[a-f0-9]{64}|p_[a-f0-9]{12}(?:[a-f0-9]{4}){0,13})(?![\s\S])/;
 function assertProgramRef(ref) {
-  if (!programRefPattern.test(ref))
-    throw new Error("Invalid program reference; use the full sha256 reference returned by Kiln.");
+  if (typeof ref !== "string" || !programRefPattern.test(ref))
+    throw new Error("Invalid program reference; use a p_ handle or full sha256 reference returned by Kiln.");
+}
+async function retainProgram(store, code) {
+  const canonical2 = await store.put(code);
+  return store.shortRef ? store.shortRef(canonical2) : canonical2;
+}
+function* shortProgramRefCandidates(canonical2) {
+  if (!canonicalProgramRefPattern.test(canonical2) || canonical2.length !== 71)
+    throw new Error("Invalid canonical program reference.");
+  for (let length3 = 12;length3 <= 64; length3 += 4)
+    yield `p_${canonical2.slice(7, 7 + length3)}`;
 }
 async function programReference(code) {
   const bytes = new TextEncoder().encode(code);
@@ -25993,6 +26004,7 @@ async function programReference(code) {
 class MemoryProgramStore {
   maxBytes;
   programs = new Map;
+  handles = new Map;
   constructor(maxBytes = 64 * 1024 * 1024) {
     this.maxBytes = maxBytes;
   }
@@ -26019,10 +26031,26 @@ class MemoryProgramStore {
   }
   async get(ref) {
     assertProgramRef(ref);
-    const code = this.programs.get(ref);
+    const canonical2 = ref.startsWith("p_") ? this.handles.get(ref) : ref;
+    const code = canonical2 === undefined ? undefined : this.programs.get(canonical2);
     if (code === undefined)
       throw new Error(`Program not found: ${ref}. Import the source into this store again.`);
     return code;
+  }
+  async shortRef(ref) {
+    await this.get(ref);
+    if (ref.startsWith("p_"))
+      return ref;
+    for (const handle of shortProgramRefCandidates(ref)) {
+      const owner = this.handles.get(handle);
+      if (owner === ref)
+        return handle;
+      if (owner === undefined) {
+        this.handles.set(handle, ref);
+        return handle;
+      }
+    }
+    throw new Error("Unable to register an immutable program handle.");
   }
 }
 
@@ -26055,7 +26083,10 @@ class FileProgramStore {
   }
   async get(ref) {
     assertProgramRef(ref);
-    const path = join3(this.directory, `${ref.slice(7)}.js`);
+    const canonical2 = ref.startsWith("p_") ? await this.readHandle(ref) : ref;
+    if (canonical2 === undefined)
+      throw this.notFound(ref);
+    const path = join3(this.directory, `${canonical2.slice(7)}.js`);
     let code;
     try {
       if ((await stat(path)).size > MAX_PROGRAM_BYTES)
@@ -26063,12 +26094,61 @@ class FileProgramStore {
       code = await readFile2(path, "utf8");
     } catch (error) {
       if (error.code === "ENOENT")
-        throw new Error(`Program not found: ${ref}. Use the same KILN_PROGRAM_STORE or import the source again.`);
+        throw this.notFound(ref);
       throw error;
     }
-    if (await programReference(code) !== ref)
+    if (await programReference(code) !== canonical2)
       throw new Error(`Program integrity check failed: ${ref}`);
     return code;
+  }
+  notFound(ref) {
+    return new Error(`Program not found: ${ref}. Use the same KILN_PROGRAM_STORE or import the source again.`);
+  }
+  async readHandle(handle) {
+    const path = join3(this.directory, "refs", `${handle}.ref`);
+    try {
+      const info = await lstat(path);
+      if (!info.isFile() || info.size !== 71)
+        throw new Error(`Program handle integrity check failed: ${handle}`);
+      const canonical2 = await readFile2(path, "utf8");
+      if (!canonicalProgramRefPattern.test(canonical2) || !canonical2.slice(7).startsWith(handle.slice(2)))
+        throw new Error(`Program handle integrity check failed: ${handle}`);
+      return canonical2;
+    } catch (error) {
+      if (error.code === "ENOENT")
+        return;
+      throw error;
+    }
+  }
+  async shortRef(ref) {
+    await this.get(ref);
+    if (ref.startsWith("p_"))
+      return ref;
+    const directory = join3(this.directory, "refs");
+    await mkdir(directory, { recursive: true });
+    for (const handle of shortProgramRefCandidates(ref)) {
+      const owner = await this.readHandle(handle);
+      if (owner === ref)
+        return handle;
+      if (owner !== undefined)
+        continue;
+      const temporary = join3(directory, `.write-${randomUUID()}`);
+      await writeFile2(temporary, ref, { encoding: "utf8", flag: "wx", mode: 384 });
+      try {
+        try {
+          await link(temporary, join3(directory, `${handle}.ref`));
+          return handle;
+        } catch (error) {
+          if (error.code !== "EEXIST")
+            throw error;
+          if (await this.readHandle(handle) === ref)
+            return handle;
+        }
+      } finally {
+        await unlink(temporary);
+      }
+    }
+    throw new Error("Unable to register an immutable program handle.");
   }
   async put(code) {
     const ref = await programReference(code);
@@ -26635,12 +26715,12 @@ import { z as z3 } from "zod";
 
 // src/tools/programs.ts
 import { z } from "zod";
-var refInput = z.string().regex(programRefPattern).describe("Full immutable source revision returned by Kiln.");
+var refInput = z.string().regex(programRefPattern).describe("Returned p_ handle or full sha256 ref.");
 function withProgramReferences(def, store) {
   if (!(def.inputSchema instanceof z.ZodObject))
     throw new Error(`${def.name} must have an object input schema.`);
   const inputSchema = def.inputSchema.extend({
-    code: z.string().optional().describe("Inline source, for a new draft or legacy caller. Supply code OR programRef."),
+    code: z.string().optional().describe("New source. Supply code OR programRef."),
     programRef: refInput.optional(),
     ...def.name === "kiln_edit" ? {
       includeCode: z.boolean().optional().describe("Return the full updated source. Defaults to false with programRef, true with code.")
@@ -26663,11 +26743,11 @@ function withProgramReferences(def, store) {
     run: async (input) => {
       const args = inputSchema.parse(input);
       const code = typeof args.code === "string" ? args.code : await store.get(args.programRef);
-      const parentRef = await store.put(code);
+      const parentRef = await retainProgram(store, code);
       const output = await def.run({ ...args, code });
       if (def.name !== "kiln_edit" || output.ok !== true || typeof output.code !== "string")
         return { ...output, programRef: parentRef };
-      const programRef = await store.put(output.code);
+      const programRef = await retainProgram(store, output.code);
       const { code: updatedCode, ...rest } = output;
       const includeCode = args.includeCode ?? args.code !== undefined;
       const diff = typeof rest.diff === "string" ? rest.diff : "";
@@ -29186,7 +29266,7 @@ USAGE
   kiln render <program.js|ref> [options]     execute a Kiln program (offline, no key)
   kiln generate "<prompt>"  [options]    author a program with a model, then render
   kiln source <file.js>                 save a source snapshot and print its programRef
-  kiln source <sha256:ref> --out file.js export a revision without model transcription
+  kiln source <programRef> --out file.js export a revision without model transcription
 
 OPTIONS
   --out <path>            GLB output path            (default: out.glb)
@@ -29203,7 +29283,7 @@ EXAMPLES
   kiln render examples/crate.kiln.js --out crate.glb --views sheet.png
   kiln generate "a weathered wooden crate" --out crate.glb --views sheet.png
   kiln render examples/crate.kiln.js --render cpu --views sheet.png
-  kiln render sha256:FULL_HASH --capture cameras.json --views chosen.png
+  kiln render p_RETURNED_HANDLE --capture cameras.json --views chosen.png
 `;
 function parseArgs(argv) {
   const args = {
@@ -29305,7 +29385,7 @@ async function readCaptureRecipe(args) {
 }
 async function emit(code, args, context) {
   context.programStore ??= localProgramStore();
-  const programRef = await context.programStore.put(code);
+  const programRef = await retainProgram(context.programStore, code);
   console.log(`  programRef ${programRef}`);
   const result = await context.evaluatorPort.render(code, {
     optimize: "off",
@@ -29359,7 +29439,7 @@ async function cmdRender(args) {
     console.error(USAGE);
     return 2;
   }
-  const code = file.startsWith("sha256:") ? await localProgramStore().get(file) : await readFile5(resolvePath(file), "utf8");
+  const code = file.startsWith("sha256:") || programRefPattern.test(file) ? await localProgramStore().get(file) : await readFile5(resolvePath(file), "utf8");
   const context = await createPackagedLocalToolContext(await buildRenderPort(args.render, args.renderPort));
   console.log(`rendering ${file}`);
   await emit(code, args, context);
@@ -29416,7 +29496,7 @@ async function cmdSource(args) {
   if (!input || args.positional.length !== 1)
     throw new Error("source requires one file path or programRef.");
   const store = localProgramStore();
-  if (input.startsWith("sha256:")) {
+  if (input.startsWith("sha256:") || programRefPattern.test(input)) {
     const code = await store.get(input);
     if (args.out) {
       await writeFile4(resolvePath(args.out), code, { encoding: "utf8", flag: "wx" });
@@ -29426,7 +29506,7 @@ async function cmdSource(args) {
   } else {
     if (args.out)
       throw new Error("Use source <programRef> --out <new-file.js> to export a saved revision.");
-    console.log(await store.put(await readFile5(resolvePath(input), "utf8")));
+    console.log(await retainProgram(store, await readFile5(resolvePath(input), "utf8")));
   }
   return 0;
 }

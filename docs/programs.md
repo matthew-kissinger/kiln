@@ -7,6 +7,11 @@ Pass `code` once to `kiln_validate` or `kiln_render`. Both return a `programRef`
 when the draft fails. Use it for later rendering, validation, inspection, animation
 and interior views. `kiln_source` reads the source; `kiln_edit` changes it.
 
+Copy the returned reference exactly. Built-in stores return compact handles such as
+`p_7c94a132b8e0`, so the model need not repeat a full hash. A handle always identifies
+one source revision in its store; it never moves to a newer draft. Full
+`sha256:<64 lowercase hex characters>` references are still accepted.
+
 ```js
 kiln_source({ programRef, query: 'shelfHeight', limit: 1200 })
 kiln_edit({ programRef, edits: [
@@ -43,16 +48,25 @@ From a generated workspace, import and export without model transcription:
 
 ```sh
 node kiln.mjs source asset.kiln.js
-node kiln.mjs source sha256:FULL_REFERENCE --out revised.kiln.js
-node kiln.mjs render sha256:FULL_REFERENCE --out revised.glb --views revised.png
+node kiln.mjs source RETURNED_REF --out revised.kiln.js
+node kiln.mjs render RETURNED_REF --out revised.glb --views revised.png
 ```
 
+Replace `RETURNED_REF` with the reference returned for the revision you want to save.
 Source export refuses to overwrite an existing file. The saved JavaScript is portable;
 a reference needs a store containing that source.
 
-References hash the exact UTF-8 source, including whitespace and line endings. Local
-CLI and MCP processes default to `.kiln/programs` in their working directory. The setup
+The canonical SHA-256 hashes the exact UTF-8 source, including whitespace and line
+endings. A short handle maps to that full hash. Handles start with `p_` and 12 lowercase
+hex characters; a collision extends a new handle by four characters at a time, up to
+64. Existing mappings remain unchanged. Use the returned handle rather than shortening
+a hash yourself.
+
+Local CLI and MCP processes default to `.kiln/programs` in their working directory. The setup
 command configures the same absolute store path for both; `KILN_PROGRAM_STORE` overrides it.
+Keep the whole store, including its reference mappings, to preserve short handles
+across CLI calls and server restarts. A handle from another store is not automatically
+available here; import the source and use the returned reference.
 
 Local storage is append-only, limited to 1 MiB per program. There is no automatic
 eviction or total disk quota. Export accepted work before deleting an old workspace's
@@ -73,6 +87,12 @@ same eight definitions used by MCP. Inject `context.programStore`, with asynchro
 `put(code)` and `get(programRef)` methods, to share revisions between instances. Without
 it, one registry instance keeps an in-memory store bounded to 64 MiB. Keep that instance
 for the run. The legacy registry and internal working-buffer surface remain separate.
+
+`ProgramStore.put` continues to return the canonical SHA-256 reference. Built-in stores
+also provide `shortRef`; the tool and CLI layers use it to present a compact `programRef`.
+Custom stores can implement this optional method or keep returning canonical references.
+Keep source and artifact hashes in provenance records; a compact handle does not replace
+those integrity checks.
 
 ## Why separate read and edit?
 

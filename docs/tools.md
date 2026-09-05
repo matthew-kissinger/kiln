@@ -88,13 +88,13 @@ Check program syntax and sandbox rules before building. Returns validation findi
   "type": "object",
   "properties": {
     "code": {
-      "description": "Inline source, for a new draft or legacy caller. Supply code OR programRef.",
+      "description": "New source. Supply code OR programRef.",
       "type": "string"
     },
     "programRef": {
       "type": "string",
-      "pattern": "^sha256:[a-f0-9]{64}$",
-      "description": "Full immutable source revision returned by Kiln."
+      "pattern": "^(?:sha256:[a-f0-9]{64}|p_[a-f0-9]{12}(?:[a-f0-9]{4}){0,13})(?![\\s\\S])",
+      "description": "Returned p_ handle or full sha256 ref."
     }
   },
   "additionalProperties": false
@@ -117,7 +117,7 @@ Build a program and return geometry metrics, exact part paths and images. Omit c
   "type": "object",
   "properties": {
     "code": {
-      "description": "Inline source, for a new draft or legacy caller. Supply code OR programRef.",
+      "description": "New source. Supply code OR programRef.",
       "type": "string"
     },
     "capture": {
@@ -426,8 +426,8 @@ Build a program and return geometry metrics, exact part paths and images. Omit c
     },
     "programRef": {
       "type": "string",
-      "pattern": "^sha256:[a-f0-9]{64}$",
-      "description": "Full immutable source revision returned by Kiln."
+      "pattern": "^(?:sha256:[a-f0-9]{64}|p_[a-f0-9]{12}(?:[a-f0-9]{4}){0,13})(?![\\s\\S])",
+      "description": "Returned p_ handle or full sha256 ref."
     }
   },
   "additionalProperties": false
@@ -687,7 +687,7 @@ Render sampled animation frames to check motion and attachments. Use shot for th
       ]
     },
     "code": {
-      "description": "Inline source, for a new draft or legacy caller. Supply code OR programRef.",
+      "description": "New source. Supply code OR programRef.",
       "type": "string"
     },
     "clip": {
@@ -704,8 +704,8 @@ Render sampled animation frames to check motion and attachments. Use shot for th
     },
     "programRef": {
       "type": "string",
-      "pattern": "^sha256:[a-f0-9]{64}$",
-      "description": "Full immutable source revision returned by Kiln."
+      "pattern": "^(?:sha256:[a-f0-9]{64}|p_[a-f0-9]{12}(?:[a-f0-9]{4}){0,13})(?![\\s\\S])",
+      "description": "Returned p_ handle or full sha256 ref."
     }
   },
   "required": [
@@ -981,7 +981,7 @@ Render roof-off floor-plan, dollhouse, and eye-level cutaway views. Optional ver
       "additionalProperties": false
     },
     "code": {
-      "description": "Inline source, for a new draft or legacy caller. Supply code OR programRef.",
+      "description": "New source. Supply code OR programRef.",
       "type": "string"
     },
     "nodeName": {
@@ -990,8 +990,8 @@ Render roof-off floor-plan, dollhouse, and eye-level cutaway views. Optional ver
     },
     "programRef": {
       "type": "string",
-      "pattern": "^sha256:[a-f0-9]{64}$",
-      "description": "Full immutable source revision returned by Kiln."
+      "pattern": "^(?:sha256:[a-f0-9]{64}|p_[a-f0-9]{12}(?:[a-f0-9]{4}){0,13})(?![\\s\\S])",
+      "description": "Returned p_ handle or full sha256 ref."
     }
   },
   "additionalProperties": false
@@ -1310,7 +1310,7 @@ Inspect a part with context or isolation. Use legacy part/orbit controls or shot
       "additionalProperties": false
     },
     "code": {
-      "description": "Inline source, for a new draft or legacy caller. Supply code OR programRef.",
+      "description": "New source. Supply code OR programRef.",
       "type": "string"
     },
     "part": {
@@ -1339,8 +1339,8 @@ Inspect a part with context or isolation. Use legacy part/orbit controls or shot
     },
     "programRef": {
       "type": "string",
-      "pattern": "^sha256:[a-f0-9]{64}$",
-      "description": "Full immutable source revision returned by Kiln."
+      "pattern": "^(?:sha256:[a-f0-9]{64}|p_[a-f0-9]{12}(?:[a-f0-9]{4}){0,13})(?![\\s\\S])",
+      "description": "Returned p_ handle or full sha256 ref."
     }
   },
   "additionalProperties": false
@@ -1363,7 +1363,7 @@ Apply exact-string replacements to a program revision and render the result (ren
   "type": "object",
   "properties": {
     "code": {
-      "description": "Inline source, for a new draft or legacy caller. Supply code OR programRef.",
+      "description": "New source. Supply code OR programRef.",
       "type": "string"
     },
     "edits": {
@@ -1704,8 +1704,8 @@ Apply exact-string replacements to a program revision and render the result (ren
     },
     "programRef": {
       "type": "string",
-      "pattern": "^sha256:[a-f0-9]{64}$",
-      "description": "Full immutable source revision returned by Kiln."
+      "pattern": "^(?:sha256:[a-f0-9]{64}|p_[a-f0-9]{12}(?:[a-f0-9]{4}){0,13})(?![\\s\\S])",
+      "description": "Returned p_ handle or full sha256 ref."
     },
     "includeCode": {
       "description": "Return the full updated source. Defaults to false with programRef, true with code.",
@@ -1736,8 +1736,8 @@ Read a saved program revision without changing it. Returns exact source text in 
   "properties": {
     "programRef": {
       "type": "string",
-      "pattern": "^sha256:[a-f0-9]{64}$",
-      "description": "Full immutable source revision returned by Kiln."
+      "pattern": "^(?:sha256:[a-f0-9]{64}|p_[a-f0-9]{12}(?:[a-f0-9]{4}){0,13})(?![\\s\\S])",
+      "description": "Returned p_ handle or full sha256 ref."
     },
     "offset": {
       "default": 0,

@@ -1,6 +1,6 @@
 # Camera recipes for authoring
 
-Choose the number of images for the question you are answering. Replace `REF` with the actual `programRef`. Omit `capture` for the default six-view sheet.
+Choose the number of images for the question you are answering. Replace `REF` with the actual `programRef`, copied exactly, including its `p_` or `sha256:` prefix. Omit `capture` for the default six-view sheet.
 
 ## A compact orbit sheet
 
@@ -81,10 +81,11 @@ Write only the `capture` object to `cameras.json`, without `programRef` or an ou
 ```
 
 ```sh
-node kiln.mjs render sha256:FULL_HASH --capture cameras.json --views hero.png --out asset.glb
+node kiln.mjs render RETURNED_REF --capture cameras.json --views hero.png --out asset.glb
 ```
 
-Use the saved revision and reuse the file for matched before/after cameras. The CLI
+Replace `RETURNED_REF` with the reference returned by Kiln. Use the saved revision and
+reuse the file for matched before/after cameras. The CLI
 uses the same validated camera pipeline as MCP and can reuse the evaluated build.
 It writes PNG bytes directly; there is no need to copy image base64. `--capture`
 requires `--views`, accepts JSON up to 1 MiB, and supports grid output only. A single

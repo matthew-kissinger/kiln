@@ -1,11 +1,11 @@
 import { z } from 'zod';
-import { programRefPattern, type ProgramStore } from '../program-store';
+import { programRefPattern, retainProgram, type ProgramStore } from '../program-store';
 import type { KilnToolDef } from './registry';
 
 const refInput = z
   .string()
   .regex(programRefPattern)
-  .describe('Full immutable source revision returned by Kiln.');
+  .describe('Returned p_ handle or full sha256 ref.');
 
 /** Adapt source-taking definitions once, for all hosts. Legacy definitions remain unchanged. */
 export function withProgramReferences(def: KilnToolDef, store: ProgramStore): KilnToolDef {
@@ -13,10 +13,7 @@ export function withProgramReferences(def: KilnToolDef, store: ProgramStore): Ki
     throw new Error(`${def.name} must have an object input schema.`);
   const inputSchema = def.inputSchema
     .extend({
-      code: z
-        .string()
-        .optional()
-        .describe('Inline source, for a new draft or legacy caller. Supply code OR programRef.'),
+      code: z.string().optional().describe('New source. Supply code OR programRef.'),
       programRef: refInput.optional(),
       ...(def.name === 'kiln_edit'
         ? {
@@ -57,11 +54,11 @@ export function withProgramReferences(def: KilnToolDef, store: ProgramStore): Ki
       const code =
         typeof args.code === 'string' ? args.code : await store.get(args.programRef as string);
       // Keep malformed drafts too, so a failed build can be repaired by reference.
-      const parentRef = await store.put(code);
+      const parentRef = await retainProgram(store, code);
       const output = (await def.run({ ...args, code })) as Record<string, unknown>;
       if (def.name !== 'kiln_edit' || output.ok !== true || typeof output.code !== 'string')
         return { ...output, programRef: parentRef };
-      const programRef = await store.put(output.code);
+      const programRef = await retainProgram(store, output.code);
       const { code: updatedCode, ...rest } = output;
       const includeCode = args.includeCode ?? args.code !== undefined;
       const diff = typeof rest.diff === 'string' ? rest.diff : '';

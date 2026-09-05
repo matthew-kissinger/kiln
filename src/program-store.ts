@@ -2,6 +2,7 @@
 export interface ProgramStore {
   put(code: string): Promise<string>;
   get(programRef: string): Promise<string>;
+  shortRef?(programRef: string): Promise<string>;
   stats?(): Promise<ProgramStoreStats>;
 }
 
@@ -15,11 +16,28 @@ export interface ProgramStoreStats {
 }
 
 export const MAX_PROGRAM_BYTES = 1024 * 1024;
-export const programRefPattern = /^sha256:[a-f0-9]{64}$/;
+export const canonicalProgramRefPattern = /^sha256:[a-f0-9]{64}(?![\s\S])/;
+export const programRefPattern =
+  /^(?:sha256:[a-f0-9]{64}|p_[a-f0-9]{12}(?:[a-f0-9]{4}){0,13})(?![\s\S])/;
 
 export function assertProgramRef(ref: string): void {
-  if (!programRefPattern.test(ref))
-    throw new Error('Invalid program reference; use the full sha256 reference returned by Kiln.');
+  if (typeof ref !== 'string' || !programRefPattern.test(ref))
+    throw new Error(
+      'Invalid program reference; use a p_ handle or full sha256 reference returned by Kiln.',
+    );
+}
+
+/** Prefer the store's immutable handle without changing the canonical put contract. */
+export async function retainProgram(store: ProgramStore, code: string): Promise<string> {
+  const canonical = await store.put(code);
+  return store.shortRef ? store.shortRef(canonical) : canonical;
+}
+
+/** Bounded deterministic candidates. These are not resolvable until registered. */
+export function* shortProgramRefCandidates(canonical: string): Generator<string> {
+  if (!canonicalProgramRefPattern.test(canonical) || canonical.length !== 71)
+    throw new Error('Invalid canonical program reference.');
+  for (let length = 12; length <= 64; length += 4) yield `p_${canonical.slice(7, 7 + length)}`;
 }
 
 export async function programReference(code: string): Promise<string> {
@@ -34,6 +52,7 @@ export async function programReference(code: string): Promise<string> {
 
 export class MemoryProgramStore implements ProgramStore {
   private readonly programs = new Map<string, string>();
+  private readonly handles = new Map<string, string>();
   constructor(private readonly maxBytes = 64 * 1024 * 1024) {}
   private bytes = 0;
 
@@ -61,9 +80,24 @@ export class MemoryProgramStore implements ProgramStore {
 
   async get(ref: string): Promise<string> {
     assertProgramRef(ref);
-    const code = this.programs.get(ref);
+    const canonical = ref.startsWith('p_') ? this.handles.get(ref) : ref;
+    const code = canonical === undefined ? undefined : this.programs.get(canonical);
     if (code === undefined)
       throw new Error(`Program not found: ${ref}. Import the source into this store again.`);
     return code;
+  }
+
+  async shortRef(ref: string): Promise<string> {
+    await this.get(ref);
+    if (ref.startsWith('p_')) return ref;
+    for (const handle of shortProgramRefCandidates(ref)) {
+      const owner = this.handles.get(handle);
+      if (owner === ref) return handle;
+      if (owner === undefined) {
+        this.handles.set(handle, ref);
+        return handle;
+      }
+    }
+    throw new Error('Unable to register an immutable program handle.');
   }
 }

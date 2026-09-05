@@ -14,7 +14,7 @@ Establish the subject, scale, style, and destination constraints from the reques
 
 Write ordinary JavaScript with `meta` and `build()`. Keep dimensions that should change together in named parameters. Use [geometry recipes](references/geometry-recipes.md) for freeform surfaces, deformations, lofts, Boolean materials, or repeated parts. A model can author its own equations and topology; it does not need to assemble everything from boxes.
 
-Submit `code` once to `kiln_render` or `kiln_validate`, then retain its `programRef`, including on a failed build. In a generated asset workspace, `node kiln.mjs source asset.kiln.js` imports a file directly. Pass the reference for later views and edits instead of retransmitting the program.
+Submit `code` once to `kiln_render` or `kiln_validate`, then retain its `programRef`, including on a failed build. In a generated asset workspace, `node kiln.mjs source asset.kiln.js` imports a file directly. Copy the returned reference exactly for later views and edits. Built-in stores return short handles such as `p_7c94a132b8e0`; full SHA-256 references also work. Do not construct a handle or retransmit the program.
 
 ## Review what matters
 
@@ -31,10 +31,12 @@ Read a bounded source region with `kiln_source({ programRef, query: "dimensionOr
 Save the final reference without model transcription:
 
 ```sh
-node kiln.mjs source sha256:FULL_HASH --out asset-v1.kiln.js
-node kiln.mjs render sha256:FULL_HASH --out asset-v1.glb --views asset-v1.png
+node kiln.mjs source RETURNED_REF --out asset-v1.kiln.js
+node kiln.mjs render RETURNED_REF --out asset-v1.glb --views asset-v1.png
 ```
 
-To save a chosen camera view, write the `capture` object itself to `cameras.json` and run `node kiln.mjs render sha256:FULL_HASH --capture cameras.json --views hero.png`. This uses the same camera schema and render pipeline as MCP. CLI image export supports grid output; use one shot for a single hero PNG. Do not copy image base64 into shell commands. The [camera recipes](references/camera-recipes.md) include a complete file example.
+Replace `RETURNED_REF` with the final reference returned by Kiln. Keep `.kiln/programs`, including its mappings, while using saved references.
+
+To save a chosen camera view, write the `capture` object itself to `cameras.json` and run `node kiln.mjs render RETURNED_REF --capture cameras.json --views hero.png`. This uses the same camera schema and render pipeline as MCP. CLI image export supports grid output; use one shot for a single hero PNG. Do not copy image base64 into shell commands. The [camera recipes](references/camera-recipes.md) include a complete file example.
 
 Source export refuses to overwrite a file. Report the source and GLB, important design choices, what you reviewed, and any unresolved limitation. Validation does not establish visual quality or destination-runtime performance. There is no default triangle target; measure geometry, draw calls, textures, and loading against the user's actual constraints.

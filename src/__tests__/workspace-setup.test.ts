@@ -16,7 +16,7 @@ it('creates an isolated workspace whose Node CLI imports and exports exactly onc
     await writeFile(join(root, 'asset.kiln.js'), source);
     const imported = node(['kiln.mjs', 'source', 'asset.kiln.js']);
     expect(imported.status).toBe(0);
-    expect(imported.stdout.trim()).toMatch(/^sha256:[a-f0-9]{64}$/);
+    expect(imported.stdout.trim()).toMatch(/^p_[a-f0-9]{12}$/);
     const ref = imported.stdout.trim();
     const exported = node(['kiln.mjs', 'source', ref, '--out', 'saved.kiln.js']);
     expect(exported.status).toBe(0);

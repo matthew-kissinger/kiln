@@ -50,7 +50,6 @@ export function Home({ specimens }: { specimens: Specimen[] }) {
     'typewriter',
     'nautilus-habitat',
     'ribbon-tea-pavilion',
-    'brass-tellurion',
     'polar-rover',
     'kinetic-wave',
   ].flatMap((name) => specimens.find((s) => s.name === name) ?? []);
@@ -218,14 +217,14 @@ export function Home({ specimens }: { specimens: Specimen[] }) {
                 <span>Export the accepted source and GLB. Earlier revisions stay available.</span>
               </li>
             </ol>
-            <Code>{`kiln_source({ programRef: "sha256:…", query: "shelfHeight" })
+            <Code>{`kiln_source({ programRef: "p_7c94a132b8e0", query: "shelfHeight" })
 kiln_edit({
-  programRef: "sha256:…",
+  programRef: "p_7c94a132b8e0",
   edits: [{ oldString: "shelfHeight = 0.2", newString: "shelfHeight = 0.45" }]
 })`}</Code>
             <p className="aside">
-              API sketch: use the full reference returned by Kiln. References survive local server
-              restarts. <a href={`${DOCS}/programs.md`}>How source revisions work →</a>
+              API sketch: copy the reference returned by Kiln exactly. References survive local
+              server restarts. <a href={`${DOCS}/programs.md`}>How source revisions work →</a>
             </p>
           </div>
         </div>

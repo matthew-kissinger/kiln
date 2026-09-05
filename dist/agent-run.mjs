@@ -28019,10 +28019,17 @@ import { z as z3 } from "zod";
 
 // src/program-store.ts
 var MAX_PROGRAM_BYTES = 1024 * 1024;
-var programRefPattern = /^sha256:[a-f0-9]{64}$/;
+var canonicalProgramRefPattern = /^sha256:[a-f0-9]{64}(?![\s\S])/;
+var programRefPattern = /^(?:sha256:[a-f0-9]{64}|p_[a-f0-9]{12}(?:[a-f0-9]{4}){0,13})(?![\s\S])/;
 function assertProgramRef(ref) {
-  if (!programRefPattern.test(ref))
-    throw new Error("Invalid program reference; use the full sha256 reference returned by Kiln.");
+  if (typeof ref !== "string" || !programRefPattern.test(ref))
+    throw new Error("Invalid program reference; use a p_ handle or full sha256 reference returned by Kiln.");
+}
+function* shortProgramRefCandidates(canonical2) {
+  if (!canonicalProgramRefPattern.test(canonical2) || canonical2.length !== 71)
+    throw new Error("Invalid canonical program reference.");
+  for (let length2 = 12;length2 <= 64; length2 += 4)
+    yield `p_${canonical2.slice(7, 7 + length2)}`;
 }
 async function programReference(code) {
   const bytes = new TextEncoder().encode(code);
@@ -28037,6 +28044,7 @@ async function programReference(code) {
 class MemoryProgramStore {
   maxBytes;
   programs = new Map;
+  handles = new Map;
   constructor(maxBytes = 64 * 1024 * 1024) {
     this.maxBytes = maxBytes;
   }
@@ -28063,16 +28071,32 @@ class MemoryProgramStore {
   }
   async get(ref) {
     assertProgramRef(ref);
-    const code = this.programs.get(ref);
+    const canonical2 = ref.startsWith("p_") ? this.handles.get(ref) : ref;
+    const code = canonical2 === undefined ? undefined : this.programs.get(canonical2);
     if (code === undefined)
       throw new Error(`Program not found: ${ref}. Import the source into this store again.`);
     return code;
+  }
+  async shortRef(ref) {
+    await this.get(ref);
+    if (ref.startsWith("p_"))
+      return ref;
+    for (const handle of shortProgramRefCandidates(ref)) {
+      const owner = this.handles.get(handle);
+      if (owner === ref)
+        return handle;
+      if (owner === undefined) {
+        this.handles.set(handle, ref);
+        return handle;
+      }
+    }
+    throw new Error("Unable to register an immutable program handle.");
   }
 }
 
 // src/tools/programs.ts
 import { z } from "zod";
-var refInput = z.string().regex(programRefPattern).describe("Full immutable source revision returned by Kiln.");
+var refInput = z.string().regex(programRefPattern).describe("Returned p_ handle or full sha256 ref.");
 
 // src/tools/discovery.ts
 import { z as z2 } from "zod";

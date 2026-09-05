@@ -112,7 +112,9 @@ try {
   const source = `const meta = { name: 'PackedEnclosure', category: 'prop' };\nasync function build() {\nconst root = createRoot('PackedEnclosure');\nconst mat = gameMaterial(0x4488aa);\nconst base = new THREE.Mesh(boxGeo(2, 2, 2), mat);\nbase.position.y = 1;\nconst cutter = new THREE.Mesh(cylinderGeo(0.3, 0.3, 3, 16), mat);\ncutter.position.y = 1;\nconst body = await boolDiff('Body', base, cutter);\nbody.geometry = await autoUnwrap(body.geometry, { resolution: 256 });\nroot.add(body);\nreturn root;\n}\n`;
   await writeFile(join(workspace, 'asset.kiln.js'), source);
   const ref = (await command([cli, 'source', join(workspace, 'asset.kiln.js')], root)).trim();
-  assert.match(ref, /^sha256:[a-f0-9]{64}$/);
+  assert.match(ref, /^p_[a-f0-9]{12}$/);
+  assert.equal(await command([cli, 'source', `sha256:${sha(source)}`], root), source);
+  receipt.checks.push('short-reference-full-hash-compatibility');
   await command([cli, 'render', ref, '--render', 'cpu', '--out', join(workspace, 'asset.glb'), '--views', join(workspace, 'sheet.png')], root);
   const png = await readFile(join(workspace, 'sheet.png'));
   assert.equal(png.subarray(0, 8).toString('hex'), '89504e470d0a1a0a');
@@ -162,6 +164,7 @@ try {
     assert.equal(changed.ok, true);
     assert.equal(changed.parentRef, ref);
     assert.notEqual(changed.programRef, ref);
+    assert.match(changed.programRef, /^p_[a-f0-9]{12}$/);
     assert.equal(changed.code, undefined);
     assert(result.content.some((item) => item.type === 'image' && item.data.length > 100));
     receipt.editResult = { programRef: changed.programRef, parentRef: changed.parentRef };

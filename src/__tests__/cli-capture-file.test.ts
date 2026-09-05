@@ -35,7 +35,7 @@ it('renders retained source with a capture file and rejects invalid recipes befo
     const imported = run(['source', 'source.js']);
     expect(imported.exitCode).toBe(0);
     const ref = imported.stdout.toString().trim();
-    expect(ref).toMatch(/^sha256:[a-f0-9]{64}$/);
+    expect(ref).toMatch(/^p_[a-f0-9]{12}$/);
     const recipe = {
       version: 'kiln.capture.v1',
       size: 160,

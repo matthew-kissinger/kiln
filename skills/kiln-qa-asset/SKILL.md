@@ -10,7 +10,7 @@ Match the checks to the requested delivery. A source build, an image review, a G
 
 ## Before integration
 
-Read validation/build findings and export warnings. `kiln_validate` only checks source; render and inspect the actual geometry when that is the task. Choose broad or part-specific views that reveal the suspected defect. Reuse `programRef` for every view; request source text only when a repair needs it.
+Read validation/build findings and export warnings. `kiln_validate` only checks source; render and inspect the actual geometry when that is the task. Choose broad or part-specific views that reveal the suspected defect. Copy the returned `programRef` exactly for every view, whether it is a short `p_` handle or a full SHA-256 reference; request source text only when a repair needs it. A handle identifies a revision in its store; use full source and artifact hashes for integrity evidence.
 
 Distinguish expected open sheets from invalid solid topology. `geometryDiagnostics` reports boundary edges, non-manifold edges, orientation conflicts and degenerates; it does not prove absence of self-intersection. A capped loft, shell-like surface, or sampled field is not automatically a manufacturing-grade solid.
 

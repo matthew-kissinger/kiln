@@ -14,6 +14,7 @@ import { fileURLToPath } from 'node:url';
 import { resolveRenderMode, buildRenderPort, describeDrawnBy } from './cli-render-mode';
 import type { RenderMode } from './cli-render-mode';
 import { localProgramStore } from './program-store-node';
+import { retainProgram, programRefPattern } from './program-store';
 
 const USAGE = `kiln — vision-in-the-loop 3D asset generation
 
@@ -21,7 +22,7 @@ USAGE
   kiln render <program.js|ref> [options]     execute a Kiln program (offline, no key)
   kiln generate "<prompt>"  [options]    author a program with a model, then render
   kiln source <file.js>                 save a source snapshot and print its programRef
-  kiln source <sha256:ref> --out file.js export a revision without model transcription
+  kiln source <programRef> --out file.js export a revision without model transcription
 
 OPTIONS
   --out <path>            GLB output path            (default: out.glb)
@@ -38,7 +39,7 @@ EXAMPLES
   kiln render examples/crate.kiln.js --out crate.glb --views sheet.png
   kiln generate "a weathered wooden crate" --out crate.glb --views sheet.png
   kiln render examples/crate.kiln.js --render cpu --views sheet.png
-  kiln render sha256:FULL_HASH --capture cameras.json --views chosen.png
+  kiln render p_RETURNED_HANDLE --capture cameras.json --views chosen.png
 `;
 
 interface Args {
@@ -160,7 +161,7 @@ async function readCaptureRecipe(args: Args): Promise<unknown> {
  */
 async function emit(code: string, args: Args, context: KilnToolContext): Promise<void> {
   context.programStore ??= localProgramStore();
-  const programRef = await context.programStore.put(code);
+  const programRef = await retainProgram(context.programStore, code);
   console.log(`  programRef ${programRef}`);
   const result = await context.evaluatorPort!.render(code, {
     optimize: 'off',
@@ -221,9 +222,10 @@ async function cmdRender(args: Args): Promise<number> {
     console.error(USAGE);
     return 2;
   }
-  const code = file.startsWith('sha256:')
-    ? await localProgramStore().get(file)
-    : await readFile(resolvePath(file), 'utf8');
+  const code =
+    file.startsWith('sha256:') || programRefPattern.test(file)
+      ? await localProgramStore().get(file)
+      : await readFile(resolvePath(file), 'utf8');
   const context = await createPackagedLocalToolContext(
     await buildRenderPort(args.render, args.renderPort),
   );
@@ -301,7 +303,7 @@ async function cmdSource(args: Args): Promise<number> {
   if (!input || args.positional.length !== 1)
     throw new Error('source requires one file path or programRef.');
   const store = localProgramStore();
-  if (input.startsWith('sha256:')) {
+  if (input.startsWith('sha256:') || programRefPattern.test(input)) {
     const code = await store.get(input);
     if (args.out) {
       await writeFile(resolvePath(args.out), code, { encoding: 'utf8', flag: 'wx' });
@@ -310,7 +312,7 @@ async function cmdSource(args: Args): Promise<number> {
   } else {
     if (args.out)
       throw new Error('Use source <programRef> --out <new-file.js> to export a saved revision.');
-    console.log(await store.put(await readFile(resolvePath(input), 'utf8')));
+    console.log(await retainProgram(store, await readFile(resolvePath(input), 'utf8')));
   }
   return 0;
 }

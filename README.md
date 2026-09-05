@@ -80,14 +80,14 @@ Import an existing program from your asset workspace:
 node kiln.mjs source workbench.kiln.js
 ```
 
-The command prints a `programRef` identifying that exact source. The agent can use it
-for every later call:
+The command prints a short `programRef`, such as `p_7c94a132b8e0`, identifying that
+exact source. Copy it exactly for later calls:
 
 ```js
-// Use the full reference returned by Kiln in place of the placeholders.
-kiln_source({ programRef: "sha256:...", query: "shelfHeight" })
+// programRef is the value returned by Kiln.
+kiln_source({ programRef, query: "shelfHeight" })
 kiln_edit({
-  programRef: "sha256:...",
+  programRef,
   edits: [{ oldString: "shelfHeight = 0.2", newString: "shelfHeight = 0.35" }]
 })
 ```
@@ -100,11 +100,13 @@ does not modify the base.
 Save the new revision and export it without copying its source through the model:
 
 ```sh
-node kiln.mjs source sha256:FULL_REFERENCE --out workbench-v2.kiln.js
-node kiln.mjs render sha256:FULL_REFERENCE --out workbench-v2.glb --views workbench-v2.png
+node kiln.mjs source RETURNED_REF --out workbench-v2.kiln.js
+node kiln.mjs render RETURNED_REF --out workbench-v2.glb --views workbench-v2.png
 ```
 
-References survive local server restarts. Inline `code` still works for new drafts and
+Replace `RETURNED_REF` with the new reference from the edit. Short references survive
+local server restarts while you keep the workspace's store. Full SHA-256 references
+are still accepted. Inline `code` still works for new drafts and
 existing integrations. [Program storage and API details](docs/programs.md).
 
 ## Shape geometry and choose views

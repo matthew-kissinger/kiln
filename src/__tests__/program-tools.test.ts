@@ -17,7 +17,7 @@ describe('program references', () => {
       (await defs.find((d) => d.name === name)!.run(args)) as Record<string, unknown>;
     const initial = await call('kiln_validate', { code });
     const a = initial.programRef as string;
-    expect(a).toMatch(/^sha256:[a-f0-9]{64}$/);
+    expect(a).toMatch(/^p_[a-f0-9]{12}$/);
     const source = await call('kiln_source', { programRef: a, query: 'boxGeo', limit: 100 });
     expect(source.code).toContain('boxGeo');
     expect((source.code as string).length).toBeLessThanOrEqual(100);
@@ -35,6 +35,21 @@ describe('program references', () => {
     const rerender = await call('kiln_render', { programRef: edited.programRef });
     expect(rerender.ok).toBe(true);
     expect(rerender.programRef).toBe(edited.programRef);
+  });
+
+  it('keeps custom stores without short-reference support compatible', async () => {
+    const backing = new MemoryProgramStore();
+    const store = { put: backing.put.bind(backing), get: backing.get.bind(backing) };
+    const defs = createKilnProgramToolRegistry({ programStore: store });
+    const result = (await defs.find((d) => d.name === 'kiln_validate')!.run({ code })) as Record<
+      string,
+      unknown
+    >;
+    expect(result.programRef).toBe(await programReference(code));
+    const source = (await defs
+      .find((d) => d.name === 'kiln_source')!
+      .run({ programRef: result.programRef })) as Record<string, unknown>;
+    expect(source.code).toBe(code);
   });
 
   it('preserves inline clients, failed drafts, atomic failures and independent branches', async () => {
@@ -63,7 +78,7 @@ describe('program references', () => {
       edits: [...change('E'), { oldString: 'missing', newString: 'x' }],
     })) as Record<string, unknown>;
     expect(failed.ok).toBe(false);
-    expect(failed.programRef).toBe(a);
+    expect(await store.get(failed.programRef as string)).toBe(code);
     expect(await store.get(a)).toBe(code);
     const invalid = (await defs
       .find((d) => d.name === 'kiln_render')!

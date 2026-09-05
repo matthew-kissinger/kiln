@@ -59,13 +59,15 @@ const guide = `# Kiln asset workspace
 Use the kiln_workspace MCP server configured in this project to author and refine assets in this directory. Another server named kiln may use a different installation; do not substitute it silently. The engine is installed separately. Do not read its implementation or example collection to solve an asset task.
 
 - Read the relevant skill from this project's skills/ directory, not a global plugin copy. Use kiln_list_primitives on kiln_workspace for API signatures. If that server is unavailable, report the setup problem instead of using another installation.
-- Import an existing file with node kiln.mjs source asset.kiln.js. It returns a programRef.
+- Import an existing file with node kiln.mjs source asset.kiln.js. It returns a programRef, normally a short immutable p_ handle. Copy it exactly; do not expand or shorten it.
 - For a new draft, pass code once to kiln_validate or kiln_render. Keep its programRef even if validation fails.
 - Use kiln_source with programRef and a literal query to read exact edit anchors. Follow nextOffset for more context.
 - Use kiln_edit with programRef and edits. It returns a new programRef and renders by default. Use that reference for later views and edits; do not resend the program.
 - Review the image and diff. Check viewFidelity before judging materials.
-- Save with node kiln.mjs source sha256:FULL_HASH --out revised.kiln.js. Export refuses to overwrite a file.
-- Export geometry with node kiln.mjs render sha256:FULL_HASH --out asset.glb --views sheet.png.
+- Save with node kiln.mjs source PROGRAM_REF --out revised.kiln.js. Export refuses to overwrite a file.
+- Export geometry with node kiln.mjs render PROGRAM_REF --out asset.glb --views sheet.png.
+
+Replace PROGRAM_REF above with the exact returned reference. Full sha256 references remain valid.
 
 The CLI and MCP share .kiln/programs. Keep that directory while working. Source files are portable; references resolve only in a store containing their source.
 `;
