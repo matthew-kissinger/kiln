@@ -191,6 +191,13 @@ bun run kiln render examples/crate.kiln.js \\
           Seven of them, and the whole surface is here. Four exist so the model can look at what it
           built, which is the part most asset pipelines leave out.
         </p>
+        <p>
+          Every one except <code>kiln_list_primitives</code> takes the program itself as its{' '}
+          <code>code</code> argument. There is no session on the server holding a half-finished
+          asset. The model keeps the source in its own context and sends it with each call, so the
+          program is the only state, and the same tools behave identically whether they reach you
+          over MCP, through the CLI, or imported straight into your process.
+        </p>
         <dl className="tools">
           {TOOLS.map((t) => (
             <div key={t.name}>
