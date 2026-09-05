@@ -1,6 +1,6 @@
 {
   "version": 1,
-  "currentSourceHash": "b36e40be94454b469acc086260ae37399010968c14748a98fa58bffaf68d0965",
+  "currentSourceHash": "6433d22d378e5b18e33ab35928b63d9aab12608b3f6474be6110a846db95553d",
   "brief": {
     "kind": "summary",
     "text": "Create a jewel-enamel and brass mechanical peacock with custom eye-pattern feathers, a visible radial hub and an articulated opening fan."
@@ -21,8 +21,14 @@
     {
       "title": "Maintainer head connection repair",
       "description": "Codex maintainer agent extended the neck centerline 45 mm into the skull. Original design and fan animation retained. Actual side and 0/50/100% FanOpen views inspected; final source and GLB exported locally.",
-      "file": "current.kiln.js",
+      "file": "revision-2.kiln.js",
       "sourceHash": "b36e40be94454b469acc086260ae37399010968c14748a98fa58bffaf68d0965"
+    },
+    {
+      "title": "Maintainer body winding repair",
+      "description": "Codex maintainer agent reversed the body surface sweep after inspection found all 2,240 shell triangles facing inward. Single-sided material retained. Outward winding regression test passes; both sides of the enamel body and the updated neutral poster were visually inspected.",
+      "file": "current.kiln.js",
+      "sourceHash": "6433d22d378e5b18e33ab35928b63d9aab12608b3f6474be6110a846db95553d"
     }
   ]
 }

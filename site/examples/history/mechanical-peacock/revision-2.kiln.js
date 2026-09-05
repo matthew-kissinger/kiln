@@ -152,7 +152,7 @@ async function build() {
   /* ---- enamel body shell over a brass keel ---- */
   const bodyGroup = createPivot('Body', [0, BODY_Y, 0], root);
   const bodyGeo = parametricSurface(function (u, v) {
-    const a = -2 * Math.PI * u; // Outward winding around the longitudinal body axis.
+    const a = 2 * Math.PI * u;
     const k = bodyK(v);
     const x = BODY_X0 + (BODY_X1 - BODY_X0) * v;
     const droop = -0.028 * Math.sin(Math.PI * v);

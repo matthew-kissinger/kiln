@@ -1,15 +1,15 @@
 {
-  "sourceHash": "d79eec971bd3199993b8af63673f17feb0b968d91745873ad032927ea48a9241",
+  "sourceHash": "f0c0ec0dee84e5b8714744a16f8e66399ad66f35a415ad974c409efed4b7bf73",
   "model": "Gemini 3.8 Flash",
   "harness": "Antigravity",
   "authoredDate": "2026-09-05",
   "provenance": {
-    "attribution": "Recorded Antigravity / gemini-3.8-flash-high run; configured model, no provider-internal attestation.",
+    "attribution": "Recorded Antigravity / gemini-3.8-flash-high run; configured model, no provider-internal attestation. Subsequent rear-panel repair by a Codex maintainer agent is recorded in source history.",
     "sourceAccess": "Fresh project-local authoring workspace with a brief, installed skills and Kiln tools.",
     "inheritedContext": "Fresh independent authoring conversation.",
     "startingExample": "None supplied.",
-    "humanIntervention": "Maintainer supplied the brief and reviewed actual exports and uniform gallery posters. Final source bytes are preserved from the model export.",
-    "reviewFidelity": "Actual GPU images inspected independently. The author repaired grille and dial orientation after image review. Dial markings remain pale; this is a decorative asset, not a functioning radio.",
+    "humanIntervention": "Maintainer supplied the brief and reviewed exports. Codex maintainer agent subsequently resized the rear panels to fit within the cabinet faces, matched the walnut finish, and repositioned rear details. Original model source is retained in revision history.",
+    "reviewFidelity": "Actual GPU images inspected independently. The author repaired grille and dial orientation after image review. Dial markings remain pale; this is a decorative asset, not a functioning radio. Subsequent maintainer repair inspected in actual front and rear GPU images; rear panels no longer protrude beyond the stepped cabinet.",
     "evaluationPackageHash": "0d457e8f8763730079da013abfa6662aadc02843f090fcae594c0f711399d16c",
     "evaluationGlbHash": "6829cc3841de54672db8160be4b9517c0e006ff2ce082dff1e44faf0479544f7",
     "poster": "Gallery GPU render of the exact downloadable GLB. The separate poster receipt records image, camera and renderer.",
@@ -20,23 +20,23 @@
         "457e4f85-753d-4e1a-ac20-f7d20c989694",
         "dawn-d3d12:nvidia-geforce-rtx-3070:D3D12 driver version 32.0.16.1074"
       ],
-      "sourceHash": "d79eec971bd3199993b8af63673f17feb0b968d91745873ad032927ea48a9241",
-      "artifactHash": "ed05028163467fed662cdf95f01d27121906b65d6335f4c569ba649bdb03cb32",
-      "imageHash": "86d098dfc2234c7aff7721e661a715beb7646bdcd7de7f8164c898d8c0c50697",
+      "sourceHash": "f0c0ec0dee84e5b8714744a16f8e66399ad66f35a415ad974c409efed4b7bf73",
+      "artifactHash": "d923b9be1171d384a0779ebf19c8c34224428c7d336a9e9ff1175535df5b33c0",
+      "imageHash": "291be8ac3971bb9b13ccb949a67a8fc49543d1845aee3f5498055a7dc46b174d",
       "width": 1024,
       "height": 1024,
       "camera": {
         "version": "kiln.camera.v1",
         "projection": "orthographic",
         "position": [
-          1.5347978337458954,
-          0.9106492002266087,
-          1.0743584836221265
+          1.5292212996253498,
+          0.9277716220258652,
+          1.070772281588519
         ],
         "target": [
-          0.009989423416242295,
-          0.17874116326837525,
-          0.006992596391369605
+          0.010212199825087103,
+          0.17855843519404102,
+          0.007150659299229872
         ],
         "up": [
           0,
@@ -46,7 +46,7 @@
         "aspect": 1,
         "near": 0.01,
         "far": 5,
-        "halfHeight": 0.2528453251389103
+        "halfHeight": 0.2534335091834949
       },
       "rendererId": "dawn-d3d12:nvidia-geforce-rtx-3070:D3D12 driver version 32.0.16.1074",
       "materialFaithful": true,

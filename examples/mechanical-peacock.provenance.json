@@ -1,5 +1,5 @@
 {
-  "sourceHash": "b36e40be94454b469acc086260ae37399010968c14748a98fa58bffaf68d0965",
+  "sourceHash": "6433d22d378e5b18e33ab35928b63d9aab12608b3f6474be6110a846db95553d",
   "model": "Claude Opus 5",
   "harness": "Claude Code",
   "authoredDate": "2026-09-05",
@@ -8,7 +8,7 @@
     "sourceAccess": "Fresh project-local authoring workspace with a brief, packaged core skills and Kiln tools. Maintainer repair used the retained source.",
     "inheritedContext": "Fresh original Claude authoring conversation; subsequent local maintainer refinement.",
     "startingExample": "None supplied.",
-    "humanIntervention": "Maintainer supplied the brief and reviewed images. Codex maintainer agent extended the neck centerline by 45 mm to join the skull, rendered motion samples, and exported the final GLB locally. The original Claude session timed out before final export.",
+    "humanIntervention": "Maintainer supplied the brief and reviewed images. Codex maintainer agent extended the neck centerline by 45 mm to join the skull, rendered motion samples, and exported the final GLB locally. The original Claude session timed out before final export. A subsequent Codex maintainer patch corrected inward body-shell winding, verified by triangle orientation and actual images from both sides. Single-sided materials were retained.",
     "reviewFidelity": "Actual GPU side, fan-motion and neutral square poster images inspected. Stylized decorative prop, not an engineering model. FanOpen inspected at 0%, 50% and 100%; continuous clearance and physical drive behavior are not certified. Some thin feather edges and partial eye bezels retain the original stylization. Engine retains SWEEP_TIGHT_TURN and SWEEP_SELF_INTERSECTION_UNCHECKED warnings; recorded in the example checks.",
     "evaluationPackageHash": "19add77366f489f078ca50f58d6d0bcb4c4d3e86a18df4bc8da387285ab90822",
     "evaluationGlbHash": "c15346728ab09544762d2fae70d8dfa1edec48f903635dba32b2485843b2ca11",
@@ -20,9 +20,9 @@
         "457e4f85-753d-4e1a-ac20-f7d20c989694",
         "dawn-d3d12:nvidia-geforce-rtx-3070:D3D12 driver version 32.0.16.1074"
       ],
-      "sourceHash": "b36e40be94454b469acc086260ae37399010968c14748a98fa58bffaf68d0965",
-      "artifactHash": "b81e7b28be13772a3d07fd2778131b4394790830dbdd12cde221ecf63c09624e",
-      "imageHash": "4580cd1025c0cdc1a5c9600afc508e1d82a3d2b57b132a017cd071d71826048b",
+      "sourceHash": "6433d22d378e5b18e33ab35928b63d9aab12608b3f6474be6110a846db95553d",
+      "artifactHash": "f140ad665a327a5a0275b4805f0562d5bc7a0df3cc98121105d2a8a2cfd5b11a",
+      "imageHash": "2b1a7e3ebf9d5bbf36acbc816202cc06b6234239b5c47a74559d25a55a002582",
       "width": 1024,
       "height": 1024,
       "camera": {

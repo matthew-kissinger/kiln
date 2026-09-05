@@ -1,6 +1,6 @@
 {
   "version": 1,
-  "currentSourceHash": "d79eec971bd3199993b8af63673f17feb0b968d91745873ad032927ea48a9241",
+  "currentSourceHash": "f0c0ec0dee84e5b8714744a16f8e66399ad66f35a415ad974c409efed4b7bf73",
   "brief": {
     "kind": "summary",
     "text": "Create a collectible Art Deco radio with a rounded walnut cabinet, brass trim, a geometric speaker grille, an inset tuning dial and animated controls."
@@ -25,10 +25,16 @@
       "sourceHash": "ce748f8b92d155134d6f06938e17d189663418f16d2c0a09afa05ab5cdf80c52"
     },
     {
-      "title": "Current gallery revision",
+      "title": "Final Gemini authoring revision",
       "description": "Added woven grille bars, detailed feet and finer tuning-knob flutes. The tuning scale uses marks rather than numeric labels.",
-      "file": "current.kiln.js",
+      "file": "revision-3.kiln.js",
       "sourceHash": "d79eec971bd3199993b8af63673f17feb0b968d91745873ad032927ea48a9241"
+    },
+    {
+      "title": "Maintainer rear-panel fit and finish",
+      "description": "Codex maintainer agent resized the three rear panels to stay inside the flat cabinet faces, matched their walnut material, and repositioned the louvers and power grommet. Actual front and rear GPU views inspected. Original dial and control animation retained.",
+      "file": "current.kiln.js",
+      "sourceHash": "f0c0ec0dee84e5b8714744a16f8e66399ad66f35a415ad974c409efed4b7bf73"
     }
   ]
 }

@@ -19,7 +19,7 @@ async function build() {
   const pointerMat = gameMaterial(0xd32f2f, { roughness: 0.30, metalness: 0.10 });
   const bakeliteMat = gameMaterial(0x1a120e, { roughness: 0.32, metalness: 0.08 });
   const pilotJewelMat = gameMaterial(0xdd1818, { roughness: 0.15, emissive: 0xff2200, emissiveIntensity: 0.75 });
-  const backPanelMat = walnutMat;
+  const backPanelMat = gameMaterial(0x2d221b, { roughness: 0.85 });
   const dialTickMat = gameMaterial(0x2b1c11, { roughness: 0.6 });
 
   // 1. Stepped Plinth Base & Corner Feet
@@ -274,22 +274,22 @@ async function build() {
   createPart('BrandPlaqueInlay', plaqueInlayGeo, darkWoodMat, { position: [0.0912, 0.048, 0], parent: root });
 
   // Center rear panel fitting stepped cabinet silhouette
-  const backBoardGeo = boxGeo(0.004, 0.298, 0.112);
-  createPart('BackPanel', backBoardGeo, backPanelMat, { position: [-0.089, 0.1995, 0], parent: root });
+  const backBoardGeo = boxGeo(0.004, 0.320, 0.174);
+  createPart('BackPanel', backBoardGeo, backPanelMat, { position: [-0.088, 0.195, 0], parent: root });
 
   // Wing rear panels matching stepped flanks
   [-0.125, 0.125].forEach((zPos, idx) => {
-    const wingBackGeo = boxGeo(0.004, 0.162, 0.020);
-    createPart(`WingBack_${idx}`, wingBackGeo, backPanelMat, { position: [-0.0825, 0.133, zPos], parent: root });
+    const wingBackGeo = boxGeo(0.004, 0.190, 0.048);
+    createPart(`WingBack_${idx}`, wingBackGeo, backPanelMat, { position: [-0.082, 0.133, zPos], parent: root });
   });
 
   for (let v = 0; v < 5; v++) {
-    const louverGeo = boxGeo(0.002, 0.005, 0.100);
-    createPart(`BackLouver_${v}`, louverGeo, darkWoodMat, { position: [-0.092, 0.230 - v * 0.018, 0], parent: root });
+    const louverGeo = boxGeo(0.002, 0.005, 0.120);
+    createPart(`BackLouver_${v}`, louverGeo, darkWoodMat, { position: [-0.0905, 0.230 - v * 0.018, 0], parent: root });
   }
 
   const grommetGeo = cylinderXGeo(0.006, 0.006, 0.004, 16);
-  createPart('PowerGrommet', grommetGeo, bakeliteMat, { position: [-0.092, 0.062, 0.040], parent: root });
+  createPart('PowerGrommet', grommetGeo, bakeliteMat, { position: [-0.090, 0.050, 0.050], parent: root });
 
   return root;
 }

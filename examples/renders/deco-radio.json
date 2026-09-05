@@ -5,23 +5,23 @@
     "457e4f85-753d-4e1a-ac20-f7d20c989694",
     "dawn-d3d12:nvidia-geforce-rtx-3070:D3D12 driver version 32.0.16.1074"
   ],
-  "sourceHash": "d79eec971bd3199993b8af63673f17feb0b968d91745873ad032927ea48a9241",
-  "artifactHash": "ed05028163467fed662cdf95f01d27121906b65d6335f4c569ba649bdb03cb32",
-  "imageHash": "86d098dfc2234c7aff7721e661a715beb7646bdcd7de7f8164c898d8c0c50697",
+  "sourceHash": "f0c0ec0dee84e5b8714744a16f8e66399ad66f35a415ad974c409efed4b7bf73",
+  "artifactHash": "d923b9be1171d384a0779ebf19c8c34224428c7d336a9e9ff1175535df5b33c0",
+  "imageHash": "291be8ac3971bb9b13ccb949a67a8fc49543d1845aee3f5498055a7dc46b174d",
   "width": 1024,
   "height": 1024,
   "camera": {
     "version": "kiln.camera.v1",
     "projection": "orthographic",
     "position": [
-      1.5347978337458954,
-      0.9106492002266087,
-      1.0743584836221265
+      1.5292212996253498,
+      0.9277716220258652,
+      1.070772281588519
     ],
     "target": [
-      0.009989423416242295,
-      0.17874116326837525,
-      0.006992596391369605
+      0.010212199825087103,
+      0.17855843519404102,
+      0.007150659299229872
     ],
     "up": [
       0,
@@ -31,7 +31,7 @@
     "aspect": 1,
     "near": 0.01,
     "far": 5,
-    "halfHeight": 0.2528453251389103
+    "halfHeight": 0.2534335091834949
   },
   "rendererId": "dawn-d3d12:nvidia-geforce-rtx-3070:D3D12 driver version 32.0.16.1074",
   "materialFaithful": true,

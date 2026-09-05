@@ -19,8 +19,8 @@ the model; Kiln does not require a separate model API key for its tools.
 
 <p align="center"><a href="https://kilnstudio.tools/#/mechanical-peacock"><img src="examples/renders/mechanical-peacock.png" width="460" alt="Mechanical peacock with a jewel-coloured fan and brass frame"></a></p>
 
-Mechanical peacock · Claude Opus 5. A maintainer-agent repair joins the neck to the
-head; the [source revisions](site/examples/history/mechanical-peacock/history.json)
+Mechanical peacock · Claude Opus 5. Maintainer-agent repairs connect the neck and
+correct the body shell's face direction; the [source revisions](site/examples/history/mechanical-peacock/history.json)
 record the original and repaired programs.
 
 [Browse the interactive gallery](https://kilnstudio.tools/#/gallery)
