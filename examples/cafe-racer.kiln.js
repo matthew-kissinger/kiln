@@ -157,7 +157,13 @@ async function build() {
     }
     return p;
   };
-  const frontWheel = wheel('Front', FRONT_AXLE, 0.268, 0.052, 20);
+  // The tyre's outer radius is declared once here and shared with the mudguard,
+  // so the guard's clearance is derived from the tyre it has to clear instead of
+  // being typed a second time and left free to drift away from it.
+  const FRONT_RIM_R = 0.268;
+  const FRONT_TUBE = 0.052;
+  const FRONT_TYRE_OUTER = FRONT_RIM_R + 0.021 + FRONT_TUBE * 2;
+  const frontWheel = wheel('Front', FRONT_AXLE, FRONT_RIM_R, FRONT_TUBE, 20);
   const rearWheel = wheel('Rear', REAR_AXLE, 0.258, 0.068, 20);
   // Brake disc and caliper, front only, on the left as it should be.
   createPart('BrakeDisc', cylinderZGeo(0.145, 0.145, 0.010, 30), chrome,
@@ -340,13 +346,74 @@ async function build() {
       position: [0.553, 1.019, sz * 0.058], rotation: [0, 0, -16], parent: root,
     });
   }
-  // Front mudguard, hugging the tyre.
-  createPart('Mudguard', await uv(await extrudeProfile([
-    [0.20, 0.34], [0.30, 0.28], [0.34, 0.16], [0.30, 0.02],
-    [0.26, 0.02], [0.30, 0.15], [0.26, 0.26], [0.18, 0.31],
-  ], { depth: 0.15, axis: 'z', bevel: 0.006 })), chrome, {
-    position: [FRONT_AXLE[0] - 0.02, FRONT_AXLE[1], 0], parent: root,
-  });
+  // ---------- Front mudguard ----------
+  // A mudguard is the TYRE'S OWN SURFACE, offset outward. That one sentence is
+  // the whole construction: the tyre is a torus, so the guard is a concentric
+  // torus shell standing off it by a declared clearance, cut to an arc and to
+  // the wrap angle it covers. Nothing about it is plotted by hand, so it cannot
+  // drift away from the wheel it belongs to.
+  //
+  // Two earlier versions got this wrong in two different ways, and both are
+  // worth naming because they are the two ways a guard usually fails:
+  //
+  //   1. A typed outline. Its radii ran 0.26 to 0.41 against a tyre whose outer
+  //      radius is 0.393, and it was positioned 0.02 m off the axle -- so it was
+  //      not hovering over the tyre, it was buried in it, and not concentric.
+  //   2. A generated arc, but extruded FLAT along z. Concentric and correctly
+  //      clear, and still wrong: a guard bent in one direction only is a plank
+  //      lying on the tread. What makes it read as a guard is the CHANNEL
+  //      section -- edges that curve down over the tyre's shoulders.
+  //
+  // Offsetting the tyre torus gives both at once, for free.
+  const RAD = Math.PI / 180;
+  const GUARD_GAP = 0.026;    // clearance over the tyre, the same everywhere
+  const GUARD_THICK = 0.009;  // sheet
+  const GUARD_WRAP = 135;     // degrees of the tyre's section the blade covers
+  const GUARD_A0 = 40;        // leading edge, CCW from straight ahead
+  const GUARD_A1 = 118;       // trailing edge, roughly on the fork axis
+  const TYRE_MAJOR = FRONT_RIM_R + 0.021 + FRONT_TUBE;
+  const GUARD_R = TYRE_MAJOR + FRONT_TUBE + GUARD_GAP;   // outer edge, at the crown
+  {
+    const shellTube = (t) => new THREE.Mesh(torusGeo(TYRE_MAJOR, t, 12, 72), chrome);
+    // Cutting the inner part of the section away is what sets the wrap: keep
+    // only the material further from the axle than the chord at WRAP/2.
+    const coreR = TYRE_MAJOR + (FRONT_TUBE + GUARD_GAP) * Math.cos((GUARD_WRAP / 2) * RAD);
+    const core = new THREE.Mesh(cylinderZGeo(coreR, coreR, 0.60, 72), chrome);
+    // Each wedge is a half-space whose cut face lies exactly on a ray from the
+    // axle: the box is pushed one half-size along its own rotated +/-Y, so the
+    // face lands on the origin however the ray is angled.
+    const wedge = (deg, sign) => {
+      const a = deg * RAD;
+      const m = new THREE.Mesh(boxGeo(2.4, 2.4, 0.8), chrome);
+      m.position.set(sign * Math.sin(a) * 1.2, -sign * Math.cos(a) * 1.2, 0);
+      m.rotation.z = a;
+      return m;
+    };
+    const blade = await boolDiff('Mudguard',
+      shellTube(FRONT_TUBE + GUARD_GAP + GUARD_THICK),
+      shellTube(FRONT_TUBE + GUARD_GAP),
+      core, wedge(GUARD_A0, 1), wedge(GUARD_A1, -1),
+      { smooth: true });
+    blade.name = 'Mudguard';
+    blade.geometry = await uv(blade.geometry);
+    blade.position.set(FRONT_AXLE[0], FRONT_AXLE[1], FRONT_AXLE[2]);
+    root.add(blade);
+  }
+  // Stays. A guard is not cantilevered off thin air -- it is bolted to the fork
+  // legs, and with the clearance corrected the blade reads as floating without
+  // them. Each stay lands on the fork leg at its own height, solved off the same
+  // two nodes the leg itself is built from rather than measured off the render.
+  for (const sz of [-1, 1]) {
+    for (const deg of [52, 108]) {
+      const r = TYRE_MAJOR + (FRONT_TUBE + GUARD_GAP) * Math.cos((GUARD_WRAP / 2 - 8) * RAD);
+      const gx = FRONT_AXLE[0] + Math.cos(deg * RAD) * r;
+      const gy = FRONT_AXLE[1] + Math.sin(deg * RAD) * r;
+      const t = (0.88 - gy) / (0.88 - FRONT_AXLE[1]);
+      const fx = 0.585 + (FRONT_AXLE[0] - 0.585) * t;
+      beamBetween(`GuardStay_${deg}_${sz > 0 ? 'R' : 'L'}`,
+        [gx, gy, sz * 0.062], [fx, gy, sz * 0.100], 0.0065, chrome, { parent: root });
+    }
+  }
 
   return root;
 }
