@@ -15,7 +15,7 @@ Read [README.md](./README.md) before changing exports or package contents. Runti
 
 `src/tools/registry.ts` owns tool names, descriptions, and schemas. Two skins consume it: the
 in-process Strands tools (`src/agent/tools.ts`) and the stdio MCP server. **Both must iterate the
-registry** — never hand-write a tool definition in a skin, or the transports drift apart and the
+registry** -- never hand-write a tool definition in a skin, or the transports drift apart and the
 repo's central claim stops being true. There is a test that asserts name parity; keep it passing.
 
 Prefer an explicit terminal submit tool over `structuredOutputSchema` in the in-process loop: the
@@ -32,7 +32,7 @@ deterministic engine paths.
 The port is injected twice, for different jobs, and their deadlines must stay separate. A host calls
 it once after the loop for the artifact sheet, where nothing is blocked and a long deadline is
 correct. `KilnToolContext.viewRenderPort` injects it into `kiln_render` for the IN-LOOP grid, where a
-slow render blocks the agent mid-thought — that deadline is its own per-call argument and belongs far
+slow render blocks the agent mid-thought -- that deadline is its own per-call argument and belongs far
 lower. Never collapse the two onto one value.
 
 Routing is conditional on `sceneNeedsPbrShading(root)`: bound texture or `metalness > 0`, never
@@ -40,7 +40,7 @@ material type, because `gameMaterial` and `pbrMaterial` both construct a `MeshSt
 are indistinguishable after construction. Host telemetry rides `onViewsRendered`, while every unified
 `kiln_render` result also carries model-visible `ViewFidelityV1`; a geometry-flat CPU image must never
 be treated as material evidence. Keep the input schema stable unless the active change explicitly
-versions it — the tool definition is cached, and changing it invalidates that cache.
+versions it -- the tool definition is cached, and changing it invalidates that cache.
 
 **The GPU is a view producer only, never gate evidence.** `QaContext` is deliberately image-free so a
 QA rule structurally cannot read a render buffer. Do not add pixels to it.
