@@ -16,6 +16,7 @@ import {
   createKilnInspectDef,
   createKilnScreenshotAnimationDef,
   createKilnViewInteriorDef,
+  createKilnEditDef,
 } from './tools/registry';
 import { makeKilnTools, KILN_SUBMIT_TOOL_NAME } from './agent/tools';
 import { runTool, kilnMcpToolDefs, createKilnMcpServer } from './mcp-server';
@@ -67,6 +68,7 @@ describe('tool surface parity across transports', () => {
       createKilnScreenshotAnimationDef(),
       createKilnViewInteriorDef(),
       createKilnInspectDef(),
+      createKilnEditDef(),
     ];
     const canonical = new Map(factories.map((d) => [d.name, d.description]));
 
@@ -88,6 +90,11 @@ describe('tool surface parity across transports', () => {
       'kiln_screenshot_animation',
       'kiln_view_interior',
       'kiln_inspect',
+      // The refine verb. It is here rather than in-process-only because the
+      // in-process working buffer has no equivalent over MCP -- the host agent
+      // holds the program -- so without it, changing an existing asset meant
+      // re-emitting the whole file through kiln_render.
+      'kiln_edit',
     ]);
 
     const mcpRender = kilnMcpToolDefs().find((d) => d.name === 'kiln_render')!;

@@ -1,7 +1,10 @@
 {
-  "$schema": "https://biomejs.dev/schemas/2.5.1/schema.json",
+  "$schema": "https://biomejs.dev/schemas/2.5.3/schema.json",
   "vcs": { "enabled": true, "clientKind": "git", "useIgnoreFile": true },
-  "files": { "includes": ["src/**/*.ts"] },
+  "files": {
+    "includes": ["src/**/*.ts", "site/src/**/*.{ts,tsx}", "site/*.ts"],
+    "maxSize": 4194304
+  },
   "formatter": {
     "enabled": true,
     "indentStyle": "space",
@@ -18,7 +21,7 @@
   "linter": {
     "enabled": true,
     "rules": {
-      "recommended": true,
+      "preset": "recommended",
       "style": { "noNonNullAssertion": "off" },
       "complexity": { "useLiteralKeys": "off" },
       "suspicious": { "useIterableCallbackReturn": "warn" }

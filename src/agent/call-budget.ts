@@ -1,6 +1,16 @@
 /** One deterministic model-call allowance shared by every paid role in a generation. */
 
-export const DEFAULT_GENERATION_MODEL_CALL_LIMIT = 40;
+/**
+ * No cap by default. Zero is this module's "unlimited" value, honoured by
+ * `tryConsume`, by the step hook, and by the grade-refine headroom check.
+ *
+ * It used to be 40, which was a cost guard carried over from a hosted product
+ * where the operator paid for every call. Out here the person running the tool
+ * is the person paying for it, and a ceiling they did not choose is one that
+ * stops an asset halfway for reasons that have nothing to do with the asset.
+ * Set `KILN_GENERATION_MAX_CALLS` (or `--max-steps`) to put a bound back.
+ */
+export const DEFAULT_GENERATION_MODEL_CALL_LIMIT = 0;
 
 export type GenerationModelCallRole = 'author' | 'observer' | 'repair' | 'retry' | 'fallback';
 
@@ -21,7 +31,7 @@ export interface GenerationModelCallAdmission {
 }
 
 export interface GenerationCallBudgetReceipt {
-  /** Aggregate ceiling. Zero preserves the legacy explicit unlimited setting. */
+  /** Aggregate ceiling. Zero means unlimited, which is the default. */
   limit: number;
   consumed: number;
   /** Null only for an unlimited budget. */
@@ -39,7 +49,7 @@ export interface GenerationCallBudget {
   receipt(): GenerationCallBudgetReceipt;
 }
 
-/** Invalid configuration must not turn the cost guard off. */
+/** Unparseable configuration falls back to the default rather than inventing a bound. */
 export function resolveGenerationModelCallLimit(raw: unknown): number {
   if (raw === undefined || raw === null || raw === '') return DEFAULT_GENERATION_MODEL_CALL_LIMIT;
   const parsed = typeof raw === 'number' ? raw : Number(raw);

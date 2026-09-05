@@ -61,10 +61,15 @@
     "check:toolchain": "bun scripts/check-toolchain.mjs",
     "typecheck": "tsc --noEmit",
     "build": "tsc --noEmit",
+    "build:mcp": "bun build src/mcp-server.ts --target=node --packages=external --outfile=dist/mcp-server.mjs",
     "test": "KILN_SPIKE_LIVE=0 KILN_RENDER=cpu bun test src scripts",
     "test:coverage": "KILN_SPIKE_LIVE=0 KILN_RENDER=cpu bun test src scripts --coverage && bun scripts/check-coverage.mjs",
     "test:live": "KILN_SPIKE_LIVE=1 bun test",
-    "lint": "biome check ."
+    "lint": "biome check .",
+    "site:assets": "cd site && bun scripts/build-assets.mjs",
+    "site:dev": "cd site && vite",
+    "site:build": "cd site && vite build",
+    "smoke:harness": "node scripts/harness-smoke.mjs"
   },
   "dependencies": {
     "@gltf-transform/core": "^4.4.1",

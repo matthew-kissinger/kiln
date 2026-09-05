@@ -38,7 +38,7 @@ OPTIONS
   --render <mode>         auto | cpu | gpu           (default: auto)
   --render-port <url>     remote GPU render service
   --model <id>            model id for generate      (default: env KILN_MODEL)
-  --max-steps <n>         agent step cap             (default: 24)
+  --max-steps <n>         agent step cap, 0 = off    (default: 0)
   --category <name>       prop | vehicle | character | architecture | vegetation
   -h, --help              this message
 
@@ -70,7 +70,7 @@ export function parseArgs(argv: readonly string[]): Args {
     render: 'auto',
     renderPort: undefined,
     model: process.env['KILN_MODEL'],
-    maxSteps: 24,
+    maxSteps: 0,
     category: undefined,
     help: false,
   };
@@ -106,8 +106,11 @@ export function parseArgs(argv: readonly string[]): Args {
         break;
       case '--max-steps': {
         const n = Number(next());
-        if (!Number.isInteger(n) || n <= 0)
-          throw new Error('--max-steps must be a positive integer');
+        // Zero is the documented "no cap" value, so it has to be accepted here
+        // as well as being the default -- rejecting it would leave a user who
+        // read the help text unable to type what it told them.
+        if (!Number.isInteger(n) || n < 0)
+          throw new Error('--max-steps must be a non-negative integer (0 = no cap)');
         args.maxSteps = n;
         break;
       }

@@ -12,7 +12,7 @@ works in the thing you are shipping". It is renderer, framework, and art-style a
 ## Workflow
 
 1. **Verify the file.** Check GLB magic (`glTF`), that the JSON chunk parses, and the byte length.
-   Distinguish a missing optional file from a corrupt required one — they have different fixes.
+   Distinguish a missing optional file from a corrupt required one -- they have different fixes.
 2. **Derive the integration manifest.** `inspectGlbIntegration(bytes)` from `kiln/render` returns a
    `kiln.integration-manifest.v1` from the artifact alone. Read it *before* writing any transform.
    Never synthesize the fields by eyeballing the model.
@@ -21,7 +21,7 @@ works in the thing you are shipping". It is renderer, framework, and art-style a
 4. **Run the real project in a browser and look at it.** Load, controls, camera, traversal, layout,
    responsive behavior, console and page errors. Screenshot and *inspect the screenshot*. DOM
    assertions do not prove that a scene looks right.
-5. **Repair, then re-run.** Fix application code, camera, lighting, or placement first — most
+5. **Repair, then re-run.** Fix application code, camera, lighting, or placement first -- most
    "asset problems" are integration problems. Regenerate the asset only for an actual asset defect.
    Re-run the failed journey plus the regressions it could touch.
 6. **Report candidly.** What worked, what failed, what was confusing, what you repaired, what risk
@@ -31,7 +31,7 @@ works in the thing you are shipping". It is renderer, framework, and art-style a
 
 | Field | Use it for |
 |---|---|
-| `units` / `axes` | always metres, +X forward / +Y up / +Z right — mismatched imports show here |
+| `units` / `axes` | always metres, +X forward / +Y up / +Z right -- mismatched imports show here |
 | `bounds` | scale relative to the project's own objects; never guess scale from category |
 | `ground.offsetToGround`, `ground.grounded` | the exact Y correction to sit the asset on the floor |
 | `defaultScene` | which scene to instantiate; a missing default breaks many loaders |
@@ -67,7 +67,7 @@ Once the asset loads correctly in the real scene, judge it the way an art direct
   surrounding set dressing" is the useful sentence. An asset that works and looks cheap is a real
   defect, and it is the one nothing upstream can catch.
 
-Detail is not a cost here — Kiln has no triangle budget and draw calls track materials, not
+Detail is not a cost here -- Kiln has no triangle budget and draw calls track materials, not
 geometry. If the fix is "author more of it", that fix is available.
 
 ## Boundaries

@@ -241,7 +241,7 @@ describe('runtime-delivered approved resources', () => {
 describe('what the model is told it can bind', () => {
   test('placeholder swatches are withheld while production texture families are advertised', () => {
     const catalog = approvedTextureCatalogV1();
-    expect(catalog).toHaveLength(24);
+    expect(catalog).toHaveLength(48);
     expect(catalog.map((entry) => entry.id)).toEqual(
       expect.arrayContaining([
         'kiln.texture.bark-brown-01-albedo.v1',
@@ -252,6 +252,17 @@ describe('what the model is told it can bind', () => {
         'kiln.texture.rock-face-normal.v1',
         'kiln.texture.dry-soil-arm.v1',
         'kiln.texture.brick-wall-albedo.v1',
+        // The second half of the library exists to cover the recipes the first
+        // half left with nothing photographic to bind: skin, leaf, and rubber
+        // had no family at all, and the only metal was rust.
+        'kiln.texture.brown-leather-albedo.v1',
+        'kiln.texture.forest-leaves-albedo.v1',
+        'kiln.texture.rubber-tiles-normal.v1',
+        'kiln.texture.metal-plate-arm.v1',
+        'kiln.texture.clay-roof-tiles-albedo.v1',
+        'kiln.texture.cobblestone-floor-normal.v1',
+        'kiln.texture.oak-veneer-albedo.v1',
+        'kiln.texture.polished-marble-arm.v1',
       ]),
     );
     expect(approvedTextureCatalogV1({ includePlaceholders: true })).toHaveLength(
@@ -271,7 +282,7 @@ describe('what the model is told it can bind', () => {
     });
 
     const withoutResolver = new ApprovedTextureResourceCache({ registry: production });
-    expect(approvedTextureCatalogV1({ cache: withoutResolver })).toHaveLength(24);
+    expect(approvedTextureCatalogV1({ cache: withoutResolver })).toHaveLength(48);
     expect(
       approvedTextureCatalogV1({ cache: withoutResolver }).some((entry) => entry.id === SUBJECT),
     ).toBe(false);
@@ -281,7 +292,7 @@ describe('what the model is told it can bind', () => {
       resolver: async () => ({ bytes: goodBytes(), mime: 'image/png' }),
     });
     const catalog = approvedTextureCatalogV1({ cache: withResolver });
-    expect(catalog).toHaveLength(25);
+    expect(catalog).toHaveLength(49);
     expect(catalog.find((entry) => entry.id === SUBJECT)?.delivery).toBe('runtime');
   });
 
@@ -310,9 +321,16 @@ describe('package weight', () => {
     const productionIds = APPROVED_TEXTURE_RESOURCE_IDS.filter(
       (id) => APPROVED_TEXTURE_RESOURCES_V1[id].quality === 'production',
     );
-    expect(productionIds).toHaveLength(24);
+    expect(productionIds).toHaveLength(48);
 
+    // Two floors, not one. The per-map floor asks only "is this real pixels
+    // rather than a constant swatch", because a genuinely smooth material has a
+    // genuinely near-flat normal map -- polished marble and a wood veneer are
+    // supposed to look like that, and a single high floor would have quietly
+    // restricted the library to rough surfaces. The per-family floor is where
+    // "this is photography, not a placeholder" is actually enforced.
     const families = new Map<string, Set<string>>();
+    const familySignal = new Map<string, number>();
     for (const id of productionIds) {
       const resolved = cache.resolve(id);
       expect(resolved.bytes.subarray(0, 8)).toEqual(
@@ -323,7 +341,8 @@ describe('package weight', () => {
       const metadata = await image.metadata();
       expect([metadata.width, metadata.height, metadata.format]).toEqual([128, 128, 'png']);
       const stats = await image.stats();
-      expect(Math.max(...stats.channels.map((channel) => channel.stdev))).toBeGreaterThan(2);
+      const signal = Math.max(...stats.channels.map((channel) => channel.stdev));
+      expect(signal).toBeGreaterThan(0.5);
       const match = id.match(/^kiln\.texture\.(.+)-(albedo|normal|arm)\.v1$/);
       expect(match).not.toBeNull();
       const family = match?.[1] ?? '';
@@ -331,6 +350,7 @@ describe('package weight', () => {
       const maps = families.get(family) ?? new Set<string>();
       maps.add(map);
       families.set(family, maps);
+      familySignal.set(family, Math.max(familySignal.get(family) ?? 0, signal));
 
       const source =
         PRODUCTION_TEXTURE_SOURCE_PROVENANCE_V1[
@@ -340,9 +360,11 @@ describe('package weight', () => {
       expect(source.sourceMd5).toMatch(/^[0-9a-f]{32}$/);
       expect(source.transform).toContain('128x128');
     }
-    expect(families.size).toBe(8);
+    expect(families.size).toBe(16);
     for (const maps of families.values())
       expect([...maps].sort()).toEqual(['albedo', 'arm', 'normal']);
+    for (const [family, signal] of familySignal)
+      expect([family, signal > 2]).toEqual([family, true]);
   });
 
   test('runtime resources ship no bytes, and the embedded set stays negligible', () => {
@@ -361,9 +383,11 @@ describe('package weight', () => {
     const embedded = APPROVED_TEXTURE_RESOURCE_IDS.filter(
       (id) => APPROVED_TEXTURE_RESOURCES_V1[id].delivery === 'embedded',
     ).reduce((sum, id) => sum + APPROVED_TEXTURE_RESOURCES_V1[id].byteLength, 0);
-    // Eight 128px photographic families carry albedo, normal, and packed ARM.
+    // Sixteen 128px photographic families carry albedo, normal, and packed ARM.
     // One MiB keeps the engine tarball bounded while preserving materially more
-    // signal than the historical 2x2/4x4 proof swatches.
+    // signal than the historical 2x2/4x4 proof swatches. The cap is the reason
+    // the library grows by adding families at 128px rather than by raising the
+    // resolution of the ones already here.
     expect(embedded).toBeLessThanOrEqual(1024 * 1024);
   });
 
