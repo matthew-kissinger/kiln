@@ -15,9 +15,17 @@ on:
       - 'README.md'
       - '.github/workflows/pages.yml'
   workflow_dispatch:
+  pull_request:
+    paths:
+      - 'examples/**'
+      - 'site/**'
+      - 'src/**'
+      - 'scripts/authorship.ts'
+      - 'README.md'
+      - '.github/workflows/pages.yml'
 
 concurrency:
-  group: pages
+  group: pages-${{ github.ref }}
   cancel-in-progress: true
 
 permissions:
@@ -31,7 +39,9 @@ env:
 jobs:
   build:
     name: build the gallery
-    runs-on: ubuntu-latest
+    # Poster receipts bind exact GLB bytes captured on Windows. Platform math
+    # can change the last digit of serialized rotations without changing meshes.
+    runs-on: windows-2022
     steps:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
 
@@ -66,12 +76,15 @@ jobs:
         working-directory: site
 
       - uses: actions/configure-pages@45bfe0192ca1faeb007ade9deae92b16b8254a0d # v6.0.0
+        if: github.event_name != 'pull_request'
       - uses: actions/upload-pages-artifact@fc324d3547104276b827a68afc52ff2a11cc49c9 # v5.0.0
+        if: github.event_name != 'pull_request'
         with:
           path: site/dist
 
   deploy:
     name: deploy to Pages
+    if: github.event_name != 'pull_request'
     needs: build
     runs-on: ubuntu-latest
     environment:
