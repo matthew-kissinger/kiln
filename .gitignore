@@ -30,3 +30,7 @@ tmp/
 site/public/assets/
 site/public/thumbs/
 site/dist/
+
+# Local agent config (launch profiles, per-machine settings). The shipped
+# plugin manifest lives in .claude-plugin/, which is tracked.
+.claude/
