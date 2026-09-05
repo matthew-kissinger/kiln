@@ -788,6 +788,38 @@ button {
   text-overflow: ellipsis;
 }
 
+/* ------------------------------------------------------------------ tools */
+
+/*
+ * A definition list, not cards. Seven tools with a sentence each is reference
+ * material: the reader is scanning for the one that does the thing they want,
+ * and a grid of boxes makes that scan slower, not faster.
+ */
+.tools {
+  margin: 0 0 22px;
+  border-top: 1px solid var(--rule);
+}
+
+.tools > div {
+  display: grid;
+  grid-template-columns: 13rem 1fr;
+  gap: 0 20px;
+  padding: 13px 0;
+  border-bottom: 1px solid var(--rule);
+}
+
+.tools dt {
+  font-family: var(--mono);
+  font-size: 12.5px;
+  color: var(--flame);
+}
+
+.tools dd {
+  margin: 0;
+  color: var(--dim);
+  text-wrap: pretty;
+}
+
 /* --------------------------------------------------------------- repo map */
 
 .map {
@@ -837,6 +869,12 @@ button {
 
   .strip {
     grid-template-columns: repeat(2, 1fr);
+  }
+
+  /* The tool name stops being a column and becomes a heading over its line. */
+  .tools > div {
+    grid-template-columns: 1fr;
+    gap: 4px;
   }
 
   .masthead {

@@ -6,6 +6,42 @@ import type { Specimen } from './types';
 const DOCS = `${REPO}/blob/main`;
 
 /**
+ * The seven tools the MCP server actually lists, in the order it lists them,
+ * with the one-line version of what each is for. Anyone comparing this against
+ * `tools/list` should find the same names in the same order.
+ */
+const TOOLS = [
+  {
+    name: 'kiln_list_primitives',
+    line: 'Lists what the sandbox gives you: geometry helpers, materials, structure, animation, CSG, arrays, UV and textures, with exact signatures. A model calls this before writing anything, which is why it can work with no engine source in front of it.',
+  },
+  {
+    name: 'kiln_validate',
+    line: 'Static checks on a program before it runs. Missing meta or build(), keyframe typos, infinite loops, recursive build() calls, syntax errors. Cheap enough to run on every draft. There is no triangle budget and density is never warned about.',
+  },
+  {
+    name: 'kiln_render',
+    line: 'Runs the program, builds the GLB in memory, and returns the six-view contact sheet as an image along with triangle count, mesh and material counts, the bounding box, which part sits lowest, and any structural warnings. This is the tool that lets the model see.',
+  },
+  {
+    name: 'kiln_screenshot_animation',
+    line: 'Renders one named clip as six frames sampled across it, each labelled with its phase. Motion is the thing a still cannot show, so a rig that looks right and moves wrong is only catchable here.',
+  },
+  {
+    name: 'kiln_view_interior',
+    line: 'For anything you can walk into. Renders it with the roof lifted off as a floor plan plus two cutaways, so an interior that turned out solid is visible instead of hidden behind its own walls.',
+  },
+  {
+    name: 'kiln_inspect',
+    line: 'A close-up of one named part from any angle. The contact sheet is where you notice something is wrong, and this is where you find out what.',
+  },
+  {
+    name: 'kiln_edit',
+    line: 'Exact-string patches applied to an existing program, rendered in the same call. This is the refine verb, and the reason a second pass is a diff rather than a regeneration.',
+  },
+] as const;
+
+/**
  * The exact configs from docs/install.md. They live here as data rather than as
  * prose so the tab switcher can render them uniformly, and every one of them is
  * a config somebody actually got working. The note attached to each is the part
@@ -146,6 +182,31 @@ bun run kiln render examples/crate.kiln.js \\
         <p className="aside">
           <a href="https://bun.sh">Bun</a> is the toolchain. The MCP server itself runs on Node from
           a committed bundle, so you do not need Bun on your PATH to use the plugin.
+        </p>
+      </section>
+
+      <section className="band">
+        <h2>The tools</h2>
+        <p>
+          Seven of them, and the whole surface is here. Four exist so the model can look at what it
+          built, which is the part most asset pipelines leave out.
+        </p>
+        <dl className="tools">
+          {TOOLS.map((t) => (
+            <div key={t.name}>
+              <dt>{t.name}</dt>
+              <dd>{t.line}</dd>
+            </div>
+          ))}
+        </dl>
+        <p>
+          All seven are defined once, in <a href={`${DOCS}/src/tools/registry.ts`}>one registry</a>,
+          and reach you three ways. As an <b>MCP server</b> over stdio, which is what the configs
+          below set up. As a <b>CLI</b>, where <code>kiln render</code> and{' '}
+          <code>kiln generate</code> cover the offline path and a full authoring run. Or{' '}
+          <b>in process</b>, by importing <code>kiln/tools</code> and mapping four fields per tool,
+          if your harness is TypeScript and you would rather skip the transport. Nothing is
+          reimplemented per transport, and a parity test fails the build if they drift.
         </p>
       </section>
 
