@@ -1,0 +1,129 @@
+bun test v1.3.14 (0d9b296a)
+
+src/__tests__/mcp-cancellation.test.ts: (run #1)
+{"event":"spawn","pid":20,"infinite":true}
+{"event":"close","pid":20,"exitCode":null,"signal":"SIGKILL","settled":true,"responseBytes":0}
+{"event":"spawn","pid":26,"infinite":false}
+{"event":"close","pid":26,"exitCode":0,"signal":null,"settled":false,"responseBytes":6346}
+(pass) propagates a real MCP cancellation to the worker and accepts a later valid request [586.13ms]
+
+src/__tests__/mcp-cancellation.test.ts: (run #2)
+{"event":"spawn","pid":33,"infinite":true}
+{"event":"close","pid":33,"exitCode":null,"signal":"SIGKILL","settled":true,"responseBytes":0}
+{"event":"spawn","pid":34,"infinite":false}
+{"event":"stderr","pid":34,"text":"20 |   });\n21 | } catch {\n22 |   // Input overflow happens before the handler can classify a request. Passing\n23 |   // an invalid empty request through the same handler keeps the result shape\n24 |   // canonical and sanitized.\n25 |   writeFileSync(3, await evaluateEvaluatorRequestV1(''), { encoding: 'utf8' });\n       ^\nEPIPE: broken pipe, write\n      fd: 3,\n syscall: \"write\",\n   errno: -32,\n    code: \"EPIPE\"\n\n      at /work/src/evaluator/worker.ts:25:3\n\nBun v1.3.14 (Linux x64 baseline)\n"}
+{"event":"close","pid":34,"exitCode":1,"signal":null,"settled":false,"responseBytes":0}
+52 |       },
+53 |     });
+54 |     expect(valid.isError).not.toBe(true);
+55 |     const details = valid.content.find((item) => item.type === 'text');
+56 |     expect(details?.type).toBe('text');
+57 |     if (details?.type === 'text') expect(JSON.parse(details.text)).toMatchObject({ ok: true });
+                                                                        ^
+error: expect(received).toMatchObject(expected)
+
+  {
+-   "ok": true,
++   "error": "Evaluator worker failed.",
++   "ok": false,
++   "programRef": "sha256:e14402a7df9893f6ac65d1869a15f2b9e8c418ea0f98d03aa6938e645aa5c8f7",
++   "warnings": [],
+  }
+
+- Expected  - 1
++ Received  + 4
+
+      at <anonymous> (/work/src/__tests__/mcp-cancellation.test.ts:57:68)
+(fail) propagates a real MCP cancellation to the worker and accepts a later valid request [351.26ms]
+
+src/__tests__/mcp-cancellation.test.ts: (run #3)
+{"event":"spawn","pid":41,"infinite":true}
+{"event":"close","pid":41,"exitCode":null,"signal":"SIGKILL","settled":true,"responseBytes":0}
+{"event":"spawn","pid":42,"infinite":false}
+{"event":"stderr","pid":42,"text":"20 |   });\n21 | } catch {\n22 |   // Input overflow happens before the handler can classify a request. Passing\n23 |   // an invalid empty request through the same handler keeps the result shape\n24 |   // canonical and sanitized.\n25 |   writeFileSync(3, await evaluateEvaluatorRequestV1(''), { encoding: 'utf8' });\n       ^\nEPIPE: broken pipe, write\n      fd: 3,\n syscall: \"write\",\n   errno: -32,\n    code: \"EPIPE\"\n\n      at /work/src/evaluator/worker.ts:25:3\n\nBun v1.3.14 (Linux x64 baseline)\n"}
+{"event":"close","pid":42,"exitCode":1,"signal":null,"settled":false,"responseBytes":0}
+52 |       },
+53 |     });
+54 |     expect(valid.isError).not.toBe(true);
+55 |     const details = valid.content.find((item) => item.type === 'text');
+56 |     expect(details?.type).toBe('text');
+57 |     if (details?.type === 'text') expect(JSON.parse(details.text)).toMatchObject({ ok: true });
+                                                                        ^
+error: expect(received).toMatchObject(expected)
+
+  {
+-   "ok": true,
++   "error": "Evaluator worker failed.",
++   "ok": false,
++   "programRef": "sha256:e14402a7df9893f6ac65d1869a15f2b9e8c418ea0f98d03aa6938e645aa5c8f7",
++   "warnings": [],
+  }
+
+- Expected  - 1
++ Received  + 4
+
+      at <anonymous> (/work/src/__tests__/mcp-cancellation.test.ts:57:68)
+(fail) propagates a real MCP cancellation to the worker and accepts a later valid request [342.33ms]
+
+src/__tests__/mcp-cancellation.test.ts: (run #4)
+{"event":"spawn","pid":49,"infinite":true}
+{"event":"close","pid":49,"exitCode":null,"signal":"SIGKILL","settled":true,"responseBytes":0}
+{"event":"spawn","pid":50,"infinite":false}
+{"event":"stderr","pid":50,"text":"20 |   });\n21 | } catch {\n22 |   // Input overflow happens before the handler can classify a request. Passing\n23 |   // an invalid empty request through the same handler keeps the result shape\n24 |   // canonical and sanitized.\n25 |   writeFileSync(3, await evaluateEvaluatorRequestV1(''), { encoding: 'utf8' });\n       ^\nEPIPE: broken pipe, write\n      fd: 3,\n syscall: \"write\",\n   errno: -32,\n    code: \"EPIPE\"\n\n      at /work/src/evaluator/worker.ts:25:3\n\nBun v1.3.14 (Linux x64 baseline)\n"}
+{"event":"close","pid":50,"exitCode":1,"signal":null,"settled":false,"responseBytes":0}
+52 |       },
+53 |     });
+54 |     expect(valid.isError).not.toBe(true);
+55 |     const details = valid.content.find((item) => item.type === 'text');
+56 |     expect(details?.type).toBe('text');
+57 |     if (details?.type === 'text') expect(JSON.parse(details.text)).toMatchObject({ ok: true });
+                                                                        ^
+error: expect(received).toMatchObject(expected)
+
+  {
+-   "ok": true,
++   "error": "Evaluator worker failed.",
++   "ok": false,
++   "programRef": "sha256:e14402a7df9893f6ac65d1869a15f2b9e8c418ea0f98d03aa6938e645aa5c8f7",
++   "warnings": [],
+  }
+
+- Expected  - 1
++ Received  + 4
+
+      at <anonymous> (/work/src/__tests__/mcp-cancellation.test.ts:57:68)
+(fail) propagates a real MCP cancellation to the worker and accepts a later valid request [372.38ms]
+
+src/__tests__/mcp-cancellation.test.ts: (run #5)
+{"event":"spawn","pid":57,"infinite":true}
+{"event":"close","pid":57,"exitCode":null,"signal":"SIGKILL","settled":true,"responseBytes":0}
+{"event":"spawn","pid":58,"infinite":false}
+{"event":"stderr","pid":58,"text":"20 |   });\n21 | } catch {\n22 |   // Input overflow happens before the handler can classify a request. Passing\n23 |   // an invalid empty request through the same handler keeps the result shape\n24 |   // canonical and sanitized.\n25 |   writeFileSync(3, await evaluateEvaluatorRequestV1(''), { encoding: 'utf8' });\n       ^\nEPIPE: broken pipe, write\n      fd: 3,\n syscall: \"write\",\n   errno: -32,\n    code: \"EPIPE\"\n\n      at /work/src/evaluator/worker.ts:25:3\n\nBun v1.3.14 (Linux x64 baseline)\n"}
+{"event":"close","pid":58,"exitCode":1,"signal":null,"settled":false,"responseBytes":0}
+52 |       },
+53 |     });
+54 |     expect(valid.isError).not.toBe(true);
+55 |     const details = valid.content.find((item) => item.type === 'text');
+56 |     expect(details?.type).toBe('text');
+57 |     if (details?.type === 'text') expect(JSON.parse(details.text)).toMatchObject({ ok: true });
+                                                                        ^
+error: expect(received).toMatchObject(expected)
+
+  {
+-   "ok": true,
++   "error": "Evaluator worker failed.",
++   "ok": false,
++   "programRef": "sha256:e14402a7df9893f6ac65d1869a15f2b9e8c418ea0f98d03aa6938e645aa5c8f7",
++   "warnings": [],
+  }
+
+- Expected  - 1
++ Received  + 4
+
+      at <anonymous> (/work/src/__tests__/mcp-cancellation.test.ts:57:68)
+(fail) propagates a real MCP cancellation to the worker and accepts a later valid request [373.95ms]
+
+ 1 pass
+ 4 fail
+ 21 expect() calls
+Ran 5 tests across 1 file. [2.62s]

@@ -1,0 +1,37 @@
+v22.23.1
+bun test v1.3.14 (0d9b296a)
+
+src/__tests__/mcp-cancellation.test.ts: (run #1)
+(pass) propagates a real MCP cancellation to the Node worker and accepts a later valid request [1178.88ms]
+
+src/__tests__/mcp-cancellation.test.ts: (run #2)
+(pass) propagates a real MCP cancellation to the Node worker and accepts a later valid request [1152.30ms]
+
+src/__tests__/mcp-cancellation.test.ts: (run #3)
+(pass) propagates a real MCP cancellation to the Node worker and accepts a later valid request [1146.94ms]
+
+src/__tests__/mcp-cancellation.test.ts: (run #4)
+(pass) propagates a real MCP cancellation to the Node worker and accepts a later valid request [1083.71ms]
+
+src/__tests__/mcp-cancellation.test.ts: (run #5)
+(pass) propagates a real MCP cancellation to the Node worker and accepts a later valid request [1140.99ms]
+
+src/__tests__/mcp-cancellation.test.ts: (run #6)
+(pass) propagates a real MCP cancellation to the Node worker and accepts a later valid request [1128.96ms]
+
+src/__tests__/mcp-cancellation.test.ts: (run #7)
+(pass) propagates a real MCP cancellation to the Node worker and accepts a later valid request [1185.24ms]
+
+src/__tests__/mcp-cancellation.test.ts: (run #8)
+(pass) propagates a real MCP cancellation to the Node worker and accepts a later valid request [1148.40ms]
+
+src/__tests__/mcp-cancellation.test.ts: (run #9)
+(pass) propagates a real MCP cancellation to the Node worker and accepts a later valid request [1305.37ms]
+
+src/__tests__/mcp-cancellation.test.ts: (run #10)
+(pass) propagates a real MCP cancellation to the Node worker and accepts a later valid request [1437.75ms]
+
+ 10 pass
+ 0 fail
+ 40 expect() calls
+Ran 10 tests across 1 file. [11.96s]

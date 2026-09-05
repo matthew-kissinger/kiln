@@ -17,7 +17,7 @@ the model; Kiln does not require a separate model API key for its tools.
 | --- | --- | --- |
 | [![Curved-hull survey submersible with an articulated sampling arm](examples/renders/abyssal-surveyor.png)](examples/abyssal-surveyor.kiln.js) | [![Mechanical typewriter](examples/renders/typewriter.png)](examples/typewriter.kiln.js) | [![Faceted gold solar sails supported by dark trussed spars](examples/renders/solar-sail-courier.png)](examples/solar-sail-courier.kiln.js) |
 
-[Browse the interactive gallery](https://matthew-kissinger.github.io/kiln/#/gallery)
+[Browse the interactive gallery](https://kilnstudio.tools/#/gallery)
 · [All examples and model credits](docs/examples.md)
 
 These are saved examples from different authoring runs, not a model ranking.
@@ -44,6 +44,9 @@ Rendering uses the CPU unless a compatible local GPU service is available.
 Use `--render cpu` to select the CPU explicitly.
 
 ## Connect your agent
+
+The [agent reading guide](site/public/llms.txt) links to setup, tool schemas and the
+source revision workflow in plain text.
 
 Create a separate directory for your assets. The setup command writes project-local
 configuration and copies the Kiln skills; it does not change your global settings.
