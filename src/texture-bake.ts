@@ -388,24 +388,34 @@ export async function bakeSceneTextures(
  *
  * Triangles with degenerate UVs (zero area in texture space) contribute
  * nothing rather than poisoning the accumulation with infinities.
+ *
+ * Non-indexed geometry is handled directly. A triangle soup is just an index
+ * buffer that happens to read 0, 1, 2, ... so the same accumulation is exactly
+ * right for it: every vertex belongs to one face and comes out holding that
+ * face's tangent. Flat-shaded parts, anything merged from several geometries,
+ * and anything through `.toNonIndexed()` all land here, which is most of what a
+ * hand-built asset is made of -- refusing them would have meant no portable
+ * tangents on the majority of normal-mapped meshes.
  */
 function computeTangentBasis(geometry: THREE.BufferGeometry): void {
   const index = geometry.getIndex();
   const position = geometry.getAttribute('position');
   const normal = geometry.getAttribute('normal');
   const uv = geometry.getAttribute('uv');
-  if (!index || !position || !normal || !uv) {
-    throw new Error('position, normal, uv, and an index are all required');
+  if (!position || !normal || !uv) {
+    throw new Error('position, normal, and uv are all required');
   }
 
   const vertexCount = position.count;
+  const triangleIndices = index ? index.count : vertexCount;
+  const at = index ? (i: number) => index.getX(i) : (i: number) => i;
   const tan1 = new Float32Array(vertexCount * 3);
   const tan2 = new Float32Array(vertexCount * 3);
 
-  for (let i = 0; i < index.count; i += 3) {
-    const a = index.getX(i);
-    const b = index.getX(i + 1);
-    const c = index.getX(i + 2);
+  for (let i = 0; i + 2 < triangleIndices; i += 3) {
+    const a = at(i);
+    const b = at(i + 1);
+    const c = at(i + 2);
 
     const x1 = position.getX(b) - position.getX(a);
     const y1 = position.getY(b) - position.getY(a);
@@ -494,12 +504,6 @@ export function ensureNormalMapTangents(root: THREE.Object3D, warnings: string[]
     done.add(geometry);
 
     const name = mesh.name || '(unnamed mesh)';
-    if (!geometry.getIndex()) {
-      warnings.push(
-        `Mesh ${JSON.stringify(name)} uses a normal map but its geometry is not indexed, so tangents could not be computed. Each runtime will generate its own tangent basis and the surface may light differently across engines.`,
-      );
-      return;
-    }
     if (!geometry.getAttribute('uv')) {
       warnings.push(
         `Mesh ${JSON.stringify(name)} uses a normal map but has no UV coordinates, so tangents could not be computed — and the normal map cannot be sampled either. Unwrap it first: mesh.geometry = await autoUnwrap(mesh.geometry).`,

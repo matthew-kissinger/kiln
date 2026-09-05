@@ -6,7 +6,7 @@
   "description": "GLB in, PBR PNG views out. Dawn/WebGPU + three.js, headless. No Kiln engine coupling.",
   "scripts": {
     "start": "node --import ./src/register-hooks.mjs src/server.mjs",
-    "test": "node --test test/contract.test.mjs test/material-fixture.test.mjs test/presentation-presets.test.mjs",
+    "test": "node --test test/contract.test.mjs test/framing.test.mjs test/material-fixture.test.mjs test/presentation-presets.test.mjs",
     "smoke": "node --import ./src/register-hooks.mjs test/smoke.mjs",
     "conformance:material": "node --import ./src/register-hooks.mjs test/material-conformance.mjs"
   },

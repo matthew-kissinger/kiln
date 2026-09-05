@@ -1,6 +1,16 @@
 node_modules/
-dist/
+# `dist/*` and not `dist/`: git never descends into an excluded DIRECTORY, so a
+# negation under `dist/` can never match and the bundle below stayed ignored
+# while the docs said it was committed.
+dist/*
+# ...except the MCP server bundle. A plugin install is a git clone with no build
+# step, so the artifact the harness launches has to be in the tree. Kept honest
+# by src/__tests__/mcp-bundle.test.ts, which rebuilds it and compares bytes.
+!dist/mcp-server.mjs
 coverage/
+# `kiln render` writes here when no --out is given, so it lands at the repo
+# root every time anyone tries the README's first command.
+/out.glb
 *.tsbuildinfo
 *.log
 .DS_Store
@@ -9,3 +19,14 @@ coverage/
 !.env.example
 .localdata/
 tmp/
+
+# Dogfooding runs by dispatched CLI agents (scripts/dispatch-asset.mjs)
+.dogfood/
+
+# The gallery site's payload is generated, not authored: `site/scripts/build-assets.mjs`
+# runs every program in examples/ and writes the GLBs, the thumbnails and the
+# index out of what the engine returns. Committing 24 MB of GLB would also mean
+# committing a copy that can silently stop matching the program beside it.
+site/public/assets/
+site/public/thumbs/
+site/dist/

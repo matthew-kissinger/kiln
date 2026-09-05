@@ -209,7 +209,15 @@ export function subdivide(
   // Three's box/sphere/cylinder (which keep 4 verts per face for
   // independent normals/UVs) become a single connected surface.
   const input = weld ? mergeVertices(geometry, { positionOnly: true }) : geometry;
-  return LoopSubdivision.modify(input, iterations, subOpts);
+  // `three-subdivide` builds each new vertex normal by SUMMING the normals of
+  // the faces around it and never divides through, so the length comes out as
+  // however many faces met there -- 2/3 after one iteration on a box, and 0.35
+  // after two. A raster never shows this, because a shader normalises before it
+  // lights, and the glTF validator rejects every one of them
+  // (GLTF_ACCESSOR_VECTOR3_NON_UNIT). Found by a dispatched agent's printing
+  // press: `subdivide(boxGeo(1.5, 0.6, 0.8), 2)` produced 1,104 bad normals out
+  // of 1,152 and blocked the build at final-glb. Same repair as `lathe`.
+  return normalizeSurfaceNormals(LoopSubdivision.modify(input, iterations, subOpts));
 }
 
 // =============================================================================
@@ -249,9 +257,52 @@ export function curveToMesh(
  * @param profile — array of [x, y] points; x is radial distance, y is height
  * @param segments — radial segments (default 12)
  */
+/**
+ * three.js `LatheGeometry` emits one ring of NON-UNIT normals.
+ *
+ * Its meridian pre-pass copies the running normal into `prevNormal` *before*
+ * normalising it, and the final profile point then pushes `prevNormal`
+ * verbatim -- so every vertex on the last ring carries a normal whose length is
+ * the length of the last profile segment rather than 1. Nothing shows in a
+ * raster, because a shader normalises before it lights; it is fatal on export,
+ * because the glTF validator rejects it with GLTF_ACCESSOR_VECTOR3_NON_UNIT and
+ * the asset never ships.
+ *
+ * Found by an agent dispatched through `scripts/dispatch-asset.mjs`: eight
+ * lathed saucers with a 0.03 m final profile segment produced 15 of 105
+ * vertices at length 0.030017 each, and blocked the build at final-glb.
+ *
+ * Only the broken ring is touched. Rebuilding the whole attribute with
+ * `computeVertexNormals` would throw away the smooth meridian shading that is
+ * the entire reason to lathe a profile in the first place.
+ */
+function normalizeSurfaceNormals(geo: THREE.BufferGeometry): THREE.BufferGeometry {
+  const normal = geo.getAttribute('normal') as THREE.BufferAttribute | undefined;
+  if (!normal) return geo;
+  let repaired = false;
+  for (let i = 0; i < normal.count; i++) {
+    const x = normal.getX(i);
+    const y = normal.getY(i);
+    const z = normal.getZ(i);
+    const len = Math.hypot(x, y, z);
+    if (!Number.isFinite(len) || len < 1e-12) {
+      // A profile that touches the axis can degenerate entirely. Any unit
+      // vector satisfies the validator; +Y is the least surprising.
+      normal.setXYZ(i, 0, 1, 0);
+      repaired = true;
+      continue;
+    }
+    if (Math.abs(len - 1) <= 1e-6) continue;
+    normal.setXYZ(i, x / len, y / len, z / len);
+    repaired = true;
+  }
+  if (repaired) normal.needsUpdate = true;
+  return geo;
+}
+
 export function lathe(profile: Array<[number, number]>, segments = 12): THREE.BufferGeometry {
   const points2d = profile.map((p) => new THREE.Vector2(p[0], p[1]));
-  return new THREE.LatheGeometry(points2d, segments);
+  return normalizeSurfaceNormals(new THREE.LatheGeometry(points2d, segments));
 }
 
 /**
@@ -291,7 +342,7 @@ export function revolveGeo(
   const { angle = Math.PI * 2, axis = [0, 1, 0], segments = 12 } = options;
   const points2d = profile.map((p) => new THREE.Vector2(p[0], p[1]));
   // LatheGeometry signature: (points, segments, phiStart, phiLength).
-  const geo = new THREE.LatheGeometry(points2d, segments, 0, angle);
+  const geo = normalizeSurfaceNormals(new THREE.LatheGeometry(points2d, segments, 0, angle));
 
   const n = new THREE.Vector3(axis[0], axis[1], axis[2]);
   if (n.lengthSq() < 1e-12) {

@@ -33,6 +33,14 @@ const DEFAULT_LOCAL_PORT_URL = 'http://127.0.0.1:8000';
 const HEALTH_PROBE_TIMEOUT_MS = 1_500;
 
 /**
+ * Second budget, used only after the first probe timed out on a socket that was
+ * accepted. See `probeRenderService`: a renderer busy with somebody else's frame
+ * is still a renderer, and one local service shared by a batch of dispatched
+ * agents is the documented way to use this.
+ */
+const HEALTH_PROBE_BUSY_TIMEOUT_MS = 8_000;
+
+/**
  * In-loop deadline. Far below the deadline appropriate for a post-loop artifact
  * sheet, because this render blocks the caller while it runs. See AGENTS.md — the
  * two deadlines must not be collapsed onto one value.
@@ -83,22 +91,55 @@ export function makeRemoteRenderPort(url: string, token?: string): PbrRenderPort
   };
 }
 
+/** One `/health` request. `busy` means the socket was accepted and then went quiet. */
+type Probe = { kind: 'ok'; rendererId: string } | { kind: 'busy' } | { kind: 'absent' };
+
+async function probeOnce(url: string, timeoutMs: number): Promise<Probe> {
+  try {
+    const res = await fetch(new URL('/health', url), {
+      signal: AbortSignal.timeout(timeoutMs),
+    });
+    if (!res.ok) return { kind: 'absent' };
+    const json = (await res.json()) as { ok?: boolean; rendererId?: string };
+    if (!json.ok) return { kind: 'absent' };
+    return { kind: 'ok', rendererId: json.rendererId ?? 'unknown-renderer' };
+  } catch (err) {
+    // `AbortSignal.timeout` rejects with a TimeoutError; everything else here —
+    // ECONNREFUSED, DNS, a socket hangup — arrives as a TypeError from fetch.
+    const timedOut = err instanceof Error && err.name === 'TimeoutError';
+    return timedOut ? { kind: 'busy' } : { kind: 'absent' };
+  }
+}
+
 /**
  * Probe a render service. Never throws — a missing GPU is the expected case on
  * most machines, and `auto` degrading quietly to the CPU rasterizer is the point.
+ *
+ * The probe asks whether a renderer is THERE, which is not the same question as
+ * whether it is free. The service renders on the GPU from a single-threaded Node
+ * process, so while it is drawing somebody else's frame it accepts the socket and
+ * answers nothing, and a 1.5 second budget expires. One local renderer shared by a
+ * batch of dispatched agents is the documented way to use this, so that state is
+ * routine rather than exceptional — and reading it as "no GPU here" silently drops
+ * the whole session onto the CPU rasterizer, where every textured material draws
+ * flat white and the agent cannot tell. It looks like a model with bad taste.
+ *
+ * Nothing listening is a different answer and still has to be fast, or `auto`
+ * would stall on every CPU-only machine. It is: the kernel refuses the connection
+ * in about a millisecond, which arrives here as `absent` rather than `busy`, so
+ * only a socket that was actually accepted is worth waiting longer for.
  */
-async function probeRenderService(url: string): Promise<string | undefined> {
-  try {
-    const res = await fetch(new URL('/health', url), {
-      signal: AbortSignal.timeout(HEALTH_PROBE_TIMEOUT_MS),
-    });
-    if (!res.ok) return undefined;
-    const json = (await res.json()) as { ok?: boolean; rendererId?: string };
-    if (!json.ok) return undefined;
-    return json.rendererId ?? 'unknown-renderer';
-  } catch {
-    return undefined;
-  }
+/**
+ * Exported for `src/__tests__/cli-render-mode.test.ts`, which is the only place
+ * the two budgets can be observed: `buildRenderPort` reaches the probe only on
+ * the no-URL path, and that path is pinned to port 8000 on the host machine.
+ */
+export async function probeRenderService(url: string): Promise<string | undefined> {
+  const first = await probeOnce(url, HEALTH_PROBE_TIMEOUT_MS);
+  if (first.kind === 'ok') return first.rendererId;
+  if (first.kind === 'absent') return undefined;
+  const second = await probeOnce(url, HEALTH_PROBE_BUSY_TIMEOUT_MS);
+  return second.kind === 'ok' ? second.rendererId : undefined;
 }
 
 /** What actually got selected, for honest CLI reporting. */

@@ -17,6 +17,7 @@ import {
 } from './presentation-presets.mjs';
 
 export { MAX_VIEW_DIRS, validateViewDirs } from './contract.mjs';
+import { orthoDepth, orthoHalfExtent } from './framing.mjs';
 
 globalThis.self = globalThis;
 globalThis.requestAnimationFrame = (cb) => setTimeout(() => cb(performance.now()), 16);
@@ -191,17 +192,18 @@ function applyPresentationPreset(renderer, scene, root, preset, environment) {
   }
 }
 
-function orthoCam(center, radius, dir) {
-  const cam = new THREE.OrthographicCamera(-radius, radius, radius, -radius, 0.01, radius * 6);
-  cam.position.copy(center.clone().add(new THREE.Vector3(...dir).normalize().multiplyScalar(radius * 2.5)));
-  cam.lookAt(center);
-  cam.updateMatrixWorld();
-  return cam;
-}
-
-function beautyCam(center, boxRadius) {
-  const cam = new THREE.PerspectiveCamera(35, 1, 0.01, boxRadius * 10);
-  cam.position.copy(center.clone().add(new THREE.Vector3(1, 0.55, 1).normalize().multiplyScalar(boxRadius * 2.1)));
+/**
+ * Camera for one view. The fit itself lives in `framing.mjs`, which is pure
+ * arithmetic and therefore testable without a GPU; see the note there for why
+ * the old `max(sizes) * 0.72` had to go.
+ */
+function orthoCam(center, min, max, dir) {
+  const half = orthoHalfExtent(min, max, dir);
+  const { distance, far } = orthoDepth(min, max, half);
+  const cam = new THREE.OrthographicCamera(-half, half, half, -half, 0.01, far);
+  cam.position.copy(
+    center.clone().add(new THREE.Vector3(...dir).normalize().multiplyScalar(distance)),
+  );
   cam.lookAt(center);
   cam.updateMatrixWorld();
   return cam;
@@ -316,7 +318,8 @@ export async function renderGlb(glbBytes, opts = {}) {
     const box = new THREE.Box3().setFromObject(gltf.scene);
     const center = box.getCenter(new THREE.Vector3());
     const sizes = box.getSize(new THREE.Vector3());
-    const orthoRadius = Math.max(sizes.x, sizes.y, sizes.z) * 0.72 + 1e-3;
+    const boxMin = [box.min.x, box.min.y, box.min.z];
+    const boxMax = [box.max.x, box.max.y, box.max.z];
 
     // One RT per view, pooled across requests (alloc is pure overhead). Submit
     // every render first, then read back — a mid-loop readback forces a full GPU
@@ -324,7 +327,7 @@ export async function renderGlb(glbBytes, opts = {}) {
     const rts = rtPool(size, viewDirs.length);
     viewDirs.forEach((dir, i) => {
       renderer.setRenderTarget(rts[i]);
-      renderer.render(scene, orthoCam(center, orthoRadius, dir));
+      renderer.render(scene, orthoCam(center, boxMin, boxMax, dir));
     });
     const views = [];
     for (const vrt of rts) {

@@ -32,6 +32,7 @@ import {
   createKilnViewInteriorDef,
   type KilnToolDef,
   type KilnToolContext,
+  createKilnEditDef,
 } from './tools/registry';
 import { buildRenderPort, resolveRenderMode } from './cli-render-mode';
 
@@ -95,6 +96,7 @@ export function kilnMcpToolDefs(context: KilnToolContext = {}): KilnToolDef[] {
     createKilnScreenshotAnimationDef(context),
     createKilnViewInteriorDef(context),
     createKilnInspectDef(context),
+    createKilnEditDef(context),
   ];
 }
 
@@ -138,6 +140,10 @@ export async function runTool(def: KilnToolDef, args: unknown): Promise<KilnTool
       ],
     };
   }
+
+  // A def may render its own text when the default JSON would repeat itself.
+  const asText = def.text?.(output);
+  if (asText !== undefined) return { content: [{ type: 'text', text: asText }] };
 
   return { content: [{ type: 'text', text: JSON.stringify(output, null, 2) }] };
 }

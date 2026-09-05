@@ -48,8 +48,8 @@ import {
   planeGeo,
   wingGeo,
   // materials
-  gameMaterial,
   basicMaterial,
+  gameMaterial,
   glassMaterial,
   lambertMaterial,
   // animation tracks
@@ -984,5 +984,109 @@ describe('buildSandboxGlobals', () => {
     const geo = fn(1, 1, 1);
     expect(geo).toBeInstanceOf(THREE.BoxGeometry);
     expect(geo.getAttribute('position').count).toBeGreaterThan(0);
+  });
+});
+
+describe('material constructors reject an options object in the color slot', () => {
+  /**
+   * `gameMaterial({ color, roughness, metalness })` is what a model writes when
+   * it is remembering some other engine's API, and until this guard existed it
+   * was not an error: three.js leaves `Color.set` alone for a plain object, so
+   * the material came back white with default roughness, and the asset shipped
+   * with a handful of flat white parts nobody had chosen. Failing closed is the
+   * same treatment an invented texture ID already gets.
+   */
+  const cases: Array<[string, (c: unknown) => unknown]> = [
+    ['gameMaterial', (c) => gameMaterial(c as number)],
+    ['basicMaterial', (c) => basicMaterial(c as number)],
+    ['glassMaterial', (c) => glassMaterial(c as number)],
+    ['lambertMaterial', (c) => lambertMaterial(c as number)],
+  ];
+
+  for (const [name, call] of cases) {
+    test(`${name} names the mistake instead of returning white`, () => {
+      expect(() => call({ color: 0x8c4a32, roughness: 0.5 })).toThrow(/color must be a hex number/);
+      // The message has to be actionable: the model needs to be told where the
+      // settings actually go, not just that it was wrong.
+      expect(() => call({ color: 0x8c4a32 })).toThrow(/SECOND argument/);
+      expect(() => call(undefined)).toThrow(/color must be a hex number/);
+    });
+  }
+
+  test('the two real shapes still work', () => {
+    expect(gameMaterial(0x8c4a32, { roughness: 0.5, metalness: 0.9 }).roughness).toBe(0.5);
+    expect(gameMaterial('#8c4a32').color.getHexString()).toBe('8c4a32');
+  });
+});
+
+describe('createPart rejects a wrong call instead of failing later', () => {
+  // Every case here is a real mistake a dispatched model made. `new THREE.Mesh()`
+  // swallows all of them and the program dies much later in the exporter, with a
+  // message that names a three.js internal and nothing the author wrote. A model
+  // reading that has no way back, so it burns its remaining turns guessing. The
+  // assertions below are about the *message*, not the throw: what matters is that
+  // it says which argument, what arrived, and what the right call looks like.
+
+  const geo = boxGeo(1, 1, 1);
+  const mat = gameMaterial(0x808080);
+
+  test('the parent passed first, the shape most other scene APIs take', () => {
+    const root = createRoot('Root');
+    expect(() =>
+      // @ts-expect-error deliberately the wrong call
+      createPart(root, { name: 'box', geo: boxGeo, material: mat }),
+    ).toThrow(/first argument is the part NAME.*Object3D.*parent belongs in the options object/s);
+  });
+
+  test('a geometry helper referenced instead of called', () => {
+    // @ts-expect-error deliberately the wrong call
+    expect(() => createPart('Hull', boxGeo, mat)).toThrow(/have to be CALLED/);
+  });
+
+  test('an async geometry helper left un-awaited', () => {
+    // roundedBoxGeo resolves through WASM, so forgetting the await hands
+    // createPart a Promise. Saying so is the whole fix: the model needs to know
+    // that build() has to be async too.
+    // @ts-expect-error deliberately the wrong call
+    expect(() => createPart('Hull', Promise.resolve(geo), mat)).toThrow(/Promise.*await/s);
+  });
+
+  test('a colour passed where a material belongs', () => {
+    // @ts-expect-error deliberately the wrong call
+    expect(() => createPart('Hull', geo, 0x808080)).toThrow(/a colour is not a material/);
+  });
+
+  test('every message carries the signature it wants back', () => {
+    for (const bad of [
+      // @ts-expect-error deliberately the wrong call
+      () => createPart(null, geo, mat),
+      // @ts-expect-error deliberately the wrong call
+      () => createPart('Hull', undefined, mat),
+      // @ts-expect-error deliberately the wrong call
+      () => createPart('Hull', geo, undefined),
+    ]) {
+      expect(bad).toThrow(/createPart\(name, geometry, material, options\?\)/);
+    }
+  });
+
+  test('the right call is untouched', () => {
+    const part = createPart('Hull', boxGeo(1, 1, 1), gameMaterial(0x808080));
+    expect(part).toBeInstanceOf(THREE.Object3D);
+    expect(part.name).toBe('Mesh_Hull');
+  });
+
+  test('a geometry from another copy of three is still a geometry', () => {
+    // `three-subdivide` resolves its own three, so `subdivide()` returns a
+    // geometry whose prototype chain is not this module's. An `instanceof`
+    // check rejects it, and the first version of this guard did -- it broke the
+    // lighthouse, whose rocks are subdivided icosahedra. The duck-typed flags
+    // three ships for exactly this case are what the guard tests now, so the
+    // stand-in below has to pass.
+    const foreign = Object.assign(Object.create(null), {
+      isBufferGeometry: true,
+      attributes: {},
+      morphAttributes: {},
+    }) as unknown as THREE.BufferGeometry;
+    expect(() => createPart('Rock', foreign, mat)).not.toThrow();
   });
 });

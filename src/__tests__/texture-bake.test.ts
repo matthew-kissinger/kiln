@@ -494,7 +494,7 @@ describe('normal-mapped meshes get a tangent basis', () => {
     expect(warnings[0]).toContain('autoUnwrap');
   });
 
-  test('a non-indexed normal-mapped mesh is warned about by name', () => {
+  test('a non-indexed normal-mapped mesh gets tangents, not a warning', () => {
     const geometry = uvBox().toNonIndexed();
     const mesh = new THREE.Mesh(geometry, normalMapped());
     mesh.name = 'Mesh_Flat';
@@ -502,9 +502,64 @@ describe('normal-mapped meshes get a tangent basis', () => {
     root.add(mesh);
 
     const warnings: string[] = [];
-    expect(ensureNormalMapTangents(root, warnings)).toBe(0);
-    expect(warnings[0]).toContain('"Mesh_Flat"');
-    expect(warnings[0]).toContain('not indexed');
+    expect(ensureNormalMapTangents(root, warnings)).toBe(1);
+    expect(warnings).toEqual([]);
+
+    const tangent = geometry.getAttribute('tangent');
+    expect(tangent.count).toBe(geometry.getAttribute('position').count);
+    // Every vertex of a soup belongs to exactly one face, so every tangent has
+    // to be a real unit vector -- none of the zero-length placeholders that a
+    // vertex touched only by degenerate triangles would fall back to.
+    for (let v = 0; v < tangent.count; v++) {
+      const length = Math.hypot(tangent.getX(v), tangent.getY(v), tangent.getZ(v));
+      expect(length).toBeCloseTo(1, 5);
+      expect(Math.abs(tangent.getW(v))).toBe(1);
+    }
+  });
+
+  test('an indexed and a soup copy of the same box agree on tangents', () => {
+    // The soup path is not a separate approximation: unwelding the box changes
+    // which vertices exist, not what the surface is, so the tangent at a given
+    // position has to come out the same either way.
+    const indexed = uvBox();
+    const soup = uvBox().toNonIndexed();
+    for (const geometry of [indexed, soup]) {
+      const root = new THREE.Object3D();
+      root.add(new THREE.Mesh(geometry, normalMapped()));
+      expect(ensureNormalMapTangents(root, [])).toBe(1);
+    }
+
+    const soupTangent = soup.getAttribute('tangent');
+    const soupPosition = soup.getAttribute('position');
+    const indexedTangent = indexed.getAttribute('tangent');
+    const indexedPosition = indexed.getAttribute('position');
+    const indexedNormal = indexed.getAttribute('normal');
+    const soupNormal = soup.getAttribute('normal');
+
+    for (let v = 0; v < soupTangent.count; v++) {
+      // Match by position AND normal: a box corner is three different vertices
+      // at one point, and only the normal tells them apart.
+      let match = -1;
+      for (let w = 0; w < indexedPosition.count; w++) {
+        const samePoint =
+          indexedPosition.getX(w) === soupPosition.getX(v) &&
+          indexedPosition.getY(w) === soupPosition.getY(v) &&
+          indexedPosition.getZ(w) === soupPosition.getZ(v);
+        const sameFacing =
+          indexedNormal.getX(w) === soupNormal.getX(v) &&
+          indexedNormal.getY(w) === soupNormal.getY(v) &&
+          indexedNormal.getZ(w) === soupNormal.getZ(v);
+        if (samePoint && sameFacing) {
+          match = w;
+          break;
+        }
+      }
+      expect(match).toBeGreaterThanOrEqual(0);
+      expect(soupTangent.getX(v)).toBeCloseTo(indexedTangent.getX(match), 5);
+      expect(soupTangent.getY(v)).toBeCloseTo(indexedTangent.getY(match), 5);
+      expect(soupTangent.getZ(v)).toBeCloseTo(indexedTangent.getZ(match), 5);
+      expect(soupTangent.getW(v)).toBe(indexedTangent.getW(match));
+    }
   });
 
   test('geometry shared by two normal-mapped meshes is computed once', () => {

@@ -532,6 +532,27 @@ export async function loadGlbReviewScene(bytes: Uint8Array): Promise<LoadedGlbRe
           'position',
           new BufferAttribute(Float32Array.from(decodedAccessor(position)), 3),
         );
+        const normal = primitive.getAttribute('NORMAL');
+        if (normal) {
+          geometry.setAttribute(
+            'normal',
+            new BufferAttribute(Float32Array.from(decodedAccessor(normal)), 3),
+          );
+        }
+        const uv = primitive.getAttribute('TEXCOORD_0');
+        if (uv) {
+          geometry.setAttribute(
+            'uv',
+            new BufferAttribute(Float32Array.from(decodedAccessor(uv)), 2),
+          );
+        }
+        const tangent = primitive.getAttribute('TANGENT');
+        if (tangent) {
+          geometry.setAttribute(
+            'tangent',
+            new BufferAttribute(Float32Array.from(decodedAccessor(tangent)), 4),
+          );
+        }
         geometry.setIndex(new BufferAttribute(indices, 1));
         const threeMaterial = new MeshStandardMaterial({
           opacity: flat.opacity,

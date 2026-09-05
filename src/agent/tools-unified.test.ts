@@ -563,9 +563,26 @@ describe('makeKilnUnifiedTools', () => {
     });
   });
 
-  test('after a successful render, repeated whole rewrites are bounded and preserve the last buffer', async () => {
+  // No cap by default: an agent that decides its third rewrite is the right move
+  // is not wrong about its own work, and the old bound existed to protect a
+  // hosted call allowance that no longer exists.
+  test('whole rewrites after a render are unlimited by default', async () => {
     const sink: UnifiedSink = { edits: [] };
     const tools = makeKilnUnifiedTools({ seedCode: BOX_CODE, sink });
+    const draft = findTool(tools, 'kiln_draft');
+    await findTool(tools, 'kiln_render').invoke({});
+    for (const w of [2, 3, 4, 5, 6]) {
+      expect(
+        (await draft.invoke({ code: BOX_CODE.replace('1, 1, 1', `${w}, 1, 1`) })) as {
+          ok: boolean;
+        },
+      ).toMatchObject({ ok: true });
+    }
+  });
+
+  test('a host that wants the old bound can still ask for it', async () => {
+    const sink: UnifiedSink = { edits: [] };
+    const tools = makeKilnUnifiedTools({ seedCode: BOX_CODE, sink, maxPostRenderRewrites: 2 });
     const draft = findTool(tools, 'kiln_draft');
     await findTool(tools, 'kiln_render').invoke({});
     expect(

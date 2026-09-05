@@ -6,13 +6,23 @@ import {
 } from './call-budget';
 
 describe('generation-global model-call budget', () => {
-  test('defaults to the existing aggregate 40-call ceiling', () => {
+  // The default is no ceiling. A cap the user did not ask for stops an asset
+  // halfway for reasons that have nothing to do with the asset, and out here the
+  // person running the tool is the person paying for it.
+  test('defaults to no ceiling at all', () => {
+    expect(DEFAULT_GENERATION_MODEL_CALL_LIMIT).toBe(0);
     expect(createGenerationCallBudget().receipt()).toMatchObject({
-      limit: DEFAULT_GENERATION_MODEL_CALL_LIMIT,
+      limit: 0,
       consumed: 0,
-      remaining: 40,
+      remaining: null,
       exhausted: false,
     });
+  });
+
+  test('an unconfigured budget really does keep admitting calls', () => {
+    const budget = createGenerationCallBudget();
+    for (let i = 0; i < 500; i++) expect(budget.tryConsume('author')).toBe(true);
+    expect(budget.receipt()).toMatchObject({ consumed: 500, denied: 0, exhausted: false });
   });
 
   test('attributes one shared allowance across author, observer, repair, retry, and fallback', () => {
@@ -52,6 +62,8 @@ describe('generation-global model-call budget', () => {
       }),
     ).toBe(12);
     expect(generationModelCallLimitFromEnv({ KILN_AGENT_MAX_STEPS: '7' })).toBe(7);
-    expect(generationModelCallLimitFromEnv({ KILN_GENERATION_MAX_CALLS: 'invalid' })).toBe(40);
+    expect(generationModelCallLimitFromEnv({ KILN_GENERATION_MAX_CALLS: 'invalid' })).toBe(
+      DEFAULT_GENERATION_MODEL_CALL_LIMIT,
+    );
   });
 });

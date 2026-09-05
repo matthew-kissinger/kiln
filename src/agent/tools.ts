@@ -229,126 +229,18 @@ export function makeKilnTools(sink: SubmitSink, context: KilnToolContext = {}): 
 // Used only when refining in edit mode (existingCode set + refineMode='edit');
 // the from-scratch generate path keeps `makeKilnTools` unchanged.
 
-/** One applied `kiln_edit` call, recorded for provenance / the diff trace. */
-export interface EditRecord {
-  oldString: string;
-  newString: string;
-  replaceAll: boolean;
-  /** How many occurrences this edit actually replaced. */
-  occurrences: number;
-}
+// The working buffer and its edit semantics moved to `../edit-buffer` so the MCP
+// transport can share one implementation rather than growing a second dialect;
+// see the header there. Re-exported so existing importers are unaffected.
+import { KilnDraftBuffer, type EditRecord, type EditResult, type EditSink } from '../edit-buffer';
 
-/** Result of a single `kiln_edit` application (never thrown - returned to the model). */
-export type EditResult =
-  | { ok: true; occurrences: number; newBytes: number }
-  | { ok: false; error: string; occurrences?: number; hint?: string };
-
-/**
- * A mutable sink the edit tools write into. Create one per run with `edits: []`,
- * pass it to {@link makeKilnEditTools}, and after invoke read `.code` (the final
- * working buffer) and `.edits` (the applied edit trace).
- */
-export interface EditSink {
-  code?: string;
-  edits: EditRecord[];
-}
-
-/**
- * The in-memory working copy of the program being authored or refined. Pure
- * string ops - no Strands / THREE involvement - so it is trivially unit-testable
- * on its own.
- *
- * Two ways to write it: {@link draft} replaces the whole buffer (the authoring
- * verb — generate starts from an empty buffer and drafts the first program),
- * and {@link apply} does a surgical exact-string edit (recorded in `edits` for
- * the refine diff). Seed defaults to empty for the from-scratch generate path;
- * pass the parent's code to seed a refine.
- */
-export class KilnDraftBuffer {
-  private buf: string;
-  readonly edits: EditRecord[] = [];
-
-  constructor(seedCode: string = '') {
-    this.buf = seedCode;
-  }
-
-  /** The current working code. */
-  get code(): string {
-    return this.buf;
-  }
-
-  /** Current line count. */
-  get lineCount(): number {
-    return this.buf.split('\n').length;
-  }
-
-  /** Read the current buffer (raw text - exactly what `apply` matches against). */
-  view(): { code: string; lines: number } {
-    return { code: this.buf, lines: this.lineCount };
-  }
-
-  /**
-   * Replace the entire working buffer (the authoring verb). NOT recorded as an
-   * edit — drafting is wholesale authoring, not a surgical diff step. The refine
-   * diff is always computed from the seed to the final buffer, so a draft is
-   * captured there regardless.
-   */
-  draft(code: string): { ok: true; bytes: number; lines: number } {
-    this.buf = code;
-    return { ok: true, bytes: this.buf.length, lines: this.lineCount };
-  }
-
-  /** Apply one exact-string replacement. Mirrors the Edit tool's contract. */
-  apply(input: { oldString: string; newString: string; replaceAll?: boolean }): EditResult {
-    const { oldString, newString } = input;
-    const replaceAll = input.replaceAll ?? false;
-
-    if (oldString.length === 0) {
-      return { ok: false, error: 'oldString must not be empty.' };
-    }
-    if (oldString === newString) {
-      return {
-        ok: false,
-        error: 'oldString and newString are identical - there is nothing to change.',
-      };
-    }
-
-    const occurrences = this.buf.split(oldString).length - 1;
-    if (occurrences === 0) {
-      return {
-        ok: false,
-        error: 'oldString was not found in the current code.',
-        hint: 'Call kiln_view and copy an exact span (including whitespace and indentation) to edit.',
-      };
-    }
-    if (occurrences > 1 && !replaceAll) {
-      return {
-        ok: false,
-        occurrences,
-        error: `oldString matched ${occurrences} times, so the edit is ambiguous.`,
-        hint: 'Add surrounding context to make oldString unique, or set replaceAll:true to change every occurrence.',
-      };
-    }
-
-    // Replace WITHOUT going through String.prototype.replace(string, string):
-    // that interprets `$&` / `$1` etc. in newString. Index/splice and split/join
-    // are literal.
-    if (replaceAll) {
-      this.buf = this.buf.split(oldString).join(newString);
-    } else {
-      const at = this.buf.indexOf(oldString);
-      this.buf = this.buf.slice(0, at) + newString + this.buf.slice(at + oldString.length);
-    }
-
-    const applied = replaceAll ? occurrences : 1;
-    this.edits.push({ oldString, newString, replaceAll, occurrences: applied });
-    return { ok: true, occurrences: applied, newBytes: this.buf.length };
-  }
-}
-
-/** Back-compat alias: the edit-mode refine path and external importers (kiln-studio
- *  mock, tests) still refer to this as `KilnEditBuffer`. Same class. */
-export { KilnDraftBuffer as KilnEditBuffer };
+export {
+  KilnDraftBuffer,
+  KilnDraftBuffer as KilnEditBuffer,
+  type EditRecord,
+  type EditResult,
+  type EditSink,
+};
 
 const viewInput = z.object({});
 
@@ -557,9 +449,17 @@ export interface UnifiedSink {
   capture?: CaptureConfig;
 }
 
-/** Once a program renders, repair should become surgical. Repeated wholesale
- * rewrites were the exact production churn pattern that consumed 40 calls. */
-export const MAX_POST_RENDER_REWRITES = 2;
+/**
+ * Whole-program rewrites allowed after the first successful render. Zero, the
+ * default, means no limit.
+ *
+ * This was 2, to stop a churn pattern that burned through a hosted product's
+ * 40-call allowance. That allowance is gone, and without it the cap only says
+ * that an agent which decides its third rewrite is the right move is wrong about
+ * its own work. Advice on staying surgical belongs in the skill, where it is
+ * guidance; here it was a refusal. Set it above zero to put the bound back.
+ */
+export const MAX_POST_RENDER_REWRITES = 0;
 
 /**
  * A live render candidate surfaced out-of-band from the unified `kiln_render`
@@ -598,8 +498,12 @@ export function makeKilnUnifiedTools(
      *  Lets the host surface a filmstrip of intermediate renders + pick a version.
      *  Never affects the agent's view; sink errors are swallowed. */
     onCandidate?: (c: KilnRenderCandidate) => void;
+    /** Whole-program rewrites allowed after the first successful render.
+     *  Defaults to {@link MAX_POST_RENDER_REWRITES} -- no limit. */
+    maxPostRenderRewrites?: number;
   } & KilnToolContext,
 ): Tool[] {
+  const maxPostRenderRewrites = opts.maxPostRenderRewrites ?? MAX_POST_RENDER_REWRITES;
   const buffer = new KilnDraftBuffer(opts.seedCode ?? '');
   opts.sink.edits = buffer.edits; // share the live trace
   const toolContext: KilnToolContext = {
@@ -644,13 +548,14 @@ export function makeKilnUnifiedTools(
       const nextCode = (input as { code: string }).code;
       const changesCode = nextCode !== buffer.code;
       if (
+        maxPostRenderRewrites > 0 &&
         changesCode &&
         opts.sink.everRendered &&
-        (opts.sink.postRenderRewrites ?? 0) >= MAX_POST_RENDER_REWRITES
+        (opts.sink.postRenderRewrites ?? 0) >= maxPostRenderRewrites
       ) {
         return {
           ok: false,
-          error: `whole-program rewrite limit reached after a successful render (${MAX_POST_RENDER_REWRITES})`,
+          error: `whole-program rewrite limit reached after a successful render (${maxPostRenderRewrites})`,
           hint: 'Keep the current working buffer, use kiln_view plus kiln_edit for targeted repairs, render it again, then finalize.',
         } as JSONValue;
       }

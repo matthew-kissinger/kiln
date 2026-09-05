@@ -18,10 +18,9 @@
   "mcpServers": {
     "kiln": {
       "type": "stdio",
-      "command": "bun",
+      "command": "node",
       "args": [
-        "run",
-        "${CLAUDE_PLUGIN_ROOT}/src/mcp-server.ts"
+        "${CLAUDE_PLUGIN_ROOT}/dist/mcp-server.mjs"
       ],
       "env": {
         "KILN_RENDER": "auto"

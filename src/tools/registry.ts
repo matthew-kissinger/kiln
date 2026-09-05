@@ -37,6 +37,10 @@ import type { ViewGridResult } from '../views';
 import type { EvaluatorExecutionProfileV1, EvaluatorPortV1 } from '../evaluator';
 import { resolveEvaluatorPortV1 } from '../evaluator';
 import { sceneNeedsPbrShading } from '../material-resources';
+import { KilnDraftBuffer } from '../edit-buffer';
+// `agent/diff` has no imports of its own -- it is pure string work -- so this
+// does not put an agent-SDK edge into the `kiln/tools` graph.
+import { unifiedDiff } from '../agent/diff';
 import type { GenerationCallBudget } from '../agent/call-budget';
 import {
   resolveViewRenderTimeoutMs,
@@ -74,6 +78,26 @@ export interface KilnToolDef {
    * back to {@link media} (a composite) or the raw output. Checked before `media`.
    */
   mediaMulti?(output: unknown): { pngs: Uint8Array[]; json: unknown } | undefined;
+  /**
+   * Reshape a `run()` output for a text transport.
+   *
+   * The default MCP serialization is `JSON.stringify(output, null, 2)`, which is
+   * right for a result whose fields the model needs to read individually. It is
+   * wrong for a result that already contains a rendered human-readable form of
+   * itself, because then the wire carries the same information twice.
+   *
+   * `kiln_list_primitives` is the case that forced this: it returns 92 entries
+   * as a structured array (48 KB) AND as formatted text (36 KB), and pretty
+   * printing the pair sent 90 KB for one call. Harnesses differ in how they cope
+   * and one of them copes badly -- OpenCode truncates a result that large, spills
+   * the full copy to a file, and hands the model a cut-off catalog plus the job
+   * of reassembling it. A dispatched model spent twenty-two minutes grepping that
+   * file and never wrote a program.
+   *
+   * In-process callers still get the structured array from `run()`; only the
+   * wire representation changes.
+   */
+  text?(output: unknown): string | undefined;
 }
 
 /**
@@ -319,6 +343,10 @@ async function renderDerivativeCell(
   context: KilnToolContext,
 ): Promise<import('../views').DerivativeCellRenderResult> {
   const rendered = await renderSceneToGLB(input.root as THREE.Object3D, {
+    // The scene here was loaded back from a GLB this engine already produced
+    // and adjudicated. Submitting it for judgement a second time fails on the
+    // round trip rather than on the asset: see `derivative` in render.ts.
+    derivative: true,
     ...(trustedCategory(context) ? { category: trustedCategory(context) } : {}),
     ...(context.intent ? { intent: context.intent } : {}),
   });
@@ -1509,6 +1537,178 @@ export const kilnInspectDef: KilnToolDef = createKilnInspectDef();
  * every validate/render/view closure. Tool schemas remain byte-for-byte neutral:
  * the model cannot provide or override this context.
  */
+// =============================================================================
+// kiln_edit — patch an existing program and see the result in one call
+// =============================================================================
+//
+// The refine verb. Authoring a new asset and fixing an existing one are
+// different jobs, and until now only the first had a tool: every MCP surface
+// took a whole program and rendered it, so "change the wheel radius" meant
+// re-emitting the entire file and hoping nothing else moved.
+//
+// Two decisions in here are worth stating, because the obvious alternatives are
+// both wrong.
+//
+// It is STATELESS. The in-process surface keeps a working buffer across turns,
+// and porting that to MCP would have meant session state living in the server
+// while the host agent holds the same program on disk -- two copies, no
+// reconciliation, and a desync the model cannot see. Over MCP the host owns the
+// text, which is the invariant the rest of this transport already keeps. So the
+// caller passes the code in and gets the patched code back, and there is exactly
+// one copy at every moment.
+//
+// It is ALL-OR-NOTHING. Edits apply in order against a buffer seeded from
+// `code`, and if any one of them fails to match, nothing is returned but the
+// error. A partial application would hand back a program in a state the model
+// did not ask for and would have to diff against its own intent to discover.
+// Failing whole means the retry is the same call with a corrected edit.
+//
+// The render is folded in for the same reason `kiln_render` collapses metrics
+// and views: the loop is edit-then-look, and splitting it across two calls
+// doubles the round trips for no gain.
+//
+// Like `kilnRenderViewsDef`, this sits OUTSIDE `createKilnToolRegistry`. That
+// array is the frozen four-tool bench baseline and adding to it would silently
+// change what the benchmark measures. The in-process agent does not need this
+// def either -- it has a working buffer across turns and its own edit tools, so
+// `kiln_edit` is reached through `kilnMcpToolDefs()`, where the host holds the
+// program and nothing else does.
+
+const editOperationInput = z.object({
+  oldString: z
+    .string()
+    .describe(
+      'The exact text to replace, copied verbatim from the program (including whitespace and ' +
+        'indentation, and with no line-number prefixes). Must be unique unless replaceAll is true.',
+    ),
+  newString: z.string().describe('The replacement text. Use an empty string to delete.'),
+  replaceAll: z
+    .boolean()
+    .optional()
+    .describe('Replace every occurrence instead of failing when oldString matches more than once.'),
+});
+
+const editInput = z.object({
+  code: z.string().describe('The Kiln program to patch. The full current source.'),
+  edits: z
+    .array(editOperationInput)
+    .min(1)
+    .max(20)
+    .describe(
+      'Edits applied in order against the program. If any one fails to match, none are applied ' +
+        'and the reply says which. Batch related changes into a single call.',
+    ),
+  render: z
+    .boolean()
+    .optional()
+    .describe(
+      'Render the patched program and return the views (default true). false = patch only.',
+    ),
+  capture: captureInput,
+});
+
+/** Result of one `kiln_edit` call. */
+export interface KilnEditResult {
+  ok: boolean;
+  /** Why the call failed. Present only when ok is false. */
+  error?: string;
+  /** 1-based index of the edit that failed to apply. */
+  failedEdit?: number;
+  /** How to fix the failure. */
+  hint?: string;
+  /** The patched program. Present only when every edit applied. */
+  code?: string;
+  /** Occurrences replaced, per edit, in the order given. */
+  applied?: { occurrences: number }[];
+  /** Unified diff from the submitted code to the patched code. */
+  diff?: string;
+  /** The render of the patched program, when render was not disabled. */
+  render?: KilnRenderViewsResult;
+  /** Six-view PNG, lifted from the render so transports can attach it as an image. */
+  pngBase64?: string;
+}
+
+async function runEdit(
+  input: z.infer<typeof editInput>,
+  context: KilnToolContext,
+): Promise<KilnEditResult> {
+  const buffer = new KilnDraftBuffer(input.code);
+  const applied: { occurrences: number }[] = [];
+
+  for (const [index, edit] of input.edits.entries()) {
+    const result = buffer.apply(edit);
+    if (!result.ok) {
+      return {
+        ok: false,
+        failedEdit: index + 1,
+        error: result.error,
+        ...(result.hint ? { hint: result.hint } : {}),
+        // No `code`: nothing was applied, so there is no new program to report.
+      };
+    }
+    applied.push({ occurrences: result.occurrences });
+  }
+
+  const code = buffer.code;
+  const diff = unifiedDiff(input.code, code, {
+    fromLabel: 'before',
+    toLabel: 'after',
+  });
+
+  if (input.render === false) return { ok: true, code, applied, diff };
+
+  const rendered = await runRenderViews(
+    { code, ...(input.capture ? { capture: input.capture } : {}) } as z.infer<
+      typeof renderViewsInput
+    >,
+    context,
+  );
+
+  // Lift the image to the top level and strip it from the nested result, so the
+  // PNG crosses the wire once rather than being carried in both places.
+  const { pngBase64, ...renderJson } = rendered as KilnRenderViewsResult & { pngBase64?: string };
+  return {
+    ok: true,
+    code,
+    applied,
+    diff,
+    render: renderJson as KilnRenderViewsResult,
+    ...(pngBase64 ? { pngBase64 } : {}),
+  };
+}
+
+const KILN_EDIT_DESCRIPTION =
+  'Patch an EXISTING Kiln program with exact-string replacements and render the result in one ' +
+  'call. This is the refine verb: use it to change an asset you already have rather than ' +
+  're-emitting the whole file, so every line you did not touch stays byte-for-byte identical and ' +
+  'the reply carries a unified diff of what actually changed. Pass the full current source as ' +
+  '`code` and one or more { oldString, newString } edits, copied verbatim from that source. ' +
+  'Edits apply in order and the call is all-or-nothing: if any oldString does not match, or ' +
+  'matches more than once without replaceAll, NOTHING is applied and the reply names the edit ' +
+  'that failed -- fix it and call again. The patched program comes back as `code`; write it to ' +
+  'your file to keep it. Renders by default, so you see the change immediately; pass ' +
+  'render:false to patch without rendering. Writes no files.';
+
+/** Create the refine/edit definition with host-owned QA context. */
+export function createKilnEditDef(context: KilnToolContext = {}): KilnToolDef {
+  const statefulContext = withViewEvidenceHistory(context);
+  return {
+    name: 'kiln_edit',
+    description: KILN_EDIT_DESCRIPTION,
+    inputSchema: editInput,
+    run: async (input) => runEdit(editInput.parse(input), statefulContext),
+    media: (output) => {
+      const o = output as KilnEditResult | undefined;
+      if (!o || typeof o.pngBase64 !== 'string' || o.pngBase64.length === 0) return undefined;
+      const { pngBase64: _png, ...json } = o;
+      return { png: new Uint8Array(Buffer.from(o.pngBase64, 'base64')), json };
+    },
+  };
+}
+
+/** Neutral compatibility export. */
+export const kilnEditDef: KilnToolDef = createKilnEditDef();
+
 export function createKilnToolRegistry(context: KilnToolContext = {}): KilnToolDef[] {
   return [
     {
@@ -1517,6 +1717,9 @@ export function createKilnToolRegistry(context: KilnToolContext = {}): KilnToolD
         'List the Kiln sandbox primitives available to generated 3D code: geometry helpers (boxGeo, cylinderXGeo, capsuleGeo, ...), materials (gameMaterial, glassMaterial, ...), structure (createRoot, createPart, createPivot), animation, CSG, arrays, UV, and textures. Call this before writing Kiln code to discover exact signatures and idiomatic usage. Optionally filter by category.',
       inputSchema: listPrimitivesInput,
       run: async (input) => runListPrimitives(listPrimitivesInput.parse(input)),
+      // The `primitives` array and `text` carry identical information; the model
+      // reads the text. Sending both is what made this call 90 KB.
+      text: (output) => (output as { text: string }).text,
     },
     {
       name: 'kiln_validate',

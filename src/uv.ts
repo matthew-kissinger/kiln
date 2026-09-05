@@ -202,6 +202,7 @@ export async function autoUnwrap(
   };
 
   if (!out.getAttribute('normal')) out.computeVertexNormals();
+  repairZeroNormals(out);
 
   // xatlas can pack every chart and still hand back a mesh with no coords1 when
   // the input degenerates. Better to say so than to return a geometry whose
@@ -229,4 +230,72 @@ function toIndexed(geo: THREE.BufferGeometry): THREE.BufferGeometry {
   const out = geo.clone();
   out.setIndex(new THREE.BufferAttribute(indices, 1));
   return out;
+}
+
+/**
+ * Replace any zero-length or non-finite normal with one derived from the faces
+ * that use it.
+ *
+ * A CSG result routinely carries a few zero-area triangles -- Manifold produces
+ * them where cutters meet a curved surface at a shallow angle. They are
+ * invisible, they survive the atlas, and `computeVertexNormals` cannot give
+ * them a direction: the cross product of two collinear edges is the zero
+ * vector, so every vertex touched only by such triangles ends up at (0, 0, 0).
+ * glTF rejects that (`GLTF_ACCESSOR_VECTOR3_NON_UNIT`), so an asset that looks
+ * finished fails export. Measured on a torus shell cut to an arc: 118 of 662.
+ *
+ * Only the broken normals are rebuilt, from the non-degenerate faces around
+ * them. Rebuilding the whole attribute would be no more correct and would throw
+ * away the normals xatlas already carried through correctly.
+ */
+function repairZeroNormals(geo: THREE.BufferGeometry): void {
+  const normal = geo.getAttribute('normal') as THREE.BufferAttribute | undefined;
+  const position = geo.getAttribute('position') as THREE.BufferAttribute | undefined;
+  const index = geo.getIndex();
+  if (!normal || !position || !index) return;
+
+  const broken = new Set<number>();
+  for (let i = 0; i < normal.count; i++) {
+    const x = normal.getX(i);
+    const y = normal.getY(i);
+    const z = normal.getZ(i);
+    if (!Number.isFinite(x + y + z) || Math.hypot(x, y, z) < 1e-6) broken.add(i);
+  }
+  if (broken.size === 0) return;
+
+  const acc = new Float32Array(normal.count * 3);
+  const a = new THREE.Vector3();
+  const b = new THREE.Vector3();
+  const c = new THREE.Vector3();
+  const face = new THREE.Vector3();
+  const edge = new THREE.Vector3();
+  for (let t = 0; t + 2 < index.count; t += 3) {
+    const tri = [index.getX(t), index.getX(t + 1), index.getX(t + 2)];
+    if (!tri.some((i) => broken.has(i))) continue;
+    a.fromBufferAttribute(position, tri[0]!);
+    b.fromBufferAttribute(position, tri[1]!);
+    c.fromBufferAttribute(position, tri[2]!);
+    // Area-weighted, which is what the cross product already gives: a sliver
+    // triangle should not pull the normal of the vertex it happens to touch.
+    face.subVectors(c, a);
+    edge.subVectors(b, a);
+    face.crossVectors(edge, face);
+    for (const i of tri) {
+      if (!broken.has(i)) continue;
+      const o = i * 3;
+      acc[o] = acc[o]! + face.x;
+      acc[o + 1] = acc[o + 1]! + face.y;
+      acc[o + 2] = acc[o + 2]! + face.z;
+    }
+  }
+
+  for (const i of broken) {
+    face.set(acc[i * 3]!, acc[i * 3 + 1]!, acc[i * 3 + 2]!);
+    // A vertex used only by degenerate triangles has no direction to recover.
+    // Any unit vector satisfies the validator; +Y is the least surprising.
+    if (face.lengthSq() < 1e-20) face.set(0, 1, 0);
+    else face.normalize();
+    normal.setXYZ(i, face.x, face.y, face.z);
+  }
+  normal.needsUpdate = true;
 }
