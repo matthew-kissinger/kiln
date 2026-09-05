@@ -4,7 +4,7 @@ import { Suspense, useEffect, useMemo, useState } from 'react';
 import * as THREE from 'three';
 import { RoomEnvironment } from 'three/examples/jsm/environments/RoomEnvironment.js';
 
-import { REPO, asset } from './App';
+import { REPO, asset } from './repo';
 import type { Specimen } from './types';
 
 const num = (n: number) => n.toLocaleString('en-US');

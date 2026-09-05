@@ -1,6 +1,6 @@
 import { useMemo, useState } from 'react';
 
-import { REPO, asset } from './App';
+import { REPO, asset } from './repo';
 import type { Specimen } from './types';
 
 const num = (n: number) => n.toLocaleString('en-US');
@@ -57,74 +57,36 @@ function Facet({
 
 export function Gallery({ specimens }: { specimens: Specimen[] }) {
   const [category, setCategory] = useState<string | null>(null);
-  const [harness, setHarness] = useState<string | null>(null);
-  const [cleanRoom, setCleanRoom] = useState(false);
   const [heaviest, setHeaviest] = useState(false);
 
   const categories = useMemo(() => tally(specimens, 'category'), [specimens]);
-  const harnesses = useMemo(() => tally(specimens, 'harness'), [specimens]);
-  const models = useMemo(() => new Set(specimens.map((s) => s.model)).size, [specimens]);
-  const triangles = useMemo(() => specimens.reduce((a, s) => a + s.tris, 0), [specimens]);
-  const cleanRoomCount = useMemo(() => specimens.filter((s) => s.cleanRoom).length, [specimens]);
 
   const shown = useMemo(() => {
-    const rows = specimens.filter(
-      (s) =>
-        (category === null || s.category === category) &&
-        (harness === null || s.harness === harness) &&
-        (!cleanRoom || s.cleanRoom),
-    );
+    const rows = specimens.filter((s) => category === null || s.category === category);
     return heaviest ? [...rows].sort((a, b) => b.tris - a.tris) : rows;
-  }, [specimens, category, harness, cleanRoom, heaviest]);
+  }, [specimens, category, heaviest]);
 
   return (
     <>
       <header className="masthead">
+        <a className="back" href="#/">
+          Kiln
+        </a>
         <h1 className="wordmark">
-          Kiln <span>specimen gallery</span>
+          The <span>specimens</span>
         </h1>
         <p>
-          Every object here is a JavaScript program that a language model wrote, and the mesh you
-          orbit is built from that program in your browser rather than exported from it. Nothing was
-          sculpted by hand and nothing came out of an asset library. The engine, the tools the
-          models used and all fifty programs are <a href={REPO}>on GitHub</a>.
+          Every object here is a JavaScript program a language model wrote, and the mesh you orbit
+          is built from that program in your browser rather than exported from it. Nothing was
+          sculpted by hand and nothing came out of an asset library. Open one to turn it, see the
+          topology under the shading, read the program, or take the GLB. All of it is{' '}
+          <a href={REPO}>on GitHub</a>.
         </p>
-        <div className="tally">
-          <div>
-            <b>{specimens.length}</b>
-            <small>specimens</small>
-          </div>
-          <div>
-            <b>{num(triangles)}</b>
-            <small>triangles</small>
-          </div>
-          <div>
-            <b>{models}</b>
-            <small>models</small>
-          </div>
-          <div>
-            <b>{harnesses.length}</b>
-            <small>harnesses</small>
-          </div>
-        </div>
       </header>
 
-      <nav className="filters" aria-label="Filter the gallery">
+      <nav className="filters" aria-label="Filter the specimens">
         <Facet label="Category" options={categories} value={category} onChange={setCategory} />
-        <Facet label="Written in" options={harnesses} value={harness} onChange={setHarness} />
         <div className="facet">
-          {/* The strongest claim any of these programs makes, so it gets its own
-              control: the model had a brief and the Kiln skills, and nothing
-              else -- no repository to read, no finished example to copy. */}
-          <button
-            type="button"
-            className="chip"
-            aria-pressed={cleanRoom}
-            onClick={() => setCleanRoom(!cleanRoom)}
-            title="Written in a directory holding only a brief and the Kiln skills"
-          >
-            clean room <em>{cleanRoomCount}</em>
-          </button>
           <button
             type="button"
             className="chip"
@@ -151,8 +113,11 @@ export function Gallery({ specimens }: { specimens: Specimen[] }) {
             <div className="meta">
               <h3>{title(s.name)}</h3>
               <p>{s.caption}</p>
+              {/* The model stays on the card. It is an attribution, not a
+                  statistic: somebody else wrote this and the page should say so
+                  without being asked. */}
               <div className="by">
-                <i>{s.model}</i> · {s.harness}
+                <i>{s.model}</i>
               </div>
             </div>
           </a>
@@ -164,6 +129,7 @@ export function Gallery({ specimens }: { specimens: Specimen[] }) {
           Built by running <code>examples/*.kiln.js</code> through the engine at deploy time, so a
           program and the model on this page cannot disagree.
         </span>
+        <a href="#/">Home</a>
         <a href={REPO}>Repository</a>
         <a href={`${REPO}/tree/main/examples`}>The programs</a>
         <a href={`${REPO}/blob/main/docs/install.md`}>Install the plugin</a>

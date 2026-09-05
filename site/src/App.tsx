@@ -1,24 +1,16 @@
 import { Suspense, lazy, useEffect, useState } from 'react';
 
 import { Gallery } from './Gallery';
+import { Home } from './Home';
+import { asset } from './repo';
 import type { Specimen } from './types';
 
 /**
- * Split, because three and drei are a megabyte and the gallery does not need a
- * byte of either. The landing page is a grid of fifty webp thumbnails and should
- * paint like one; the renderer arrives when somebody actually asks for a mesh.
+ * Split, because three and drei are a megabyte and neither the front page nor
+ * the gallery needs a byte of either. Both are text and webp thumbnails and
+ * should paint like it; the renderer arrives when somebody asks for a mesh.
  */
 const Viewer = lazy(() => import('./Viewer').then((m) => ({ default: m.Viewer })));
-
-export const REPO = 'https://github.com/matthew-kissinger/kiln';
-
-/**
- * Relative to the document, not to the origin. The build sets a relative base so
- * one artifact serves correctly both from a custom domain at the root and from a
- * project page under a path, and the fetches have to follow the same rule or the
- * second case quietly 404s every GLB.
- */
-export const asset = (path: string) => new URL(path, document.baseURI).href;
 
 /** Outside the component, so the listener effect has nothing to depend on. */
 const readRoute = () => decodeURIComponent(location.hash.replace(/^#\/?/, ''));
@@ -49,12 +41,12 @@ export function App() {
       .catch(() => setFailed(true));
   }, []);
 
-  // The whole page is driven by one fetch, so it is worth saying what happened
-  // rather than leaving an empty grid that looks like a design decision.
+  // Every route here is driven by one fetch, so it is worth saying what happened
+  // rather than leaving an empty page that looks like a design decision.
   if (failed) {
     return (
       <div className="loading" style={{ position: 'static', height: '100%' }}>
-        the gallery index did not load
+        the specimen index did not load
       </div>
     );
   }
@@ -68,5 +60,9 @@ export function App() {
       </Suspense>
     );
   }
-  return <Gallery specimens={specimens} />;
+  // Anything unrecognised lands on the front page rather than a 404, because the
+  // only way to get here with a bad route is a stale deep link into a renamed
+  // specimen, and the front page is what that reader wanted anyway.
+  if (route === 'gallery') return <Gallery specimens={specimens} />;
+  return <Home specimens={specimens} />;
 }

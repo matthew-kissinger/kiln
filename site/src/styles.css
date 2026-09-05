@@ -113,32 +113,11 @@ button {
   text-decoration-color: var(--flame);
 }
 
-.tally {
-  display: flex;
-  gap: 26px;
-  margin-left: auto;
-}
-
-.tally div {
-  display: flex;
-  flex-direction: column;
-  gap: 2px;
-}
-
-.tally b {
-  font-family: var(--mono);
-  font-size: 19px;
-  font-weight: 500;
-  font-variant-numeric: tabular-nums;
-  line-height: 1;
-}
-
-.tally small {
-  font-family: var(--mono);
-  font-size: 10px;
-  letter-spacing: 0.13em;
-  text-transform: uppercase;
-  color: var(--faint);
+/* The way back to the front page, as an eyebrow on its own line rather than a
+   fourth thing competing for the baseline the wordmark sits on. */
+.masthead .back {
+  flex: 0 0 100%;
+  margin-bottom: -14px;
 }
 
 /* ----------------------------------------------------------------- filters */
@@ -557,15 +536,312 @@ button {
   color: var(--flame);
 }
 
+/* -------------------------------------------------------------- front page */
+
+/*
+ * Read, not browsed. One measured column the whole way down, because everything
+ * on this page is either a sentence or a command somebody is about to run, and
+ * both are ruined by a wide measure. The grid stays in the gallery, where the
+ * content is actually two-dimensional.
+ */
+.doc {
+  max-width: 74ch;
+  margin: 0 auto;
+  padding: 0 32px;
+}
+
+.hero {
+  padding: 88px 0 64px;
+}
+
+.hero .wordmark {
+  font-size: 42px;
+  margin-bottom: 28px;
+}
+
+.lede {
+  max-width: 66ch;
+  margin: 0 0 18px;
+  font-size: 17px;
+  line-height: 1.62;
+  color: var(--dim);
+  text-wrap: pretty;
+}
+
+.lede em {
+  font-style: normal;
+  color: var(--ink);
+}
+
+.cta {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  margin-top: 30px;
+}
+
+.button {
+  display: inline-flex;
+  align-items: center;
+  padding: 9px 17px;
+  border: 1px solid var(--rule);
+  border-radius: 2px;
+  background: var(--panel);
+  font-family: var(--mono);
+  font-size: 12px;
+  letter-spacing: 0.06em;
+  text-decoration: none;
+  color: var(--ink);
+  transition: border-color 0.14s ease, color 0.14s ease;
+}
+
+.button:hover {
+  border-color: var(--flame);
+  color: var(--flame);
+}
+
+.button.primary {
+  border-color: var(--flame);
+  background: var(--flame);
+  color: #17110b;
+  font-weight: 600;
+}
+
+.button.primary:hover {
+  filter: brightness(1.1);
+  color: #17110b;
+}
+
+.button.ghost {
+  background: none;
+}
+
+.band {
+  padding: 44px 0;
+  border-top: 1px solid var(--rule);
+}
+
+.band h2 {
+  margin: 0 0 16px;
+  font-size: 23px;
+  font-weight: 600;
+  letter-spacing: -0.02em;
+  text-wrap: balance;
+}
+
+.band p {
+  max-width: 66ch;
+  margin: 0 0 18px;
+  color: var(--dim);
+  text-wrap: pretty;
+}
+
+.band p:last-child {
+  margin-bottom: 0;
+}
+
+.band a {
+  color: var(--ink);
+  text-decoration-color: var(--rule);
+  text-underline-offset: 3px;
+}
+
+.band a:hover {
+  text-decoration-color: var(--flame);
+}
+
+.band code {
+  font-family: var(--mono);
+  font-size: 13px;
+  color: var(--ink);
+}
+
+.aside {
+  font-size: 13px;
+  color: var(--faint);
+}
+
+/* The one thing on the page that is not prose: what a config file got wrong for
+   somebody, sitting where they will read it after copying the command. */
+.note {
+  padding-left: 14px;
+  border-left: 2px solid var(--flame);
+  font-size: 14px;
+}
+
+/* ---------------------------------------------------------------- code slab */
+
+.code {
+  position: relative;
+  margin: 0 0 18px;
+  border: 1px solid var(--rule);
+  border-radius: 3px;
+  background: var(--stage);
+}
+
+.code pre {
+  margin: 0;
+  padding: 16px 68px 16px 18px;
+  overflow-x: auto;
+}
+
+.code code {
+  font-family: var(--mono);
+  font-size: 13px;
+  line-height: 1.7;
+  white-space: pre;
+  color: var(--ink);
+}
+
+.copy {
+  position: absolute;
+  top: 9px;
+  right: 9px;
+  padding: 4px 9px;
+  border: 1px solid var(--rule);
+  border-radius: 2px;
+  background: var(--panel);
+  font-family: var(--mono);
+  font-size: 10px;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: var(--faint);
+}
+
+.copy:hover {
+  border-color: var(--flame);
+  color: var(--flame);
+}
+
+/* -------------------------------------------------------------------- tabs */
+
+.tabs {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 2px;
+  margin-bottom: -1px;
+}
+
+.tab {
+  padding: 8px 14px;
+  border: 1px solid transparent;
+  border-bottom: 0;
+  border-radius: 3px 3px 0 0;
+  font-family: var(--mono);
+  font-size: 12px;
+  color: var(--faint);
+}
+
+.tab:hover {
+  color: var(--dim);
+}
+
+.tab[aria-selected="true"] {
+  border-color: var(--rule);
+  background: var(--stage);
+  color: var(--flame);
+}
+
+.tabs + .code {
+  border-top-left-radius: 0;
+}
+
+/* ------------------------------------------------------------------- strip */
+
+.strip {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 10px;
+  margin-bottom: 22px;
+}
+
+.chip-card {
+  display: block;
+  border: 1px solid var(--rule);
+  border-radius: 3px;
+  background: var(--stage);
+  text-decoration: none;
+  overflow: hidden;
+  transition: border-color 0.14s ease;
+}
+
+.chip-card:hover {
+  border-color: var(--flame);
+}
+
+.chip-card img {
+  display: block;
+  width: 100%;
+  aspect-ratio: 1;
+  object-fit: contain;
+}
+
+.chip-card span {
+  display: block;
+  padding: 0 8px 8px;
+  font-family: var(--mono);
+  font-size: 10px;
+  letter-spacing: 0.06em;
+  color: var(--faint);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+/* --------------------------------------------------------------- repo map */
+
+.map {
+  margin: 0;
+  color: var(--dim);
+}
+
+.map dt {
+  margin-top: 18px;
+  font-family: var(--mono);
+  font-size: 13px;
+}
+
+.map dt:first-child {
+  margin-top: 0;
+}
+
+.map dt a {
+  color: var(--flame);
+  text-decoration-color: var(--rule);
+  text-underline-offset: 3px;
+}
+
+.map dd {
+  max-width: 62ch;
+  margin: 4px 0 0;
+}
+
+.doc .foot {
+  margin-top: 20px;
+  padding-left: 0;
+  padding-right: 0;
+}
+
 @media (max-width: 720px) {
+  .doc {
+    padding: 0 18px;
+  }
+
+  .hero {
+    padding: 48px 0 40px;
+  }
+
+  .hero .wordmark {
+    font-size: 32px;
+  }
+
+  .strip {
+    grid-template-columns: repeat(2, 1fr);
+  }
+
   .masthead {
     gap: 18px;
     padding: 24px 18px 20px;
-  }
-
-  .tally {
-    margin-left: 0;
-    gap: 20px;
   }
 
   .filters {
