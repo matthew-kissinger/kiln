@@ -56,11 +56,19 @@ describe('repository reliability contracts', () => {
     expect(bunfig).toContain('coverageReporter = ["text", "lcov"]');
     expect(bunfig).not.toContain('coverageThreshold =');
     expect(bunfig).toContain('coveragePathIgnorePatterns = [');
-    expect(thresholds).toEqual({
-      measuredBaseline: { functions: 95.96, lines: 92.54 },
-      thresholds: { functions: 92, lines: 91 },
-    });
-    expect(readme).toContain('95.96% functions / 92.54% lines');
+    // The enforced ratchets are policy: they must not move without someone
+    // noticing, so they stay literal here. The measured baseline is an
+    // observation, and it legitimately moves whenever code lands — so it is
+    // checked for shape and then used to verify the README quotes it, rather
+    // than written out a third time in this file. Three copies of one number
+    // drift, and the copy in the test is the one that turns a stale sentence
+    // into a red build with no idea which of the three is right.
+    expect(Object.keys(thresholds).sort()).toEqual(['measuredBaseline', 'thresholds']);
+    expect(thresholds.thresholds).toEqual({ functions: 92, lines: 91 });
+    const { functions, lines } = thresholds.measuredBaseline;
+    expect(functions).toBeGreaterThanOrEqual(thresholds.thresholds.functions);
+    expect(lines).toBeGreaterThanOrEqual(thresholds.thresholds.lines);
+    expect(readme).toContain(`${functions}% functions / ${lines}% lines`);
     expect(readme).toContain('threshold decreases require an explicit measured rationale.');
     expect(workflow).toContain('run: bun run test:coverage');
     expect(workflow).toContain('uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02');
