@@ -19,7 +19,8 @@ frames across render, inspection and animation, with bounded grids or separate
 images and explicit fidelity reporting.
 
 The website leads with a single station model and a real source-edit demonstration.
-Its six featured examples use verified Astra, Gemini and Muse credits. A new
+Its ten featured examples use verified Astra, Gemini and Muse credits. The warm,
+varied homepage includes developer entry points and a plain-text agent reading guide. A new
 submersible joins the selection; the tidal observatory and fire lookout tower are removed from the public
 gallery and generated downloads, with source and evaluation history retained. The vessel,
 canopy and instrument studies remain useful evaluation examples without being

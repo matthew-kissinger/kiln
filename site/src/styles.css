@@ -1110,3 +1110,5 @@ fieldset.tabs { padding:0; border:0; min-width:0; }
 .editorial-grid .feature-title { margin: 0; text-transform: capitalize; }
 .editorial-grid .feature-caption { margin: 0 0 6px; }
 @media (max-width: 800px) { .reading-grid { grid-template-columns: 1fr; gap: 24px; } }
+.editorial-grid .feature-lead .feature-image img,
+.editorial-grid .feature-wide .feature-image img { object-fit: cover; }
