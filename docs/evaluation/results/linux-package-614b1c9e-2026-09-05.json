@@ -1,0 +1,44 @@
+{
+  "status": "passed",
+  "image": "node:22.23.1-bookworm-slim@sha256:6c74791e557ce11fc957704f6d4fe134a7bc8d6f5ca4403205b2966bd488f6b3",
+  "tarball": "q1-kiln-614b1c9e.tgz",
+  "tarballSha256": "614b1c9ea2adf55bd7b4c1b058c0b7c7f4dd24f76f8a2d22267c6fb2221281ef",
+  "containerMemoryBytes": 2147483648,
+  "containerCpus": 2,
+  "timedOut": false,
+  "exitCode": 0,
+  "smoke": {
+    "root": "[ephemeral Linux workspace removed with container]",
+    "platform": "linux",
+    "arch": "x64",
+    "node": "v22.23.1",
+    "checks": [
+      "direct-node-cli-help",
+      "tarball-install-without-dev-dependencies",
+      "node-cli-entry",
+      "npm-init-workspace",
+      "csg-wasm",
+      "uv-wasm",
+      "cpu-png",
+      "cross-cwd-cli-source-store",
+      "packaged-node-worker",
+      "mcp-discovery",
+      "source-reference-edit-images",
+      "server-restart-persistence",
+      "exact-source-export"
+    ],
+    "status": "passed",
+    "npm": "12.0.1",
+    "tarball": "/input/candidate.tgz",
+    "tarballSha256": "614b1c9ea2adf55bd7b4c1b058c0b7c7f4dd24f76f8a2d22267c6fb2221281ef",
+    "engineVersion": "0.6.0",
+    "bundleHashes": {
+      "cli": "fb05f82f0fbabf2b7397d0147c9f53c3fd66253aeaf156f084a08d6b77137535",
+      "mcp": "db85fca40d316805cd3b8b9fdecd5df63f8e78d7c3f162d8e3b35f79e131b7e2"
+    },
+    "editResult": {
+      "programRef": "sha256:7fd2baaf40e0159bf85ede698533c8907aeba206c855a454e64b40e2ebc53018",
+      "parentRef": "sha256:bd1be775f34532a3ce756e8253709e85df5ed0549394866b98f6abce2617f11e"
+    }
+  }
+}

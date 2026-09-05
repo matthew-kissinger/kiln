@@ -1,81 +1,27 @@
 ---
 name: kiln-qa-asset
-description: Wire a finished GLB into the user's actual project and prove it works by looking at it running, then repair what fails. Use after generating or receiving a 3D asset, when integrating a model into a game or web app, or when asked whether an asset is actually usable.
+description: Check a Kiln asset's geometry, views, export fidelity, and behavior in its destination project. Use for delivery review, loading, materials, animation, collision, or runtime defects.
 license: MIT
 ---
 
-# QA an asset in the real project
+# Verify an asset for its intended use
 
-A structurally valid GLB is not a usable asset. This skill is the step between "it built" and "it
-works in the thing you are shipping". It is renderer, framework, and art-style agnostic.
+Match the checks to the requested delivery. A source build, an image review, a GLB export, and a working asset in a game are different pieces of evidence.
 
-## Workflow
+## Before integration
 
-1. **Verify the file.** Check GLB magic (`glTF`), that the JSON chunk parses, and the byte length.
-   Distinguish a missing optional file from a corrupt required one -- they have different fixes.
-2. **Derive the integration manifest.** `inspectGlbIntegration(bytes)` from `kiln/render` returns a
-   `kiln.integration-manifest.v1` from the artifact alone. Read it *before* writing any transform.
-   Never synthesize the fields by eyeballing the model.
-3. **Wire it into the project's own stack.** Their loader, their scene graph, their build. Do not
-   introduce a new renderer or framework to make the asset easier to test.
-4. **Run the real project in a browser and look at it.** Load, controls, camera, traversal, layout,
-   responsive behavior, console and page errors. Screenshot and *inspect the screenshot*. DOM
-   assertions do not prove that a scene looks right.
-5. **Repair, then re-run.** Fix application code, camera, lighting, or placement first -- most
-   "asset problems" are integration problems. Regenerate the asset only for an actual asset defect.
-   Re-run the failed journey plus the regressions it could touch.
-6. **Report candidly.** What worked, what failed, what was confusing, what you repaired, what risk
-   remains. Link every claim to the evidence that supports it.
+Read validation/build findings and export warnings. `kiln_validate` only checks source; render and inspect the actual geometry when that is the task. Choose broad or part-specific views that reveal the suspected defect. Copy the returned `programRef` exactly for every view, whether it is a short `p_` handle or a full SHA-256 reference; request source text only when a repair needs it. A handle identifies a revision in its store; use full source and artifact hashes for integrity evidence.
 
-## What the manifest tells you
+Distinguish expected open sheets from invalid solid topology. `geometryDiagnostics` reports boundary edges, non-manifold edges, orientation conflicts and degenerates; it does not prove absence of self-intersection. A capped loft, shell-like surface, or sampled field is not automatically a manufacturing-grade solid.
 
-| Field | Use it for |
-|---|---|
-| `units` / `axes` | always metres, +X forward / +Y up / +Z right -- mismatched imports show here |
-| `bounds` | scale relative to the project's own objects; never guess scale from category |
-| `ground.offsetToGround`, `ground.grounded` | the exact Y correction to sit the asset on the floor |
-| `defaultScene` | which scene to instantiate; a missing default breaks many loaders |
-| `renderMetrics.drawCalls`, `uniqueMaterials` | runtime cost, which is draw calls, not triangles |
-| `structuralQa` | validator errors/warnings that survived generation |
-| `artifactSha256` | that the file you are wiring is the file you were given |
+Check material and camera fidelity independently. A fallback image may still answer a geometry question, but it cannot establish faithful PBR appearance. Keep unresolved export or material findings visible in the delivery report.
 
-**`visualQa` is always `not_assessed`.** That is literal, and it is the reason this skill exists.
-Nothing upstream has looked at the asset in its real scene. You are the first thing that does.
+## In the destination
 
-## Failures worth checking for specifically
+Use the project's existing loader and renderer. Read the [integration checks](references/integration-checks.md) for manifests, frames, composition options, and limits.
 
-- **Scale.** Correct-looking in isolation, wrong next to a character controller.
-- **Ground contact.** `offsetToGround` applied in the wrong direction sinks or floats the asset.
-- **Orientation.** An asset authored to the contract still lands sideways if the project's forward
-  axis differs. Fix it in the project's import transform, not by re-authoring the asset.
-- **Material read.** If the asset was authored against the flat-shaded CPU rasterizer, this is the
-  first time real lighting touches it. Metal and texture problems appear here or nowhere.
-- **Occlusion and collision.** Geometry that blocks the camera or traps the player.
-- **Draw calls.** A visually fine asset that costs 400 draws is a performance bug, not a win.
+Confirm scale alongside existing objects, forward direction, ground contact, placement, and useful viewing distance. Check textures and lighting in the destination renderer. Exercise relevant animation, interaction, and collision; sample intermediate poses when checking motion. For web projects use the actual browser view, and for native projects use the destination runtime.
 
-## The visual bar
+Reproduce defects before fixing them. Correct placement/loader/lighting problems in integration code; change asset source for a geometry or rig defect. Recheck the affected behavior after a repair.
 
-`visualQa: not_assessed` means you own the aesthetic verdict, and a functional pass is not one.
-Once the asset loads correctly in the real scene, judge it the way an art director would:
-
-- **Name what it is competing with.** The real object, or a production asset from a comparable
-  title. Write it down.
-- **Ask which one is obviously the generated one, and what gives it away.** Uniformity, missing
-  secondary structure, absent wear, parts parked against each other instead of joined, edges with no
-  chamfer catching no light. Name the specific giveaway.
-- **Report it as a finding, not a footnote.** "Loads correctly; reads as a blockout next to the
-  surrounding set dressing" is the useful sentence. An asset that works and looks cheap is a real
-  defect, and it is the one nothing upstream can catch.
-
-Detail is not a cost here -- Kiln has no triangle budget and draw calls track materials, not
-geometry. If the fix is "author more of it", that fix is available.
-
-## Boundaries
-
-- A successful load is not a QA result. Neither is a passing type check.
-- Never overwrite the user's files without consent, and never let a downloaded filename escape the
-  project root.
-- Stop after bounded repair attempts with a reproducible case and a precise next action, rather than
-  looping.
-- Do not soften the report to make it look complete. A named unresolved problem is more useful than
-  a clean summary that is wrong.
+Report the exact artifacts tested, what you ran and saw, repaired defects, and checks left unperformed. Validation, `visualQa: not_assessed`, an AABB overlap test, or a low triangle count is not a substitute for visual or runtime verification.

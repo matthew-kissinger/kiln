@@ -1,0 +1,35 @@
+{
+  "ok": true,
+  "captureIdentity": {
+    "version": "kiln.capture-producer.v1",
+    "fingerprint": "sha256:10f346ec6287c8d635dabe4668d72925080e6fe3d059dd7a9252f2694ce595c2",
+    "instanceId": "457e4f85-753d-4e1a-ac20-f7d20c989694"
+  },
+  "rendererId": "dawn-d3d12:nvidia-geforce-rtx-3070:D3D12 driver version 32.0.16.1074",
+  "backend": "d3d12",
+  "adapter": {
+    "vendor": "nvidia",
+    "architecture": "ampere",
+    "device": "nvidia-geforce-rtx-3070",
+    "description": "D3D12 driver version 32.0.16.1074"
+  },
+  "capabilities": [
+    "render.views",
+    "render.views.checked",
+    "render.cameras.perspective-v1",
+    "render.targets.rectangular-v1",
+    "render.outputs.sha256-v1",
+    "render.fidelity.v1",
+    "render.operational-evidence.v1",
+    "render.profile.neutral-studio-v1",
+    "render.profile.gallery-studio-v1",
+    "render.beauty",
+    "auth.x-render-token"
+  ],
+  "presentationProfile": "neutral-studio-v1",
+  "lightingPresetIds": [
+    "neutral-studio-v1",
+    "gallery-studio-v1"
+  ],
+  "authRequired": true
+}

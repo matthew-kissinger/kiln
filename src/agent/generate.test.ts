@@ -473,7 +473,7 @@ describe('generateKilnAsset viewRenderPort (B3b/B4)', () => {
       }),
     });
     expect(garbage.renderDegraded).toBe(true);
-    expect(garbage.renderDegradedReason).toContain('bad signature');
+    expect(garbage.renderDegradedReason).toContain('invalid PNG header');
     expect(garbage.views).toBeInstanceOf(Buffer);
 
     const empty = await generateKilnAsset({
@@ -635,25 +635,29 @@ describe('generateKilnAsset viewRenderPort (B3b/B4)', () => {
     expect(Buffer.compare(degraded.views!, cpu.png)).toBe(0);
   });
 
-  test('T3.3: per-cell zoom declines the port rather than silently auto-framing', async () => {
+  test('T3.3: per-cell zoom sends an exact camera and declines an unattested legacy reply', async () => {
     runImpl = okRun;
     let portCalls = 0;
+    let requested: import('../composer/render-port').PbrRenderRequest | undefined;
     const capture = { cells: [{ azimuthDeg: 45, elevationDeg: 20, zoom: 2 }] };
     const r = await generateKilnAsset({
       prompt: 'a crate',
       captureViews: true,
       capture,
-      viewRenderPort: async () => {
+      viewRenderPort: async (request) => {
+        requested = request;
         portCalls++;
         return { ok: true, rendererId: 'gpu:test', viewsPng: await stubCells(1) };
       },
     });
-    // The port contract carries directions only — it cannot express zoom, and
-    // returning auto-framed cells for a zoom request would be a silent wrong
-    // answer. Not even attempted.
-    expect(portCalls).toBe(0);
+    expect(portCalls).toBe(1);
+    expect(requested?.viewDirs).toBeUndefined();
+    expect(requested?.cameras?.[0]).toMatchObject({
+      projection: 'orthographic',
+      halfHeight: expect.any(Number),
+    });
     expect(r.renderDegraded).toBe(true);
-    expect(r.renderDegradedReason).toContain('zoom is not supported');
+    expect(r.renderDegradedReason).toContain('camera receipt missing');
     const { renderGlbViewGrid } = await import('../views');
     expect(Buffer.compare(r.views!, (await renderGlbViewGrid(r.glb, { capture })).png)).toBe(0);
   });

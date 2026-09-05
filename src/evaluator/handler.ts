@@ -1,3 +1,4 @@
+import { AuthoringDiagnosticError, type AuthoringDiagnostic } from './authoring-diagnostic';
 import type { RenderGlbOptions, RenderResult } from '../render';
 import { renderGLBInProcess } from '../render';
 import { AssetQaBlockedError } from '../qa/run';
@@ -26,6 +27,7 @@ export interface EvaluatorHandlerControlsV1 {
 function failure(
   requestId: string,
   code: EvaluatorOutcomeCode,
+  diagnostic?: AuthoringDiagnostic,
   qa?: Extract<WireEvaluatorResultV1, { ok: false }>['error']['qa'],
 ): Extract<WireEvaluatorResultV1, { ok: false }> {
   return {
@@ -36,6 +38,7 @@ function failure(
       code,
       message: evaluatorOutcomeMessage(code),
       ...(qa ? { qa } : {}),
+      ...(diagnostic ? { diagnostic } : {}),
     },
   };
 }
@@ -90,7 +93,7 @@ export async function evaluateEvaluatorRequestV1(
     }
   } catch (error) {
     if (error instanceof AssetQaBlockedError) {
-      wire = failure(request.requestId, 'QA_BLOCKED', {
+      wire = failure(request.requestId, 'QA_BLOCKED', undefined, {
         report: error.report,
         stage: error.stage,
         ...(error.gltfValidation ? { gltfValidation: error.gltfValidation } : {}),
@@ -98,7 +101,11 @@ export async function evaluateEvaluatorRequestV1(
     } else if (error instanceof EvaluatorPortError && error.code === 'DEADLINE_EXCEEDED') {
       wire = failure(request.requestId, 'DEADLINE_EXCEEDED');
     } else {
-      wire = failure(request.requestId, 'EXECUTION_REJECTED');
+      wire = failure(
+        request.requestId,
+        'EXECUTION_REJECTED',
+        error instanceof AuthoringDiagnosticError ? error.diagnostic : undefined,
+      );
     }
   } finally {
     clearTimeout(timer);

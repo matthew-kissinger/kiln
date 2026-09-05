@@ -8,14 +8,39 @@ export interface Specimen {
   file: string;
   thumb: string;
   bytes: number;
+  animations?: number;
+  authoredDate?: string;
+  poster?: string;
+  heroPoster?: Record<string, unknown>;
+  source?: string;
+  sourceHash?: string;
+  artifactHash?: string;
+  history?: {
+    brief: { kind: 'recorded' | 'summary'; text: string };
+    revisions: {
+      title: string;
+      description: string;
+      source: string;
+      sourceHash: string;
+      current: boolean;
+    }[];
+  };
+  provenance?: {
+    attribution: string;
+    sourceAccess: string;
+    inheritedContext?: string;
+    startingExample: string;
+    humanIntervention: string;
+    reviewFidelity: string;
+    poster: string;
+    posterReceipt?: Record<string, unknown>;
+  };
   category: string;
   caption: string;
   /** The model that wrote the program, named the way prose names it. */
   model: string;
   /** The agent harness it wrote through. */
   harness: string;
-  /** Written with no access to this repository and no example to copy from. */
-  cleanRoom: boolean;
   tris: number;
   drawCalls: number;
   materials: number;

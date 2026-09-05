@@ -1,7 +1,24 @@
 # Changelog
 
-All notable changes to `@kiln/engine`. This is a **private** package; semver is tracked
-for the consuming app's lockfile + tarball provenance, not public npm releases.
+Changes to `@kiln/engine`. Source and installable packages are distributed through
+GitHub. The package is not published on the npm registry.
+
+## Public OSS snapshot — 2026-09-05
+
+- Short, immutable source references work across rendering, source reads, edits,
+  CLI exports, and MCP restarts. Full hashes remain compatible.
+- Project-local setup and skills support authoring, inspection, and refinement
+  through the CLI, MCP server, and TypeScript tools.
+- Geometry modifiers and configurable asset/part cameras extend the authoring
+  and review workflow.
+- The redesigned site includes 62 selected assets with source downloads, GLB
+  viewers, attribution, and recorded revision histories where available.
+- Mechanical Peacock and Deco Radio include documented maintainer repairs.
+  Brass Tellurion and Victorian Greenhouse remain archived outside the gallery.
+- Package checks cover Windows, Linux, and hosted Apple Silicon/Intel Macs.
+
+The snapshot retains package version 0.6.0. Earlier development notes follow;
+their asset counts and workflow descriptions describe those earlier revisions.
 
 ## [Unreleased]
 

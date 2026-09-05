@@ -1,0 +1,53 @@
+{
+  "harness": "Claude Code 2.1.259",
+  "requestedModel": "claude-opus-5",
+  "initializedModel": "claude-opus-5",
+  "sessionId": "3e7e9645-c13b-446a-86d4-3faba3775990",
+  "servers": [
+    {
+      "name": "kiln_workspace",
+      "status": "connected"
+    }
+  ],
+  "packageSha256": "0d457e8f8763730079da013abfa6662aadc02843f090fcae594c0f711399d16c",
+  "budget": {
+    "calls": 0,
+    "images": 0,
+    "reserved": 0,
+    "maxCalls": 32,
+    "maxImages": 48,
+    "expired": false,
+    "exitCode": 0
+  },
+  "exit": {
+    "code": 1,
+    "timedOut": false,
+    "finishedAt": "2026-09-05T22:20:50.028Z"
+  },
+  "providerError": "Credit balance is too low",
+  "apiErrorStatus": 400,
+  "terminalReason": "api_error",
+  "usage": {
+    "output_tokens_details": {
+      "thinking_tokens": 0
+    },
+    "input_tokens": 0,
+    "cache_creation_input_tokens": 0,
+    "cache_read_input_tokens": 0,
+    "output_tokens": 0,
+    "server_tool_use": {
+      "web_search_requests": 0,
+      "web_fetch_requests": 0
+    },
+    "service_tier": "standard",
+    "cache_creation": {
+      "ephemeral_1h_input_tokens": 0,
+      "ephemeral_5m_input_tokens": 0
+    },
+    "inference_geo": "",
+    "iterations": [],
+    "speed": "standard"
+  },
+  "totalCostUsd": 0,
+  "remainingSessionsStarted": false
+}

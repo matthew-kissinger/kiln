@@ -1,0 +1,1185 @@
+{
+  "url": "http://127.0.0.1:4175/",
+  "assets": 63,
+  "downloads": 235,
+  "histories": 14,
+  "checks": [
+    {
+      "path": "assets/abyssal-surveyor.kiln.js",
+      "sha256": "3fad8e8c92fbcbc535007bc08db6ff2564d08ac0cbfb840b355e58ae85c0b633",
+      "bytes": 9024
+    },
+    {
+      "path": "assets/abyssal-surveyor.glb",
+      "sha256": "eb18c8e8ec9b1c6f45f813aa1120285ee16b475d7860018bba4a0a9b7f41eb7e",
+      "bytes": 636504
+    },
+    {
+      "path": "thumbs/abyssal-surveyor.webp",
+      "sha256": "e6254ee659bc38cde4c1b20115eb9b72e805c7efcd9e43bdbd67d67be0c50e42",
+      "bytes": 12222
+    },
+    {
+      "path": "assets/history/abyssal-surveyor/initial.kiln.js",
+      "sha256": "d295e88b9f64632665f2a4251fee08b5313cd88887e104be0f556f6954ee1e6a",
+      "bytes": 8893
+    },
+    {
+      "path": "assets/history/abyssal-surveyor/arm-revision.kiln.js",
+      "sha256": "1b055f12e8a375e18104eb3268a03cb7550f64de4754ee4bc2fb737f18f407f1",
+      "bytes": 9014
+    },
+    {
+      "path": "assets/history/abyssal-surveyor/current.kiln.js",
+      "sha256": "3fad8e8c92fbcbc535007bc08db6ff2564d08ac0cbfb840b355e58ae85c0b633",
+      "bytes": 9024
+    },
+    {
+      "path": "assets/air-defense-radar.kiln.js",
+      "sha256": "05fe2ee0c75f0c2e0124b3c75e4ea88f85165e7836e41156c1572daad19cde97",
+      "bytes": 35049
+    },
+    {
+      "path": "assets/air-defense-radar.glb",
+      "sha256": "ca0d93b7039bf8a936d412169dd09f4415b67ae1ff02ef2c950ac4eea1104d52",
+      "bytes": 320228
+    },
+    {
+      "path": "thumbs/air-defense-radar.webp",
+      "sha256": "4d5f929fbfcfcd8a4b3dc02a8e4ceadd084eb3ffcffc7dcbadaf8e913dfacd0e",
+      "bytes": 22408
+    },
+    {
+      "path": "assets/aircraft-carrier.kiln.js",
+      "sha256": "b9fb1cf515ff9a089198f97a997b39f14621b86282ef85ed5ce05bfd2ed395a5",
+      "bytes": 35417
+    },
+    {
+      "path": "assets/aircraft-carrier.glb",
+      "sha256": "790be350bf1074356171e9e6df5c9345cde38c9cd6feebe2268a8f2182a22bed",
+      "bytes": 326476
+    },
+    {
+      "path": "thumbs/aircraft-carrier.webp",
+      "sha256": "6db3e05033b1d58ef96d6523c170babccb8e145a37a54b0644aaea8726998303",
+      "bytes": 12752
+    },
+    {
+      "path": "assets/alpine-cable-terminal.kiln.js",
+      "sha256": "c368480584e957410a252651f8e2254b3e8823be5cbc94324d65a12d5f5c6d90",
+      "bytes": 18386
+    },
+    {
+      "path": "assets/alpine-cable-terminal.glb",
+      "sha256": "8635a74b087d08b1eb28a78bb79fe8dd579ca5086d4004b09c1dbc9248995fa8",
+      "bytes": 224588
+    },
+    {
+      "path": "thumbs/alpine-cable-terminal.webp",
+      "sha256": "8ac81f9d327bbc7c0646611613378e8584d5c4cb7eb527032a546ac3bbe9a433",
+      "bytes": 18554
+    },
+    {
+      "path": "assets/history/alpine-cable-terminal/rejected-draft.kiln.js",
+      "sha256": "da9526b8d41b153a05c49dfc68df8a40beaa22f49c69e3499388e89d46ec07b5",
+      "bytes": 17581
+    },
+    {
+      "path": "assets/history/alpine-cable-terminal/repaired-draft.kiln.js",
+      "sha256": "dead910a6df337cb69907cd93cb9eaaed22a806941a154a2f6c415d56a6f2ae6",
+      "bytes": 17668
+    },
+    {
+      "path": "assets/history/alpine-cable-terminal/current.kiln.js",
+      "sha256": "c368480584e957410a252651f8e2254b3e8823be5cbc94324d65a12d5f5c6d90",
+      "bytes": 18386
+    },
+    {
+      "path": "assets/anglerfish.kiln.js",
+      "sha256": "ab5898d2061979708b4db6f9277320081c96c9cde7a985a2de35362a7ede40ff",
+      "bytes": 19462
+    },
+    {
+      "path": "assets/anglerfish.glb",
+      "sha256": "27432aa45b662d44ed4d8b806eb8891e892cda3dfb67ddbcc435c792906bf69d",
+      "bytes": 505240
+    },
+    {
+      "path": "thumbs/anglerfish.webp",
+      "sha256": "2fc05edbb140652b325526e23a410d02c34104b3ce4448971768964826b39575",
+      "bytes": 10114
+    },
+    {
+      "path": "assets/arcade-cabinet.kiln.js",
+      "sha256": "b824524867c88ffc1fc0c67fb9152c16cbfbb5bb207f91f7e27ee42994470409",
+      "bytes": 31790
+    },
+    {
+      "path": "assets/arcade-cabinet.glb",
+      "sha256": "764355c39e44b80f5dd81e286d8b8cf8ad6fe9d08c2748f0c1ce565b6c931b23",
+      "bytes": 1237192
+    },
+    {
+      "path": "thumbs/arcade-cabinet.webp",
+      "sha256": "9bbd23fb076d074e25f27c7fe4c1a0a3bd8b657e73ac3404ac590643b047b87f",
+      "bytes": 15538
+    },
+    {
+      "path": "assets/astronomical-clock.kiln.js",
+      "sha256": "4c027f3366e18a05a7d8b75fc98a3c10f0f3b86977cb81ea03555cdb67d2f61c",
+      "bytes": 22116
+    },
+    {
+      "path": "assets/astronomical-clock.glb",
+      "sha256": "c498401d68f07a86bde8beda5db900a879aea8b94bbb9f012ff6e72fd55bc07e",
+      "bytes": 211452
+    },
+    {
+      "path": "thumbs/astronomical-clock.webp",
+      "sha256": "021ce129f38ee8951f562032d1a80839597d40903a52cfee683aea2fc535583e",
+      "bytes": 15494
+    },
+    {
+      "path": "assets/bench-refractor.kiln.js",
+      "sha256": "32223e1d94c3034d14f5d3f401fd7fbb5da3e471ddf92c3acdc319a85a03106d",
+      "bytes": 11683
+    },
+    {
+      "path": "assets/bench-refractor.glb",
+      "sha256": "9869570c85b37881853a4e1a78ee101244abcead308d35374e37287e388be749",
+      "bytes": 182832
+    },
+    {
+      "path": "thumbs/bench-refractor.webp",
+      "sha256": "3aed00f62ed3c5e4225b106688577f005a7387490fd4ba4bf09bbb166bb26d55",
+      "bytes": 8002
+    },
+    {
+      "path": "assets/history/bench-refractor/starting-study.kiln.js",
+      "sha256": "f21fc9f7ab93dfe56720232007668ba95fc541d6071454a7ba12289c5a519df0",
+      "bytes": 10499
+    },
+    {
+      "path": "assets/history/bench-refractor/current.kiln.js",
+      "sha256": "32223e1d94c3034d14f5d3f401fd7fbb5da3e471ddf92c3acdc319a85a03106d",
+      "bytes": 11683
+    },
+    {
+      "path": "assets/blast-furnace.kiln.js",
+      "sha256": "8879da09bc2e38dc0bd398dd43ab62e631900193308548a20be3806165e34567",
+      "bytes": 6898
+    },
+    {
+      "path": "assets/blast-furnace.glb",
+      "sha256": "3b056d11e1ebcf0cd37b57998c73009fd1fe71a1a454f8a41a72f8706ae2f22b",
+      "bytes": 171260
+    },
+    {
+      "path": "thumbs/blast-furnace.webp",
+      "sha256": "2cfbf83b61bf90213770a4bb4b608b0d1bfe113f4beb5c8f8684777405df55e4",
+      "bytes": 14890
+    },
+    {
+      "path": "assets/brass-tellurion.kiln.js",
+      "sha256": "cf76e93c71f2a63dfd08863d014cf1b2a74b55f104a7d6146ec9c35db67f012a",
+      "bytes": 12910
+    },
+    {
+      "path": "assets/brass-tellurion.glb",
+      "sha256": "5def78a72fd3016647b6a2ce0e72d8f41b7dc15f9c6c93b8dc018acbc25dae01",
+      "bytes": 662836
+    },
+    {
+      "path": "thumbs/brass-tellurion.webp",
+      "sha256": "d452d6224fd0d028a7cfb50ea2c8def58fabcf293d524fb467eadb67ccd0cacb",
+      "bytes": 16624
+    },
+    {
+      "path": "assets/history/brass-tellurion/initial.kiln.js",
+      "sha256": "35f4aa1102b30e9a808d3bde07e9c2486f59710ad810f9b00540580c5ce50272",
+      "bytes": 12663
+    },
+    {
+      "path": "assets/history/brass-tellurion/revision-1.kiln.js",
+      "sha256": "05d5e0de75367f4bba2ef0a924fea6e1c2e4e2d03092f8b47383f110e25c6242",
+      "bytes": 12690
+    },
+    {
+      "path": "assets/history/brass-tellurion/revision-2.kiln.js",
+      "sha256": "a3f7ce3965611f22ac464e2f8de2be89a225386536348943628047dae5c450b9",
+      "bytes": 12697
+    },
+    {
+      "path": "assets/history/brass-tellurion/current.kiln.js",
+      "sha256": "cf76e93c71f2a63dfd08863d014cf1b2a74b55f104a7d6146ec9c35db67f012a",
+      "bytes": 12910
+    },
+    {
+      "path": "assets/cable-stayed-bridge.kiln.js",
+      "sha256": "601194504f7a18d6dfb7e914b343e608885f3778ca17447d6555cae5104a1508",
+      "bytes": 9456
+    },
+    {
+      "path": "assets/cable-stayed-bridge.glb",
+      "sha256": "67be59e264c9c568b2228f6c9a26e1b8b7c220241344e56e644cdf3fea814855",
+      "bytes": 84660
+    },
+    {
+      "path": "thumbs/cable-stayed-bridge.webp",
+      "sha256": "90dc5ca30e360581a04351d5b0ce48c0a34732f18c765a38f91c50b3c6612393",
+      "bytes": 9276
+    },
+    {
+      "path": "assets/cafe-racer.kiln.js",
+      "sha256": "17553756d649fbd5d49b67cfa8a2d3b1918d1d331fd58b6783b6ea4e06f58006",
+      "bytes": 22284
+    },
+    {
+      "path": "assets/cafe-racer.glb",
+      "sha256": "c825f5f6fc0fb1aa8782a304ff54e9593be3edabc2acd46d50ef42e34d1bcf49",
+      "bytes": 1344672
+    },
+    {
+      "path": "thumbs/cafe-racer.webp",
+      "sha256": "9fe83a60aa1f440879e61e02c3dd17ebe80ce3e6c12b9175d44cdfcaa636aa85",
+      "bytes": 18504
+    },
+    {
+      "path": "assets/carousel.kiln.js",
+      "sha256": "f93b8b3c92a3cecba5620c61e7c4deb2d94470ca2c7fcb098579d5fa0d16a773",
+      "bytes": 21651
+    },
+    {
+      "path": "assets/carousel.glb",
+      "sha256": "b5217272c3fda0e28e8ad88cf628cc74dc5a7d86a9509a6e56b156d2dd45fd7f",
+      "bytes": 191040
+    },
+    {
+      "path": "thumbs/carousel.webp",
+      "sha256": "a47d250d88722bb7214c8dcb61744734ee670d0681b8d7b1d594e58e265ca705",
+      "bytes": 29844
+    },
+    {
+      "path": "assets/cathedral.kiln.js",
+      "sha256": "eefd46ab244dff7ab3d9f2b1acae42265afed0ef3059130c32589804ccb20c98",
+      "bytes": 42878
+    },
+    {
+      "path": "assets/cathedral.glb",
+      "sha256": "490eaa7dd5c3f6f4f41489e9ac609c26cc1245ba4e8464ed5d0d37d369a9e1ca",
+      "bytes": 2259480
+    },
+    {
+      "path": "thumbs/cathedral.webp",
+      "sha256": "0b106ec1731d40182d54aafd963cce8a9b97d61269715f92f09837c0f06337e4",
+      "bytes": 12512
+    },
+    {
+      "path": "assets/clock-tower.kiln.js",
+      "sha256": "641fe2de7491061214b88d4bc06a824dcfc0e582f408f6af8986bd6498f0e731",
+      "bytes": 8786
+    },
+    {
+      "path": "assets/clock-tower.glb",
+      "sha256": "dfd7e07b394e511aad15f04d7023d84285273c3156d1428210baae1d6fac0957",
+      "bytes": 165104
+    },
+    {
+      "path": "thumbs/clock-tower.webp",
+      "sha256": "6197454f14d1c534579a3f25b95802b091e199ddf758e7282c9433734a9e9e88",
+      "bytes": 9522
+    },
+    {
+      "path": "assets/comms-satellite.kiln.js",
+      "sha256": "7a7754a7b3945001db47534c05995b4af8e2fbf730426a1f9ee45df7f95c7198",
+      "bytes": 21325
+    },
+    {
+      "path": "assets/comms-satellite.glb",
+      "sha256": "4ccd8959415a3e8ca67d47a3404299adeef517c277b4f516c66631de55e93fff",
+      "bytes": 294052
+    },
+    {
+      "path": "thumbs/comms-satellite.webp",
+      "sha256": "22c6a38ab34570b24b33b5a72a8cfca30ca1f78d272895a149c4a65cc4d1fe02",
+      "bytes": 8424
+    },
+    {
+      "path": "assets/crawler-crane.kiln.js",
+      "sha256": "228406376aa8a86dfb4d0fb0335ae37b33ae36b2e063ec3ce14ab6b7fed08570",
+      "bytes": 17632
+    },
+    {
+      "path": "assets/crawler-crane.glb",
+      "sha256": "8c479df7a86c6efe234219a41e5f6cfec3a082c81228579791e3fe391abaa2ce",
+      "bytes": 190092
+    },
+    {
+      "path": "thumbs/crawler-crane.webp",
+      "sha256": "c08545b86bcf8a1daf6e35a364573655a8e63e5f95f2af43266658b84492d3a6",
+      "bytes": 15858
+    },
+    {
+      "path": "assets/deco-radio.kiln.js",
+      "sha256": "d79eec971bd3199993b8af63673f17feb0b968d91745873ad032927ea48a9241",
+      "bytes": 15324
+    },
+    {
+      "path": "assets/deco-radio.glb",
+      "sha256": "ed05028163467fed662cdf95f01d27121906b65d6335f4c569ba649bdb03cb32",
+      "bytes": 206992
+    },
+    {
+      "path": "thumbs/deco-radio.webp",
+      "sha256": "911a4a2aabd9c16c2d6ae42fc7132ab22e6dcbfa7da8f82e0285c266bf77a440",
+      "bytes": 16498
+    },
+    {
+      "path": "assets/history/deco-radio/initial.kiln.js",
+      "sha256": "f2989a63a016b89ed7dc0704537b33c3dda9969f59ee0b759ddff3e620c8b96b",
+      "bytes": 11568
+    },
+    {
+      "path": "assets/history/deco-radio/revision-1.kiln.js",
+      "sha256": "98e5e0acc662589323030271bc1cf44987890c33c4228ad1bd3f1d0a7cea1d49",
+      "bytes": 13919
+    },
+    {
+      "path": "assets/history/deco-radio/revision-2.kiln.js",
+      "sha256": "ce748f8b92d155134d6f06938e17d189663418f16d2c0a09afa05ab5cdf80c52",
+      "bytes": 15060
+    },
+    {
+      "path": "assets/history/deco-radio/current.kiln.js",
+      "sha256": "d79eec971bd3199993b8af63673f17feb0b968d91745873ad032927ea48a9241",
+      "bytes": 15324
+    },
+    {
+      "path": "assets/deep-sea-diver.kiln.js",
+      "sha256": "1e461d16ca2e965bdb8fd1e32d9cfff40bf78e835c823065851e6a8558afb8eb",
+      "bytes": 24902
+    },
+    {
+      "path": "assets/deep-sea-diver.glb",
+      "sha256": "f5859987780a73e576da68c9d7814fe573a44728884860188582dfe9e2bf84d7",
+      "bytes": 271692
+    },
+    {
+      "path": "thumbs/deep-sea-diver.webp",
+      "sha256": "7170e0d8f42c81b60a5c260d4fc4cc75149e9f5fdd20d04c42a867bdfdaf7f47",
+      "bytes": 12646
+    },
+    {
+      "path": "assets/diving-helmet.kiln.js",
+      "sha256": "e04bda302f223945b734687c5d23700e42259b87ec7ebbb9da4ba7b22940b679",
+      "bytes": 16361
+    },
+    {
+      "path": "assets/diving-helmet.glb",
+      "sha256": "75c2817dd6e7bb0fd26fd702856ddb1eed11f4e8fbe7685315f509dd27859654",
+      "bytes": 1471600
+    },
+    {
+      "path": "thumbs/diving-helmet.webp",
+      "sha256": "62c53c2ab60311919cd25a0186b63d68dd3b9f45d4ec05363b89ff611571bc29",
+      "bytes": 16852
+    },
+    {
+      "path": "assets/drilling-rig.kiln.js",
+      "sha256": "013e4ff5f7b414f8f387faa12934217959a78a1a436904cc1b447b1068f7e6dd",
+      "bytes": 34718
+    },
+    {
+      "path": "assets/drilling-rig.glb",
+      "sha256": "8918a1fdb276872b79fe5cb3c79e2774ded0c04602a33f935a254699953b739f",
+      "bytes": 197312
+    },
+    {
+      "path": "thumbs/drilling-rig.webp",
+      "sha256": "f38d238455eea01f72629debbe23af3e73531a440fc873ac74a84d0d25320ead",
+      "bytes": 18212
+    },
+    {
+      "path": "assets/espresso-machine.kiln.js",
+      "sha256": "ad5fc985db72c19ab43f6ac7d77d0d06a8d7be42a3e363bee5576a2992d58a6c",
+      "bytes": 22028
+    },
+    {
+      "path": "assets/espresso-machine.glb",
+      "sha256": "1a5933c8e9883f9dfe63ca2764bfa9ac92cccd616d5873ccdbbadfca37b47711",
+      "bytes": 228356
+    },
+    {
+      "path": "thumbs/espresso-machine.webp",
+      "sha256": "54528e9cec9e74ac184b391806d9b3ec65a53174647ebc525f2b6bc975a91529",
+      "bytes": 19334
+    },
+    {
+      "path": "assets/excavator.kiln.js",
+      "sha256": "5efa00cbc9e610b656f529a692f8e942b8dbd6bc7013715dabc9f821a5287d05",
+      "bytes": 19735
+    },
+    {
+      "path": "assets/excavator.glb",
+      "sha256": "fdb06dc365fc88b52a9e2bb8acc3f7588ca0a0c536bce1b567a4b7ea826c82bf",
+      "bytes": 239444
+    },
+    {
+      "path": "thumbs/excavator.webp",
+      "sha256": "931d27f115c4011cbad77eb5affe7a075aab3555848f3e7ebcc7d7091b2ab76b",
+      "bytes": 15596
+    },
+    {
+      "path": "assets/ferris-wheel.kiln.js",
+      "sha256": "5fcdd06693b1653a8b9f90041c15c00ef8068413eb3f01d7fbfd46c7fb6311a1",
+      "bytes": 24877
+    },
+    {
+      "path": "assets/ferris-wheel.glb",
+      "sha256": "299fc7e7f55a6514017bec784a7e2f2fce6e3c691605efe056bcfed717baf265",
+      "bytes": 155328
+    },
+    {
+      "path": "thumbs/ferris-wheel.webp",
+      "sha256": "0e73b3a7b21427fb80edeb625217b7e93394ffb7db43d742cc7f3a03505ea8bc",
+      "bytes": 37944
+    },
+    {
+      "path": "assets/field-gun.kiln.js",
+      "sha256": "f27ff0adf535ef28afb3f2818048d406ef639cdfd2bf163e548e07440832e304",
+      "bytes": 12577
+    },
+    {
+      "path": "assets/field-gun.glb",
+      "sha256": "3669237760efeeac78aa5a337f793d506020fd701ebb93229fc2d71695c2f717",
+      "bytes": 935680
+    },
+    {
+      "path": "thumbs/field-gun.webp",
+      "sha256": "93cf378e0e8fe9ebc71840832bbfedc5641e6e569b9b37369f75f4212d1e3b02",
+      "bytes": 11986
+    },
+    {
+      "path": "assets/fighter-jet.kiln.js",
+      "sha256": "08813f64ca19872516d3ecaf5c10e0175cd3e8608289137b2e19d9dfe2f8493e",
+      "bytes": 39413
+    },
+    {
+      "path": "assets/fighter-jet.glb",
+      "sha256": "727cb8a940817a4bee08b6e047e31a09a698c8c02492c28be4b0e4335a9918a6",
+      "bytes": 352732
+    },
+    {
+      "path": "thumbs/fighter-jet.webp",
+      "sha256": "0f1b34f168afd50043f0a83f45db4dee77bfb0e01b8784fe79a759c3f59e1367",
+      "bytes": 6346
+    },
+    {
+      "path": "assets/gothic-gatehouse.kiln.js",
+      "sha256": "cdda0ed41156c36ace847ea4dd0296316f09f0922708fb5f7024c2c212e73a55",
+      "bytes": 33086
+    },
+    {
+      "path": "assets/gothic-gatehouse.glb",
+      "sha256": "0434b1a54ab25216682353346c4533f2569b159394608d46699b6fb6d2c5872f",
+      "bytes": 167060
+    },
+    {
+      "path": "thumbs/gothic-gatehouse.webp",
+      "sha256": "d0be041e7981fcfa119622b843a19a99119d3a79c0b846e1767f3c89e9144e12",
+      "bytes": 13076
+    },
+    {
+      "path": "assets/gramophone.kiln.js",
+      "sha256": "13f50784b88b7e018bd3eb27e1c04c99845b30d9f4e66ef8159ffddaf6c16139",
+      "bytes": 23924
+    },
+    {
+      "path": "assets/gramophone.glb",
+      "sha256": "6375f5e8ca90cd333e3a289a193db9de85ef8be3db9154a4e981df9037535bbc",
+      "bytes": 260500
+    },
+    {
+      "path": "thumbs/gramophone.webp",
+      "sha256": "025ab94e7bb00f6c9d6579c571fe3db807f431defc423d391f0247b893694b17",
+      "bytes": 15652
+    },
+    {
+      "path": "assets/harbour-crane.kiln.js",
+      "sha256": "0aa97fb40d1e35a3b12a33908d885fc461978975af9d3a5314f9ae784486aff8",
+      "bytes": 31180
+    },
+    {
+      "path": "assets/harbour-crane.glb",
+      "sha256": "ef7aeef0b20ed4cec37f5fc8cf2f290a88eb52c1e622b6628761e102c65b0a0d",
+      "bytes": 146500
+    },
+    {
+      "path": "thumbs/harbour-crane.webp",
+      "sha256": "f0793181f43cf76358a08687adfb9c6fb786cd29022994c32357ccbea8fd2e78",
+      "bytes": 24408
+    },
+    {
+      "path": "assets/hot-air-balloon.kiln.js",
+      "sha256": "1e4847824a88156db594e4b67cc722d30b9b61a66c38070fc7d1229aa3e87e26",
+      "bytes": 17964
+    },
+    {
+      "path": "assets/hot-air-balloon.glb",
+      "sha256": "eef1687ac74589f2b1611ab3f37356fb4eb7869833cb8074f09f425d9137c8db",
+      "bytes": 127472
+    },
+    {
+      "path": "thumbs/hot-air-balloon.webp",
+      "sha256": "0934084175abcdfc5b40d72a5c165dec696a7b89fc30b5ddedc3cf77ca2999fc",
+      "bytes": 14750
+    },
+    {
+      "path": "assets/kestrel-rescue-craft.kiln.js",
+      "sha256": "9bf2bde9213858712aa018a74783539e023a8e6e87eafdc2589aa31b1d1c1900",
+      "bytes": 5819
+    },
+    {
+      "path": "assets/kestrel-rescue-craft.glb",
+      "sha256": "cd17707cd36e6718b2e08c89085d240cba9047002c551258deab73e9921ed1a1",
+      "bytes": 646016
+    },
+    {
+      "path": "thumbs/kestrel-rescue-craft.webp",
+      "sha256": "c0f8b78386a24e044f1067eb7b94e74ca3d4b9badbfc1d82855057ed56977ac1",
+      "bytes": 8428
+    },
+    {
+      "path": "assets/history/kestrel-rescue-craft/initial.kiln.js",
+      "sha256": "ba87343b9c088a8c35e68aaf8441e66f75497964cfb720264fe6f5661f4fef78",
+      "bytes": 5487
+    },
+    {
+      "path": "assets/history/kestrel-rescue-craft/revision-1.kiln.js",
+      "sha256": "2df641afdfda34c3070368c98b25c7717567bea7dcd4565e429bd1643117cd56",
+      "bytes": 5523
+    },
+    {
+      "path": "assets/history/kestrel-rescue-craft/current.kiln.js",
+      "sha256": "9bf2bde9213858712aa018a74783539e023a8e6e87eafdc2589aa31b1d1c1900",
+      "bytes": 5819
+    },
+    {
+      "path": "assets/kinetic-wave.kiln.js",
+      "sha256": "5a4ef2784d7a49e58c9dba495a97bae1bad948d4d9569e65607d97ebddb40151",
+      "bytes": 11076
+    },
+    {
+      "path": "assets/kinetic-wave.glb",
+      "sha256": "43427534911b4ac0221a26f31f6b2a7f1d21415809dfee7509bcc3175010bbdd",
+      "bytes": 221224
+    },
+    {
+      "path": "thumbs/kinetic-wave.webp",
+      "sha256": "578613985c33479cffdf4e673d650c714ce035a209ebeec8a9de6849668ad146",
+      "bytes": 17514
+    },
+    {
+      "path": "assets/history/kinetic-wave/initial.kiln.js",
+      "sha256": "a49616fba7ea7df347e0cc2ec34561d80ed4d12ad800d870d2fd22ace0b6a96f",
+      "bytes": 8985
+    },
+    {
+      "path": "assets/history/kinetic-wave/revision-1.kiln.js",
+      "sha256": "8cc3251317a820b42fd61c3a1f827fea48a0fd2d25b1c5dd60fcceb967fb42a3",
+      "bytes": 9635
+    },
+    {
+      "path": "assets/history/kinetic-wave/current.kiln.js",
+      "sha256": "5a4ef2784d7a49e58c9dba495a97bae1bad948d4d9569e65607d97ebddb40151",
+      "bytes": 11076
+    },
+    {
+      "path": "assets/lighthouse.kiln.js",
+      "sha256": "432847b5d3f7ad1f164602484559379d4d9ff0a98ce05d8b7abd55c229a5db08",
+      "bytes": 16265
+    },
+    {
+      "path": "assets/lighthouse.glb",
+      "sha256": "b1ecd6eb6c637281b8b1b1c30f1cc64fb66bcd1219c3115288e72ad89ae59b84",
+      "bytes": 479272
+    },
+    {
+      "path": "thumbs/lighthouse.webp",
+      "sha256": "4e75be2d4979b449b1a654c0654ad1bf4ab72db5863a037e91ddf8ab8ca8f5b1",
+      "bytes": 11048
+    },
+    {
+      "path": "assets/longcase-clock.kiln.js",
+      "sha256": "4fcc5a79caaf3533966314a92883e374aabff6c8b2a254c8cfec3dc5ceb4c93c",
+      "bytes": 30102
+    },
+    {
+      "path": "assets/longcase-clock.glb",
+      "sha256": "773420e0d0dcc6b66b0be1a6416b4491c757c04a6d24b99efbb2550ab18a5322",
+      "bytes": 261336
+    },
+    {
+      "path": "thumbs/longcase-clock.webp",
+      "sha256": "11ab7c9c3df94644896dad61c5cbe49906d64b79f84bc8dbfd0b61afa39456ac",
+      "bytes": 8464
+    },
+    {
+      "path": "assets/mech.kiln.js",
+      "sha256": "c0924f2e075f5cb240fefb75c02475d7a36dcdffb1ad152f22d042ce4245cf89",
+      "bytes": 19361
+    },
+    {
+      "path": "assets/mech.glb",
+      "sha256": "05dc958b7e820d3ac3f3e40757f1ddf67477c8c8f34109e573ff5ccb6b000ee4",
+      "bytes": 2002920
+    },
+    {
+      "path": "thumbs/mech.webp",
+      "sha256": "dad2d019f8f9d933e493daf63ef4b37848b0bf5cc026a433503afae3de7c8c5f",
+      "bytes": 10462
+    },
+    {
+      "path": "assets/nautilus-habitat.kiln.js",
+      "sha256": "7c98646e72943fbbbaa79391cc3951dd804f459eb1a36ce7d21c46f75370f5b2",
+      "bytes": 6335
+    },
+    {
+      "path": "assets/nautilus-habitat.glb",
+      "sha256": "a0f5aeda46da02893101e67700dd0a2d7fb7fe15dd70d53bab4e7babaa4fae3e",
+      "bytes": 595224
+    },
+    {
+      "path": "thumbs/nautilus-habitat.webp",
+      "sha256": "b7e5036876a7f2b2f845889fca5f30a601759665a574765ac572800858b29597",
+      "bytes": 21684
+    },
+    {
+      "path": "assets/history/nautilus-habitat/initial.kiln.js",
+      "sha256": "7f8b05623ccd1ae68e8e1d9949550274c3772f363cf1f61567149dbec73d83c5",
+      "bytes": 5311
+    },
+    {
+      "path": "assets/history/nautilus-habitat/revision-1.kiln.js",
+      "sha256": "749a58cda43ae78d4ff0fefa946cafd90896e0d99118aa18cd5c73d7651a6383",
+      "bytes": 5415
+    },
+    {
+      "path": "assets/history/nautilus-habitat/revision-2.kiln.js",
+      "sha256": "ef2ba2b6406792b7c5f621a32b89e7461c557fa02f7d13a36039c7f343edcdb5",
+      "bytes": 6335
+    },
+    {
+      "path": "assets/history/nautilus-habitat/current.kiln.js",
+      "sha256": "7c98646e72943fbbbaa79391cc3951dd804f459eb1a36ce7d21c46f75370f5b2",
+      "bytes": 6335
+    },
+    {
+      "path": "assets/orbital-station.kiln.js",
+      "sha256": "d2c1693ef6938a14e482a3640c838bbf17c721aa333a7559ad496593ae1f33ea",
+      "bytes": 6117
+    },
+    {
+      "path": "assets/orbital-station.glb",
+      "sha256": "0270271ecfef25ead0652c480c8959e72fdacddb60aa91a97021679cdfc8d053",
+      "bytes": 182932
+    },
+    {
+      "path": "thumbs/orbital-station.webp",
+      "sha256": "785154aad7e20a4a0b63d4d0ae79cf0e473dc1c0d4c6124d18483ae2fe5869cb",
+      "bytes": 15694
+    },
+    {
+      "path": "assets/orrery.kiln.js",
+      "sha256": "3e0b46fa8bb5c4a7a086e4a55e29f1163b32a022b8b646d26398c71254b4c755",
+      "bytes": 20064
+    },
+    {
+      "path": "assets/orrery.glb",
+      "sha256": "9a479427676dbff95a6b1e958ff8d8bbd08b75d377d45ed66c6c3ea9c00d7ff3",
+      "bytes": 350836
+    },
+    {
+      "path": "thumbs/orrery.webp",
+      "sha256": "74df4ee514b63c55be9c7322a46c6d1ce24c14d01c291666aec83d17aaaf7d08",
+      "bytes": 16114
+    },
+    {
+      "path": "assets/penny-farthing.kiln.js",
+      "sha256": "a243562feabdc46ea5b2d084b723d50b71c0ba801ecf24572d3da0341f1b9544",
+      "bytes": 12780
+    },
+    {
+      "path": "assets/penny-farthing.glb",
+      "sha256": "ba367254573499c71991f2ad4a8e4a55fda6efde53d159af177ff9893b4a7fae",
+      "bytes": 823600
+    },
+    {
+      "path": "thumbs/penny-farthing.webp",
+      "sha256": "2390857bfd1847b265905c7dd20b7425361fd93ab6ff6336d70a57248fc134ce",
+      "bytes": 20204
+    },
+    {
+      "path": "assets/pinball-machine.kiln.js",
+      "sha256": "35eef6aebfe01ae582e27fb7e5f29cb367029194c58908d2ff274c8999e8f065",
+      "bytes": 13726
+    },
+    {
+      "path": "assets/pinball-machine.glb",
+      "sha256": "53af70cb9820328777bad2a67c204b6bd0ff82c097f030d251e06729891746bb",
+      "bytes": 216688
+    },
+    {
+      "path": "thumbs/pinball-machine.webp",
+      "sha256": "afec7110f294fdcf9801d465c1b18129a94b1f5f5f7c115a1d489c84ca32bdcb",
+      "bytes": 9772
+    },
+    {
+      "path": "assets/pipe-organ.kiln.js",
+      "sha256": "4e4ed8e01e007891a84f3c13117c1367264570311f233c711206f2c18629db41",
+      "bytes": 30318
+    },
+    {
+      "path": "assets/pipe-organ.glb",
+      "sha256": "0cd4ab232e27b69e8b336d09a5a948f803f1e2b503650549a98520a13b3d0484",
+      "bytes": 256640
+    },
+    {
+      "path": "thumbs/pipe-organ.webp",
+      "sha256": "f0ce11fa45bd4578fc80aa8d730565760907c04486e9a5385f89a1ff3922d9bd",
+      "bytes": 14334
+    },
+    {
+      "path": "assets/planetarium-projector.kiln.js",
+      "sha256": "1d885b43ff02292d306ade1333dd3a8106da77fc13d2822f073d1fd81622ec84",
+      "bytes": 17825
+    },
+    {
+      "path": "assets/planetarium-projector.glb",
+      "sha256": "667f98c95fd380731d62b09b5541b7b0588c35756ab70e695431cd1d918a93ea",
+      "bytes": 184724
+    },
+    {
+      "path": "thumbs/planetarium-projector.webp",
+      "sha256": "59c0d081e31f3d2ab1cd88f0adaf26a2649b0633c1921a4aeb9a1b372521c1af",
+      "bytes": 15150
+    },
+    {
+      "path": "assets/polar-rover.kiln.js",
+      "sha256": "aea09b2491cc06ac710648d0de30bb365fa1b2c0fff10712cb70db07e8216515",
+      "bytes": 32072
+    },
+    {
+      "path": "assets/polar-rover.glb",
+      "sha256": "ca27887bc5718b9899fc13fc80cbcfbf83697cf0b04680b21656fbecb6c3a46f",
+      "bytes": 300068
+    },
+    {
+      "path": "thumbs/polar-rover.webp",
+      "sha256": "9b02b6c33e54e7a79162532301a431fbef64ddfbc20870360e3f2981e7643b90",
+      "bytes": 20096
+    },
+    {
+      "path": "assets/history/polar-rover/initial.kiln.js",
+      "sha256": "80be5bc99e05c37c5b11a0fbc60d9be83991dc1f44d517745238ab976a89907b",
+      "bytes": 26884
+    },
+    {
+      "path": "assets/history/polar-rover/revision-1.kiln.js",
+      "sha256": "452b4cb2d887a0a249637d2a49aea5bdeb2aab023a9ffe6928d35ee8a809fc4a",
+      "bytes": 26790
+    },
+    {
+      "path": "assets/history/polar-rover/revision-2.kiln.js",
+      "sha256": "b93a4f3830cb24b03f44a1436d23173a06af6aae893ab10dc83f5ddce465a048",
+      "bytes": 28799
+    },
+    {
+      "path": "assets/history/polar-rover/revision-3.kiln.js",
+      "sha256": "1b95d7f2a6ad8edfcc965624fccbfd89d67fadd5273041b4bd107dcc5874721b",
+      "bytes": 28760
+    },
+    {
+      "path": "assets/history/polar-rover/current.kiln.js",
+      "sha256": "aea09b2491cc06ac710648d0de30bb365fa1b2c0fff10712cb70db07e8216515",
+      "bytes": 32072
+    },
+    {
+      "path": "assets/printing-press.kiln.js",
+      "sha256": "c6ee2bf3d6ff7a6f8833425ecfef25888af0842ddcb9c749ae43b54d28968ddf",
+      "bytes": 28706
+    },
+    {
+      "path": "assets/printing-press.glb",
+      "sha256": "373aa5f55fc21271640e36c0364e2a1cd416714a92e5b783387eee6894ce8d37",
+      "bytes": 175068
+    },
+    {
+      "path": "thumbs/printing-press.webp",
+      "sha256": "fe3dec4037259b3bbe04bf2ddc94eb554a68ff0ffc747959e5eb0796d164fb88",
+      "bytes": 11390
+    },
+    {
+      "path": "assets/pumpjack.kiln.js",
+      "sha256": "c1b5c04953a5a398185f82cc7f8698089bdc00bc217ca4b2181b28c4dc4a7134",
+      "bytes": 40174
+    },
+    {
+      "path": "assets/pumpjack.glb",
+      "sha256": "1d0fa7845cd3ed293e1c130273b4bea2e05a9af1c3e37b42999583e1952f38ba",
+      "bytes": 230296
+    },
+    {
+      "path": "thumbs/pumpjack.webp",
+      "sha256": "02e6a0d6f4f1257dcbfb767bd9d30b093db3126c0415184e83dd20ae5f8b6a2e",
+      "bytes": 17594
+    },
+    {
+      "path": "assets/radio-telescope.kiln.js",
+      "sha256": "6414ad919135ddcd1443d1add8973dcfc99ffd95f66590219491fbe9d8951605",
+      "bytes": 23343
+    },
+    {
+      "path": "assets/radio-telescope.glb",
+      "sha256": "092cc11a24d28b67a47c74ce5f1c6fe1d07a7be32e9385af5c48862ebf14e02f",
+      "bytes": 328740
+    },
+    {
+      "path": "thumbs/radio-telescope.webp",
+      "sha256": "fd1b03d3deaaf462dc2234debef38f96b763ed3b252ad8643d35f47939195f47",
+      "bytes": 19856
+    },
+    {
+      "path": "assets/research-vessel.kiln.js",
+      "sha256": "1f109fd8c5d6de9fe07507e473a1c7ba674565f1544ac68dd6067a5664371455",
+      "bytes": 9938
+    },
+    {
+      "path": "assets/research-vessel.glb",
+      "sha256": "31daa828d14a8bc9d1c07896df85b50ebf66f874db883f3fd8195245d18489e1",
+      "bytes": 385008
+    },
+    {
+      "path": "thumbs/research-vessel.webp",
+      "sha256": "d0821eb095ef44a15bae1465e365d3aa5d6e50f5dd873631efe981bd6661fb78",
+      "bytes": 18718
+    },
+    {
+      "path": "assets/history/research-vessel/initial.kiln.js",
+      "sha256": "6fb756d6f62075d27ca0bde6ad85bb1247a551042abf4dea9c504cb5fe70aa3e",
+      "bytes": 9938
+    },
+    {
+      "path": "assets/history/research-vessel/reviewed.kiln.js",
+      "sha256": "a0e702f76ca06c736997982394c7a388b23053a552c1a3e3975da49515a7d430",
+      "bytes": 9938
+    },
+    {
+      "path": "assets/history/research-vessel/current.kiln.js",
+      "sha256": "1f109fd8c5d6de9fe07507e473a1c7ba674565f1544ac68dd6067a5664371455",
+      "bytes": 9938
+    },
+    {
+      "path": "assets/ribbon-tea-pavilion.kiln.js",
+      "sha256": "81c0880f18dc90290d667c9101ffbd08e0b74f48ecd605389e4de7a0bd62f054",
+      "bytes": 18340
+    },
+    {
+      "path": "assets/ribbon-tea-pavilion.glb",
+      "sha256": "f60af96565da846e500a7ef1e733fb27662a2d3c6f7108a2924eaa36bafd4d35",
+      "bytes": 511740
+    },
+    {
+      "path": "thumbs/ribbon-tea-pavilion.webp",
+      "sha256": "ef7c4e2eda5a7f59cc9c1c4881260cc222da93be3c99aca7b602b25aa82bb25d",
+      "bytes": 10368
+    },
+    {
+      "path": "assets/history/ribbon-tea-pavilion/initial.kiln.js",
+      "sha256": "ef6e8d267c3b0e7cd30b239cd3dcbe88d642e19921d534a5f4f7a6545c34c383",
+      "bytes": 16785
+    },
+    {
+      "path": "assets/history/ribbon-tea-pavilion/revision-1.kiln.js",
+      "sha256": "8253f39c47e31967c88c10101024b9f33886ad6914315f9be7c0911f1e0a33c8",
+      "bytes": 16814
+    },
+    {
+      "path": "assets/history/ribbon-tea-pavilion/current.kiln.js",
+      "sha256": "81c0880f18dc90290d667c9101ffbd08e0b74f48ecd605389e4de7a0bd62f054",
+      "bytes": 18340
+    },
+    {
+      "path": "assets/rigid-airship.kiln.js",
+      "sha256": "9f3341c1f613a399cac20842aeb6e974b7d80bbceaa07b0d1510c53d98ab9ae6",
+      "bytes": 6945
+    },
+    {
+      "path": "assets/rigid-airship.glb",
+      "sha256": "eaca192c97b78f27d9dd24b66d8623dcbcec6855a8fdbe7af9b323f3521b4608",
+      "bytes": 211520
+    },
+    {
+      "path": "thumbs/rigid-airship.webp",
+      "sha256": "d7414d6b64ea6ac8d3573a9b34e4921b2f734ef28a48ea4034c7d7c91ccd1dd3",
+      "bytes": 9220
+    },
+    {
+      "path": "assets/robot-arm.kiln.js",
+      "sha256": "a09a2ba7cd96a937e092028162d49dbbf76330b94023b11bb0b15ce3d7f4ac31",
+      "bytes": 23654
+    },
+    {
+      "path": "assets/robot-arm.glb",
+      "sha256": "11797ec814f8406ffd5d967226c736d74a3297a8d7cb6926d5a3ad909da26f99",
+      "bytes": 1255784
+    },
+    {
+      "path": "thumbs/robot-arm.webp",
+      "sha256": "8f86dc57c570bbbe5860fb7eef637d0d92fae6c2ec9e973e0b092891ae4c579f",
+      "bytes": 14048
+    },
+    {
+      "path": "assets/seed-vault.kiln.js",
+      "sha256": "704f5ca2c787bc3884421d284058499d5760531ddd8f3f586e1d2ba09280d09c",
+      "bytes": 15869
+    },
+    {
+      "path": "assets/seed-vault.glb",
+      "sha256": "fb8f67e4c7e3c1e21ae5ad72ba2c8859239fe7f146798e1f76e87f84cb45f20f",
+      "bytes": 463308
+    },
+    {
+      "path": "thumbs/seed-vault.webp",
+      "sha256": "929d7c5357b7036d4b7fe543fe6c5ca2d2bd0d9572ed2d0952c22fbc8c1372b6",
+      "bytes": 25546
+    },
+    {
+      "path": "assets/history/seed-vault/initial.kiln.js",
+      "sha256": "319eba479a4917515eb1413514efb20cc32d1311997b22ee03bb384cef4a70c2",
+      "bytes": 12488
+    },
+    {
+      "path": "assets/history/seed-vault/revision-1.kiln.js",
+      "sha256": "09be284d10b639eada39cc2f165972db379ce1caf49c6882fff3b82631f80f46",
+      "bytes": 14168
+    },
+    {
+      "path": "assets/history/seed-vault/revision-2.kiln.js",
+      "sha256": "22701789ebaa0679ec62f99033969571b266b0406f00dfb18352ac0ae0fbed81",
+      "bytes": 15875
+    },
+    {
+      "path": "assets/history/seed-vault/current.kiln.js",
+      "sha256": "704f5ca2c787bc3884421d284058499d5760531ddd8f3f586e1d2ba09280d09c",
+      "bytes": 15869
+    },
+    {
+      "path": "assets/solar-sail-courier.kiln.js",
+      "sha256": "0a3aac41c77094e96aaeed3414802b20fb3143398715cd8ffcc008d626821164",
+      "bytes": 20923
+    },
+    {
+      "path": "assets/solar-sail-courier.glb",
+      "sha256": "8875896c6a9c96f5b5d9c2c395a0a9e40ef1aff53a4edb6b4a46c9bea4c0fb0b",
+      "bytes": 348568
+    },
+    {
+      "path": "thumbs/solar-sail-courier.webp",
+      "sha256": "5c917466d4a20048b8205e0db9d3157cd1a1e7aaf24747165157a72b36f110f1",
+      "bytes": 28434
+    },
+    {
+      "path": "assets/history/solar-sail-courier/initial.kiln.js",
+      "sha256": "1fe4ad118242dd9805a88b09b27b90f9f3bd72b39cfcff8ad631646c56bf3fc1",
+      "bytes": 17806
+    },
+    {
+      "path": "assets/history/solar-sail-courier/revision-1.kiln.js",
+      "sha256": "272e8a7af1693d89cc93388d2e6c6c5bfedd3d856dd58de4fb8a4c6e16476cba",
+      "bytes": 19573
+    },
+    {
+      "path": "assets/history/solar-sail-courier/current.kiln.js",
+      "sha256": "0a3aac41c77094e96aaeed3414802b20fb3143398715cd8ffcc008d626821164",
+      "bytes": 20923
+    },
+    {
+      "path": "assets/steam-locomotive.kiln.js",
+      "sha256": "0c100fb9b080162f13d807920b02e0aa8d8263309b1a1160fcb1d6528c1716aa",
+      "bytes": 24479
+    },
+    {
+      "path": "assets/steam-locomotive.glb",
+      "sha256": "6e5462c54efe536129073ccabef7d4c2c0a82fe49cbbca4420aea9635cebcbc4",
+      "bytes": 310008
+    },
+    {
+      "path": "thumbs/steam-locomotive.webp",
+      "sha256": "fb8f67c98fd766a5fb40603e32ebcf1fccd6e5a2cdd09c165e35fae029dbc920",
+      "bytes": 18538
+    },
+    {
+      "path": "assets/street-lamp.kiln.js",
+      "sha256": "c1d24daf95c30f46b2d32f3c40c0ae6c08827e0a665b190ec499af83a928e1f6",
+      "bytes": 14498
+    },
+    {
+      "path": "assets/street-lamp.glb",
+      "sha256": "0d16f94cbbace428e8d166606a0413cb062c7424601251a6eb10a8360cf98d5b",
+      "bytes": 688536
+    },
+    {
+      "path": "thumbs/street-lamp.webp",
+      "sha256": "7d77509cb819c658f0eb9944129d1d665f870cdb974fc60f8c98c76897843cff",
+      "bytes": 3366
+    },
+    {
+      "path": "assets/sushi-store.kiln.js",
+      "sha256": "fdd92c6e2ed8fb371d22f8c94c1f0e6ae932d915f0e75cd50c70b6f876bd0743",
+      "bytes": 35135
+    },
+    {
+      "path": "assets/sushi-store.glb",
+      "sha256": "7efe7865e34bb5b526965d8366601de1b991664d20d76895bbf9adf41e7fbb3c",
+      "bytes": 2257820
+    },
+    {
+      "path": "thumbs/sushi-store.webp",
+      "sha256": "42d89e1d5349f556b11fd25f072121f92fa98702d647dd6190b41ac11318932c",
+      "bytes": 19700
+    },
+    {
+      "path": "assets/tram.kiln.js",
+      "sha256": "29a7d021e6c789ed7ea05fcd838c40f365052555eec24a672b4f74d240273779",
+      "bytes": 29422
+    },
+    {
+      "path": "assets/tram.glb",
+      "sha256": "58508a6cf591625fbc85546b7509c05f118678f51a4a02284eb0541c2dfb77ce",
+      "bytes": 187852
+    },
+    {
+      "path": "thumbs/tram.webp",
+      "sha256": "a72c2f8b35e8b08f5b3da6fb5653f6f02fc9ab62b4a2fd6a241b21d28824694b",
+      "bytes": 16818
+    },
+    {
+      "path": "assets/trebuchet.kiln.js",
+      "sha256": "94d40bcb59df7e5dd976d663b6adf6a27ebecbb3d948d62dc5c50e40688e1595",
+      "bytes": 13716
+    },
+    {
+      "path": "assets/trebuchet.glb",
+      "sha256": "20e83b1650588c4998f3b99d982f9a84337a683b20f52513726ee9382a35f2bf",
+      "bytes": 75476
+    },
+    {
+      "path": "thumbs/trebuchet.webp",
+      "sha256": "d0ae510844488d99fd41d0d8de6367ccbe7a8e8077c9101e00675a55fb9f37e2",
+      "bytes": 14978
+    },
+    {
+      "path": "assets/tugboat.kiln.js",
+      "sha256": "c826f90f1dccde22891e9c6acc0e6d524aee4a1d5eaab62d762f146c2acea3b3",
+      "bytes": 38461
+    },
+    {
+      "path": "assets/tugboat.glb",
+      "sha256": "0d077bfe7984f74d0452691d657db8b2b2d48e4046fa54017c97caedd6540c81",
+      "bytes": 222696
+    },
+    {
+      "path": "thumbs/tugboat.webp",
+      "sha256": "0aa63bb04181a9cb782ca49201157b5b1a84948ef9d3f4c164cc1d9caab70440",
+      "bytes": 17784
+    },
+    {
+      "path": "assets/twisting-canopy.kiln.js",
+      "sha256": "2d3d12e4e53613289f017fc5c4e20731fe7736655781839168dc2480be3efdcf",
+      "bytes": 8358
+    },
+    {
+      "path": "assets/twisting-canopy.glb",
+      "sha256": "0dc4acac3729fda27b1567463dd32d183ebc340d740d8d4f51d8ad1482d8a322",
+      "bytes": 139828
+    },
+    {
+      "path": "thumbs/twisting-canopy.webp",
+      "sha256": "622b46fc1bfd708c5cf4d8b91562410a962a929125d8f43e1c456e85a4b147bd",
+      "bytes": 13824
+    },
+    {
+      "path": "assets/history/twisting-canopy/initial.kiln.js",
+      "sha256": "978417452ba0d2764d82af9697bfa888b907787f38ce4cdc6a196e468d451e9f",
+      "bytes": 8358
+    },
+    {
+      "path": "assets/history/twisting-canopy/current.kiln.js",
+      "sha256": "2d3d12e4e53613289f017fc5c4e20731fe7736655781839168dc2480be3efdcf",
+      "bytes": 8358
+    },
+    {
+      "path": "assets/typewriter.kiln.js",
+      "sha256": "f3b83ab3b81d22cc2b6f553bde8cb73b903923215a0b987c0cafa4fc0de960c1",
+      "bytes": 15704
+    },
+    {
+      "path": "assets/typewriter.glb",
+      "sha256": "e5b0fbc255afe43c4d17b3356e9f5f35895a5548ec662c3d61ca33b0b7944d2b",
+      "bytes": 440048
+    },
+    {
+      "path": "thumbs/typewriter.webp",
+      "sha256": "d0f2fa8ab0cbedb402249faa2460efc1f0830340de0963d4c75836b8be53eee7",
+      "bytes": 18272
+    },
+    {
+      "path": "assets/vending-machine.kiln.js",
+      "sha256": "4ea4db40981f8021107381b739300b4d184d42664eb4c8cf2b7aae756c8f2599",
+      "bytes": 28265
+    },
+    {
+      "path": "assets/vending-machine.glb",
+      "sha256": "58fa9096a65238c7614cbfceda24b6084e7070c6cfbd68398ea168fba020949c",
+      "bytes": 790268
+    },
+    {
+      "path": "thumbs/vending-machine.webp",
+      "sha256": "cc4ba0631ee1030ae78fed280b4e9d7423ddc3209aaec24e9b9fe18896133a96",
+      "bytes": 15734
+    },
+    {
+      "path": "assets/victorian-greenhouse.kiln.js",
+      "sha256": "7fc022a92ca6ec100a328ba5dcc6bfe13ca497ba60226bf92b70848fd06787ee",
+      "bytes": 39418
+    },
+    {
+      "path": "assets/victorian-greenhouse.glb",
+      "sha256": "e842f0856cc64ac13081190405868668182ffd41fbf12dcbc91df43147bd5fbc",
+      "bytes": 179940
+    },
+    {
+      "path": "thumbs/victorian-greenhouse.webp",
+      "sha256": "aa712c6534505734f99bb030a077ddca11bd55377f3b55f094f191e037f8f15e",
+      "bytes": 18324
+    },
+    {
+      "path": "assets/windmill.kiln.js",
+      "sha256": "c1a7eeb546fdc10544635609c9b0035ae9307ea5da4f916630cb3ead9c73f6cb",
+      "bytes": 14565
+    },
+    {
+      "path": "assets/windmill.glb",
+      "sha256": "6511a91b7aff2881f9a56898134cb75328cb97f347b08028313be50a18e4f4cb",
+      "bytes": 419072
+    },
+    {
+      "path": "thumbs/windmill.webp",
+      "sha256": "d7d6fabecfcd4dc2f0b5dace2057e871d17dd4d8bad29873585ef8dac20a8ee5",
+      "bytes": 21860
+    }
+  ],
+  "excluded": true,
+  "scope": "Fetched final production preview source, GLB, thumbnail and revision downloads; byte hashes match the built local records."
+}

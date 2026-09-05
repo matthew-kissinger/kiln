@@ -1,0 +1,76 @@
+{
+  "examples": 4,
+  "verifiedDownloads": 10,
+  "records": [
+    {
+      "asset": "abyssal-surveyor",
+      "source": "assets/history/abyssal-surveyor/initial.kiln.js",
+      "sha256": "d295e88b9f64632665f2a4251fee08b5313cd88887e104be0f556f6954ee1e6a",
+      "bytes": 8893,
+      "current": false
+    },
+    {
+      "asset": "abyssal-surveyor",
+      "source": "assets/history/abyssal-surveyor/arm-revision.kiln.js",
+      "sha256": "1b055f12e8a375e18104eb3268a03cb7550f64de4754ee4bc2fb737f18f407f1",
+      "bytes": 9014,
+      "current": false
+    },
+    {
+      "asset": "abyssal-surveyor",
+      "source": "assets/history/abyssal-surveyor/current.kiln.js",
+      "sha256": "3fad8e8c92fbcbc535007bc08db6ff2564d08ac0cbfb840b355e58ae85c0b633",
+      "bytes": 9024,
+      "current": true
+    },
+    {
+      "asset": "bench-refractor",
+      "source": "assets/history/bench-refractor/starting-study.kiln.js",
+      "sha256": "f21fc9f7ab93dfe56720232007668ba95fc541d6071454a7ba12289c5a519df0",
+      "bytes": 10499,
+      "current": false
+    },
+    {
+      "asset": "bench-refractor",
+      "source": "assets/history/bench-refractor/current.kiln.js",
+      "sha256": "32223e1d94c3034d14f5d3f401fd7fbb5da3e471ddf92c3acdc319a85a03106d",
+      "bytes": 11683,
+      "current": true
+    },
+    {
+      "asset": "research-vessel",
+      "source": "assets/history/research-vessel/initial.kiln.js",
+      "sha256": "6fb756d6f62075d27ca0bde6ad85bb1247a551042abf4dea9c504cb5fe70aa3e",
+      "bytes": 9938,
+      "current": false
+    },
+    {
+      "asset": "research-vessel",
+      "source": "assets/history/research-vessel/reviewed.kiln.js",
+      "sha256": "a0e702f76ca06c736997982394c7a388b23053a552c1a3e3975da49515a7d430",
+      "bytes": 9938,
+      "current": false
+    },
+    {
+      "asset": "research-vessel",
+      "source": "assets/history/research-vessel/current.kiln.js",
+      "sha256": "1f109fd8c5d6de9fe07507e473a1c7ba674565f1544ac68dd6067a5664371455",
+      "bytes": 9938,
+      "current": true
+    },
+    {
+      "asset": "twisting-canopy",
+      "source": "assets/history/twisting-canopy/initial.kiln.js",
+      "sha256": "978417452ba0d2764d82af9697bfa888b907787f38ce4cdc6a196e468d451e9f",
+      "bytes": 8358,
+      "current": false
+    },
+    {
+      "asset": "twisting-canopy",
+      "source": "assets/history/twisting-canopy/current.kiln.js",
+      "sha256": "2d3d12e4e53613289f017fc5c4e20731fe7736655781839168dc2480be3efdcf",
+      "bytes": 8358,
+      "current": true
+    }
+  ]
+}

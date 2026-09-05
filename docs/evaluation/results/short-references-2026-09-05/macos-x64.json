@@ -1,0 +1,37 @@
+{
+  "root": "/var/folders/20/jp1_0n3n7kndh6rnbqb5344m0000gn/T/kiln-package-café-hfEbyI",
+  "platform": "darwin",
+  "arch": "x64",
+  "node": "v22.23.1",
+  "checks": [
+    "direct-node-cli-help",
+    "tarball-install-without-dev-dependencies",
+    "node-cli-entry",
+    "npm-init-workspace",
+    "short-reference-full-hash-compatibility",
+    "csg-wasm",
+    "uv-wasm",
+    "cpu-png",
+    "cross-cwd-cli-source-store",
+    "capture-file-part-relative-grid",
+    "capture-file-build-reuse",
+    "packaged-node-worker",
+    "mcp-discovery",
+    "source-reference-edit-images",
+    "server-restart-persistence",
+    "exact-source-export"
+  ],
+  "status": "passed",
+  "npm": "12.0.1",
+  "tarball": "/Users/runner/work/kiln/kiln/candidate/kiln-engine-0.6.0.tgz",
+  "tarballSha256": "eddff8da662dd69f5f241d91eada7cca33400cefd5e9028422fd68bcd02bb78e",
+  "engineVersion": "0.6.0",
+  "bundleHashes": {
+    "cli": "13a7a110b781d06cc3487c3381c422d5f5a386f9a7308bc82fe21da547174217",
+    "mcp": "841bb44b94f010e9ae5efe855fad14c2defb0971103c012f6829b56d80da515d"
+  },
+  "editResult": {
+    "programRef": "p_7fd2baaf40e0",
+    "parentRef": "p_bd1be775f345"
+  }
+}

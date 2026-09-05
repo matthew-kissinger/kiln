@@ -86,6 +86,18 @@ createStairs(name, material, { steps?, totalRise, totalRun, width, axis?: 'x'|'z
   // a multi-storey building.
 
 // Geometry (returns BufferGeometry)
+meshGeo({ positions: number[], indices?: number[], normals?: number[], uvs?: number[], tangents?: number[] })
+  // Builds an owned triangle mesh from flat numeric arrays. Validates finite values, attribute
+  // lengths and indices; computes normals if absent. Counterclockwise winding.
+parametricSurface(sample: (u,v) => [x,y,z], opts?: { u?: [0,1], v?: [0,1], uSegments?: 24, vSegments?: 24, periodicU?: false, periodicV?: false, orientation?: 'uv'|'vu' })
+  // Samples an equation into an owned surface with UVs. Periodic endpoints must coincide; UV
+  // seams retain matching normals. A surface is not automatically a watertight solid.
+await implicitSurface(sample: ([x,y,z]) => signedValue, { bounds: { min, max }, edgeLength, maxCells?: 1000000, maxEvaluations?: 8000000, level?: 0, tolerance?: -1, smooth?: true })
+  // Experimental positive-inside implicit field sampled into a solid mesh. Requires explicit
+  // bounds and resolution; checks grid size and actual evaluation count. Output has no UVs.
+  // NOTE: Use async build and await. Smaller edgeLength increases cost sharply. This helper
+  // cannot stop a callback that never returns; the host evaluator process provides that
+  // boundary. Thin features and geometric accuracy require inspection.
 boxGeo(width: number, height: number, depth: number)  // 6-face box. 12 tris regardless of size. Cheapest geometry.
 sphereGeo(radius: number, widthSegments?: 8, heightSegments?: 6)
   // UV sphere. Default 8x6 segments = 84 tris. Bump segments for smoother curves.
@@ -155,8 +167,9 @@ wingGeo(opts?: { span, rootChord, tipChord, sweep, thickness, dihedral })
   // Trapezoid wing panel. Local root edge is at Z=0, span extends toward +Z, positive sweep
   // moves the tip aft along -X.
 gearGeo(opts?: { teeth?: 12, rootRadius?: 0.8, tipRadius?: 1.0, boreRadius?: 0.2, height?: 0.3, toothWidthFrac?: 0.5 })
-  // Parametric gear: disc with N additive teeth around the rim and a center bore. Flat-shaded
-  // hard edges. Built directly (no CSG), so cheap.
+  // Stylized gear with flat edges and an optional center bore; no CSG. Use boreRadius <
+  // rootRadius < tipRadius. Radii are absolute: an omitted rootRadius stays 0.8 when tipRadius
+  // changes. Set all three radii for small gears.
 bladeGeo(opts?: { length?: 1.5, baseWidth?: 0.1, thickness?: 0.015, tipLength?: 0.25, edgeBevel?: 0 })
   // Parametric sword blade: rectangular base tapering to a point over tipLength. edgeBevel > 0
   // pinches the cross-section toward a diamond ridge.
@@ -191,12 +204,20 @@ foliageMaterial(albedo, { alphaCutoff?, roughness?, doubleSided? })
   // double-sided. Use an alpha-bearing albedo texture.
 
 // Instancing (share geometry+material; smaller GLBs)
+copyGeometry(geometry: BufferGeometry)
+  // Returns an independent geometry with copied vertex buffers. Use before direct mutation of a
+  // cached primitive.
+copyMaterial(material: Material)
+  // Copies material properties so edits do not change other parts. Referenced textures remain
+  // shared.
 createWheelGeometrySet(radius: number, width: number)
   // Creates one reusable +Z-axle tire/rim/hub geometry set for instanced wheel assemblies.
 cloneGeometry(geo: BufferGeometry)
-  // Returns the same geometry reference. Use it as a signal that you are intentionally sharing
-  // geometry across multiple parts; gltf-transform dedupes on export.
-cloneMaterial(mat: Material)  // Shared material reference. See cloneGeometry.
+  // Deprecated name: returns the SAME geometry, without copying. Use copyGeometry for
+  // independent vertex edits, or pass the original geometry directly for intentional sharing.
+cloneMaterial(mat: Material)
+  // Deprecated name: returns the SAME material. Use copyMaterial for independent property
+  // edits, or pass the original for intentional sharing.
 createInstance(name, source, opts?: { position, rotation: [xDeg, yDeg, zDeg], scale, parent })
   // Creates a new mesh reusing an existing part's geometry + material at a new transform.
   // Cheapest way to replicate wheels / bolts / fence posts / windows. \`rotation\` is in DEGREES,
@@ -214,16 +235,17 @@ mirror(name, source, axis: 'x'|'y'|'z', parent?)
   // handled by viewers).
 
 // CSG / Boolean (async — using any of these requires \`async function build()\`)
-// NOTE: UVs do NOT survive a boolean: the manifold bridge carries positions only, so the result
-// has no uv attribute and any texture on it will not appear. Unwrap AFTER the boolean, never
-// before — \`mesh.geometry = await autoUnwrap(mesh.geometry)\`. Unwrapping an operand first is
-// wasted work; the next boolean throws the atlas away. An operand that contributes zero
-// triangles (an empty Group) and an empty result both throw with the cause named, instead of
-// silently producing an invisible part.
-await boolUnion(name: string, ...parts: Object3D[], opts?: { smooth?: false })
+// NOTE: For textured or multi-material booleans, pass { preserveAttributes: true } as the final
+// options argument. This preserves UV0 and source materials through actual operand runs;
+// exposed cut faces inherit the cutter material and UVs. Legacy calls omit that option and
+// discard UVs, so unwrap their result afterward: \`mesh.geometry = await
+// autoUnwrap(mesh.geometry)\`. Tangents are regenerated when needed. Empty operands/results fail
+// with a named cause. Convex hull faces are newly generated and have no original-face
+// provenance.
+await boolUnion(name: string, ...parts: Object3D[], opts?: { smooth?: false, preserveAttributes?: boolean })
   // Merges two or more parts into one watertight manifold mesh. Default flat shading (hard
   // edges) — pass { smooth: true } as last arg for averaged normals on organic merges.
-await boolDiff(name: string, body: Object3D, ...cutters: Object3D[], opts?: { smooth?: false })
+await boolDiff(name: string, body: Object3D, ...cutters: Object3D[], opts?: { smooth?: false, preserveAttributes?: boolean })
   // Subtracts cutters from a body (holes, button recesses, window slots). Default flat shading
   // for sharp mechanical edges.
 await roundedBoxGeo(width: number, height: number, depth: number, radius: number, opts?: { style?: 'round' | 'chamfer', segments?: 12, smooth?: boolean })
@@ -265,16 +287,49 @@ await hull(name: string, ...parts: Object3D[], opts?: { smooth?: true })
   // volumes). Pass { smooth: false } for a faceted look.
 
 // Mesh ops
-subdivide(geometry: BufferGeometry, iterations?: 1, opts?: { split, uvSmooth, preserveEdges, flatOnly, weld })
-  // Loop subdivision. Each iteration ~4x the triangle count and smooths the surface.
-  // Non-indexed input is auto-welded via mergeVertices (weld: false to skip). Use 1 for mild
-  // smoothing, 2 for organic shapes.
-mergeVertices(geometry: BufferGeometry, tolerance?: 1e-4)
-  // Welds coincident vertices into shared, indexed ones. Three's primitives emit disconnected
-  // per-face strips — call this before subdividing, deforming, or smooth-shading so shared
-  // corners move once.
+creaseNormals(geometry: BufferGeometry, opts?: { angle?: 60, tolerance?: number })
+  // Returns owned geometry with angle-limited smooth normals, preserving UV corners. Angle is
+  // degrees. Invalidates tangents; use after shaping for sharp rims and smooth walls.
+bend(geometry, { angle, frame?: { origin, rotation }, interval?: [minY,maxY], falloff?: t => weight })
+  // Bends local +Y toward +X through angle degrees. Returns owned geometry and updated
+  // normals/bounds; preserves UVs, invalidates tangents. Frame rotation is Euler XYZ degrees.
+  // NOTE: Deformation interval uses local Y distances; outside vertices stay unchanged. Add
+  // enough segments before bending. Falloff returns 0..1; use it to avoid a discontinuity at a
+  // selected interval boundary.
+twist(geometry, { angle, frame?: { origin, rotation }, interval?: [minY,maxY], falloff?: t => weight })
+  // Rotates the cross-section progressively around local +Y, reaching angle degrees at the end.
+  // Returns owned geometry; frame rotation uses Euler XYZ degrees.
+taper(geometry, { startScale?: [1,1], endScale: [x,z], frame?: { origin, rotation }, interval?: [minY,maxY], falloff?: t => weight })
+  // Scales local X/Z across the local Y interval using positive start/end scale pairs. Returns
+  // owned geometry; preserves UVs and invalidates tangents.
+displace(geometry, offset: ([x,y,z], t) => [dx,dy,dz], opts?: { frame?: { origin, rotation }, interval?: [minY,maxY], falloff?: t => weight })
+  // Adds an authored displacement vector in the chosen local frame. Returns owned geometry;
+  // callback coordinates are local and t is normalized along the interval.
+subdivide(geometry: BufferGeometry, iterations?: 1, opts?: { preserveUV?: boolean, split?: boolean, uvSmooth?: boolean, preserveEdges?: boolean, flatOnly?: boolean, weld?: boolean })
+  // Loop subdivision returns new geometry; each iteration roughly quadruples triangles and
+  // smooths the surface. Use preserveUV:true for textured meshes. Legacy position-only welding
+  // discards UVs and reports that loss. This smooths shapes, not selected-edge beveling.
+mergeVertices(geometry: BufferGeometry, opts?: { tolerance?: 1e-4, positionOnly?: boolean } | number)
+  // Returns indexed geometry. Default welding preserves attribute seams, so a textured cube
+  // retains separate face corners. positionOnly:true welds coincident positions and discards
+  // other attributes; use it explicitly when changing topology and regenerate shading/UVs
+  // afterward.
 
 // Curves
+sweepProfile(profile: [x,z][], path: [x,y,z][], opts?: { cap?: true, closed?: false, up?: [x,y,z], twist?: 0, scale?: number | [x,z][] })
+  // Sweeps a simple noncircular profile along polyline stations using transported frames.
+  // Supports total twist in degrees and per-station scales. Generates UVs and optional caps.
+  // NOTE: First version supports one simple profile without holes. Closed paths omit the
+  // repeated endpoint and require twist to be a multiple of 360. up sets the initial profile +Z
+  // direction and cannot parallel the path. Tight-turn warnings do not replace visual
+  // inspection for self-intersections.
+loftProfiles(sections: { profile: [x,z][], frame?: { origin, rotation } }[], opts?: { cap?: true })
+  // Joins corresponding simple profiles in explicit local XZ planes. Each frame uses Euler XYZ
+  // degrees and local +Y along the loft. Profiles need equal point counts and corresponding
+  // vertices.
+  // NOTE: No holes or automatic profile correspondence. Opposite winding is normalized while
+  // preserving the first point. Caps close boundaries but do not prove the loft has no
+  // self-intersections.
 curveToMesh(points: [x,y,z][], radius, tubularSegs?: 32, radialSegs?: 8, closed?: false)
   // Sweeps a circular profile along a path. Equivalent to Blender's Curve to Mesh node with a
   // circle profile. Use for pipes, cables, tubular frames.
@@ -357,11 +412,15 @@ spinAnimation(jointName: string, duration?: 2, axis?: 'x' | 'y' | 'z')
   // 360° rotation over \`duration\` around \`axis\`.
 
 // Inspection utilities
+geometryDiagnostics(geometry: BufferGeometry, tolerance?: 1e-6)
+  // Counts mesh topology problems after position-based seam matching. Open boundaries are valid
+  // for sheets; closed edges alone do not prove a self-intersection-free solid.
 countTriangles(root: Object3D)  // Sums triangle count across every mesh in the subtree.
 countMaterials(root: Object3D)  // Unique material count (by reference) across the subtree.
 getJointNames(root: Object3D)  // All node names beginning with \`Joint_\`. Use to sanity-check animation targets.
 validateAsset(root: Object3D, category: 'character' | 'prop' | 'vfx' | 'environment' | 'architecture' | 'vegetation' | 'vehicle')
-  // Warns on high distinct-material count (draw calls). No triangle limit; detail is free."
+  // Checks geometry and material costs for the selected category. No default triangle limit;
+  // choose detail for the intended runtime and inspect measured draw calls."
 `;
 
 exports[`unified api surface (examples folded in) unified api snapshot (review folded examples in this diff) 1`] = `
@@ -486,6 +545,23 @@ createStairs(name, material, { steps?, totalRise, totalRun, width, axis?: 'x'|'z
   // axis: 'x', parent: root });
 
 // Geometry (returns BufferGeometry)
+meshGeo({ positions: number[], indices?: number[], normals?: number[], uvs?: number[], tangents?: number[] })
+  // Builds an owned triangle mesh from flat numeric arrays. Validates finite values, attribute
+  // lengths and indices; computes normals if absent. Counterclockwise winding.
+  // e.g. const triangle = meshGeo({ positions: [0,0,0, 1,0,0, 0,1,0], indices: [0,1,2] });
+parametricSurface(sample: (u,v) => [x,y,z], opts?: { u?: [0,1], v?: [0,1], uSegments?: 24, vSegments?: 24, periodicU?: false, periodicV?: false, orientation?: 'uv'|'vu' })
+  // Samples an equation into an owned surface with UVs. Periodic endpoints must coincide; UV
+  // seams retain matching normals. A surface is not automatically a watertight solid.
+  // e.g. const canopy = parametricSurface((u,v) => [u, 0.3*Math.sin(u*3)*Math.cos(v*2), v], {
+  // u: [-2,2], v: [-1,1] });
+await implicitSurface(sample: ([x,y,z]) => signedValue, { bounds: { min, max }, edgeLength, maxCells?: 1000000, maxEvaluations?: 8000000, level?: 0, tolerance?: -1, smooth?: true })
+  // Experimental positive-inside implicit field sampled into a solid mesh. Requires explicit
+  // bounds and resolution; checks grid size and actual evaluation count. Output has no UVs.
+  // NOTE: Use async build and await. Smaller edgeLength increases cost sharply. This helper
+  // cannot stop a callback that never returns; the host evaluator process provides that
+  // boundary. Thin features and geometric accuracy require inspection.
+  // e.g. const blob = await implicitSurface(([x,y,z]) => 1-Math.hypot(x,y,z), { bounds: { min:
+  // [-1.2,-1.2,-1.2], max: [1.2,1.2,1.2] }, edgeLength: 0.15 });
 boxGeo(width: number, height: number, depth: number)  // 6-face box. 12 tris regardless of size. Cheapest geometry.
   // e.g. const geo = boxGeo(1, 0.5, 2);
 sphereGeo(radius: number, widthSegments?: 8, heightSegments?: 6)
@@ -584,10 +660,12 @@ wingGeo(opts?: { span, rootChord, tipChord, sweep, thickness, dihedral })
   // e.g. const geo = wingGeo({ span: 2.2, rootChord: 0.8, tipChord: 0.3, sweep: 0.25, dihedral:
   // 0.08 });
 gearGeo(opts?: { teeth?: 12, rootRadius?: 0.8, tipRadius?: 1.0, boreRadius?: 0.2, height?: 0.3, toothWidthFrac?: 0.5 })
-  // Parametric gear: disc with N additive teeth around the rim and a center bore. Flat-shaded
-  // hard edges. Built directly (no CSG), so cheap.
-  // e.g. const g = gearGeo({ teeth: 16, tipRadius: 1.0, boreRadius: 0.15, height: 0.25 });
-  // createPart('Gear', g, gameMaterial(0x909090, { metalness: 0.8 }), { parent: root });
+  // Stylized gear with flat edges and an optional center bore; no CSG. Use boreRadius <
+  // rootRadius < tipRadius. Radii are absolute: an omitted rootRadius stays 0.8 when tipRadius
+  // changes. Set all three radii for small gears.
+  // e.g. const g = gearGeo({ teeth: 28, rootRadius: 0.063, tipRadius: 0.075, boreRadius: 0.012,
+  // height: 0.024 }); createPart('Gear', g, gameMaterial(0x909090, { metalness: 0.8 }), {
+  // parent: root });
 bladeGeo(opts?: { length?: 1.5, baseWidth?: 0.1, thickness?: 0.015, tipLength?: 0.25, edgeBevel?: 0 })
   // Parametric sword blade: rectangular base tapering to a point over tipLength. edgeBevel > 0
   // pinches the cross-section toward a diamond ridge.
@@ -637,14 +715,24 @@ foliageMaterial(albedo, { alphaCutoff?, roughness?, doubleSided? })
   // e.g. const mat = await materialRecipe('kiln.material.leaf.v1');
 
 // Instancing (share geometry+material; smaller GLBs)
+copyGeometry(geometry: BufferGeometry)
+  // Returns an independent geometry with copied vertex buffers. Use before direct mutation of a
+  // cached primitive.
+  // e.g. const editable = copyGeometry(boxGeo(1, 1, 1)); editable.translate(0, 0.5, 0);
+copyMaterial(material: Material)
+  // Copies material properties so edits do not change other parts. Referenced textures remain
+  // shared.
+  // e.g. const red = copyMaterial(steel); red.color.set(0xaa2222);
 createWheelGeometrySet(radius: number, width: number)
   // Creates one reusable +Z-axle tire/rim/hub geometry set for instanced wheel assemblies.
   // e.g. const wheelGeo = createWheelGeometrySet(0.45, 0.22);
 cloneGeometry(geo: BufferGeometry)
-  // Returns the same geometry reference. Use it as a signal that you are intentionally sharing
-  // geometry across multiple parts; gltf-transform dedupes on export.
+  // Deprecated name: returns the SAME geometry, without copying. Use copyGeometry for
+  // independent vertex edits, or pass the original geometry directly for intentional sharing.
   // e.g. const wheelGeo = cylinderGeo(0.4, 0.4, 0.2, 12);
-cloneMaterial(mat: Material)  // Shared material reference. See cloneGeometry.
+cloneMaterial(mat: Material)
+  // Deprecated name: returns the SAME material. Use copyMaterial for independent property
+  // edits, or pass the original for intentional sharing.
   // e.g. const rubberMat = gameMaterial(0x1a1a1a, { roughness: 0.95 });
 createInstance(name, source, opts?: { position, rotation: [xDeg, yDeg, zDeg], scale, parent })
   // Creates a new mesh reusing an existing part's geometry + material at a new transform.
@@ -672,19 +760,20 @@ mirror(name, source, axis: 'x'|'y'|'z', parent?)
   // e.g. mirror('WingR', wingL, 'x', root);
 
 // CSG / Boolean (async — using any of these requires \`async function build()\`)
-// NOTE: UVs do NOT survive a boolean: the manifold bridge carries positions only, so the result
-// has no uv attribute and any texture on it will not appear. Unwrap AFTER the boolean, never
-// before — \`mesh.geometry = await autoUnwrap(mesh.geometry)\`. Unwrapping an operand first is
-// wasted work; the next boolean throws the atlas away. An operand that contributes zero
-// triangles (an empty Group) and an empty result both throw with the cause named, instead of
-// silently producing an invisible part.
-await boolUnion(name: string, ...parts: Object3D[], opts?: { smooth?: false })
+// NOTE: For textured or multi-material booleans, pass { preserveAttributes: true } as the final
+// options argument. This preserves UV0 and source materials through actual operand runs;
+// exposed cut faces inherit the cutter material and UVs. Legacy calls omit that option and
+// discard UVs, so unwrap their result afterward: \`mesh.geometry = await
+// autoUnwrap(mesh.geometry)\`. Tangents are regenerated when needed. Empty operands/results fail
+// with a named cause. Convex hull faces are newly generated and have no original-face
+// provenance.
+await boolUnion(name: string, ...parts: Object3D[], opts?: { smooth?: false, preserveAttributes?: boolean })
   // Merges two or more parts into one watertight manifold mesh. Default flat shading (hard
   // edges) — pass { smooth: true } as last arg for averaged normals on organic merges.
   // e.g. const body = new THREE.Mesh(boxGeo(2, 1, 1), steel); const turret = new
   // THREE.Mesh(cylinderGeo(0.3, 0.3, 0.4, 16), steel); turret.position.y = 0.5; const hull =
   // await boolUnion('Hull', body, turret);
-await boolDiff(name: string, body: Object3D, ...cutters: Object3D[], opts?: { smooth?: false })
+await boolDiff(name: string, body: Object3D, ...cutters: Object3D[], opts?: { smooth?: false, preserveAttributes?: boolean })
   // Subtracts cutters from a body (holes, button recesses, window slots). Default flat shading
   // for sharp mechanical edges.
   // e.g. const body = new THREE.Mesh(cylinderGeo(1, 1, 0.3, 32), steel); const teeth = [...];
@@ -743,21 +832,62 @@ await hull(name: string, ...parts: Object3D[], opts?: { smooth?: true })
   // ...rockChunks);
 
 // Mesh ops
-subdivide(geometry: BufferGeometry, iterations?: 1, opts?: { split, uvSmooth, preserveEdges, flatOnly, weld })
-  // Loop subdivision. Each iteration ~4x the triangle count and smooths the surface.
-  // Non-indexed input is auto-welded via mergeVertices (weld: false to skip). Use 1 for mild
-  // smoothing, 2 for organic shapes.
+creaseNormals(geometry: BufferGeometry, opts?: { angle?: 60, tolerance?: number })
+  // Returns owned geometry with angle-limited smooth normals, preserving UV corners. Angle is
+  // degrees. Invalidates tangents; use after shaping for sharp rims and smooth walls.
+  // e.g. const shell = creaseNormals(cylinderGeo(1,1,2,32), { angle: 45 });
+bend(geometry, { angle, frame?: { origin, rotation }, interval?: [minY,maxY], falloff?: t => weight })
+  // Bends local +Y toward +X through angle degrees. Returns owned geometry and updated
+  // normals/bounds; preserves UVs, invalidates tangents. Frame rotation is Euler XYZ degrees.
+  // NOTE: Deformation interval uses local Y distances; outside vertices stay unchanged. Add
+  // enough segments before bending. Falloff returns 0..1; use it to avoid a discontinuity at a
+  // selected interval boundary.
+  // e.g. const arch = bend(planeGeo(1,4,4,32), { angle: 90 });
+twist(geometry, { angle, frame?: { origin, rotation }, interval?: [minY,maxY], falloff?: t => weight })
+  // Rotates the cross-section progressively around local +Y, reaching angle degrees at the end.
+  // Returns owned geometry; frame rotation uses Euler XYZ degrees.
+  // e.g. const spiral = twist(column, { angle: 120 });
+taper(geometry, { startScale?: [1,1], endScale: [x,z], frame?: { origin, rotation }, interval?: [minY,maxY], falloff?: t => weight })
+  // Scales local X/Z across the local Y interval using positive start/end scale pairs. Returns
+  // owned geometry; preserves UVs and invalidates tangents.
+  // e.g. const narrowed = taper(column, { endScale: [0.4,0.7] });
+displace(geometry, offset: ([x,y,z], t) => [dx,dy,dz], opts?: { frame?: { origin, rotation }, interval?: [minY,maxY], falloff?: t => weight })
+  // Adds an authored displacement vector in the chosen local frame. Returns owned geometry;
+  // callback coordinates are local and t is normalized along the interval.
+  // e.g. const rippled = displace(surface, ([x,y,z]) => [0, 0.1*Math.sin(x*8), 0]);
+subdivide(geometry: BufferGeometry, iterations?: 1, opts?: { preserveUV?: boolean, split?: boolean, uvSmooth?: boolean, preserveEdges?: boolean, flatOnly?: boolean, weld?: boolean })
+  // Loop subdivision returns new geometry; each iteration roughly quadruples triangles and
+  // smooths the surface. Use preserveUV:true for textured meshes. Legacy position-only welding
+  // discards UVs and reports that loss. This smooths shapes, not selected-edge beveling.
   // e.g. const smoothRock = subdivide(boxGeo(1, 1, 1), 2);
-mergeVertices(geometry: BufferGeometry, tolerance?: 1e-4)
-  // Welds coincident vertices into shared, indexed ones. Three's primitives emit disconnected
-  // per-face strips — call this before subdividing, deforming, or smooth-shading so shared
-  // corners move once.
-  // e.g. // Weld before random deformation so corners drift together: const base =
-  // mergeVertices(boxGeo(1, 1, 1)); const pos = base.getAttribute('position'); for (let i = 0;
-  // i < pos.count; i++) pos.setXYZ(i, pos.getX(i) + jitter(), pos.getY(i) + jitter(),
-  // pos.getZ(i) + jitter()); const rock = subdivide(base, 2);
+mergeVertices(geometry: BufferGeometry, opts?: { tolerance?: 1e-4, positionOnly?: boolean } | number)
+  // Returns indexed geometry. Default welding preserves attribute seams, so a textured cube
+  // retains separate face corners. positionOnly:true welds coincident positions and discards
+  // other attributes; use it explicitly when changing topology and regenerate shading/UVs
+  // afterward.
+  // e.g. const welded = mergeVertices(boxGeo(1, 1, 1), { positionOnly: true }); const rock =
+  // displace(subdivide(welded, 2), ([x,y,z]) => [0.08*Math.sin(y*7+z*3), 0.04*Math.sin(x*9),
+  // 0]);
 
 // Curves
+sweepProfile(profile: [x,z][], path: [x,y,z][], opts?: { cap?: true, closed?: false, up?: [x,y,z], twist?: 0, scale?: number | [x,z][] })
+  // Sweeps a simple noncircular profile along polyline stations using transported frames.
+  // Supports total twist in degrees and per-station scales. Generates UVs and optional caps.
+  // NOTE: First version supports one simple profile without holes. Closed paths omit the
+  // repeated endpoint and require twist to be a multiple of 360. up sets the initial profile +Z
+  // direction and cannot parallel the path. Tight-turn warnings do not replace visual
+  // inspection for self-intersections.
+  // e.g. const rail = sweepProfile([[-.1,-.2],[.1,-.2],[.1,.2],[-.1,.2]],
+  // [[0,0,0],[0,1,0],[1,2,0]]);
+loftProfiles(sections: { profile: [x,z][], frame?: { origin, rotation } }[], opts?: { cap?: true })
+  // Joins corresponding simple profiles in explicit local XZ planes. Each frame uses Euler XYZ
+  // degrees and local +Y along the loft. Profiles need equal point counts and corresponding
+  // vertices.
+  // NOTE: No holes or automatic profile correspondence. Opposite winding is normalized while
+  // preserving the first point. Caps close boundaries but do not prove the loft has no
+  // self-intersections.
+  // e.g. const hull = loftProfiles([{ profile: wide }, { profile: narrow, frame: { origin:
+  // [0,2,0] } }]);
 curveToMesh(points: [x,y,z][], radius, tubularSegs?: 32, radialSegs?: 8, closed?: false)
   // Sweeps a circular profile along a path. Equivalent to Blender's Curve to Mesh node with a
   // circle profile. Use for pipes, cables, tubular frames.
@@ -876,6 +1006,10 @@ spinAnimation(jointName: string, duration?: 2, axis?: 'x' | 'y' | 'z')
   // e.g. return [spinAnimation('Joint_Rotor', 0.5, 'y')];
 
 // Inspection utilities
+geometryDiagnostics(geometry: BufferGeometry, tolerance?: 1e-6)
+  // Counts mesh topology problems after position-based seam matching. Open boundaries are valid
+  // for sheets; closed edges alone do not prove a self-intersection-free solid.
+  // e.g. const topology = geometryDiagnostics(shell);
 countTriangles(root: Object3D)  // Sums triangle count across every mesh in the subtree.
   // e.g. meta.tris = countTriangles(root);
 countMaterials(root: Object3D)  // Unique material count (by reference) across the subtree.
@@ -883,6 +1017,7 @@ countMaterials(root: Object3D)  // Unique material count (by reference) across t
 getJointNames(root: Object3D)  // All node names beginning with \`Joint_\`. Use to sanity-check animation targets.
   // e.g. const joints = getJointNames(root);
 validateAsset(root: Object3D, category: 'character' | 'prop' | 'vfx' | 'environment' | 'architecture' | 'vegetation' | 'vehicle')
-  // Warns on high distinct-material count (draw calls). No triangle limit; detail is free.
+  // Checks geometry and material costs for the selected category. No default triangle limit;
+  // choose detail for the intended runtime and inspect measured draw calls.
   // e.g. const v = validateAsset(root, 'prop');"
 `;

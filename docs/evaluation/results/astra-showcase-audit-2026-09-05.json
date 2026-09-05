@@ -1,0 +1,459 @@
+[
+  {
+    "name": "nautilus-habitat",
+    "setup": {
+      "name": "nautilus-habitat",
+      "phase": "independent showcase authoring",
+      "model": "gpt-6-astra",
+      "harness": "Codex",
+      "runtime": "C:\\Users\\Mattm\\AppData\\Local\\Temp\\kiln-package-café-I3KNmI\\fresh installation\\node_modules\\@kiln\\engine",
+      "tarballSha256": "0d457e8f8763730079da013abfa6662aadc02843f090fcae594c0f711399d16c",
+      "build": {
+        "schemaVersion": 1,
+        "entries": {
+          "mcp": {
+            "identity": "sha256:dffc31aa0b40c68acb7cfda3cd818d010a0fd1979cf604ac1a420be97913fe75",
+            "engineVersion": "0.6.0",
+            "toolchain": "bun@1.3.14",
+            "sourceHash": "a664884bdce4d3fc78c66a79c492ef722a85031bf62f037aa0384223507450ea",
+            "dependencyHash": "50096a04c37058e201c3d5234a0babeae5531f941f07f5dbf11ee733f04ce2e8",
+            "dependencies": {
+              "@gltf-transform/core": "^4.4.1",
+              "@gltf-transform/extensions": "^4.4.1",
+              "@gltf-transform/functions": "^4.4.1",
+              "@modelcontextprotocol/client": "^2.0.0",
+              "@modelcontextprotocol/server": "^2.0.0",
+              "@openrouter/ai-sdk-provider": "^2.10.0",
+              "@types/three": "^0.185.1",
+              "acorn": "^8.17.0",
+              "acorn-walk": "^8.3.5",
+              "gltf-validator": "2.0.0-dev.3.10",
+              "manifold-3d": "^3.5.1",
+              "sharp": "^0.35.3",
+              "three": "0.185.1",
+              "three-subdivide": "^1.1.5",
+              "xatlasjs": "^0.2.0",
+              "zod": "^4.4.3"
+            },
+            "target": "node",
+            "file": "mcp-server.mjs",
+            "bundleHash": "sha256:776d049ab819ff898450320b59540b3d61c0460a6954d2db9c1aaabb7d7f0354"
+          },
+          "cli": {
+            "identity": "sha256:dffc31aa0b40c68acb7cfda3cd818d010a0fd1979cf604ac1a420be97913fe75",
+            "engineVersion": "0.6.0",
+            "toolchain": "bun@1.3.14",
+            "sourceHash": "a664884bdce4d3fc78c66a79c492ef722a85031bf62f037aa0384223507450ea",
+            "dependencyHash": "50096a04c37058e201c3d5234a0babeae5531f941f07f5dbf11ee733f04ce2e8",
+            "dependencies": {
+              "@gltf-transform/core": "^4.4.1",
+              "@gltf-transform/extensions": "^4.4.1",
+              "@gltf-transform/functions": "^4.4.1",
+              "@modelcontextprotocol/client": "^2.0.0",
+              "@modelcontextprotocol/server": "^2.0.0",
+              "@openrouter/ai-sdk-provider": "^2.10.0",
+              "@types/three": "^0.185.1",
+              "acorn": "^8.17.0",
+              "acorn-walk": "^8.3.5",
+              "gltf-validator": "2.0.0-dev.3.10",
+              "manifold-3d": "^3.5.1",
+              "sharp": "^0.35.3",
+              "three": "0.185.1",
+              "three-subdivide": "^1.1.5",
+              "xatlasjs": "^0.2.0",
+              "zod": "^4.4.3"
+            },
+            "target": "node",
+            "file": "cli.mjs",
+            "bundleHash": "sha256:4f70681d55901b2416babe9108b291e4a7ab2de462360f8d13bdd7084bea6126"
+          },
+          "worker": {
+            "identity": "sha256:dffc31aa0b40c68acb7cfda3cd818d010a0fd1979cf604ac1a420be97913fe75",
+            "engineVersion": "0.6.0",
+            "toolchain": "bun@1.3.14",
+            "sourceHash": "a664884bdce4d3fc78c66a79c492ef722a85031bf62f037aa0384223507450ea",
+            "dependencyHash": "50096a04c37058e201c3d5234a0babeae5531f941f07f5dbf11ee733f04ce2e8",
+            "dependencies": {
+              "@gltf-transform/core": "^4.4.1",
+              "@gltf-transform/extensions": "^4.4.1",
+              "@gltf-transform/functions": "^4.4.1",
+              "@modelcontextprotocol/client": "^2.0.0",
+              "@modelcontextprotocol/server": "^2.0.0",
+              "@openrouter/ai-sdk-provider": "^2.10.0",
+              "@types/three": "^0.185.1",
+              "acorn": "^8.17.0",
+              "acorn-walk": "^8.3.5",
+              "gltf-validator": "2.0.0-dev.3.10",
+              "manifold-3d": "^3.5.1",
+              "sharp": "^0.35.3",
+              "three": "0.185.1",
+              "three-subdivide": "^1.1.5",
+              "xatlasjs": "^0.2.0",
+              "zod": "^4.4.3"
+            },
+            "target": "node",
+            "file": "evaluator-worker.mjs",
+            "bundleHash": "sha256:5a574c3be5f352c9d1c4bfd4c77dc184e202921bb2767b20dce8b467b69cf150"
+          },
+          "agent-run": {
+            "identity": "sha256:dffc31aa0b40c68acb7cfda3cd818d010a0fd1979cf604ac1a420be97913fe75",
+            "engineVersion": "0.6.0",
+            "toolchain": "bun@1.3.14",
+            "sourceHash": "a664884bdce4d3fc78c66a79c492ef722a85031bf62f037aa0384223507450ea",
+            "dependencyHash": "50096a04c37058e201c3d5234a0babeae5531f941f07f5dbf11ee733f04ce2e8",
+            "dependencies": {
+              "@gltf-transform/core": "^4.4.1",
+              "@gltf-transform/extensions": "^4.4.1",
+              "@gltf-transform/functions": "^4.4.1",
+              "@modelcontextprotocol/client": "^2.0.0",
+              "@modelcontextprotocol/server": "^2.0.0",
+              "@openrouter/ai-sdk-provider": "^2.10.0",
+              "@types/three": "^0.185.1",
+              "acorn": "^8.17.0",
+              "acorn-walk": "^8.3.5",
+              "gltf-validator": "2.0.0-dev.3.10",
+              "manifold-3d": "^3.5.1",
+              "sharp": "^0.35.3",
+              "three": "0.185.1",
+              "three-subdivide": "^1.1.5",
+              "xatlasjs": "^0.2.0",
+              "zod": "^4.4.3"
+            },
+            "target": "node",
+            "file": "agent-run.mjs",
+            "bundleHash": "sha256:97490ef3e400fcfab4902b707ede2a3fc8497984ab4e1c9c1bea96ea2000253a"
+          },
+          "agent-providers": {
+            "identity": "sha256:dffc31aa0b40c68acb7cfda3cd818d010a0fd1979cf604ac1a420be97913fe75",
+            "engineVersion": "0.6.0",
+            "toolchain": "bun@1.3.14",
+            "sourceHash": "a664884bdce4d3fc78c66a79c492ef722a85031bf62f037aa0384223507450ea",
+            "dependencyHash": "50096a04c37058e201c3d5234a0babeae5531f941f07f5dbf11ee733f04ce2e8",
+            "dependencies": {
+              "@gltf-transform/core": "^4.4.1",
+              "@gltf-transform/extensions": "^4.4.1",
+              "@gltf-transform/functions": "^4.4.1",
+              "@modelcontextprotocol/client": "^2.0.0",
+              "@modelcontextprotocol/server": "^2.0.0",
+              "@openrouter/ai-sdk-provider": "^2.10.0",
+              "@types/three": "^0.185.1",
+              "acorn": "^8.17.0",
+              "acorn-walk": "^8.3.5",
+              "gltf-validator": "2.0.0-dev.3.10",
+              "manifold-3d": "^3.5.1",
+              "sharp": "^0.35.3",
+              "three": "0.185.1",
+              "three-subdivide": "^1.1.5",
+              "xatlasjs": "^0.2.0",
+              "zod": "^4.4.3"
+            },
+            "target": "node",
+            "file": "agent-providers.mjs",
+            "bundleHash": "sha256:367808f475150d9591ba39b7abe48531015adc447ae369ad471b5b91289033a6"
+          }
+        }
+      },
+      "promptSha256": "7fc3019de91a1c605e60c699dea880f971c622c3952e9daf02b13f321581cf41",
+      "skills": {
+        "kiln-author-asset/references/camera-recipes.md": "8959e0b5bf98d8d6712147ff9f4eb05bdff9a58cdda60796304a527329b84c19",
+        "kiln-author-asset/references/geometry-recipes.md": "12e861a7c05b21ee8d0de713f4bde8a843af1dbf37326b5121a8229805693c3c",
+        "kiln-author-asset/references/program-contract.md": "42cc4c17fa14d94febdf0ccbc38454f5972f2d3730f20dbca39151c0fe3aa293",
+        "kiln-author-asset/references/reusable-frame.kiln.js": "9015b2255742efa74e47531f68778573c34566237b3256dcdaab9c360cfc895f",
+        "kiln-author-asset/SKILL.md": "6a69c2ef6315cf719c33a5c024f5b07c87264de8e6fdb987cacbefbfd431f93e",
+        "kiln-qa-asset/references/integration-checks.md": "3d340cc81c0de0a4415ff1d2707c64db1a7433fd7e63f69e1748862739ef5c24",
+        "kiln-qa-asset/SKILL.md": "f2f990a669529f09c7e818a74f1e3af299e474d41a86910434d521a1fd596845",
+        "kiln-refine-asset/references/revision-and-views.md": "78ccb43588fd37b020cabc17e61facd610ea676c7f0c9ebb104f07845edbf3e5",
+        "kiln-refine-asset/SKILL.md": "135af2115e63f09f4c413feceedee5f547d21d154b4d32ed5e88c4077ac56d61"
+      },
+      "observerSha256": "58c6d64f3232510ccff48f7109a7337c6b6f8d64400030073b36f2b6a8e72237",
+      "createdAt": "2026-09-05T21:08:51.295Z"
+    },
+    "exit": {
+      "name": "nautilus-habitat",
+      "code": 0,
+      "timedOut": false,
+      "startedAt": "2026-09-05T21:09:03.959Z",
+      "finishedAt": "2026-09-05T21:17:25.548Z"
+    },
+    "calls": 12,
+    "inlineSourceCalls": 0,
+    "imageCells": 10,
+    "imageMessages": 5,
+    "edits": [
+      {
+        "requestId": 11,
+        "input": "7f8b05623ccd1ae68e8e1d9949550274c3772f363cf1f61567149dbec73d83c5",
+        "output": "749a58cda43ae78d4ff0fefa946cafd90896e0d99118aa18cd5c73d7651a6383",
+        "literalEdits": 2,
+        "replayVerified": true
+      },
+      {
+        "requestId": 13,
+        "input": "749a58cda43ae78d4ff0fefa946cafd90896e0d99118aa18cd5c73d7651a6383",
+        "output": "ef2ba2b6406792b7c5f621a32b89e7461c557fa02f7d13a36039c7f343edcdb5",
+        "literalEdits": 5,
+        "replayVerified": true
+      },
+      {
+        "requestId": 15,
+        "input": "ef2ba2b6406792b7c5f621a32b89e7461c557fa02f7d13a36039c7f343edcdb5",
+        "output": "7c98646e72943fbbbaa79391cc3951dd804f459eb1a36ce7d21c46f75370f5b2",
+        "literalEdits": 1,
+        "replayVerified": true
+      }
+    ],
+    "failures": [],
+    "finalSourceHash": "7c98646e72943fbbbaa79391cc3951dd804f459eb1a36ce7d21c46f75370f5b2",
+    "history": [
+      {
+        "title": "Initial design",
+        "description": "Initial imported program.",
+        "file": "initial.kiln.js",
+        "sourceHash": "7f8b05623ccd1ae68e8e1d9949550274c3772f363cf1f61567149dbec73d83c5"
+      },
+      {
+        "title": "Source revision 1",
+        "description": "Exact retained source after a successful literal edit call; unchanged text outside the requested edits was preserved.",
+        "file": "revision-1.kiln.js",
+        "sourceHash": "749a58cda43ae78d4ff0fefa946cafd90896e0d99118aa18cd5c73d7651a6383"
+      },
+      {
+        "title": "Source revision 2",
+        "description": "Exact retained source after a successful literal edit call; unchanged text outside the requested edits was preserved.",
+        "file": "revision-2.kiln.js",
+        "sourceHash": "ef2ba2b6406792b7c5f621a32b89e7461c557fa02f7d13a36039c7f343edcdb5"
+      },
+      {
+        "title": "Current gallery revision",
+        "description": "Exact retained source after a successful literal edit call; unchanged text outside the requested edits was preserved.",
+        "file": "current.kiln.js",
+        "sourceHash": "7c98646e72943fbbbaa79391cc3951dd804f459eb1a36ce7d21c46f75370f5b2"
+      }
+    ]
+  },
+  {
+    "name": "kestrel-rescue-craft",
+    "setup": {
+      "name": "kestrel-rescue-craft",
+      "phase": "independent showcase authoring",
+      "model": "gpt-6-astra",
+      "harness": "Codex",
+      "runtime": "C:\\Users\\Mattm\\AppData\\Local\\Temp\\kiln-package-café-I3KNmI\\fresh installation\\node_modules\\@kiln\\engine",
+      "tarballSha256": "0d457e8f8763730079da013abfa6662aadc02843f090fcae594c0f711399d16c",
+      "build": {
+        "schemaVersion": 1,
+        "entries": {
+          "mcp": {
+            "identity": "sha256:dffc31aa0b40c68acb7cfda3cd818d010a0fd1979cf604ac1a420be97913fe75",
+            "engineVersion": "0.6.0",
+            "toolchain": "bun@1.3.14",
+            "sourceHash": "a664884bdce4d3fc78c66a79c492ef722a85031bf62f037aa0384223507450ea",
+            "dependencyHash": "50096a04c37058e201c3d5234a0babeae5531f941f07f5dbf11ee733f04ce2e8",
+            "dependencies": {
+              "@gltf-transform/core": "^4.4.1",
+              "@gltf-transform/extensions": "^4.4.1",
+              "@gltf-transform/functions": "^4.4.1",
+              "@modelcontextprotocol/client": "^2.0.0",
+              "@modelcontextprotocol/server": "^2.0.0",
+              "@openrouter/ai-sdk-provider": "^2.10.0",
+              "@types/three": "^0.185.1",
+              "acorn": "^8.17.0",
+              "acorn-walk": "^8.3.5",
+              "gltf-validator": "2.0.0-dev.3.10",
+              "manifold-3d": "^3.5.1",
+              "sharp": "^0.35.3",
+              "three": "0.185.1",
+              "three-subdivide": "^1.1.5",
+              "xatlasjs": "^0.2.0",
+              "zod": "^4.4.3"
+            },
+            "target": "node",
+            "file": "mcp-server.mjs",
+            "bundleHash": "sha256:776d049ab819ff898450320b59540b3d61c0460a6954d2db9c1aaabb7d7f0354"
+          },
+          "cli": {
+            "identity": "sha256:dffc31aa0b40c68acb7cfda3cd818d010a0fd1979cf604ac1a420be97913fe75",
+            "engineVersion": "0.6.0",
+            "toolchain": "bun@1.3.14",
+            "sourceHash": "a664884bdce4d3fc78c66a79c492ef722a85031bf62f037aa0384223507450ea",
+            "dependencyHash": "50096a04c37058e201c3d5234a0babeae5531f941f07f5dbf11ee733f04ce2e8",
+            "dependencies": {
+              "@gltf-transform/core": "^4.4.1",
+              "@gltf-transform/extensions": "^4.4.1",
+              "@gltf-transform/functions": "^4.4.1",
+              "@modelcontextprotocol/client": "^2.0.0",
+              "@modelcontextprotocol/server": "^2.0.0",
+              "@openrouter/ai-sdk-provider": "^2.10.0",
+              "@types/three": "^0.185.1",
+              "acorn": "^8.17.0",
+              "acorn-walk": "^8.3.5",
+              "gltf-validator": "2.0.0-dev.3.10",
+              "manifold-3d": "^3.5.1",
+              "sharp": "^0.35.3",
+              "three": "0.185.1",
+              "three-subdivide": "^1.1.5",
+              "xatlasjs": "^0.2.0",
+              "zod": "^4.4.3"
+            },
+            "target": "node",
+            "file": "cli.mjs",
+            "bundleHash": "sha256:4f70681d55901b2416babe9108b291e4a7ab2de462360f8d13bdd7084bea6126"
+          },
+          "worker": {
+            "identity": "sha256:dffc31aa0b40c68acb7cfda3cd818d010a0fd1979cf604ac1a420be97913fe75",
+            "engineVersion": "0.6.0",
+            "toolchain": "bun@1.3.14",
+            "sourceHash": "a664884bdce4d3fc78c66a79c492ef722a85031bf62f037aa0384223507450ea",
+            "dependencyHash": "50096a04c37058e201c3d5234a0babeae5531f941f07f5dbf11ee733f04ce2e8",
+            "dependencies": {
+              "@gltf-transform/core": "^4.4.1",
+              "@gltf-transform/extensions": "^4.4.1",
+              "@gltf-transform/functions": "^4.4.1",
+              "@modelcontextprotocol/client": "^2.0.0",
+              "@modelcontextprotocol/server": "^2.0.0",
+              "@openrouter/ai-sdk-provider": "^2.10.0",
+              "@types/three": "^0.185.1",
+              "acorn": "^8.17.0",
+              "acorn-walk": "^8.3.5",
+              "gltf-validator": "2.0.0-dev.3.10",
+              "manifold-3d": "^3.5.1",
+              "sharp": "^0.35.3",
+              "three": "0.185.1",
+              "three-subdivide": "^1.1.5",
+              "xatlasjs": "^0.2.0",
+              "zod": "^4.4.3"
+            },
+            "target": "node",
+            "file": "evaluator-worker.mjs",
+            "bundleHash": "sha256:5a574c3be5f352c9d1c4bfd4c77dc184e202921bb2767b20dce8b467b69cf150"
+          },
+          "agent-run": {
+            "identity": "sha256:dffc31aa0b40c68acb7cfda3cd818d010a0fd1979cf604ac1a420be97913fe75",
+            "engineVersion": "0.6.0",
+            "toolchain": "bun@1.3.14",
+            "sourceHash": "a664884bdce4d3fc78c66a79c492ef722a85031bf62f037aa0384223507450ea",
+            "dependencyHash": "50096a04c37058e201c3d5234a0babeae5531f941f07f5dbf11ee733f04ce2e8",
+            "dependencies": {
+              "@gltf-transform/core": "^4.4.1",
+              "@gltf-transform/extensions": "^4.4.1",
+              "@gltf-transform/functions": "^4.4.1",
+              "@modelcontextprotocol/client": "^2.0.0",
+              "@modelcontextprotocol/server": "^2.0.0",
+              "@openrouter/ai-sdk-provider": "^2.10.0",
+              "@types/three": "^0.185.1",
+              "acorn": "^8.17.0",
+              "acorn-walk": "^8.3.5",
+              "gltf-validator": "2.0.0-dev.3.10",
+              "manifold-3d": "^3.5.1",
+              "sharp": "^0.35.3",
+              "three": "0.185.1",
+              "three-subdivide": "^1.1.5",
+              "xatlasjs": "^0.2.0",
+              "zod": "^4.4.3"
+            },
+            "target": "node",
+            "file": "agent-run.mjs",
+            "bundleHash": "sha256:97490ef3e400fcfab4902b707ede2a3fc8497984ab4e1c9c1bea96ea2000253a"
+          },
+          "agent-providers": {
+            "identity": "sha256:dffc31aa0b40c68acb7cfda3cd818d010a0fd1979cf604ac1a420be97913fe75",
+            "engineVersion": "0.6.0",
+            "toolchain": "bun@1.3.14",
+            "sourceHash": "a664884bdce4d3fc78c66a79c492ef722a85031bf62f037aa0384223507450ea",
+            "dependencyHash": "50096a04c37058e201c3d5234a0babeae5531f941f07f5dbf11ee733f04ce2e8",
+            "dependencies": {
+              "@gltf-transform/core": "^4.4.1",
+              "@gltf-transform/extensions": "^4.4.1",
+              "@gltf-transform/functions": "^4.4.1",
+              "@modelcontextprotocol/client": "^2.0.0",
+              "@modelcontextprotocol/server": "^2.0.0",
+              "@openrouter/ai-sdk-provider": "^2.10.0",
+              "@types/three": "^0.185.1",
+              "acorn": "^8.17.0",
+              "acorn-walk": "^8.3.5",
+              "gltf-validator": "2.0.0-dev.3.10",
+              "manifold-3d": "^3.5.1",
+              "sharp": "^0.35.3",
+              "three": "0.185.1",
+              "three-subdivide": "^1.1.5",
+              "xatlasjs": "^0.2.0",
+              "zod": "^4.4.3"
+            },
+            "target": "node",
+            "file": "agent-providers.mjs",
+            "bundleHash": "sha256:367808f475150d9591ba39b7abe48531015adc447ae369ad471b5b91289033a6"
+          }
+        }
+      },
+      "promptSha256": "40a40de016af5d37fa99ada8dca18736208d6e3ad126bf0a9f39ff33bcd78f0b",
+      "skills": {
+        "kiln-author-asset/references/camera-recipes.md": "8959e0b5bf98d8d6712147ff9f4eb05bdff9a58cdda60796304a527329b84c19",
+        "kiln-author-asset/references/geometry-recipes.md": "12e861a7c05b21ee8d0de713f4bde8a843af1dbf37326b5121a8229805693c3c",
+        "kiln-author-asset/references/program-contract.md": "42cc4c17fa14d94febdf0ccbc38454f5972f2d3730f20dbca39151c0fe3aa293",
+        "kiln-author-asset/references/reusable-frame.kiln.js": "9015b2255742efa74e47531f68778573c34566237b3256dcdaab9c360cfc895f",
+        "kiln-author-asset/SKILL.md": "6a69c2ef6315cf719c33a5c024f5b07c87264de8e6fdb987cacbefbfd431f93e",
+        "kiln-qa-asset/references/integration-checks.md": "3d340cc81c0de0a4415ff1d2707c64db1a7433fd7e63f69e1748862739ef5c24",
+        "kiln-qa-asset/SKILL.md": "f2f990a669529f09c7e818a74f1e3af299e474d41a86910434d521a1fd596845",
+        "kiln-refine-asset/references/revision-and-views.md": "78ccb43588fd37b020cabc17e61facd610ea676c7f0c9ebb104f07845edbf3e5",
+        "kiln-refine-asset/SKILL.md": "135af2115e63f09f4c413feceedee5f547d21d154b4d32ed5e88c4077ac56d61"
+      },
+      "observerSha256": "58c6d64f3232510ccff48f7109a7337c6b6f8d64400030073b36f2b6a8e72237",
+      "createdAt": "2026-09-05T21:08:52.348Z"
+    },
+    "exit": {
+      "name": "kestrel-rescue-craft",
+      "code": 0,
+      "timedOut": false,
+      "startedAt": "2026-09-05T21:09:03.965Z",
+      "finishedAt": "2026-09-05T21:16:40.056Z"
+    },
+    "calls": 16,
+    "inlineSourceCalls": 0,
+    "imageCells": 19,
+    "imageMessages": 7,
+    "edits": [
+      {
+        "requestId": 10,
+        "input": "ba87343b9c088a8c35e68aaf8441e66f75497964cfb720264fe6f5661f4fef78",
+        "output": "2df641afdfda34c3070368c98b25c7717567bea7dcd4565e429bd1643117cd56",
+        "literalEdits": 6,
+        "replayVerified": true
+      },
+      {
+        "requestId": 16,
+        "input": "2df641afdfda34c3070368c98b25c7717567bea7dcd4565e429bd1643117cd56",
+        "output": "9bf2bde9213858712aa018a74783539e023a8e6e87eafdc2589aa31b1d1c1900",
+        "literalEdits": 6,
+        "replayVerified": true
+      }
+    ],
+    "failures": [
+      {
+        "id": 15,
+        "tool": "kiln_edit",
+        "text": "Input validation error: Invalid arguments for tool kiln_edit: capture: Invalid kiln.capture.v1: shots.0.camera.position.0: Invalid input: expected number, received string; shots.0.camera.position.1: Invalid input: expected number, received string; shots.0.camera.position.2: Invalid input: expected number, received string; shots.0.camera.target.0: Invalid input: expected number, received string; shots.0.camera.target.1: Invalid input: expected number, received string; shots.0.camera.target.2: Invalid input: expected number, received string; additional issues omitted"
+      }
+    ],
+    "finalSourceHash": "9bf2bde9213858712aa018a74783539e023a8e6e87eafdc2589aa31b1d1c1900",
+    "history": [
+      {
+        "title": "Initial design",
+        "description": "Initial imported program.",
+        "file": "initial.kiln.js",
+        "sourceHash": "ba87343b9c088a8c35e68aaf8441e66f75497964cfb720264fe6f5661f4fef78"
+      },
+      {
+        "title": "Source revision 1",
+        "description": "Exact retained source after a successful literal edit call; unchanged text outside the requested edits was preserved.",
+        "file": "revision-1.kiln.js",
+        "sourceHash": "2df641afdfda34c3070368c98b25c7717567bea7dcd4565e429bd1643117cd56"
+      },
+      {
+        "title": "Current gallery revision",
+        "description": "Exact retained source after a successful literal edit call; unchanged text outside the requested edits was preserved.",
+        "file": "current.kiln.js",
+        "sourceHash": "9bf2bde9213858712aa018a74783539e023a8e6e87eafdc2589aa31b1d1c1900"
+      }
+    ]
+  }
+]

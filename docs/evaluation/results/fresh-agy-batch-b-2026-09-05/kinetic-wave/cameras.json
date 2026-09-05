@@ -1,0 +1,30 @@
+{
+  "version": "kiln.capture.v1",
+  "output": "grid",
+  "cols": 2,
+  "size": 768,
+  "shots": [
+    {
+      "name": "Hero Gallery Perspective",
+      "camera": {
+        "type": "orbit",
+        "azimuthDeg": 40,
+        "elevationDeg": 22
+      }
+    },
+    {
+      "name": "Articulated Pivot and Clasp Detail",
+      "subject": {
+        "name": "Mesh_RootClasp_8"
+      },
+      "visibility": "context",
+      "camera": {
+        "type": "orbit",
+        "relativeTo": "part",
+        "azimuthDeg": 45,
+        "elevationDeg": 15,
+        "padding": 1.6
+      }
+    }
+  ]
+}

@@ -6,6 +6,7 @@
  */
 
 import * as THREE from 'three';
+import { AuthoringDiagnosticError } from './evaluator/authoring-diagnostic';
 
 // =============================================================================
 // gearGeo
@@ -55,16 +56,17 @@ export function gearGeo(opts: GearOptions = {}): THREE.BufferGeometry {
   } = opts;
 
   if (teeth < 3) throw new Error('gearGeo: teeth must be >= 3');
-  if (tipRadius <= rootRadius) throw new Error('gearGeo: tipRadius must exceed rootRadius');
-  if (boreRadius >= rootRadius) throw new Error('gearGeo: boreRadius must be less than rootRadius');
+  if (tipRadius <= rootRadius || boreRadius >= rootRadius) {
+    throw new AuthoringDiagnosticError('GEAR_RADII_ORDER');
+  }
 
-  // Crown (outer) ring: 4 points per tooth around XZ plane.
+  // Crown (outer) ring: 3 distinct points per tooth around XZ plane.
   // α = half-width of the valley within each sector (so the tooth spans
   // the central toothWidthFrac of the sector).
   const sector = (Math.PI * 2) / teeth;
   const alpha = (1 - toothWidthFrac) * (sector / 2);
 
-  // Build the 4N outer crown points in the XZ plane (y = 0 as extrusion base).
+  // Each valley end is the next tooth's valley start; emit it only once.
   type V2 = [number, number];
   const crown: V2[] = [];
   for (let i = 0; i < teeth; i++) {
@@ -72,19 +74,17 @@ export function gearGeo(opts: GearOptions = {}): THREE.BufferGeometry {
     const a0 = base; // valley start
     const a1 = base + alpha; // tooth start
     const a2 = base + sector - alpha; // tooth end
-    const a3 = base + sector; // valley end (= next valley start, handled by next iter)
     crown.push([rootRadius * Math.cos(a0), rootRadius * Math.sin(a0)]);
     crown.push([tipRadius * Math.cos(a1), tipRadius * Math.sin(a1)]);
     crown.push([tipRadius * Math.cos(a2), tipRadius * Math.sin(a2)]);
-    crown.push([rootRadius * Math.cos(a3), rootRadius * Math.sin(a3)]);
   }
-  const N = crown.length; // 4 * teeth
+  const N = crown.length; // 3 * teeth
 
   // Bore (inner) ring: one point per crown point so cap triangulation is a
   // clean strip between concentric rings. N points on a circle of boreRadius.
   const bore: V2[] = [];
   for (let i = 0; i < N; i++) {
-    const t = (i / N) * Math.PI * 2;
+    const t = Math.atan2(crown[i]![1], crown[i]![0]);
     bore.push([boreRadius * Math.cos(t), boreRadius * Math.sin(t)]);
   }
 
@@ -135,7 +135,7 @@ export function gearGeo(opts: GearOptions = {}): THREE.BufferGeometry {
     const bA = boreTop + i;
     const bB = boreTop + j;
     indices.push(bA, cB, cA);
-    indices.push(bA, bB, cB);
+    if (boreRadius > 0) indices.push(bA, bB, cB);
   }
 
   // Bottom cap: normal should point -Y. Reverse of top-cap winding.
@@ -146,7 +146,7 @@ export function gearGeo(opts: GearOptions = {}): THREE.BufferGeometry {
     const bA = boreBot + i;
     const bB = boreBot + j;
     indices.push(bA, cA, cB);
-    indices.push(bA, cB, bB);
+    if (boreRadius > 0) indices.push(bA, cB, bB);
   }
 
   // Outer side wall: normal should point RADIALLY OUTWARD. Going around in
@@ -164,7 +164,7 @@ export function gearGeo(opts: GearOptions = {}): THREE.BufferGeometry {
 
   // Inner side wall (bore): normal should point INWARD toward axis.
   // Reverse of outer wall winding.
-  for (let i = 0; i < N; i++) {
+  for (let i = 0; boreRadius > 0 && i < N; i++) {
     const j = (i + 1) % N;
     const tA = boreTop + i;
     const tB = boreTop + j;

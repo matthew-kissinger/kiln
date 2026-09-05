@@ -1,0 +1,114 @@
+{
+  "name": "folding-botanical-field-station",
+  "base": "C:/Users/Mattm/X/kiln-cleanrooms/fresh-claude-folding-botanical-field-station-19add773-20260905",
+  "exit": {
+    "code": 1,
+    "timedOut": false,
+    "wrongModel": false,
+    "startedAt": "2026-09-05T22:54:44.467Z",
+    "finishedAt": "2026-09-05T23:04:48.160Z",
+    "terminalReason": "api_error",
+    "isError": true
+  },
+  "status": "finished",
+  "initializedModel": "claude-opus-5",
+  "actualModels": [
+    "claude-opus-5",
+    "<synthetic>"
+  ],
+  "calls": 4,
+  "deniedCalls": 0,
+  "imageCells": 0,
+  "editRequests": 0,
+  "sourceImports": 0,
+  "shortRefRequests": 0,
+  "returnedRefs": [],
+  "files": [],
+  "failures": [],
+  "packageSha256": "19add77366f489f078ca50f58d6d0bcb4c4d3e86a18df4bc8da387285ab90822",
+  "revisions": [],
+  "handleMappings": {},
+  "editReplay": [],
+  "readPaths": [
+    "C:\\Users\\Mattm\\X\\kiln-cleanrooms\\fresh-claude-folding-botanical-field-station-19add773-20260905\\workspace\\AGENTS.md",
+    "C:\\Users\\Mattm\\X\\kiln-cleanrooms\\fresh-claude-folding-botanical-field-station-19add773-20260905\\workspace\\TASK.md",
+    "C:\\Users\\Mattm\\X\\kiln-cleanrooms\\fresh-claude-folding-botanical-field-station-19add773-20260905\\workspace\\skills\\kiln-author-asset\\SKILL.md",
+    "C:\\Users\\Mattm\\X\\kiln-cleanrooms\\fresh-claude-folding-botanical-field-station-19add773-20260905\\workspace\\skills\\kiln-refine-asset\\SKILL.md",
+    "C:\\Users\\Mattm\\X\\kiln-cleanrooms\\fresh-claude-folding-botanical-field-station-19add773-20260905\\workspace\\skills\\kiln-qa-asset\\SKILL.md",
+    "C:\\Users\\Mattm\\X\\kiln-cleanrooms\\fresh-claude-folding-botanical-field-station-19add773-20260905\\workspace\\START.md",
+    "C:\\Users\\Mattm\\X\\kiln-cleanrooms\\fresh-claude-folding-botanical-field-station-19add773-20260905\\workspace\\skills\\kiln-author-asset\\references\\program-contract.md",
+    "C:\\Users\\Mattm\\X\\kiln-cleanrooms\\fresh-claude-folding-botanical-field-station-19add773-20260905\\workspace\\skills\\kiln-author-asset\\references\\camera-recipes.md",
+    "C:\\Users\\Mattm\\X\\kiln-cleanrooms\\fresh-claude-folding-botanical-field-station-19add773-20260905\\workspace\\skills\\kiln-author-asset\\references\\geometry-recipes.md",
+    "C:\\Users\\Mattm\\X\\kiln-cleanrooms\\fresh-claude-folding-botanical-field-station-19add773-20260905\\workspace\\skills\\kiln-refine-asset\\references\\revision-and-views.md",
+    "C:\\Users\\Mattm\\X\\kiln-cleanrooms\\fresh-claude-folding-botanical-field-station-19add773-20260905\\workspace\\skills\\kiln-author-asset\\references\\reusable-frame.kiln.js"
+  ],
+  "deliveredImages": [],
+  "forwardedImageBlocks": 0,
+  "modelUsage": {
+    "claude-haiku-4-5-20251001": {
+      "inputTokens": 1003,
+      "outputTokens": 13,
+      "cacheReadInputTokens": 0,
+      "cacheCreationInputTokens": 0,
+      "webSearchRequests": 0,
+      "costUSD": 0.001068,
+      "contextWindow": 200000,
+      "maxOutputTokens": 32000,
+      "thinkingTokens": 0,
+      "canonicalModel": "claude-haiku-4-5",
+      "provider": "firstParty",
+      "costBasis": "list"
+    },
+    "claude-opus-5": {
+      "inputTokens": 20,
+      "outputTokens": 46479,
+      "cacheReadInputTokens": 325194,
+      "cacheCreationInputTokens": 52632,
+      "webSearchRequests": 0,
+      "costUSD": 1.850992,
+      "contextWindow": 1000000,
+      "maxOutputTokens": 64000,
+      "thinkingTokens": 31548,
+      "canonicalModel": "claude-opus-5",
+      "provider": "firstParty",
+      "costBasis": "list"
+    }
+  },
+  "costReportedUsd": 1.85206,
+  "usage": {
+    "input_tokens": 20,
+    "cache_creation_input_tokens": 52632,
+    "cache_read_input_tokens": 325194,
+    "output_tokens": 46479,
+    "output_tokens_details": {
+      "thinking_tokens": 31548
+    },
+    "server_tool_use": {
+      "web_search_requests": 0,
+      "web_fetch_requests": 0
+    },
+    "service_tier": "standard",
+    "cache_creation": {
+      "ephemeral_1h_input_tokens": 52632,
+      "ephemeral_5m_input_tokens": 0
+    },
+    "inference_geo": "not_available",
+    "iterations": [
+      {
+        "input_tokens": 2,
+        "output_tokens": 28048,
+        "cache_read_input_tokens": 48324,
+        "cache_creation_input_tokens": 16883,
+        "cache_creation": {
+          "ephemeral_5m_input_tokens": 0,
+          "ephemeral_1h_input_tokens": 16883
+        },
+        "type": "message"
+      }
+    ],
+    "speed": "standard"
+  },
+  "durationMs": 601170,
+  "terminalResult": "You've hit your weekly limit · resets Sep 10, 12am (America/New_York)",
+  "apiErrorStatus": 429
+}

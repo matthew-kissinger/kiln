@@ -68,8 +68,8 @@ describe('repository reliability contracts', () => {
     const { functions, lines } = thresholds.measuredBaseline;
     expect(functions).toBeGreaterThanOrEqual(thresholds.thresholds.functions);
     expect(lines).toBeGreaterThanOrEqual(thresholds.thresholds.lines);
-    expect(readme).toContain(`${functions}% functions / ${lines}% lines`);
-    expect(readme).toContain('threshold decreases require an explicit measured rationale.');
+    expect(readme).toContain("docs/architecture.md");
+    expect(await readText('docs/architecture.md')).toContain('Threshold decreases require an explicit measured rationale.');
     expect(workflow).toContain('run: bun run test:coverage');
     expect(workflow).toContain('uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02');
     expect(workflow).toContain('path: coverage/lcov.info');

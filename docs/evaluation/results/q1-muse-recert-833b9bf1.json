@@ -1,0 +1,101 @@
+{
+  "tarballSha256": "833b9bf14468798640447d2ba98d16d1bcedaaff8ac8752d266881e29aaabb97",
+  "initialRef": "sha256:32223e1d94c3034d14f5d3f401fd7fbb5da3e471ddf92c3acdc319a85a03106d",
+  "finalRef": "sha256:93fbc95991a140c3ff51d34411c5540dac8a962645c8defc0d686f6994bf0e22",
+  "sourceBytes": 11461,
+  "glbSha256": "9d87f5d0123eb8a7fea6e6a081006390a1d616f1becd7f4e14fa3f80b83be665",
+  "glbBytes": 224288,
+  "exactRecordedEditsReproduceSource": true,
+  "allUnrelatedBytesPreserved": true,
+  "editCalls": 1,
+  "edits": [
+    {
+      "newString": "  createPart('ElevWheel', gearGeo({ teeth: 28, rootRadius: 0.063, tipRadius: 0.075, boreRadius: 0.012, height: 0.024 }), brass, { position: [0.03, 0.88, 0.115], rotation: [90, 0, 0], parent: yoke });",
+      "oldString": "  createPart('ElevWheel', cylinderZGeo(0.075, 0.075, 0.024, 28), brass, { position: [0.03, 0.88, 0.115], parent: yoke });"
+    },
+    {
+      "newString": "",
+      "oldString": "  for (let i = 0; i < 14; i++) {\n    const a = (i / 14) * 360;\n    const r = a * Math.PI / 180;\n    createPart('WheelTooth' + i, boxGeo(0.012, 0.012, 0.024), brass, {\n      position: [0.03 + Math.cos(r) * 0.075, 0.88 + Math.sin(r) * 0.075, 0.115],\n      rotation: [0, 0, a], parent: yoke\n    });\n  }\n"
+    }
+  ],
+  "gearNodes": [
+    {
+      "name": "Mesh_ElevWheel",
+      "translation": [
+        0.03,
+        0.88,
+        0.115
+      ],
+      "rotation": [
+        0.7071067811865475,
+        0,
+        0,
+        0.7071067811865476
+      ],
+      "mesh": 14
+    },
+    {
+      "name": "Mesh_ElevHub",
+      "translation": [
+        0.03,
+        0.88,
+        0.115
+      ],
+      "mesh": 15
+    }
+  ],
+  "remainingDecorativeWheelToothNodes": [],
+  "animationNames": [
+    "FocusTravel"
+  ],
+  "outcome": {
+    "exitCode": 0,
+    "timedOut": false,
+    "seconds": 195.854,
+    "startedAt": "2026-09-05T19:14:14.606Z",
+    "endedAt": "2026-09-05T19:17:30.460Z"
+  },
+  "mcpBudget": {
+    "calls": 13,
+    "images": 10,
+    "reserved": 0,
+    "maxCalls": 24,
+    "maxImages": 32
+  },
+  "successfulCliRenderedCells": 8,
+  "totalSuccessfulRenderedCells": 18,
+  "imageHashes": {
+    "trace\\images\\010-0.png": "09aa4a97e900beb398e1c7b9b6b56ebbf7fb67727459e01297a0a2f5a8f39b87",
+    "trace\\images\\012-0.png": "336e997b2e7a231ed743570faf4a705d3bbaa9397609af2e4918de9423672ced",
+    "trace\\images\\013-0.png": "f5769108fa3bcd6d63a7d0059704041688a40cdd60d3aeab6e81d0f0fe5552ce",
+    "workspace\\assets\\chosen.png": "c1d2518d77669a816a5ce8809c3b2c6e3f5ed6416a5c676487216b12abc71e0c"
+  },
+  "captureRecipe": {
+    "cols": 1,
+    "output": "grid",
+    "shots": [
+      {
+        "camera": {
+          "azimuthDeg": 45,
+          "elevationDeg": 26.8,
+          "padding": 1.2,
+          "type": "orbit"
+        },
+        "name": "ElevWheel-context",
+        "subject": {
+          "path": "/Bench%20Refractor%20Comparator[0]/BenchComparator[0]/Joint_Yoke[0]/Mesh_ElevWheel[0]"
+        },
+        "visibility": "context"
+      }
+    ],
+    "size": 768,
+    "version": "kiln.capture.v1"
+  },
+  "limitations": [
+    "Initial CLI subject.name ElevWheel failed; exact Mesh_ElevWheel path succeeded with part-relative orbit. Model then chose world-relative orbit for its preferred view. This is not a part-frame defect.",
+    "gearGeo axis missing from discovery text caused extra lookups.",
+    "MCP receipts mark exactArtifact false; independently exported GLB hash matches edit render inputGlbSha256.",
+    "No mechanical meshing or clearance proof. The bore is occluded by preserved hub.",
+    "Supplied-source recertification; original Muse authorship remains separate."
+  ]
+}

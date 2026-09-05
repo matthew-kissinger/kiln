@@ -1,3 +1,21 @@
+import { enforceCapturePixels, enforceCaptureBytes, type CaptureLimits } from './capture-limits';
+export { DEFAULT_CAPTURE_LIMITS, resolveCaptureLimits } from './capture-limits';
+export type { CaptureLimits } from './capture-limits';
+import { captureCpuCell, type CaptureCache } from './capture-cache';
+export * from './capture-cache';
+import {
+  rasterizeCamera,
+  cameraFromBounds,
+  resolveAssetCamera,
+  selectCameraSubject,
+  withCameraVisibility,
+  type CameraShotV1,
+  type ResolvedCameraShotV1,
+  type ResolvedAssetCameraV1,
+} from './camera';
+import { renderCaptureGrid } from './camera-capture';
+export * from './camera';
+export * from './camera-capture';
 /**
  * Six-view grid rendering for the Kiln vision loop.
  *
@@ -281,6 +299,7 @@ export function snapSceneToPalette(
 }
 
 export interface ViewGridResult {
+  captureCache?: { hit: boolean; reused: number; total: number };
   png: Buffer;
   width: number;
   height: number;
@@ -294,6 +313,10 @@ export interface ViewGridResult {
 }
 
 export interface ViewGridOptions extends RasterOptions {
+  captureLimits?: CaptureLimits;
+  captureCache?: CaptureCache;
+  /** Exact GLB identity, supplied automatically by renderGlbViewGrid. */
+  artifactGlbSha256?: `sha256:${string}`;
   views?: ViewSpec[];
   /** Snap flat-color materials before rasterization. Mutates the provided scene root. */
   snapPalette?: readonly SnapPaletteSlot[];
@@ -314,6 +337,8 @@ export async function renderViewGrid(
   // negligible against 32-64K reasoning budgets; 512 would double it again for
   // marginal legibility gain at typical asset scales. Candidate thumbnails
   // downscale separately (Studio thumbnailFor), unaffected.
+  if (opts.capture?.shots || opts.capture?.version)
+    return renderCaptureGrid(root, opts.capture, undefined, opts.captureLimits);
   const size = opts.size ?? 384;
   // H-33: the default view set is env-selectable (KILN_GRID_VARIANT=rear-quarter
   // swaps the 3/4 cell to the opposite-rear azimuth) so a bench arm can flip the
@@ -327,6 +352,7 @@ export async function renderViewGrid(
   const resolved = resolveGridCapture(opts.capture, process.env['KILN_GRID_VARIANT']);
   const views = opts.views ?? resolved.views;
   const cols = opts.cols ?? resolved.cols;
+  enforceCapturePixels(views.length, size, cols, opts.captureLimits);
   if (opts.snapPalette?.length) snapSceneToPalette(root, opts.snapPalette);
 
   // Per-cell zoom needs a shared frame box; measuring is only worth it when a
@@ -336,29 +362,65 @@ export async function renderViewGrid(
   const wantsZoom = resolved.zooms.some((z) => z !== undefined);
   const sceneBounds = wantsZoom ? measureBounds(root) : undefined;
 
+  const cache = opts.snapPalette?.length ? undefined : opts.captureCache;
+  let reused = 0;
   const cells: Uint8Array[] = [];
   for (let vi = 0; vi < views.length; vi++) {
     const zoom = resolved.zooms[vi];
-    const cell = rasterizeView(root, views[vi]!.dir, {
+    const rasterOptions = {
       size,
       backfaceCull: opts.backfaceCull,
       ...(opts.frameBounds ? { frameBounds: opts.frameBounds } : {}),
       ...(sceneBounds && zoom !== undefined
         ? { frameBounds: expandFrameBounds(sceneBounds, zoom) }
         : {}),
-    });
+    };
+    let cell: Uint8Array;
+    if (cache && opts.artifactGlbSha256) {
+      const { CPU_RASTER_RENDERER_ID } = await import('./renderer-id');
+      const camera = cameraFromBounds(
+        rasterOptions.frameBounds ?? measureBounds(root),
+        views[vi]!.dir,
+      );
+      const result = await captureCpuCell(
+        cache,
+        {
+          artifactGlbSha256: opts.artifactGlbSha256,
+          rendererId: `${CPU_RASTER_RENDERER_ID}/legacy-fit`,
+          camera,
+          size,
+          backfaceCull: opts.backfaceCull ?? true,
+        },
+        async () => ({
+          png: encodePng(rasterizeView(root, views[vi]!.dir, rasterOptions), size, size),
+          width: size,
+          height: size,
+          inputGlbSha256: opts.artifactGlbSha256!,
+          reasonCodes: [],
+          meshCount: 0,
+          instanceCount: 0,
+        }),
+      );
+      if (result.captureCache?.hit) reused++;
+      cell = decodePng(result.png).rgb;
+    } else cell = rasterizeView(root, views[vi]!.dir, rasterOptions);
     // H-30: view name + axis gnomon, via the annotator the GPU port shares.
     annotateViewCell(cell, size, views[vi]!);
     cells.push(cell);
   }
   const { rgb, width, height } = compositeCellGrid(cells, size, cols);
 
+  const png = encodePng(rgb, width, height);
+  enforceCaptureBytes([png], opts.captureLimits);
   return {
-    png: encodePng(rgb, width, height),
+    png,
     width,
     height,
     views: views.map((v) => v.name),
     capture: { preset: resolved.preset, cols, cells: views.length },
+    ...(cache && opts.artifactGlbSha256
+      ? { captureCache: { hit: reused === views.length, reused, total: views.length } }
+      : {}),
   };
 }
 
@@ -391,16 +453,18 @@ export interface GlbViewCellResult {
 export async function renderGlbViewCell(
   bytes: Uint8Array,
   view: ViewSpec,
-  options: RasterOptions = {},
+  options: RasterOptions & { camera?: ResolvedAssetCameraV1 } = {},
 ): Promise<GlbViewCellResult> {
   const exactBytes = Uint8Array.from(bytes);
   const loaded = await loadGlbGeometryFlatScene(exactBytes);
   const size = options.size ?? 256;
-  const rgb = rasterizeView(loaded.root, view.dir, {
-    size,
-    ...(options.backfaceCull !== undefined ? { backfaceCull: options.backfaceCull } : {}),
-    ...(options.frameBounds ? { frameBounds: options.frameBounds } : {}),
-  });
+  const rgb = options.camera
+    ? rasterizeCamera(loaded.root, options.camera, size, options.backfaceCull)
+    : rasterizeView(loaded.root, view.dir, {
+        size,
+        ...(options.backfaceCull !== undefined ? { backfaceCull: options.backfaceCull } : {}),
+        ...(options.frameBounds ? { frameBounds: options.frameBounds } : {}),
+      });
   return {
     png: encodePng(rgb, size, size),
     width: size,
@@ -422,7 +486,8 @@ export async function renderGlbViewGrid(
   // rasterized geometry and reported hash refer to different byte sequences.
   const exactBytes = Uint8Array.from(bytes);
   const loaded = await loadGlbGeometryFlatScene(exactBytes);
-  const grid = await renderViewGrid(loaded.root, options);
+  const artifactGlbSha256 = await hashGlbViewInput(exactBytes);
+  const grid = await renderViewGrid(loaded.root, { ...options, artifactGlbSha256 });
   return {
     ...grid,
     inputGlbSha256: await hashGlbViewInput(exactBytes),
@@ -502,6 +567,9 @@ function resolveCamera(name?: string): ViewSpec {
 }
 
 export interface AnimationViewOptions extends RasterOptions {
+  shot?: CameraShotV1;
+  frameTimes?: number[];
+  framing?: 'locked' | 'follow';
   /** Clip to render, by name (case-insensitive, substring-tolerant). Omit → first clip. */
   clip?: string;
   /** Camera angle. Default 'right' (side profile). */
@@ -516,6 +584,7 @@ export interface AnimationViewOptions extends RasterOptions {
 }
 
 export interface DerivativeCellRenderInput {
+  camera?: ResolvedAssetCameraV1;
   root: unknown;
   label: string;
   view: ViewSpec;
@@ -536,6 +605,7 @@ export type DerivativeCellRenderer = (
 ) => Promise<DerivativeCellRenderResult>;
 
 export interface AnimationViewResult {
+  cameraShots?: ResolvedCameraShotV1[];
   ok: boolean;
   clip?: string;
   camera?: string;
@@ -556,12 +626,6 @@ export interface AnimationViewResult {
   availableClips?: string[];
   error?: string;
   derivativeReceipts?: import('../composer/render-port').DerivativeViewReceiptV1[];
-}
-
-/** Phase percentage label for frame i of n, e.g. "0%" … "100%". */
-function phaseLabel(i: number, n: number): string {
-  const pct = n <= 1 ? 0 : Math.round((100 * i) / (n - 1));
-  return `${pct}%`;
 }
 
 /**
@@ -606,7 +670,21 @@ export async function renderClipAnimation(
   }
 
   const prepared = prepareClip(root as never, chosen);
-  const times = planFrameTimes(prepared.duration, frameCount);
+  if (opts.frameTimes && opts.frames !== undefined)
+    throw new Error('frameTimes and frames are mutually exclusive');
+  if (opts.shot && opts.camera) throw new Error('shot and camera are mutually exclusive');
+  if (
+    opts.frameTimes &&
+    (opts.frameTimes.length < 1 ||
+      opts.frameTimes.length > 9 ||
+      opts.frameTimes.some(
+        (v, i) => !Number.isFinite(v) || v < 0 || v > 1 || (i > 0 && v <= opts.frameTimes![i - 1]!),
+      ))
+  )
+    throw new Error('frameTimes must contain 1..9 strictly increasing phases in 0..1');
+  const times = opts.frameTimes
+    ? opts.frameTimes.map((t) => t * prepared.duration)
+    : planFrameTimes(prepared.duration, frameCount);
   const frameTimes = times.map((t) => (prepared.duration > 0 ? t / prepared.duration : 0));
 
   // Pass 1 — union the posed bounds so all frames share one camera framing.
@@ -614,7 +692,9 @@ export async function renderClipAnimation(
   const max: [number, number, number] = [-Infinity, -Infinity, -Infinity];
   for (const t of times) {
     poseSceneAtTime(root as never, prepared, t);
-    const b = measureBounds(root);
+    const b = measureBounds(
+      opts.shot?.subject ? selectCameraSubject(root, opts.shot.subject).node : root,
+    );
     for (let a = 0; a < 3; a++) {
       const lo = b.min[a]!;
       const hi = b.max[a]!;
@@ -623,6 +703,23 @@ export async function renderClipAnimation(
     }
   }
   const frameBounds = Number.isFinite(min[0]) ? { min, max } : undefined;
+  poseSceneAtTime(root as never, prepared, times[0]!);
+  const initialShot = opts.shot ? resolveAssetCamera(root, opts.shot) : undefined;
+  let lockedCamera = initialShot?.camera;
+  if (initialShot && opts.shot?.camera?.type !== 'explicit' && frameBounds) {
+    const dir = initialShot.camera.position.map((v, i) => v - initialShot.camera.target[i]!) as [
+      number,
+      number,
+      number,
+    ];
+    lockedCamera = cameraFromBounds(
+      frameBounds,
+      dir,
+      opts.shot?.camera?.type === 'orbit' ? (opts.shot.camera.padding ?? 1.2) : 1.2,
+      initialShot.camera.up,
+    );
+  }
+  const cameraShots: ResolvedCameraShotV1[] = [];
 
   // Pass 2 — render + label each frame against the fixed framing.
   const labelScale = Math.max(2, Math.round(size / 80));
@@ -630,16 +727,26 @@ export async function renderClipAnimation(
   const derivativeReceipts: import('../composer/render-port').DerivativeViewReceiptV1[] = [];
   for (let i = 0; i < times.length; i++) {
     poseSceneAtTime(root as never, prepared, times[i]!);
+    const resolvedShot = opts.shot ? resolveAssetCamera(root, opts.shot) : undefined;
+    if (resolvedShot) {
+      if (opts.framing !== 'follow') resolvedShot.camera = lockedCamera!;
+      cameraShots.push(resolvedShot);
+    }
     let cell: Uint8Array;
     if (opts.renderDerivativeCell) {
-      const rendered = await opts.renderDerivativeCell({
-        root,
-        label: phaseLabel(i, times.length),
-        view: cam,
-        size,
-        ...(opts.backfaceCull !== undefined ? { backfaceCull: opts.backfaceCull } : {}),
-        ...(frameBounds ? { frameBounds } : {}),
-      });
+      const produce = () =>
+        opts.renderDerivativeCell!({
+          root,
+          ...(resolvedShot ? { camera: resolvedShot.camera } : {}),
+          label: `${Math.round(frameTimes[i]! * 100)}%`,
+          view: cam,
+          size,
+          ...(opts.backfaceCull !== undefined ? { backfaceCull: opts.backfaceCull } : {}),
+          ...(frameBounds ? { frameBounds } : {}),
+        });
+      const rendered = resolvedShot
+        ? await withCameraVisibility(root, resolvedShot, produce)
+        : await produce();
       const decoded = decodePng(rendered.png);
       if (decoded.width !== size || decoded.height !== size) {
         throw new Error(
@@ -649,13 +756,25 @@ export async function renderClipAnimation(
       cell = decoded.rgb;
       derivativeReceipts.push(rendered.receipt);
     } else {
-      cell = rasterizeView(root, cam.dir, {
-        size,
-        ...(opts.backfaceCull !== undefined ? { backfaceCull: opts.backfaceCull } : {}),
-        ...(frameBounds ? { frameBounds } : {}),
-      });
+      cell = resolvedShot
+        ? await withCameraVisibility(root, resolvedShot, async () =>
+            rasterizeCamera(root, resolvedShot.camera, size),
+          )
+        : rasterizeView(root, cam.dir, {
+            size,
+            ...(opts.backfaceCull !== undefined ? { backfaceCull: opts.backfaceCull } : {}),
+            ...(frameBounds ? { frameBounds } : {}),
+          });
     }
-    stampLabel(cell, size, size, labelScale, labelScale, phaseLabel(i, times.length), labelScale);
+    stampLabel(
+      cell,
+      size,
+      size,
+      labelScale,
+      labelScale,
+      `${Math.round(frameTimes[i]! * 100)}%`,
+      labelScale,
+    );
     cells.push(cell);
   }
 
@@ -665,6 +784,7 @@ export async function renderClipAnimation(
     camera: cam.name,
     frames: times.length,
     frameTimes,
+    ...(cameraShots.length ? { cameraShots } : {}),
     duration: prepared.duration,
     ...(prepared.unresolved.length ? { unresolvedTracks: prepared.unresolved } : {}),
     ...(derivativeReceipts.length ? { derivativeReceipts } : {}),
@@ -689,6 +809,8 @@ export async function renderClipAnimation(
 // =============================================================================
 
 export interface InteriorGridResult extends ViewGridResult {
+  cameraShots?: ResolvedCameraShotV1[];
+  perFramePngs?: Buffer[];
   /** Roof subtree roots hidden (0 → no roof resolved: no `roof.` role, no
    *  historical roof name, or an explicit `nodeName` that matched nothing). */
   roofsHidden: number;
@@ -698,6 +820,7 @@ export interface InteriorGridResult extends ViewGridResult {
 }
 
 export interface InteriorGridOptions extends RasterOptions {
+  capture?: CaptureConfig;
   /** Exact-name override: lift this node and its children instead of resolving
    *  the roof semantically. Omit it for the ordinary path — role first, then a
    *  narrow historical-name fallback. */
@@ -755,6 +878,10 @@ export async function renderInteriorGrid(
     ? hideNodeInScene(root, opts.nodeName)
     : hideArchitectureRoofInScene(root).nodes.length;
 
+  if (opts.capture) {
+    const grid = await renderCaptureGrid(root, opts.capture, opts.renderDerivativeCell);
+    return { ...grid, roofsHidden, wallsHidden: 0 };
+  }
   let wallsHidden = 0;
   const cells: Uint8Array[] = [];
   const derivativeReceipts: import('../composer/render-port').DerivativeViewReceiptV1[] = [];

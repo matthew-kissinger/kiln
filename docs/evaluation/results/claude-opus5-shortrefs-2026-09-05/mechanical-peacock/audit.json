@@ -1,0 +1,84 @@
+{
+  "name": "mechanical-peacock",
+  "base": "C:/Users/Mattm/X/kiln-cleanrooms/fresh-claude-mechanical-peacock-19add773-20260905",
+  "exit": {
+    "code": 1,
+    "timedOut": true,
+    "wrongModel": false,
+    "startedAt": "2026-09-05T22:42:19.410Z",
+    "finishedAt": "2026-09-05T22:52:29.740Z",
+    "isError": null
+  },
+  "status": "finished",
+  "initializedModel": "claude-opus-5",
+  "actualModels": [
+    "claude-opus-5"
+  ],
+  "calls": 7,
+  "deniedCalls": 0,
+  "imageCells": 4,
+  "editRequests": 1,
+  "sourceImports": 0,
+  "shortRefRequests": 3,
+  "returnedRefs": [
+    "p_7c04e74fe347",
+    "p_b36982692607"
+  ],
+  "files": [],
+  "failures": [
+    {
+      "tool": "kiln_render",
+      "error": "Asset QA blocked at final-glb: GLTF_ACCESSOR_VECTOR3_NON_UNIT: Vector3 at accessor indices 0..2 is not of unit length: 0. | GLTF_ACCESSOR_VECTOR3_NON_UNIT: Vector3 at accessor indices 3..5 is not of unit length: 0. | GLTF_ACCESSOR_VECTOR3_NON_UNIT: Vector3 at accessor indices 6..8 is not of unit length: 0. | GLTF_ACCESSOR_VECTOR3_NON_UNIT: Vector3 at accessor indices 18..20 is not of unit length: 0. | GLTF_ACCESSOR_VECTOR3_NON_UNIT: Vector3 at accessor indices 21..23 is not of unit length: 0. | GLTF_ACCESSOR_VECTOR3_NON_UNIT: Vector3 at accessor indices 24..26 is not of unit length: 0. (+114 more blockers)"
+    }
+  ],
+  "packageSha256": "19add77366f489f078ca50f58d6d0bcb4c4d3e86a18df4bc8da387285ab90822",
+  "revisions": [
+    {
+      "sourceHash": "7c04e74fe34735b124942f821db74909e5c4a09b10c0c123c338cdf0078db85a",
+      "bytes": 16739
+    },
+    {
+      "sourceHash": "b36982692607a6702bfc8a004d4a18a743c2b59518d0ff20cd2b0f02982f4892",
+      "bytes": 17123
+    }
+  ],
+  "handleMappings": {
+    "p_7c04e74fe347": "sha256:7c04e74fe34735b124942f821db74909e5c4a09b10c0c123c338cdf0078db85a",
+    "p_b36982692607": "sha256:b36982692607a6702bfc8a004d4a18a743c2b59518d0ff20cd2b0f02982f4892"
+  },
+  "editReplay": [
+    {
+      "parentRef": "p_7c04e74fe347",
+      "programRef": "p_b36982692607",
+      "sourceHash": "b36982692607a6702bfc8a004d4a18a743c2b59518d0ff20cd2b0f02982f4892",
+      "rejected": false,
+      "exact": true,
+      "occurrences": [
+        1,
+        3,
+        1,
+        1,
+        1
+      ]
+    }
+  ],
+  "readPaths": [
+    "C:\\Users\\Mattm\\X\\kiln-cleanrooms\\fresh-claude-mechanical-peacock-19add773-20260905\\workspace\\AGENTS.md",
+    "C:\\Users\\Mattm\\X\\kiln-cleanrooms\\fresh-claude-mechanical-peacock-19add773-20260905\\workspace\\TASK.md",
+    "C:\\Users\\Mattm\\X\\kiln-cleanrooms\\fresh-claude-mechanical-peacock-19add773-20260905\\workspace\\skills\\kiln-author-asset\\SKILL.md",
+    "C:\\Users\\Mattm\\X\\kiln-cleanrooms\\fresh-claude-mechanical-peacock-19add773-20260905\\workspace\\skills\\kiln-author-asset\\references\\program-contract.md",
+    "C:\\Users\\Mattm\\X\\kiln-cleanrooms\\fresh-claude-mechanical-peacock-19add773-20260905\\workspace\\skills\\kiln-author-asset\\references\\geometry-recipes.md",
+    "C:\\Users\\Mattm\\X\\kiln-cleanrooms\\fresh-claude-mechanical-peacock-19add773-20260905\\workspace\\skills\\kiln-author-asset\\references\\camera-recipes.md",
+    "C:\\Users\\Mattm\\X\\kiln-cleanrooms\\fresh-claude-mechanical-peacock-19add773-20260905\\workspace\\skills\\kiln-refine-asset\\SKILL.md",
+    "C:\\Users\\Mattm\\X\\kiln-cleanrooms\\fresh-claude-mechanical-peacock-19add773-20260905\\workspace\\skills\\kiln-qa-asset\\SKILL.md",
+    "C:\\Users\\Mattm\\X\\kiln-cleanrooms\\fresh-claude-mechanical-peacock-19add773-20260905\\workspace\\skills\\kiln-refine-asset\\references\\revision-and-views.md"
+  ],
+  "deliveredImages": [
+    {
+      "path": "C:\\Users\\Mattm\\X\\kiln-cleanrooms\\fresh-claude-mechanical-peacock-19add773-20260905\\evidence\\mcp\\images\\007-0.png",
+      "bytes": 455081,
+      "sha256": "7319e6dea0752fa281be155b5c58b43f5387b494b62b729b4cc33443aa18122f"
+    }
+  ],
+  "forwardedImageBlocks": 1
+}

@@ -19,7 +19,9 @@
  * A plugin install is a git clone with no build step, which is why the artifact
  * is committed rather than built on demand.
  */
-import { spawn, spawnSync } from 'node:child_process';
+import { spawnSync } from 'node:child_process';
+import { Client } from '@modelcontextprotocol/client';
+import { StdioClientTransport } from '@modelcontextprotocol/client/stdio';
 import { createHash } from 'node:crypto';
 import { readFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
@@ -76,47 +78,29 @@ describe('mcp server bundle', () => {
       .map((t) => t.name)
       .sort();
 
-    const names = await new Promise<string[]>((done, fail) => {
-      const child = spawn('node', [BUNDLE], { cwd: REPO, stdio: ['pipe', 'pipe', 'pipe'] });
-      const timer = setTimeout(() => {
-        child.kill();
-        fail(new Error('node never answered tools/list'));
-      }, 60_000);
-      let buf = '';
-      child.stdout.on('data', (d: Buffer) => {
-        buf += d.toString();
-        for (const line of buf.split('\n')) {
-          if (!line.trim().startsWith('{')) continue;
-          let msg: { id?: number; result?: { tools?: Array<{ name: string }> } };
-          try {
-            msg = JSON.parse(line) as typeof msg;
-          } catch {
-            continue;
-          }
-          if (msg.id !== 1 || !msg.result?.tools) continue;
-          clearTimeout(timer);
-          child.kill();
-          done(msg.result.tools.map((t) => t.name).sort());
-          return;
-        }
-      });
-      child.on('error', (e) => {
-        clearTimeout(timer);
-        fail(e);
-      });
-      child.stdin.write(
-        `${JSON.stringify({
-          jsonrpc: '2.0',
-          id: 0,
-          method: 'initialize',
-          params: {
-            protocolVersion: '2024-11-05',
-            capabilities: {},
-            clientInfo: { name: 'bundle-test', version: '1' },
-          },
-        })}\n${JSON.stringify({ jsonrpc: '2.0', id: 1, method: 'tools/list', params: {} })}\n`,
-      );
+    // Negotiate initialization before tools/list. Pipelining them relies on
+    // server scheduling and can race once startup does real installation work.
+    const client = new Client({ name: 'bundle-test', version: '1' });
+    const transport = new StdioClientTransport({
+      command: 'node',
+      args: [BUNDLE],
+      cwd: REPO,
+      env: { ...process.env, KILN_RENDER: 'cpu' } as Record<string, string>,
+      stderr: 'pipe',
     });
+    let errors = '';
+    transport.stderr?.on('data', (chunk) => {
+      errors += chunk.toString();
+    });
+    let names: string[];
+    try {
+      await client.connect(transport);
+      names = (await client.listTools()).tools.map((tool) => tool.name).sort();
+    } catch (error) {
+      throw new Error(`Node MCP startup failed: ${errors}`, { cause: error });
+    } finally {
+      await client.close();
+    }
 
     expect(names).toEqual(expected);
   }, 70_000);

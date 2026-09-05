@@ -1,0 +1,36 @@
+{
+  "root": "[fresh Windows installation retained outside checkout]",
+  "platform": "win32",
+  "arch": "x64",
+  "node": "v22.23.1",
+  "checks": [
+    "direct-node-cli-help",
+    "tarball-install-without-dev-dependencies",
+    "node-cli-entry",
+    "npm-init-workspace",
+    "csg-wasm",
+    "uv-wasm",
+    "cpu-png",
+    "cross-cwd-cli-source-store",
+    "capture-file-part-relative-grid",
+    "capture-file-build-reuse",
+    "packaged-node-worker",
+    "mcp-discovery",
+    "source-reference-edit-images",
+    "server-restart-persistence",
+    "exact-source-export"
+  ],
+  "status": "passed",
+  "npm": "12.0.1",
+  "tarball": "q1-kiln-833b9bf1.tgz",
+  "tarballSha256": "833b9bf14468798640447d2ba98d16d1bcedaaff8ac8752d266881e29aaabb97",
+  "engineVersion": "0.6.0",
+  "bundleHashes": {
+    "cli": "ccd60c459a8b20cd4cd96016332354ab9aff4c5f208e2b2fdb39cf312943ed09",
+    "mcp": "7a12f1a46bcb9561f25f087264ab27db6d73c48fd4fdce50a5b814d90a3414a6"
+  },
+  "editResult": {
+    "programRef": "sha256:7fd2baaf40e0159bf85ede698533c8907aeba206c855a454e64b40e2ebc53018",
+    "parentRef": "sha256:bd1be775f34532a3ce756e8253709e85df5ed0549394866b98f6abce2617f11e"
+  }
+}

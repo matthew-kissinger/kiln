@@ -1,0 +1,5 @@
+import {test} from 'node:test';import assert from 'node:assert/strict';import {validateCameraMode} from '../src/contract.mjs';
+const camera={version:'kiln.camera.v1',projection:'orthographic',position:[3,2,4],target:[0,0,0],up:[0,1,0],halfHeight:2,aspect:1,near:.1,far:100};
+test('versioned orthographic cameras retain exact framing',()=>{const result=validateCameraMode({cameras:[camera],width:128,height:128});assert.deepEqual(result.cameras,[camera]);assert.throws(()=>validateCameraMode({cameras:[{...camera,halfHeight:0}],width:128,height:128}),/halfHeight/);});
+import {buildRenderFidelityV1} from '../src/contract.mjs';
+test('orthographic service receipt retains projection and half-height',()=>{const parsed=validateCameraMode({cameras:[camera],width:128,height:128});const receipt=buildRenderFidelityV1({rendererId:'gpu:test',inputGlbSha256:`sha256:${'a'.repeat(64)}`,presentationProfile:parsed.lightingPresetId,renderMode:{mode:'camera',...parsed},resolvedCameras:parsed.cameras,timings:{totalMs:1,queueAndTotalMs:1}});assert.equal(receipt.resolvedCameras[0].halfHeight,2);assert.equal(receipt.resolvedCameras[0].projection,'orthographic');});

@@ -1,0 +1,15 @@
+# Project-local aliases: experimental only
+
+An immutable `programRef` already lets render, source, edit, and inspect share a program without resending it. This R0 experiment asks a narrower question: can a readable project-local name point to a revision without losing concurrent edits?
+
+The prototype in `src/experiments/program-aliases.ts` has two operations: resolve an explicitly named alias, and compare-and-set it using an expected reference. Creating an alias requires `expectedRef: null`; updating it requires the reference the caller read. There is no global current program and no implicit replacement of another revision. Alias names are lowercase identifiers, scoped to one directory.
+
+Run `bun scripts/experiment-program-aliases.ts`. The [recorded result](program-aliases-results.json) used eight independent processes updating one alias from the same starting reference. Exactly one update succeeded; seven were rejected. A fresh store instance still resolved all three immutable sources, including the original and losing candidate. Focused tests also reject alias collisions, stale updates, invalid names, missing source targets, corrupt alias JSON, and an occupied lock.
+
+Publication uses a complete temporary JSON file renamed under an exclusive per-alias directory lock. Contention fails explicitly with a busy error; a stale reference fails with a conflict. The prototype does not automatically retry an edit against a newer revision. Readers observe an old or new complete pointer and verify the referenced source through the store. This is local-filesystem coordination, not a distributed consensus protocol or a security boundary against another process rewriting the directory.
+
+A crashed writer can leave a lock. The prototype fails closed and does not guess when it is safe to take over; a human must establish that no writer remains before removing a stale lock. It does not promise crash-durable fsync behavior, network-filesystem locking, or alias history. These are explicit adoption costs, not solved by the concurrency result.
+
+**Keep aliases experimental and absent from stable tools for now.** The test establishes basic collision/lost-update protection, not reduced user effort. A matched clean-room model pilot must compare immutable references alone against explicit aliases: source retransmission, stale-reference repairs, successful revisions, tool-call count, and user setup effort. Adopt a stable alias API only if readable names reduce friction without hidden state or accidental cross-revision edits. Preserve direct immutable-reference access and inspectable alias targets if adopted.
+
+Separately, the production source stores now offer optional `stats()`: entries, bytes, the per-source byte limit, and `eviction: 'none'`; memory stores also report their total byte limit. File statistics count persisted full-hash source files, omit temporary files, and do not perform a content integrity scan or imply a total disk quota. Counts are a point-in-time observation while other processes may add sources. Reads continue to verify source integrity. No statistics call evicts a reference.

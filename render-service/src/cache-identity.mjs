@@ -1,0 +1,8 @@
+import {createHash,randomUUID} from 'node:crypto';
+import {readFileSync,readdirSync,statSync,realpathSync} from 'node:fs';
+import {dirname,join,relative,parse} from 'node:path';
+import {fileURLToPath} from 'node:url';
+/** Hash loaded service code and installed renderer package bytes once at boot. No URLs or secrets. */
+export function fingerprintRendererInputs(roots,gpuState){const hash=createHash('sha256');hash.update(JSON.stringify({version:'kiln.capture-producer.v1',node:process.version,platform:process.platform,arch:process.arch,rendererId:gpuState.rendererId,backend:gpuState.backend,adapter:gpuState.summary}));for(let i=0;i<roots.length;i++){const root=realpathSync(roots[i]);const visit=path=>{if(statSync(path).isDirectory()){for(const name of readdirSync(path).sort()){if(name==='node_modules')continue;visit(join(path,name));}}else{const bytes=readFileSync(path);hash.update(JSON.stringify([i,relative(root,path).replaceAll('\\','/'),bytes.length]));hash.update(bytes);}};visit(root);}return `sha256:${hash.digest('hex')}`;}
+function packageRoot(name){let dir=dirname(fileURLToPath(import.meta.resolve(name)));for(;;){try{if(JSON.parse(readFileSync(join(dir,'package.json'),'utf8')).name===name)return dir;}catch{}const parent=dirname(dir);if(parent===dir||dir===parse(dir).root)throw new Error(`Missing installed renderer dependency ${name}`);dir=parent;}}
+export function createRendererCaptureIdentity(gpuState){try{return Object.freeze({version:'kiln.capture-producer.v1',fingerprint:fingerprintRendererInputs([fileURLToPath(new URL('.',import.meta.url)),...['three','webgpu','pngjs'].map(packageRoot)],gpuState),instanceId:randomUUID()});}catch{return undefined;}}

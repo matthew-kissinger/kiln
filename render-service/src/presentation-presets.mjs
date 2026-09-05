@@ -112,6 +112,9 @@ const definitions = [
   }),
 ];
 
+// Gallery photography uses a lower exposure without changing the default tool rig.
+definitions.push(validatePreset({ ...definitions[0], id: 'gallery-studio-v1', exposure: 0.9, background: '#747474' }));
+
 for (const definition of definitions) deepFreeze(definition);
 export const PRESENTATION_PRESET_IDS = Object.freeze(definitions.map(({ id }) => id));
 export const DEFAULT_PRESENTATION_PRESET_ID = PRESENTATION_PRESET_IDS[0];

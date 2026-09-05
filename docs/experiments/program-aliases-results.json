@@ -1,0 +1,13 @@
+{
+  "experiment": "R0 project-local alias compare-and-set",
+  "processes": 8,
+  "updated": 1,
+  "rejected": 7,
+  "rejectionKinds": [
+    "conflict"
+  ],
+  "immutableReferencesResolved": 3,
+  "originalSourcePreserved": true,
+  "finalAliasIsCandidate": true,
+  "usability": "Not evaluated; clean-room model pilot required before stable adoption"
+}

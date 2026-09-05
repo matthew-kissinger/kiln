@@ -1,6 +1,6 @@
 import { Canvas, useThree } from '@react-three/fiber';
 import { ContactShadows, Grid, OrbitControls, useGLTF, useProgress } from '@react-three/drei';
-import { Suspense, useEffect, useMemo, useState } from 'react';
+import { Suspense, useEffect, useMemo, useRef, useState } from 'react';
 import * as THREE from 'three';
 import { RoomEnvironment } from 'three/examples/jsm/environments/RoomEnvironment.js';
 
@@ -24,7 +24,7 @@ interface OrbitLike {
 
 const UP = new THREE.Vector3(0, 1, 0);
 
-/** A three-quarter view from a little above, which suits all fifty of them. */
+/** Default three-quarter view from slightly above the asset. */
 const ELEVATION = 0.315; // radians, about 18 degrees
 const AZIMUTH = 0.733; // radians, about 42 degrees
 
@@ -309,7 +309,7 @@ function Loading() {
       <div>
         <i style={{ width: `${Math.max(progress, 4)}%` }} />
       </div>
-      building the mesh
+      loading the GLB
     </div>
   );
 }
@@ -318,9 +318,11 @@ export function Viewer({ all, current }: { all: Specimen[]; current: Specimen })
   const { name } = current;
   const [wireframe, setWireframe] = useState(false);
   const [grid, setGrid] = useState(true);
-  const [spin, setSpin] = useState(true);
+  const [spin, setSpin] = useState(false);
   const [framing, setFraming] = useState(0);
   const [radius, setRadius] = useState(4);
+  const [canvasReady, setCanvasReady] = useState(false);
+  const historyDialog = useRef<HTMLDialogElement>(null);
 
   const index = all.findIndex((s) => s.name === name);
   const step = useMemo(
@@ -336,9 +338,15 @@ export function Viewer({ all, current }: { all: Specimen[]; current: Specimen })
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
       if (e.metaKey || e.ctrlKey || e.altKey) return;
+      if (historyDialog.current?.open) return;
+      if (
+        e.target instanceof HTMLElement &&
+        e.target.closest('input, textarea, select, button, a, summary, [contenteditable]')
+      )
+        return;
       if (e.key === 'ArrowRight') step(1);
       else if (e.key === 'ArrowLeft') step(-1);
-      else if (e.key === 'Escape') location.hash = '#/';
+      else if (e.key === 'Escape') location.hash = '#/gallery';
       else if (e.key.toLowerCase() === 'w') setWireframe((v) => !v);
       else if (e.key.toLowerCase() === 'g') setGrid((v) => !v);
       else return;
@@ -348,14 +356,15 @@ export function Viewer({ all, current }: { all: Specimen[]; current: Specimen })
     return () => removeEventListener('keydown', onKey);
   }, [step]);
 
-  // A new specimen starts framed and spinning again, whatever was left set on
+  // A new specimen starts framed and stationary, whatever was left set on
   // the last one. Wireframe and the grid deliberately carry over: someone
   // stepping through the gallery in wireframe meant to be in wireframe.
   //
   // biome-ignore lint/correctness/useExhaustiveDependencies: name is a trigger, not an input.
   useEffect(() => {
     setFraming((n) => n + 1);
-    setSpin(true);
+    setSpin(false);
+    historyDialog.current?.close();
   }, [name]);
 
   const [x, y, z] = current.size;
@@ -363,7 +372,7 @@ export function Viewer({ all, current }: { all: Specimen[]; current: Specimen })
   return (
     <div className="viewer">
       <div className="bar">
-        <a className="back" href="#/">
+        <a className="back" href="#/gallery">
           &larr; gallery
         </a>
         <div className="sep" />
@@ -394,7 +403,15 @@ export function Viewer({ all, current }: { all: Specimen[]; current: Specimen })
           <button type="button" className="chip" onClick={() => setFraming((n) => n + 1)}>
             reset view
           </button>
-          <a className="chip" href={`${REPO}/blob/main/examples/${current.name}.kiln.js`}>
+          <a
+            className="chip"
+            href={
+              current.source
+                ? asset(current.source)
+                : `${REPO}/blob/main/examples/${current.name}.kiln.js`
+            }
+            download={current.source ? `${current.name}.kiln.js` : undefined}
+          >
             program
           </a>
           <a className="chip" href={asset(current.file)} download={`${current.name}.glb`}>
@@ -404,69 +421,77 @@ export function Viewer({ all, current }: { all: Specimen[]; current: Specimen })
       </div>
 
       <div className="stage">
-        <Canvas
-          dpr={[1, 2]}
-          // Transparent, so the well behind it keeps its gradient: a flat clear
-          // colour under a lit model reads as a cut-out, and the falloff is what
-          // makes the stage look like a room.
-          gl={{ antialias: true, alpha: true, toneMapping: THREE.ACESFilmicToneMapping }}
-          camera={{ fov: 34, position: [6, 3, 5] }}
-        >
-          <Ibl />
-          {/* A key with a real direction on top of the room light, so edges and
+        <div className="model-viewport">
+          <Canvas
+            role="img"
+            aria-label={`3D preview of ${title(current.name)}`}
+            onCreated={() => setCanvasReady(true)}
+            fallback={
+              <p className="preview-message" hidden={canvasReady} aria-hidden={canvasReady}>
+                WebGL is unavailable. Download the source or GLB using the links above.
+              </p>
+            }
+            dpr={[1, 2]}
+            // Transparent, so the well behind it keeps its gradient: a flat clear
+            // colour under a lit model reads as a cut-out, and the falloff is what
+            // makes the stage look like a room.
+            gl={{ antialias: true, alpha: true, toneMapping: THREE.ACESFilmicToneMapping }}
+            camera={{ fov: 34, position: [6, 3, 5] }}
+          >
+            <Ibl />
+            {/* A key with a real direction on top of the room light, so edges and
               bevels read. Everything else about the surface comes from the
               material the program declared. */}
-          <directionalLight position={[radius * 2, radius * 2.6, radius * 1.4]} intensity={2.1} />
-          <directionalLight position={[-radius * 1.8, radius, -radius * 1.6]} intensity={0.5} />
-          <hemisphereLight args={['#cfd8dd', '#2a221c', 0.35]} />
+            <directionalLight position={[radius * 2, radius * 2.6, radius * 1.4]} intensity={2.1} />
+            <directionalLight position={[-radius * 1.8, radius, -radius * 1.6]} intensity={0.5} />
+            <hemisphereLight args={['#cfd8dd', '#2a221c', 0.35]} />
 
-          <OrbitControls
-            makeDefault
-            autoRotate={spin}
-            autoRotateSpeed={0.55}
-            enableDamping
-            dampingFactor={0.06}
-          />
-
-          <Suspense fallback={null}>
-            <Model
-              key={current.name}
-              url={asset(current.file)}
-              wireframe={wireframe}
-              framing={framing}
-              onBounds={setRadius}
+            <OrbitControls
+              makeDefault
+              autoRotate={spin}
+              autoRotateSpeed={0.55}
+              enableDamping
+              dampingFactor={0.06}
             />
-          </Suspense>
 
-          <ContactShadows
-            position={[0, 0.001, 0]}
-            scale={radius * 4}
-            far={radius * 1.5}
-            opacity={0.55}
-            blur={2.4}
-            resolution={1024}
-            color="#000000"
-          />
-          {grid && (
-            <Grid
-              args={[radius * 10, radius * 10]}
-              cellSize={radius / 5}
-              cellColor="#2b2620"
-              sectionSize={radius}
-              sectionColor="#453b31"
-              fadeDistance={radius * 9}
-              fadeStrength={1.4}
-              infiniteGrid
-              followCamera={false}
+            <Suspense fallback={null}>
+              <Model
+                key={current.name}
+                url={asset(current.file)}
+                wireframe={wireframe}
+                framing={framing}
+                onBounds={setRadius}
+              />
+            </Suspense>
+
+            <ContactShadows
+              position={[0, 0.001, 0]}
+              scale={radius * 4}
+              far={radius * 1.5}
+              opacity={0.55}
+              blur={2.4}
+              resolution={1024}
+              color="#000000"
             />
-          )}
-        </Canvas>
+            {grid && (
+              <Grid
+                args={[radius * 10, radius * 10]}
+                cellSize={radius / 5}
+                cellColor="#2b2620"
+                sectionSize={radius}
+                sectionColor="#453b31"
+                fadeDistance={radius * 9}
+                fadeStrength={1.4}
+                infiniteGrid
+                followCamera={false}
+              />
+            )}
+          </Canvas>
 
-        <Loading />
+          <Loading />
+        </div>
 
-        {/* One anchored group rather than two independently positioned panels:
-            side by side on a wide screen, stacked on a phone, and neither one
-            has to know how tall the other is. */}
+        {/* Desktop overlays; below the model in the mobile scroll flow. */}
         <div className="panels">
           <dl className="readout">
             <dt>triangles</dt>
@@ -483,13 +508,94 @@ export function Viewer({ all, current }: { all: Specimen[]; current: Specimen })
             <dd>{(current.bytes / 1024).toFixed(0)} KB</dd>
           </dl>
 
-          <p className="caption">
-            {current.caption}
-            <b>
-              written by <i>{current.model}</i> through {current.harness}
-              {current.cleanRoom ? ', in a clean room' : ''}
-            </b>
-          </p>
+          <div className="caption">
+            <p>
+              {current.caption}
+              <b>
+                written by <i>{current.model}</i> through {current.harness}
+                {current.provenance
+                  ? ` · ${current.provenance.attribution}`
+                  : ' · historical collection credit'}
+              </b>
+            </p>
+            <button
+              className="history-trigger"
+              type="button"
+              onClick={() => historyDialog.current?.showModal()}
+            >
+              Brief & revisions
+            </button>
+            <dialog className="history-dialog" ref={historyDialog} aria-labelledby="history-title">
+              <form method="dialog" className="history-heading">
+                <h2 id="history-title">{title(current.name)} · Brief & revisions</h2>
+                <button type="submit">Close</button>
+              </form>
+              {current.history ? (
+                <>
+                  <h3>
+                    {current.history.brief.kind === 'summary' ? 'Brief summary' : 'Design brief'}
+                  </h3>
+                  <p>{current.history.brief.text}</p>
+                  <ol>
+                    {current.history.revisions.map((revision) => (
+                      <li key={revision.sourceHash}>
+                        <h4>
+                          {revision.title}
+                          {revision.current && <span> · Shown here</span>}
+                        </h4>
+                        <p>{revision.description}</p>
+                        <a
+                          href={asset(revision.source)}
+                          download
+                          aria-label={`Download ${revision.title.toLowerCase()} source`}
+                        >
+                          Download this source
+                        </a>
+                        <code title="Source SHA-256">{revision.sourceHash}</code>
+                      </li>
+                    ))}
+                  </ol>
+                </>
+              ) : (
+                <p>
+                  No brief or earlier revisions have been added to this record. The program download
+                  contains the displayed version.
+                </p>
+              )}
+            </dialog>
+            <details className="provenance">
+              <summary>Build & authorship</summary>
+              <p>
+                Source access: {current.provenance?.sourceAccess ?? 'Not recorded'}
+                <br />
+                Inherited context: {current.provenance?.inheritedContext ?? 'Not recorded'}
+                <br />
+                Starting example: {current.provenance?.startingExample ?? 'Not recorded'}
+                <br />
+                Human input: {current.provenance?.humanIntervention ?? 'Not recorded'}
+                <br />
+                Authoring review: {current.provenance?.reviewFidelity ?? 'Not recorded'}
+              </p>
+              <p>
+                {current.provenance?.poster ??
+                  'Gallery poster is an archival render; its source revision was not recorded.'}
+              </p>
+              {current.provenance?.posterReceipt && (
+                <p>
+                  <a href={asset(`assets/${current.name}.poster.json`)}>
+                    Poster camera & render record ↗
+                  </a>
+                </p>
+              )}
+              {current.sourceHash && (
+                <p className="hash">
+                  Source SHA-256: {current.sourceHash}
+                  <br />
+                  GLB SHA-256: {current.artifactHash}
+                </p>
+              )}
+            </details>
+          </div>
         </div>
       </div>
     </div>

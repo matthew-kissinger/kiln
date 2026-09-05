@@ -1,0 +1,150 @@
+{
+  "name": "solar-sail-courier",
+  "base": "C:/Users/Mattm/X/kiln-cleanrooms/fresh-agy-solar-sail-courier-0d457e8f-20260905-gpu",
+  "exit": {
+    "code": 0,
+    "timedOut": false,
+    "finishedAt": "2026-09-05T21:13:27.188Z"
+  },
+  "status": "finished",
+  "model": "gemini-3.8-flash-high",
+  "conversationId": "0b5d3b00-27e0-4e9d-82f3-f420d0341ccb",
+  "packageSha256": "0d457e8f8763730079da013abfa6662aadc02843f090fcae594c0f711399d16c",
+  "calls": 18,
+  "inlineSourceCalls": 0,
+  "edits": 2,
+  "imageCells": 16,
+  "images": [
+    {
+      "path": "C:\\Users\\Mattm\\X\\kiln-cleanrooms\\fresh-agy-solar-sail-courier-0d457e8f-20260905-gpu\\evidence\\mcp\\images\\008-0.png",
+      "bytes": 84648,
+      "sha256": "1d8e36c1a3c803d738c4a26d5ce9995b09a6149904ec37fe3296044028c46d2e"
+    },
+    {
+      "path": "C:\\Users\\Mattm\\X\\kiln-cleanrooms\\fresh-agy-solar-sail-courier-0d457e8f-20260905-gpu\\evidence\\mcp\\images\\009-0.png",
+      "bytes": 38106,
+      "sha256": "8f8b40074f382b35e53131c62550b49e7e7839571da4fbeb54a437e961f325a9"
+    },
+    {
+      "path": "C:\\Users\\Mattm\\X\\kiln-cleanrooms\\fresh-agy-solar-sail-courier-0d457e8f-20260905-gpu\\evidence\\mcp\\images\\014-0.png",
+      "bytes": 151119,
+      "sha256": "901efcafb410d68c9e80bfbf3563bb44a747a18a0e7cd2dbe50cd26b8ddd66ac"
+    },
+    {
+      "path": "C:\\Users\\Mattm\\X\\kiln-cleanrooms\\fresh-agy-solar-sail-courier-0d457e8f-20260905-gpu\\evidence\\mcp\\images\\017-0.png",
+      "bytes": 197905,
+      "sha256": "254dbc10472caaef4f28f512363cb96825a9836a19ac00cb190d2bec7bee3c98"
+    },
+    {
+      "path": "C:\\Users\\Mattm\\X\\kiln-cleanrooms\\fresh-agy-solar-sail-courier-0d457e8f-20260905-gpu\\evidence\\mcp\\images\\018-0.png",
+      "bytes": 65360,
+      "sha256": "4b2b256d2737e7d28d80aeb90a0a1000a0c18a94ff75871c9053470f9f8f3ff8"
+    }
+  ],
+  "toolErrors": [],
+  "files": [
+    {
+      "file": "final-chosen.png",
+      "bytes": 247568,
+      "sha256": "f80ae57bb9d7905fdc67ed2821ef3483c6a4c2e4b610998e2f4c6971fd9ca1d4"
+    },
+    {
+      "file": "final.glb",
+      "bytes": 348568,
+      "sha256": "12af7b1acaf8f073c89bee4a15f1f9fff92d72aa351676ebe3de0ac2a8aec97a"
+    },
+    {
+      "file": "final.kiln.js",
+      "bytes": 20923,
+      "sha256": "0a3aac41c77094e96aaeed3414802b20fb3143398715cd8ffcc008d626821164"
+    }
+  ],
+  "lastEvent": "result",
+  "acceptedCalls": 18,
+  "deniedCalls": [],
+  "revisions": [
+    {
+      "sourceHash": "0a3aac41c77094e96aaeed3414802b20fb3143398715cd8ffcc008d626821164",
+      "bytes": 20923
+    },
+    {
+      "sourceHash": "1fe4ad118242dd9805a88b09b27b90f9f3bd72b39cfcff8ad631646c56bf3fc1",
+      "bytes": 17806
+    },
+    {
+      "sourceHash": "272e8a7af1693d89cc93388d2e6c6c5bfedd3d856dd58de4fb8a4c6e16476cba",
+      "bytes": 19573
+    }
+  ],
+  "editReplay": [
+    {
+      "parentRef": "sha256:1fe4ad118242dd9805a88b09b27b90f9f3bd72b39cfcff8ad631646c56bf3fc1",
+      "programRef": "sha256:272e8a7af1693d89cc93388d2e6c6c5bfedd3d856dd58de4fb8a4c6e16476cba",
+      "occurrences": [
+        1,
+        1,
+        1
+      ],
+      "rejected": false,
+      "exact": true,
+      "renderOk": true
+    },
+    {
+      "parentRef": "sha256:272e8a7af1693d89cc93388d2e6c6c5bfedd3d856dd58de4fb8a4c6e16476cba",
+      "programRef": "sha256:0a3aac41c77094e96aaeed3414802b20fb3143398715cd8ffcc008d626821164",
+      "occurrences": [
+        1,
+        1,
+        1
+      ],
+      "rejected": false,
+      "exact": true,
+      "renderOk": true
+    }
+  ],
+  "viewedImages": [
+    "C:/Users/Mattm/.gemini/antigravity-cli/brain/0b5d3b00-27e0-4e9d-82f3-f420d0341ccb/.system_generated/steps/59/media_0.png",
+    "C:/Users/Mattm/.gemini/antigravity-cli/brain/0b5d3b00-27e0-4e9d-82f3-f420d0341ccb/.system_generated/steps/67/media_0.png",
+    "C:/Users/Mattm/.gemini/antigravity-cli/brain/0b5d3b00-27e0-4e9d-82f3-f420d0341ccb/.system_generated/steps/87/media_0.png",
+    "C:/Users/Mattm/.gemini/antigravity-cli/brain/0b5d3b00-27e0-4e9d-82f3-f420d0341ccb/.system_generated/steps/99/media_0.png",
+    "C:/Users/Mattm/.gemini/antigravity-cli/brain/0b5d3b00-27e0-4e9d-82f3-f420d0341ccb/.system_generated/steps/107/media_0.png",
+    "C:/Users/Mattm/X/kiln-cleanrooms/fresh-agy-solar-sail-courier-0d457e8f-20260905-gpu/workspace/assets/final-chosen.png"
+  ],
+  "readPaths": [
+    "C:/Users/Mattm/X/kiln-cleanrooms/fresh-agy-solar-sail-courier-0d457e8f-20260905-gpu/workspace/AGENTS.md",
+    "C:/Users/Mattm/X/kiln-cleanrooms/fresh-agy-solar-sail-courier-0d457e8f-20260905-gpu/workspace/TASK.md",
+    "C:/Users/Mattm/X/kiln-cleanrooms/fresh-agy-solar-sail-courier-0d457e8f-20260905-gpu/workspace/skills/kiln-author-asset/SKILL.md",
+    "C:/Users/Mattm/X/kiln-cleanrooms/fresh-agy-solar-sail-courier-0d457e8f-20260905-gpu/workspace/skills/kiln-refine-asset/SKILL.md",
+    "C:/Users/Mattm/X/kiln-cleanrooms/fresh-agy-solar-sail-courier-0d457e8f-20260905-gpu/workspace/skills/kiln-qa-asset/SKILL.md",
+    "C:/Users/Mattm/X/kiln-cleanrooms/fresh-agy-solar-sail-courier-0d457e8f-20260905-gpu/workspace/skills/kiln-author-asset/references/program-contract.md",
+    "C:/Users/Mattm/X/kiln-cleanrooms/fresh-agy-solar-sail-courier-0d457e8f-20260905-gpu/workspace/skills/kiln-author-asset/references/camera-recipes.md",
+    "C:/Users/Mattm/X/kiln-cleanrooms/fresh-agy-solar-sail-courier-0d457e8f-20260905-gpu/workspace/skills/kiln-author-asset/references/geometry-recipes.md",
+    "C:/Users/Mattm/X/kiln-cleanrooms/fresh-agy-solar-sail-courier-0d457e8f-20260905-gpu/workspace/skills/kiln-refine-asset/references/revision-and-views.md",
+    "C:/Users/Mattm/X/kiln-cleanrooms/fresh-agy-solar-sail-courier-0d457e8f-20260905-gpu/workspace/skills/kiln-qa-asset/references/integration-checks.md",
+    "C:/Users/Mattm/.gemini/antigravity-cli/mcp/kiln_workspace/kiln_list_primitives.json",
+    "C:/Users/Mattm/X/kiln-cleanrooms/fresh-agy-solar-sail-courier-0d457e8f-20260905-gpu/workspace/kiln.mjs",
+    "C:/Users/Mattm/X/kiln-cleanrooms/fresh-agy-solar-sail-courier-0d457e8f-20260905-gpu/workspace/START.md",
+    "C:/Users/Mattm/.gemini/antigravity-cli/mcp/kiln_workspace/kiln_render.json",
+    "C:/Users/Mattm/.gemini/antigravity-cli/mcp/kiln_workspace/kiln_edit.json",
+    "C:/Users/Mattm/.gemini/antigravity-cli/mcp/kiln_workspace/kiln_screenshot_animation.json",
+    "C:/Users/Mattm/.gemini/antigravity-cli/mcp/kiln_workspace/kiln_source.json",
+    "C:/Users/Mattm/.gemini/antigravity-cli/brain/0b5d3b00-27e0-4e9d-82f3-f420d0341ccb/.system_generated/steps/59/output.txt",
+    "C:/Users/Mattm/.gemini/antigravity-cli/brain/0b5d3b00-27e0-4e9d-82f3-f420d0341ccb/.system_generated/steps/59/output.txt",
+    "C:/Users/Mattm/.gemini/antigravity-cli/brain/0b5d3b00-27e0-4e9d-82f3-f420d0341ccb/.system_generated/steps/59/media_0.png",
+    "C:/Users/Mattm/.gemini/antigravity-cli/brain/0b5d3b00-27e0-4e9d-82f3-f420d0341ccb/.system_generated/steps/67/output.txt",
+    "C:/Users/Mattm/.gemini/antigravity-cli/brain/0b5d3b00-27e0-4e9d-82f3-f420d0341ccb/.system_generated/steps/67/output.txt",
+    "C:/Users/Mattm/.gemini/antigravity-cli/brain/0b5d3b00-27e0-4e9d-82f3-f420d0341ccb/.system_generated/steps/67/media_0.png",
+    "C:/Users/Mattm/.gemini/antigravity-cli/brain/0b5d3b00-27e0-4e9d-82f3-f420d0341ccb/.system_generated/steps/75/output.txt",
+    "C:/Users/Mattm/.gemini/antigravity-cli/brain/0b5d3b00-27e0-4e9d-82f3-f420d0341ccb/.system_generated/steps/79/output.txt",
+    "C:/Users/Mattm/.gemini/antigravity-cli/brain/0b5d3b00-27e0-4e9d-82f3-f420d0341ccb/.system_generated/steps/87/output.txt",
+    "C:/Users/Mattm/.gemini/antigravity-cli/brain/0b5d3b00-27e0-4e9d-82f3-f420d0341ccb/.system_generated/steps/87/output.txt",
+    "C:/Users/Mattm/.gemini/antigravity-cli/brain/0b5d3b00-27e0-4e9d-82f3-f420d0341ccb/.system_generated/steps/87/media_0.png",
+    "C:/Users/Mattm/.gemini/antigravity-cli/brain/0b5d3b00-27e0-4e9d-82f3-f420d0341ccb/.system_generated/steps/99/output.txt",
+    "C:/Users/Mattm/.gemini/antigravity-cli/brain/0b5d3b00-27e0-4e9d-82f3-f420d0341ccb/.system_generated/steps/99/output.txt",
+    "C:/Users/Mattm/.gemini/antigravity-cli/brain/0b5d3b00-27e0-4e9d-82f3-f420d0341ccb/.system_generated/steps/99/media_0.png",
+    "C:/Users/Mattm/.gemini/antigravity-cli/brain/0b5d3b00-27e0-4e9d-82f3-f420d0341ccb/.system_generated/steps/107/output.txt",
+    "C:/Users/Mattm/.gemini/antigravity-cli/brain/0b5d3b00-27e0-4e9d-82f3-f420d0341ccb/.system_generated/steps/107/output.txt",
+    "C:/Users/Mattm/.gemini/antigravity-cli/brain/0b5d3b00-27e0-4e9d-82f3-f420d0341ccb/.system_generated/steps/107/media_0.png",
+    "C:/Users/Mattm/X/kiln-cleanrooms/fresh-agy-solar-sail-courier-0d457e8f-20260905-gpu/workspace/assets/final-chosen.png"
+  ]
+}

@@ -1,0 +1,34 @@
+{
+  "root": "C:\\Users\\Mattm\\AppData\\Local\\Temp\\kiln-package-caf\u00e9-5bltQy",
+  "platform": "win32",
+  "arch": "x64",
+  "node": "v22.23.1",
+  "checks": [
+    "direct-node-cli-help",
+    "tarball-install-without-dev-dependencies",
+    "node-cli-entry",
+    "npm-init-workspace",
+    "csg-wasm",
+    "uv-wasm",
+    "cpu-png",
+    "cross-cwd-cli-source-store",
+    "packaged-node-worker",
+    "mcp-discovery",
+    "source-reference-edit-images",
+    "server-restart-persistence",
+    "exact-source-export"
+  ],
+  "status": "passed",
+  "npm": "12.0.1",
+  "tarball": "C:\\Users\\Mattm\\X\\kiln-oss\\tmp\\q1-kiln-1d3bf676.tgz",
+  "tarballSha256": "1d3bf676c9439ab9507e797118b263f2b6f6ce70a8db1c4e6b48c1be022bb806",
+  "engineVersion": "0.6.0",
+  "bundleHashes": {
+    "cli": "6b0c939ce794c48d10f422affe0b9c511c2339bbd7e4b7b98dd00ffbc54fee90",
+    "mcp": "f92fa4744d1df9055410dab0f3a2820fb0f4cabd3a43a6cf023d8ab5ce4a37a7"
+  },
+  "editResult": {
+    "programRef": "sha256:7fd2baaf40e0159bf85ede698533c8907aeba206c855a454e64b40e2ebc53018",
+    "parentRef": "sha256:bd1be775f34532a3ce756e8253709e85df5ed0549394866b98f6abce2617f11e"
+  }
+}

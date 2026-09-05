@@ -2,7 +2,8 @@
 //
 // Written by the model itself through the Kiln MCP tools: it wrote the
 // program, rendered it, looked at its own six-view contact sheet, and
-// revised. Not a line of it is hand-authored.
+// revised. The original geometry was authored by that model.
+// Maintainer revision: preserve rock UVs during subdivision (2026-09-05).
 //
 // Dispatched into a clean directory containing only the brief and the Kiln
 // skills, with no access to this repository or to any finished example.
@@ -42,7 +43,7 @@ async function build() {
       pos.setXYZ(i, vx * (1 + j * 0.5), vy * (1 + j * 0.35), vz * (1 + j * 0.5));
     }
     g.computeVertexNormals();
-    g = subdivide(g, 2);
+    g = subdivide(g, 2, { preserveUV: true });
     createPart(name, g, mat, { position: [px, 0.35 + sy * 0.25, pz], rotation: [0, rotY, 0], parent: root });
   }
   makeRock('Rock1', 4.4, 1.2, 1.5, 1.1, 20, rockMat, 1);
