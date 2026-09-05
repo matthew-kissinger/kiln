@@ -1,5 +1,15 @@
 # Normalize line endings to LF for all text; let Git detect text vs binary.
+#
+# This alone is not enough: a file written with CRLF by a tool after checkout
+# stays CRLF in the working copy, and anything measuring file content then gets
+# a different answer locally than on a fresh LF checkout. That is how the skill
+# front-matter budget in src/__tests__/mcp-payload.test.ts first failed on CI
+# while passing here. That test now normalizes before it measures.
 * text=auto eol=lf
 bun.lock -diff linguist-generated=true
 *.png binary
+*.gif binary
 *.glb binary
+*.webp binary
+*.tgz binary
+*.ico binary

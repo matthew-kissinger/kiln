@@ -129,8 +129,14 @@ describe('always-on context cost', () => {
     let total = 0;
     let count = 0;
     for (const name of await readdir(dir)) {
-      const md = await readFile(join(dir, name, 'SKILL.md'), 'utf8');
-      const fm = /^---\r?\n([\s\S]*?)\r?\n---/.exec(md);
+      // Normalize before measuring. The count is a claim about how much a
+      // skill says about itself, and that must not change with whoever checked
+      // the tree out: a CRLF working copy counts one extra character per line
+      // and disagrees with CI, which is exactly how this assertion first
+      // failed. `.gitattributes` keeps the tree LF; this keeps the measurement
+      // honest even where it is not.
+      const md = (await readFile(join(dir, name, 'SKILL.md'), 'utf8')).replace(/\r\n/g, '\n');
+      const fm = /^---\n([\s\S]*?)\n---/.exec(md);
       if (!fm) throw new Error(`skills/${name}/SKILL.md has no front matter`);
       total += fm[1]!.length;
       count++;

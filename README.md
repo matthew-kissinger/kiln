@@ -257,7 +257,7 @@ does not re-emit the first nine.
 
 What sits in context permanently is small, and it is measured rather than asserted. The seven tool
 schemas derive to 15,839 characters of JSON Schema, call it four thousand tokens. The five skills
-advertise themselves in 1,698 characters of front matter, four hundred more; their bodies come to
+advertise themselves in 1,692 characters of front matter, four hundred more; their bodies come to
 about eight thousand tokens between them and load only when one of them actually fires. Everything
 else a model would otherwise have to be told about building an asset lives in the engine, where it
 is executed rather than read.
