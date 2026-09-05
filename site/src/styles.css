@@ -1,0 +1,615 @@
+/*
+ * One visual world, deliberately.
+ *
+ * Every tool that shows a mesh -- Blender, Houdini, Unreal, Substance -- is dark,
+ * because a dark surround is what lets you read a lit surface. So this commits to
+ * a dark page rather than following the host theme, and paints every colour
+ * explicitly so it holds on any ground.
+ *
+ * The two accents have separate jobs and never do each other's. Flame is the
+ * kiln, and marks state: what is selected, what is on. Wire is the colour every
+ * 3D tool draws edges in, and appears only where edges are being drawn.
+ */
+:root {
+  --ground: #13110f;
+  --stage: #0b0a09;
+  --panel: #1a1714;
+  --rule: #322c25;
+  --ink: #f0eae1;
+  --dim: #9c9187;
+  --faint: #6b625a;
+  --flame: #e8823c;
+  --wire: #6fd3e4;
+
+  --ui: "Archivo", ui-sans-serif, system-ui, "Segoe UI", sans-serif;
+  --mono: "IBM Plex Mono", ui-monospace, "SFMono-Regular", "Consolas", monospace;
+
+  color-scheme: dark;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+html,
+body,
+#root {
+  height: 100%;
+}
+
+body {
+  margin: 0;
+  background: var(--ground);
+  color: var(--ink);
+  font-family: var(--ui);
+  font-size: 15px;
+  line-height: 1.55;
+  -webkit-font-smoothing: antialiased;
+}
+
+a {
+  color: inherit;
+}
+
+button {
+  font: inherit;
+  color: inherit;
+  background: none;
+  border: 0;
+  cursor: pointer;
+}
+
+:focus-visible {
+  outline: 2px solid var(--flame);
+  outline-offset: 2px;
+}
+
+/* ---------------------------------------------------------------- masthead */
+
+.masthead {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-end;
+  gap: 28px 40px;
+  padding: 34px 32px 26px;
+  border-bottom: 1px solid var(--rule);
+}
+
+.wordmark {
+  display: flex;
+  align-items: baseline;
+  gap: 12px;
+  margin: 0;
+  font-size: 30px;
+  font-weight: 700;
+  letter-spacing: -0.035em;
+  line-height: 1;
+}
+
+.wordmark span {
+  font-family: var(--mono);
+  font-size: 11px;
+  font-weight: 400;
+  letter-spacing: 0.16em;
+  text-transform: uppercase;
+  color: var(--faint);
+}
+
+.masthead p {
+  flex: 1 1 30ch;
+  max-width: 62ch;
+  margin: 0;
+  color: var(--dim);
+  text-wrap: pretty;
+}
+
+.masthead p a {
+  color: var(--ink);
+  text-decoration-color: var(--rule);
+  text-underline-offset: 3px;
+}
+
+.masthead p a:hover {
+  text-decoration-color: var(--flame);
+}
+
+.tally {
+  display: flex;
+  gap: 26px;
+  margin-left: auto;
+}
+
+.tally div {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.tally b {
+  font-family: var(--mono);
+  font-size: 19px;
+  font-weight: 500;
+  font-variant-numeric: tabular-nums;
+  line-height: 1;
+}
+
+.tally small {
+  font-family: var(--mono);
+  font-size: 10px;
+  letter-spacing: 0.13em;
+  text-transform: uppercase;
+  color: var(--faint);
+}
+
+/* ----------------------------------------------------------------- filters */
+
+.filters {
+  position: sticky;
+  top: 0;
+  z-index: 5;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px 22px;
+  padding: 12px 32px;
+  background: color-mix(in oklab, var(--ground) 88%, transparent);
+  backdrop-filter: blur(14px);
+  border-bottom: 1px solid var(--rule);
+}
+
+.facet {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px;
+}
+
+.facet > small {
+  margin-right: 4px;
+  font-family: var(--mono);
+  font-size: 10px;
+  letter-spacing: 0.13em;
+  text-transform: uppercase;
+  color: var(--faint);
+}
+
+.chip {
+  padding: 4px 11px;
+  border: 1px solid var(--rule);
+  border-radius: 2px;
+  font-size: 12.5px;
+  color: var(--dim);
+  white-space: nowrap;
+  transition:
+    color 0.12s,
+    border-color 0.12s,
+    background 0.12s;
+}
+
+.chip:hover {
+  color: var(--ink);
+  border-color: var(--faint);
+}
+
+.chip[aria-pressed="true"] {
+  color: var(--ground);
+  background: var(--flame);
+  border-color: var(--flame);
+  font-weight: 500;
+}
+
+.chip em {
+  font-family: var(--mono);
+  font-style: normal;
+  font-size: 11px;
+  opacity: 0.65;
+}
+
+.count {
+  margin-left: auto;
+  font-family: var(--mono);
+  font-size: 12px;
+  color: var(--faint);
+}
+
+/* -------------------------------------------------------------------- grid */
+
+/*
+ * The hairlines between cards come from each card's own outward shadow filling
+ * the one-pixel gap, not from a rule-coloured grid showing through it. With a
+ * filter applied the grid can be three cards wide and eleven rows short, and a
+ * rule-coloured background paints every empty track: a filter that matched three
+ * assets used to leave two thirds of the page as a flat brown slab.
+ */
+.grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(232px, 1fr));
+  gap: 1px;
+  padding: 1px;
+  background: var(--ground);
+}
+
+.card {
+  display: flex;
+  flex-direction: column;
+  padding: 0;
+  text-align: left;
+  color: inherit;
+  text-decoration: none;
+  background: var(--ground);
+  box-shadow: 0 0 0 1px var(--rule);
+  transition: background 0.14s;
+}
+
+.card:hover,
+.card:focus-visible {
+  background: var(--panel);
+}
+
+.shot {
+  position: relative;
+  aspect-ratio: 1;
+  overflow: hidden;
+  background: var(--stage);
+}
+
+.shot img {
+  display: block;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  transform: scale(1.02);
+  transition:
+    transform 0.5s cubic-bezier(0.2, 0.7, 0.3, 1),
+    filter 0.3s;
+  filter: saturate(0.94);
+}
+
+.card:hover .shot img {
+  transform: scale(1.07);
+  filter: saturate(1.05);
+}
+
+.shot b {
+  position: absolute;
+  right: 8px;
+  bottom: 8px;
+  padding: 3px 7px;
+  border-radius: 2px;
+  background: color-mix(in oklab, var(--stage) 78%, transparent);
+  backdrop-filter: blur(4px);
+  font-family: var(--mono);
+  font-size: 10.5px;
+  font-weight: 400;
+  font-variant-numeric: tabular-nums;
+  color: var(--dim);
+}
+
+.meta {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  padding: 12px 14px 15px;
+}
+
+.meta h3 {
+  margin: 0;
+  font-size: 14.5px;
+  font-weight: 600;
+  letter-spacing: -0.008em;
+}
+
+.meta p {
+  margin: 0;
+  font-size: 12.5px;
+  line-height: 1.4;
+  color: var(--dim);
+  text-wrap: pretty;
+}
+
+.by {
+  margin-top: 5px;
+  font-family: var(--mono);
+  font-size: 10.5px;
+  letter-spacing: 0.02em;
+  color: var(--faint);
+}
+
+.by i {
+  font-style: normal;
+  color: var(--ink);
+}
+
+/* ------------------------------------------------------------------ viewer */
+
+/*
+ * `minmax(0, 1fr)` and not the implicit `auto` column. An auto grid track is
+ * sized to its widest item, the canvas is an item with an inline pixel width,
+ * and the two of them chase each other: the canvas measures its parent, the
+ * parent sizes to the canvas, and on a phone the whole viewer ended up a
+ * thousand pixels wide with the controls and half the model off the right edge.
+ */
+.viewer {
+  display: grid;
+  grid-template-rows: auto 1fr;
+  grid-template-columns: minmax(0, 1fr);
+  height: 100%;
+  overflow: hidden;
+}
+
+.bar {
+  display: flex;
+  min-width: 0;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 10px 18px;
+  padding: 11px 20px;
+  border-bottom: 1px solid var(--rule);
+  background: var(--ground);
+}
+
+.bar h2 {
+  margin: 0;
+  font-size: 16px;
+  font-weight: 600;
+  letter-spacing: -0.01em;
+  white-space: nowrap;
+}
+
+.bar .sep {
+  width: 1px;
+  height: 20px;
+  background: var(--rule);
+}
+
+.back {
+  display: flex;
+  text-decoration: none;
+  align-items: center;
+  gap: 7px;
+  white-space: nowrap;
+  font-family: var(--mono);
+  font-size: 11px;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: var(--dim);
+}
+
+.back:hover {
+  color: var(--flame);
+}
+
+.controls {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-left: auto;
+}
+
+.controls .chip[aria-pressed="true"] {
+  color: var(--stage);
+  background: var(--wire);
+  border-color: var(--wire);
+}
+
+.controls a.chip {
+  text-decoration: none;
+}
+
+.stage {
+  position: relative;
+  min-width: 0;
+  min-height: 0;
+  overflow: hidden;
+  background: radial-gradient(120% 90% at 50% 8%, #191512 0%, var(--stage) 62%);
+}
+
+.stage canvas {
+  display: block;
+  touch-action: none;
+}
+
+/* Anchored as one group so the caption never has to know how tall the readout
+   is: side by side on a wide screen, stacked on a phone. */
+.panels {
+  position: absolute;
+  right: 18px;
+  bottom: 18px;
+  left: 18px;
+  display: flex;
+  align-items: flex-end;
+  justify-content: space-between;
+  gap: 16px;
+  pointer-events: none;
+}
+
+.readout {
+  display: grid;
+  grid-template-columns: auto auto;
+  gap: 2px 20px;
+  padding: 14px 18px;
+  border: 1px solid var(--rule);
+  border-radius: 3px;
+  background: color-mix(in oklab, var(--panel) 82%, transparent);
+  backdrop-filter: blur(10px);
+  font-family: var(--mono);
+  font-size: 11.5px;
+  font-variant-numeric: tabular-nums;
+  pointer-events: none;
+}
+
+.readout dt {
+  align-self: center;
+  font-size: 10px;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--faint);
+}
+
+.readout dd {
+  margin: 0;
+  color: var(--ink);
+  text-align: right;
+}
+
+.caption {
+  max-width: 36ch;
+  padding: 13px 17px;
+  border: 1px solid var(--rule);
+  border-radius: 3px;
+  background: color-mix(in oklab, var(--panel) 82%, transparent);
+  backdrop-filter: blur(10px);
+  text-align: right;
+  font-size: 13px;
+  line-height: 1.45;
+  color: var(--dim);
+  text-wrap: pretty;
+  pointer-events: none;
+}
+
+.caption b {
+  display: block;
+  margin-top: 6px;
+  font-family: var(--mono);
+  font-size: 10.5px;
+  font-weight: 400;
+  letter-spacing: 0.05em;
+  color: var(--faint);
+}
+
+.caption b i {
+  font-style: normal;
+  color: var(--flame);
+}
+
+.loading {
+  position: absolute;
+  inset: 0;
+  display: grid;
+  gap: 14px;
+  place-content: center;
+  justify-items: center;
+  font-family: var(--mono);
+  font-size: 11px;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: var(--faint);
+  pointer-events: none;
+}
+
+.loading div {
+  width: 180px;
+  height: 1px;
+  background: var(--rule);
+}
+
+.loading i {
+  display: block;
+  height: 100%;
+  background: var(--flame);
+  transition: width 0.2s;
+}
+
+.step {
+  display: flex;
+  gap: 4px;
+}
+
+.step button {
+  padding: 4px 9px;
+  border: 1px solid var(--rule);
+  border-radius: 2px;
+  font-family: var(--mono);
+  font-size: 12px;
+  color: var(--dim);
+}
+
+.step button:hover {
+  color: var(--ink);
+  border-color: var(--faint);
+}
+
+/* ------------------------------------------------------------------ footer */
+
+.foot {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px 28px;
+  padding: 40px 32px 56px;
+  border-top: 1px solid var(--rule);
+  font-size: 13px;
+  color: var(--faint);
+}
+
+.foot code {
+  font-family: var(--mono);
+  font-size: 12px;
+  color: var(--dim);
+}
+
+.foot a {
+  color: var(--dim);
+  text-decoration-color: var(--rule);
+  text-underline-offset: 3px;
+}
+
+.foot a:hover {
+  color: var(--flame);
+}
+
+@media (max-width: 720px) {
+  .masthead {
+    gap: 18px;
+    padding: 24px 18px 20px;
+  }
+
+  .tally {
+    margin-left: 0;
+    gap: 20px;
+  }
+
+  .filters {
+    padding: 10px 18px;
+  }
+
+  .grid {
+    grid-template-columns: repeat(auto-fill, minmax(160px, 1fr));
+  }
+
+  .panels {
+    right: 12px;
+    bottom: 12px;
+    left: 12px;
+    flex-direction: column;
+    align-items: stretch;
+    gap: 8px;
+  }
+
+  .readout {
+    grid-template-columns: 1fr auto;
+  }
+
+  .caption {
+    max-width: none;
+    text-align: left;
+  }
+
+  /* The bar already wraps to three lines on a phone; a sticky filter strip of
+     five rows of chips on top of that would leave nothing to scroll. */
+  .filters {
+    position: static;
+  }
+
+  .foot {
+    padding: 28px 18px 40px;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    transition-duration: 0.01ms !important;
+  }
+}
