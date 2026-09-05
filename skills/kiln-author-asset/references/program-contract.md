@@ -24,7 +24,7 @@ function animate(root) {   // optional
 
 `build()` may be **sync or async**. Mark it `async` if you use any CSG op (`boolUnion`, `boolDiff`,
 `boolIntersect`, `hull`) or any bevel/sweep op (`roundedBoxGeo`, `extrudeProfile`,
-`revolveProfile`) — those await WASM.
+`revolveProfile`) -- those await WASM.
 
 An `export` statement is a validation error, not a style problem: the program is evaluated in a
 sandbox, not imported as a module.
@@ -35,7 +35,7 @@ sandbox, not imported as a module.
 |---|---|
 | `name` | the asset name; also the conventional root node name |
 | `category` | picks the advisory triangle reference point (see below) |
-| `role` | how the asset sits in a scene — drives composition layout |
+| `role` | how the asset sits in a scene -- drives composition layout |
 
 `role` is one of `ground`, `building`, `wonder`, `poi`, `prop`, `fill`, `vehicle`. It is the field a
 scene composer reads later, so set it deliberately even for a standalone asset.
@@ -51,12 +51,12 @@ This is strict, and violating it is the most common failure that metrics cannot 
 
 Vehicles, aircraft, weapons, boats, and buildings all follow this frame. If a part points forward,
 build it along +X. If a part spans left-to-right, build it along Z. Do not let each asset invent its
-own forward axis — a scene composed of assets with private conventions is unfixable.
+own forward axis -- a scene composed of assets with private conventions is unfixable.
 
 ## `createPart` auto-parents
 
 ```js
-// WRONG — double-adds
+// WRONG -- double-adds
 parent.add(createPart('Name', geo, mat, { parent: parentObj }));
 
 // RIGHT
@@ -69,7 +69,7 @@ group, set rotation on the returned object after creating it.
 ## Triangle budgets are advisory
 
 `kiln_validate` emits an informational nudge when an asset is far past the reference point for its
-category — 25k for `prop`, 40k for `character`/`vehicle`/`vegetation`, 60k for `building`, 120k for
+category -- 25k for `prop`, 40k for `character`/`vehicle`/`vegetation`, 60k for `building`, 120k for
 `environment`, 40k default. **These never gate.** Triangles are not the cost driver; draw calls are.
 Keep the detail if the silhouette needs it, and reuse materials to keep draw calls down.
 

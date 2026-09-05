@@ -146,4 +146,34 @@ describe('GLB-native geometry-flat view input', () => {
     });
     expect(encoded).toEqual(expected);
   });
+
+  test('review scene retains normal and uv attributes from primitive', async () => {
+    const doc = triangleDocument();
+    const buffer = doc.getRoot().listBuffers()[0]!;
+    const normals = doc
+      .createAccessor('normals')
+      .setType('VEC3')
+      .setArray(new Float32Array([0, 0, 1, 0, 0, 1, 0, 0, 1]))
+      .setBuffer(buffer);
+    const uvs = doc
+      .createAccessor('uvs')
+      .setType('VEC2')
+      .setArray(new Float32Array([0, 0, 1, 0, 0.5, 1]))
+      .setBuffer(buffer);
+    const prim = doc.getRoot().listMeshes()[0]!.listPrimitives()[0]!;
+    prim.setAttribute('NORMAL', normals).setAttribute('TEXCOORD_0', uvs);
+
+    const loaded = await loadGlbReviewScene(await io().writeBinary(doc));
+    let foundNormal = false;
+    let foundUv = false;
+    loaded.root.traverse((node) => {
+      const mesh = node as { isMesh?: boolean; geometry?: { getAttribute(name: string): unknown } };
+      if (mesh.isMesh && mesh.geometry) {
+        if (mesh.geometry.getAttribute('normal')) foundNormal = true;
+        if (mesh.geometry.getAttribute('uv')) foundUv = true;
+      }
+    });
+    expect(foundNormal).toBe(true);
+    expect(foundUv).toBe(true);
+  });
 });

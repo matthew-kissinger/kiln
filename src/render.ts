@@ -992,6 +992,24 @@ export interface RenderSceneOptions {
   instance?: InstanceMode;
   /** Agent-declared asset role — drives the `instance: 'auto'` gate. */
   role?: AssetRole;
+  /**
+   * Re-serialization of a scene that has already been adjudicated, so asset QA
+   * observes rather than blocks.
+   *
+   * The review tools pose a loaded scene and export it again to get one camera
+   * cell out of the render port. That export is not a new asset submission: the
+   * bytes it derives from were produced by this engine and passed QA on the way
+   * out. Re-adjudicating them fails on facts the round trip destroys rather
+   * than on anything wrong with the asset — a texture that arrives back as a
+   * decoded image no longer carries the payload provenance
+   * `MAT_TEXTURE_DECODE_FAILED` looks for, so every textured asset was rejected
+   * by its own animation preview.
+   *
+   * Reports are still computed and still record their real disposition, so
+   * telemetry stays honest; only the throw is withheld. This is deliberately
+   * narrower than `KILN_QA_MODE`, which turns blocking off for a whole process.
+   */
+  derivative?: boolean;
 }
 
 function finalTextureForSlot(material: GtMaterial, slot: string): GtTexture | null {
@@ -1313,10 +1331,13 @@ export async function renderSceneToGLB(
     },
     qaPolicyFromEnv(),
   );
+  // A derivative export withholds the throw without hiding the finding.
+  const qaBlocks = qaBlockingEnabled() && opts.derivative !== true;
+  const qaSuppressedBy = opts.derivative === true ? 'derivative re-serialization' : 'KILN_QA_MODE';
   if (sceneQaReport.disposition === 'block') {
     const blocked = new AssetQaBlockedError(sceneQaReport, 'scene');
-    if (qaBlockingEnabled()) throw blocked;
-    warnings.push(`${blocked.message} — block suppressed by KILN_QA_MODE`);
+    if (qaBlocks) throw blocked;
+    warnings.push(`${blocked.message} — block suppressed by ${qaSuppressedBy}`);
   }
 
   const doc = new Document();
@@ -1440,8 +1461,8 @@ export async function renderSceneToGLB(
   const qaReport = await appendFinalVfxGlbQa(intent, materialQaReport, bytes);
   if (qaReport.disposition === 'block') {
     const blocked = new AssetQaBlockedError(qaReport, 'final-glb', gltfValidation);
-    if (qaBlockingEnabled()) throw blocked;
-    warnings.push(`${blocked.message} — block suppressed by KILN_QA_MODE`);
+    if (qaBlocks) throw blocked;
+    warnings.push(`${blocked.message} — block suppressed by ${qaSuppressedBy}`);
   }
   for (const issue of gltfValidation.issues.messages) {
     if (issue.severity !== 1) continue;

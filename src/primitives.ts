@@ -139,6 +139,75 @@ export function createPivot(
  * Returns the added Object3D (mesh or pivot) for reference.
  * NOTE: Do NOT call .add() on the return value - it's already added!
  */
+/**
+ * The three positional arguments, checked at the door.
+ *
+ * `new THREE.Mesh()` accepts anything at all and fails much later somewhere
+ * else. A dispatched model that wrote `createPart(root, { geo: boxGeo, material })`
+ * -- the shape most other scene APIs take, and the single most common way to get
+ * this call wrong -- got all the way to the exporter and died on
+ * `undefined is not an object (evaluating 'Object.keys(morphAttributes)')`.
+ * That message names nothing the author did and gives a model no way back, so it
+ * spends its remaining turns guessing. Three cheap instanceof checks turn the
+ * same mistake into a sentence that says what was passed, what was wanted, and
+ * what the call looks like when it is right.
+ *
+ * The tests are the `isBufferGeometry` / `isMaterial` flags rather than
+ * `instanceof`, and that is not a style choice. `three-subdivide` resolves its
+ * own copy of three, so `subdivide()` hands back a geometry whose prototype
+ * chain belongs to a different THREE -- `instanceof` says no to something that
+ * is a geometry in every way that matters, and the lighthouse's rocks go
+ * through exactly that path. Three.js ships those flags for this reason.
+ */
+function assertPartArgs(name: unknown, geometry: unknown, material: unknown): void {
+  const SIG =
+    'Signature: createPart(name, geometry, material, options?) -- ' +
+    "e.g. createPart('Hull', boxGeo(1, 1, 1), gameMaterial(0x808080), { parent: root }).";
+
+  if (typeof name !== 'string') {
+    const asObject = name as { isObject3D?: boolean; name?: string } | null;
+    const got =
+      asObject?.isObject3D === true
+        ? `an Object3D ("${asObject.name || 'unnamed'}"). The parent belongs in the options object as { parent }, not first`
+        : `${name === null ? 'null' : typeof name}`;
+    throw new Error(
+      `createPart: the first argument is the part NAME, a string, but got ${got}. ${SIG}`,
+    );
+  }
+
+  if ((geometry as { isBufferGeometry?: boolean } | null)?.isBufferGeometry !== true) {
+    let got: string;
+    if (typeof geometry === 'function') {
+      got =
+        'a function -- geometry helpers have to be CALLED, so boxGeo(1, 1, 1) rather than boxGeo';
+    } else if (geometry instanceof Promise) {
+      got =
+        'a Promise -- roundedBoxGeo, extrudeProfile and revolveProfile are async, ' +
+        'so await the helper and mark build() async';
+    } else {
+      got =
+        geometry === null ? 'null' : geometry === undefined ? 'undefined' : `a ${typeof geometry}`;
+    }
+    throw new Error(
+      `createPart("${name}"): the second argument must be a geometry, but got ${got}. ${SIG}`,
+    );
+  }
+
+  if ((material as { isMaterial?: boolean } | null)?.isMaterial !== true) {
+    const got =
+      typeof material === 'number'
+        ? 'a number -- a colour is not a material, so wrap it: gameMaterial(0x808080)'
+        : material === null
+          ? 'null'
+          : material === undefined
+            ? 'undefined'
+            : `a ${typeof material}`;
+    throw new Error(
+      `createPart("${name}"): the third argument must be a material, but got ${got}. ${SIG}`,
+    );
+  }
+}
+
 export function createPart(
   name: string,
   geometry: THREE.BufferGeometry,
@@ -154,6 +223,7 @@ export function createPart(
     semantic?: SemanticMetadataV1 | SemanticMetadataV1Input;
   } = {},
 ): THREE.Object3D {
+  assertPartArgs(name, geometry, material);
   const mesh = new THREE.Mesh(geometry, material);
   mesh.name = `Mesh_${name}`;
 
@@ -1156,6 +1226,35 @@ export function createStairs(
 // Materials
 // =============================================================================
 
+/**
+ * Reject anything that is not a colour where a colour is expected.
+ *
+ * Every constructor here takes `(color, options)`, and a model that has met a
+ * different engine reaches for `gameMaterial({ color, roughness, metalness })`
+ * instead. That is not an error in three.js: `Color.set` ignores a plain object
+ * and leaves the colour at its default white, the options argument is absent so
+ * the material also takes default roughness and metalness, and the program runs
+ * to completion. What comes back is a white plastic part in the middle of a
+ * correctly-painted asset, which reads as the model having chosen it.
+ *
+ * An air-defence radar in `examples/` had every steel fitting on the vehicle
+ * blown out this way, and the header comment it wrote about the finish described
+ * a material that was never applied. So this fails closed, and says which shape
+ * it wanted, because the whole point of the catalog is that the API a model
+ * half-remembers is not the API it gets to use.
+ */
+function requireColor(color: unknown, fn: string): void {
+  if (typeof color === 'number' || typeof color === 'string') return;
+  const got =
+    color && typeof color === 'object'
+      ? `an object with keys [${Object.keys(color as object).join(', ')}]`
+      : String(color);
+  throw new Error(
+    `${fn}(color, options?): color must be a hex number like 0x8c4a32 or a CSS string, got ${got}. ` +
+      `Material settings go in the SECOND argument: ${fn}(0x8c4a32, { roughness: 0.5, metalness: 0.9 }).`,
+  );
+}
+
 export function gameMaterial(
   color: number | string,
   options: {
@@ -1166,6 +1265,7 @@ export function gameMaterial(
     flatShading?: boolean;
   } = {},
 ): THREE.MeshStandardMaterial {
+  requireColor(color, 'gameMaterial');
   return new THREE.MeshStandardMaterial({
     color,
     metalness: options.metalness ?? 0,
@@ -1180,6 +1280,7 @@ export function basicMaterial(
   color: number | string,
   options: { transparent?: boolean; opacity?: number } = {},
 ): THREE.MeshBasicMaterial {
+  requireColor(color, 'basicMaterial');
   return new THREE.MeshBasicMaterial({
     color,
     transparent: options.transparent ?? false,
@@ -1191,6 +1292,7 @@ export function glassMaterial(
   color: number | string,
   options: { opacity?: number; roughness?: number; metalness?: number } = {},
 ): THREE.MeshStandardMaterial {
+  requireColor(color, 'glassMaterial');
   return new THREE.MeshStandardMaterial({
     color,
     transparent: true,
@@ -1205,6 +1307,7 @@ export function lambertMaterial(
   color: number | string,
   options: { flatShading?: boolean; emissive?: number | string } = {},
 ): THREE.MeshLambertMaterial {
+  requireColor(color, 'lambertMaterial');
   return new THREE.MeshLambertMaterial({
     color,
     flatShading: options.flatShading ?? true,

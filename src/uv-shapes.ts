@@ -54,9 +54,80 @@ export function boxUnwrap(geo: THREE.BufferGeometry): THREE.BufferGeometry {
 export function cylinderUnwrap(geo: THREE.BufferGeometry): THREE.BufferGeometry {
   const cloned = geo.clone();
   if (!cloned.getAttribute('uv')) {
-    planarProjectToUVs(cloned);
+    cylindricalProjectToUVs(cloned);
   }
   return cloned;
+}
+
+/**
+ * Wrap UVs around the Y axis: u from the angle in the XZ plane, v from height.
+ *
+ * The fallback here used to be the same flat projection `boxUnwrap` uses, which
+ * made the two functions identical in every case that mattered -- and the case
+ * that mattered was the one this file's own header describes, a curved surface
+ * carrying a directional texture. A flat projection on a curve compresses to
+ * nothing where the surface turns away from the projection axis, so brick on a
+ * well curb came out as horizontal smears. Built-in `cylinderGeo` never hit it
+ * because Three.js ships UVs with it; anything swept or extruded did.
+ *
+ * u is normalized across the geometry's OWN angular span, not across a whole
+ * turn. That is the same promise `boxUnwrap` makes -- each face gets the full
+ * [0,1] -- and it is the difference between a brick texture that reads as brick
+ * and one squeezed into the six percent of texture width a 22 degree curb stone
+ * would otherwise occupy. A full cylinder spans a whole turn, so it lands on the
+ * classic mapping unchanged.
+ *
+ * The seam is the honest limitation: a triangle that spans the -X axis has one
+ * corner at u≈1 and the next at u≈0, and the texture runs backwards across it.
+ * Geometry built around +X -- which a swept ring segment is, and which is what
+ * this exists for -- never reaches the seam. A full revolve should keep the UVs
+ * its own sweep produced.
+ */
+function cylindricalProjectToUVs(geo: THREE.BufferGeometry): void {
+  const pos = geo.getAttribute('position') as THREE.BufferAttribute | undefined;
+  if (!pos) return;
+  geo.computeBoundingBox();
+  const bb = geo.boundingBox;
+  if (!bb) return;
+  const minY = bb.min.y;
+  // A flat ring has no height to map v against; fall back to the radius so the
+  // texture still varies across the surface instead of collapsing to one line.
+  const height = bb.max.y - minY;
+  const maxR = Math.max(Math.hypot(bb.min.x, bb.min.z), Math.hypot(bb.max.x, bb.max.z), 1e-6);
+  // Caps get their own mapping, which is the other half of what the header
+  // promises. A cap lies in a plane of constant y, so the cylindrical v is the
+  // same number for every vertex on it and the whole face samples one row of
+  // texels -- brick that turns into radial streaks the moment you look down at
+  // it. Anything facing along Y is projected flat instead, circle-in-square.
+  if (!geo.getAttribute('normal')) geo.computeVertexNormals();
+  const nrm = geo.getAttribute('normal') as THREE.BufferAttribute | undefined;
+  const spanX = Math.max(bb.max.x - bb.min.x, 1e-6);
+  const spanZ = Math.max(bb.max.z - bb.min.z, 1e-6);
+
+  let minA = Infinity;
+  let maxA = -Infinity;
+  for (let i = 0; i < pos.count; i++) {
+    if (nrm && Math.abs(nrm.getY(i)) > 0.7) continue;
+    const a = Math.atan2(pos.getZ(i), pos.getX(i));
+    if (a < minA) minA = a;
+    if (a > maxA) maxA = a;
+  }
+  const span = maxA - minA;
+  const uv = new Float32Array(pos.count * 2);
+  for (let i = 0; i < pos.count; i++) {
+    const x = pos.getX(i);
+    const y = pos.getY(i);
+    const z = pos.getZ(i);
+    if (nrm && Math.abs(nrm.getY(i)) > 0.7) {
+      uv[i * 2] = (x - bb.min.x) / spanX;
+      uv[i * 2 + 1] = (z - bb.min.z) / spanZ;
+      continue;
+    }
+    const a = Math.atan2(z, x);
+    uv[i * 2] = span > 1e-6 ? (a - minA) / span : 0.5;
+    uv[i * 2 + 1] = height > 1e-6 ? (y - minY) / height : Math.hypot(x, z) / maxR;
+  }
+  geo.setAttribute('uv', new THREE.BufferAttribute(uv, 2));
 }
 
 /**

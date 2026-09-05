@@ -1,12 +1,12 @@
 # render-service
 
 GLB bytes in, PBR PNG views out. Headless three.js `WebGPURenderer` on Dawn (the `webgpu` npm
-prebuilt) — no browser, no X server, no engine coupling. This is the **GPU** in Kiln's
+prebuilt) -- no browser, no X server, no engine coupling. This is the **GPU** in Kiln's
 `--render gpu` and `--render-port`.
 
 It is a separate Node project on purpose: headless WebGPU needs Node loader hooks that Bun does not
 run, so the renderer lives behind a socket rather than inside the engine process. The upside is that
-local and remote GPU are the same code path — a GPU on another machine works exactly like one here.
+local and remote GPU are the same code path -- a GPU on another machine works exactly like one here.
 
 ## Run it
 
@@ -32,17 +32,17 @@ will not start, never one that quietly renders on CPU while reporting success.
 
 | Route | Body | Returns |
 |---|---|---|
-| `GET /health` | — | `{ok, rendererId, backend, adapter, capabilities, presentationProfile, lightingPresetIds}` |
+| `GET /health` | -- | `{ok, rendererId, backend, adapter, capabilities, presentationProfile, lightingPresetIds}` |
 | `POST /render` (legacy) | `{glb_base64, size?=384, views?, beauty_size?, background?}` | `{ok, rendererId, presentationProfile, timings, views[base64 png], beauty?}` |
 | `POST /render` (camera) | `{glb_base64, cameras, width, height, lighting_preset_id?}` | the above plus `{backend, cameras, width, height, lightingPresetId, viewSha256, outputSetSha256, cameraReceipts}` |
-| `POST /bake` | — | 501 |
+| `POST /bake` | -- | 501 |
 
-Auth, when `RENDER_SERVICE_TOKEN` is set, is the `x-render-token` header — **not** `Authorization`,
+Auth, when `RENDER_SERVICE_TOKEN` is set, is the `x-render-token` header -- **not** `Authorization`,
 because serverless edge gateways routinely consume that one before it reaches the process.
 
 `views` is an optional array of `[x,y,z]` camera directions (max 12); the default is the six-view set
 matching the engine's grid conventions. A request for N views returns exactly N PNGs in request
-order — truncating or padding would silently reshape a grid whose geometry was chosen from that
+order -- truncating or padding would silently reshape a grid whose geometry was chosen from that
 length, so an over-long list is rejected rather than trimmed.
 
 Renders serialize through a single GPU queue. `rendererId` (e.g.
@@ -64,7 +64,7 @@ docker run --gpus all -p 8000:8000 kiln-render-service
 
 The image installs `libglvnd0 libegl1 libgl1 libglx0` deliberately: without the GLVND dispatch libs
 an injected NVIDIA Vulkan ICD init-fails with a NULL `vkCreateInstance` and Dawn lands on a software
-renderer. `NVIDIA_DRIVER_CAPABILITIES` must include `graphics` — the commonly-copied
+renderer. `NVIDIA_DRIVER_CAPABILITIES` must include `graphics` -- the commonly-copied
 `utility,compute` yields no ICD and a silent software fallback.
 
 ## Tests
