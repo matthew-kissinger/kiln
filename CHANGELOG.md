@@ -5,6 +5,29 @@ for the consuming app's lockfile + tarball provenance, not public npm releases.
 
 ## [Unreleased]
 
+### Changed
+- **`site/` is a project site now, not a gallery.** The front page was a wall of
+  specimens with a tally of triangles above it, which answered a question nobody
+  arriving from a link was asking. It now opens on what Kiln is, the offline command
+  that proves the engine works with no model and no key, the exact configuration for
+  each of the five harnesses with the gotcha that cost time in each one, and a map of
+  where to look in the repository; the specimens moved behind `#/gallery` and are
+  reached from a strip of eight. The aggregate counts are gone -- a number is a claim
+  about the library, and the library is the thing on the other page. Per-card model
+  attribution stays, because that is not a statistic. `REPO` and `asset()` moved out of
+  `App.tsx` into a leaf module: once `App` imported a page that read one at module
+  scope the cycle turned into a blank screen at first paint, and a module that imports
+  nothing cannot be in a cycle.
+
+### Fixed
+- **The carousel and orrery GIFs no longer show something the programs beside them
+  stopped producing.** Both were flagged in review as showing an earlier revision, and
+  both were regenerated on the GPU port from the current source. Nothing in the repo
+  ties a GIF to the revision it was rendered from, so the staleness was caught by
+  somebody remembering rather than by a gate -- the stills have the same exposure.
+  A frame overlay confirms the camera is fixed across both loops and only the authored
+  motion moves.
+
 ### Added
 - **A specimen gallery in `site/`, built by running the programs rather than by
   committing meshes.** The README's stills are a weak claim about geometry -- a lit
