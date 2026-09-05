@@ -1,0 +1,147 @@
+{
+  "name": "kinetic-wave",
+  "base": "C:/Users/Mattm/X/kiln-cleanrooms/fresh-agy-kinetic-wave-0d457e8f-20260905-gpu",
+  "exit": {
+    "code": 0,
+    "timedOut": false,
+    "finishedAt": "2026-09-05T21:23:05.638Z"
+  },
+  "status": "finished",
+  "model": "gemini-3.8-flash-high",
+  "conversationId": "c13984bc-4b92-4c06-8dc6-756f4f198b89",
+  "packageSha256": "0d457e8f8763730079da013abfa6662aadc02843f090fcae594c0f711399d16c",
+  "calls": 18,
+  "inlineSourceCalls": 1,
+  "edits": 2,
+  "imageCells": 14,
+  "images": [
+    {
+      "path": "C:\\Users\\Mattm\\X\\kiln-cleanrooms\\fresh-agy-kinetic-wave-0d457e8f-20260905-gpu\\evidence\\mcp\\images\\009-0.png",
+      "bytes": 69262,
+      "sha256": "91ece32e94216701d0ba6859b09dae06baaedb5bb4135960831726656a251a9e"
+    },
+    {
+      "path": "C:\\Users\\Mattm\\X\\kiln-cleanrooms\\fresh-agy-kinetic-wave-0d457e8f-20260905-gpu\\evidence\\mcp\\images\\010-0.png",
+      "bytes": 75438,
+      "sha256": "93c9a5f9cf80aeb33caaa4f0892200c28e78f6d11d050fa71e1b29555a172d00"
+    },
+    {
+      "path": "C:\\Users\\Mattm\\X\\kiln-cleanrooms\\fresh-agy-kinetic-wave-0d457e8f-20260905-gpu\\evidence\\mcp\\images\\014-0.png",
+      "bytes": 140645,
+      "sha256": "2f8bbf149a2592d1967e4f86123805226a84d46adc57c3e1447b7fdec736873f"
+    },
+    {
+      "path": "C:\\Users\\Mattm\\X\\kiln-cleanrooms\\fresh-agy-kinetic-wave-0d457e8f-20260905-gpu\\evidence\\mcp\\images\\017-0.png",
+      "bytes": 107226,
+      "sha256": "5f4ae92ceed196a0613589a5381dffe5f483f341473bb38456fa8d0d7a2051aa"
+    },
+    {
+      "path": "C:\\Users\\Mattm\\X\\kiln-cleanrooms\\fresh-agy-kinetic-wave-0d457e8f-20260905-gpu\\evidence\\mcp\\images\\018-0.png",
+      "bytes": 74542,
+      "sha256": "55d2bf23716d77251286496f0e037ebf75da8ac0dd830ffd2b85d2aca3219605"
+    }
+  ],
+  "toolErrors": [],
+  "files": [
+    {
+      "file": "final-chosen.png",
+      "bytes": 258442,
+      "sha256": "b88fe6f5c5c9b27094571384421006ca20fdb5cb272f9990ccfc79284cbe0f52"
+    },
+    {
+      "file": "final.glb",
+      "bytes": 221224,
+      "sha256": "be25ec9e081de0b493cb41a598e06640f34ce0606efcff69ddb933732643a3dc"
+    },
+    {
+      "file": "final.kiln.js",
+      "bytes": 11076,
+      "sha256": "5a4ef2784d7a49e58c9dba495a97bae1bad948d4d9569e65607d97ebddb40151"
+    }
+  ],
+  "lastEvent": "result",
+  "acceptedCalls": 18,
+  "deniedCalls": [],
+  "revisions": [
+    {
+      "sourceHash": "5a4ef2784d7a49e58c9dba495a97bae1bad948d4d9569e65607d97ebddb40151",
+      "bytes": 11076
+    },
+    {
+      "sourceHash": "8cc3251317a820b42fd61c3a1f827fea48a0fd2d25b1c5dd60fcceb967fb42a3",
+      "bytes": 9635
+    },
+    {
+      "sourceHash": "a49616fba7ea7df347e0cc2ec34561d80ed4d12ad800d870d2fd22ace0b6a96f",
+      "bytes": 8985
+    }
+  ],
+  "editReplay": [
+    {
+      "parentRef": "sha256:a49616fba7ea7df347e0cc2ec34561d80ed4d12ad800d870d2fd22ace0b6a96f",
+      "programRef": "sha256:8cc3251317a820b42fd61c3a1f827fea48a0fd2d25b1c5dd60fcceb967fb42a3",
+      "occurrences": [
+        1,
+        1
+      ],
+      "rejected": false,
+      "exact": true,
+      "renderOk": true
+    },
+    {
+      "parentRef": "sha256:8cc3251317a820b42fd61c3a1f827fea48a0fd2d25b1c5dd60fcceb967fb42a3",
+      "programRef": "sha256:5a4ef2784d7a49e58c9dba495a97bae1bad948d4d9569e65607d97ebddb40151",
+      "occurrences": [
+        1,
+        1,
+        1,
+        1
+      ],
+      "rejected": false,
+      "exact": true,
+      "renderOk": true
+    }
+  ],
+  "viewedImages": [
+    "C:\\Users\\Mattm\\.gemini\\antigravity-cli\\brain\\c13984bc-4b92-4c06-8dc6-756f4f198b89\\.system_generated\\steps\\58\\media_0.png",
+    "C:\\Users\\Mattm\\.gemini\\antigravity-cli\\brain\\c13984bc-4b92-4c06-8dc6-756f4f198b89\\.system_generated\\steps\\66\\media_0.png",
+    "C:\\Users\\Mattm\\.gemini\\antigravity-cli\\brain\\c13984bc-4b92-4c06-8dc6-756f4f198b89\\.system_generated\\steps\\80\\media_0.png",
+    "C:\\Users\\Mattm\\.gemini\\antigravity-cli\\brain\\c13984bc-4b92-4c06-8dc6-756f4f198b89\\.system_generated\\steps\\92\\media_0.png",
+    "C:\\Users\\Mattm\\.gemini\\antigravity-cli\\brain\\c13984bc-4b92-4c06-8dc6-756f4f198b89\\.system_generated\\steps\\100\\media_0.png",
+    "C:\\Users\\Mattm\\X\\kiln-cleanrooms\\fresh-agy-kinetic-wave-0d457e8f-20260905-gpu\\workspace\\assets\\final-chosen.png"
+  ],
+  "readPaths": [
+    "C:\\Users\\Mattm\\X\\kiln-cleanrooms\\fresh-agy-kinetic-wave-0d457e8f-20260905-gpu\\workspace\\AGENTS.md",
+    "C:\\Users\\Mattm\\X\\kiln-cleanrooms\\fresh-agy-kinetic-wave-0d457e8f-20260905-gpu\\workspace\\TASK.md",
+    "C:\\Users\\Mattm\\X\\kiln-cleanrooms\\fresh-agy-kinetic-wave-0d457e8f-20260905-gpu\\workspace\\skills\\kiln-author-asset\\SKILL.md",
+    "C:\\Users\\Mattm\\X\\kiln-cleanrooms\\fresh-agy-kinetic-wave-0d457e8f-20260905-gpu\\workspace\\skills\\kiln-refine-asset\\SKILL.md",
+    "C:\\Users\\Mattm\\X\\kiln-cleanrooms\\fresh-agy-kinetic-wave-0d457e8f-20260905-gpu\\workspace\\skills\\kiln-qa-asset\\SKILL.md",
+    "C:\\Users\\Mattm\\X\\kiln-cleanrooms\\fresh-agy-kinetic-wave-0d457e8f-20260905-gpu\\workspace\\skills\\kiln-author-asset\\references\\camera-recipes.md",
+    "C:\\Users\\Mattm\\X\\kiln-cleanrooms\\fresh-agy-kinetic-wave-0d457e8f-20260905-gpu\\workspace\\skills\\kiln-author-asset\\references\\program-contract.md",
+    "C:\\Users\\Mattm\\X\\kiln-cleanrooms\\fresh-agy-kinetic-wave-0d457e8f-20260905-gpu\\workspace\\skills\\kiln-author-asset\\references\\geometry-recipes.md",
+    "C:\\Users\\Mattm\\X\\kiln-cleanrooms\\fresh-agy-kinetic-wave-0d457e8f-20260905-gpu\\workspace\\skills\\kiln-refine-asset\\references\\revision-and-views.md",
+    "C:\\Users\\Mattm\\X\\kiln-cleanrooms\\fresh-agy-kinetic-wave-0d457e8f-20260905-gpu\\workspace\\skills\\kiln-qa-asset\\references\\integration-checks.md",
+    "C:\\Users\\Mattm\\.gemini\\antigravity-cli\\mcp\\kiln_workspace\\kiln_list_primitives.json",
+    "C:\\Users\\Mattm\\.gemini\\antigravity-cli\\mcp\\kiln_workspace\\kiln_render.json",
+    "C:\\Users\\Mattm\\.gemini\\antigravity-cli\\mcp\\kiln_workspace\\kiln_edit.json",
+    "C:\\Users\\Mattm\\.gemini\\antigravity-cli\\mcp\\kiln_workspace\\kiln_screenshot_animation.json",
+    "C:\\Users\\Mattm\\X\\kiln-cleanrooms\\fresh-agy-kinetic-wave-0d457e8f-20260905-gpu\\workspace\\kiln.mjs",
+    "C:\\Users\\Mattm\\X\\kiln-cleanrooms\\fresh-agy-kinetic-wave-0d457e8f-20260905-gpu\\workspace\\START.md",
+    "C:\\Users\\Mattm\\.gemini\\antigravity-cli\\brain\\c13984bc-4b92-4c06-8dc6-756f4f198b89\\.system_generated\\steps\\58\\output.txt",
+    "C:\\Users\\Mattm\\.gemini\\antigravity-cli\\brain\\c13984bc-4b92-4c06-8dc6-756f4f198b89\\.system_generated\\steps\\58\\output.txt",
+    "C:\\Users\\Mattm\\.gemini\\antigravity-cli\\brain\\c13984bc-4b92-4c06-8dc6-756f4f198b89\\.system_generated\\steps\\58\\media_0.png",
+    "C:\\Users\\Mattm\\.gemini\\antigravity-cli\\brain\\c13984bc-4b92-4c06-8dc6-756f4f198b89\\.system_generated\\steps\\66\\output.txt",
+    "C:\\Users\\Mattm\\.gemini\\antigravity-cli\\brain\\c13984bc-4b92-4c06-8dc6-756f4f198b89\\.system_generated\\steps\\66\\output.txt",
+    "C:\\Users\\Mattm\\.gemini\\antigravity-cli\\brain\\c13984bc-4b92-4c06-8dc6-756f4f198b89\\.system_generated\\steps\\66\\media_0.png",
+    "C:\\Users\\Mattm\\.gemini\\antigravity-cli\\brain\\c13984bc-4b92-4c06-8dc6-756f4f198b89\\.system_generated\\steps\\80\\output.txt",
+    "C:\\Users\\Mattm\\.gemini\\antigravity-cli\\brain\\c13984bc-4b92-4c06-8dc6-756f4f198b89\\.system_generated\\steps\\80\\output.txt",
+    "C:\\Users\\Mattm\\.gemini\\antigravity-cli\\brain\\c13984bc-4b92-4c06-8dc6-756f4f198b89\\.system_generated\\steps\\80\\media_0.png",
+    "C:\\Users\\Mattm\\.gemini\\antigravity-cli\\brain\\c13984bc-4b92-4c06-8dc6-756f4f198b89\\.system_generated\\steps\\92\\output.txt",
+    "C:\\Users\\Mattm\\.gemini\\antigravity-cli\\brain\\c13984bc-4b92-4c06-8dc6-756f4f198b89\\.system_generated\\steps\\92\\output.txt",
+    "C:\\Users\\Mattm\\.gemini\\antigravity-cli\\brain\\c13984bc-4b92-4c06-8dc6-756f4f198b89\\.system_generated\\steps\\92\\media_0.png",
+    "C:\\Users\\Mattm\\.gemini\\antigravity-cli\\brain\\c13984bc-4b92-4c06-8dc6-756f4f198b89\\.system_generated\\steps\\100\\output.txt",
+    "C:\\Users\\Mattm\\.gemini\\antigravity-cli\\brain\\c13984bc-4b92-4c06-8dc6-756f4f198b89\\.system_generated\\steps\\100\\output.txt",
+    "C:\\Users\\Mattm\\.gemini\\antigravity-cli\\brain\\c13984bc-4b92-4c06-8dc6-756f4f198b89\\.system_generated\\steps\\100\\media_0.png",
+    "C:\\Users\\Mattm\\X\\kiln-cleanrooms\\fresh-agy-kinetic-wave-0d457e8f-20260905-gpu\\workspace\\assets\\final-chosen.png"
+  ]
+}

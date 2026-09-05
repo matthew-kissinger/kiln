@@ -7,6 +7,12 @@ dist/*
 # step, so the artifact the harness launches has to be in the tree. Kept honest
 # by src/__tests__/mcp-bundle.test.ts, which rebuilds it and compares bytes.
 !dist/mcp-server.mjs
+!dist/cli.mjs
+!dist/evaluator-worker.mjs
+!dist/build.json
+!dist/agent-run.mjs
+!dist/agent-providers.mjs
+.kiln/
 coverage/
 # `kiln render` writes here when no --out is given, so it lands at the repo
 # root every time anyone tries the README's first command.

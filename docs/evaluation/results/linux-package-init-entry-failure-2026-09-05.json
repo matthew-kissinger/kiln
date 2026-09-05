@@ -1,0 +1,32 @@
+{
+  "status": "failed",
+  "image": "node:22.23.1-bookworm-slim@sha256:6c74791e557ce11fc957704f6d4fe134a7bc8d6f5ca4403205b2966bd488f6b3",
+  "tarball": "kiln-engine-0.6.0.tgz",
+  "tarballSha256": "d186bd20f87abe8a1d705eec9a3e0c43320a5e79fed64ed8b69bf922357ab888",
+  "containerMemoryBytes": 2147483648,
+  "containerCpus": 2,
+  "timedOut": false,
+  "exitCode": 1,
+  "smoke": {
+    "root": "[ephemeral Linux workspace removed with container]",
+    "platform": "linux",
+    "arch": "x64",
+    "node": "v22.23.1",
+    "checks": [
+      "direct-node-cli-help",
+      "tarball-install-without-dev-dependencies",
+      "node-cli-entry"
+    ],
+    "status": "failed",
+    "npm": "12.0.1",
+    "tarball": "/input/candidate.tgz",
+    "tarballSha256": "d186bd20f87abe8a1d705eec9a3e0c43320a5e79fed64ed8b69bf922357ab888",
+    "engineVersion": "0.6.0",
+    "bundleHashes": {
+      "cli": "3b1fedddd8a8c9c6186500bb94f8fc1ea2321afab54c0c2871a22d5cc19e6cd3",
+      "mcp": "76ab5871499762234ce72cdc7f213549cee7159c1e886b69eab26b6e8d3ecc17"
+    },
+    "error": "ENOENT: no such file or directory, open '/tmp/kiln-package-caf\u00e9-q5yOLj/asset workspace caf\u00e9/asset.kiln.js'"
+  },
+  "error": "Error: Command failed: /usr/local/bin/node /checks/smoke-package.mjs --tarball /input/candidate.tgz\n\n\n1 !== 0\n"
+}

@@ -13,3 +13,15 @@ bun.lock -diff linguist-generated=true
 *.webp binary
 *.tgz binary
 *.ico binary
+
+# Retained programs and runtime inputs are identified by their exact bytes.
+# Checkout conversion would invalidate source, skill and build receipts.
+*.kiln.js -text
+src/** -text
+dist/** -text
+skills/** -text
+render-service/src/** -text
+scripts/create-workspace.mjs -text
+package.json -text
+plugin.json -text
+.claude-plugin/** -text

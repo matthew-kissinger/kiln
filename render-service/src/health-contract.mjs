@@ -21,6 +21,7 @@ export const RENDER_CAPABILITIES = Object.freeze([
 export function buildHealthDocument(gpuState, authRequired) {
   return {
     ok: true,
+    ...(gpuState.captureIdentity?{captureIdentity:gpuState.captureIdentity}:{}),
     rendererId: gpuState.rendererId,
     backend: gpuState.backend,
     adapter: gpuState.summary,

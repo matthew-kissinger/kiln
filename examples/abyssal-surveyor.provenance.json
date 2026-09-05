@@ -1,0 +1,57 @@
+{
+  "sourceHash": "3fad8e8c92fbcbc535007bc08db6ff2564d08ac0cbfb840b355e58ae85c0b633",
+  "model": "GPT-6 Astra",
+  "harness": "Codex",
+  "authoredDate": "2026-09-05",
+  "provenance": {
+    "attribution": "Recorded Codex / gpt-6-astra creative authoring run; configured model, no provider-internal attestation",
+    "sourceAccess": "Local art-directed brief, installed skills and tool definitions; no engine implementation or finished examples observed.",
+    "inheritedContext": "Fresh creative authoring conversation.",
+    "startingExample": "None supplied.",
+    "humanIntervention": "Maintainer supplied the brief and independently verified exports and images. Model repaired arm attachment and rear skid supports by reference; no hand-edited source geometry.",
+    "reviewFidelity": "GPU whole, detail and animated-arm views delivered and reviewed. Coherent curved hull and attached mechanism; hidden clearance and engineering function not verified. The run reached its 15-minute limit while copying an image after valid source/GLB exports; final notes were unfinished.",
+    "poster": "Gallery GPU render of the exact downloadable GLB. Source, artifact, image hashes and camera settings are recorded alongside the poster.",
+    "evaluationPackageHash": "1d3bf676c9439ab9507e797118b263f2b6f6ce70a8db1c4e6b48c1be022bb806",
+    "evaluationGlbHash": "0886b918c9d5a3d0d36b003668c8a199bda6380352c04992192fe76e57e98a7c",
+    "posterReceipt": {
+      "captureIdentity": [
+        "kiln.capture-producer.v1",
+        "sha256:10f346ec6287c8d635dabe4668d72925080e6fe3d059dd7a9252f2694ce595c2",
+        "a3fa7ff0-5d67-45ca-b663-3de687c939da",
+        "dawn-d3d12:nvidia-geforce-rtx-3070:D3D12 driver version 32.0.16.1074"
+      ],
+      "sourceHash": "3fad8e8c92fbcbc535007bc08db6ff2564d08ac0cbfb840b355e58ae85c0b633",
+      "artifactHash": "eb18c8e8ec9b1c6f45f813aa1120285ee16b475d7860018bba4a0a9b7f41eb7e",
+      "imageHash": "40fcb48e399aacf5b3c552be32d6bef97b97cf8d9942f36a70e71d0fa55475b6",
+      "width": 1024,
+      "height": 1024,
+      "camera": {
+        "version": "kiln.camera.v1",
+        "projection": "orthographic",
+        "position": [
+          6.038903834655833,
+          4.089496835050596,
+          4.325857682002302
+        ],
+        "target": [
+          -0.036977341613745385,
+          1.173073870441199,
+          0.07274085861359743
+        ],
+        "up": [
+          0,
+          1,
+          0
+        ],
+        "aspect": 1,
+        "near": 0.01,
+        "far": 19.92342492049875,
+        "halfHeight": 1.4528095009602613
+      },
+      "rendererId": "dawn-d3d12:nvidia-geforce-rtx-3070:D3D12 driver version 32.0.16.1074",
+      "materialFaithful": true,
+      "lightingPresetId": "gallery-studio-v1",
+      "purpose": "Gallery poster generated from the exact downloadable GLB; separate from authoring feedback."
+    }
+  }
+}

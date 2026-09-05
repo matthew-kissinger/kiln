@@ -202,13 +202,31 @@ export function subdivide(
     preserveEdges?: boolean;
     flatOnly?: boolean;
     weld?: boolean;
+    /** Preserve per-corner UVs while smoothing positions across chart seams. */
+    preserveUV?: boolean;
   } = {},
 ): THREE.BufferGeometry {
-  const { weld = true, ...subOpts } = opts;
+  const { weld = true, preserveUV = false, ...subOpts } = opts;
   // Subdivision wants position-only adjacency. Weld shared corners so
   // Three's box/sphere/cylinder (which keep 4 verts per face for
   // independent normals/UVs) become a single connected surface.
-  const input = weld ? mergeVertices(geometry, { positionOnly: true }) : geometry;
+  const input =
+    weld && !preserveUV ? mergeVertices(geometry, { positionOnly: true }) : geometry.clone();
+  const center = new THREE.Vector3();
+  let normalizationScale = 1;
+  if (preserveUV) {
+    subOpts.uvSmooth = false;
+    // Upstream adjacency hashes positions to two decimal places. Normalize the
+    // owned copy so choosing millimeters rather than meters does not change topology.
+    input.computeBoundingBox();
+    const extent = input.boundingBox!.getSize(new THREE.Vector3());
+    input.boundingBox!.getCenter(center);
+    const size = Math.max(extent.x, extent.y, extent.z);
+    normalizationScale = size > 0 ? 10000 / size : 1;
+    input
+      .translate(-center.x, -center.y, -center.z)
+      .scale(normalizationScale, normalizationScale, normalizationScale);
+  }
   // `three-subdivide` builds each new vertex normal by SUMMING the normals of
   // the faces around it and never divides through, so the length comes out as
   // however many faces met there -- 2/3 after one iteration on a box, and 0.35
@@ -217,7 +235,36 @@ export function subdivide(
   // (GLTF_ACCESSOR_VECTOR3_NON_UNIT). Found by a dispatched agent's printing
   // press: `subdivide(boxGeo(1.5, 0.6, 0.8), 2)` produced 1,104 bad normals out
   // of 1,152 and blocked the build at final-glb. Same repair as `lathe`.
-  return normalizeSurfaceNormals(LoopSubdivision.modify(input, iterations, subOpts));
+  const output = normalizeSurfaceNormals(LoopSubdivision.modify(input, iterations, subOpts));
+  if (preserveUV)
+    output
+      .scale(1 / normalizationScale, 1 / normalizationScale, 1 / normalizationScale)
+      .translate(center.x, center.y, center.z);
+  output.deleteAttribute('tangent');
+  output.computeBoundingBox();
+  output.computeBoundingSphere();
+  if (geometry.getAttribute('uv') && !output.getAttribute('uv')) {
+    output.userData.kilnAttributeWarnings = [
+      {
+        code: 'SUBDIVIDE_UV_DROPPED',
+        message:
+          'Position-only subdivision discarded UVs. Use preserveUV: true or unwrap the output.',
+      },
+    ];
+  }
+  if (geometry.userData.kilnCsgProvenance || geometry.userData.kilnRanges) {
+    delete output.userData.kilnCsgProvenance;
+    delete output.userData.kilnRanges;
+    output.userData.kilnAttributeWarnings = [
+      ...(output.userData.kilnAttributeWarnings ?? []),
+      {
+        code: 'SUBDIVIDE_PROVENANCE_DROPPED',
+        message:
+          'Subdivision changed triangle topology. Source face/range provenance was discarded rather than guessed.',
+      },
+    ];
+  }
+  return output;
 }
 
 // =============================================================================

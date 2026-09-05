@@ -79,7 +79,7 @@ Generate assets with realistic proportions and detail:
 - Multiple materials with PBR properties (metalness, roughness)
 - Include fine details (seams, edges, bevels)
 - Subtle color gradients
-- Spend geometry freely; there is no triangle limit`,
+- Use enough geometry for the silhouette and intended viewing distance; inspect measured runtime costs`,
 };
 
 // =============================================================================
@@ -246,8 +246,8 @@ export const KILN_ATTACHMENT_RULES = `<attachment-rules>
 - Use createWingPair() for aircraft wings and helicopter stub wings. Set rootZ
   to the fuselage half-width so the wing roots touch the body. Wings must not
   float near the body, pass through the centerline, or angle as detached planks.
-- Any visually-attached part should overlap or touch its parent by about 0.02
-  units. Floating parts are invalid even if the named-parts check passes.
+- Attached parts should meet their support surfaces. Scale any intentional overlap
+  to the actual connection and asset size; inspect contact rather than applying a fixed world-unit offset.
 - Low triangle count is not the goal by itself. Spend triangles where silhouette
   matters: cockpits, wheels, rotors, wings, organic rocks, and curved aircraft.
 </attachment-rules>`;
@@ -264,7 +264,7 @@ export const KILN_RULES = `<rules>
 - Output ONLY valid JavaScript code (no TypeScript types)
 - NEVER call .add() on createPart result - it auto-adds to parent
 - createPart/createInstance rotation is in DEGREES, not radians. rotation: [0,0,90] is a quarter turn; rotation: [0,0,0.785] is invisible. Never pass Math.PI-based values to the rotation option (direct THREE properties like group.rotation.z stay radians)
-- Z-FIGHTING PREVENTION: No two mesh faces may be coplanar or near-coplanar. All decorative geometry (decals, markings, edge strips, reinforcements, trim) must be fully outside the parent mesh - never intersecting or flush. Offset at least 0.01 from the nearest surface. If a box is 0.6 wide (edges at x=+-0.3), place edge trim at x=+-0.31, NOT x=+-0.29. Minimum 0.01 thickness for flat parts.
+- Prevent z-fighting between overlapping visible faces. Give raised trim real thickness and use a surface offset appropriate to the asset's scale and camera distance. Joined construction may intersect internally; inspect the visible contact instead of imposing a universal minimum thickness or offset.
 - ROOFS AND TENTS: the two gable slopes MIRROR each other (+angle / -angle) and their top edges meet at the ridge. Every slope must extend PAST its wall line so the eave hangs below the wall top with real overhang - a panel that stops flush at the wall reads as a lid propped on the box. A panel perpendicular to its roof plane is wrong: its thin axis must align with the roof NORMAL, not the slope direction.
 - CLOSED CIRCLES: barrels, drums, and towers built from staves/planks must close the full circumference - each stave TANGENT to the circle (rotate by its own angle), never radial fins with gaps. Do not carve groove detail with many thin CSG cutters (booleans blow up on thin blades); use lathe facets or thin proud surface strips instead.
 - GROUND: only intentionally below-grade parts (earth mounds, footings, piles, keels/rudders) may dip below Y=0. Functional surface parts - wheels, tails, missiles, furniture, equipment - must stay at or above it; if a tilted assembly buries one end, raise or re-pivot it.

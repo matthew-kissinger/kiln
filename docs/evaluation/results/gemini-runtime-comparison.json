@@ -1,0 +1,56 @@
+{
+  "sourceRef": "sha256:2d3d12e4e53613289f017fc5c4e20731fe7736655781839168dc2480be3efdcf",
+  "files": {
+    "modelExport": {
+      "bytes": 139828,
+      "sha256": "392ab403413b9ce8e4616df05cb37d6260d70078d4c0d8a2c5903af64be9c310",
+      "binBytes": 111368,
+      "binSha256": "fef42f7a2af514b11c292db9d2bf45186a3bce6a96db0978d3b064fb733aa9fe"
+    },
+    "independentNode22": {
+      "bytes": 139832,
+      "sha256": "c73bcf9aa3c02280787cea77cfceff8d73bb76ddfa437db7fec1ba222816a099",
+      "binBytes": 111368,
+      "binSha256": "fef42f7a2af514b11c292db9d2bf45186a3bce6a96db0978d3b064fb733aa9fe"
+    },
+    "explicitNode2414": {
+      "bytes": 139828,
+      "sha256": "392ab403413b9ce8e4616df05cb37d6260d70078d4c0d8a2c5903af64be9c310",
+      "binBytes": 111368,
+      "binSha256": "fef42f7a2af514b11c292db9d2bf45186a3bce6a96db0978d3b064fb733aa9fe"
+    },
+    "explicitNode2420Cache": {
+      "bytes": 139828,
+      "sha256": "392ab403413b9ce8e4616df05cb37d6260d70078d4c0d8a2c5903af64be9c310",
+      "binBytes": 111368,
+      "binSha256": "fef42f7a2af514b11c292db9d2bf45186a3bce6a96db0978d3b064fb733aa9fe"
+    },
+    "explicitNode2420Uncached": {
+      "bytes": 139828,
+      "sha256": "392ab403413b9ce8e4616df05cb37d6260d70078d4c0d8a2c5903af64be9c310",
+      "binBytes": 111368,
+      "binSha256": "fef42f7a2af514b11c292db9d2bf45186a3bce6a96db0978d3b064fb733aa9fe"
+    }
+  },
+  "jsonDifferences": [
+    {
+      "path": "/materials/1/pbrMetallicRoughness/baseColorFactor/1",
+      "model": 0.038204371589236,
+      "independent": 0.03820437158923601,
+      "absoluteDelta": 6.938893903907228e-18,
+      "equalAtFloat32": true
+    },
+    {
+      "path": "/materials/3/pbrMetallicRoughness/baseColorFactor/2",
+      "model": 0.0722718506743852,
+      "independent": 0.07227185067438519,
+      "absoluteDelta": 1.3877787807814457e-17,
+      "equalAtFloat32": true
+    }
+  ],
+  "binaryChunksIdentical": true,
+  "mcpFinalEditBuildKey": "sha256:77b29542cc3b0a3e21d47436e1269352d974ffe3517a160a0815ee4ead529f33",
+  "mcpCachedArtifactHash": "sha256:c73bcf9aa3c02280787cea77cfceff8d73bb76ddfa437db7fec1ba222816a099",
+  "agyNativeExportBuildKey": "sha256:bb26f02c78f1cd6efcec3a23962266e3dadabc09827482cc02d38f0b39a132dc",
+  "node2420ReproducesOriginalCacheKey": true
+}

@@ -1,0 +1,102 @@
+{
+  "startedAt": "2026-09-05T20:34:16.569Z",
+  "platform": "linux",
+  "arch": "x64",
+  "node": "v22.23.1",
+  "stages": [
+    {
+      "name": "extract",
+      "command": "tar",
+      "args": [
+        "-xf",
+        "/input.tar",
+        "-C",
+        "/work"
+      ],
+      "code": 0,
+      "timedOut": false,
+      "elapsedMs": 3191
+    },
+    {
+      "name": "toolchain",
+      "command": "bun",
+      "args": [
+        "run",
+        "check:toolchain"
+      ],
+      "code": 0,
+      "timedOut": false,
+      "elapsedMs": 162
+    },
+    {
+      "name": "install",
+      "command": "bun",
+      "args": [
+        "install",
+        "--frozen-lockfile"
+      ],
+      "code": 0,
+      "timedOut": false,
+      "elapsedMs": 6105
+    },
+    {
+      "name": "identity",
+      "command": "node",
+      "args": [
+        "--input-type=module",
+        "-e",
+        "const{runtimeBuildIdentity}=await import('./scripts/build-runtime.mjs');console.log(JSON.stringify(await runtimeBuildIdentity(process.cwd())));"
+      ],
+      "code": 0,
+      "timedOut": false,
+      "elapsedMs": 141
+    },
+    {
+      "name": "native-versions",
+      "command": "node",
+      "args": [
+        "-e",
+        "console.log(JSON.stringify({node:process.version,sharp:require('sharp').versions},null,2))"
+      ],
+      "code": 0,
+      "timedOut": false,
+      "elapsedMs": 98
+    },
+    {
+      "name": "typecheck",
+      "command": "bun",
+      "args": [
+        "run",
+        "typecheck"
+      ],
+      "code": 0,
+      "timedOut": false,
+      "elapsedMs": 3463
+    },
+    {
+      "name": "lint",
+      "command": "bun",
+      "args": [
+        "run",
+        "lint"
+      ],
+      "code": 0,
+      "timedOut": false,
+      "elapsedMs": 2272
+    },
+    {
+      "name": "coverage",
+      "command": "bun",
+      "args": [
+        "run",
+        "test:coverage"
+      ],
+      "code": 1,
+      "timedOut": false,
+      "elapsedMs": 198839
+    }
+  ],
+  "status": "failed",
+  "error": "coverage failed",
+  "finishedAt": "2026-09-05T20:37:50.902Z"
+}

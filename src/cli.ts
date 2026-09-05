@@ -1,40 +1,32 @@
-#!/usr/bin/env bun
+#!/usr/bin/env node
 /**
- * Kiln CLI — the entry point for humans and scripts.
- *
- * Two commands:
- *   render   — execute an existing Kiln program to GLB + a six-view contact sheet.
- *              Offline: no model, no network, no key. This is the quickstart path,
- *              and the one that must keep working on a machine with nothing set up.
- *   generate — run the agent loop against a provider to author a program first.
- *
- * The view grid deliberately runs through the SAME `kiln_screenshot` registry def
- * the agent calls, rather than reaching into the rasterizer directly, so the image
- * a human sees is byte-identical to the image the model saw. Any drift between the
- * two would be a bug we would rather fail loudly than paper over.
- *
- * Argument parsing is hand-rolled to keep the dependency surface at zero — this
- * file is the one place a `commander`-shaped dependency would be tempting and is
- * not worth it.
+ * Human and script entry point: render programs, import/export source revisions,
+ * or run the optional model-driven generation loop. Rendering a GLB and its views
+ * shares one evaluation through the program-aware registry.
  */
-import { readFile, writeFile } from 'node:fs/promises';
+import { open, readFile, writeFile } from 'node:fs/promises';
+import { realpathSync } from 'node:fs';
 import { resolve as resolvePath } from 'node:path';
 
-import { renderGLB } from './render';
-import type { KilnToolContext } from './tools/registry';
-import { kilnMcpToolDefs } from './mcp-server';
+import { createPackagedLocalToolContext } from './local-runtime';
+import { createKilnProgramToolRegistry, type KilnToolContext } from './tools/registry';
+import { fileURLToPath } from 'node:url';
 import { resolveRenderMode, buildRenderPort, describeDrawnBy } from './cli-render-mode';
 import type { RenderMode } from './cli-render-mode';
+import { localProgramStore } from './program-store-node';
 
 const USAGE = `kiln — vision-in-the-loop 3D asset generation
 
 USAGE
-  kiln render <program.js> [options]     execute a Kiln program (offline, no key)
+  kiln render <program.js|ref> [options]     execute a Kiln program (offline, no key)
   kiln generate "<prompt>"  [options]    author a program with a model, then render
+  kiln source <file.js>                 save a source snapshot and print its programRef
+  kiln source <sha256:ref> --out file.js export a revision without model transcription
 
 OPTIONS
   --out <path>            GLB output path            (default: out.glb)
   --views <path>          contact sheet PNG path     (default: none)
+  --capture <file.json>  camera recipe for --views  (grid output; max 1 MiB)
   --render <mode>         auto | cpu | gpu           (default: auto)
   --render-port <url>     remote GPU render service
   --model <id>            model id for generate      (default: env KILN_MODEL)
@@ -46,6 +38,7 @@ EXAMPLES
   kiln render examples/crate.kiln.js --out crate.glb --views sheet.png
   kiln generate "a weathered wooden crate" --out crate.glb --views sheet.png
   kiln render examples/crate.kiln.js --render cpu --views sheet.png
+  kiln render sha256:FULL_HASH --capture cameras.json --views chosen.png
 `;
 
 interface Args {
@@ -53,6 +46,8 @@ interface Args {
   positional: string[];
   out: string | undefined;
   views: string | undefined;
+  capture: string | undefined;
+  captureRecipe?: unknown;
   render: RenderMode;
   renderPort: string | undefined;
   model: string | undefined;
@@ -67,6 +62,7 @@ export function parseArgs(argv: readonly string[]): Args {
     positional: [],
     out: undefined,
     views: undefined,
+    capture: undefined,
     render: 'auto',
     renderPort: undefined,
     model: process.env['KILN_MODEL'],
@@ -91,6 +87,9 @@ export function parseArgs(argv: readonly string[]): Args {
         break;
       case '--views':
         args.views = next();
+        break;
+      case '--capture':
+        args.capture = next();
         break;
       case '--render':
         args.render = resolveRenderMode(next());
@@ -123,12 +122,52 @@ export function parseArgs(argv: readonly string[]): Args {
   return args;
 }
 
+/** Read a bounded recipe and validate the same capture schema used by MCP. */
+async function readCaptureRecipe(args: Args): Promise<unknown> {
+  if (!args.views) throw new Error('--capture requires --views <output.png>.');
+  if (args.command !== 'render' && args.command !== 'generate')
+    throw new Error('--capture is supported by render and generate only.');
+  const limit = 1024 * 1024;
+  const file = await open(resolvePath(args.capture!), 'r');
+  let capture: unknown;
+  try {
+    const info = await file.stat();
+    if (!info.isFile() || info.size > limit)
+      throw new Error('--capture requires a JSON file no larger than 1 MiB.');
+    const buffer = Buffer.alloc(limit + 1);
+    const { bytesRead } = await file.read(buffer, 0, buffer.length, 0);
+    if (bytesRead > limit) throw new Error('--capture JSON exceeds 1 MiB.');
+    try {
+      capture = JSON.parse(buffer.subarray(0, bytesRead).toString('utf8'));
+    } catch {
+      throw new Error('--capture requires valid JSON.');
+    }
+  } finally {
+    await file.close();
+  }
+  const def = createKilnProgramToolRegistry().find((d) => d.name === 'kiln_render');
+  if (!def) throw new Error('kiln_render is missing from the MCP tool surface');
+  // Schema validation needs a selector but does not resolve or write this placeholder.
+  def.inputSchema.parse({ programRef: `sha256:${'0'.repeat(64)}`, capture });
+  if ((capture as { output?: unknown } | null)?.output === 'separate')
+    throw new Error('--capture supports grid output only for one --views PNG. Set output to grid.');
+  return capture;
+}
+
 /**
  * Render one program to GLB bytes plus, optionally, the contact sheet.
  * Shared by both commands so `generate` and `render` cannot diverge in output.
  */
 async function emit(code: string, args: Args, context: KilnToolContext): Promise<void> {
-  const result = await renderGLB(code);
+  context.programStore ??= localProgramStore();
+  const programRef = await context.programStore.put(code);
+  console.log(`  programRef ${programRef}`);
+  const result = await context.evaluatorPort!.render(code, {
+    optimize: 'off',
+    ...(args.category ? { category: args.category as never } : {}),
+  });
+  if (result.buildCache)
+    console.log(`  build ${result.buildCache.hit ? 'reused' : 'created'} ${result.buildCache.key}`);
   // Only write a GLB when one was asked for, or when it is the sole output —
   // `--views sheet.png` alone should not litter the working directory.
   const out = args.out ?? (args.views ? undefined : 'out.glb');
@@ -151,11 +190,22 @@ async function emit(code: string, args: Args, context: KilnToolContext): Promise
     // The SAME def the MCP surface serves, so the CLI cannot render views through
     // a path the agent never takes — and so `--render-port` actually fires, which
     // the frozen baseline's CPU-only kiln_screenshot would silently ignore.
-    const def = kilnMcpToolDefs(context).find((d) => d.name === 'kiln_render');
+    // This call already built the exact source above. Review the same artifact.
+    const def = createKilnProgramToolRegistry({
+      ...context,
+      evaluatorPort: { render: async () => result },
+    }).find((d) => d.name === 'kiln_render');
     if (!def) throw new Error('kiln_render is missing from the MCP tool surface');
-    const output = await def.run({ code });
+    const output = await def.run({
+      programRef,
+      ...(args.captureRecipe === undefined ? {} : { capture: args.captureRecipe }),
+    });
+    const failure = output as { ok?: unknown; error?: unknown } | null;
+    if (failure?.ok === false && typeof failure.error === 'string' && failure.error.trim()) {
+      throw new Error(failure.error.slice(0, 2048));
+    }
     const media = def.media?.(output);
-    if (!media) throw new Error('kiln_screenshot returned no image');
+    if (!media) throw new Error('kiln_render returned no image');
     await writeFile(resolvePath(args.views), media.png);
     // Report what actually drew the pixels, not what was configured. The engine
     // routes to the port only when the scene needs PBR shading, so a GPU that was
@@ -171,8 +221,12 @@ async function cmdRender(args: Args): Promise<number> {
     console.error(USAGE);
     return 2;
   }
-  const code = await readFile(resolvePath(file), 'utf8');
-  const context = await buildRenderPort(args.render, args.renderPort);
+  const code = file.startsWith('sha256:')
+    ? await localProgramStore().get(file)
+    : await readFile(resolvePath(file), 'utf8');
+  const context = await createPackagedLocalToolContext(
+    await buildRenderPort(args.render, args.renderPort),
+  );
   console.log(`rendering ${file}`);
   await emit(code, args, context);
   return 0;
@@ -193,12 +247,24 @@ async function cmdGenerate(args: Args): Promise<number> {
   // Imported lazily so `kiln render` never pulls the agent stack (an optional
   // peer) into the process. A missing @strands-agents/sdk must not break the
   // offline path, which is the one the quickstart promises works everywhere.
-  const [{ runKilnAgent }, { makeKilnModel, resolveKilnAgentModel }] = await Promise.all([
-    import('./agent/run'),
-    import('./agent/providers'),
-  ]);
+  // Nonliteral imports keep optional model SDKs outside the offline Node bundle.
+  const modules = import.meta.url.endsWith('.ts')
+    ? ['./agent/run.ts', './agent/providers.ts']
+    : ['./agent-run.mjs', './agent-providers.mjs'];
+  let generation: [typeof import('./agent/run'), typeof import('./agent/providers')];
+  try {
+    generation = await Promise.all([import(modules[0]!), import(modules[1]!)]);
+  } catch (error) {
+    throw new Error(
+      'The optional generation adapter could not load. Use your connected agent with MCP, or install the agent/provider dependencies for kiln generate.',
+      { cause: error },
+    );
+  }
+  const [{ runKilnAgent }, { makeKilnModel, resolveKilnAgentModel }] = generation;
 
-  const context = await buildRenderPort(args.render, args.renderPort);
+  const context = await createPackagedLocalToolContext(
+    await buildRenderPort(args.render, args.renderPort),
+  );
   const descriptor = resolveKilnAgentModel(args.model);
   const model = makeKilnModel(descriptor);
 
@@ -230,6 +296,25 @@ async function cmdGenerate(args: Args): Promise<number> {
   return 0;
 }
 
+async function cmdSource(args: Args): Promise<number> {
+  const input = args.positional[0];
+  if (!input || args.positional.length !== 1)
+    throw new Error('source requires one file path or programRef.');
+  const store = localProgramStore();
+  if (input.startsWith('sha256:')) {
+    const code = await store.get(input);
+    if (args.out) {
+      await writeFile(resolvePath(args.out), code, { encoding: 'utf8', flag: 'wx' });
+      console.log(`Saved ${input} to ${args.out}`);
+    } else process.stdout.write(code);
+  } else {
+    if (args.out)
+      throw new Error('Use source <programRef> --out <new-file.js> to export a saved revision.');
+    console.log(await store.put(await readFile(resolvePath(input), 'utf8')));
+  }
+  return 0;
+}
+
 export async function main(argv: readonly string[]): Promise<number> {
   let args: Args;
   try {
@@ -240,10 +325,13 @@ export async function main(argv: readonly string[]): Promise<number> {
   }
   if (args.help || !args.command) {
     console.log(USAGE);
-    return args.command ? 0 : 2;
+    return args.help ? 0 : 2;
   }
   try {
+    if (args.capture !== undefined) args.captureRecipe = await readCaptureRecipe(args);
     switch (args.command) {
+      case 'source':
+        return await cmdSource(args);
       case 'render':
         return await cmdRender(args);
       case 'generate':
@@ -265,7 +353,19 @@ export async function main(argv: readonly string[]): Promise<number> {
   }
 }
 
-if (import.meta.main) {
+function isDirectCliEntry(): boolean {
+  if (!process.argv[1]) return false;
+  try {
+    // npm's Unix bin is a symlink; compare the actual files on both sides.
+    return (
+      realpathSync(resolvePath(process.argv[1])) === realpathSync(fileURLToPath(import.meta.url))
+    );
+  } catch {
+    return false;
+  }
+}
+
+if (isDirectCliEntry()) {
   main(process.argv.slice(2))
     .then((code) => {
       process.exitCode = code;

@@ -1,3 +1,5 @@
+import {renderDisplayTarget} from './display-output.mjs';
+import {packRgbaReadback} from './readback.mjs';
 // GLB bytes -> PBR PNG views. Headless three.js WebGPURenderer, RenderTarget-only.
 //
 // B1a engineering notes encoded here:
@@ -17,7 +19,7 @@ import {
 } from './presentation-presets.mjs';
 
 export { MAX_VIEW_DIRS, validateViewDirs } from './contract.mjs';
-import { orthoDepth, orthoHalfExtent } from './framing.mjs';
+import { beautyCameraSpec, orthoDepth, orthoHalfExtent } from './framing.mjs';
 
 globalThis.self = globalThis;
 globalThis.requestAnimationFrame = (cb) => setTimeout(() => cb(performance.now()), 16);
@@ -99,9 +101,10 @@ export async function initRenderer(opts = {}) {
     addEventListener() { }, removeEventListener() { }, dispatchEvent() { },
     getContext() { throw new Error('default canvas context requested — RT-only expectation violated'); },
   };
-  const renderer = new THREE.WebGPURenderer({ canvas: fakeCanvas, device: gpuState.device, antialias: false });
+  const renderer = new THREE.WebGPURenderer({ canvas: fakeCanvas, device: gpuState.device, antialias: false, samples: 4, outputBufferType: THREE.HalfFloatType });
   await renderer.init();
   renderer.toneMapping = THREE.ACESFilmicToneMapping;
+  renderer.outputColorSpace = THREE.SRGBColorSpace;
   renderer.toneMappingExposure = PRESENTATION_EXPOSURE;
 
   const pmrem = new THREE.PMREMGenerator(renderer);
@@ -210,7 +213,9 @@ function orthoCam(center, min, max, dir) {
 }
 
 function exactPerspectiveCam(spec) {
-  const cam = new THREE.PerspectiveCamera(spec.fovDeg, spec.aspect, spec.near, spec.far);
+  const cam = spec.projection === 'orthographic'
+    ? new THREE.OrthographicCamera(-spec.halfHeight * spec.aspect, spec.halfHeight * spec.aspect, spec.halfHeight, -spec.halfHeight, spec.near, spec.far)
+    : new THREE.PerspectiveCamera(spec.fovDeg, spec.aspect, spec.near, spec.far);
   cam.position.set(...spec.position);
   cam.up.set(...spec.up);
   cam.lookAt(new THREE.Vector3(...spec.target));
@@ -222,7 +227,7 @@ function exactPerspectiveCam(spec) {
 async function readPng(renderer, rt, w, h) {
   const pixels = await renderer.readRenderTargetPixelsAsync(rt, 0, 0, w, h);
   const png = new PNG({ width: w, height: h });
-  Buffer.from(pixels.buffer, pixels.byteOffset, w * h * 4).copy(png.data);
+  packRgbaReadback(pixels,w,h).copy(png.data);
   // Fast encode: deflate 1 + no row filtering is ~10x quicker than the adaptive
   // default and consumers read pixels, not bytes (image tokens scale with
   // dimensions, not file size).
@@ -291,8 +296,7 @@ export async function renderGlb(glbBytes, opts = {}) {
           samples: 4,
         });
         requestTargets.push(target);
-        renderer.setRenderTarget(target);
-        renderer.render(scene, exactPerspectiveCam(camera));
+        renderDisplayTarget(renderer, scene, exactPerspectiveCam(camera), target);
       }
       const views = [];
       for (const target of requestTargets) {
@@ -326,8 +330,7 @@ export async function renderGlb(glbBytes, opts = {}) {
     // sync per view.
     const rts = rtPool(size, viewDirs.length);
     viewDirs.forEach((dir, i) => {
-      renderer.setRenderTarget(rts[i]);
-      renderer.render(scene, orthoCam(center, boxMin, boxMax, dir));
+      renderDisplayTarget(renderer, scene, orthoCam(center, boxMin, boxMax, dir), rts[i]);
     });
     const views = [];
     for (const vrt of rts) {
@@ -338,10 +341,9 @@ export async function renderGlb(glbBytes, opts = {}) {
     let beauty = null;
     if (beautySize) {
       const rtB = new THREE.RenderTarget(beautySize, beautySize, { depthBuffer: true, samples: 4 });
-      renderer.setRenderTarget(rtB);
-      renderer.render(scene, beautyCam(center, sizes.length() * 0.62 + 1e-3));
+      requestTargets.push(rtB);
+      renderDisplayTarget(renderer, scene, exactPerspectiveCam(beautyCameraSpec(center.toArray(), sizes.length() * 0.62 + 1e-3)), rtB);
       beauty = await readPng(renderer, rtB, beautySize, beautySize);
-      rtB.dispose();
     }
     const tEnd = performance.now();
 

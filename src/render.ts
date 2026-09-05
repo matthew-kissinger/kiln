@@ -1,3 +1,4 @@
+import { rethrowAuthoringError } from './evaluator/authoring-diagnostic';
 /**
  * Headless Kiln GLB Renderer
  *
@@ -11,6 +12,11 @@
  */
 
 import * as THREE from 'three';
+import {
+  geometryAttributeValues,
+  inspectGeometryExport,
+  type GeometryExportPolicy,
+} from './geometry-export';
 import { createHash } from 'node:crypto';
 import { Document, WebIO, getBounds } from '@gltf-transform/core';
 import {
@@ -341,45 +347,49 @@ export async function executeKilnCode(
   // before the Function constructor sees source. This is not process isolation.
   assertGeneratedSourceSafe(normalized);
 
-  const primitiveUsage: Record<string, number> = {};
-  const globals = buildSandboxGlobals(primitiveUsage, {
-    textureResolver: options.textureResolver ?? DEFAULT_TEXTURE_RESOLVER,
-  });
-  const globalNames = Object.keys(globals);
-  const globalValues = Object.values(globals);
+  try {
+    const primitiveUsage: Record<string, number> = {};
+    const globals = buildSandboxGlobals(primitiveUsage, {
+      textureResolver: options.textureResolver ?? DEFAULT_TEXTURE_RESOLVER,
+    });
+    const globalNames = Object.keys(globals);
+    const globalValues = Object.values(globals);
 
-  const fn = new Function(
-    ...globalNames,
-    `${normalized}\nreturn { meta: typeof meta !== 'undefined' ? meta : {}, build, animate: typeof animate !== 'undefined' ? animate : null };`,
-  );
+    const fn = new Function(
+      ...globalNames,
+      `${normalized}\nreturn { meta: typeof meta !== 'undefined' ? meta : {}, build, animate: typeof animate !== 'undefined' ? animate : null };`,
+    );
 
-  const { meta, build, animate } = fn(...globalValues) as {
-    meta: KilnCodeMeta;
-    build: () => THREE.Object3D | Promise<THREE.Object3D>;
-    animate:
-      | ((
-          root: THREE.Object3D,
-        ) => THREE.AnimationClip[] | undefined | Promise<THREE.AnimationClip[] | undefined>)
-      | null;
-  };
+    const { meta, build, animate } = fn(...globalValues) as {
+      meta: KilnCodeMeta;
+      build: () => THREE.Object3D | Promise<THREE.Object3D>;
+      animate:
+        | ((
+            root: THREE.Object3D,
+          ) => THREE.AnimationClip[] | undefined | Promise<THREE.AnimationClip[] | undefined>)
+        | null;
+    };
 
-  if (typeof build !== 'function') {
-    throw new Error('executeKilnCode: generated code did not define `build`');
+    if (typeof build !== 'function') {
+      throw new Error('executeKilnCode: generated code did not define `build`');
+    }
+
+    const root = await build();
+    // Duck-typed check — the kiln sandbox uses `new Function(...)`, which under
+    // bun creates an isolated module realm. `new THREE.X()` inside the sandbox
+    // produces objects whose constructor is a *different* class object from the
+    // THREE imported here, so `instanceof THREE.Object3D` returns false.
+    // Three.js sets `.isObject3D = true` on the prototype for exactly this case.
+    if (!(root as { isObject3D?: boolean })?.isObject3D) {
+      throw new Error('executeKilnCode: build() did not return a THREE.Object3D');
+    }
+
+    const clips = animate ? ((await animate(root)) ?? []) : [];
+
+    return { meta: meta ?? {}, root, clips, primitiveUsage };
+  } catch (error) {
+    rethrowAuthoringError(error);
   }
-
-  const root = await build();
-  // Duck-typed check — the kiln sandbox uses `new Function(...)`, which under
-  // bun creates an isolated module realm. `new THREE.X()` inside the sandbox
-  // produces objects whose constructor is a *different* class object from the
-  // THREE imported here, so `instanceof THREE.Object3D` returns false.
-  // Three.js sets `.isObject3D = true` on the prototype for exactly this case.
-  if (!(root as { isObject3D?: boolean })?.isObject3D) {
-    throw new Error('executeKilnCode: build() did not return a THREE.Object3D');
-  }
-
-  const clips = animate ? ((await animate(root)) ?? []) : [];
-
-  return { meta: meta ?? {}, root, clips, primitiveUsage };
 }
 
 // =============================================================================
@@ -548,14 +558,14 @@ function bridgeGeometry(
   doc: Document,
   buf: GtBuffer,
   geometry: THREE.BufferGeometry,
-  material: GtMaterial,
+  material: GtMaterial | GtMaterial[],
   meshName: string,
 ): GtMesh {
   if (!geometry.getAttribute('normal')) {
     geometry.computeVertexNormals();
   }
 
-  const prim = doc.createPrimitive().setMaterial(material);
+  const prim = doc.createPrimitive().setMaterial(Array.isArray(material) ? material[0]! : material);
 
   const posAttr = geometry.getAttribute('position') as THREE.BufferAttribute | undefined;
   if (posAttr) {
@@ -563,7 +573,7 @@ function bridgeGeometry(
       'POSITION',
       doc
         .createAccessor(meshName + '_pos')
-        .setArray(new Float32Array(posAttr.array))
+        .setArray(geometryAttributeValues(posAttr))
         .setType(TYPE_VEC3)
         .setBuffer(buf),
     );
@@ -575,7 +585,7 @@ function bridgeGeometry(
       'NORMAL',
       doc
         .createAccessor(meshName + '_norm')
-        .setArray(new Float32Array(normAttr.array))
+        .setArray(geometryAttributeValues(normAttr))
         .setType(TYPE_VEC3)
         .setBuffer(buf),
     );
@@ -587,7 +597,7 @@ function bridgeGeometry(
       'TEXCOORD_0',
       doc
         .createAccessor(meshName + '_uv')
-        .setArray(new Float32Array(uvAttr.array))
+        .setArray(geometryAttributeValues(uvAttr))
         .setType(TYPE_VEC2)
         .setBuffer(buf),
     );
@@ -599,7 +609,7 @@ function bridgeGeometry(
       'TANGENT',
       doc
         .createAccessor(meshName + '_tangent')
-        .setArray(new Float32Array(tangentAttr.array))
+        .setArray(geometryAttributeValues(tangentAttr))
         .setType(TYPE_VEC4)
         .setBuffer(buf),
     );
@@ -620,7 +630,46 @@ function bridgeGeometry(
     );
   }
 
-  return doc.createMesh(meshName).addPrimitive(prim);
+  const mesh = doc.createMesh(meshName);
+  if (!Array.isArray(material)) return mesh.addPrimitive(prim);
+  const indexValues = indexAttr
+    ? Array.from(indexAttr.array)
+    : Array.from({ length: posAttr!.count }, (_, i) => i);
+  const groups = [...geometry.groups].sort((a, b) => a.start - b.start);
+  let covered = 0;
+  for (const group of groups) {
+    if (
+      group.start !== covered ||
+      !Number.isInteger(group.start) ||
+      !Number.isInteger(group.count) ||
+      group.count <= 0 ||
+      group.start % 3 ||
+      group.count % 3 ||
+      group.start + group.count > indexValues.length ||
+      !material[group.materialIndex ?? 0]
+    ) {
+      throw new TypeError(
+        `${meshName}: material groups must cover every triangle exactly once with valid material indices.`,
+      );
+    }
+    const part = doc.createPrimitive().setMaterial(material[group.materialIndex ?? 0]!);
+    for (const semantic of prim.listSemantics())
+      part.setAttribute(semantic, prim.getAttribute(semantic)!);
+    const IndexArray = posAttr!.count > 65535 ? Uint32Array : Uint16Array;
+    part.setIndices(
+      doc
+        .createAccessor(meshName + '_group_indices')
+        .setArray(new IndexArray(indexValues.slice(group.start, group.start + group.count)))
+        .setType(TYPE_SCALAR)
+        .setBuffer(buf),
+    );
+    mesh.addPrimitive(part);
+    covered += group.count;
+  }
+  if (covered !== indexValues.length)
+    throw new TypeError(`${meshName}: material groups do not cover every triangle.`);
+  prim.dispose();
+  return mesh;
 }
 
 function bridgeNode(
@@ -694,14 +743,15 @@ function bridgeNode(
 
   if ((threeObj as { isMesh?: boolean }).isMesh) {
     const threeMesh = threeObj as THREE.Mesh;
-    const threeMat = threeMesh.material as THREE.Material;
-    const gtMat = bridgeMaterial(doc, threeMat, matCache, texCache);
+    const threeMats = Array.isArray(threeMesh.material) ? threeMesh.material : [threeMesh.material];
+    const gtMats = threeMats.map((material) => bridgeMaterial(doc, material, matCache, texCache));
+    const gtMat = Array.isArray(threeMesh.material) ? gtMats : gtMats[0]!;
 
     // Key the mesh cache by (geometry ref, material ref) so createInstance
     // (same geo + mat as source) produces a GLB-level mesh instance: a
     // single Mesh referenced by multiple Nodes. Cuts duplicated accessors
     // for wheels, bolts, fence posts, etc.
-    const cacheKey = `${threeMesh.geometry.uuid}__${threeMat.uuid}`;
+    const cacheKey = `${threeMesh.geometry.uuid}__${threeMats.map((material) => material.uuid).join('_')}`;
     let gtMesh = meshCache.get(cacheKey);
     if (!gtMesh) {
       gtMesh = bridgeGeometry(doc, buf, threeMesh.geometry, gtMat, threeMesh.name || 'mesh');
@@ -866,6 +916,8 @@ function reviewClipExtras(clips: THREE.AnimationClip[]): Record<string, unknown>
 // =============================================================================
 
 export interface RenderResult {
+  /** Optional host cache receipt. This identifies evaluation reuse, not image fidelity. */
+  buildCache?: { key: `sha256:${string}`; hit: boolean };
   glb: Buffer;
   /** SHA-256 identity of the exact returned GLB bytes. */
   artifactGlbSha256: `sha256:${string}`;
@@ -964,6 +1016,8 @@ export interface RenderSceneResult {
 }
 
 export interface RenderSceneOptions {
+  /** Warn about unsupported custom attributes (default), or reject before export. */
+  geometryPolicy?: GeometryExportPolicy;
   /** Name of the glTF scene. Defaults to 'Scene'. */
   sceneName?: string;
   /** Animation clips to bridge into the document. */
@@ -1274,7 +1328,9 @@ export async function renderSceneToGLB(
   opts: RenderSceneOptions = {},
 ): Promise<RenderSceneResult> {
   const clips = opts.clips ?? [];
-  const warnings: string[] = [];
+  if (opts.geometryPolicy !== undefined && !['warn', 'strict'].includes(opts.geometryPolicy))
+    throw new Error('geometryPolicy must be warn or strict');
+  const warnings = inspectGeometryExport(root, opts.geometryPolicy);
   const tris = countTriangles(root);
   const intent =
     opts.intent ??
@@ -1534,6 +1590,7 @@ export async function renderSceneToGLB(
  * Pure function: no file I/O, no globals, no WebGL.
  */
 export interface RenderGlbOptions {
+  geometryPolicy?: GeometryExportPolicy;
   optimize?: OptimizeMode;
   instance?: InstanceMode;
   intent?: AssetIntentV1;
@@ -1552,12 +1609,15 @@ export async function renderGLBInProcess(
   code: string,
   opts: RenderGlbOptions = {},
 ): Promise<RenderResult> {
+  if (opts.geometryPolicy !== undefined && !['warn', 'strict'].includes(opts.geometryPolicy))
+    throw new Error('geometryPolicy must be warn or strict');
   const { meta, root, clips, primitiveUsage } = await executeKilnCode(code, {
     textureResolver: opts.textureResolver ?? DEFAULT_TEXTURE_RESOLVER,
   });
   const requestedCategory = opts.intent?.category ?? opts.category;
   const scene = await renderSceneToGLB(root, {
     sceneName: meta.name || 'Scene',
+    geometryPolicy: opts.geometryPolicy,
     clips,
     ...(requestedCategory ? { category: requestedCategory } : {}),
     ...(opts.intent ? { intent: opts.intent } : {}),

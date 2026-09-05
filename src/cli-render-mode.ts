@@ -1,3 +1,4 @@
+import { createHash } from 'node:crypto';
 /**
  * Render-mode resolution for the CLI: `auto | cpu | gpu`, plus a remote port URL.
  *
@@ -58,6 +59,14 @@ export function makeRemoteRenderPort(url: string, token?: string): PbrRenderPort
     const body: Record<string, unknown> = {
       glb_base64: Buffer.from(req.glb).toString('base64'),
     };
+    const inputGlbSha256 = `sha256:${createHash('sha256').update(req.glb).digest('hex')}` as const;
+    body['input_glb_sha256'] = inputGlbSha256;
+    if (req.cameras) {
+      body['cameras'] = req.cameras;
+      body['width'] = req.width;
+      body['height'] = req.height;
+      if (req.lightingPresetId) body['lighting_preset_id'] = req.lightingPresetId;
+    }
     if (req.viewDirs) body['views'] = req.viewDirs;
     if (req.size !== undefined) body['size'] = req.size;
     if (req.beautySize !== undefined) body['beauty_size'] = req.beautySize;
@@ -78,17 +87,74 @@ export function makeRemoteRenderPort(url: string, token?: string): PbrRenderPort
       ok?: boolean;
       rendererId?: string;
       views?: string[];
+      beauty?: string;
       error?: string;
+      cameras?: PbrRenderResult['cameras'];
+      width?: number;
+      height?: number;
+      fidelity?: {
+        version?: string;
+        producer?: string;
+        materialFaithful?: boolean;
+        delivered?: string;
+        degraded?: boolean;
+        inputGlbSha256?: string;
+        rendererId?: string;
+      };
     };
     if (!json.ok) throw new Error(json.error ?? 'render service reported failure');
     return {
       ok: true,
       rendererId: json.rendererId ?? 'remote',
+      ...(json.cameras ? { cameras: json.cameras, width: json.width, height: json.height } : {}),
+      ...(json.fidelity?.version === 'kiln.render-fidelity.v1' &&
+      json.fidelity.producer === 'kiln-render-service' &&
+      json.fidelity.materialFaithful === true &&
+      json.fidelity.delivered === 'full-material' &&
+      json.fidelity.degraded === false &&
+      json.fidelity.inputGlbSha256 === inputGlbSha256 &&
+      json.fidelity.rendererId === json.rendererId
+        ? { derivativeFidelity: { materialFaithful: true as const, inputGlbSha256 } }
+        : {}),
       ...(json.views
         ? { viewsPng: json.views.map((b64) => new Uint8Array(Buffer.from(b64, 'base64'))) }
         : {}),
+      ...(json.beauty ? { beautyPng: new Uint8Array(Buffer.from(json.beauty, 'base64')) } : {}),
     };
   };
+}
+
+/** Fresh attestation per capture; unknown/older/unreachable services bypass cell reuse. */
+export async function probeCaptureIdentity(url: string): Promise<string | undefined> {
+  try {
+    const response = await fetch(new URL('/health', url), {
+      signal: AbortSignal.timeout(HEALTH_PROBE_TIMEOUT_MS),
+      cache: 'no-store',
+    });
+    if (!response.ok) return undefined;
+    const health = (await response.json()) as {
+      ok?: boolean;
+      rendererId?: string;
+      captureIdentity?: { version?: string; fingerprint?: string; instanceId?: string };
+    };
+    const identity = health.captureIdentity;
+    if (
+      !health.ok ||
+      !health.rendererId ||
+      identity?.version !== 'kiln.capture-producer.v1' ||
+      !/^sha256:[a-f0-9]{64}$/.test(identity.fingerprint ?? '') ||
+      !identity.instanceId?.trim()
+    )
+      return undefined;
+    return JSON.stringify([
+      identity.version,
+      identity.fingerprint,
+      identity.instanceId,
+      health.rendererId,
+    ]);
+  } catch {
+    return undefined;
+  }
 }
 
 /** One `/health` request. `busy` means the socket was accepted and then went quiet. */
@@ -195,10 +261,11 @@ export async function buildRenderPort(
   mode: RenderMode,
   portUrl: string | undefined,
 ): Promise<KilnToolContext> {
-  const context: KilnToolContext = {};
+  const context: KilnToolContext = mode === 'gpu' ? { viewRenderRequired: true } : {};
   const attach = (url: string, label: string): KilnToolContext => {
     context.viewRenderPort = makeRemoteRenderPort(url, process.env['KILN_RENDER_TOKEN']);
     context.viewRenderTimeoutMs = CLI_VIEW_RENDER_TIMEOUT_MS;
+    context.captureCacheIdentity = () => probeCaptureIdentity(url);
     selected.set(context, label);
     return context;
   };

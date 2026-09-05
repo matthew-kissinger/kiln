@@ -1,0 +1,140 @@
+{
+  "kind": "provided-source workflow recertification; not independent creation or matched model ranking",
+  "packageSha256": "833b9bf14468798640447d2ba98d16d1bcedaaff8ac8752d266881e29aaabb97",
+  "model": "gpt-6-astra",
+  "harness": "Codex 0.153.3",
+  "node": "22.23.1",
+  "setup": {
+    "packageSha256": "833b9bf14468798640447d2ba98d16d1bcedaaff8ac8752d266881e29aaabb97",
+    "startingSourceSha256": "3fad8e8c92fbcbc535007bc08db6ff2564d08ac0cbfb840b355e58ae85c0b633",
+    "startingSourceProvenance": "provided prior Astra LANTERN creative candidate",
+    "runtime": "C:\\Users\\Mattm\\X\\kiln-cleanrooms\\final-runtime-833b9bf1\\kiln-package-café-Grrt37\\fresh installation\\node_modules\\@kiln\\engine",
+    "node": "C:\\Users\\Mattm\\AppData\\Roaming\\fnm\\node-versions\\v22.23.1\\installation\\node.exe",
+    "skillHashes": {
+      "kiln-author-asset/references/camera-recipes.md": "8959e0b5bf98d8d6712147ff9f4eb05bdff9a58cdda60796304a527329b84c19",
+      "kiln-author-asset/references/geometry-recipes.md": "12e861a7c05b21ee8d0de713f4bde8a843af1dbf37326b5121a8229805693c3c",
+      "kiln-author-asset/references/program-contract.md": "42cc4c17fa14d94febdf0ccbc38454f5972f2d3730f20dbca39151c0fe3aa293",
+      "kiln-author-asset/references/reusable-frame.kiln.js": "9015b2255742efa74e47531f68778573c34566237b3256dcdaab9c360cfc895f",
+      "kiln-author-asset/SKILL.md": "6a69c2ef6315cf719c33a5c024f5b07c87264de8e6fdb987cacbefbfd431f93e",
+      "kiln-qa-asset/references/integration-checks.md": "3d340cc81c0de0a4415ff1d2707c64db1a7433fd7e63f69e1748862739ef5c24",
+      "kiln-qa-asset/SKILL.md": "f2f990a669529f09c7e818a74f1e3af299e474d41a86910434d521a1fd596845",
+      "kiln-refine-asset/references/revision-and-views.md": "78ccb43588fd37b020cabc17e61facd610ea676c7f0c9ebb104f07845edbf3e5",
+      "kiln-refine-asset/SKILL.md": "135af2115e63f09f4c413feceedee5f547d21d154b4d32ed5e88c4077ac56d61"
+    }
+  },
+  "exit": {
+    "code": 0,
+    "timedOut": false,
+    "finishedAt": "2026-09-05T19:18:56.659Z"
+  },
+  "source": {
+    "before": "sha256:3fad8e8c92fbcbc535007bc08db6ff2564d08ac0cbfb840b355e58ae85c0b633",
+    "after": "sha256:4380d7c0f6ed11f1e520b99672d2458708f3b78700abd8c4136dbe6c3a05ca07",
+    "exactFocusedEdit": true,
+    "edit": "ARM_ROOT +Z 0.06 asset units; all other bytes preserved"
+  },
+  "glb": {
+    "bytes": 636476,
+    "sha256": "5c2c5254ca4d841dbce47d6d930f2d97884a0f975e744ffa19d2e40e5c841b24",
+    "independentInstalledCliExactMatch": true
+  },
+  "requests": [
+    {
+      "tool": "kiln_list_primitives",
+      "argumentBytes": 21,
+      "sourceSubmitted": false
+    },
+    {
+      "tool": "kiln_source",
+      "argumentBytes": 115,
+      "sourceSubmitted": false
+    },
+    {
+      "tool": "kiln_render",
+      "argumentBytes": 577,
+      "sourceSubmitted": false
+    },
+    {
+      "tool": "kiln_source",
+      "argumentBytes": 126,
+      "sourceSubmitted": false
+    },
+    {
+      "tool": "kiln_edit",
+      "argumentBytes": 683,
+      "sourceSubmitted": false
+    }
+  ],
+  "capture": {
+    "version": "kiln.capture.v1",
+    "output": "grid",
+    "cols": 2,
+    "size": 768,
+    "shots": [
+      {
+        "name": "Whole asset",
+        "camera": {
+          "type": "explicit",
+          "projection": "orthographic",
+          "relativeTo": "asset",
+          "position": [
+            4,
+            2.6,
+            4
+          ],
+          "target": [
+            0,
+            1.1,
+            0
+          ],
+          "framing": "bounds",
+          "padding": 1.15
+        }
+      },
+      {
+        "name": "Arm attachment",
+        "subject": {
+          "name": "Joint_Arm_shoulder"
+        },
+        "visibility": "context",
+        "camera": {
+          "type": "explicit",
+          "projection": "orthographic",
+          "relativeTo": "part",
+          "position": [
+            1,
+            0.65,
+            3
+          ],
+          "target": [
+            0.2,
+            0.05,
+            0
+          ],
+          "halfHeight": 0.52
+        }
+      }
+    ]
+  },
+  "images": [
+    {
+      "name": "before.png",
+      "bytes": 381268,
+      "sha256": "a4b0d98a3e06b585268bf1a78ffb4d9bdf25450989179f0d2844563bbdd5aae4",
+      "width": 1548,
+      "height": 776
+    },
+    {
+      "name": "after.png",
+      "bytes": 381178,
+      "sha256": "0c9a79af78017f0a3eb1e3baae1a46b01b9ceaaf7b2bec40031e77b415b243cc",
+      "width": 1548,
+      "height": 776
+    }
+  ],
+  "visualReview": "Independently opened before/after saved sheets. Whole asset and close-up show shoulder, links, struts and harness; outward mount follows the focused edit. No minimum clearance measurement or animation sweep. Whole-asset bounds fitting and part-relative camera mean recipe matches, not fixed world matrices.",
+  "failures": [
+    "One oversized shell receipt write hit Windows command length; model recovered with compact metadata. No base64 image copy."
+  ],
+  "limits": "Provided-source refinement only; original creative run was deadline-limited. Images are derivative review, not destination-runtime GLB validation."
+}

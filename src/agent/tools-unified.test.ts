@@ -601,3 +601,21 @@ describe('makeKilnUnifiedTools', () => {
     expect(sink.code).toBe(beforeRejectedRewrite);
   });
 });
+test('buffer inspection forwards the shared exact camera shot', async () => {
+  const tools = makeKilnUnifiedTools({ seedCode: BOX_CODE, sink: { edits: [] } });
+  const result = (await findTool(tools, 'kiln_inspect').invoke({
+    shot: {
+      camera: {
+        type: 'explicit',
+        projection: 'perspective',
+        position: [3, 2, 3],
+        target: [0, 0.5, 0],
+      },
+    },
+  })) as unknown[];
+  const json = (result.find((v) => v instanceof JsonBlock) as JsonBlock).json as Record<
+    string,
+    unknown
+  >;
+  expect(json.cameraShot).toMatchObject({ camera: { projection: 'perspective' } });
+});

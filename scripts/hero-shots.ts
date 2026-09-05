@@ -42,6 +42,10 @@ const OUT_DIR = join(EXAMPLES, 'renders');
  * that are deliberately NOT heroes and should not appear in the gallery.
  */
 const HEROES = [
+  'abyssal-surveyor',
+  'bench-refractor',
+  'research-vessel',
+  'twisting-canopy',
   'field-gun',
   'cathedral',
   'mech',

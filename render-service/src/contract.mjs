@@ -234,7 +234,7 @@ export function validateCameraMode(input) {
     if (!value || typeof value !== 'object' || Array.isArray(value)) {
       throw badRequest(`cameras[${index}] must be an object`);
     }
-    const allowed = new Set(['position', 'target', 'up', 'fovDeg', 'aspect', 'near', 'far']);
+    const allowed = new Set(['position', 'target', 'up', 'fovDeg', 'aspect', 'near', 'far', 'version', 'projection', 'halfHeight']);
     for (const key of Object.keys(value)) {
       if (!allowed.has(key)) throw badRequest(`cameras[${index}].${key} is unknown`);
     }
@@ -254,11 +254,18 @@ export function validateCameraMode(input) {
     if (Math.hypot(...cross) <= viewLength * upLength * 1e-9) {
       throw badRequest(`cameras[${index}].up must not be collinear with view`);
     }
-    const fovDeg = finiteNumber(value.fovDeg, `cameras[${index}].fovDeg`);
+    const versioned = value.version !== undefined || value.projection !== undefined;
+    if (versioned && (value.version !== 'kiln.camera.v1' || !['orthographic','perspective'].includes(value.projection))) throw badRequest('invalid versioned camera');
+    const orthographic = value.projection === 'orthographic';
+    if (orthographic && value.fovDeg !== undefined) throw badRequest('orthographic camera cannot use fovDeg');
+    if (!orthographic && value.halfHeight !== undefined) throw badRequest('perspective camera cannot use halfHeight');
+    const halfHeight = orthographic ? finiteNumber(value.halfHeight, `cameras[${index}].halfHeight`) : undefined;
+    if (orthographic && halfHeight <= 0) throw badRequest('halfHeight must be positive');
+    const fovDeg = orthographic ? undefined : finiteNumber(value.fovDeg, `cameras[${index}].fovDeg`);
     const aspect = finiteNumber(value.aspect, `cameras[${index}].aspect`);
     const near = finiteNumber(value.near, `cameras[${index}].near`);
     const far = finiteNumber(value.far, `cameras[${index}].far`);
-    if (fovDeg <= 0 || fovDeg >= 180) {
+    if (!orthographic && (fovDeg <= 0 || fovDeg >= 180)) {
       throw badRequest(`cameras[${index}].fovDeg must be in (0,180)`);
     }
     if (aspect <= 0) throw badRequest(`cameras[${index}].aspect must be positive`);
@@ -267,7 +274,7 @@ export function validateCameraMode(input) {
     if (Math.abs(aspect - targetAspect) > Math.max(1, targetAspect) * 1e-9) {
       throw badRequest(`cameras[${index}].aspect must equal width/height`);
     }
-    return { position, target, up, fovDeg, aspect, near, far };
+    return { position, target, up, ...(orthographic ? {halfHeight} : {fovDeg}), aspect, near, far, ...(versioned ? {version:value.version,projection:value.projection} : {}) };
   });
   const lightingPresetId = input.lightingPresetId === undefined
     ? SUPPORTED_LIGHTING_PRESET_ID
@@ -363,10 +370,11 @@ function cloneCamera(camera) {
     position: [...camera.position],
     target: [...camera.target],
     up: [...camera.up],
-    fovDeg: camera.fovDeg,
+    ...(camera.projection === 'orthographic' ? {halfHeight:camera.halfHeight} : {fovDeg:camera.fovDeg}),
     aspect: camera.aspect,
     near: camera.near,
     far: camera.far,
+    ...(camera.version ? {version:camera.version,projection:camera.projection} : {}),
   };
 }
 

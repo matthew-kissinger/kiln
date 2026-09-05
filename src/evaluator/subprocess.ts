@@ -1,3 +1,4 @@
+import { authoringDiagnosticAdvice, type AuthoringDiagnostic } from './authoring-diagnostic';
 import { spawn, type SpawnOptions } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
 import type { RenderGlbOptions, RenderResult } from '../render';
@@ -20,6 +21,10 @@ export interface EvaluatorSubprocessControls {
   deadlineMs?: number;
   maxGlbBytes?: number;
   maxResponseBytes?: number;
+  /** Host cancellation, never serialized into the generated program. */
+  signal?: AbortSignal;
+  /** Node V8 old-space heap cap, not a total process/native-memory limit. */
+  maxHeapMb?: number;
 }
 
 export interface EvaluatorProcessLaunch {
@@ -32,8 +37,12 @@ export interface EvaluatorProcessLaunch {
 export class EvaluatorSubprocessError extends Error {
   readonly code: EvaluatorOutcomeCode;
 
-  constructor(code: EvaluatorOutcomeCode, message: string) {
-    super(message);
+  constructor(
+    code: EvaluatorOutcomeCode,
+    message: string,
+    readonly diagnostic?: AuthoringDiagnostic,
+  ) {
+    super(diagnostic ? `${message} ${authoringDiagnosticAdvice(diagnostic)}` : message);
     this.name = 'EvaluatorSubprocessError';
     this.code = code;
   }
@@ -73,6 +82,9 @@ export async function renderGLBViaProcessLaunch(
   controls: EvaluatorSubprocessControls = {},
   launch?: EvaluatorProcessLaunch,
 ): Promise<RenderResult> {
+  if (controls.signal?.aborted) {
+    throw new EvaluatorSubprocessError('CANCELLED', 'Evaluator request was cancelled.');
+  }
   if (options.textureResolver) {
     throw new EvaluatorSubprocessError(
       'INPUT_INVALID',
@@ -102,10 +114,27 @@ export async function renderGLBViaProcessLaunch(
     );
   }
 
-  const workerPath = fileURLToPath(new URL('./worker.ts', import.meta.url));
+  const sourceModule = import.meta.url.endsWith('.ts');
+  const workerPath = fileURLToPath(
+    new URL(
+      process.versions.bun && sourceModule
+        ? './worker.ts'
+        : sourceModule
+          ? '../../dist/evaluator-worker.mjs'
+          : './evaluator-worker.mjs',
+      import.meta.url,
+    ),
+  );
+  const maxHeapMb = boundedInteger(controls.maxHeapMb, 512, 4096);
+  if (maxHeapMb < 64 || (process.versions.bun && controls.maxHeapMb !== undefined)) {
+    throw new EvaluatorSubprocessError(
+      'INPUT_INVALID',
+      'Heap limits require a Node worker and 64–4096 MiB.',
+    );
+  }
   const defaultLaunch: EvaluatorProcessLaunch = {
     command: process.execPath,
-    args: process.versions.bun ? [workerPath] : ['--import', 'tsx', workerPath],
+    args: process.versions.bun ? [workerPath] : [`--max-old-space-size=${maxHeapMb}`, workerPath],
     env: sanitizedEvaluatorEnv(),
   };
   const resolvedLaunch = launch ?? defaultLaunch;
@@ -133,21 +162,55 @@ export async function renderGLBViaProcessLaunch(
       if (settled) return;
       settled = true;
       clearTimeout(timer);
+      controls.signal?.removeEventListener('abort', abort);
       if (error) reject(error);
       else resolve(result as RenderResult);
     };
     const timer = setTimeout(() => {
-      terminateProcess(child, detached);
       finish(new EvaluatorSubprocessError('DEADLINE_EXCEEDED', 'Evaluator deadline exceeded.'));
+      terminateProcess(child, detached);
     }, deadlineMs);
+    const abort = () => {
+      // Windows/Bun may emit a child error synchronously while killing it.
+      // Settle the host outcome first so that event cannot replace cancellation.
+      finish(new EvaluatorSubprocessError('CANCELLED', 'Evaluator request was cancelled.'));
+      terminateProcess(child, detached);
+    };
+    const pipeFailed = (error: NodeJS.ErrnoException) => {
+      // Killing a worker while stdin is opening can emit EPIPE after cancellation.
+      // Always consume pipe errors; only an active request becomes a worker error.
+      if (settled) return;
+      // Windows/Bun can report a closed input/stderr/protocol pipe before the
+      // process close event drains its complete fd3 envelope. Keep the host
+      // deadline and cancellation armed, then require exit 0 plus strict decode.
+      if (
+        ['EPIPE', 'ECONNRESET', 'ERR_STREAM_DESTROYED', 'ERR_STREAM_PREMATURE_CLOSE'].includes(
+          error.code ?? '',
+        )
+      )
+        return;
+      finish(new EvaluatorSubprocessError('WORKER_FAILED', 'Evaluator worker pipe failed.'));
+      terminateProcess(child, detached);
+    };
+    child.stdin?.on('error', pipeFailed);
+    protocol.on('error', (error: NodeJS.ErrnoException) => {
+      // Bun on Windows can report EBADF on fd3 after delivering its complete
+      // reply, before a normal process close. Only that proved case is deferred;
+      // close still requires exit 0 and a strictly decoded, complete envelope.
+      if (process.platform === 'win32' && process.versions.bun && error.code === 'EBADF') return;
+      pipeFailed(error);
+    });
+    child.stderr?.on('error', pipeFailed);
+    controls.signal?.addEventListener('abort', abort, { once: true });
+    if (controls.signal?.aborted) abort();
 
     protocol.on('data', (chunk: Buffer) => {
       responseBytes += chunk.byteLength;
       if (responseBytes > maxResponseBytes) {
-        terminateProcess(child, detached);
         finish(
           new EvaluatorSubprocessError('OUTPUT_LIMIT_EXCEEDED', 'Evaluator output limit exceeded.'),
         );
+        terminateProcess(child, detached);
         return;
       }
       chunks.push(Buffer.from(chunk));
@@ -181,6 +244,7 @@ export async function renderGLBViaProcessLaunch(
             new EvaluatorSubprocessError(
               result.error.code,
               evaluatorOutcomeMessage(result.error.code),
+              result.error.diagnostic,
             ),
           );
           return;
@@ -190,7 +254,7 @@ export async function renderGLBViaProcessLaunch(
         finish(new EvaluatorSubprocessError('PROTOCOL_ERROR', 'Evaluator returned invalid data.'));
       }
     });
-    child.stdin?.end(requestJson);
+    if (!settled) child.stdin?.end(requestJson);
   });
 }
 

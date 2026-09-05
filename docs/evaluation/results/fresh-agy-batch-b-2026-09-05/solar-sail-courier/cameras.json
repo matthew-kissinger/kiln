@@ -1,0 +1,30 @@
+{
+  "version": "kiln.capture.v1",
+  "output": "grid",
+  "cols": 2,
+  "size": 768,
+  "shots": [
+    {
+      "name": "Solar Sail Courier - Hero",
+      "camera": {
+        "type": "orbit",
+        "azimuthDeg": 40,
+        "elevationDeg": 22
+      }
+    },
+    {
+      "name": "Cargo Core and Hinge Detail",
+      "subject": {
+        "name": "CargoCore"
+      },
+      "visibility": "context",
+      "camera": {
+        "type": "orbit",
+        "relativeTo": "part",
+        "azimuthDeg": 115,
+        "elevationDeg": 15,
+        "padding": 1.3
+      }
+    }
+  ]
+}

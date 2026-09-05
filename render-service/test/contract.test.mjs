@@ -213,7 +213,7 @@ describe('provider-free render contract', () => {
     };
     throws400(
       () => buildRenderFidelityV1({ ...common, presentationProfile: 'other-profile' }),
-      /presentationProfile must be neutral-studio-v1/,
+      /presentationProfile must be one of: neutral-studio-v1, gallery-studio-v1/,
     );
     throws400(
       () => buildRenderFidelityV1({
