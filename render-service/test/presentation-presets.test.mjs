@@ -34,7 +34,7 @@ function recursivelyFrozen(value) {
 describe('versioned presentation preset registry', () => {
   it('pins neutral-studio-v1 to the byte/visual-equivalent renderer values', () => {
     assert.equal(DEFAULT_PRESENTATION_PRESET_ID, 'neutral-studio-v1');
-    assert.deepEqual(PRESENTATION_PRESET_IDS, ['neutral-studio-v1']);
+    assert.deepEqual(PRESENTATION_PRESET_IDS, ['neutral-studio-v1', 'gallery-studio-v1']);
     assert.equal(Object.isFrozen(PRESENTATION_PRESET_IDS), true);
     assert.equal(Object.isFrozen(PRESENTATION_PRESET_CAPABILITIES), true);
     assert.equal(SUPPORTED_LIGHTING_PRESET_ID, DEFAULT_PRESENTATION_PRESET_ID);
@@ -85,7 +85,7 @@ describe('versioned presentation preset registry', () => {
   });
 
   it('advertises every registry ID through provider-free health contract data', () => {
-    assert.deepEqual(PRESENTATION_PRESET_CAPABILITIES, ['render.profile.neutral-studio-v1']);
+    assert.deepEqual(PRESENTATION_PRESET_CAPABILITIES, ['render.profile.neutral-studio-v1', 'render.profile.gallery-studio-v1']);
     assert.ok(PRESENTATION_PRESET_CAPABILITIES.every((capability) => RENDER_CAPABILITIES.includes(capability)));
     const health = buildHealthDocument({
       rendererId: 'dawn-vulkan:test',
@@ -93,7 +93,7 @@ describe('versioned presentation preset registry', () => {
       summary: { vendor: 'test' },
     }, true);
     assert.equal(health.presentationProfile, 'neutral-studio-v1');
-    assert.deepEqual(health.lightingPresetIds, ['neutral-studio-v1']);
+    assert.deepEqual(health.lightingPresetIds, ['neutral-studio-v1', 'gallery-studio-v1']);
     assert.notEqual(health.lightingPresetIds, PRESENTATION_PRESET_IDS);
     assert.equal(health.authRequired, true);
   });

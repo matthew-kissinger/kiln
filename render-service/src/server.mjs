@@ -29,6 +29,7 @@ import {
 } from './renderer.mjs';
 import { acquireGpu } from './gpu.mjs';
 import { buildHealthDocument } from './health-contract.mjs';
+import {createRendererCaptureIdentity} from './cache-identity.mjs';
 import {
   buildRenderFidelityV1,
   buildRenderOperationalEvidenceV1,
@@ -58,6 +59,7 @@ try {
   console.error(`FATAL: ${e.message}`);
   process.exit(1);
 }
+gpuState.captureIdentity=createRendererCaptureIdentity(gpuState);
 console.log(`adapter: ${JSON.stringify(gpuState.summary)}`);
 console.log(`rendererId: ${gpuState.rendererId}`);
 if (!TOKEN) console.warn('WARNING: RENDER_SERVICE_TOKEN unset — POST routes are UNAUTHENTICATED');

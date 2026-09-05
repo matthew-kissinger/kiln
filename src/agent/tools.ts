@@ -132,20 +132,6 @@ async function toCallbackResult(
   return output as JSONValue;
 }
 
-/** Schema for the buffer-aware animation tool (omits `code` — it reads the working
- *  buffer). Used by the edit + unified refine surfaces. */
-const animationBufferInput = z.object({
-  clip: z.string().describe('The animation clip to view, by name (e.g. "walk", "attack").'),
-  camera: z
-    .string()
-    .optional()
-    .describe('Camera angle: right (default), front, back, left, top, or three-quarter.'),
-  perFrame: z
-    .boolean()
-    .optional()
-    .describe('Return separate high-res frames instead of one grid. Default false.'),
-});
-
 /** Build a buffer-aware kiln_screenshot_animation tool that runs against `getCode()`
  *  (the working buffer) instead of a `code` argument. Same behavior as the registry
  *  def otherwise; image transports attach the frame(s) via toCallbackResult. */
@@ -157,17 +143,11 @@ function makeBufferAnimationTool(
   return tool({
     name: def.name,
     description: `${def.description} Operates on your current working buffer (omit code).`,
-    inputSchema: animationBufferInput,
+    inputSchema: (def.inputSchema as z.ZodObject).omit({ code: true }),
     callback: async (input) => {
-      const i = input as { clip: string; camera?: string; perFrame?: boolean };
       return toCallbackResult(
         def,
-        await def.run({
-          code: getCode(),
-          clip: i.clip,
-          ...(i.camera ? { camera: i.camera } : {}),
-          ...(i.perFrame ? { perFrame: true } : {}),
-        }),
+        await def.run({ ...(input as Record<string, unknown>), code: getCode() }),
         context,
       );
     },
@@ -655,22 +635,9 @@ export function makeKilnUnifiedTools(
     description: `${inspectDef.description} Operates on your current working buffer (no code argument).`,
     inputSchema: inspectBufferInput,
     callback: async (input) => {
-      const i = input as {
-        part?: string;
-        view?: string;
-        azimuthDeg?: number;
-        elevationDeg?: number;
-        zoom?: number;
-        isolate?: boolean;
-      };
       const out = await inspectDef.run({
+        ...(input as Record<string, unknown>),
         code: buffer.code,
-        ...(i.part !== undefined ? { part: i.part } : {}),
-        ...(i.view !== undefined ? { view: i.view } : {}),
-        ...(i.azimuthDeg !== undefined ? { azimuthDeg: i.azimuthDeg } : {}),
-        ...(i.elevationDeg !== undefined ? { elevationDeg: i.elevationDeg } : {}),
-        ...(i.zoom !== undefined ? { zoom: i.zoom } : {}),
-        ...(i.isolate !== undefined ? { isolate: i.isolate } : {}),
       });
       return toCallbackResult(inspectDef, out, opts);
     },
@@ -685,20 +652,11 @@ export function makeKilnUnifiedTools(
   const interiorTool: Tool = tool({
     name: 'kiln_view_interior',
     description: `${interiorDef.description} Operates on your current working buffer (omit code).`,
-    inputSchema: z.object({
-      nodeName: z
-        .string()
-        .optional()
-        .describe(
-          'Override: lift the roof by exact node name. Normally omit it — the roof is found by ' +
-            'its semantic role whatever it is named.',
-        ),
-    }),
+    inputSchema: (interiorDef.inputSchema as z.ZodObject).omit({ code: true }),
     callback: async (input) => {
-      const n = (input as { nodeName?: string }).nodeName;
       const out = await interiorDef.run({
+        ...(input as Record<string, unknown>),
         code: buffer.code,
-        ...(n ? { nodeName: n } : {}),
       });
       return toCallbackResult(interiorDef, out, opts);
     },

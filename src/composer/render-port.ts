@@ -1,3 +1,4 @@
+import { validateResolvedAssetCamera, type ResolvedAssetCameraV1 } from '../views/camera';
 /**
  * SceneRenderPort — the host-supplied seam that lets the composer SEE the scene
  * without the engine importing THREE. The engine defines this interface and the
@@ -175,6 +176,9 @@ export interface ViewFidelityV1 {
 
 /** One purpose-built review GLB and the pixels derived from those exact bytes. */
 export interface DerivativeViewReceiptV1 extends ViewFidelityV1 {
+  captureCache?: { hit: boolean; reused: number; total: number };
+  camera?: ResolvedAssetCameraV1;
+  cameraFidelity?: 'echo-validated' | 'engine-resolved';
   /** Stable cell/frame identity within the review surface. */
   derivativeLabel: string;
   /** Derivative bytes are never the persisted/final artifact. */
@@ -261,7 +265,7 @@ export interface PbrRenderRequest {
   beautySize?: number;
   /** Fully resolved perspective cameras for canonical composed-scene renders.
    * Legacy asset sheets continue to use `viewDirs` unchanged. */
-  cameras?: ResolvedSceneCamera[];
+  cameras?: (ResolvedSceneCamera | ResolvedAssetCameraV1)[];
   /** Rectangular camera target. Both are required in camera mode and each is bounded. */
   width?: number;
   height?: number;
@@ -358,6 +362,12 @@ export function validatePbrRenderRequest(input: unknown): PbrRenderRequest {
         throw new TypeError(`PbrRenderRequest.cameras[${index}] must be an object`);
       }
       const camera = value as Record<string, unknown>;
+      if (camera.version !== undefined || camera.projection !== undefined) {
+        const parsed = validateResolvedAssetCamera(camera as unknown as ResolvedAssetCameraV1);
+        if (Math.abs(parsed.aspect - result.width! / result.height!) > 1e-9)
+          throw new TypeError('camera aspect must equal width/height');
+        return parsed;
+      }
       const expected = new Set(['position', 'target', 'up', 'fovDeg', 'aspect', 'near', 'far']);
       for (const key of Object.keys(camera)) {
         if (!expected.has(key))
@@ -441,6 +451,7 @@ export function validatePbrRenderRequest(input: unknown): PbrRenderRequest {
 export { GRID_BACKGROUND_HEX, GRID_BACKGROUND_RGB } from '../views/background';
 
 export interface PbrRenderResult {
+  captureCache?: { hit: boolean; reused: number; total: number };
   ok: boolean;
   /** Honest producer identity, e.g. "dawn-vulkan:nvidia-rtx-a4500:NVIDIA: 550.100"
    *  or the CPU fallback's deterministic "cpu-raster:<engine-version>". */
@@ -448,7 +459,7 @@ export interface PbrRenderResult {
   /** Actual renderer backend. Required by hosts for camera mode; optional for legacy ports. */
   backend?: string;
   /** Exact camera transport echoed by a camera-mode host after validation. */
-  cameras?: ResolvedSceneCamera[];
+  cameras?: (ResolvedSceneCamera | ResolvedAssetCameraV1)[];
   width?: number;
   height?: number;
   lightingPresetId?: string;

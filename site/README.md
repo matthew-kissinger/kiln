@@ -1,29 +1,56 @@
-# The gallery
+# Kiln website
 
-A viewer for every program in [`examples/`](../examples), deployed to GitHub Pages by
-[`.github/workflows/pages.yml`](../.github/workflows/pages.yml).
+The home page and gallery load text and static posters first. Three.js is loaded
+when a visitor opens an asset or requests the interactive hero. Models start
+stationary. Source downloads refer to the files produced alongside the displayed
+GLBs, rather than a potentially newer branch on GitHub.
 
-The important thing about it is that it holds no assets of its own. `scripts/build-assets.mjs` runs
-each `*.kiln.js` through the same evaluator the test suite uses and keeps what comes back: the GLB,
-and the triangle count, draw calls, material count and bounds off the engine's integration manifest.
-Edit a program, rebuild, and the mesh on the page is the new one. There is no exported copy sitting
-in the repository waiting to disagree with the file beside it, which is also why the built payload is
-gitignored rather than committed.
+From the repository root:
 
-Attribution on each card is read from the program's own header by
-[`scripts/authorship.ts`](../scripts/authorship.ts), the same parser the README's authorship test
-uses, so the two can never tell different stories about who wrote what.
-
-```bash
-bun install          # from this directory
-bun run assets       # ~1 minute: fifty programs through the engine
-bun run dev
+```sh
+bun run --cwd site assets
+bun site/scripts/verify-assets.mjs
+bun run --cwd site build
+bun run --cwd site preview --host 127.0.0.1 --port 4175
 ```
 
-`bun run assets` needs the engine's own dependencies, so run `bun install` in the repository root
-first. React and three live here and nowhere else; the engine has no browser dependency and this
-directory exists partly to keep it that way.
+Install the site dependencies with `cd site && bun install --frozen-lockfile` if
+they are not present. Asset generation uses the root engine dependencies and
+makes no model calls. It rebuilds the gallery, workbench edit demonstration, and
+the equation-surface example with part-relative camera inspection.
+Run it after engine/source changes; building only the Vite application does not
+regenerate GLBs. Keep the engine tree stable during generation: the build refuses
+to issue a build record if its inputs change.
 
-The viewer is a viewer. Nothing in the authoring loop needs a browser — the models that wrote these
-programs looked at rendered contact sheets, not at a canvas — and this page is for the person
-reading the repository, not for the agent writing to it.
+Validation:
+
+```sh
+bun test site/scripts/provenance.test.ts
+bunx tsc -p site/tsconfig.json
+bunx biome check site/src
+```
+
+Before sharing the page, inspect desktop and mobile layouts, keyboard navigation,
+the hero's first loaded frame, gallery filters, source and GLB downloads, and the
+failed-WebGL/load fallback. Automated bundle checks do not establish visual quality.
+
+[Example attribution and build records](../docs/example-provenance.md) explains
+the distinction between source-header declarations, evaluation evidence and
+new gallery captures and historical evaluation images.
+
+To make a new exact-GLB gallery poster with the local GPU service running:
+
+```sh
+bun site/scripts/build-example-poster.mjs abyssal-surveyor --square
+bun site/scripts/build-hero-poster.mjs abyssal-surveyor
+```
+
+Run these from the repository root after asset generation. They do not call a
+model or edit the asset source. They check the returned camera and material
+receipt, require a stable renderer identity across the request, and save hashes
+and capture settings with the image. `build-example-poster` updates the example's
+source-bound sidecar and the generated index. Use the hero command only when a
+large opening image is needed; source and framing still match its downloadable
+GLB. Review the pixels before featuring an example. If an exact-poster guard
+rejects a later asset rebuild, remove that example's old `posterReceipt` from the
+sidecar, rebuild, then generate and review a new poster.

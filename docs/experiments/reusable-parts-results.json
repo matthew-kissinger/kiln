@@ -1,0 +1,36 @@
+{
+  "experiment": "X4 ordinary reusable parts",
+  "scope": "Offline deterministic assembly comparison; no model or visual-quality claim",
+  "trials": [
+    {
+      "count": 1,
+      "reusableBytes": 1327,
+      "expandedBytes": 1160,
+      "identicalGeometryAndTransforms": true,
+      "editArgumentBytes": 101,
+      "revisedAnchorY": 3.1,
+      "unchangedSiblingAssemblies": 0,
+      "semanticsSha256": "2b16d05811e61d6397a30131ed96a142a57da842744081da0233b52f6eda6d5c"
+    },
+    {
+      "count": 3,
+      "reusableBytes": 1591,
+      "expandedBytes": 3164,
+      "identicalGeometryAndTransforms": true,
+      "editArgumentBytes": 101,
+      "revisedAnchorY": 3.1,
+      "unchangedSiblingAssemblies": 2,
+      "semanticsSha256": "ca5da12edb5bbb5f8cdc32a4e80ec8761ad909ffc547f48378bc0683bdd2d9c4"
+    },
+    {
+      "count": 16,
+      "reusableBytes": 3335,
+      "expandedBytes": 16218,
+      "identicalGeometryAndTransforms": true,
+      "editArgumentBytes": 101,
+      "revisedAnchorY": 3.1,
+      "unchangedSiblingAssemblies": 15,
+      "semanticsSha256": "5ddb6150e63cceaa42c9fa3c95481bd3f529b84db5975bd27809877a437e9243"
+    }
+  ]
+}

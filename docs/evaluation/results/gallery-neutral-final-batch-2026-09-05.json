@@ -1,0 +1,1983 @@
+{
+  "count": 53,
+  "total": 53,
+  "elapsedSeconds": 64.193,
+  "records": [
+    {
+      "name": "abyssal-surveyor",
+      "receiptHash": "f33b63d0949369b245ea17f4111f964cff3355bfb6b8a5d57430868fa3a8416f",
+      "sourceHash": "3fad8e8c92fbcbc535007bc08db6ff2564d08ac0cbfb840b355e58ae85c0b633",
+      "artifactHash": "eb18c8e8ec9b1c6f45f813aa1120285ee16b475d7860018bba4a0a9b7f41eb7e",
+      "imageHash": "40fcb48e399aacf5b3c552be32d6bef97b97cf8d9942f36a70e71d0fa55475b6",
+      "captureIdentity": [
+        "kiln.capture-producer.v1",
+        "sha256:10f346ec6287c8d635dabe4668d72925080e6fe3d059dd7a9252f2694ce595c2",
+        "a3fa7ff0-5d67-45ca-b663-3de687c939da",
+        "dawn-d3d12:nvidia-geforce-rtx-3070:D3D12 driver version 32.0.16.1074"
+      ],
+      "camera": {
+        "version": "kiln.camera.v1",
+        "projection": "orthographic",
+        "position": [
+          6.038903834655833,
+          4.089496835050596,
+          4.325857682002302
+        ],
+        "target": [
+          -0.036977341613745385,
+          1.173073870441199,
+          0.07274085861359743
+        ],
+        "up": [
+          0,
+          1,
+          0
+        ],
+        "aspect": 1,
+        "near": 0.01,
+        "far": 19.92342492049875,
+        "halfHeight": 1.4528095009602613
+      },
+      "previousReceiptReconstructionMatches": true
+    },
+    {
+      "name": "air-defense-radar",
+      "receiptHash": "1319f26668863b46f9296beb64b55226248feab5156979c5a00c46004909232f",
+      "sourceHash": "05fe2ee0c75f0c2e0124b3c75e4ea88f85165e7836e41156c1572daad19cde97",
+      "artifactHash": "ca0d93b7039bf8a936d412169dd09f4415b67ae1ff02ef2c950ac4eea1104d52",
+      "imageHash": "f6494ce9ffc897a2b77ddbc1ccdce8606d8c4455cf992941b0b75890a27ff132",
+      "captureIdentity": [
+        "kiln.capture-producer.v1",
+        "sha256:10f346ec6287c8d635dabe4668d72925080e6fe3d059dd7a9252f2694ce595c2",
+        "a3fa7ff0-5d67-45ca-b663-3de687c939da",
+        "dawn-d3d12:nvidia-geforce-rtx-3070:D3D12 driver version 32.0.16.1074"
+      ],
+      "camera": {
+        "version": "kiln.camera.v1",
+        "projection": "orthographic",
+        "position": [
+          21.559177569910425,
+          13.462045840921116,
+          15.19567430117992
+        ],
+        "target": [
+          0.08756170488359179,
+          3.155670225708235,
+          0.16554319566113904
+        ],
+        "up": [
+          0,
+          1,
+          0
+        ],
+        "aspect": 1,
+        "near": 0.01,
+        "far": 70.40758602710231,
+        "halfHeight": 5.15965042367738
+      },
+      "previousReceiptReconstructionMatches": true
+    },
+    {
+      "name": "aircraft-carrier",
+      "receiptHash": "046d50044343af6479c9bf3f9f9168c08c8f6cd405bc40d421cd92ba8b207ced",
+      "sourceHash": "b9fb1cf515ff9a089198f97a997b39f14621b86282ef85ed5ce05bfd2ed395a5",
+      "artifactHash": "790be350bf1074356171e9e6df5c9345cde38c9cd6feebe2268a8f2182a22bed",
+      "imageHash": "ba16722a492fe7cad9a91d0bdb2f60ad1294e9634578acc6843a9890abedb852",
+      "captureIdentity": [
+        "kiln.capture-producer.v1",
+        "sha256:10f346ec6287c8d635dabe4668d72925080e6fe3d059dd7a9252f2694ce595c2",
+        "a3fa7ff0-5d67-45ca-b663-3de687c939da",
+        "dawn-d3d12:nvidia-geforce-rtx-3070:D3D12 driver version 32.0.16.1074"
+      ],
+      "camera": {
+        "version": "kiln.camera.v1",
+        "projection": "orthographic",
+        "position": [
+          540.610225073139,
+          265.7162378269476,
+          381.69422765775346
+        ],
+        "target": [
+          3.9536460272767973,
+          8.121079884933739,
+          6.034622325650013
+        ],
+        "up": [
+          0,
+          1,
+          0
+        ],
+        "aspect": 1,
+        "near": 0.01,
+        "far": 1759.7508493865164,
+        "halfHeight": 122.36958829467858
+      },
+      "previousReceiptReconstructionMatches": true
+    },
+    {
+      "name": "anglerfish",
+      "receiptHash": "fc6473dfc3ee5a377f1599f95be258be28ac8fca89c47a622ec503e68ecd0f8f",
+      "sourceHash": "ab5898d2061979708b4db6f9277320081c96c9cde7a985a2de35362a7ede40ff",
+      "artifactHash": "27432aa45b662d44ed4d8b806eb8891e892cda3dfb67ddbcc435c792906bf69d",
+      "imageHash": "877db8f84bd294b02dc598cc280ffb20ebeddbad8418ee54c147d39c0c5f30a8",
+      "captureIdentity": [
+        "kiln.capture-producer.v1",
+        "sha256:10f346ec6287c8d635dabe4668d72925080e6fe3d059dd7a9252f2694ce595c2",
+        "a3fa7ff0-5d67-45ca-b663-3de687c939da",
+        "dawn-d3d12:nvidia-geforce-rtx-3070:D3D12 driver version 32.0.16.1074"
+      ],
+      "camera": {
+        "version": "kiln.camera.v1",
+        "projection": "orthographic",
+        "position": [
+          1.5315856667116787,
+          0.7911391142245014,
+          1.0776472604239862
+        ],
+        "target": [
+          0.006777256382025588,
+          0.05923107726626799,
+          0.01028137319322927
+        ],
+        "up": [
+          0,
+          1,
+          0
+        ],
+        "aspect": 1,
+        "near": 0.01,
+        "far": 5,
+        "halfHeight": 0.13936720171201783
+      },
+      "previousReceiptReconstructionMatches": true
+    },
+    {
+      "name": "arcade-cabinet",
+      "receiptHash": "5fd8a1d623d589758b78e09654329533819b808b6bd26361e4ae23498dcd8764",
+      "sourceHash": "b824524867c88ffc1fc0c67fb9152c16cbfbb5bb207f91f7e27ee42994470409",
+      "artifactHash": "764355c39e44b80f5dd81e286d8b8cf8ad6fe9d08c2748f0c1ce565b6c931b23",
+      "imageHash": "5415c2261488c3233a952c2a6ef5b17abed46440e0ae59314b896fb59c0217fe",
+      "captureIdentity": [
+        "kiln.capture-producer.v1",
+        "sha256:10f346ec6287c8d635dabe4668d72925080e6fe3d059dd7a9252f2694ce595c2",
+        "a3fa7ff0-5d67-45ca-b663-3de687c939da",
+        "dawn-d3d12:nvidia-geforce-rtx-3070:D3D12 driver version 32.0.16.1074"
+      ],
+      "camera": {
+        "version": "kiln.camera.v1",
+        "projection": "orthographic",
+        "position": [
+          3.1515457558925464,
+          2.4081336515935527,
+          2.192251955946968
+        ],
+        "target": [
+          0.0056951555794512035,
+          0.8981253634432671,
+          -0.009843464272198637
+        ],
+        "up": [
+          0,
+          1,
+          0
+        ],
+        "aspect": 1,
+        "near": 0.01,
+        "far": 10.31556023367219,
+        "halfHeight": 1.0272062455756625
+      },
+      "previousReceiptReconstructionMatches": true
+    },
+    {
+      "name": "astronomical-clock",
+      "receiptHash": "34c6d9c6fd85a8cad924804cac25c842efe23821bca3decd57638234c0550fb5",
+      "sourceHash": "4c027f3366e18a05a7d8b75fc98a3c10f0f3b86977cb81ea03555cdb67d2f61c",
+      "artifactHash": "c498401d68f07a86bde8beda5db900a879aea8b94bbb9f012ff6e72fd55bc07e",
+      "imageHash": "d135991fae9c6731b7f437ccb730f5a159709ced905e38bca112c47c97aca3fd",
+      "captureIdentity": [
+        "kiln.capture-producer.v1",
+        "sha256:10f346ec6287c8d635dabe4668d72925080e6fe3d059dd7a9252f2694ce595c2",
+        "a3fa7ff0-5d67-45ca-b663-3de687c939da",
+        "dawn-d3d12:nvidia-geforce-rtx-3070:D3D12 driver version 32.0.16.1074"
+      ],
+      "camera": {
+        "version": "kiln.camera.v1",
+        "projection": "orthographic",
+        "position": [
+          12.824520883280114,
+          9.709235791527004,
+          9.081164584917477
+        ],
+        "target": [
+          0.005338457708968139,
+          3.5560282272528534,
+          0.10773688701767659
+        ],
+        "up": [
+          0,
+          1,
+          0
+        ],
+        "aspect": 1,
+        "near": 0.01,
+        "far": 42.03538732711911,
+        "halfHeight": 4.196797261518554
+      },
+      "previousReceiptReconstructionMatches": true
+    },
+    {
+      "name": "bench-refractor",
+      "receiptHash": "4c51cb5c000811ca7a6a17c98d0973d3e8de40d14ab76ab3d5876613af7d6df7",
+      "sourceHash": "32223e1d94c3034d14f5d3f401fd7fbb5da3e471ddf92c3acdc319a85a03106d",
+      "artifactHash": "9869570c85b37881853a4e1a78ee101244abcead308d35374e37287e388be749",
+      "imageHash": "7a6c8027106509c69c521359fae3010c2951e5c77170db45cc2d3986a59ac399",
+      "captureIdentity": [
+        "kiln.capture-producer.v1",
+        "sha256:10f346ec6287c8d635dabe4668d72925080e6fe3d059dd7a9252f2694ce595c2",
+        "a3fa7ff0-5d67-45ca-b663-3de687c939da",
+        "dawn-d3d12:nvidia-geforce-rtx-3070:D3D12 driver version 32.0.16.1074"
+      ],
+      "camera": {
+        "version": "kiln.camera.v1",
+        "projection": "orthographic",
+        "position": [
+          2.3178060024917273,
+          1.6131278104837525,
+          1.6364641988235813
+        ],
+        "target": [
+          0.034739694734365556,
+          0.5172559827602189,
+          0.038317783393428256
+        ],
+        "up": [
+          0,
+          1,
+          0
+        ],
+        "aspect": 1,
+        "near": 0.01,
+        "far": 7.486403840282395,
+        "halfHeight": 0.6540954073851797
+      },
+      "previousReceiptReconstructionMatches": true
+    },
+    {
+      "name": "blast-furnace",
+      "receiptHash": "16fd467d6ed2319a2ef5265ab34ede4df38117b714db3a138da98bb0b9abefc8",
+      "sourceHash": "8879da09bc2e38dc0bd398dd43ab62e631900193308548a20be3806165e34567",
+      "artifactHash": "3b056d11e1ebcf0cd37b57998c73009fd1fe71a1a454f8a41a72f8706ae2f22b",
+      "imageHash": "1379df4f7b1390678cd2806f54109ff8a71fc549fec7ffa7b89448049655d7d4",
+      "captureIdentity": [
+        "kiln.capture-producer.v1",
+        "sha256:10f346ec6287c8d635dabe4668d72925080e6fe3d059dd7a9252f2694ce595c2",
+        "a3fa7ff0-5d67-45ca-b663-3de687c939da",
+        "dawn-d3d12:nvidia-geforce-rtx-3070:D3D12 driver version 32.0.16.1074"
+      ],
+      "camera": {
+        "version": "kiln.camera.v1",
+        "projection": "orthographic",
+        "position": [
+          60.1835370160465,
+          38.42885280207343,
+          45.82847591123254
+        ],
+        "target": [
+          -0.3578019165388211,
+          9.369010114432475,
+          3.449538658422825
+        ],
+        "up": [
+          0,
+          1,
+          0
+        ],
+        "aspect": 1,
+        "near": 0.01,
+        "far": 198.52113394199046,
+        "halfHeight": 17.800271169037714
+      },
+      "previousReceiptReconstructionMatches": true
+    },
+    {
+      "name": "cable-stayed-bridge",
+      "receiptHash": "3d1de056dcc15e45a18eb282d239585a496d41faf532795c7f12405c3350a81a",
+      "sourceHash": "601194504f7a18d6dfb7e914b343e608885f3778ca17447d6555cae5104a1508",
+      "artifactHash": "67be59e264c9c568b2228f6c9a26e1b8b7c220241344e56e644cdf3fea814855",
+      "imageHash": "eff6501d047e18fb7a94a7d6fe74590b8a87a580d990a5f14c7336dc988b165b",
+      "captureIdentity": [
+        "kiln.capture-producer.v1",
+        "sha256:10f346ec6287c8d635dabe4668d72925080e6fe3d059dd7a9252f2694ce595c2",
+        "a3fa7ff0-5d67-45ca-b663-3de687c939da",
+        "dawn-d3d12:nvidia-geforce-rtx-3070:D3D12 driver version 32.0.16.1074"
+      ],
+      "camera": {
+        "version": "kiln.camera.v1",
+        "projection": "orthographic",
+        "position": [
+          157.4611377161354,
+          83.1358427289908,
+          110.22279640129474
+        ],
+        "target": [
+          2.2042790024700167,
+          8.612550546431422,
+          1.5429953017290114
+        ],
+        "up": [
+          0,
+          1,
+          0
+        ],
+        "aspect": 1,
+        "near": 0.01,
+        "far": 509.1028409270772,
+        "halfHeight": 35.141772287577936
+      },
+      "previousReceiptReconstructionMatches": true
+    },
+    {
+      "name": "cafe-racer",
+      "receiptHash": "4523745a5ddb4b52656e4fb0ee1cadb1552ff0aa43a38505233417b7405df325",
+      "sourceHash": "17553756d649fbd5d49b67cfa8a2d3b1918d1d331fd58b6783b6ea4e06f58006",
+      "artifactHash": "c825f5f6fc0fb1aa8782a304ff54e9593be3edabc2acd46d50ef42e34d1bcf49",
+      "imageHash": "56a8fb68d511c4c6c9d1c98b70df02d84775a95d2c86859ea34f83f25e1389fa",
+      "captureIdentity": [
+        "kiln.capture-producer.v1",
+        "sha256:10f346ec6287c8d635dabe4668d72925080e6fe3d059dd7a9252f2694ce595c2",
+        "a3fa7ff0-5d67-45ca-b663-3de687c939da",
+        "dawn-d3d12:nvidia-geforce-rtx-3070:D3D12 driver version 32.0.16.1074"
+      ],
+      "camera": {
+        "version": "kiln.camera.v1",
+        "projection": "orthographic",
+        "position": [
+          3.9214538019419187,
+          2.396862434815737,
+          2.756845864486131
+        ],
+        "target": [
+          -0.019774848570303184,
+          0.50507268256987,
+          -0.002014190872424097
+        ],
+        "up": [
+          0,
+          1,
+          0
+        ],
+        "aspect": 1,
+        "near": 0.01,
+        "far": 12.9236847849631,
+        "halfHeight": 0.8583519356252477
+      },
+      "previousReceiptReconstructionMatches": true
+    },
+    {
+      "name": "carousel",
+      "receiptHash": "d07c9879fbda3a683fac767b6e4969e7c106ff5111d8a1290272596384413615",
+      "sourceHash": "f93b8b3c92a3cecba5620c61e7c4deb2d94470ca2c7fcb098579d5fa0d16a773",
+      "artifactHash": "b5217272c3fda0e28e8ad88cf628cc74dc5a7d86a9509a6e56b156d2dd45fd7f",
+      "imageHash": "e836e1b4b9d4c95a57a3b8a806735503f1d487a35929a3e1d94b578f61d0861e",
+      "captureIdentity": [
+        "kiln.capture-producer.v1",
+        "sha256:10f346ec6287c8d635dabe4668d72925080e6fe3d059dd7a9252f2694ce595c2",
+        "a3fa7ff0-5d67-45ca-b663-3de687c939da",
+        "dawn-d3d12:nvidia-geforce-rtx-3070:D3D12 driver version 32.0.16.1074"
+      ],
+      "camera": {
+        "version": "kiln.camera.v1",
+        "projection": "orthographic",
+        "position": [
+          17.447508186313915,
+          10.646495966068501,
+          12.213255730419739
+        ],
+        "target": [
+          0.18646118447460736,
+          2.361193405185635,
+          0.13052282913222513
+        ],
+        "up": [
+          0,
+          1,
+          0
+        ],
+        "aspect": 1,
+        "near": 0.01,
+        "far": 56.600707619744796,
+        "halfHeight": 3.8158705564242728
+      },
+      "previousReceiptReconstructionMatches": true
+    },
+    {
+      "name": "cathedral",
+      "receiptHash": "2bb1b8e6136d36c9b116c9053290d88045c89f772864a310a5f43cd94db0d0f1",
+      "sourceHash": "eefd46ab244dff7ab3d9f2b1acae42265afed0ef3059130c32589804ccb20c98",
+      "artifactHash": "490eaa7dd5c3f6f4f41489e9ac609c26cc1245ba4e8464ed5d0d37d369a9e1ca",
+      "imageHash": "9be0ffc118e25e918289947717cebc9b0ecb5b9d1f218ed28620efdf8a60f7cf",
+      "captureIdentity": [
+        "kiln.capture-producer.v1",
+        "sha256:10f346ec6287c8d635dabe4668d72925080e6fe3d059dd7a9252f2694ce595c2",
+        "a3fa7ff0-5d67-45ca-b663-3de687c939da",
+        "dawn-d3d12:nvidia-geforce-rtx-3070:D3D12 driver version 32.0.16.1074"
+      ],
+      "camera": {
+        "version": "kiln.camera.v1",
+        "projection": "orthographic",
+        "position": [
+          129.72368231595198,
+          84.38085075016318,
+          94.30657762116637
+        ],
+        "target": [
+          -2.6391955032284082,
+          20.846669396956592,
+          1.652563147740114
+        ],
+        "up": [
+          0,
+          1,
+          0
+        ],
+        "aspect": 1,
+        "near": 0.01,
+        "far": 434.03117704002057,
+        "halfHeight": 34.77475656219223
+      },
+      "previousReceiptReconstructionMatches": true
+    },
+    {
+      "name": "clock-tower",
+      "receiptHash": "ab62d69a0ee6acca33766dbb4f55edf20edf6822cc67b3bac5e066727bb60b00",
+      "sourceHash": "641fe2de7491061214b88d4bc06a824dcfc0e582f408f6af8986bd6498f0e731",
+      "artifactHash": "dfd7e07b394e511aad15f04d7023d84285273c3156d1428210baae1d6fac0957",
+      "imageHash": "f675656cc58c937ecfb4893f97946e204119f0400d4e62474b5e68d2a5705585",
+      "captureIdentity": [
+        "kiln.capture-producer.v1",
+        "sha256:10f346ec6287c8d635dabe4668d72925080e6fe3d059dd7a9252f2694ce595c2",
+        "a3fa7ff0-5d67-45ca-b663-3de687c939da",
+        "dawn-d3d12:nvidia-geforce-rtx-3070:D3D12 driver version 32.0.16.1074"
+      ],
+      "camera": {
+        "version": "kiln.camera.v1",
+        "projection": "orthographic",
+        "position": [
+          42.21982086644186,
+          32.140950229754665,
+          29.553874606509297
+        ],
+        "target": [
+          0.25795781017827707,
+          11.99925596274815,
+          0.18057046712479394
+        ],
+        "up": [
+          0,
+          1,
+          0
+        ],
+        "aspect": 1,
+        "near": 0.01,
+        "far": 137.59716555862815,
+        "halfHeight": 14.318665873645894
+      },
+      "previousReceiptReconstructionMatches": true
+    },
+    {
+      "name": "comms-satellite",
+      "receiptHash": "35d9a44db57c178353f2fe6c785ce207afdd0fcfc128b9bf43b622d5534a81d6",
+      "sourceHash": "7a7754a7b3945001db47534c05995b4af8e2fbf730426a1f9ee45df7f95c7198",
+      "artifactHash": "4ccd8959415a3e8ca67d47a3404299adeef517c277b4f516c66631de55e93fff",
+      "imageHash": "c58de5c23f92d5bcdfcc5633076af530525b10e455c8beeb393b4a3e5afe5f09",
+      "captureIdentity": [
+        "kiln.capture-producer.v1",
+        "sha256:10f346ec6287c8d635dabe4668d72925080e6fe3d059dd7a9252f2694ce595c2",
+        "a3fa7ff0-5d67-45ca-b663-3de687c939da",
+        "dawn-d3d12:nvidia-geforce-rtx-3070:D3D12 driver version 32.0.16.1074"
+      ],
+      "camera": {
+        "version": "kiln.camera.v1",
+        "projection": "orthographic",
+        "position": [
+          34.849667744279785,
+          19.231158703030477,
+          24.39476742099584
+        ],
+        "target": [
+          0.7513685092501742,
+          2.8639750702162665,
+          0.5259579564751213
+        ],
+        "up": [
+          0,
+          1,
+          0
+        ],
+        "aspect": 1,
+        "near": 0.01,
+        "far": 111.81174960747293,
+        "halfHeight": 10.441602397477297
+      },
+      "previousReceiptReconstructionMatches": true
+    },
+    {
+      "name": "crawler-crane",
+      "receiptHash": "76ab3991ce49a5453bcb7211cef535d43a6bf3329bc997d68632bb32f4093de1",
+      "sourceHash": "228406376aa8a86dfb4d0fb0335ae37b33ae36b2e063ec3ce14ab6b7fed08570",
+      "artifactHash": "8c479df7a86c6efe234219a41e5f6cfec3a082c81228579791e3fe391abaa2ce",
+      "imageHash": "a112ce520beda4277cd04c4dc6804844f10ec2169270d0e73718e9ae56826bfd",
+      "captureIdentity": [
+        "kiln.capture-producer.v1",
+        "sha256:10f346ec6287c8d635dabe4668d72925080e6fe3d059dd7a9252f2694ce595c2",
+        "a3fa7ff0-5d67-45ca-b663-3de687c939da",
+        "dawn-d3d12:nvidia-geforce-rtx-3070:D3D12 driver version 32.0.16.1074"
+      ],
+      "camera": {
+        "version": "kiln.camera.v1",
+        "projection": "orthographic",
+        "position": [
+          27.842645760081034,
+          18.11915020567782,
+          18.814608554902623
+        ],
+        "target": [
+          1.9735421745981396,
+          5.7019804846460325,
+          0.7062360450646008
+        ],
+        "up": [
+          0,
+          1,
+          0
+        ],
+        "aspect": 1,
+        "near": 0.01,
+        "far": 84.82739015024902,
+        "halfHeight": 6.319543508211379
+      },
+      "previousReceiptReconstructionMatches": true
+    },
+    {
+      "name": "deep-sea-diver",
+      "receiptHash": "f5ceed3e00b55642d0becc331a4f4ffa0891ccb3ec6148251670e27cb3e1b420",
+      "sourceHash": "1e461d16ca2e965bdb8fd1e32d9cfff40bf78e835c823065851e6a8558afb8eb",
+      "artifactHash": "f5859987780a73e576da68c9d7814fe573a44728884860188582dfe9e2bf84d7",
+      "imageHash": "ce96b812ec53744063bd72f468bf1862ebdc2786ef466708aa600782b98bbc94",
+      "captureIdentity": [
+        "kiln.capture-producer.v1",
+        "sha256:10f346ec6287c8d635dabe4668d72925080e6fe3d059dd7a9252f2694ce595c2",
+        "a3fa7ff0-5d67-45ca-b663-3de687c939da",
+        "dawn-d3d12:nvidia-geforce-rtx-3070:D3D12 driver version 32.0.16.1074"
+      ],
+      "camera": {
+        "version": "kiln.camera.v1",
+        "projection": "orthographic",
+        "position": [
+          3.730518422891793,
+          2.7239052868716978,
+          2.565083872662568
+        ],
+        "target": [
+          0.027727154053463418,
+          0.9465654778292996,
+          -0.026870015524262297
+        ],
+        "up": [
+          0,
+          1,
+          0
+        ],
+        "aspect": 1,
+        "near": 0.01,
+        "far": 12.141824650736979,
+        "halfHeight": 1.111046605992177
+      },
+      "previousReceiptReconstructionMatches": true
+    },
+    {
+      "name": "diving-helmet",
+      "receiptHash": "dd4f8f5f483051a5413cc4a1cb60f7c262691c7f841b753823c869eb876349fc",
+      "sourceHash": "e04bda302f223945b734687c5d23700e42259b87ec7ebbb9da4ba7b22940b679",
+      "artifactHash": "75c2817dd6e7bb0fd26fd702856ddb1eed11f4e8fbe7685315f509dd27859654",
+      "imageHash": "e38e166a9122f57f04b7ea81c2134c00060aa9ebe9754409952b34c411dfa070",
+      "captureIdentity": [
+        "kiln.capture-producer.v1",
+        "sha256:10f346ec6287c8d635dabe4668d72925080e6fe3d059dd7a9252f2694ce595c2",
+        "a3fa7ff0-5d67-45ca-b663-3de687c939da",
+        "dawn-d3d12:nvidia-geforce-rtx-3070:D3D12 driver version 32.0.16.1074"
+      ],
+      "camera": {
+        "version": "kiln.camera.v1",
+        "projection": "orthographic",
+        "position": [
+          1.5151087550445754,
+          0.9563143695585614,
+          1.076587111616835
+        ],
+        "target": [
+          -0.00969965528507764,
+          0.22440633260032794,
+          0.009221224386077982
+        ],
+        "up": [
+          0,
+          1,
+          0
+        ],
+        "aspect": 1,
+        "near": 0.01,
+        "far": 5,
+        "halfHeight": 0.3185500056645611
+      },
+      "previousReceiptReconstructionMatches": true
+    },
+    {
+      "name": "drilling-rig",
+      "receiptHash": "285330a7e1ff7c0bdbf228c4d3feb39f64e30b06ad16f40d0a6d52b89a261ec9",
+      "sourceHash": "013e4ff5f7b414f8f387faa12934217959a78a1a436904cc1b447b1068f7e6dd",
+      "artifactHash": "8918a1fdb276872b79fe5cb3c79e2774ded0c04602a33f935a254699953b739f",
+      "imageHash": "985b5ecd0c2534546035bf09e1fd240e81996e8218cfe5c52ae494512aca594d",
+      "captureIdentity": [
+        "kiln.capture-producer.v1",
+        "sha256:10f346ec6287c8d635dabe4668d72925080e6fe3d059dd7a9252f2694ce595c2",
+        "a3fa7ff0-5d67-45ca-b663-3de687c939da",
+        "dawn-d3d12:nvidia-geforce-rtx-3070:D3D12 driver version 32.0.16.1074"
+      ],
+      "camera": {
+        "version": "kiln.camera.v1",
+        "projection": "orthographic",
+        "position": [
+          44.59261989284042,
+          29.717838550543412,
+          29.84983392618038
+        ],
+        "target": [
+          3.7331592546986068,
+          10.105297444235342,
+          1.248211479481117
+        ],
+        "up": [
+          0,
+          1,
+          0
+        ],
+        "aspect": 1,
+        "near": 0.01,
+        "far": 133.98227725314118,
+        "halfHeight": 12.954834544452728
+      },
+      "previousReceiptReconstructionMatches": true
+    },
+    {
+      "name": "espresso-machine",
+      "receiptHash": "1ff8bcf63a611409ac5467f118daf49d51bac7177e51c925e242fb77d1edea86",
+      "sourceHash": "ad5fc985db72c19ab43f6ac7d77d0d06a8d7be42a3e363bee5576a2992d58a6c",
+      "artifactHash": "1a5933c8e9883f9dfe63ca2764bfa9ac92cccd616d5873ccdbbadfca37b47711",
+      "imageHash": "562bf57dfeb0c9b750c1437eaf572bf39a5f3ddab8b1a30a2862faa495bb97a4",
+      "captureIdentity": [
+        "kiln.capture-producer.v1",
+        "sha256:10f346ec6287c8d635dabe4668d72925080e6fe3d059dd7a9252f2694ce595c2",
+        "a3fa7ff0-5d67-45ca-b663-3de687c939da",
+        "dawn-d3d12:nvidia-geforce-rtx-3070:D3D12 driver version 32.0.16.1074"
+      ],
+      "camera": {
+        "version": "kiln.camera.v1",
+        "projection": "orthographic",
+        "position": [
+          2.4105013384783534,
+          1.547848937552542,
+          1.641525936080824
+        ],
+        "target": [
+          0.10571786457968572,
+          0.44155287008118144,
+          0.028177504351757178
+        ],
+        "up": [
+          0,
+          1,
+          0
+        ],
+        "aspect": 1,
+        "near": 0.01,
+        "far": 7.557616610339882,
+        "halfHeight": 0.5925701065986592
+      },
+      "previousReceiptReconstructionMatches": true
+    },
+    {
+      "name": "excavator",
+      "receiptHash": "0e357a02c0de6035ddcf2e6227150cee8ced96ce692fc511004d45ca0dafb1fa",
+      "sourceHash": "5efa00cbc9e610b656f529a692f8e942b8dbd6bc7013715dabc9f821a5287d05",
+      "artifactHash": "fdb06dc365fc88b52a9e2bb8acc3f7588ca0a0c536bce1b567a4b7ea826c82bf",
+      "imageHash": "c4e387cd551d0768014ff956d20d61247f5408d0ad7a077abe08605aa00838e5",
+      "captureIdentity": [
+        "kiln.capture-producer.v1",
+        "sha256:10f346ec6287c8d635dabe4668d72925080e6fe3d059dd7a9252f2694ce595c2",
+        "a3fa7ff0-5d67-45ca-b663-3de687c939da",
+        "dawn-d3d12:nvidia-geforce-rtx-3070:D3D12 driver version 32.0.16.1074"
+      ],
+      "camera": {
+        "version": "kiln.camera.v1",
+        "projection": "orthographic",
+        "position": [
+          15.548282430043475,
+          8.286864083248439,
+          9.948545981861097
+        ],
+        "target": [
+          1.509726460063908,
+          1.5483572176582467,
+          0.12155680287540102
+        ],
+        "up": [
+          0,
+          1,
+          0
+        ],
+        "aspect": 1,
+        "near": 0.01,
+        "far": 46.033835709709024,
+        "halfHeight": 3.3948927508695177
+      },
+      "previousReceiptReconstructionMatches": true
+    },
+    {
+      "name": "ferris-wheel",
+      "receiptHash": "be71b5e66c4128981d08b37ed62b8fb6cc118e889aeed312718a894d6699f6f0",
+      "sourceHash": "5fcdd06693b1653a8b9f90041c15c00ef8068413eb3f01d7fbfd46c7fb6311a1",
+      "artifactHash": "299fc7e7f55a6514017bec784a7e2f2fce6e3c691605efe056bcfed717baf265",
+      "imageHash": "76ed46ddac590e48c06cd2960941b4da72c212929b25f43a6f39e6dc486ee4e7",
+      "captureIdentity": [
+        "kiln.capture-producer.v1",
+        "sha256:10f346ec6287c8d635dabe4668d72925080e6fe3d059dd7a9252f2694ce595c2",
+        "a3fa7ff0-5d67-45ca-b663-3de687c939da",
+        "dawn-d3d12:nvidia-geforce-rtx-3070:D3D12 driver version 32.0.16.1074"
+      ],
+      "camera": {
+        "version": "kiln.camera.v1",
+        "projection": "orthographic",
+        "position": [
+          18.69737345237566,
+          12.99780695900678,
+          13.088161416662963
+        ],
+        "target": [
+          0.20346867212630726,
+          4.1207326644870905,
+          0.14242807048841508
+        ],
+        "up": [
+          0,
+          1,
+          0
+        ],
+        "aspect": 1,
+        "near": 0.01,
+        "far": 60.643372160608365,
+        "halfHeight": 5.27515385904506
+      },
+      "previousReceiptReconstructionMatches": true
+    },
+    {
+      "name": "field-gun",
+      "receiptHash": "d07a6370f344adcf42f4a417cabb77020ce948fff924b5d9a860c43d637b8662",
+      "sourceHash": "f27ff0adf535ef28afb3f2818048d406ef639cdfd2bf163e548e07440832e304",
+      "artifactHash": "3669237760efeeac78aa5a337f793d506020fd701ebb93229fc2d71695c2f717",
+      "imageHash": "a485ebedfd9cd1a6044fb82d8e246bd0fa8d4fec7f9e1a51e185b497a4b4d6bf",
+      "captureIdentity": [
+        "kiln.capture-producer.v1",
+        "sha256:10f346ec6287c8d635dabe4668d72925080e6fe3d059dd7a9252f2694ce595c2",
+        "a3fa7ff0-5d67-45ca-b663-3de687c939da",
+        "dawn-d3d12:nvidia-geforce-rtx-3070:D3D12 driver version 32.0.16.1074"
+      ],
+      "camera": {
+        "version": "kiln.camera.v1",
+        "projection": "orthographic",
+        "position": [
+          7.055329877357256,
+          3.970394508014958,
+          5.278361535151203
+        ],
+        "target": [
+          -0.4074060600188154,
+          0.3882812580744435,
+          0.05444637898795354
+        ],
+        "up": [
+          0,
+          1,
+          0
+        ],
+        "aspect": 1,
+        "near": 0.01,
+        "far": 24.47106104222851,
+        "halfHeight": 1.5486872501058047
+      },
+      "previousReceiptReconstructionMatches": true
+    },
+    {
+      "name": "fighter-jet",
+      "receiptHash": "b66574a4f6d4db19153daf83e38fb4fba35c7835a57617791bfc339b30adec87",
+      "sourceHash": "08813f64ca19872516d3ecaf5c10e0175cd3e8608289137b2e19d9dfe2f8493e",
+      "artifactHash": "727cb8a940817a4bee08b6e047e31a09a698c8c02492c28be4b0e4335a9918a6",
+      "imageHash": "934a10b6fda4e54d55fe3c22d37e042abfb471d89a35c13ee20aefc71ed47606",
+      "captureIdentity": [
+        "kiln.capture-producer.v1",
+        "sha256:10f346ec6287c8d635dabe4668d72925080e6fe3d059dd7a9252f2694ce595c2",
+        "a3fa7ff0-5d67-45ca-b663-3de687c939da",
+        "dawn-d3d12:nvidia-geforce-rtx-3070:D3D12 driver version 32.0.16.1074"
+      ],
+      "camera": {
+        "version": "kiln.camera.v1",
+        "projection": "orthographic",
+        "position": [
+          31.183687185302134,
+          18.02661582175608,
+          22.575214288061684
+        ],
+        "target": [
+          -0.07302634541048528,
+          3.0233933270140225,
+          0.6955148165628533
+        ],
+        "up": [
+          0,
+          1,
+          0
+        ],
+        "aspect": 1,
+        "near": 0.01,
+        "far": 102.49390454226028,
+        "halfHeight": 6.480246763750492
+      },
+      "previousReceiptReconstructionMatches": true
+    },
+    {
+      "name": "gothic-gatehouse",
+      "receiptHash": "22a6b390abd5241208d01e850a8ec3927f6a1355e38f3bedcd705be2359c765d",
+      "sourceHash": "cdda0ed41156c36ace847ea4dd0296316f09f0922708fb5f7024c2c212e73a55",
+      "artifactHash": "0434b1a54ab25216682353346c4533f2569b159394608d46699b6fb6d2c5872f",
+      "imageHash": "8b383c02f0b1ca7a2c671e0dd147e81a5f1d39df943374af5a2de5f180b1ecf0",
+      "captureIdentity": [
+        "kiln.capture-producer.v1",
+        "sha256:10f346ec6287c8d635dabe4668d72925080e6fe3d059dd7a9252f2694ce595c2",
+        "a3fa7ff0-5d67-45ca-b663-3de687c939da",
+        "dawn-d3d12:nvidia-geforce-rtx-3070:D3D12 driver version 32.0.16.1074"
+      ],
+      "camera": {
+        "version": "kiln.camera.v1",
+        "projection": "orthographic",
+        "position": [
+          41.20723846304261,
+          25.50893696988753,
+          28.019740022785946
+        ],
+        "target": [
+          3.1769279393181096,
+          7.254387918499772,
+          1.3985226561788044
+        ],
+        "up": [
+          0,
+          1,
+          0
+        ],
+        "aspect": 1,
+        "near": 0.01,
+        "far": 124.70520973681737,
+        "halfHeight": 9.866124421990706
+      },
+      "previousReceiptReconstructionMatches": true
+    },
+    {
+      "name": "gramophone",
+      "receiptHash": "48e8892a06b18fbf237aaceab5318181db3819cacaf9b51d6c5d3b1e97926c48",
+      "sourceHash": "13f50784b88b7e018bd3eb27e1c04c99845b30d9f4e66ef8159ffddaf6c16139",
+      "artifactHash": "6375f5e8ca90cd333e3a289a193db9de85ef8be3db9154a4e981df9037535bbc",
+      "imageHash": "360286d1113b691d91f1d6e8143b47aa045f8ac7956f632eeb858a4848f8dda5",
+      "captureIdentity": [
+        "kiln.capture-producer.v1",
+        "sha256:10f346ec6287c8d635dabe4668d72925080e6fe3d059dd7a9252f2694ce595c2",
+        "a3fa7ff0-5d67-45ca-b663-3de687c939da",
+        "dawn-d3d12:nvidia-geforce-rtx-3070:D3D12 driver version 32.0.16.1074"
+      ],
+      "camera": {
+        "version": "kiln.camera.v1",
+        "projection": "orthographic",
+        "position": [
+          1.8503817563095861,
+          1.1654954874790038,
+          1.2752307410363184
+        ],
+        "target": [
+          0.08915387168103005,
+          0.3201061028572967,
+          0.04237122179632925
+        ],
+        "up": [
+          0,
+          1,
+          0
+        ],
+        "aspect": 1,
+        "near": 0.01,
+        "far": 5.775243213171256,
+        "halfHeight": 0.386341249425208
+      },
+      "previousReceiptReconstructionMatches": true
+    },
+    {
+      "name": "harbour-crane",
+      "receiptHash": "016bbf81598eab5490b8cf29aa68ecd0358f6155ee8d9a9e3e4bdba044f5866e",
+      "sourceHash": "0aa97fb40d1e35a3b12a33908d885fc461978975af9d3a5314f9ae784486aff8",
+      "artifactHash": "ef7aeef0b20ed4cec37f5fc8cf2f290a88eb52c1e622b6628761e102c65b0a0d",
+      "imageHash": "b034621b8e5b4c5d452b6e022172a13acf7b4c25663b4f5d21c88140244ab333",
+      "captureIdentity": [
+        "kiln.capture-producer.v1",
+        "sha256:10f346ec6287c8d635dabe4668d72925080e6fe3d059dd7a9252f2694ce595c2",
+        "a3fa7ff0-5d67-45ca-b663-3de687c939da",
+        "dawn-d3d12:nvidia-geforce-rtx-3070:D3D12 driver version 32.0.16.1074"
+      ],
+      "camera": {
+        "version": "kiln.camera.v1",
+        "projection": "orthographic",
+        "position": [
+          108.18945932256348,
+          67.62471637469396,
+          70.88262153205292
+        ],
+        "target": [
+          8.057537524584381,
+          19.561393911663988,
+          0.7902762734675548
+        ],
+        "up": [
+          0,
+          1,
+          0
+        ],
+        "aspect": 1,
+        "near": 0.01,
+        "far": 328.3426334733138,
+        "halfHeight": 22.484019974660928
+      },
+      "previousReceiptReconstructionMatches": true
+    },
+    {
+      "name": "hot-air-balloon",
+      "receiptHash": "d4c9a770584e5b54b10c1f5854f1b6ee6ed294d5785f3d01cf934b58f1b7d920",
+      "sourceHash": "1e4847824a88156db594e4b67cc722d30b9b61a66c38070fc7d1229aa3e87e26",
+      "artifactHash": "eef1687ac74589f2b1611ab3f37356fb4eb7869833cb8074f09f425d9137c8db",
+      "imageHash": "bacb494367baaa94a0243f4b0d64e3fe67f039af88e9e5c465483b657637f5a1",
+      "captureIdentity": [
+        "kiln.capture-producer.v1",
+        "sha256:10f346ec6287c8d635dabe4668d72925080e6fe3d059dd7a9252f2694ce595c2",
+        "a3fa7ff0-5d67-45ca-b663-3de687c939da",
+        "dawn-d3d12:nvidia-geforce-rtx-3070:D3D12 driver version 32.0.16.1074"
+      ],
+      "camera": {
+        "version": "kiln.camera.v1",
+        "projection": "orthographic",
+        "position": [
+          28.597828086139128,
+          20.36462313817747,
+          20.018479660297388
+        ],
+        "target": [
+          0.04040949266243396,
+          6.6570622133086585,
+          0.028286644863703768
+        ],
+        "up": [
+          0,
+          1,
+          0
+        ],
+        "aspect": 1,
+        "near": 0.01,
+        "far": 93.64264520059533,
+        "halfHeight": 7.246720261537305
+      },
+      "previousReceiptReconstructionMatches": true
+    },
+    {
+      "name": "lighthouse",
+      "receiptHash": "624728f874abdf9190a95738c2f423b640b9414a279e06a7dde497d3d8809e1b",
+      "sourceHash": "432847b5d3f7ad1f164602484559379d4d9ff0a98ce05d8b7abd55c229a5db08",
+      "artifactHash": "b1ecd6eb6c637281b8b1b1c30f1cc64fb66bcd1219c3115288e72ad89ae59b84",
+      "imageHash": "1906eb8846f413470a9dccda1adc7378b4063b4444dec7a824993efbcffd35b1",
+      "captureIdentity": [
+        "kiln.capture-producer.v1",
+        "sha256:10f346ec6287c8d635dabe4668d72925080e6fe3d059dd7a9252f2694ce595c2",
+        "a3fa7ff0-5d67-45ca-b663-3de687c939da",
+        "dawn-d3d12:nvidia-geforce-rtx-3070:D3D12 driver version 32.0.16.1074"
+      ],
+      "camera": {
+        "version": "kiln.camera.v1",
+        "projection": "orthographic",
+        "position": [
+          33.582615189404855,
+          21.59498000395605,
+          23.507830632583396
+        ],
+        "target": [
+          0.33262272595906506,
+          5.6349836215020686,
+          0.23283590817134553
+        ],
+        "up": [
+          0,
+          1,
+          0
+        ],
+        "aspect": 1,
+        "near": 0.01,
+        "far": 109.03006646014424,
+        "halfHeight": 8.202300180754117
+      },
+      "previousReceiptReconstructionMatches": true
+    },
+    {
+      "name": "longcase-clock",
+      "receiptHash": "1ad95bf3b5a07be9dbb41e11f6305c36b2998d837169fa6cdebaaae5941695e1",
+      "sourceHash": "4fcc5a79caaf3533966314a92883e374aabff6c8b2a254c8cfec3dc5ceb4c93c",
+      "artifactHash": "773420e0d0dcc6b66b0be1a6416b4491c757c04a6d24b99efbb2550ab18a5322",
+      "imageHash": "2ac383bde5ea2b7e5e6334c21445b7cb5f961889b02a7798513a456da0fe979f",
+      "captureIdentity": [
+        "kiln.capture-producer.v1",
+        "sha256:10f346ec6287c8d635dabe4668d72925080e6fe3d059dd7a9252f2694ce595c2",
+        "a3fa7ff0-5d67-45ca-b663-3de687c939da",
+        "dawn-d3d12:nvidia-geforce-rtx-3070:D3D12 driver version 32.0.16.1074"
+      ],
+      "camera": {
+        "version": "kiln.camera.v1",
+        "projection": "orthographic",
+        "position": [
+          3.896807287408508,
+          3.019095215110712,
+          2.727765101185955
+        ],
+        "target": [
+          0.019346835350522975,
+          1.1579141981228793,
+          0.01354278474536608
+        ],
+        "up": [
+          0,
+          1,
+          0
+        ],
+        "aspect": 1,
+        "near": 0.01,
+        "far": 12.714582454394073,
+        "halfHeight": 1.3149148425697221
+      },
+      "previousReceiptReconstructionMatches": true
+    },
+    {
+      "name": "mech",
+      "receiptHash": "39492c9ad8c8ad6e561b1d2b7489e7cc8437d281e96e9ae04cb0555237d43953",
+      "sourceHash": "c0924f2e075f5cb240fefb75c02475d7a36dcdffb1ad152f22d042ce4245cf89",
+      "artifactHash": "05dc958b7e820d3ac3f3e40757f1ddf67477c8c8f34109e573ff5ccb6b000ee4",
+      "imageHash": "5570cf6585db92837b7f759319ecc64fa743c833c1e6cfad1a60ba80b14671ea",
+      "captureIdentity": [
+        "kiln.capture-producer.v1",
+        "sha256:10f346ec6287c8d635dabe4668d72925080e6fe3d059dd7a9252f2694ce595c2",
+        "a3fa7ff0-5d67-45ca-b663-3de687c939da",
+        "dawn-d3d12:nvidia-geforce-rtx-3070:D3D12 driver version 32.0.16.1074"
+      ],
+      "camera": {
+        "version": "kiln.camera.v1",
+        "projection": "orthographic",
+        "position": [
+          10.082087736671307,
+          7.163408785485221,
+          6.745343431047189
+        ],
+        "target": [
+          0.3937685283280378,
+          2.513015565480452,
+          -0.036480014793098085
+        ],
+        "up": [
+          0,
+          1,
+          0
+        ],
+        "aspect": 1,
+        "near": 0.01,
+        "far": 31.76897222861173,
+        "halfHeight": 2.9108699571171086
+      },
+      "previousReceiptReconstructionMatches": true
+    },
+    {
+      "name": "orbital-station",
+      "receiptHash": "56d5343fda1c63398dbf54ec910f3e15887c42a8ff7ea94e3a2625d910fd4268",
+      "sourceHash": "d2c1693ef6938a14e482a3640c838bbf17c721aa333a7559ad496593ae1f33ea",
+      "artifactHash": "0270271ecfef25ead0652c480c8959e72fdacddb60aa91a97021679cdfc8d053",
+      "imageHash": "f077deae87a1b85f8a1eec1e3349a8b76de5c1302b64362ff081f9aa97eef445",
+      "captureIdentity": [
+        "kiln.capture-producer.v1",
+        "sha256:10f346ec6287c8d635dabe4668d72925080e6fe3d059dd7a9252f2694ce595c2",
+        "a3fa7ff0-5d67-45ca-b663-3de687c939da",
+        "dawn-d3d12:nvidia-geforce-rtx-3070:D3D12 driver version 32.0.16.1074"
+      ],
+      "camera": {
+        "version": "kiln.camera.v1",
+        "projection": "orthographic",
+        "position": [
+          69.77844410950888,
+          44.189336425386585,
+          50.67984019060035
+        ],
+        "target": [
+          0.3301681944798219,
+          10.854163986172633,
+          2.0660470500800145
+        ],
+        "up": [
+          0,
+          1,
+          0
+        ],
+        "aspect": 1,
+        "near": 0.01,
+        "far": 227.72787533357985,
+        "halfHeight": 18.799998408372225
+      },
+      "previousReceiptReconstructionMatches": true
+    },
+    {
+      "name": "orrery",
+      "receiptHash": "7ab0df242b0da0389c4055698060dd30239ed1fa35d833be3338f56931b9f23a",
+      "sourceHash": "3e0b46fa8bb5c4a7a086e4a55e29f1163b32a022b8b646d26398c71254b4c755",
+      "artifactHash": "9a479427676dbff95a6b1e958ff8d8bbd08b75d377d45ed66c6c3ea9c00d7ff3",
+      "imageHash": "ec870b859cd8356f2b53470e3794a2b7e89423529b9bb5b10eaf2c7719d3225e",
+      "captureIdentity": [
+        "kiln.capture-producer.v1",
+        "sha256:10f346ec6287c8d635dabe4668d72925080e6fe3d059dd7a9252f2694ce595c2",
+        "a3fa7ff0-5d67-45ca-b663-3de687c939da",
+        "dawn-d3d12:nvidia-geforce-rtx-3070:D3D12 driver version 32.0.16.1074"
+      ],
+      "camera": {
+        "version": "kiln.camera.v1",
+        "projection": "orthographic",
+        "position": [
+          4.68162278739201,
+          2.9487327025789987,
+          3.2771359511744063
+        ],
+        "target": [
+          0.1783218162330562,
+          0.7871482364227012,
+          0.12482527136313935
+        ],
+        "up": [
+          0,
+          1,
+          0
+        ],
+        "aspect": 1,
+        "near": 0.01,
+        "far": 14.766776404995598,
+        "halfHeight": 0.9960331735913969
+      },
+      "previousReceiptReconstructionMatches": true
+    },
+    {
+      "name": "penny-farthing",
+      "receiptHash": "285bc6da3194059a816749768d7aaa6103790b8162e075efc844719fa387300c",
+      "sourceHash": "a243562feabdc46ea5b2d084b723d50b71c0ba801ecf24572d3da0341f1b9544",
+      "artifactHash": "ba367254573499c71991f2ad4a8e4a55fda6efde53d159af177ff9893b4a7fae",
+      "imageHash": "9cdd8d45d201618450a6091f4fe4749d150259114c6deee41bda0e8530a89937",
+      "captureIdentity": [
+        "kiln.capture-producer.v1",
+        "sha256:10f346ec6287c8d635dabe4668d72925080e6fe3d059dd7a9252f2694ce595c2",
+        "a3fa7ff0-5d67-45ca-b663-3de687c939da",
+        "dawn-d3d12:nvidia-geforce-rtx-3070:D3D12 driver version 32.0.16.1074"
+      ],
+      "camera": {
+        "version": "kiln.camera.v1",
+        "projection": "orthographic",
+        "position": [
+          3.750517591436638,
+          2.7052476905986382,
+          2.833144937926236
+        ],
+        "target": [
+          -0.28544282816070293,
+          0.7679866891919144,
+          0.007972644208097667
+        ],
+        "up": [
+          0,
+          1,
+          0
+        ],
+        "aspect": 1,
+        "near": 0.01,
+        "far": 13.234319775048967,
+        "halfHeight": 0.9307352648806041
+      },
+      "previousReceiptReconstructionMatches": true
+    },
+    {
+      "name": "pinball-machine",
+      "receiptHash": "351cbb4553cdc5f0a890ec61d228d0630dd66bdd6a91576a9ef857b0902fbddf",
+      "sourceHash": "35eef6aebfe01ae582e27fb7e5f29cb367029194c58908d2ff274c8999e8f065",
+      "artifactHash": "53af70cb9820328777bad2a67c204b6bd0ff82c097f030d251e06729891746bb",
+      "imageHash": "42462a3ad82e59a2bd5913b613ec54566dd90bfc691feea2b979a136412af65a",
+      "captureIdentity": [
+        "kiln.capture-producer.v1",
+        "sha256:10f346ec6287c8d635dabe4668d72925080e6fe3d059dd7a9252f2694ce595c2",
+        "a3fa7ff0-5d67-45ca-b663-3de687c939da",
+        "dawn-d3d12:nvidia-geforce-rtx-3070:D3D12 driver version 32.0.16.1074"
+      ],
+      "camera": {
+        "version": "kiln.camera.v1",
+        "projection": "orthographic",
+        "position": [
+          3.4830393598804763,
+          2.6468460696856457,
+          2.522977549324276
+        ],
+        "target": [
+          -0.11595491811499019,
+          0.9193288162478221,
+          0.0036815547274498973
+        ],
+        "up": [
+          0,
+          1,
+          0
+        ],
+        "aspect": 1,
+        "near": 0.01,
+        "far": 11.801463887575846,
+        "halfHeight": 1.198829196314419
+      },
+      "previousReceiptReconstructionMatches": true
+    },
+    {
+      "name": "pipe-organ",
+      "receiptHash": "9f49852c703cb3e4f96a1339bce48843cfb6b405019f32ca4d83a74e7f72cb18",
+      "sourceHash": "4e4ed8e01e007891a84f3c13117c1367264570311f233c711206f2c18629db41",
+      "artifactHash": "0cd4ab232e27b69e8b336d09a5a948f803f1e2b503650549a98520a13b3d0484",
+      "imageHash": "7a4078d7fdd172272a53dc6dcec8d347e1314b57866af5d1841337c240d9d7d5",
+      "captureIdentity": [
+        "kiln.capture-producer.v1",
+        "sha256:10f346ec6287c8d635dabe4668d72925080e6fe3d059dd7a9252f2694ce595c2",
+        "a3fa7ff0-5d67-45ca-b663-3de687c939da",
+        "dawn-d3d12:nvidia-geforce-rtx-3070:D3D12 driver version 32.0.16.1074"
+      ],
+      "camera": {
+        "version": "kiln.camera.v1",
+        "projection": "orthographic",
+        "position": [
+          14.102477666182459,
+          9.55667921564362,
+          9.79173440302183
+        ],
+        "target": [
+          0.7241367189866671,
+          3.1350755609896392,
+          0.42689573998477615
+        ],
+        "up": [
+          0,
+          1,
+          0
+        ],
+        "aspect": 1,
+        "near": 0.01,
+        "far": 43.86892430736097,
+        "halfHeight": 4.0756096266075845
+      },
+      "previousReceiptReconstructionMatches": true
+    },
+    {
+      "name": "planetarium-projector",
+      "receiptHash": "7a1fef387326edf4fad60ae0bb709d47d8c4a284dcf675d43463940e36b7f4e3",
+      "sourceHash": "1d885b43ff02292d306ade1333dd3a8106da77fc13d2822f073d1fd81622ec84",
+      "artifactHash": "667f98c95fd380731d62b09b5541b7b0588c35756ab70e695431cd1d918a93ea",
+      "imageHash": "ec31cb8d410cc27d4ebaf51c3048b8003d1c380426793ec126b121482fb3c9d5",
+      "captureIdentity": [
+        "kiln.capture-producer.v1",
+        "sha256:10f346ec6287c8d635dabe4668d72925080e6fe3d059dd7a9252f2694ce595c2",
+        "a3fa7ff0-5d67-45ca-b663-3de687c939da",
+        "dawn-d3d12:nvidia-geforce-rtx-3070:D3D12 driver version 32.0.16.1074"
+      ],
+      "camera": {
+        "version": "kiln.camera.v1",
+        "projection": "orthographic",
+        "position": [
+          9.367294961103012,
+          6.666513177659918,
+          6.557106472772107
+        ],
+        "target": [
+          0.03100164541918908,
+          2.185092386131683,
+          0.021701151793432353
+        ],
+        "up": [
+          0,
+          1,
+          0
+        ],
+        "aspect": 1,
+        "near": 0.01,
+        "far": 30.614643952761842,
+        "halfHeight": 2.731591703419347
+      },
+      "previousReceiptReconstructionMatches": true
+    },
+    {
+      "name": "printing-press",
+      "receiptHash": "5d52d843bc706165a09ef1c76b9b5aa0910accb8950e6fbbbb1c906e3b8ac935",
+      "sourceHash": "c6ee2bf3d6ff7a6f8833425ecfef25888af0842ddcb9c749ae43b54d28968ddf",
+      "artifactHash": "373aa5f55fc21271640e36c0364e2a1cd416714a92e5b783387eee6894ce8d37",
+      "imageHash": "43fc3eb5542434f6f5e39cc0b63649d95f35f870489519e9a762eafdc3e07e54",
+      "captureIdentity": [
+        "kiln.capture-producer.v1",
+        "sha256:10f346ec6287c8d635dabe4668d72925080e6fe3d059dd7a9252f2694ce595c2",
+        "a3fa7ff0-5d67-45ca-b663-3de687c939da",
+        "dawn-d3d12:nvidia-geforce-rtx-3070:D3D12 driver version 32.0.16.1074"
+      ],
+      "camera": {
+        "version": "kiln.camera.v1",
+        "projection": "orthographic",
+        "position": [
+          5.277958284008462,
+          3.3885237910682315,
+          3.3995707994168707
+        ],
+        "target": [
+          0.33148198635946113,
+          1.0142151681967106,
+          -0.06296260893742968
+        ],
+        "up": [
+          0,
+          1,
+          0
+        ],
+        "aspect": 1,
+        "near": 0.01,
+        "far": 16.21999283365576,
+        "halfHeight": 1.4165220234542992
+      },
+      "previousReceiptReconstructionMatches": true
+    },
+    {
+      "name": "pumpjack",
+      "receiptHash": "f73fd8e5171173559bf255d29758d528fdf82e95d7328b3e1f0cbc6268cbaccc",
+      "sourceHash": "c1b5c04953a5a398185f82cc7f8698089bdc00bc217ca4b2181b28c4dc4a7134",
+      "artifactHash": "1d0fa7845cd3ed293e1c130273b4bea2e05a9af1c3e37b42999583e1952f38ba",
+      "imageHash": "b5c80f9bbe55ffdcd63f2928118028d3db269ec144d3e3e4e15042e9c6f7dd30",
+      "captureIdentity": [
+        "kiln.capture-producer.v1",
+        "sha256:10f346ec6287c8d635dabe4668d72925080e6fe3d059dd7a9252f2694ce595c2",
+        "a3fa7ff0-5d67-45ca-b663-3de687c939da",
+        "dawn-d3d12:nvidia-geforce-rtx-3070:D3D12 driver version 32.0.16.1074"
+      ],
+      "camera": {
+        "version": "kiln.camera.v1",
+        "projection": "orthographic",
+        "position": [
+          16.011190456166428,
+          9.508744442316052,
+          11.417833319316497
+        ],
+        "target": [
+          -0.14670587568086624,
+          1.7529542030293515,
+          0.1073058870233935
+        ],
+        "up": [
+          0,
+          1,
+          0
+        ],
+        "aspect": 1,
+        "near": 0.01,
+        "far": 52.98336572118614,
+        "halfHeight": 4.578523478260898
+      },
+      "previousReceiptReconstructionMatches": true
+    },
+    {
+      "name": "radio-telescope",
+      "receiptHash": "5625e79a02e39648b4f86da5b859656c682fea39974146d5486171b88a9d7758",
+      "sourceHash": "6414ad919135ddcd1443d1add8973dcfc99ffd95f66590219491fbe9d8951605",
+      "artifactHash": "092cc11a24d28b67a47c74ce5f1c6fe1d07a7be32e9385af5c48862ebf14e02f",
+      "imageHash": "03dedc36c6337d60d04edf16da1b04994ebd3de0fa2504bb280d0fe93941dd51",
+      "captureIdentity": [
+        "kiln.capture-producer.v1",
+        "sha256:10f346ec6287c8d635dabe4668d72925080e6fe3d059dd7a9252f2694ce595c2",
+        "a3fa7ff0-5d67-45ca-b663-3de687c939da",
+        "dawn-d3d12:nvidia-geforce-rtx-3070:D3D12 driver version 32.0.16.1074"
+      ],
+      "camera": {
+        "version": "kiln.camera.v1",
+        "projection": "orthographic",
+        "position": [
+          28.33534433945768,
+          17.76635022018246,
+          19.834741037620372
+        ],
+        "target": [
+          0.36678400617949947,
+          4.341441260208934,
+          0.2567488043256496
+        ],
+        "up": [
+          0,
+          1,
+          0
+        ],
+        "aspect": 1,
+        "near": 0.01,
+        "far": 91.71171979314951,
+        "halfHeight": 6.464849476306145
+      },
+      "previousReceiptReconstructionMatches": true
+    },
+    {
+      "name": "research-vessel",
+      "receiptHash": "68517dbd922d9361426bbc19aadfd8d5a63f54d418af9c1ff1177f34d434cd58",
+      "sourceHash": "1f109fd8c5d6de9fe07507e473a1c7ba674565f1544ac68dd6067a5664371455",
+      "artifactHash": "31daa828d14a8bc9d1c07896df85b50ebf66f874db883f3fd8195245d18489e1",
+      "imageHash": "ce7e000d56854a0cf7f2b6813b8a3038567c96abec3a7b728d7c7a6d91a65791",
+      "captureIdentity": [
+        "kiln.capture-producer.v1",
+        "sha256:10f346ec6287c8d635dabe4668d72925080e6fe3d059dd7a9252f2694ce595c2",
+        "a3fa7ff0-5d67-45ca-b663-3de687c939da",
+        "dawn-d3d12:nvidia-geforce-rtx-3070:D3D12 driver version 32.0.16.1074"
+      ],
+      "camera": {
+        "version": "kiln.camera.v1",
+        "projection": "orthographic",
+        "position": [
+          14.595027128971722,
+          9.00730396867397,
+          10.90921980995136
+        ],
+        "target": [
+          -0.24875639224845547,
+          1.8822878784882853,
+          0.5185713450972351
+        ],
+        "up": [
+          0,
+          1,
+          0
+        ],
+        "aspect": 1,
+        "near": 0.01,
+        "far": 48.674257764656005,
+        "halfHeight": 3.2812017726350895
+      },
+      "previousReceiptReconstructionMatches": true
+    },
+    {
+      "name": "rigid-airship",
+      "receiptHash": "809b0e9450d554bd4673a02ff5819339f80df1d0786ef983580850a75ebe914d",
+      "sourceHash": "9f3341c1f613a399cac20842aeb6e974b7d80bbceaa07b0d1510c53d98ab9ae6",
+      "artifactHash": "eaca192c97b78f27d9dd24b66d8623dcbcec6855a8fdbe7af9b323f3521b4608",
+      "imageHash": "92c24438b81f4977477d096007820d1d30ddc0b1963c842bf6d81c7946c64b74",
+      "captureIdentity": [
+        "kiln.capture-producer.v1",
+        "sha256:10f346ec6287c8d635dabe4668d72925080e6fe3d059dd7a9252f2694ce595c2",
+        "a3fa7ff0-5d67-45ca-b663-3de687c939da",
+        "dawn-d3d12:nvidia-geforce-rtx-3070:D3D12 driver version 32.0.16.1074"
+      ],
+      "camera": {
+        "version": "kiln.camera.v1",
+        "projection": "orthographic",
+        "position": [
+          91.82998861988628,
+          53.68658913547213,
+          63.67474202974806
+        ],
+        "target": [
+          1.9137645556458385,
+          10.526801584636718,
+          0.7333851847797602
+        ],
+        "up": [
+          0,
+          1,
+          0
+        ],
+        "aspect": 1,
+        "near": 0.01,
+        "far": 294.84433406555377,
+        "halfHeight": 20.35727883971446
+      },
+      "previousReceiptReconstructionMatches": true
+    },
+    {
+      "name": "robot-arm",
+      "receiptHash": "40335eafbe9bf5fd175b9c197c017fa3f31fe2993eeac0981b133887b51794da",
+      "sourceHash": "a09a2ba7cd96a937e092028162d49dbbf76330b94023b11bb0b15ce3d7f4ac31",
+      "artifactHash": "11797ec814f8406ffd5d967226c736d74a3297a8d7cb6926d5a3ad909da26f99",
+      "imageHash": "32d4e960f5f7d699e1a80b9500965bda5c63566f6428fcbfeb9bc87893c78523",
+      "captureIdentity": [
+        "kiln.capture-producer.v1",
+        "sha256:10f346ec6287c8d635dabe4668d72925080e6fe3d059dd7a9252f2694ce595c2",
+        "a3fa7ff0-5d67-45ca-b663-3de687c939da",
+        "dawn-d3d12:nvidia-geforce-rtx-3070:D3D12 driver version 32.0.16.1074"
+      ],
+      "camera": {
+        "version": "kiln.camera.v1",
+        "projection": "orthographic",
+        "position": [
+          4.055929883550528,
+          2.4247407683685607,
+          2.634076975269664
+        ],
+        "target": [
+          0.36597963851026766,
+          0.6535646507492361,
+          0.05111180374148284
+        ],
+        "up": [
+          0,
+          1,
+          0
+        ],
+        "aspect": 1,
+        "near": 0.01,
+        "far": 12.099717643354674,
+        "halfHeight": 0.700719305414192
+      },
+      "previousReceiptReconstructionMatches": true
+    },
+    {
+      "name": "steam-locomotive",
+      "receiptHash": "394043ea489da67440ad96a362a24f74c1a41c89acb12d391f81923da1fff51f",
+      "sourceHash": "0c100fb9b080162f13d807920b02e0aa8d8263309b1a1160fcb1d6528c1716aa",
+      "artifactHash": "6e5462c54efe536129073ccabef7d4c2c0a82fe49cbbca4420aea9635cebcbc4",
+      "imageHash": "021a03ccc25698c24b44bf8fbb64964b312eccd5a5287c2d44a1aa10a6723b1d",
+      "captureIdentity": [
+        "kiln.capture-producer.v1",
+        "sha256:10f346ec6287c8d635dabe4668d72925080e6fe3d059dd7a9252f2694ce595c2",
+        "a3fa7ff0-5d67-45ca-b663-3de687c939da",
+        "dawn-d3d12:nvidia-geforce-rtx-3070:D3D12 driver version 32.0.16.1074"
+      ],
+      "camera": {
+        "version": "kiln.camera.v1",
+        "projection": "orthographic",
+        "position": [
+          17.01663599883812,
+          10.006498065701685,
+          11.670795844658791
+        ],
+        "target": [
+          0.5324401351327726,
+          2.094084051123118,
+          0.13185874006505025
+        ],
+        "up": [
+          0,
+          1,
+          0
+        ],
+        "aspect": 1,
+        "near": 0.01,
+        "far": 54.053334674818515,
+        "halfHeight": 4.118974154904743
+      },
+      "previousReceiptReconstructionMatches": true
+    },
+    {
+      "name": "street-lamp",
+      "receiptHash": "d72bb350b77c984e1885128e7cebfb82f0daddf92d1ab58449b625f66a1c1a35",
+      "sourceHash": "c1d24daf95c30f46b2d32f3c40c0ae6c08827e0a665b190ec499af83a928e1f6",
+      "artifactHash": "0d16f94cbbace428e8d166606a0413cb062c7424601251a6eb10a8360cf98d5b",
+      "imageHash": "86c575521c214d64c7c88a24a5ff29e26bea8034751d5fd64e7284bde0fc9261",
+      "captureIdentity": [
+        "kiln.capture-producer.v1",
+        "sha256:10f346ec6287c8d635dabe4668d72925080e6fe3d059dd7a9252f2694ce595c2",
+        "a3fa7ff0-5d67-45ca-b663-3de687c939da",
+        "dawn-d3d12:nvidia-geforce-rtx-3070:D3D12 driver version 32.0.16.1074"
+      ],
+      "camera": {
+        "version": "kiln.camera.v1",
+        "projection": "orthographic",
+        "position": [
+          7.288917388494452,
+          5.715788619989502,
+          5.1022421719461155
+        ],
+        "target": [
+          0.024522220080621108,
+          2.228878939150863,
+          0.017165554056434773
+        ],
+        "up": [
+          0,
+          1,
+          0
+        ],
+        "aspect": 1,
+        "near": 0.01,
+        "far": 23.820681730248715,
+        "halfHeight": 2.494132305941432
+      },
+      "previousReceiptReconstructionMatches": true
+    },
+    {
+      "name": "sushi-store",
+      "receiptHash": "3fd42d3d2d72c6fa01a1ad188c3a703baa67c04d309edb480f9ec727ea207764",
+      "sourceHash": "fdd92c6e2ed8fb371d22f8c94c1f0e6ae932d915f0e75cd50c70b6f876bd0743",
+      "artifactHash": "7efe7865e34bb5b526965d8366601de1b991664d20d76895bbf9adf41e7fbb3c",
+      "imageHash": "1eb0e50187509639da324132701c0ded02e2bc2fd49b37d8cbc670a5a4502609",
+      "captureIdentity": [
+        "kiln.capture-producer.v1",
+        "sha256:10f346ec6287c8d635dabe4668d72925080e6fe3d059dd7a9252f2694ce595c2",
+        "a3fa7ff0-5d67-45ca-b663-3de687c939da",
+        "dawn-d3d12:nvidia-geforce-rtx-3070:D3D12 driver version 32.0.16.1074"
+      ],
+      "camera": {
+        "version": "kiln.camera.v1",
+        "projection": "orthographic",
+        "position": [
+          13.30886761801592,
+          9.874331540393047,
+          10.331207332611143
+        ],
+        "target": [
+          -1.3956149961700848,
+          2.8161798855837654,
+          0.03806950268094083
+        ],
+        "up": [
+          0,
+          1,
+          0
+        ],
+        "aspect": 1,
+        "near": 0.01,
+        "far": 48.21747609264235,
+        "halfHeight": 4.122964874008335
+      },
+      "previousReceiptReconstructionMatches": true
+    },
+    {
+      "name": "tram",
+      "receiptHash": "b58acf595918d2736deab7e98b6755f8010015bf2721066e8fb38200cba3b8c7",
+      "sourceHash": "29a7d021e6c789ed7ea05fcd838c40f365052555eec24a672b4f74d240273779",
+      "artifactHash": "58508a6cf591625fbc85546b7509c05f118678f51a4a02284eb0541c2dfb77ce",
+      "imageHash": "a50b9e6f883879753a5f81c325b790a7e62545ea2b83f783fdf57bcf88cbbf92",
+      "captureIdentity": [
+        "kiln.capture-producer.v1",
+        "sha256:10f346ec6287c8d635dabe4668d72925080e6fe3d059dd7a9252f2694ce595c2",
+        "a3fa7ff0-5d67-45ca-b663-3de687c939da",
+        "dawn-d3d12:nvidia-geforce-rtx-3070:D3D12 driver version 32.0.16.1074"
+      ],
+      "camera": {
+        "version": "kiln.camera.v1",
+        "projection": "orthographic",
+        "position": [
+          20.185092164996508,
+          12.055409352797092,
+          14.216564503308401
+        ],
+        "target": [
+          -0.017002584861870406,
+          2.3584038728650705,
+          0.07509817840754074
+        ],
+        "up": [
+          0,
+          1,
+          0
+        ],
+        "aspect": 1,
+        "near": 0.01,
+        "far": 66.24469872084069,
+        "halfHeight": 4.649173905807829
+      },
+      "previousReceiptReconstructionMatches": true
+    },
+    {
+      "name": "trebuchet",
+      "receiptHash": "ff27a16ba72c786903436eb92a4b8a26a098514251b0ebce68f339369145db8c",
+      "sourceHash": "94d40bcb59df7e5dd976d663b6adf6a27ebecbb3d948d62dc5c50e40688e1595",
+      "artifactHash": "20e83b1650588c4998f3b99d982f9a84337a683b20f52513726ee9382a35f2bf",
+      "imageHash": "ad29d1b7ae246d1cec0063562d5c0a7cd7e060918d4031c3ec93dfdab1985529",
+      "captureIdentity": [
+        "kiln.capture-producer.v1",
+        "sha256:10f346ec6287c8d635dabe4668d72925080e6fe3d059dd7a9252f2694ce595c2",
+        "a3fa7ff0-5d67-45ca-b663-3de687c939da",
+        "dawn-d3d12:nvidia-geforce-rtx-3070:D3D12 driver version 32.0.16.1074"
+      ],
+      "camera": {
+        "version": "kiln.camera.v1",
+        "projection": "orthographic",
+        "position": [
+          15.431990724041567,
+          9.535608572876145,
+          11.362393506829093
+        ],
+        "target": [
+          -0.5042147254952319,
+          1.8862299570984817,
+          0.20704969215333752
+        ],
+        "up": [
+          0,
+          1,
+          0
+        ],
+        "aspect": 1,
+        "near": 0.01,
+        "far": 52.256419041168265,
+        "halfHeight": 3.69997904938702
+      },
+      "previousReceiptReconstructionMatches": true
+    },
+    {
+      "name": "tugboat",
+      "receiptHash": "a10886f900fd644f12c2c5d62f91ed0e65efcee87cb31790b6ebcc5965244420",
+      "sourceHash": "c826f90f1dccde22891e9c6acc0e6d524aee4a1d5eaab62d762f146c2acea3b3",
+      "artifactHash": "0d077bfe7984f74d0452691d657db8b2b2d48e4046fa54017c97caedd6540c81",
+      "imageHash": "f2272654c4fcd2383fc14906e5c0fad5f00129a6d8fe93b3aff76175ca465a58",
+      "captureIdentity": [
+        "kiln.capture-producer.v1",
+        "sha256:10f346ec6287c8d635dabe4668d72925080e6fe3d059dd7a9252f2694ce595c2",
+        "a3fa7ff0-5d67-45ca-b663-3de687c939da",
+        "dawn-d3d12:nvidia-geforce-rtx-3070:D3D12 driver version 32.0.16.1074"
+      ],
+      "camera": {
+        "version": "kiln.camera.v1",
+        "projection": "orthographic",
+        "position": [
+          32.92400955373781,
+          19.83143913165454,
+          22.71199901843233
+        ],
+        "target": [
+          1.0590648319606433,
+          4.536265665201499,
+          0.40653771318831833
+        ],
+        "up": [
+          0,
+          1,
+          0
+        ],
+        "aspect": 1,
+        "near": 0.01,
+        "far": 104.48835573673215,
+        "halfHeight": 6.52951215593516
+      },
+      "previousReceiptReconstructionMatches": true
+    },
+    {
+      "name": "twisting-canopy",
+      "receiptHash": "ca2ff5daef9ec5415e44d6252719237cae010c265d18065d6a5573a4c884cec5",
+      "sourceHash": "2d3d12e4e53613289f017fc5c4e20731fe7736655781839168dc2480be3efdcf",
+      "artifactHash": "0dc4acac3729fda27b1567463dd32d183ebc340d740d8d4f51d8ad1482d8a322",
+      "imageHash": "44a1eeb9b58ed9e227697177754bed6464914c7d66c15dbb7b29fab02e06b95d",
+      "captureIdentity": [
+        "kiln.capture-producer.v1",
+        "sha256:10f346ec6287c8d635dabe4668d72925080e6fe3d059dd7a9252f2694ce595c2",
+        "a3fa7ff0-5d67-45ca-b663-3de687c939da",
+        "dawn-d3d12:nvidia-geforce-rtx-3070:D3D12 driver version 32.0.16.1074"
+      ],
+      "camera": {
+        "version": "kiln.camera.v1",
+        "projection": "orthographic",
+        "position": [
+          12.125842359869024,
+          7.8402505730421925,
+          8.5052441666979
+        ],
+        "target": [
+          -0.08509039260019971,
+          1.979002851856965,
+          -0.04240876003055844
+        ],
+        "up": [
+          0,
+          1,
+          0
+        ],
+        "aspect": 1,
+        "near": 0.01,
+        "far": 40.04087552818949,
+        "halfHeight": 3.684495923485949
+      },
+      "previousReceiptReconstructionMatches": true
+    },
+    {
+      "name": "typewriter",
+      "receiptHash": "13fcec03d958282d287a9b5807e8708b735ec45bd3cb829615e4cdf3c2129ed2",
+      "sourceHash": "f3b83ab3b81d22cc2b6f553bde8cb73b903923215a0b987c0cafa4fc0de960c1",
+      "artifactHash": "e5b0fbc255afe43c4d17b3356e9f5f35895a5548ec662c3d61ca33b0b7944d2b",
+      "imageHash": "2f77f9100e97fca55c542453c42f9875cffa367de1c5171e38a7a3cdbe5d1903",
+      "captureIdentity": [
+        "kiln.capture-producer.v1",
+        "sha256:10f346ec6287c8d635dabe4668d72925080e6fe3d059dd7a9252f2694ce595c2",
+        "a3fa7ff0-5d67-45ca-b663-3de687c939da",
+        "dawn-d3d12:nvidia-geforce-rtx-3070:D3D12 driver version 32.0.16.1074"
+      ],
+      "camera": {
+        "version": "kiln.camera.v1",
+        "projection": "orthographic",
+        "position": [
+          2.347792114202321,
+          1.4814812933514288,
+          1.665086896494897
+        ],
+        "target": [
+          -0.019213273569214533,
+          0.34531870722109165,
+          0.008183125054822412
+        ],
+        "up": [
+          0,
+          1,
+          0
+        ],
+        "aspect": 1,
+        "near": 0.01,
+        "far": 7.76164851838601,
+        "halfHeight": 0.6325221602145413
+      },
+      "previousReceiptReconstructionMatches": true
+    },
+    {
+      "name": "vending-machine",
+      "receiptHash": "56a85687ed050949805e479667cbcdfaf3fa84258fc1f65ab7e57b465d4a0de0",
+      "sourceHash": "4ea4db40981f8021107381b739300b4d184d42664eb4c8cf2b7aae756c8f2599",
+      "artifactHash": "58fa9096a65238c7614cbfceda24b6084e7070c6cfbd68398ea168fba020949c",
+      "imageHash": "ba3ffa372a4c901947b73667cdef9f189424c29b95f29b4b6617fb281986ab79",
+      "captureIdentity": [
+        "kiln.capture-producer.v1",
+        "sha256:10f346ec6287c8d635dabe4668d72925080e6fe3d059dd7a9252f2694ce595c2",
+        "a3fa7ff0-5d67-45ca-b663-3de687c939da",
+        "dawn-d3d12:nvidia-geforce-rtx-3070:D3D12 driver version 32.0.16.1074"
+      ],
+      "camera": {
+        "version": "kiln.camera.v1",
+        "projection": "orthographic",
+        "position": [
+          4.837035025605117,
+          3.1563627994772534,
+          3.3159245179235817
+        ],
+        "target": [
+          0.14536888255324995,
+          0.904363050812357,
+          0.03175821778727492
+        ],
+        "up": [
+          0,
+          1,
+          0
+        ],
+        "aspect": 1,
+        "near": 0.01,
+        "far": 15.384444731773094,
+        "halfHeight": 1.3582189956951318
+      },
+      "previousReceiptReconstructionMatches": true
+    },
+    {
+      "name": "victorian-greenhouse",
+      "receiptHash": "4fbf26707afc648ae07da75e24523d23454efafaebdf986c48065c21cbc0f64a",
+      "sourceHash": "7fc022a92ca6ec100a328ba5dcc6bfe13ca497ba60226bf92b70848fd06787ee",
+      "artifactHash": "e842f0856cc64ac13081190405868668182ffd41fbf12dcbc91df43147bd5fbc",
+      "imageHash": "c6ff8e3263391eb5da1d0b44aa924164c01685a9997c21973a00e12402cbd88e",
+      "captureIdentity": [
+        "kiln.capture-producer.v1",
+        "sha256:10f346ec6287c8d635dabe4668d72925080e6fe3d059dd7a9252f2694ce595c2",
+        "a3fa7ff0-5d67-45ca-b663-3de687c939da",
+        "dawn-d3d12:nvidia-geforce-rtx-3070:D3D12 driver version 32.0.16.1074"
+      ],
+      "camera": {
+        "version": "kiln.camera.v1",
+        "projection": "orthographic",
+        "position": [
+          13.733077190270778,
+          8.678300617343925,
+          9.613154033189543
+        ],
+        "target": [
+          0.11106483914181148,
+          2.139734688802022,
+          0.07774538739926803
+        ],
+        "up": [
+          0,
+          1,
+          0
+        ],
+        "aspect": 1,
+        "near": 0.01,
+        "far": 44.667947326523404,
+        "halfHeight": 3.859172253004807
+      },
+      "previousReceiptReconstructionMatches": true
+    },
+    {
+      "name": "windmill",
+      "receiptHash": "7007b0958df01eadebe3cf0ade649545d966beffeb7f7b548de1ddc13508fda4",
+      "sourceHash": "c1a7eeb546fdc10544635609c9b0035ae9307ea5da4f916630cb3ead9c73f6cb",
+      "artifactHash": "6511a91b7aff2881f9a56898134cb75328cb97f347b08028313be50a18e4f4cb",
+      "imageHash": "6d9e95ce336ec4966c3272f213f58bb6b5357a7ae0f6c57b5167e542cd5d73ec",
+      "captureIdentity": [
+        "kiln.capture-producer.v1",
+        "sha256:10f346ec6287c8d635dabe4668d72925080e6fe3d059dd7a9252f2694ce595c2",
+        "a3fa7ff0-5d67-45ca-b663-3de687c939da",
+        "dawn-d3d12:nvidia-geforce-rtx-3070:D3D12 driver version 32.0.16.1074"
+      ],
+      "camera": {
+        "version": "kiln.camera.v1",
+        "projection": "orthographic",
+        "position": [
+          51.07359414488213,
+          34.55283688585886,
+          32.80819937604264
+        ],
+        "target": [
+          2.330172618480349,
+          11.155994553186005,
+          -1.3121956924386078
+        ],
+        "up": [
+          0,
+          1,
+          0
+        ],
+        "aspect": 1,
+        "near": 0.01,
+        "far": 159.83457723670278,
+        "halfHeight": 13.202858002915079
+      },
+      "previousReceiptReconstructionMatches": true
+    }
+  ],
+  "settings": {
+    "lightingPresetId": "gallery-studio-v1",
+    "exposure": 0.9,
+    "background": "#747474",
+    "width": 1024,
+    "height": 1024
+  },
+  "previousBatchReceipt": "gallery-exposure09-batch-2026-09-05.json",
+  "verification": {
+    "all53SourceAndGlbHashesUnchanged": true,
+    "all53ImageAndReceiptHashesVerified": true,
+    "all53PublicReceiptAndIndexBindingsVerified": true,
+    "all53CameraAndOtherReceiptFieldsUnchanged": true,
+    "method": "Reconstruct each prior serialized receipt by replacing only current captureIdentity and imageHash with its retained previous values; SHA-256 must equal the retained prior receiptHash. This proves all other receipt fields, including camera, are byte-identical."
+  }
+}

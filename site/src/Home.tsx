@@ -1,355 +1,418 @@
 import { useState } from 'react';
-
+import { Hero } from './Hero';
+import { EditDemo } from './EditDemo';
 import { REPO, asset } from './repo';
 import type { Specimen } from './types';
 
-const DOCS = `${REPO}/blob/main`;
-
-/**
- * The seven tools the MCP server actually lists, in the order it lists them,
- * with the one-line version of what each is for. Anyone comparing this against
- * `tools/list` should find the same names in the same order.
- */
-const TOOLS = [
-  {
-    name: 'kiln_list_primitives',
-    line: 'Lists what the sandbox gives you: geometry helpers, materials, structure, animation, CSG, arrays, UV and textures, with exact signatures. A model calls this before writing anything, which is why it can work with no engine source in front of it.',
-  },
-  {
-    name: 'kiln_validate',
-    line: 'Static checks on a program before it runs. Missing meta or build(), keyframe typos, infinite loops, recursive build() calls, syntax errors. Cheap enough to run on every draft. There is no triangle budget and density is never warned about.',
-  },
-  {
-    name: 'kiln_render',
-    line: 'Runs the program, builds the GLB in memory, and returns the six-view contact sheet as an image along with triangle count, mesh and material counts, the bounding box, which part sits lowest, and any structural warnings. This is the tool that lets the model see.',
-  },
-  {
-    name: 'kiln_screenshot_animation',
-    line: 'Renders one named clip as six frames sampled across it, each labelled with its phase. Motion is the thing a still cannot show, so a rig that looks right and moves wrong is only catchable here.',
-  },
-  {
-    name: 'kiln_view_interior',
-    line: 'For anything you can walk into. Renders it with the roof lifted off as a floor plan plus two cutaways, so an interior that turned out solid is visible instead of hidden behind its own walls.',
-  },
-  {
-    name: 'kiln_inspect',
-    line: 'A close-up of one named part from any angle. The contact sheet is where you notice something is wrong, and this is where you find out what.',
-  },
-  {
-    name: 'kiln_edit',
-    line: 'Exact-string patches applied to an existing program, rendered in the same call. This is the refine verb, and the reason a second pass is a diff rather than a regeneration.',
-  },
-] as const;
-
-/**
- * The exact configs from docs/install.md. They live here as data rather than as
- * prose so the tab switcher can render them uniformly, and every one of them is
- * a config somebody actually got working. The note attached to each is the part
- * that saves an hour.
- */
+const DOCS = `${REPO}/blob/main/docs`;
 const HARNESSES = [
-  {
-    id: 'claude',
-    name: 'Claude Code',
-    code: `claude plugin marketplace add matthew-kissinger/kiln
-claude plugin install kiln@kiln`,
-    note: 'Brings the tools and all five skills in together. Check it took with /mcp.',
-  },
-  {
-    id: 'codex',
-    name: 'Codex CLI',
-    code: `codex mcp add kiln --env KILN_RENDER=auto \\
-  -- node /absolute/path/to/kiln/dist/mcp-server.mjs`,
-    note: 'Headless runs need --approve-for-me, or every tool call gets refused before it runs.',
-  },
-  {
-    id: 'agy',
-    name: 'Antigravity',
-    code: `agy plugin install .
-agy mcp add --env KILN_RENDER=auto kiln \\
-  node /absolute/path/to/kiln/dist/mcp-server.mjs`,
-    note: 'Two commands, not one. Installing a plugin does not register the MCP servers it declares, so the agent sees no tools until you run the second. Confirm with agy mcp list.',
-  },
-  {
-    id: 'opencode',
-    name: 'OpenCode',
-    code: `{
-  "mcp": {
-    "kiln": {
-      "type": "local",
-      "command": ["node", "/absolute/path/to/kiln/dist/mcp-server.mjs"],
-      "enabled": true,
-      "environment": { "KILN_RENDER": "auto" }
-    }
-  }
-}`,
-    note: 'Three things differ from every other client here and each one fails silently: the key is mcp and not mcpServers, the type is local and not stdio, and the command is a single array instead of a command plus args.',
-  },
-  {
-    id: 'hermes',
-    name: 'Hermes',
-    code: `hermes mcp add kiln --command node \\
-  --args /absolute/path/to/kiln/dist/mcp-server.mjs --env KILN_RENDER=auto
-hermes config set skills.external_dirs /absolute/path/to/kiln/skills`,
-    note: 'A Python agent with its own config format, provider routing and skill store. If it works here, none of this is Claude Code specific.',
-  },
+  ['opencode', 'OpenCode'],
+  ['codex', 'Codex'],
+  ['agy', 'Antigravity'],
+  ['hermes', 'Hermes'],
+  ['claude', 'Claude Code'],
 ] as const;
 
 function Code({ children }: { children: string }) {
-  const [copied, setCopied] = useState(false);
+  const [status, setStatus] = useState('Copy');
   return (
     <div className="code">
       <pre>
         <code>{children}</code>
       </pre>
       <button
-        type="button"
         className="copy"
-        onClick={() => {
-          navigator.clipboard?.writeText(children).then(
-            () => {
-              setCopied(true);
-              setTimeout(() => setCopied(false), 1400);
-            },
-            () => {},
-          );
+        type="button"
+        onClick={async () => {
+          try {
+            await navigator.clipboard.writeText(children);
+            setStatus('Copied');
+          } catch {
+            setStatus('Select text to copy');
+          }
         }}
       >
-        {copied ? 'copied' : 'copy'}
+        {status}
       </button>
     </div>
   );
 }
 
 export function Home({ specimens }: { specimens: Specimen[] }) {
-  const [harness, setHarness] = useState<string>(HARNESSES[0].id);
-  const active = HARNESSES.find((h) => h.id === harness) ?? HARNESSES[0];
-
-  // Counted from the index rather than written into the copy. The library grows,
-  // and a sentence with a number typed into it goes stale the first time it does.
-  const models = new Set(specimens.map((s) => s.model)).size;
-  const notClaude = specimens.filter((s) => !s.model.startsWith('Claude')).length;
-  const cleanRoom = specimens.filter((s) => s.cleanRoom).length;
-
-  // A door to the gallery, not a gallery. The heaviest ones make the point fastest.
-  const strip = [...specimens].sort((a, b) => b.tris - a.tris).slice(0, 8);
-
+  const [harness, setHarness] = useState('opencode');
+  const [geometryTab, setGeometryTab] = useState('surface');
+  const hero = specimens.find((s) => s.name === 'orbital-station');
+  const featured = [
+    'abyssal-surveyor',
+    'kestrel-rescue-craft',
+    'solar-sail-courier',
+    'mechanical-peacock',
+    'orrery',
+    'typewriter',
+    'nautilus-habitat',
+    'ribbon-tea-pavilion',
+    'polar-rover',
+    'kinetic-wave',
+  ].flatMap((name) => specimens.find((s) => s.name === name) ?? []);
   return (
-    <div className="doc">
-      <header className="hero">
-        <h1 className="wordmark">
-          Kiln <span>open source</span>
-        </h1>
-        <p className="lede">
-          Kiln builds 3D assets with language models, without generating a mesh. The model writes a
-          small JavaScript program that constructs the geometry. Kiln runs that program, exports a
-          GLB, renders six views of the result, and gives the images back so the model can see what
-          it actually made and fix it.
-        </p>
-        <p className="lede">
-          It started as a commercial product. The engine is open source now because model capability
-          keeps leapfrogging, and something like this is worth more as a thing you can run and
-          change yourself than as a service sitting behind my login.
-        </p>
-        <p className="lede">
-          What you keep is the program, not just the mesh. Parts have names, sizes are in real
-          metres, and the next revision is a diff instead of another roll of the dice.
-        </p>
-        <div className="cta">
-          <a className="button primary" href="#start">
-            Get started
-          </a>
-          <a className="button" href="#/gallery">
-            Gallery
-          </a>
-          <a className="button ghost" href={REPO}>
-            GitHub
-          </a>
+    <main className="doc home">
+      <nav className="site-nav" aria-label="Main navigation">
+        <a className="brand" href="#/">
+          Kiln<span> / open source 3D</span>
+        </a>
+        <div>
+          <a href="#/gallery">Examples</a>
+          <a href={`${DOCS}/install.md`}>Docs</a>
+          <a href={REPO}>GitHub ↗</a>
         </div>
-      </header>
-
-      <section className="band">
-        <h2 id="start">Run it without an API key</h2>
-        <p>
-          Everything except the model runs on your machine, including the rasterizer, so the offline
-          path needs no network and no GPU. If this writes a GLB and a contact sheet then the engine
-          is working, and anything that breaks after it is configuration.
-        </p>
-        <Code>{`git clone https://github.com/matthew-kissinger/kiln && cd kiln
-bun install
-bun run kiln render examples/crate.kiln.js \\
-  --out crate.glb --views sheet.png`}</Code>
-        <p className="aside">
-          <a href="https://bun.sh">Bun</a> is the toolchain. The MCP server itself runs on Node from
-          a committed bundle, so you do not need Bun on your PATH to use the plugin.
-        </p>
-      </section>
-
-      <section className="band">
-        <h2>The tools</h2>
-        <p>
-          Seven of them, and the whole surface is here. Four exist so the model can look at what it
-          built, which is the part most asset pipelines leave out.
-        </p>
-        <p>
-          Every one except <code>kiln_list_primitives</code> takes the program itself as its{' '}
-          <code>code</code> argument. Nothing on the server holds a half-finished asset between
-          calls, which is why the same tools behave identically whether they reach you over MCP,
-          through the CLI, or imported straight into your process.
-        </p>
-        <p>
-          That does not mean writing it again to change it. <code>kiln_edit</code> is the second
-          verb for a reason: it takes the current source plus exact-string replacements, so the
-          model patches rather than re-emits, every line it did not touch comes back byte for byte,
-          and the reply is a diff. A rewrite cannot promise that, and what it quietly loses is
-          invisible in a render: a constant that shifted, a part that lost its name, a comment
-          carrying the reason for a number.
-        </p>
-        <dl className="tools">
-          {TOOLS.map((t) => (
-            <div key={t.name}>
-              <dt>{t.name}</dt>
-              <dd>{t.line}</dd>
-            </div>
-          ))}
-        </dl>
-        <p>
-          All seven are defined once, in <a href={`${DOCS}/src/tools/registry.ts`}>one registry</a>,
-          and reach you three ways. As an <b>MCP server</b> over stdio, which is what the configs
-          below set up. As a <b>CLI</b>, where <code>kiln render</code> and{' '}
-          <code>kiln generate</code> cover the offline path and a full authoring run. Or{' '}
-          <b>in process</b>, by importing <code>kiln/tools</code> and mapping four fields per tool,
-          if your harness is TypeScript and you would rather skip the transport. Nothing is
-          reimplemented per transport, and a parity test fails the build if they drift.
-        </p>
-      </section>
-
-      <section className="band">
-        <h2>Wire it into your agent</h2>
-        <p>
-          One tool surface over two transports. Every harness below has been run end to end, and the
-          note under each config is the part that is not obvious from anyone's documentation.
-        </p>
-        <div className="tabs" role="tablist">
-          {HARNESSES.map((h) => (
-            <button
-              key={h.id}
-              type="button"
-              role="tab"
-              className="tab"
-              aria-selected={h.id === harness}
-              onClick={() => setHarness(h.id)}
+      </nav>
+      <div className="home-hero">
+        <header className="hero hero-copy">
+          <p className="eyebrow">An open-source workshop for 3D</p>
+          <h1 className="hero-title">
+            Build the asset.
+            <br />
+            <em>Keep the source.</em>
+          </h1>
+          <p className="lede">
+            Build editable 3D assets with your coding agent. Review renders, change named parts, and
+            export JavaScript and GLB.
+          </p>
+          <div className="cta">
+            <a className="button primary" href="#start">
+              Run your first render
+            </a>
+            <a className="button" href="#connect">
+              Connect your agent
+            </a>
+          </div>
+        </header>
+        <div className="hero-visual">
+          {hero && <Hero specimen={hero} />}
+          <p className="hero-note">
+            An orbital station, built from editable JavaScript. Turn it around.
+          </p>
+        </div>
+      </div>
+      <div className="capability-strip">
+        <span>Local CLI + MCP</span>
+        <span>Editable JavaScript</span>
+        <span>Named parts & materials</span>
+        <span>GLB export · MIT</span>
+      </div>
+      <section className="band collection-section" aria-labelledby="collection-title">
+        <div className="section-heading">
+          <div>
+            <p className="eyebrow">The example collection</p>
+            <h2 id="collection-title">Small worlds. Working parts.</h2>
+          </div>
+          <a href="#/gallery">Browse all {specimens.length} examples →</a>
+        </div>
+        <div className="featured-assets editorial-grid">
+          {featured.map((s, index) => (
+            <a
+              className={`featured-asset ${index === 0 ? 'feature-lead' : index === 1 ? 'feature-wide' : 'feature-compact'}`}
+              key={s.name}
+              href={`#/${s.name}`}
             >
-              {h.name}
-            </button>
-          ))}
-        </div>
-        <Code>{active.code}</Code>
-        <p className="note">{active.note}</p>
-        <p className="aside">
-          Full detail, including headless permission grants and how to check that it actually
-          connected, is in <a href={`${DOCS}/docs/install.md`}>the install guide</a>.
-        </p>
-      </section>
-
-      <section className="band">
-        <h2>What the model actually writes</h2>
-        <p>
-          A program says what it is, builds a tree of named parts out of primitives and CSG, and
-          returns the root. Kiln injects the globals, so there is nothing to import and no build
-          step. If the asset moves, an <code>animate()</code> function beside it returns named clips
-          built against those same parts, so the joint that moves is the joint that was modelled.
-        </p>
-        <Code>{`const meta = { name: 'Crate', category: 'prop' };
-
-function build() {
-  const root = createRoot('Crate');
-  const wood = gameMaterial(0x8a5a2b, { roughness: 0.8 });
-  createPart('Body', boxGeo(1, 1, 1), wood, {
-    position: [0, 0.5, 0],
-    parent: root,
-  });
-  return root;
-}`}</Code>
-        <p>
-          The six-view sheet goes back to the model as an image. Write it, render it, look at it,
-          revise. That loop is the whole idea, and it is why the header comment on every example
-          reads like a post-mortem.
-        </p>
-      </section>
-
-      <section className="band">
-        <h2>
-          {specimens.length} assets, written by {models} models
-        </h2>
-        <p>
-          {notClaude} of them were not written by Claude. {cleanRoom} were dispatched into a
-          directory holding nothing but a brief and the Kiln skills, with no engine source and no
-          finished example to copy an interface from. Nothing in the tools or the skills changed for
-          any of them.
-        </p>
-        <div className="strip">
-          {strip.map((s) => (
-            <a key={s.name} className="chip-card" href={`#/${s.name}`}>
-              <img src={asset(s.thumb)} alt={s.caption || s.name} loading="lazy" />
-              <span>{s.name.replace(/-/g, ' ')}</span>
+              <div className="feature-image">
+                <img
+                  src={asset(s.thumb)}
+                  alt={s.caption || s.name.replaceAll('-', ' ')}
+                  loading="lazy"
+                />
+              </div>
+              <div className="feature-copy">
+                <span className="feature-number" aria-hidden="true">
+                  {String(index + 1).padStart(2, '0')}
+                </span>
+                <h3 className="feature-title">{s.name.replaceAll('-', ' ')}</h3>
+                <p className="feature-caption">{s.caption}</p>
+                <small className="feature-credit">
+                  {s.model} · {s.harness}
+                </small>
+              </div>
             </a>
           ))}
         </div>
-        <p>
-          <a className="button" href="#/gallery">
-            Browse the gallery
-          </a>
+        <p className="aside">
+          Every example opens in a 3D viewer, with its source and model credit alongside it. Browse
+          the shapes, inspect an assembly, or start from a program you like.
         </p>
       </section>
-
-      <section className="band">
-        <h2>Where to look in the repo</h2>
-        <dl className="map">
-          <dt>
-            <a href={`${DOCS}/examples`}>examples/</a>
-          </dt>
-          <dd>
-            Every program, with its render beside it and the model that wrote it in the header.
-          </dd>
-          <dt>
-            <a href={`${DOCS}/src/tools/registry.ts`}>src/tools/registry.ts</a>
-          </dt>
-          <dd>
-            One definition of every tool. The in-process version and the MCP server both read from
-            it, so the two transports cannot drift apart. A parity test fails the build if they
-            start to.
-          </dd>
-          <dt>
-            <a href={`${DOCS}/skills`}>skills/</a>
-          </dt>
-          <dd>
-            Five skills, written for a host agent that is doing the authoring itself rather than
-            calling a black box.
-          </dd>
-          <dt>
-            <a href={`${DOCS}/examples/strands-harness.ts`}>examples/strands-harness.ts</a>
-          </dt>
-          <dd>
-            The whole integration in about sixty lines, with both host-injected seams visible.
-          </dd>
-          <dt>
-            <a href={`${DOCS}/render-service`}>render-service/</a>
-          </dt>
-          <dd>
-            The GPU renderer. Local and remote are the same HTTP service, so there is no native
-            dependency and installing Kiln cannot fail on a machine without a GPU.
-          </dd>
-        </dl>
+      <section className="band reading-section" aria-labelledby="reading-title">
+        <div className="section-heading">
+          <div>
+            <p className="eyebrow">Find your way in</p>
+            <h2 id="reading-title">From a first asset to your own tools.</h2>
+          </div>
+        </div>
+        <div className="reading-grid">
+          <article>
+            <h3>Make something</h3>
+            <p>
+              Start with a local render, then connect your coding agent. Kiln provides the geometry
+              tools; your harness runs the model.
+            </p>
+            <a href="#start">Run a first render →</a>
+            <a href={`${DOCS}/install.md`}>Installation and supported harnesses</a>
+          </article>
+          <article>
+            <h3>Build on Kiln</h3>
+            <p>
+              Use the CLI, connect through MCP, or work with the TypeScript library. Read the
+              contracts before adding a geometry helper or tool.
+            </p>
+            <a href={`${DOCS}/architecture.md`}>How the engine fits together →</a>
+            <a href={`${DOCS}/extending.md`}>Extend the engine</a>
+            <a href={`${REPO}/blob/main/CONTRIBUTING.md`}>Contribute code or examples</a>
+          </article>
+          <article>
+            <h3>Working with an agent?</h3>
+            <p>
+              Give it the text guide below. It links to setup, tool contracts and skills, including
+              how to reuse a source revision across calls.
+            </p>
+            <a href={asset('llms.txt')}>Agent reading guide · plain text →</a>
+            <a href={`${DOCS}/tools.md`}>Tool arguments and results</a>
+            <a href={`${DOCS}/clean-room.md`}>Project-local setup and boundaries</a>
+          </article>
+        </div>
       </section>
-
+      <section className="band revision-section" aria-labelledby="revision-title">
+        <div className="section-intro">
+          <p className="eyebrow">01 / Make one change</p>
+          <h2 id="revision-title">
+            Change the shelf.
+            <br />
+            Keep the rest.
+          </h2>
+          <p>
+            Send the program once. Kiln returns a reference to that exact source revision. Your
+            agent can find a dimension, edit it, and review the new render without repeating the
+            whole program.
+          </p>
+        </div>
+        <div className="revision-layout">
+          <div className="revision-visual">
+            <EditDemo />
+          </div>
+          <div className="revision-detail">
+            <ol className="workflow">
+              <li>
+                <b>01 / Read</b>
+                <span>
+                  <code>kiln_source</code> searches the saved source and returns the section you
+                  need.
+                </span>
+              </li>
+              <li>
+                <b>02 / Edit</b>
+                <span>
+                  <code>kiln_edit</code> applies exact replacements and returns a new revision, a
+                  diff and rendered views.
+                </span>
+              </li>
+              <li>
+                <b>03 / Keep</b>
+                <span>Export the accepted source and GLB. Earlier revisions stay available.</span>
+              </li>
+            </ol>
+            <Code>{`kiln_source({ programRef: "p_7c94a132b8e0", query: "shelfHeight" })
+kiln_edit({
+  programRef: "p_7c94a132b8e0",
+  edits: [{ oldString: "shelfHeight = 0.2", newString: "shelfHeight = 0.45" }]
+})`}</Code>
+            <p className="aside">
+              API sketch: copy the reference returned by Kiln exactly. References survive local
+              server restarts. <a href={`${DOCS}/programs.md`}>How source revisions work →</a>
+            </p>
+          </div>
+        </div>
+      </section>
+      <section className="band geometry-section" aria-labelledby="geometry-title">
+        <div className="section-intro">
+          <p className="eyebrow">02 / Give it your own shape</p>
+          <h2 id="geometry-title">Shape it with an equation.</h2>
+          <p>
+            Sample a curved surface, build your own mesh, or combine lofts and modifiers. Keep those
+            functions in the source. Then frame a named part from its own axes to check an
+            attachment.
+          </p>
+        </div>
+        <div className="geometry-layout">
+          <div className="geometry-visual">
+            <figure className="edit-demo">
+              <div className="edit-demo-image">
+                <img
+                  src={asset('assets/equation-canopy.png')}
+                  alt="A wave-shaped canopy beside a close-up of the socket connecting a post to its surface"
+                  loading="lazy"
+                />
+              </div>
+              <figcaption>
+                <p>One saved revision. The whole surface and a socket viewed from below.</p>
+                <div className="demo-links">
+                  <a href={asset('assets/equation-canopy.kiln.js')} download>
+                    Source
+                  </a>
+                  <a href={asset('assets/equation-canopy.glb')} download>
+                    GLB
+                  </a>
+                  <a href={asset('assets/geometry-demo.json')}>Camera record</a>
+                </div>
+                <small>
+                  Maintainer teaching example. Actual CPU renders; the sampled sheet has no
+                  thickness.
+                </small>
+              </figcaption>
+            </figure>
+          </div>
+          <div className="geometry-detail">
+            <fieldset className="tabs" aria-label="Geometry example code">
+              <button
+                type="button"
+                className="tab"
+                aria-pressed={geometryTab === 'surface'}
+                onClick={() => setGeometryTab('surface')}
+              >
+                Surface code
+              </button>
+              <button
+                type="button"
+                className="tab"
+                aria-pressed={geometryTab === 'camera'}
+                onClick={() => setGeometryTab('camera')}
+              >
+                Camera request
+              </button>
+            </fieldset>
+            <Code>
+              {geometryTab === 'surface'
+                ? `const surface = parametricSurface(
+  (u, v) => [u, 1.35 + 0.22 * Math.sin(u * 2) + 0.12 * v * v, v],
+  { u: [-1.6, 1.6], v: [-0.8, 0.8],
+    uSegments: 48, vSegments: 24, orientation: 'vu' }
+);`
+                : `// Reuse programRef and a partPath returned by your render.
+kiln_render({ programRef, capture: {
+  version: 'kiln.capture.v1', cols: 2,
+  shots: [
+    { name: 'Whole asset' },
+    { name: 'Attachment', subject: { path: partPath },
+      visibility: 'context', camera: { type: 'orbit',
+        relativeTo: 'part', azimuthDeg: 65,
+        elevationDeg: -18, padding: 3 } }
+  ]
+}});`}
+            </Code>
+            <p className="aside">
+              <a href={`${DOCS}/geometry.md`}>Geometry contracts</a> ·{' '}
+              <a href={`${DOCS}/cameras.md`}>Camera positions, parts and animation frames</a>
+            </p>
+          </div>
+        </div>
+      </section>
+      <section className="band setup-section" aria-labelledby="setup-title">
+        <div className="section-heading">
+          <div>
+            <p className="eyebrow">03 / Open your workshop</p>
+            <h2 id="setup-title">A small setup. A project of your own.</h2>
+          </div>
+          <a href={`${DOCS}/install.md`}>Installation guide →</a>
+        </div>
+        <div className="setup-grid">
+          <section className="setup-card render-start" aria-labelledby="start">
+            <p className="eyebrow">Try the engine</p>
+            <h2 id="start">Your first render needs no model.</h2>
+            <p>
+              Built packages run with Node.js. Follow the{' '}
+              <a href={`${DOCS}/install.md`}>macOS, Windows or Linux installation guide</a> to
+              create your project-local agent setup.
+            </p>
+            <p>
+              From a source checkout, install <a href="https://bun.sh">Bun 1.3.14</a> and render the
+              small teaching example:
+            </p>
+            <Code>{`git clone https://github.com/matthew-kissinger/kiln
+cd kiln
+bun install --frozen-lockfile
+bun run kiln render examples/crate.kiln.js --out crate.glb --views sheet.png`}</Code>
+            <p>
+              You get a GLB and a six-view image. CPU rendering works without a GPU. For texture and
+              PBR material review,{' '}
+              <a href={`${DOCS}/rendering.md`}>connect the optional local GPU renderer</a>.
+            </p>
+          </section>
+          <section className="setup-card agent-start" aria-labelledby="connect">
+            <p className="eyebrow">Bring your coding agent</p>
+            <h2 id="connect">Give your agent a workspace.</h2>
+            <p>
+              Create a separate project for your assets. Setup adds local configuration and the core
+              authoring, refinement and QA skills. It leaves your global settings alone. The
+              commands below start from a source checkout.
+            </p>
+            <fieldset className="tabs" aria-label="Coding agent">
+              {HARNESSES.map(([id, name]) => (
+                <button
+                  className="tab"
+                  key={id}
+                  type="button"
+                  aria-pressed={id === harness}
+                  onClick={() => setHarness(id)}
+                >
+                  {name}
+                </button>
+              ))}
+            </fieldset>
+            <Code>{`bun run build:runtime
+node scripts/create-workspace.mjs ../my-assets --harness ${harness}
+cd ../my-assets
+# Follow START.md for your harness`}</Code>
+            <p>
+              Sign in to your harness and accept its project and MCP trust prompts. Then try:{' '}
+              <q>
+                Read AGENTS.md. Make a wooden workbench with a lower shelf. Review it and save the
+                source and GLB.
+              </q>
+            </p>
+            <p className="aside">
+              Tested on Node.js 22.23.1. Composition and batch skills are opt-in.{' '}
+              <a href={`${DOCS}/clean-room.md`}>Clean-room boundaries</a> ·{' '}
+              <a href={`${DOCS}/install.md`}>Package and plugin installation</a>
+            </p>
+          </section>
+        </div>
+      </section>
+      <section className="band fit-section">
+        <div>
+          <p className="eyebrow">Built for iteration</p>
+          <h2>
+            Useful geometry.
+            <br />
+            Source you can understand.
+          </h2>
+        </div>
+        <div>
+          <p>
+            Props, machinery, vehicles, buildings and rigid-part animation are represented in the
+            examples. Named parts and adjustable dimensions make variants straightforward. Organic
+            forms and detailed characters are less well demonstrated.
+          </p>
+          <p>
+            Structural checks help find problems. Review scale, collision, performance and
+            appearance in your target scene. A CPU image shows geometry and base colours; it is not
+            full material evidence.
+          </p>
+          <a href={`${DOCS}/architecture.md`}>Explore the tools and library →</a>
+        </div>
+      </section>
       <footer className="foot">
-        <span>MIT licensed. Built by Matthew Kissinger.</span>
+        <span>Kiln · Built by Matthew Kissinger · MIT</span>
         <a href={REPO}>Repository</a>
-        <a href={`${DOCS}/docs/install.md`}>Install</a>
-        <a href="#/gallery">Gallery</a>
-        <a href={`${REPO}/blob/main/LICENSE`}>License</a>
+        <a href={`${DOCS}/install.md`}>Install</a>
+        <a href={`${DOCS}/history/production-architecture.md`}>Project history</a>
       </footer>
-    </div>
+    </main>
   );
 }

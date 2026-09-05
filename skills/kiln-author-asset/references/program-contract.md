@@ -1,80 +1,40 @@
-# The Kiln program contract
+# Kiln source contract
 
-Read this when you are about to write or repair a `.kiln.js` program. The
-[SKILL.md](../SKILL.md) loop assumes you already know this shape.
-
-## File shape
-
-A program is plain JavaScript with **no imports and no exports**. Primitives and helpers arrive as
-globals. Three top-level declarations matter:
+A `.kiln.js` file is ordinary JavaScript evaluated with Kiln globals. Do not add imports, exports, or TypeScript syntax. JSDoc and local helper functions are supported.
 
 ```js
-const meta = { name: 'AssetName', category: 'prop', role: 'prop' };
-
+const meta = { name: 'Reading lamp', category: 'prop', role: 'prop' };
 function build() {
-  const root = createRoot('AssetName');
-  // ...
+  const root = createRoot('ReadingLamp');
+  const metal = gameMaterial(0x556677);
+  createPart('Base', cylinderGeo(0.25, 0.25, 0.06, 32), metal,
+    { position: [0, 0.03, 0], parent: root });
   return root;
 }
-
-function animate(root) {   // optional
-  return [clip];           // THREE.AnimationClip[]
-}
 ```
 
-`build()` may be **sync or async**. Mark it `async` if you use any CSG op (`boolUnion`, `boolDiff`,
-`boolIntersect`, `hull`) or any bevel/sweep op (`roundedBoxGeo`, `extrudeProfile`,
-`revolveProfile`) -- those await WASM.
+`meta.name` identifies the asset. `meta.category` selects subject-related validation/QA guidance; it does not impose a category triangle budget. Categories are `prop`, `character`, `vfx`, `environment`, `architecture`, `vegetation`, and `vehicle`. `meta.role` describes its scene role when composition needs one: `ground`, `building`, `wonder`, `poi`, `prop`, `fill`, or `vehicle`.
 
-An `export` statement is a validation error, not a style problem: the program is evaluated in a
-sandbox, not imported as a module.
+`build()` returns a `THREE.Object3D` and may be async. Use `async`/`await` for Boolean operations, `roundedBoxGeo`, `extrudeProfile`, `revolveProfile`, `implicitSurface`, approved texture loading, and other catalog signatures marked async. `sweepProfile`, `loftProfiles`, and ordinary deformations are synchronous.
 
-## `meta`
+Optional `animate(root)` returns an array of `THREE.AnimationClip`. Follow catalog keyframe signatures: rotation tracks use a `rotation` field, position tracks use `position`. Grounded and moving parts need meaningful named pivots.
 
-| Field | Meaning |
-|---|---|
-| `name` | the asset name; also the conventional root node name |
-| `category` | picks the advisory triangle reference point (see below) |
-| `role` | how the asset sits in a scene -- drives composition layout |
+## Frames and ownership
 
-`role` is one of `ground`, `building`, `wonder`, `poi`, `prop`, `fill`, `vehicle`. It is the field a
-scene composer reads later, so set it deliberately even for a standalone asset.
+- Asset coordinates: metres; +X forward, +Y up, +Z right.
+- Kiln helper rotations and deformation frame rotations: Euler XYZ degrees.
+- Direct Three.js `object.rotation`: radians.
+- `createPart` prefixes mesh names with `Mesh_`. `createPart(..., { parent })` attaches the part; do not separately add its return value to another parent.
+- `createPivot(name, position?, parent?)` is positional and prefixes the node name with `Joint_`. Rotate the returned object directly if needed.
+- Cached primitives may share geometry. Use `copyGeometry` or `.clone()` before direct vertex/geometry mutation. `copyMaterial` copies material properties while sharing referenced textures.
+- Legacy `cloneGeometry` and `cloneMaterial` return their input. They are deprecated reuse helpers, not independent copies.
 
-## The coordinate contract
+## Geometry and execution boundaries
 
-This is strict, and violating it is the most common failure that metrics cannot catch:
+Custom `THREE.BufferGeometry` is available. `meshGeo` helps validate flat positions, indices, normals, UV0, and tangents. Read export warnings for unsupported attributes; arbitrary Three.js features do not automatically survive GLB export. The host may select `geometryPolicy: 'strict'` to reject unsupported attributes instead of dropping them with warnings. In a local runtime, `KILN_GEOMETRY_POLICY=strict` configures this host policy; generated source and tool arguments cannot weaken it.
 
-- **+X** = forward / nose / muzzle
-- **+Y** = up
-- **+Z** = asset right
-- Ground rests at **Y = 0**
+Use deterministic equations or explicit seeded recipes when repeatable builds matter. Avoid ambient state in reusable geometry functions.
 
-Vehicles, aircraft, weapons, boats, and buildings all follow this frame. If a part points forward,
-build it along +X. If a part spans left-to-right, build it along Z. Do not let each asset invent its
-own forward axis -- a scene composed of assets with private conventions is unfixable.
+The source policy rejects host-global access, network access, dynamic imports/evaluation, constructor chains, and raw `THREE.DataTexture`, `ShaderMaterial`, or `RawShaderMaterial`. Use approved texture/material helpers. Source checks are not an operating-system sandbox; evaluator process boundaries belong to the host.
 
-## `createPart` auto-parents
-
-```js
-// WRONG -- double-adds
-parent.add(createPart('Name', geo, mat, { parent: parentObj }));
-
-// RIGHT
-createPart('Name', geo, mat, { parent: parentObj });
-```
-
-`createPivot(name, position, parent)` is positional and takes **no rotation**. If you need a rotated
-group, set rotation on the returned object after creating it.
-
-## Triangle budgets are advisory
-
-`kiln_validate` emits an informational nudge when an asset is far past the reference point for its
-category -- 25k for `prop`, 40k for `character`/`vehicle`/`vegetation`, 60k for `building`, 120k for
-`environment`, 40k default. **These never gate.** Triangles are not the cost driver; draw calls are.
-Keep the detail if the silhouette needs it, and reuse materials to keep draw calls down.
-
-## What the sandbox forbids
-
-No `globalThis`/`global`/`process`, no network, no dynamic `import`/`eval`/`Function`, no constructor
-chains, and no raw `THREE.DataTexture`/`ShaderMaterial`/`RawShaderMaterial`. The validator rejects
-these before a render, so hitting one costs a round trip, not a mystery.
+`kiln_validate` checks source without building geometry. `kiln_render` evaluates and returns images and structural findings. A valid program can still make an unsuitable shape or fail a later export check.

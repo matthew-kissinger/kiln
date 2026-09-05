@@ -1,23 +1,19 @@
+import {
+  MemoryCaptureCache,
+  createCachedRenderPort,
+  type CaptureCache,
+} from '../views/capture-cache';
 /**
- * Kiln Tool Registry — shared capability surface for agents.
- *
- * Four model-facing tools (list, validate, render, screenshot), each a thin
- * wrapper over the existing kiln core functions. This registry is the single
- * source of truth for every transport that exposes these tools: the in-process
- * Strands skin (agent/tools.ts) and the stdio MCP server both iterate
- * `kilnToolRegistry`, so tool names, descriptions, and behavior stay identical
- * across mechanisms. Never hand-write a tool definition in a skin.
- *
- * A fifth def, `kilnRenderViewsDef`, collapses render + screenshot into one
- * "see it" tool (metrics + six-view image from a single execution). It is
- * exported separately and deliberately NOT added to `kilnToolRegistry` — the
- * unified tool surface (KILN_TOOL_SURFACE='unified') consumes it, while the
- * bench baseline keeps iterating the unchanged four.
- *
- * Pure metrics only — `kiln_render` never writes files and never throws.
+ * Shared tool definitions. The original four-tool registry remains the in-process
+ * baseline. createKilnProgramToolRegistry exposes saved revisions, source reads,
+ * edit-and-render, and the unified view tools used by the stdio server.
  */
 
 import { z } from 'zod';
+import { MemoryProgramStore, type ProgramStore } from '../program-store';
+import { createKilnSourceDef, withProgramReferences } from './programs';
+import { createKilnDiscoveryDef } from './discovery';
+import { createCachedEvaluatorPort, MemoryBuildCache, type BuildCache } from '../build-cache';
 import * as THREE from 'three';
 
 import { validate } from '../validation';
@@ -107,6 +103,25 @@ export interface KilnToolDef {
  * category field.
  */
 export interface KilnToolContext {
+  geometryPolicy?: import('../geometry-export').GeometryExportPolicy;
+  localExecution?: import('../local-runtime').LocalExecution;
+  evaluationControls?: () => import('../evaluator/protocol').EvaluatorPortCallControlsV1;
+  captureLimits?: import('../views/capture-limits').CaptureLimits;
+  captureCache?: CaptureCache;
+  captureCacheIdentity?: string | (() => string | undefined | Promise<string | undefined>);
+  cacheCaptures?: boolean;
+  /** Disposable evaluated artifacts; source persistence is independently owned by programStore. */
+  buildCache?: BuildCache;
+  /** Host-declared engine/dependency identity for an injected evaluator. Omit to disable its reuse. */
+  evaluatorCacheIdentity?: string | (() => string | undefined);
+  /** The local host already wrapped its evaluator; avoid applying the cache twice. */
+  evaluatorCacheManaged?: boolean;
+  /** Public registries reuse compatible local builds by default. */
+  cacheEvaluations?: boolean;
+  /** Fail image requests rather than substitute CPU when GPU rendering is required. */
+  viewRenderRequired?: boolean;
+  /** Optional shared source store for the reference-based tool surface. */
+  programStore?: ProgramStore;
   intent?: AssetIntentV1;
   category?: AssetCategory;
   /** Host-owned material acceptance contract. The model cannot weaken it through
@@ -301,11 +316,16 @@ async function evaluateGeneratedSource(
   return resolveEvaluatorPortV1(
     context.evaluatorPort,
     context.evaluatorProfile ?? 'trusted-local',
-  ).render(code, {
-    optimize,
-    ...(trustedCategory(context) ? { category: trustedCategory(context) } : {}),
-    ...(context.intent ? { intent: context.intent } : {}),
-  });
+  ).render(
+    code,
+    {
+      optimize,
+      ...(context.geometryPolicy ? { geometryPolicy: context.geometryPolicy } : {}),
+      ...(trustedCategory(context) ? { category: trustedCategory(context) } : {}),
+      ...(context.intent ? { intent: context.intent } : {}),
+    },
+    context.evaluationControls?.(),
+  );
 }
 
 async function loadEvaluatedReviewScene(code: string, context: KilnToolContext) {
@@ -342,7 +362,23 @@ async function renderDerivativeCell(
   input: import('../views').DerivativeCellRenderInput,
   context: KilnToolContext,
 ): Promise<import('../views').DerivativeCellRenderResult> {
-  const rendered = await renderSceneToGLB(input.root as THREE.Object3D, {
+  let derivativeRoot = input.root as THREE.Object3D;
+  if (input.backfaceCull === false) {
+    derivativeRoot = derivativeRoot.clone(true);
+    derivativeRoot.traverse((node) => {
+      const mesh = node as THREE.Mesh;
+      if (!mesh.isMesh) return;
+      const prepare = (material: THREE.Material) => {
+        const copy = material.clone();
+        copy.side = THREE.DoubleSide;
+        return copy;
+      };
+      mesh.material = Array.isArray(mesh.material)
+        ? mesh.material.map(prepare)
+        : prepare(mesh.material);
+    });
+  }
+  const rendered = await renderSceneToGLB(derivativeRoot, {
     // The scene here was loaded back from a GLB this engine already produced
     // and adjudicated. Submitting it for judgement a second time fails on the
     // round trip rather than on the asset: see `derivative` in render.ts.
@@ -350,19 +386,31 @@ async function renderDerivativeCell(
     ...(trustedCategory(context) ? { category: trustedCategory(context) } : {}),
     ...(context.intent ? { intent: context.intent } : {}),
   });
+  const { cameraFromBounds, measureBounds } = await import('../views');
+  const camera =
+    input.camera ??
+    cameraFromBounds(
+      input.frameBounds ?? measureBounds(input.root),
+      input.view.dir,
+      1,
+      undefined,
+      measureBounds(input.root),
+    );
   const derivativeGlb = Uint8Array.from(rendered.bytes);
   const inputGlbSha256 = await sha256Glb(derivativeGlb);
   let degradeReason: string | undefined;
   const derivativeReasonCodes: ViewFidelityReasonCode[] = [];
 
-  if (context.viewRenderPort && !input.gpuUnsupportedReasonCode) {
-    const { captureViewPngsViaPort } = await import('../agent/generate');
+  if (context.viewRenderPort) {
+    const { captureViewPngsViaPort } = await import('../views/port');
     const ported = await captureViewPngsViaPort(
       context.viewRenderPort,
       derivativeGlb,
       resolveInLoopViewRenderTimeoutMs(context, 'derivative-cell'),
       [input.view.dir],
       input.size,
+      [camera],
+      context.captureLimits,
     );
     if (ported.ok && ported.derivativeFidelityAttested) {
       if (ported.inputGlbSha256 !== inputGlbSha256) {
@@ -373,6 +421,9 @@ async function renderDerivativeCell(
       const receipt: DerivativeViewReceiptV1 = {
         version: 'kiln.view-fidelity.v1',
         derivativeLabel: input.label,
+        camera,
+        cameraFidelity: 'echo-validated',
+        ...(ported.captureCache ? { captureCache: ported.captureCache } : {}),
         requested: 'full-preferred',
         delivered: 'full-material',
         materialFaithful: true,
@@ -407,12 +458,29 @@ async function renderDerivativeCell(
     degradeReason = 'material-faithful view render port unavailable';
   }
 
+  if (context.viewRenderRequired) throw new Error(`Required GPU render failed: ${degradeReason}`);
   const { renderGlbViewCell, CPU_RASTER_RENDERER_ID } = await import('../views');
-  const flat = await renderGlbViewCell(derivativeGlb, input.view, {
-    size: input.size,
-    ...(input.backfaceCull !== undefined ? { backfaceCull: input.backfaceCull } : {}),
-    ...(input.frameBounds ? { frameBounds: input.frameBounds } : {}),
-  });
+  const produceFlat = async () =>
+    renderGlbViewCell(derivativeGlb, input.view, {
+      size: input.size,
+      camera,
+      ...(input.backfaceCull !== undefined ? { backfaceCull: input.backfaceCull } : {}),
+      ...(input.frameBounds ? { frameBounds: input.frameBounds } : {}),
+    });
+  const flat: import('../views').GlbViewCellResult & { captureCache?: { hit: boolean } } =
+    context.captureCache
+      ? await (await import('../views/capture-cache')).captureCpuCell(
+          context.captureCache,
+          {
+            artifactGlbSha256: inputGlbSha256,
+            rendererId: CPU_RASTER_RENDERER_ID,
+            camera,
+            size: input.size,
+            backfaceCull: input.backfaceCull ?? true,
+          },
+          produceFlat,
+        )
+      : await produceFlat();
   if (flat.inputGlbSha256 !== inputGlbSha256) {
     throw new Error(
       `derivative GLB fallback hash mismatch (${flat.inputGlbSha256} != ${inputGlbSha256})`,
@@ -427,6 +495,17 @@ async function renderDerivativeCell(
   const receipt: DerivativeViewReceiptV1 = {
     version: 'kiln.view-fidelity.v1',
     derivativeLabel: input.label,
+    camera,
+    cameraFidelity: 'engine-resolved',
+    ...(flat.captureCache
+      ? {
+          captureCache: {
+            hit: flat.captureCache.hit,
+            reused: flat.captureCache.hit ? 1 : 0,
+            total: 1,
+          },
+        }
+      : {}),
     requested: 'full-preferred',
     delivered: 'geometry-flat',
     materialFaithful: false,
@@ -501,15 +580,13 @@ const screenshotInput = z.object({
  * metrics-only `kiln_render` produces no image, so a grid shape would be a
  * meaningless argument there and would change that schema for no reason.
  */
-const captureInput = z
+const legacyCaptureInput = z
   .object({
     preset: z
       .enum(['1x1', '1x2', '2x1', '3x1', '2x2', '3x2', '3x3'])
       .optional()
       .describe(
-        'Grid shape as COLSxROWS. Default 3x2 (the six-view contact sheet). Use a smaller grid ' +
-          'for a simple or symmetric object where six cells repeat each other, and 3x3 when you ' +
-          'genuinely need more angles than six.',
+        'Grid shape as COLSxROWS. Default 3x2. Choose fewer views for simple shapes, up to 3x3 for more angles.',
       ),
     cells: z
       .array(
@@ -545,6 +622,95 @@ const captureInput = z
       'six-view 3x2 grid, which is the right default for most assets.',
   );
 
+const cameraVec3Input = z.tuple([z.number(), z.number(), z.number()]);
+const cameraShotInput = z
+  .object({
+    name: z.string().optional(),
+    subject: z
+      .object({ path: z.string().optional(), name: z.string().optional() })
+      .strict()
+      .refine((v) => (v.path === undefined) !== (v.name === undefined), {
+        message: 'Choose subject path OR exact name.',
+      })
+      .optional(),
+    visibility: z.enum(['context', 'isolate']).optional(),
+    camera: z
+      .discriminatedUnion('type', [
+        z
+          .object({
+            type: z.literal('orbit'),
+            azimuthDeg: z.number().optional(),
+            elevationDeg: z.number().optional(),
+            relativeTo: z.enum(['world', 'asset', 'part']).optional(),
+            padding: z.number().positive().max(100).optional(),
+          })
+          .strict(),
+        z
+          .object({
+            type: z.literal('explicit'),
+            projection: z.enum(['orthographic', 'perspective']),
+            position: cameraVec3Input,
+            target: cameraVec3Input.optional(),
+            relativeTo: z.enum(['world', 'asset', 'part', 'local']).optional(),
+            frame: z
+              .object({ origin: cameraVec3Input.optional(), rotation: cameraVec3Input.optional() })
+              .strict()
+              .optional(),
+            framing: z.enum(['explicit', 'bounds']).optional(),
+            padding: z.number().positive().max(100).optional(),
+            targetOffset: cameraVec3Input.optional(),
+            up: cameraVec3Input.optional(),
+            halfHeight: z.number().positive().optional(),
+            fovDeg: z.number().positive().lt(180).optional(),
+            near: z.number().positive().optional(),
+            far: z.number().positive().optional(),
+          })
+          .strict(),
+      ])
+      .optional(),
+  })
+  .strict();
+const advancedCaptureInput = z
+  .object({
+    version: z.literal('kiln.capture.v1'),
+    shots: z.array(cameraShotInput).min(1).max(9),
+    cols: z.number().int().min(1).max(3).optional(),
+    size: z.number().int().min(128).max(1024).optional(),
+    output: z.enum(['grid', 'separate']).optional(),
+  })
+  .strict();
+// Error selection only: tagged input should explain its shot fields, not the
+// legacy branch's unknown keys. This does not coerce values or change JSON Schema.
+function taggedCaptureError(issue: { input?: unknown }): string | undefined {
+  const input = issue.input;
+  if (
+    typeof input !== 'object' ||
+    input === null ||
+    !('version' in input) ||
+    input.version !== 'kiln.capture.v1'
+  )
+    return undefined;
+  const parsed = advancedCaptureInput.safeParse(input);
+  if (parsed.success) return undefined;
+  const issues = parsed.error.issues;
+  const details = issues
+    .slice(0, 6)
+    .map((problem) => `${problem.path.join('.') || 'capture'}: ${problem.message.slice(0, 240)}`);
+  return `Invalid kiln.capture.v1: ${details.join('; ')}${issues.length > 6 ? '; additional issues omitted' : ''}`;
+}
+const captureInput = z
+  .union(
+    [
+      advancedCaptureInput,
+      z.strictObject(legacyCaptureInput.unwrap().shape, { error: taggedCaptureError }),
+    ],
+    { error: taggedCaptureError },
+  )
+  .optional()
+  .describe(
+    'Use legacy preset/cells for an orbit sheet, or version kiln.capture.v1 with 1..9 shots for exact part framing, local axes, perspective and separate images. Omit for six default views.',
+  );
+
 const renderViewsInput = renderInput.extend({ capture: captureInput });
 
 /** Unified-agent schema: the working buffer supplies `code`, while the model
@@ -554,6 +720,15 @@ const renderViewsInput = renderInput.extend({ capture: captureInput });
 export const renderViewsBufferInput = renderViewsInput.omit({ code: true });
 
 const screenshotAnimationInput = z.object({
+  shot: cameraShotInput.optional(),
+  frames: z.number().int().min(2).max(6).optional(),
+  frameTimes: z
+    .array(z.number().min(0).max(1))
+    .min(1)
+    .max(9)
+    .optional()
+    .describe('Ordered phase fractions 0..1; mutually exclusive with frames.'),
+  framing: z.enum(['locked', 'follow']).optional(),
   code: z
     .string()
     .describe('Kiln source code to execute; must define animate() returning the named clip.'),
@@ -578,6 +753,7 @@ const screenshotAnimationInput = z.object({
 });
 
 const viewInteriorInput = z.object({
+  capture: advancedCaptureInput.optional(),
   code: z.string().describe('Kiln source code to execute and render with the roof hidden.'),
   nodeName: z
     .string()
@@ -634,6 +810,8 @@ function runValidate(
 // =============================================================================
 
 export interface KilnRenderMetrics {
+  buildCache?: { key: `sha256:${string}`; hit: boolean };
+  parts?: { path: string; name: string }[];
   ok: boolean;
   tris?: number;
   meshes?: number;
@@ -729,6 +907,11 @@ async function runRender(
 
     return {
       ok: true,
+      ...(rendered.buildCache ? { buildCache: rendered.buildCache } : {}),
+      parts: (await import('../views'))
+        .listCameraSubjects(root)
+        .slice(0, 80)
+        .map(({ path, name }) => ({ path, name })),
       tris: rendered.tris,
       meshes: metrics.meshes,
       materials: metrics.materials,
@@ -820,6 +1003,12 @@ export function screenshotMedia(output: unknown): { png: Uint8Array; json: unkno
 // =============================================================================
 
 export interface KilnRenderViewsResult {
+  captureCache?: { hit: boolean; reused: number; total: number };
+  buildCache?: { key: `sha256:${string}`; hit: boolean };
+  cameraShots?: import('../views').ResolvedCameraShotV1[];
+  parts?: { path: string; name: string }[];
+  derivativeReceipts?: DerivativeViewReceiptV1[];
+  framesBase64?: string[];
   ok: boolean;
   tris?: number;
   meshes?: number;
@@ -877,6 +1066,47 @@ async function runRenderViews(
 
     const structuralWarnings = inspectSceneStructure(root, { category });
     const metrics = collectSceneMetrics(root);
+    if ('shots' in (input.capture ?? {})) {
+      const { renderCaptureGrid, listCameraSubjects } = await import('../views');
+      const grid = await renderCaptureGrid(root, input.capture!, (cell) =>
+        renderDerivativeCell(cell, context),
+      );
+      const receipts = grid.derivativeReceipts;
+      const materialFaithful = receipts.every((r) => r.materialFaithful);
+      return {
+        ok: true,
+        ...(rendered.buildCache ? { buildCache: rendered.buildCache } : {}),
+        tris: rendered.tris,
+        meshes: metrics.meshes,
+        materials: metrics.materials,
+        bbox: metrics.bbox,
+        lowestPart: metrics.lowestPart,
+        views: grid.views,
+        capture: grid.capture,
+        ...(grid.captureCache ? { captureCache: grid.captureCache } : {}),
+        gridWidth: grid.width,
+        gridHeight: grid.height,
+        cameraShots: grid.cameraShots,
+        parts: listCameraSubjects(root)
+          .slice(0, 80)
+          .map(({ path, name }) => ({ path, name })),
+        derivativeReceipts: receipts,
+        ...('output' in input.capture! && input.capture.output === 'separate'
+          ? { framesBase64: grid.perFramePngs.map((p) => p.toString('base64')) }
+          : { pngBase64: grid.png.toString('base64') }),
+        viewFidelity: {
+          version: 'kiln.view-fidelity.v1',
+          requested: 'full-preferred',
+          delivered: materialFaithful ? 'full-material' : 'geometry-flat',
+          materialFaithful,
+          exactArtifact: false,
+          rendererId: [...new Set(receipts.map((r) => r.rendererId))].join(', '),
+          inputGlbSha256: await sha256Glb(Uint8Array.from(rendered.glb)),
+          degraded: !materialFaithful,
+        },
+        warnings: [...structuralWarnings, ...rendered.warnings],
+      };
+    }
 
     // Route to the GPU only when a flat-shaded raster would misrepresent the
     // scene. A prop made of untextured `gameMaterial` looks the same either way,
@@ -892,13 +1122,13 @@ async function runRenderViews(
     let drawnBy: InLoopViewRender | undefined;
     let materialFaithful = false;
 
-    if (context.viewRenderPort && neededPbr) {
+    if (context.viewRenderPort && (neededPbr || context.viewRenderRequired)) {
       // Lazy import: `../agent/generate` sits upstream of this module in the
       // agent tool-surface graph (tools/registry <- agent/tools <- agent/surface
       // <- agent/run <- agent/generate), so a static import of
       // `captureViewsViaPort` here would be a real runtime import cycle. Loaded
       // lazily exactly like the `../views` import above.
-      const { captureViewsViaPort } = await import('../agent/generate');
+      const { captureViewsViaPort } = await import('../views/port');
       const ported = await captureViewsViaPort(
         context.viewRenderPort,
         rendered.glb,
@@ -916,6 +1146,7 @@ async function runRenderViews(
           width: ported.width,
           height: ported.height,
           capture: ported.capture,
+          ...(ported.captureCache ? { captureCache: ported.captureCache } : {}),
         };
         materialFaithful = true;
         drawnBy = { renderer: ported.rendererId, degraded: false, neededPbr };
@@ -932,8 +1163,15 @@ async function runRenderViews(
     // The CPU path is unchanged and is still what runs for every scene that does
     // not need PBR, every host with no port, and every port call that did not
     // come back. It is never skipped as an optimisation — it is the fallback.
+    if (!grid && context.viewRenderRequired)
+      throw new Error(
+        `Required GPU render failed: ${drawnBy?.degradedReason ?? 'renderer unavailable'}`,
+      );
     if (!grid) {
-      grid = await renderGlbViewGrid(rendered.glb, input.capture ? { capture: input.capture } : {});
+      grid = await renderGlbViewGrid(rendered.glb, {
+        ...(input.capture ? { capture: input.capture } : {}),
+        ...(context.captureCache ? { captureCache: context.captureCache } : {}),
+      });
     }
     drawnBy ??= context.viewRenderPort
       ? { renderer: CPU_RASTER_RENDERER_ID, degraded: false, neededPbr }
@@ -981,6 +1219,11 @@ async function runRenderViews(
 
     return {
       ok: true,
+      ...(rendered.buildCache ? { buildCache: rendered.buildCache } : {}),
+      parts: (await import('../views'))
+        .listCameraSubjects(root)
+        .slice(0, 80)
+        .map(({ path, name }) => ({ path, name })),
       tris: rendered.tris,
       meshes: metrics.meshes,
       materials: metrics.materials,
@@ -996,6 +1239,7 @@ async function runRenderViews(
         : {}),
       views: grid.views,
       ...(grid.capture ? { capture: grid.capture } : {}),
+      ...(grid.captureCache ? { captureCache: grid.captureCache } : {}),
       gridWidth: grid.width,
       gridHeight: grid.height,
       pngBase64: grid.png.toString('base64'),
@@ -1021,20 +1265,7 @@ async function runRenderViews(
  * with image support attach the PNG bytes and strip the base64 from the JSON.
  */
 const KILN_RENDER_VIEWS_DESCRIPTION =
-  'Execute the current model and SEE it: returns geometry metrics (triangle count, mesh + material counts, world-space bounding box, lowestPart — the mesh touching the lowest point, which must be intentional below Y=0 like earthworks or keels, never wheels/tails/equipment, and an instanceability grade A–F — informational, how cheap to render at scale) TOGETHER with a six-view image grid. ' +
-  'Row 1 = Front (camera on +X, the nose/muzzle should face you), Right (+Z, the long profile), Back (-X); ' +
-  'row 2 = Left (-Z), Top (+Y, check symmetry), 3/4 perspective (check part contact and overall read). ' +
-  'Use it to confirm the model builds and to verify orientation (+X forward), attachment (no floating parts), proportion, and silhouette. ' +
-  'That default grid is right for most assets — omit `capture` and you get it. ' +
-  'Pass `capture` when the default is a poor fit: `{preset:"2x2"}` or `{preset:"1x1"}` for a simple ' +
-  'or symmetric object whose six cells just repeat each other (fewer, larger cells read better), ' +
-  '`{preset:"3x3"}` when six angles genuinely are not enough. ' +
-  'For full control give `capture.cells` — one camera per cell in row-major order, each ' +
-  '{azimuthDeg, elevationDeg, zoom?}: azimuth 0 = front, 90 = right, 180 = back, 270 = left; ' +
-  'elevation 0 = eye level, positive looks down. Use it to aim every cell at what actually needs ' +
-  'checking — a seam, an underside, a joint the standard six leave occluded — instead of spending ' +
-  'cells on angles that show nothing. Max 9 cells. The reply echoes the grid shape it rendered. ' +
-  'If the build fails you get an error and NO image — fix the code and render again. Uses GPU PBR shading when the scene has textured or metallic materials and the renderer is reachable; otherwise uses a flat-shaded CPU render. Always read viewFidelity: when materialFaithful is false, use the image for geometry and silhouette only; do not judge material color, textures, normal relief, roughness, metalness, AO, or emissive response from it. Writes no files.' +
+  'Build the current asset and return geometry metrics, exact part paths and images. Omit capture for six orthographic views. Choose preset/cells for a smaller orbit sheet, or version kiln.capture.v1 with shots for per-part framing, local axes, perspective and separate images. +X is forward, +Y up, +Z right. Review silhouette, attachments, proportion and ground contact. GPU PBR shading supports textured or metallic materials; a flat-shaded CPU render supports geometry review. Read viewFidelity; do not judge material fidelity from CPU views. Failed builds return errors without images.' +
   VIEW_EVIDENCE_GUIDANCE;
 
 /** Create the unified render/view definition with host-owned QA context. */
@@ -1043,8 +1274,12 @@ export function createKilnRenderViewsDef(context: KilnToolContext = {}): KilnToo
   return {
     name: 'kiln_render',
     description: KILN_RENDER_VIEWS_DESCRIPTION,
+    mediaMulti: screenshotAnimationMediaMulti,
     inputSchema: renderViewsInput,
-    run: async (input) => runRenderViews(renderViewsInput.parse(input), statefulContext),
+    run: async (input) =>
+      guardCaptureBudget('kiln_render', input, statefulContext, () =>
+        runRenderViews(renderViewsInput.parse(input), statefulContext),
+      ),
     media: screenshotMedia,
   };
 }
@@ -1057,6 +1292,7 @@ export const kilnRenderViewsDef: KilnToolDef = createKilnRenderViewsDef();
 // =============================================================================
 
 export interface KilnScreenshotAnimationResult {
+  cameraShots?: import('../views').ResolvedCameraShotV1[];
   ok: boolean;
   clip?: string;
   camera?: string;
@@ -1100,6 +1336,10 @@ async function runScreenshotAnimation(
     const warnings = inspectSceneStructure(root, { category: trustedCategory(context) });
     const r = await renderClipAnimation(root, clips, {
       clip: input.clip,
+      ...(input.shot ? { shot: input.shot } : {}),
+      ...(input.frames !== undefined ? { frames: input.frames } : {}),
+      ...(input.frameTimes ? { frameTimes: input.frameTimes } : {}),
+      ...(input.framing ? { framing: input.framing } : {}),
       ...(input.camera ? { camera: input.camera } : {}),
       ...(input.perFrame ? { perFrame: true } : {}),
       renderDerivativeCell: (cell) => renderDerivativeCell(cell, context),
@@ -1121,6 +1361,7 @@ async function runScreenshotAnimation(
     const base: KilnScreenshotAnimationResult = {
       ok: true,
       frames: r.frames,
+      ...(r.cameraShots ? { cameraShots: r.cameraShots } : {}),
       warnings,
       ...(r.clip ? { clip: r.clip } : {}),
       ...(r.camera ? { camera: r.camera } : {}),
@@ -1196,7 +1437,9 @@ export function createKilnScreenshotAnimationDef(context: KilnToolContext = {}):
     description: KILN_SCREENSHOT_ANIMATION_DESCRIPTION,
     inputSchema: screenshotAnimationInput,
     run: async (input) =>
-      runScreenshotAnimation(screenshotAnimationInput.parse(input), statefulContext),
+      guardCaptureBudget('kiln_screenshot_animation', input, statefulContext, () =>
+        runScreenshotAnimation(screenshotAnimationInput.parse(input), statefulContext),
+      ),
     media: screenshotAnimationMedia,
     mediaMulti: screenshotAnimationMediaMulti,
   };
@@ -1210,6 +1453,8 @@ export const kilnScreenshotAnimationDef: KilnToolDef = createKilnScreenshotAnima
 // =============================================================================
 
 export interface KilnViewInteriorResult {
+  cameraShots?: import('../views').ResolvedCameraShotV1[];
+  framesBase64?: string[];
   ok: boolean;
   /** View names in grid order: Floor plan, Dollhouse, Eye-level. */
   views?: string[];
@@ -1252,6 +1497,7 @@ async function runViewInterior(
     // anything at all still lifts.
     const nodeName = input.nodeName?.trim() ? input.nodeName : undefined;
     const grid = await renderInteriorGrid(root, {
+      ...(input.capture ? { capture: input.capture } : {}),
       ...(nodeName ? { nodeName } : {}),
       renderDerivativeCell: (cell) => renderDerivativeCell(cell, context),
     });
@@ -1272,9 +1518,12 @@ async function runViewInterior(
       views: grid.views,
       gridWidth: grid.width,
       gridHeight: grid.height,
+      ...(grid.cameraShots ? { cameraShots: grid.cameraShots } : {}),
       roofsHidden: grid.roofsHidden,
       wallsHidden: grid.wallsHidden,
-      pngBase64: grid.png.toString('base64'),
+      ...(input.capture?.output === 'separate' && grid.perFramePngs
+        ? { framesBase64: grid.perFramePngs.map((p) => p.toString('base64')) }
+        : { pngBase64: grid.png.toString('base64') }),
       ...(viewFidelity ? { viewFidelity } : {}),
       ...(viewEvidence ? { viewEvidence } : {}),
       warnings,
@@ -1313,9 +1562,13 @@ export function createKilnViewInteriorDef(context: KilnToolContext = {}): KilnTo
   const statefulContext = withViewEvidenceHistory(context);
   return {
     name: 'kiln_view_interior',
+    mediaMulti: screenshotAnimationMediaMulti,
     description: KILN_VIEW_INTERIOR_DESCRIPTION,
     inputSchema: viewInteriorInput,
-    run: async (input) => runViewInterior(viewInteriorInput.parse(input), statefulContext),
+    run: async (input) =>
+      guardCaptureBudget('kiln_view_interior', input, statefulContext, () =>
+        runViewInterior(viewInteriorInput.parse(input), statefulContext),
+      ),
     media: screenshotMedia,
   };
 }
@@ -1327,7 +1580,23 @@ export const kilnViewInteriorDef: KilnToolDef = createKilnViewInteriorDef();
 // kiln_inspect (unified) — part-framed close-up of one suspect region
 // =============================================================================
 
+const attachmentEndpointInput = z
+  .object({
+    subject: z.object({ path: z.string().optional(), name: z.string().optional() }).strict(),
+    point: cameraVec3Input.optional(),
+  })
+  .strict();
 const inspectInput = z.object({
+  measure: z
+    .object({ from: attachmentEndpointInput, to: attachmentEndpointInput })
+    .strict()
+    .optional()
+    .describe(
+      'Straight-line distance between exact named node origins or subject-local points; asset units, not surface clearance.',
+    ),
+  shot: cameraShotInput
+    .optional()
+    .describe('Exact framed shot; omit legacy part/view/orbit fields when using this.'),
   code: z.string().describe('Kiln source code to execute and inspect.'),
   part: z
     .string()
@@ -1380,6 +1649,9 @@ const inspectInput = z.object({
 export const inspectBufferInput = inspectInput.omit({ code: true });
 
 export interface KilnInspectResult {
+  measurement?: ReturnType<typeof import('../views/measurement').measureAttachment>;
+  subjectFrame?: ReturnType<typeof import('../views/measurement').describeSubjectFrame>;
+  cameraShot?: import('../views').ResolvedCameraShotV1;
   ok: boolean;
   /** Resolved part name that was framed (absent when the whole asset was framed). */
   part?: string;
@@ -1419,6 +1691,38 @@ async function runInspect(
   try {
     const { prepareInspectView } = await import('../views/inspect');
     const { root } = await loadEvaluatedReviewScene(input.code, context);
+    const { measureAttachment, describeSubjectFrame } = await import('../views/measurement');
+    const measurement = input.measure ? measureAttachment(root, input.measure) : undefined;
+    if (input.shot) {
+      if (
+        [
+          input.part,
+          input.view,
+          input.azimuthDeg,
+          input.elevationDeg,
+          input.zoom,
+          input.isolate,
+        ].some((v) => v !== undefined)
+      )
+        throw new Error('shot cannot be combined with legacy inspection controls');
+      const { renderCaptureGrid } = await import('../views');
+      const grid = await renderCaptureGrid(
+        root,
+        { version: 'kiln.capture.v1', shots: [input.shot], size: 512 },
+        (cell) => renderDerivativeCell(cell, context),
+      );
+      return {
+        ok: true,
+        cameraShot: grid.cameraShots[0],
+        subjectFrame: describeSubjectFrame(root, input.shot.subject),
+        ...(measurement ? { measurement } : {}),
+        pngBase64: grid.perFramePngs[0]!.toString('base64'),
+        width: 512,
+        height: 512,
+        viewFidelity: derivativeReviewFidelity(grid.derivativeReceipts),
+      };
+    }
+
     const r = prepareInspectView(root, {
       ...(input.part !== undefined ? { part: input.part } : {}),
       ...(input.view !== undefined ? { view: input.view } : {}),
@@ -1443,12 +1747,6 @@ async function runInspect(
         view: r.viewSpec,
         size: r.size,
         frameBounds: r.frameBounds,
-        // The PBR port's direction mode auto-frames the complete GLB. That is
-        // truthful for a whole asset and for an isolated part derivative, but
-        // cannot preserve a part close-up while contextual geometry remains.
-        ...(!r.part || r.isolated
-          ? {}
-          : { gpuUnsupportedReasonCode: 'DERIVATIVE_GPU_FRAMING_UNSUPPORTED' as const }),
       },
       context,
     );
@@ -1468,6 +1766,7 @@ async function runInspect(
     return {
       ok: true,
       ...(r.part ? { part: r.part } : {}),
+      ...(measurement ? { measurement } : {}),
       view: r.view,
       azimuthDeg: r.azimuthDeg,
       elevationDeg: r.elevationDeg,
@@ -1520,7 +1819,10 @@ export function createKilnInspectDef(context: KilnToolContext = {}): KilnToolDef
     name: 'kiln_inspect',
     description: KILN_INSPECT_DESCRIPTION,
     inputSchema: inspectInput,
-    run: async (input) => runInspect(inspectInput.parse(input), statefulContext),
+    run: async (input) =>
+      guardCaptureBudget('kiln_inspect', input, statefulContext, () =>
+        runInspect(inspectInput.parse(input), statefulContext),
+      ),
     media: screenshotMedia,
   };
 }
@@ -1609,6 +1911,7 @@ const editInput = z.object({
 
 /** Result of one `kiln_edit` call. */
 export interface KilnEditResult {
+  framesBase64?: string[];
   ok: boolean;
   /** Why the call failed. Present only when ok is false. */
   error?: string;
@@ -1666,7 +1969,9 @@ async function runEdit(
 
   // Lift the image to the top level and strip it from the nested result, so the
   // PNG crosses the wire once rather than being carried in both places.
-  const { pngBase64, ...renderJson } = rendered as KilnRenderViewsResult & { pngBase64?: string };
+  const { pngBase64, framesBase64, ...renderJson } = rendered as KilnRenderViewsResult & {
+    pngBase64?: string;
+  };
   return {
     ok: true,
     code,
@@ -1674,6 +1979,7 @@ async function runEdit(
     diff,
     render: renderJson as KilnRenderViewsResult,
     ...(pngBase64 ? { pngBase64 } : {}),
+    ...(framesBase64 ? { framesBase64 } : {}),
   };
 }
 
@@ -1694,9 +2000,13 @@ export function createKilnEditDef(context: KilnToolContext = {}): KilnToolDef {
   const statefulContext = withViewEvidenceHistory(context);
   return {
     name: 'kiln_edit',
+    mediaMulti: screenshotAnimationMediaMulti,
     description: KILN_EDIT_DESCRIPTION,
     inputSchema: editInput,
-    run: async (input) => runEdit(editInput.parse(input), statefulContext),
+    run: async (input) =>
+      guardCaptureBudget('kiln_edit', input, statefulContext, () =>
+        runEdit(editInput.parse(input), statefulContext),
+      ),
     media: (output) => {
       const o = output as KilnEditResult | undefined;
       if (!o || typeof o.pngBase64 !== 'string' || o.pngBase64.length === 0) return undefined;
@@ -1744,7 +2054,10 @@ export function createKilnToolRegistry(context: KilnToolContext = {}): KilnToolD
         'Use it to verify orientation (+X forward), attachment (no floating parts), and silhouette before submitting. ' +
         'If a view looks wrong, fix the code and screenshot again. Flat-shaded CPU render; does not write files.',
       inputSchema: screenshotInput,
-      run: async (input) => runScreenshot(screenshotInput.parse(input), context),
+      run: async (input) =>
+        guardCaptureBudget('kiln_screenshot', input, context, () =>
+          runScreenshot(screenshotInput.parse(input), context),
+        ),
       media: screenshotMedia,
     },
   ];
@@ -1752,3 +2065,140 @@ export function createKilnToolRegistry(context: KilnToolContext = {}): KilnToolD
 
 /** Neutral compatibility registry. It never reads category from generated source. */
 export const kilnToolRegistry: KilnToolDef[] = createKilnToolRegistry();
+
+/** Portable authoring surface. Hosts share a store explicitly; no hidden current program. */
+let localCacheScope = 0;
+function withBuildCache(context: KilnToolContext): KilnToolContext {
+  if (
+    context.evaluatorCacheManaged ||
+    context.cacheEvaluations === false ||
+    (context.evaluatorPort && !context.evaluatorCacheIdentity)
+  )
+    return context;
+  // The implicit identity never leaves this process/registry. Persistent or shared
+  // host caches should supply an exact engine/dependency identity explicitly.
+  const scope = `kiln-local-registry-${++localCacheScope}`;
+  const evaluator = {
+    render: (...args: Parameters<import('../evaluator').EvaluatorPortV1['render']>) =>
+      resolveEvaluatorPortV1(
+        context.evaluatorPort,
+        context.evaluatorProfile ?? 'trusted-local',
+      ).render(...args),
+  };
+  return {
+    ...context,
+    evaluatorPort: createCachedEvaluatorPort(evaluator, {
+      cache: context.buildCache ?? new MemoryBuildCache(),
+      identity: () => {
+        const declared =
+          typeof context.evaluatorCacheIdentity === 'function'
+            ? context.evaluatorCacheIdentity()
+            : context.evaluatorCacheIdentity;
+        if (context.evaluatorPort) return declared;
+        const env = typeof process === 'undefined' ? {} : process.env;
+        return JSON.stringify([
+          declared ?? scope,
+          env['KILN_QA_MODE'],
+          env['KILN_BAKE_OPTIMIZE'],
+          env['KILN_BAKE_INSTANCE'],
+        ]);
+      },
+    }),
+  };
+}
+
+async function guardCaptureBudget(
+  name: string,
+  input: unknown,
+  context: KilnToolContext,
+  run: () => Promise<unknown>,
+): Promise<unknown> {
+  try {
+    const { enforceCapturePixels, enforceCaptureBytes } = await import('../views/capture-limits');
+    const args = input as {
+      capture?: import('../views').CaptureConfig;
+      frames?: number;
+      frameTimes?: number[];
+      render?: boolean;
+      shot?: unknown;
+    };
+    if (name === 'kiln_edit' && args.render === false) return await run();
+    let cells = 6,
+      size = 384,
+      cols = 3,
+      compose = true;
+    if (name === 'kiln_inspect') {
+      cells = 1;
+      size = 512;
+      cols = 1;
+      compose = Boolean(args.shot);
+    } else if (name === 'kiln_screenshot_animation') {
+      cells = args.frameTimes?.length ?? args.frames ?? 6;
+      size = 256;
+    } else if (name === 'kiln_view_interior') {
+      cells = 3;
+      size = 256;
+    }
+    if (args.capture) {
+      if (args.capture.shots) {
+        cells = args.capture.shots.length;
+        size = args.capture.size ?? 384;
+        cols = args.capture.cols ?? Math.min(3, cells);
+      } else {
+        const { resolveGridCapture } = await import('../views/capture');
+        const resolved = resolveGridCapture(args.capture);
+        cells = resolved.views.length;
+        cols = resolved.cols;
+      }
+    }
+    enforceCapturePixels(cells, size, cols, context.captureLimits, compose);
+    const out = await run();
+    if (out && typeof out === 'object') {
+      const media = out as { pngBase64?: string; framesBase64?: string[] };
+      const encoded = media.framesBase64 ?? (media.pngBase64 ? [media.pngBase64] : []);
+      enforceCaptureBytes(
+        encoded.map((value) => Buffer.from(value, 'base64')),
+        context.captureLimits,
+      );
+    }
+    return out;
+  } catch (error) {
+    return { ok: false, error: error instanceof Error ? error.message : String(error) };
+  }
+}
+
+function withCaptureCache(context: KilnToolContext): KilnToolContext {
+  if (context.cacheCaptures === false) return { ...context, captureCache: undefined };
+  const cache = context.captureCache ?? new MemoryCaptureCache();
+  const identity = () =>
+    typeof context.captureCacheIdentity === 'function'
+      ? context.captureCacheIdentity()
+      : context.captureCacheIdentity;
+  return {
+    ...context,
+    captureCache: cache,
+    ...(context.viewRenderPort && context.captureCacheIdentity
+      ? { viewRenderPort: createCachedRenderPort(context.viewRenderPort, { cache, identity }) }
+      : {}),
+  };
+}
+
+export function createKilnProgramToolRegistry(
+  suppliedContext: KilnToolContext = {},
+): KilnToolDef[] {
+  const context = withCaptureCache(withBuildCache(suppliedContext));
+  const store = context.programStore ?? new MemoryProgramStore();
+  const baseline = createKilnToolRegistry(context);
+  return [
+    createKilnDiscoveryDef({ ...suppliedContext, programStore: store }),
+    ...[
+      baseline.find((d) => d.name === 'kiln_validate')!,
+      createKilnRenderViewsDef(context),
+      createKilnScreenshotAnimationDef(context),
+      createKilnViewInteriorDef(context),
+      createKilnInspectDef(context),
+      createKilnEditDef(context),
+    ].map((def) => withProgramReferences(def, store)),
+    createKilnSourceDef(store),
+  ];
+}

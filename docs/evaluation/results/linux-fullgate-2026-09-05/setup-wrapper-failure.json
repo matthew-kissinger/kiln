@@ -1,0 +1,59 @@
+{
+  "startedAt": "2026-09-05T20:33:24.242Z",
+  "platform": "linux",
+  "arch": "x64",
+  "node": "v22.23.1",
+  "stages": [
+    {
+      "name": "extract",
+      "command": "tar",
+      "args": [
+        "-xf",
+        "/input.tar",
+        "-C",
+        "/work"
+      ],
+      "code": 0,
+      "timedOut": false,
+      "elapsedMs": 3545
+    },
+    {
+      "name": "toolchain",
+      "command": "bun",
+      "args": [
+        "run",
+        "check:toolchain"
+      ],
+      "code": 0,
+      "timedOut": false,
+      "elapsedMs": 48
+    },
+    {
+      "name": "install",
+      "command": "bun",
+      "args": [
+        "install",
+        "--frozen-lockfile"
+      ],
+      "code": 0,
+      "timedOut": false,
+      "elapsedMs": 6345
+    },
+    {
+      "name": "identity",
+      "command": "node",
+      "args": [
+        "--input-type=module",
+        "-e",
+        "const{runtimeBuildIdentity}=await import('./scripts/build-runtime.mjs');console.log(JSON.stringify(await runtimeBuildIdentity(process.cwd())));console.log(JSON.stringify(require))",
+        "const{runtimeBuildIdentity}=await import('./scripts/build-runtime.mjs');console.log(JSON.stringify(await runtimeBuildIdentity(process.cwd())));"
+      ],
+      "code": 1,
+      "timedOut": false,
+      "elapsedMs": 250
+    }
+  ],
+  "status": "failed",
+  "error": "identity failed",
+  "finishedAt": "2026-09-05T20:33:34.451Z"
+}

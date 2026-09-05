@@ -12,6 +12,8 @@
  * matches a real sandbox global.
  */
 
+import { geometryPrimitives } from './geometry-catalog';
+
 export interface PrimitiveSpec {
   /** Function name as it appears in the sandbox. */
   name: string;
@@ -50,6 +52,7 @@ export interface PrimitiveSpec {
 // entry in CATEGORY_NOTES in prompt-api.ts rather than four times here.
 
 const PRIMITIVES: PrimitiveSpec[] = [
+  ...geometryPrimitives,
   // ---------------------------------------------------------------------------
   // Structure
   // ---------------------------------------------------------------------------
@@ -498,9 +501,9 @@ const PRIMITIVES: PrimitiveSpec[] = [
     returns: 'THREE.BufferGeometry',
     category: 'geometry',
     description:
-      'Parametric gear: disc with N additive teeth around the rim and a center bore. Flat-shaded hard edges. Built directly (no CSG), so cheap.',
+      'Stylized gear with flat edges and an optional center bore; no CSG. Use boreRadius < rootRadius < tipRadius. Radii are absolute: an omitted rootRadius stays 0.8 when tipRadius changes. Set all three radii for small gears.',
     example:
-      "const g = gearGeo({ teeth: 16, tipRadius: 1.0, boreRadius: 0.15, height: 0.25 });\ncreatePart('Gear', g, gameMaterial(0x909090, { metalness: 0.8 }), { parent: root });",
+      "const g = gearGeo({ teeth: 28, rootRadius: 0.063, tipRadius: 0.075, boreRadius: 0.012, height: 0.024 });\ncreatePart('Gear', g, gameMaterial(0x909090, { metalness: 0.8 }), { parent: root });",
   },
   {
     name: 'bladeGeo',
@@ -658,7 +661,7 @@ const PRIMITIVES: PrimitiveSpec[] = [
     returns: 'THREE.BufferGeometry (same ref)',
     category: 'instancing',
     description:
-      'Returns the same geometry reference. Use it as a signal that you are intentionally sharing geometry across multiple parts; gltf-transform dedupes on export.',
+      'Deprecated name: returns the SAME geometry, without copying. Use copyGeometry for independent vertex edits, or pass the original geometry directly for intentional sharing.',
     example: 'const wheelGeo = cylinderGeo(0.4, 0.4, 0.2, 12);',
   },
   {
@@ -666,7 +669,8 @@ const PRIMITIVES: PrimitiveSpec[] = [
     signature: 'cloneMaterial(mat: Material)',
     returns: 'THREE.Material (same ref)',
     category: 'instancing',
-    description: 'Shared material reference. See cloneGeometry.',
+    description:
+      'Deprecated name: returns the SAME material. Use copyMaterial for independent property edits, or pass the original for intentional sharing.',
     example: 'const rubberMat = gameMaterial(0x1a1a1a, { roughness: 0.95 });',
   },
   {
@@ -688,7 +692,8 @@ const PRIMITIVES: PrimitiveSpec[] = [
   // these ops are WASM-backed. The executor awaits build() transparently.
   {
     name: 'boolUnion',
-    signature: 'await boolUnion(name: string, ...parts: Object3D[], opts?: { smooth?: false })',
+    signature:
+      'await boolUnion(name: string, ...parts: Object3D[], opts?: { smooth?: false, preserveAttributes?: boolean })',
     returns: 'Promise<THREE.Mesh>',
     category: 'csg',
     description:
@@ -699,7 +704,7 @@ const PRIMITIVES: PrimitiveSpec[] = [
   {
     name: 'boolDiff',
     signature:
-      'await boolDiff(name: string, body: Object3D, ...cutters: Object3D[], opts?: { smooth?: false })',
+      'await boolDiff(name: string, body: Object3D, ...cutters: Object3D[], opts?: { smooth?: false, preserveAttributes?: boolean })',
     returns: 'Promise<THREE.Mesh>',
     category: 'csg',
     description:
@@ -815,22 +820,23 @@ const PRIMITIVES: PrimitiveSpec[] = [
   {
     name: 'subdivide',
     signature:
-      'subdivide(geometry: BufferGeometry, iterations?: 1, opts?: { split, uvSmooth, preserveEdges, flatOnly, weld })',
+      'subdivide(geometry: BufferGeometry, iterations?: 1, opts?: { preserveUV?: boolean, split?: boolean, uvSmooth?: boolean, preserveEdges?: boolean, flatOnly?: boolean, weld?: boolean })',
     returns: 'THREE.BufferGeometry',
     category: 'mesh-ops',
     description:
-      'Loop subdivision. Each iteration ~4x the triangle count and smooths the surface. Non-indexed input is auto-welded via mergeVertices (weld: false to skip). Use 1 for mild smoothing, 2 for organic shapes.',
+      'Loop subdivision returns new geometry; each iteration roughly quadruples triangles and smooths the surface. Use preserveUV:true for textured meshes. Legacy position-only welding discards UVs and reports that loss. This smooths shapes, not selected-edge beveling.',
     example: 'const smoothRock = subdivide(boxGeo(1, 1, 1), 2);',
   },
   {
     name: 'mergeVertices',
-    signature: 'mergeVertices(geometry: BufferGeometry, tolerance?: 1e-4)',
+    signature:
+      'mergeVertices(geometry: BufferGeometry, opts?: { tolerance?: 1e-4, positionOnly?: boolean } | number)',
     returns: 'THREE.BufferGeometry',
     category: 'mesh-ops',
     description:
-      "Welds coincident vertices into shared, indexed ones. Three's primitives emit disconnected per-face strips — call this before subdividing, deforming, or smooth-shading so shared corners move once.",
+      'Returns indexed geometry. Default welding preserves attribute seams, so a textured cube retains separate face corners. positionOnly:true welds coincident positions and discards other attributes; use it explicitly when changing topology and regenerate shading/UVs afterward.',
     example:
-      "// Weld before random deformation so corners drift together:\nconst base = mergeVertices(boxGeo(1, 1, 1));\nconst pos = base.getAttribute('position');\nfor (let i = 0; i < pos.count; i++) pos.setXYZ(i, pos.getX(i) + jitter(), pos.getY(i) + jitter(), pos.getZ(i) + jitter());\nconst rock = subdivide(base, 2);",
+      'const welded = mergeVertices(boxGeo(1, 1, 1), { positionOnly: true });\nconst rock = displace(subdivide(welded, 2), ([x,y,z]) => [0.08*Math.sin(y*7+z*3), 0.04*Math.sin(x*9), 0]);',
   },
 
   // ---------------------------------------------------------------------------
@@ -1037,7 +1043,7 @@ const PRIMITIVES: PrimitiveSpec[] = [
     returns: '{ valid, errors, warnings }',
     category: 'utility',
     description:
-      'Warns on high distinct-material count (draw calls). No triangle limit; detail is free.',
+      'Checks geometry and material costs for the selected category. No default triangle limit; choose detail for the intended runtime and inspect measured draw calls.',
     example: "const v = validateAsset(root, 'prop');",
   },
 ];

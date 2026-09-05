@@ -1,0 +1,409 @@
+{
+  "date": "2026-09-05",
+  "kind": "Three new independently authored original briefs",
+  "interruptedAttempt": {
+    "directory": "C:/Users/Mattm/X/kiln-cleanrooms/showcase-muse-0d457e8f/brass-tellurion",
+    "status": "Stopped after renderer disappeared; no delivered image cells; no source carried into fresh attempt"
+  },
+  "runs": [
+    {
+      "name": "brass-tellurion",
+      "outcome": {
+        "exitCode": 0,
+        "timedOut": false,
+        "seconds": 162.585
+      },
+      "model": "opencode/muse-spark-1.3-contributor-free",
+      "harness": "OpenCode 1.18.27",
+      "reportedCost": 0,
+      "packageSha256": "0d457e8f8763730079da013abfa6662aadc02843f090fcae594c0f711399d16c",
+      "runtimeManifest": {
+        "schemaVersion": 1,
+        "harness": "opencode",
+        "runtime": "C:\\Users\\Mattm\\AppData\\Local\\Temp\\kiln-package-café-I3KNmI\\fresh installation\\node_modules\\@kiln\\engine",
+        "runtimeVersion": "0.6.0",
+        "runtimeHashes": {
+          "cli": "4f70681d55901b2416babe9108b291e4a7ab2de462360f8d13bdd7084bea6126",
+          "mcp": "776d049ab819ff898450320b59540b3d61c0460a6954d2db9c1aaabb7d7f0354"
+        },
+        "node": "C:\\Users\\Mattm\\AppData\\Roaming\\fnm\\node-versions\\v22.23.1\\installation\\node.exe",
+        "skills": [
+          "kiln-author-asset",
+          "kiln-refine-asset",
+          "kiln-qa-asset"
+        ],
+        "skillHashes": {
+          "kiln-author-asset/references/camera-recipes.md": "8959e0b5bf98d8d6712147ff9f4eb05bdff9a58cdda60796304a527329b84c19",
+          "kiln-author-asset/references/geometry-recipes.md": "12e861a7c05b21ee8d0de713f4bde8a843af1dbf37326b5121a8229805693c3c",
+          "kiln-author-asset/references/program-contract.md": "42cc4c17fa14d94febdf0ccbc38454f5972f2d3730f20dbca39151c0fe3aa293",
+          "kiln-author-asset/references/reusable-frame.kiln.js": "9015b2255742efa74e47531f68778573c34566237b3256dcdaab9c360cfc895f",
+          "kiln-author-asset/SKILL.md": "6a69c2ef6315cf719c33a5c024f5b07c87264de8e6fdb987cacbefbfd431f93e",
+          "kiln-qa-asset/references/integration-checks.md": "3d340cc81c0de0a4415ff1d2707c64db1a7433fd7e63f69e1748862739ef5c24",
+          "kiln-qa-asset/SKILL.md": "f2f990a669529f09c7e818a74f1e3af299e474d41a86910434d521a1fd596845",
+          "kiln-refine-asset/references/revision-and-views.md": "78ccb43588fd37b020cabc17e61facd610ea676c7f0c9ebb104f07845edbf3e5",
+          "kiln-refine-asset/SKILL.md": "135af2115e63f09f4c413feceedee5f547d21d154b4d32ed5e88c4077ac56d61"
+        },
+        "generated": {
+          "kiln.mjs": "33c0d3dfb0ed8ad1e928d8ada921b404b2aa3fd336391b99679e34da3d9c404d",
+          "opencode.json": "c42b77f8c9c92d8332f7200b07fc50d8678e08053bda35cf7610173ddca922e8"
+        }
+      },
+      "calls": 15,
+      "deliveredImageCells": 10,
+      "savedPngs": 5,
+      "fullSourceMcpCalls": 0,
+      "sourceReadCalls": 0,
+      "edits": [
+        {
+          "from": "sha256:35f4aa1102b30e9a808d3bde07e9c2486f59710ad810f9b00540580c5ce50272",
+          "to": "sha256:05d5e0de75367f4bba2ef0a924fea6e1c2e4e2d03092f8b47383f110e25c6242",
+          "recordedRef": "sha256:05d5e0de75367f4bba2ef0a924fea6e1c2e4e2d03092f8b47383f110e25c6242",
+          "editCount": 2,
+          "replayMatches": true
+        },
+        {
+          "from": "sha256:05d5e0de75367f4bba2ef0a924fea6e1c2e4e2d03092f8b47383f110e25c6242",
+          "to": "sha256:a3f7ce3965611f22ac464e2f8de2be89a225386536348943628047dae5c450b9",
+          "recordedRef": "sha256:a3f7ce3965611f22ac464e2f8de2be89a225386536348943628047dae5c450b9",
+          "editCount": 7,
+          "replayMatches": true
+        },
+        {
+          "from": "sha256:a3f7ce3965611f22ac464e2f8de2be89a225386536348943628047dae5c450b9",
+          "to": "sha256:cf76e93c71f2a63dfd08863d014cf1b2a74b55f104a7d6146ec9c35db67f012a",
+          "recordedRef": "sha256:cf76e93c71f2a63dfd08863d014cf1b2a74b55f104a7d6146ec9c35db67f012a",
+          "editCount": 6,
+          "replayMatches": true
+        }
+      ],
+      "errors": [
+        {
+          "tool": "kiln_screenshot_animation",
+          "error": "clip \"{\"camera\": \"right\", \"clip\": \"Mechanism\", \"frameTimes\": [0, 0.33, 0.66], \"framing\": \"locked\"}\" not found in this asset"
+        },
+        {
+          "tool": "kiln_render",
+          "error": "Input validation error: Invalid arguments for tool kiln_render: capture: Invalid kiln.capture.v1: shots.0.camera: Unrecognized key: \"projection\"; shots.1.camera: Unrecognized key: \"projection\""
+        }
+      ],
+      "artifacts": [
+        {
+          "file": "brass-tellurion.glb",
+          "bytes": 662832,
+          "sha256": "e9f1e4c144721f76fce895aedaa728b4a55b65c1987b5d6cb1a4854725f567b2"
+        },
+        {
+          "file": "brass-tellurion.kiln.js",
+          "bytes": 12910,
+          "sha256": "cf76e93c71f2a63dfd08863d014cf1b2a74b55f104a7d6146ec9c35db67f012a"
+        },
+        {
+          "file": "chosen.png",
+          "bytes": 47290,
+          "sha256": "14e4b76784fa8b73c523c7b5a06a7645c500c96bc0e2aeefe90d3517ad757fb6"
+        },
+        {
+          "file": "hero-capture.json",
+          "bytes": 84,
+          "sha256": "c0bcb0a49706d7df6d9717569fdd01e104f498ea895df9360a2df7e0b579d449"
+        },
+        {
+          "file": "review.md",
+          "bytes": 3624,
+          "sha256": "83cb37cb4a812d9786c86de2a0eb46688a674f9afcb56b7ec56b150c85ffabed"
+        },
+        {
+          "file": "sheet.png",
+          "bytes": 390164,
+          "sha256": "0e8742741d4c2e0bb533ce0b672f15929246d0d1651dfa13c8719c9e1a676e14"
+        }
+      ],
+      "evidenceDirectory": "C:\\Users\\Mattm\\X\\kiln-cleanrooms\\showcase-muse-0d457e8f-gpu-restored\\brass-tellurion",
+      "sourceHistory": [
+        {
+          "path": "C:\\Users\\Mattm\\X\\kiln-cleanrooms\\showcase-muse-0d457e8f-gpu-restored\\brass-tellurion\\workspace\\.kiln\\programs\\05d5e0de75367f4bba2ef0a924fea6e1c2e4e2d03092f8b47383f110e25c6242.js",
+          "sourceHash": "05d5e0de75367f4bba2ef0a924fea6e1c2e4e2d03092f8b47383f110e25c6242",
+          "bytes": 12690
+        },
+        {
+          "path": "C:\\Users\\Mattm\\X\\kiln-cleanrooms\\showcase-muse-0d457e8f-gpu-restored\\brass-tellurion\\workspace\\.kiln\\programs\\35f4aa1102b30e9a808d3bde07e9c2486f59710ad810f9b00540580c5ce50272.js",
+          "sourceHash": "35f4aa1102b30e9a808d3bde07e9c2486f59710ad810f9b00540580c5ce50272",
+          "bytes": 12663
+        },
+        {
+          "path": "C:\\Users\\Mattm\\X\\kiln-cleanrooms\\showcase-muse-0d457e8f-gpu-restored\\brass-tellurion\\workspace\\.kiln\\programs\\a3f7ce3965611f22ac464e2f8de2be89a225386536348943628047dae5c450b9.js",
+          "sourceHash": "a3f7ce3965611f22ac464e2f8de2be89a225386536348943628047dae5c450b9",
+          "bytes": 12697
+        },
+        {
+          "path": "C:\\Users\\Mattm\\X\\kiln-cleanrooms\\showcase-muse-0d457e8f-gpu-restored\\brass-tellurion\\workspace\\.kiln\\programs\\cf76e93c71f2a63dfd08863d014cf1b2a74b55f104a7d6146ec9c35db67f012a.js",
+          "sourceHash": "cf76e93c71f2a63dfd08863d014cf1b2a74b55f104a7d6146ec9c35db67f012a",
+          "bytes": 12910
+        }
+      ],
+      "cliImportNote": "One initial CLI import; later exact-ref source export.",
+      "acceptanceRecommendation": "Supporting gallery candidate; not a new hero."
+    },
+    {
+      "name": "canyon-funicular",
+      "outcome": {
+        "exitCode": 1,
+        "timedOut": true,
+        "seconds": 480.368
+      },
+      "model": "opencode/muse-spark-1.3-contributor-free",
+      "harness": "OpenCode 1.18.27",
+      "reportedCost": 0,
+      "packageSha256": "0d457e8f8763730079da013abfa6662aadc02843f090fcae594c0f711399d16c",
+      "runtimeManifest": {
+        "schemaVersion": 1,
+        "harness": "opencode",
+        "runtime": "C:\\Users\\Mattm\\AppData\\Local\\Temp\\kiln-package-café-I3KNmI\\fresh installation\\node_modules\\@kiln\\engine",
+        "runtimeVersion": "0.6.0",
+        "runtimeHashes": {
+          "cli": "4f70681d55901b2416babe9108b291e4a7ab2de462360f8d13bdd7084bea6126",
+          "mcp": "776d049ab819ff898450320b59540b3d61c0460a6954d2db9c1aaabb7d7f0354"
+        },
+        "node": "C:\\Users\\Mattm\\AppData\\Roaming\\fnm\\node-versions\\v22.23.1\\installation\\node.exe",
+        "skills": [
+          "kiln-author-asset",
+          "kiln-refine-asset",
+          "kiln-qa-asset"
+        ],
+        "skillHashes": {
+          "kiln-author-asset/references/camera-recipes.md": "8959e0b5bf98d8d6712147ff9f4eb05bdff9a58cdda60796304a527329b84c19",
+          "kiln-author-asset/references/geometry-recipes.md": "12e861a7c05b21ee8d0de713f4bde8a843af1dbf37326b5121a8229805693c3c",
+          "kiln-author-asset/references/program-contract.md": "42cc4c17fa14d94febdf0ccbc38454f5972f2d3730f20dbca39151c0fe3aa293",
+          "kiln-author-asset/references/reusable-frame.kiln.js": "9015b2255742efa74e47531f68778573c34566237b3256dcdaab9c360cfc895f",
+          "kiln-author-asset/SKILL.md": "6a69c2ef6315cf719c33a5c024f5b07c87264de8e6fdb987cacbefbfd431f93e",
+          "kiln-qa-asset/references/integration-checks.md": "3d340cc81c0de0a4415ff1d2707c64db1a7433fd7e63f69e1748862739ef5c24",
+          "kiln-qa-asset/SKILL.md": "f2f990a669529f09c7e818a74f1e3af299e474d41a86910434d521a1fd596845",
+          "kiln-refine-asset/references/revision-and-views.md": "78ccb43588fd37b020cabc17e61facd610ea676c7f0c9ebb104f07845edbf3e5",
+          "kiln-refine-asset/SKILL.md": "135af2115e63f09f4c413feceedee5f547d21d154b4d32ed5e88c4077ac56d61"
+        },
+        "generated": {
+          "kiln.mjs": "33c0d3dfb0ed8ad1e928d8ada921b404b2aa3fd336391b99679e34da3d9c404d",
+          "opencode.json": "f29653bf32122f12b641f6e586b3619080746f0b9cab0a1a994119a45e129af3"
+        }
+      },
+      "calls": 19,
+      "deliveredImageCells": 13,
+      "savedPngs": 5,
+      "fullSourceMcpCalls": 0,
+      "sourceReadCalls": 2,
+      "edits": [
+        {
+          "from": "sha256:11bc8dca8b167a24127123ba3ba861d58462ab6907ea0fe2229bad362f69986f",
+          "to": "sha256:623bc5525dc64449221ea92b48d88760dffd0d5ef1970c76ab4285f39c1b9849",
+          "recordedRef": "sha256:623bc5525dc64449221ea92b48d88760dffd0d5ef1970c76ab4285f39c1b9849",
+          "editCount": 4,
+          "replayMatches": true
+        },
+        {
+          "from": "sha256:623bc5525dc64449221ea92b48d88760dffd0d5ef1970c76ab4285f39c1b9849",
+          "to": "sha256:fe6c86ee74274aec69f7aad88fb022d9ed01a917381fb9b50b868100d7a506a4",
+          "recordedRef": "sha256:fe6c86ee74274aec69f7aad88fb022d9ed01a917381fb9b50b868100d7a506a4",
+          "editCount": 13,
+          "replayMatches": true
+        },
+        {
+          "from": "sha256:fe6c86ee74274aec69f7aad88fb022d9ed01a917381fb9b50b868100d7a506a4",
+          "to": "sha256:095099390342dd6b7e2ba9f66e8a0ea947ebcb486be59ea02480b054dc51d89f",
+          "recordedRef": "sha256:095099390342dd6b7e2ba9f66e8a0ea947ebcb486be59ea02480b054dc51d89f",
+          "editCount": 8,
+          "replayMatches": true
+        }
+      ],
+      "errors": [
+        {
+          "tool": "kiln_render",
+          "error": "Generated asset execution was rejected."
+        },
+        {
+          "tool": "kiln_validate"
+        },
+        {
+          "tool": "kiln_render",
+          "error": "Asset QA blocked at final-glb: GLTF_ACCESSOR_VECTOR3_NON_UNIT: Vector3 at accessor indices 0..2 is not of unit length: 0. | GLTF_ACCESSOR_VECTOR3_NON_UNIT: Vector3 at accessor indices 15..17 is not of unit length: 0. | GLTF_ACCESSOR_VECTOR3_NON_UNIT: Vector3 at accessor indices 18..20 is not of unit length: 0. | GLTF_ACCESSOR_VECTOR3_NON_UNIT: Vector3 at accessor indices 33..35 is not of unit length: 0. | GLTF_ACCESSOR_VECTOR3_NON_UNIT: Vector3 at accessor indices 36..38 is not of unit length: 0. | GLTF_ACCESSOR_VECTOR3_NON_UNIT: Vector3 at accessor indices 51..53 is not of unit length: 0. (+6 more blockers)"
+        },
+        {
+          "tool": "kiln_edit",
+          "error": "oldString was not found in the current code."
+        },
+        {
+          "tool": "kiln_screenshot_animation",
+          "error": "Input validation error: Invalid arguments for tool kiln_screenshot_animation: shot.camera: Invalid input: expected object, received string"
+        }
+      ],
+      "artifacts": [
+        {
+          "file": "canyon-funicular.glb",
+          "bytes": 413072,
+          "sha256": "4b14e2bbc91d167d43db6bc0224c6fa08f780ac35f77c688ee85bf32e314c55e"
+        },
+        {
+          "file": "canyon-funicular.kiln.js",
+          "bytes": 12972,
+          "sha256": "095099390342dd6b7e2ba9f66e8a0ea947ebcb486be59ea02480b054dc51d89f"
+        },
+        {
+          "file": "chosen.png",
+          "bytes": 22435,
+          "sha256": "e7e5d9155a641e765275b6db922eda448c85b55b6fb6d55dd0c97af8171436e5"
+        },
+        {
+          "file": "hero-capture.json",
+          "bytes": 238,
+          "sha256": "fa035dfd610555e063febef3dd24d9e27b6d1c7221570ef82352ceb711da5653"
+        }
+      ],
+      "evidenceDirectory": "C:\\Users\\Mattm\\X\\kiln-cleanrooms\\showcase-muse-0d457e8f-gpu-restored\\canyon-funicular",
+      "sourceHistory": [
+        {
+          "path": "C:\\Users\\Mattm\\X\\kiln-cleanrooms\\showcase-muse-0d457e8f-gpu-restored\\canyon-funicular\\workspace\\.kiln\\programs\\095099390342dd6b7e2ba9f66e8a0ea947ebcb486be59ea02480b054dc51d89f.js",
+          "sourceHash": "095099390342dd6b7e2ba9f66e8a0ea947ebcb486be59ea02480b054dc51d89f",
+          "bytes": 12972
+        },
+        {
+          "path": "C:\\Users\\Mattm\\X\\kiln-cleanrooms\\showcase-muse-0d457e8f-gpu-restored\\canyon-funicular\\workspace\\.kiln\\programs\\11bc8dca8b167a24127123ba3ba861d58462ab6907ea0fe2229bad362f69986f.js",
+          "sourceHash": "11bc8dca8b167a24127123ba3ba861d58462ab6907ea0fe2229bad362f69986f",
+          "bytes": 11797
+        },
+        {
+          "path": "C:\\Users\\Mattm\\X\\kiln-cleanrooms\\showcase-muse-0d457e8f-gpu-restored\\canyon-funicular\\workspace\\.kiln\\programs\\623bc5525dc64449221ea92b48d88760dffd0d5ef1970c76ab4285f39c1b9849.js",
+          "sourceHash": "623bc5525dc64449221ea92b48d88760dffd0d5ef1970c76ab4285f39c1b9849",
+          "bytes": 10719
+        },
+        {
+          "path": "C:\\Users\\Mattm\\X\\kiln-cleanrooms\\showcase-muse-0d457e8f-gpu-restored\\canyon-funicular\\workspace\\.kiln\\programs\\74cb1bf11cc488afbe35f9cbceadf9fb79eec2587225302ce3b22416d15d1a75.js",
+          "sourceHash": "74cb1bf11cc488afbe35f9cbceadf9fb79eec2587225302ce3b22416d15d1a75",
+          "bytes": 11818
+        },
+        {
+          "path": "C:\\Users\\Mattm\\X\\kiln-cleanrooms\\showcase-muse-0d457e8f-gpu-restored\\canyon-funicular\\workspace\\.kiln\\programs\\fe6c86ee74274aec69f7aad88fb022d9ed01a917381fb9b50b868100d7a506a4.js",
+          "sourceHash": "fe6c86ee74274aec69f7aad88fb022d9ed01a917381fb9b50b868100d7a506a4",
+          "bytes": 11612
+        }
+      ],
+      "cliImportNote": "Three import command attempts; first used unavailable head and author later re-imported after locally fixing export syntax. Does not meet import-once ideal. All later MCP calls use refs.",
+      "acceptanceRecommendation": "Reject: weak canyon and station design; timed out after exports."
+    },
+    {
+      "name": "glasswing-drone",
+      "outcome": {
+        "exitCode": 0,
+        "timedOut": false,
+        "seconds": 150.384
+      },
+      "model": "opencode/muse-spark-1.3-contributor-free",
+      "harness": "OpenCode 1.18.27",
+      "reportedCost": 0,
+      "packageSha256": "0d457e8f8763730079da013abfa6662aadc02843f090fcae594c0f711399d16c",
+      "runtimeManifest": {
+        "schemaVersion": 1,
+        "harness": "opencode",
+        "runtime": "C:\\Users\\Mattm\\AppData\\Local\\Temp\\kiln-package-café-I3KNmI\\fresh installation\\node_modules\\@kiln\\engine",
+        "runtimeVersion": "0.6.0",
+        "runtimeHashes": {
+          "cli": "4f70681d55901b2416babe9108b291e4a7ab2de462360f8d13bdd7084bea6126",
+          "mcp": "776d049ab819ff898450320b59540b3d61c0460a6954d2db9c1aaabb7d7f0354"
+        },
+        "node": "C:\\Users\\Mattm\\AppData\\Roaming\\fnm\\node-versions\\v22.23.1\\installation\\node.exe",
+        "skills": [
+          "kiln-author-asset",
+          "kiln-refine-asset",
+          "kiln-qa-asset"
+        ],
+        "skillHashes": {
+          "kiln-author-asset/references/camera-recipes.md": "8959e0b5bf98d8d6712147ff9f4eb05bdff9a58cdda60796304a527329b84c19",
+          "kiln-author-asset/references/geometry-recipes.md": "12e861a7c05b21ee8d0de713f4bde8a843af1dbf37326b5121a8229805693c3c",
+          "kiln-author-asset/references/program-contract.md": "42cc4c17fa14d94febdf0ccbc38454f5972f2d3730f20dbca39151c0fe3aa293",
+          "kiln-author-asset/references/reusable-frame.kiln.js": "9015b2255742efa74e47531f68778573c34566237b3256dcdaab9c360cfc895f",
+          "kiln-author-asset/SKILL.md": "6a69c2ef6315cf719c33a5c024f5b07c87264de8e6fdb987cacbefbfd431f93e",
+          "kiln-qa-asset/references/integration-checks.md": "3d340cc81c0de0a4415ff1d2707c64db1a7433fd7e63f69e1748862739ef5c24",
+          "kiln-qa-asset/SKILL.md": "f2f990a669529f09c7e818a74f1e3af299e474d41a86910434d521a1fd596845",
+          "kiln-refine-asset/references/revision-and-views.md": "78ccb43588fd37b020cabc17e61facd610ea676c7f0c9ebb104f07845edbf3e5",
+          "kiln-refine-asset/SKILL.md": "135af2115e63f09f4c413feceedee5f547d21d154b4d32ed5e88c4077ac56d61"
+        },
+        "generated": {
+          "kiln.mjs": "33c0d3dfb0ed8ad1e928d8ada921b404b2aa3fd336391b99679e34da3d9c404d",
+          "opencode.json": "29b996f04ca8c0766fcdba7ea694f64ab1ce7a3b634c3f8a87f94c5521db51f1"
+        }
+      },
+      "calls": 9,
+      "deliveredImageCells": 9,
+      "savedPngs": 4,
+      "fullSourceMcpCalls": 0,
+      "sourceReadCalls": 0,
+      "edits": [
+        {
+          "from": "sha256:a047f865e9e2d31b5e04cafce08318021aa23a81c91f21d6bbb14a11c233bbb9",
+          "to": "sha256:c5547c4127e9b6b5721e984ad3aea70f5e4d459877d57d16c1b765f3a2bb169e",
+          "recordedRef": "sha256:c5547c4127e9b6b5721e984ad3aea70f5e4d459877d57d16c1b765f3a2bb169e",
+          "editCount": 4,
+          "replayMatches": true
+        },
+        {
+          "from": "sha256:c5547c4127e9b6b5721e984ad3aea70f5e4d459877d57d16c1b765f3a2bb169e",
+          "to": "sha256:2034b9489cce2ec28d05d3eb2da09ef454dbbc7d31e1d3de21d5736cfcfd2b3f",
+          "recordedRef": "sha256:2034b9489cce2ec28d05d3eb2da09ef454dbbc7d31e1d3de21d5736cfcfd2b3f",
+          "editCount": 5,
+          "replayMatches": true
+        }
+      ],
+      "errors": [
+        {
+          "tool": "kiln_screenshot_animation",
+          "error": "Input validation error: Invalid arguments for tool kiln_screenshot_animation: shot.camera: Invalid input: expected object, received string"
+        }
+      ],
+      "artifacts": [
+        {
+          "file": "capture.json",
+          "bytes": 168,
+          "sha256": "bcb5f7d896e59eda39a8258fbd4d5e3390a74546bba282824d1865cf4ae0b837"
+        },
+        {
+          "file": "chosen.png",
+          "bytes": 34467,
+          "sha256": "8ce1e350bd47297047ba38f46c70515fdec73cf58817aa0eb7afd8274f96f1c3"
+        },
+        {
+          "file": "glasswing-drone.glb",
+          "bytes": 307616,
+          "sha256": "f7463a8a531c20b3a3a5061ee1e14ecb48ff09fa5a4de0a9c5eac1382304fd21"
+        },
+        {
+          "file": "glasswing-drone.kiln.js",
+          "bytes": 9390,
+          "sha256": "2034b9489cce2ec28d05d3eb2da09ef454dbbc7d31e1d3de21d5736cfcfd2b3f"
+        },
+        {
+          "file": "review.md",
+          "bytes": 3603,
+          "sha256": "67485114269229383f235693cf34c7add125a2656c1d4f0bde0855bea829bc11"
+        }
+      ],
+      "evidenceDirectory": "C:\\Users\\Mattm\\X\\kiln-cleanrooms\\showcase-muse-0d457e8f-gpu-restored\\glasswing-drone",
+      "sourceHistory": [
+        {
+          "path": "C:\\Users\\Mattm\\X\\kiln-cleanrooms\\showcase-muse-0d457e8f-gpu-restored\\glasswing-drone\\workspace\\.kiln\\programs\\2034b9489cce2ec28d05d3eb2da09ef454dbbc7d31e1d3de21d5736cfcfd2b3f.js",
+          "sourceHash": "2034b9489cce2ec28d05d3eb2da09ef454dbbc7d31e1d3de21d5736cfcfd2b3f",
+          "bytes": 9390
+        },
+        {
+          "path": "C:\\Users\\Mattm\\X\\kiln-cleanrooms\\showcase-muse-0d457e8f-gpu-restored\\glasswing-drone\\workspace\\.kiln\\programs\\a047f865e9e2d31b5e04cafce08318021aa23a81c91f21d6bbb14a11c233bbb9.js",
+          "sourceHash": "a047f865e9e2d31b5e04cafce08318021aa23a81c91f21d6bbb14a11c233bbb9",
+          "bytes": 9272
+        },
+        {
+          "path": "C:\\Users\\Mattm\\X\\kiln-cleanrooms\\showcase-muse-0d457e8f-gpu-restored\\glasswing-drone\\workspace\\.kiln\\programs\\c5547c4127e9b6b5721e984ad3aea70f5e4d459877d57d16c1b765f3a2bb169e.js",
+          "sourceHash": "c5547c4127e9b6b5721e984ad3aea70f5e4d459877d57d16c1b765f3a2bb169e",
+          "bytes": 9389
+        }
+      ],
+      "cliImportNote": "One initial CLI import; later exact-ref source export.",
+      "acceptanceRecommendation": "Hold out of gallery: pale wing/body read and simple form do not meet stronger showcase bar."
+    }
+  ]
+}

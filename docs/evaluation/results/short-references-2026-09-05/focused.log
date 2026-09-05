@@ -1,0 +1,36 @@
+bun test v1.3.14 (0d9b296a)
+
+src\__tests__\cli-capture-file.test.ts:
+(pass) renders retained source with a capture file and rejects invalid recipes before writing artifacts [7165.30ms]
+
+src\__tests__\program-aliases.test.ts:
+(pass) requires explicit CAS, preserves immutable source, and rejects collisions and corrupt aliases [43.50ms]
+(pass) rejects lost updates from eight independent processes [266.27ms]
+
+src\__tests__\program-short-refs.test.ts:
+(pass) immutable short program references > keeps canonical puts and returns stable registered memory handles [1.01ms]
+(pass) immutable short program references > does not resolve an unregistered hash prefix or mint a missing source [0.34ms]
+(pass) immutable short program references > retainProgram supports hosts that only implement canonical storage [0.25ms]
+(pass) immutable short program references > accepts only full hashes or bounded lowercase handles [0.20ms]
+(pass) immutable short program references > persists handles across restart and lazily registers older full-hash files [12.31ms]
+(pass) immutable short program references > extends a colliding handle without replacing its original mapping [11.14ms]
+(pass) immutable short program references > independent file-store instances publish one stable handle concurrently [83.68ms]
+(pass) immutable short program references > extends only through the bounded canonical digest when shorter candidates are occupied [29.11ms]
+(pass) immutable short program references > rejects malformed mappings and changed source bytes without overwriting them [16.11ms]
+
+src\__tests__\program-store-stats.test.ts:
+(pass) reports deduplicated UTF-8 memory usage, limits and no eviction [0.47ms]
+(pass) reports only persisted source files across file-store instances and ignores temporary files [8.91ms]
+
+src\__tests__\program-tools.test.ts:
+(pass) program references > registers, reads, edits and renders a revision without resending source [284.04ms]
+(pass) program references > keeps custom stores without short-reference support compatible [3.35ms]
+(pass) program references > preserves inline clients, failed drafts, atomic failures and independent branches [5.54ms]
+(pass) program references > persists exact source across store instances and detects corrupt content [10.63ms]
+(pass) program references > pages source without loss and bounds search results [4.76ms]
+(pass) program references > enforces source limits without changing existing revisions [0.84ms]
+
+ 20 pass
+ 0 fail
+ 144 expect() calls
+Ran 20 tests across 5 files. [8.30s]

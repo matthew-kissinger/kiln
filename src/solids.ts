@@ -1,71 +1,15 @@
-/**
- * Kiln CSG primitives — manifold-3d wrapper
- *
- * Boolean operations (union / diff / intersect) and convex hull for the
- * Kiln primitive set, backed by Google's manifold-3d WASM library. The
- * library guarantees topologically-manifold output which matters for GLB
- * integrity (non-manifold geometry breaks many downstream tools).
- *
- * These primitives bridge Three.js BufferGeometry <-> Manifold Mesh.
- * Operations are synchronous once the WASM module is loaded (first call
- * pays the ~100ms init cost; subsequent calls are fast).
- *
- * Agents use these to:
- *   - carve holes: boolDiff(body, cutter)
- *   - merge parts: boolUnion(a, b, c)
- *   - keep overlap: boolIntersect(a, b)
- *   - wrap loosely: hull(parts)
- *
- * Limitations:
- *   - Input geometry should be watertight / manifold. sphereGeo's polar
- *     singularity can produce degenerate triangles that manifold trims.
- *   - Material is inherited from the first operand.
- *
- * ## UV semantics (T2.4) — read this before texturing a boolean
- *
- * **Every boolean DESTROYS UVs.** The bridge to manifold carries positions
- * only (`numProp: 3`); normals are recomputed from the result topology and the
- * `uv` attribute is simply absent on the output. This is not a bug to fix here:
- * manifold-3d does not preserve per-triangle provenance, so there is no
- * correspondence to carry UVs through in the first place — a new cut face has
- * no pre-image in either operand.
- *
- * The consequence for asset code: **unwrap after the boolean, not before.**
- *
- * ```js
- * const carved = await boolDiff('Panel', body, ...bolts);
- * carved.geometry = await autoUnwrap(carved.geometry);   // now it can hold a texture
- * ```
- *
- * Unwrapping an operand first is wasted work at best; the atlas it produces is
- * discarded by the very next boolean.
- *
- * Guards (all measured against real silent failures, see the tests):
- *   - An operand contributing zero triangles throws, naming which operand.
- *     `boolUnion(body, emptyGroup)` used to return the body unchanged and
- *     `boolIntersect(body, emptyGroup)` a zero-triangle mesh, both silently.
- *   - A ragged triangle list throws here rather than as manifold's bare
- *     "Not manifold", which names nothing.
- *   - An empty RESULT throws with the op-specific likely cause. A disjoint
- *     `boolIntersect` is the common one, and it used to ship an invisible part.
- */
-
+/** Manifold-backed solid operations with explicit legacy and attribute-preserving modes. */
 import * as THREE from 'three';
-import type { ManifoldToplevel, Manifold, Mesh } from 'manifold-3d';
+import { creaseNormals } from './geometry';
+import type { ManifoldToplevel, Manifold } from 'manifold-3d';
 
-// Lazy-init singleton. First call to any CSG op awaits init; subsequent
-// calls are O(bridge cost) only.
 let _module: ManifoldToplevel | null = null;
 let _initPromise: Promise<ManifoldToplevel> | null = null;
 
-/**
- * @internal — shared with `profile.ts` so the extrude/revolve/bevel ops reuse
- * this one WASM instance instead of initialising a second one.
- */
+/** @internal Shared with profile solids; initialize one WASM instance. */
 export async function getManifoldModule(): Promise<ManifoldToplevel> {
   if (_module) return _module;
   if (_initPromise) return _initPromise;
-
   _initPromise = (async () => {
     const mod = (await import('manifold-3d')) as unknown as {
       default: (opts?: Record<string, unknown>) => Promise<ManifoldToplevel>;
@@ -75,450 +19,399 @@ export async function getManifoldModule(): Promise<ManifoldToplevel> {
     _module = m;
     return m;
   })();
-
   return _initPromise;
 }
 
-/**
- * Convert a Three.js Mesh/Object3D to a Manifold Mesh (world-space).
- * Flattens any scene subtree into a single merged manifold.
- *
- * `label` names the operand in guard messages — the agent sees these, and
- * "operand 2 (Cutter)" is actionable where "Not manifold" is not.
- */
-function threeToManifold(
-  src: THREE.Object3D,
-  ManifoldCls: typeof Manifold,
-  MeshCls: typeof Mesh,
-  label = 'operand',
-): Manifold {
-  src.updateMatrixWorld(true);
-
-  const positions: number[] = [];
-  const indices: number[] = [];
-
-  const tmpVec = new THREE.Vector3();
-  let vertexOffset = 0;
-  let meshCount = 0;
-
-  src.traverse((child) => {
-    // Duck-typed `.isMesh` — sandbox-created meshes belong to a different
-    // module realm than this file's THREE import. See render.ts comment.
-    if (!(child as { isMesh?: boolean }).isMesh) return;
-    const meshChild = child as THREE.Mesh;
-    const geo = meshChild.geometry as THREE.BufferGeometry;
-    const posAttr = geo.getAttribute('position') as THREE.BufferAttribute | undefined;
-    if (!posAttr) return;
-    meshCount++;
-
-    const idx = geo.getIndex();
-    // T2.4: a ragged triangle list reaches manifold as a partial triangle and
-    // comes back as a bare "Not manifold" that names nothing. Caught here, where
-    // the offending mesh is still identifiable.
-    const listCount = idx ? idx.count : posAttr.count;
-    if (listCount % 3 !== 0) {
-      throw new Error(
-        `CSG ${label}: mesh "${meshChild.name || '(unnamed)'}" has ${listCount} ${
-          idx ? 'indices' : 'vertices'
-        }, which is not a whole number of triangles. ` +
-          'Every CSG input must be a triangle mesh; build it from the primitive geometry helpers rather than assembling attributes by hand.',
-      );
-    }
-
-    const matrix = meshChild.matrixWorld;
-
-    for (let i = 0; i < posAttr.count; i++) {
-      tmpVec.fromBufferAttribute(posAttr, i).applyMatrix4(matrix);
-      positions.push(tmpVec.x, tmpVec.y, tmpVec.z);
-    }
-
-    if (idx) {
-      for (let i = 0; i < idx.count; i++) {
-        indices.push((idx.getX(i) as number) + vertexOffset);
-      }
-    } else {
-      // Non-indexed: generate sequential triangles
-      for (let i = 0; i < posAttr.count; i++) {
-        indices.push(i + vertexOffset);
-      }
-    }
-
-    vertexOffset += posAttr.count;
-  });
-
-  // T2.4: an operand that contributes nothing used to be absorbed in silence —
-  // `boolUnion(body, emptyGroup)` returned the body, and `boolIntersect(body,
-  // emptyGroup)` returned a ZERO-triangle mesh that sailed on into the GLB.
-  // Measured, both cases; neither said a word. The realistic cause is a Group
-  // whose children were never added, or a mesh built before its geometry was.
-  if (indices.length === 0) {
-    throw new Error(
-      `CSG ${label}: contributes no triangles${
-        meshCount === 0
-          ? ' (nothing in it is a mesh — an empty Group, or a part that was never added to it)'
-          : ' (its meshes have no geometry)'
-      }. Every CSG operand must be a solid with triangles.`,
-    );
-  }
-
-  const mesh = new MeshCls({
-    numProp: 3,
-    vertProperties: new Float32Array(positions),
-    triVerts: new Uint32Array(indices),
-  });
-  mesh.merge();
-
-  return ManifoldCls.ofMesh(mesh);
+export interface CsgOptions {
+  smooth?: boolean;
+  /** Retain UV0 and operand material groups. Legacy default keeps only the first material and no UVs. */
+  preserveAttributes?: boolean;
 }
-
-/**
- * Guard a boolean's RESULT (T2.4).
- *
- * An empty result is geometrically legal and almost never intended: a
- * disjoint `boolIntersect`, or a `boolDiff` whose cutters swallow the body.
- * Measured before this guard, both produced a 0-triangle mesh that passed
- * silently through `autoUnwrap` (which also returned 0 vertices without
- * complaint) and into the GLB as an invisible part. Failing loudly here gives
- * the agent a fixable error at the step that caused it.
- */
-function assertNonEmptyResult(m: Manifold, op: string, hint: string): void {
-  if (m.numTri() > 0) return;
-  throw new Error(`${op}: the result is empty (zero triangles). ${hint}`);
-}
-
-/**
- * Convert a Manifold result back to a Three.js Mesh with the given material.
- *
- * Default is **flat shading** (one normal per triangle, hard faceted edges)
- * — that's what most mechanical CSG parts (gears, vending machines, carved
- * boxes) want. `computeVertexNormals` on an indexed mesh averages normals
- * across adjacent faces and turns hard edges into smooth blobs.
- *
- * Pass `smooth: true` for organic CSG results (like hulled rocks) where
- * averaged normals read better.
- */
-function manifoldToThree(
-  m: Manifold,
-  material: THREE.Material,
-  name: string,
-  opts: { smooth?: boolean } = {},
-): THREE.Mesh {
-  const out = new THREE.Mesh(manifoldToGeometry(m, opts), material);
-  out.name = name;
-  return out;
-}
-
-/**
- * Manifold -> BufferGeometry, with the same flat/smooth normal contract as
- * `manifoldToThree`. Split out so `profile.ts` shares the bridge.
- *
- * As with every manifold-backed op, **only positions survive** — normals are
- * regenerated here and UVs are not carried at all.
- *
- * @internal
- */
-export function manifoldToGeometry(
-  m: Manifold,
-  opts: { smooth?: boolean } = {},
-): THREE.BufferGeometry {
-  const mesh = m.getMesh();
-  const numProp = mesh.numProp;
-  const verts = mesh.vertProperties;
-  const tris = mesh.triVerts;
-
-  // Extract xyz from interleaved vertProperties
-  const positions = new Float32Array((verts.length / numProp) * 3);
-  for (let i = 0, o = 0; i < verts.length; i += numProp, o += 3) {
-    positions[o] = verts[i] as number;
-    positions[o + 1] = verts[i + 1] as number;
-    positions[o + 2] = verts[i + 2] as number;
-  }
-
-  const geo = new THREE.BufferGeometry();
-  geo.setAttribute('position', new THREE.BufferAttribute(positions, 3));
-  geo.setIndex(new THREE.BufferAttribute(new Uint32Array(tris), 1));
-
-  if (opts.smooth) {
-    geo.computeVertexNormals();
-    return geo;
-  }
-  // Flat: duplicate verts per triangle so each face gets its own normal.
-  const flat = geo.toNonIndexed();
-  flat.computeVertexNormals();
-  return flat;
-}
-
-/**
- * Pull a `{smooth}` options object off the end of a variadic part list.
- * Detects a plain object with `smooth` that's NOT an Object3D, so calls
- * like `boolUnion('X', a, b, { smooth: true })` still type-check.
- */
-function splitPartsAndOpts(parts: Array<THREE.Object3D | { smooth?: boolean }>): {
-  parts: THREE.Object3D[];
-  opts: { smooth?: boolean };
-} {
-  if (parts.length === 0) return { parts: [], opts: {} };
-  const last = parts[parts.length - 1];
-  if (
-    last &&
-    typeof last === 'object' &&
-    !(last as { isObject3D?: boolean }).isObject3D &&
-    'smooth' in last
-  ) {
-    return {
-      parts: parts.slice(0, -1) as THREE.Object3D[],
-      opts: last as { smooth?: boolean },
-    };
-  }
-  return { parts: parts as THREE.Object3D[], opts: {} };
-}
-
-function materialOf(src: THREE.Object3D, fallback: THREE.Material): THREE.Material {
-  if ((src as { isMesh?: boolean }).isMesh) {
-    return (src as THREE.Mesh).material as THREE.Material;
-  }
-  let found: THREE.Material | null = null;
-  src.traverse((c) => {
-    if (!found && (c as { isMesh?: boolean }).isMesh) {
-      found = (c as THREE.Mesh).material as THREE.Material;
-    }
-  });
-  return found ?? fallback;
-}
-
-interface KilnRange {
-  name: string;
+export interface CsgSourceRun {
+  sourceName: string;
   start: number;
   count: number;
+  materialIndex: number;
+  backside: boolean;
+}
+interface Source {
+  name: string;
+  material: THREE.Material;
+}
+interface BridgeContext {
+  preserve: boolean;
+  sources: Map<number, Source>;
+  anyUV: boolean;
+  missingUV: Set<string>;
 }
 
-/**
- * Synthesise a `kilnRanges` array for a CSG output by walking each input's
- * geometry.userData.kilnRanges (or falling back to mesh names + tri counts)
- * and weight-partitioning the *output* triangle count among them. The
- * partition is a coarse approximation — manifold-3d does not preserve per-
- * triangle provenance, so we cannot map output tris back to input tris
- * exactly. Sum invariant holds: `Σ count === outputTris`.
- *
- * The metadata is consumed by future click-to-inspect UI; the GLB exporter
- * ignores it (gltf-transform doesn't serialise userData).
- */
-function combineRangesFromCsgInputs(parts: THREE.Object3D[], outputTris: number): KilnRange[] {
-  const inputs: Array<{ name: string; weight: number }> = [];
-  for (const part of parts) {
-    part.traverse((child) => {
-      if (!(child as { isMesh?: boolean }).isMesh) return;
-      const meshChild = child as THREE.Mesh;
-      if (!meshChild.geometry) return;
-      const ranges = (meshChild.geometry.userData as Record<string, unknown>)['kilnRanges'] as
-        | KilnRange[]
-        | undefined;
-      if (ranges && ranges.length > 0) {
-        for (const r of ranges) inputs.push({ name: r.name, weight: r.count });
-        return;
-      }
-      // No prior ranges — fall back to mesh name + own tri count.
-      const idx = meshChild.geometry.getIndex();
-      const tris = idx
-        ? idx.count / 3
-        : (meshChild.geometry.getAttribute('position')?.count ?? 0) / 3;
-      inputs.push({ name: meshChild.name || 'csgInput', weight: Math.floor(tris) });
-    });
-  }
+function sourceSpans(
+  mesh: THREE.Mesh,
+  count: number,
+): { start: number; count: number; materialIndex: number; name: string }[] {
+  const prior = mesh.geometry.userData.kilnCsgProvenance as { runs?: CsgSourceRun[] } | undefined;
+  if (prior?.runs?.length)
+    return prior.runs.map((r) => ({
+      start: r.start * 3,
+      count: r.count * 3,
+      materialIndex: r.materialIndex,
+      name: r.sourceName,
+    }));
+  const ranges = mesh.geometry.userData.kilnRanges as { name: string }[] | undefined;
+  const name = mesh.name || ranges?.[0]?.name || 'unnamed';
+  return Array.isArray(mesh.material)
+    ? mesh.geometry.groups.map((g) => ({
+        start: g.start,
+        count: g.count,
+        materialIndex: g.materialIndex ?? 0,
+        name,
+      }))
+    : [{ start: 0, count, materialIndex: 0, name }];
+}
 
-  if (inputs.length === 0) {
-    return [{ name: 'csg', start: 0, count: outputTris }];
+function threeToManifold(
+  src: THREE.Object3D,
+  mod: ManifoldToplevel,
+  label: string,
+  context: BridgeContext,
+): Manifold {
+  src.updateWorldMatrix(true, true);
+  const properties: number[] = [],
+    indices: number[] = [],
+    runs: number[] = [],
+    originals: number[] = [],
+    faceIds: number[] = [];
+  let vertexOffset = 0,
+    meshCount = 0;
+  const stride = context.preserve ? 5 : 3;
+  src.traverse((child) => {
+    const mesh = child as THREE.Mesh;
+    if (!mesh.isMesh) return;
+    const geometry = mesh.geometry,
+      position = geometry.getAttribute('position');
+    if (!position) return;
+    meshCount++;
+    const index = geometry.index,
+      count = index?.count ?? position.count;
+    if (count % 3 !== 0)
+      throw new Error(
+        `CSG ${label}: mesh "${mesh.name || '(unnamed)'}" has ${count} ${index ? 'indices' : 'vertices'}, which is not a whole number of triangles. Every CSG input must be a triangle mesh.`,
+      );
+    if (position.itemSize !== 3)
+      throw new Error(`CSG ${label}: positions must have three components`);
+    const uv = geometry.getAttribute('uv');
+    if (context.preserve && uv && (uv.itemSize !== 2 || uv.count !== position.count))
+      throw new Error(`CSG ${label}: uv must have two components per vertex`);
+    if (context.preserve) {
+      if (uv) context.anyUV = true;
+      else context.missingUV.add(mesh.name || label);
+    }
+    const point = new THREE.Vector3();
+    for (let i = 0; i < position.count; i++) {
+      point.fromBufferAttribute(position, i).applyMatrix4(mesh.matrixWorld);
+      if (![point.x, point.y, point.z].every((n) => Number.isFinite(Math.fround(n))))
+        throw new Error(`CSG ${label}: transformed positions must be finite Float32 coordinates`);
+      properties.push(point.x, point.y, point.z);
+      if (context.preserve) {
+        const u = uv?.getX(i) ?? 0,
+          v = uv?.getY(i) ?? 0;
+        if (!Number.isFinite(u) || !Number.isFinite(v))
+          throw new Error(`CSG ${label}: UVs must be finite`);
+        properties.push(u, v);
+      }
+    }
+    const materials = Array.isArray(mesh.material) ? mesh.material : [mesh.material];
+    const spans = sourceSpans(mesh, count).sort((a, b) => a.start - b.start);
+    let covered = 0;
+    for (const span of spans) {
+      if (
+        !Number.isInteger(span.start) ||
+        !Number.isInteger(span.count) ||
+        span.start !== covered ||
+        span.count <= 0 ||
+        span.count % 3 ||
+        span.start % 3 ||
+        span.start + span.count > count ||
+        !materials[span.materialIndex]
+      )
+        throw new Error(
+          `CSG ${label}: material/source groups must cover triangles exactly once with valid materials`,
+        );
+      const id = mod.Manifold.reserveIDs(1);
+      context.sources.set(id, { name: span.name, material: materials[span.materialIndex]! });
+      runs.push(indices.length);
+      originals.push(id);
+      for (let i = span.start; i < span.start + span.count; i += 3) {
+        const triangle = [
+          index?.getX(i) ?? i,
+          index?.getX(i + 1) ?? i + 1,
+          index?.getX(i + 2) ?? i + 2,
+        ];
+        if (triangle.some((j) => !Number.isInteger(j) || j < 0 || j >= position.count))
+          throw new Error(`CSG ${label}: index outside positions`);
+        // A reflected world transform reverses winding; retain the operand's outward solid orientation.
+        if (mesh.matrixWorld.determinant() < 0)
+          [triangle[1], triangle[2]] = [triangle[2]!, triangle[1]!];
+        indices.push(...triangle.map((j) => j + vertexOffset));
+        const prior = geometry.userData.kilnCsgProvenance as { faceIds?: number[] } | undefined;
+        faceIds.push(prior?.faceIds?.[i / 3] ?? i / 3);
+      }
+      covered += span.count;
+    }
+    if (covered !== count)
+      throw new Error(`CSG ${label}: material/source groups do not cover every triangle`);
+    vertexOffset += position.count;
+  });
+  if (!indices.length)
+    throw new Error(
+      `CSG ${label}: contributes no triangles${meshCount === 0 ? ' (nothing in it is a mesh — an empty Group, or a part that was never added to it)' : ' (its meshes have no geometry)'}. Every CSG operand must be a solid with triangles.`,
+    );
+  runs.push(indices.length);
+  const mesh = new mod.Mesh({
+    numProp: stride,
+    vertProperties: new Float32Array(properties),
+    triVerts: new Uint32Array(indices),
+    runIndex: new Uint32Array(runs),
+    runOriginalID: new Uint32Array(originals),
+    ...(context.preserve ? { faceID: new Uint32Array(faceIds) } : {}),
+  });
+  mesh.merge();
+  return mod.Manifold.ofMesh(mesh);
+}
+
+function assertNonEmptyResult(m: Manifold, op: string, hint: string): void {
+  if (m.numTri() === 0) throw new Error(`${op}: the result is empty (zero triangles). ${hint}`);
+}
+
+/** @internal Profile solids use the position-only version of this bridge. */
+export function manifoldToGeometry(
+  m: Manifold,
+  opts: { smooth?: boolean; preserveUV?: boolean } = {},
+): THREE.BufferGeometry {
+  const mesh = m.getMesh(),
+    positions = new Float32Array((mesh.vertProperties.length / mesh.numProp) * 3);
+  const uvs =
+    opts.preserveUV && mesh.numProp >= 5 ? new Float32Array((positions.length / 3) * 2) : undefined;
+  for (let i = 0, v = 0; i < mesh.vertProperties.length; i += mesh.numProp, v++) {
+    positions.set(mesh.vertProperties.subarray(i, i + 3), v * 3);
+    if (uvs) uvs.set(mesh.vertProperties.subarray(i + 3, i + 5), v * 2);
   }
-  const totalWeight = inputs.reduce((s, i) => s + i.weight, 0) || 1;
-  const out: KilnRange[] = [];
-  let offset = 0;
-  for (let i = 0; i < inputs.length; i++) {
-    const isLast = i === inputs.length - 1;
-    const weight = inputs[i]!.weight;
-    const count = isLast ? outputTris - offset : Math.floor((weight / totalWeight) * outputTris);
-    out.push({ name: inputs[i]!.name, start: offset, count });
-    offset += count;
+  const geometry = new THREE.BufferGeometry();
+  geometry.setAttribute('position', new THREE.BufferAttribute(positions, 3));
+  geometry.setIndex(new THREE.BufferAttribute(new Uint32Array(mesh.triVerts), 1));
+  if (uvs) geometry.setAttribute('uv', new THREE.BufferAttribute(uvs, 2));
+  const out = opts.smooth ? geometry : geometry.toNonIndexed();
+  out.computeVertexNormals();
+  if (opts.smooth && uvs) {
+    const cornerNormals = creaseNormals(out, { angle: 180 }).getAttribute('normal');
+    const normal = out.getAttribute('normal');
+    for (let corner = 0; corner < out.index!.count; corner++) {
+      normal.setXYZ(
+        out.index!.getX(corner),
+        cornerNormals.getX(corner),
+        cornerNormals.getY(corner),
+        cornerNormals.getZ(corner),
+      );
+    }
   }
+  out.computeBoundingBox();
+  out.computeBoundingSphere();
   return out;
 }
 
-/** Stamp `kilnRanges` on the result mesh's geometry from its CSG inputs. */
-function tagCsgOutput(result: THREE.Mesh, parts: THREE.Object3D[]): void {
-  const idx = result.geometry.getIndex();
-  const tris = idx ? idx.count / 3 : (result.geometry.getAttribute('position')?.count ?? 0) / 3;
-  const ranges = combineRangesFromCsgInputs(parts, Math.floor(tris));
-  result.geometry.userData = {
-    ...(result.geometry.userData ?? {}),
-    kilnRanges: ranges,
-  };
+function firstMaterial(src: THREE.Object3D): THREE.Material {
+  let material: THREE.Material | undefined;
+  src.traverse((child) => {
+    const mesh = child as THREE.Mesh;
+    if (!material && mesh.isMesh)
+      material = Array.isArray(mesh.material) ? mesh.material[0] : mesh.material;
+  });
+  return material ?? new THREE.MeshStandardMaterial();
 }
 
-// =============================================================================
-// Public primitives
-// =============================================================================
+function outputMesh(
+  result: Manifold,
+  name: string,
+  parts: THREE.Object3D[],
+  opts: CsgOptions,
+  context: BridgeContext,
+  isHull: boolean,
+): THREE.Mesh {
+  const geometry = manifoldToGeometry(result, {
+    smooth: opts.smooth,
+    preserveUV: context.preserve && context.anyUV && !isHull,
+  });
+  const native = result.getMesh(),
+    materials: THREE.Material[] = [],
+    sourceRuns: CsgSourceRun[] = [];
+  if (!isHull)
+    for (let i = 0; i < native.runOriginalID.length; i++) {
+      const source = context.sources.get(native.runOriginalID[i]!);
+      const start = native.runIndex[i]! / 3,
+        count = (native.runIndex[i + 1]! - native.runIndex[i]!) / 3;
+      if (!count) continue;
+      const material = source?.material ?? firstMaterial(parts[0]!);
+      let materialIndex = context.preserve ? materials.indexOf(material) : 0;
+      if (context.preserve && materialIndex < 0) {
+        materialIndex = materials.length;
+        materials.push(material);
+      }
+      sourceRuns.push({
+        sourceName: source?.name ?? 'unknown',
+        start,
+        count,
+        materialIndex,
+        backside: !!((native.runFlags?.[i] ?? 0) & 1),
+      });
+      if (context.preserve) geometry.addGroup(start * 3, count * 3, materialIndex);
+    }
+  const total = (geometry.index?.count ?? geometry.getAttribute('position').count) / 3;
+  geometry.userData.kilnCsgProvenance = {
+    schemaVersion: 1,
+    runs: sourceRuns,
+    faceIds: isHull ? [] : Array.from(native.faceID),
+    unknownTriangles: isHull
+      ? total
+      : sourceRuns.filter((r) => r.sourceName === 'unknown').reduce((sum, r) => sum + r.count, 0),
+  };
+  geometry.userData.kilnRanges = sourceRuns.length
+    ? sourceRuns.map((r) => ({
+        name: r.sourceName,
+        start: r.start,
+        count: r.count,
+        certainty: r.sourceName === 'unknown' ? 'unknown' : 'source-run',
+      }))
+    : [{ name: 'generated hull', start: 0, count: total, certainty: 'unknown' }];
+  const warnings: { code: string; message: string }[] = [];
+  if (context.preserve && context.anyUV && context.missingUV.size)
+    warnings.push({
+      code: 'CSG_UV_MISSING',
+      message: `UVs were absent on ${[...context.missingUV].join(', ')}; those surfaces use zero UVs. Unwrap the result if they need a texture.`,
+    });
+  if (isHull && context.preserve)
+    warnings.push({
+      code: 'HULL_ATTRIBUTES_GENERATED',
+      message:
+        'A convex hull creates new faces. Source UVs and material boundaries cannot be assigned faithfully; output uses the first material and no UVs.',
+    });
+  geometry.userData.kilnAttributeWarnings = warnings;
+  const output = new THREE.Mesh(
+    geometry,
+    context.preserve && !isHull && materials.length ? materials : firstMaterial(parts[0]!),
+  );
+  output.name = `Mesh_${name}`;
+  return output;
+}
 
-/**
- * Boolean union: combine two or more parts into one watertight mesh.
- * Inherits material from the first operand.
- *
- * Default shading is **flat** (hard faceted edges) — pass
- * `{ smooth: true }` as the last arg for averaged smooth normals.
- *
- * @example
- * const merged = await boolUnion('Hull', body, turret, barrel);
- * const blob   = await boolUnion('Blob', a, b, c, { smooth: true });
- */
+function splitPartsAndOpts(items: Array<THREE.Object3D | CsgOptions>): {
+  parts: THREE.Object3D[];
+  opts: CsgOptions;
+} {
+  const last = items[items.length - 1];
+  if (last && !(last as THREE.Object3D).isObject3D)
+    return { parts: items.slice(0, -1) as THREE.Object3D[], opts: last as CsgOptions };
+  return { parts: items as THREE.Object3D[], opts: {} };
+}
+
+type Operation = 'boolUnion' | 'boolDiff' | 'boolIntersect' | 'hull';
+async function runBoolean(
+  op: Operation,
+  name: string,
+  parts: THREE.Object3D[],
+  opts: CsgOptions,
+): Promise<THREE.Mesh> {
+  const mod = await getManifoldModule(),
+    context: BridgeContext = {
+      preserve: opts.preserveAttributes ?? false,
+      sources: new Map(),
+      anyUV: false,
+      missingUV: new Set(),
+    };
+  const owned = new Set<Manifold>();
+  const track = (m: Manifold) => {
+    owned.add(m);
+    return m;
+  };
+  try {
+    const operands = parts.map((p, i) =>
+      track(
+        threeToManifold(
+          p,
+          mod,
+          op === 'boolDiff'
+            ? i === 0
+              ? 'boolDiff body'
+              : `boolDiff cutter ${i}`
+            : op === 'boolIntersect'
+              ? `boolIntersect operand ${i === 0 ? 'a' : 'b'}`
+              : `${op} operand ${i + 1}`,
+          context,
+        ),
+      ),
+    );
+    let result: Manifold;
+    if (op === 'boolUnion') result = track(mod.Manifold.union(operands));
+    else if (op === 'boolDiff') {
+      const cutters =
+        operands.length === 2 ? operands[1]! : track(mod.Manifold.union(operands.slice(1)));
+      result = track(operands[0]!.subtract(cutters));
+    } else if (op === 'boolIntersect') result = track(operands[0]!.intersect(operands[1]!));
+    else result = track(operands.length === 1 ? operands[0]!.hull() : mod.Manifold.hull(operands));
+    const hint =
+      op === 'boolDiff'
+        ? 'The cutters removed the entire body — check their size and position, or subtract fewer of them.'
+        : op === 'boolIntersect'
+          ? 'The two operands do not overlap — position them so their volumes actually intersect.'
+          : op === 'hull'
+            ? 'The inputs are coplanar or collinear, so they enclose no volume.'
+            : 'Every operand was empty after merging.';
+    assertNonEmptyResult(result, op, hint);
+    return outputMesh(
+      result,
+      name,
+      parts,
+      { ...opts, smooth: opts.smooth ?? op === 'hull' },
+      context,
+      op === 'hull',
+    );
+  } finally {
+    for (const ownedManifold of owned) ownedManifold.delete();
+  }
+}
+
+/** Union solids. Opt into UV/material retention with preserveAttributes: true. */
 export async function boolUnion(
   name: string,
-  ...partsAndOpts: Array<THREE.Object3D | { smooth?: boolean }>
+  ...items: Array<THREE.Object3D | CsgOptions>
 ): Promise<THREE.Mesh> {
-  const { parts, opts } = splitPartsAndOpts(partsAndOpts);
-  if (parts.length < 2) {
-    throw new Error('boolUnion requires at least two parts');
-  }
-  const mod = await getManifoldModule();
-  const manifolds = parts.map((p, i) =>
-    threeToManifold(p, mod.Manifold, mod.Mesh, `boolUnion operand ${i + 1}`),
-  );
-  const result = mod.Manifold.union(manifolds);
-  try {
-    assertNonEmptyResult(result, 'boolUnion', 'Every operand was empty after merging.');
-  } catch (err) {
-    for (const m of manifolds) m.delete();
-    result.delete();
-    throw err;
-  }
-  const mat = materialOf(parts[0]!, new THREE.MeshStandardMaterial());
-  const mesh = manifoldToThree(result, mat, `Mesh_${name}`, opts);
-  tagCsgOutput(mesh, parts);
-  for (const m of manifolds) m.delete();
-  result.delete();
-  return mesh;
+  const { parts, opts } = splitPartsAndOpts(items);
+  if (parts.length < 2) throw new Error('boolUnion requires at least two parts');
+  return runBoolean('boolUnion', name, parts, opts);
 }
-
-/**
- * Boolean difference: subtract `cutter` parts from `body`.
- * Use to carve windows, buttons, grip panels, bolt holes.
- *
- * Default shading is **flat** (hard faceted edges). Pass
- * `{ smooth: true }` as the last arg for averaged smooth normals.
- *
- * @example
- * const gear = await boolDiff('Gear', cylinder, ...teethCutters);
- */
+/** Cut faces inherit their cutter's material and UVs in preservation mode. */
 export async function boolDiff(
   name: string,
   body: THREE.Object3D,
-  ...cuttersAndOpts: Array<THREE.Object3D | { smooth?: boolean }>
+  ...items: Array<THREE.Object3D | CsgOptions>
 ): Promise<THREE.Mesh> {
-  const { parts: cutters, opts } = splitPartsAndOpts(cuttersAndOpts);
-  if (cutters.length < 1) {
-    throw new Error('boolDiff requires at least one cutter');
-  }
-  const mod = await getManifoldModule();
-  const bodyM = threeToManifold(body, mod.Manifold, mod.Mesh, 'boolDiff body');
-  const cutterM = cutters.map((c, i) =>
-    threeToManifold(c, mod.Manifold, mod.Mesh, `boolDiff cutter ${i + 1}`),
-  );
-  const cutterUnion = cutterM.length === 1 ? (cutterM[0] as Manifold) : mod.Manifold.union(cutterM);
-  const result = bodyM.subtract(cutterUnion);
-  try {
-    assertNonEmptyResult(
-      result,
-      'boolDiff',
-      'The cutters removed the entire body — check their size and position, or subtract fewer of them.',
-    );
-  } catch (err) {
-    bodyM.delete();
-    for (const m of cutterM) m.delete();
-    if (cutterM.length > 1) cutterUnion.delete();
-    result.delete();
-    throw err;
-  }
-  const mat = materialOf(body, new THREE.MeshStandardMaterial());
-  const mesh = manifoldToThree(result, mat, `Mesh_${name}`, opts);
-  tagCsgOutput(mesh, [body, ...cutters]);
-  bodyM.delete();
-  for (const m of cutterM) m.delete();
-  if (cutterM.length > 1) cutterUnion.delete();
-  result.delete();
-  return mesh;
+  const { parts, opts } = splitPartsAndOpts(items);
+  if (parts.length < 1) throw new Error('boolDiff requires at least one cutter');
+  return runBoolean('boolDiff', name, [body, ...parts], opts);
 }
-
-/**
- * Boolean intersection: keep only the overlapping volume.
- * Less commonly used in game assets, but handy for complex trim cuts.
- *
- * Default shading is **flat**; pass `{ smooth: true }` for averaged normals.
- */
 export async function boolIntersect(
   name: string,
   a: THREE.Object3D,
   b: THREE.Object3D,
-  opts: { smooth?: boolean } = {},
+  opts: CsgOptions = {},
 ): Promise<THREE.Mesh> {
-  const mod = await getManifoldModule();
-  const aM = threeToManifold(a, mod.Manifold, mod.Mesh, 'boolIntersect operand a');
-  const bM = threeToManifold(b, mod.Manifold, mod.Mesh, 'boolIntersect operand b');
-  const result = aM.intersect(bM);
-  try {
-    assertNonEmptyResult(
-      result,
-      'boolIntersect',
-      'The two operands do not overlap — position them so their volumes actually intersect.',
-    );
-  } catch (err) {
-    aM.delete();
-    bM.delete();
-    result.delete();
-    throw err;
-  }
-  const mat = materialOf(a, new THREE.MeshStandardMaterial());
-  const mesh = manifoldToThree(result, mat, `Mesh_${name}`, opts);
-  tagCsgOutput(mesh, [a, b]);
-  aM.delete();
-  bM.delete();
-  result.delete();
-  return mesh;
+  return runBoolean('boolIntersect', name, [a, b], opts);
 }
-
-/**
- * Convex hull: tightest convex mesh enclosing all points of the inputs.
- * Good for simplifying collision volumes or wrapping a cluster of parts.
- *
- * Hulls are typically **smooth-shaded** (they're wrapping-shapes, not
- * mechanical), so this default is `smooth: true`. Override with
- * `{ smooth: false }` for a faceted look.
- */
+/** Hull faces are generated, so their source UV/material provenance is explicitly unknown. */
 export async function hull(
   name: string,
-  ...partsAndOpts: Array<THREE.Object3D | { smooth?: boolean }>
+  ...items: Array<THREE.Object3D | CsgOptions>
 ): Promise<THREE.Mesh> {
-  const { parts, opts } = splitPartsAndOpts(partsAndOpts);
-  if (parts.length < 1) {
-    throw new Error('hull requires at least one part');
-  }
-  const mod = await getManifoldModule();
-  const manifolds = parts.map((p, i) =>
-    threeToManifold(p, mod.Manifold, mod.Mesh, `hull operand ${i + 1}`),
-  );
-  const result =
-    manifolds.length === 1 ? (manifolds[0] as Manifold).hull() : mod.Manifold.hull(manifolds);
-  try {
-    assertNonEmptyResult(
-      result,
-      'hull',
-      'The inputs are coplanar or collinear, so they enclose no volume.',
-    );
-  } catch (err) {
-    for (const m of manifolds) m.delete();
-    if (manifolds.length > 1) result.delete();
-    throw err;
-  }
-  const mat = materialOf(parts[0]!, new THREE.MeshStandardMaterial());
-  const mesh = manifoldToThree(result, mat, `Mesh_${name}`, { smooth: opts.smooth ?? true });
-  tagCsgOutput(mesh, parts);
-  for (const m of manifolds) m.delete();
-  if (manifolds.length > 1) result.delete();
-  return mesh;
+  const { parts, opts } = splitPartsAndOpts(items);
+  if (parts.length < 1) throw new Error('hull requires at least one part');
+  return runBoolean('hull', name, parts, opts);
 }

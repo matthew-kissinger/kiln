@@ -1,3 +1,4 @@
+import { DEFAULT_VIEW_RENDER_TIMEOUT_MS, captureViewsViaPort, sha256Bytes } from '../views/port';
 /**
  * `generateKilnAsset` — the core-owned "agent loop + render" engine.
  *
@@ -26,10 +27,7 @@ import {
   resolveGridCapture,
   type CaptureConfig,
   type CaptureShape,
-  type ResolvedCapture,
 } from '../views/capture';
-import { compositeViewPngGrid } from '../views/grid';
-import { decodePng } from '../views/png';
 import type { AssetStyle } from '../prompt';
 import { createAssetIntentV1, type AssetCategory, type AssetIntentV1 } from '../contracts';
 import { runKilnAgent, type RefineMode, type KilnKnowhow, type KilnInputImage } from './run';
@@ -236,188 +234,12 @@ export async function generateKilnCodeAgent(opts: {
   };
 }
 
-export const DEFAULT_VIEW_RENDER_TIMEOUT_MS = 8000;
-
-async function sha256Bytes(bytes: Uint8Array): Promise<`sha256:${string}`> {
-  const input = new Uint8Array(bytes.byteLength);
-  input.set(bytes);
-  const digest = new Uint8Array(await globalThis.crypto.subtle.digest('SHA-256', input));
-  return `sha256:${[...digest].map((byte) => byte.toString(16).padStart(2, '0')).join('')}`;
-}
-
-export type PortViewsOutcome =
-  | {
-      ok: true;
-      png: Buffer;
-      rendererId: string;
-      capture: CaptureShape;
-      /** Pixel dimensions of the composited grid — the same `width`/`height` the
-       *  CPU path reports alongside its grid, additive here so a caller never has
-       *  to decode the PNG to learn them. */
-      width: number;
-      height: number;
-    }
-  | { ok: false; reason: string };
-
-export type PortViewPngsOutcome =
-  | {
-      ok: true;
-      pngs: Uint8Array[];
-      rendererId: string;
-      derivativeFidelityAttested: boolean;
-      inputGlbSha256?: `sha256:${string}`;
-    }
-  | { ok: false; reason: string };
-
-/**
- * Lowest-level owner of the PBR-port deadline and reply validation. It accepts
- * exact GLB bytes plus explicit view directions and returns unmodified square
- * PNG cells. Contact sheets and derivative review surfaces both build on this
- * function so timeout/error/shape policy cannot drift between them.
- */
-export async function captureViewPngsViaPort(
-  port: PbrRenderPort,
-  glb: Buffer | Uint8Array,
-  timeoutMs: number,
-  viewDirs: readonly [number, number, number][],
-  size: number,
-): Promise<PortViewPngsOutcome> {
-  let timer: ReturnType<typeof setTimeout> | undefined;
-  try {
-    const requestGlb = Uint8Array.from(glb);
-    const inputGlbSha256 = await sha256Bytes(requestGlb);
-    const deadline = new Promise<never>((_, reject) => {
-      timer = setTimeout(
-        () => reject(new Error(`view render port timed out after ${timeoutMs}ms`)),
-        timeoutMs,
-      );
-    });
-    const result = await Promise.race([
-      port({
-        glb: requestGlb,
-        viewDirs: viewDirs.map((dir) => [...dir] as [number, number, number]),
-        size,
-      }),
-      deadline,
-    ]);
-    if (!result?.ok) {
-      return { ok: false, reason: result?.error ?? 'view render port returned ok: false' };
-    }
-    if (typeof result.rendererId !== 'string' || !result.rendererId.trim()) {
-      return { ok: false, reason: 'view render port returned no rendererId' };
-    }
-    if (!result.viewsPng || result.viewsPng.length !== viewDirs.length) {
-      return {
-        ok: false,
-        reason: `view render port returned ${result.viewsPng?.length ?? 0} view PNGs, expected ${viewDirs.length}`,
-      };
-    }
-    if (result.derivativeFidelity && result.derivativeFidelity.inputGlbSha256 !== inputGlbSha256) {
-      return {
-        ok: false,
-        reason: `view render port derivative receipt hash mismatch (${result.derivativeFidelity.inputGlbSha256} != ${inputGlbSha256})`,
-      };
-    }
-    // Decode here even though callers may decode again for annotation. This is
-    // the transport trust boundary: an ok:true reply with malformed/non-square
-    // pixels is a degrade, never a successful material attestation.
-    for (const png of result.viewsPng) {
-      const decoded = decodePng(png);
-      if (decoded.width !== decoded.height) {
-        return {
-          ok: false,
-          reason: `view render port returned non-square ${decoded.width}x${decoded.height} PNG`,
-        };
-      }
-    }
-    return {
-      ok: true,
-      pngs: result.viewsPng.map((png) => Uint8Array.from(png)),
-      rendererId: result.rendererId,
-      derivativeFidelityAttested: result.derivativeFidelity?.materialFaithful === true,
-      ...(result.derivativeFidelity ? { inputGlbSha256 } : {}),
-    };
-  } catch (err) {
-    return { ok: false, reason: err instanceof Error ? err.message : String(err) };
-  } finally {
-    if (timer !== undefined) clearTimeout(timer);
-  }
-}
-
-/**
- * Call the host view-render port with the ALREADY-PRODUCED GLB bytes and
- * composite its per-view PNGs into the same grid the CPU path emits.
- *
- * This shell is NOT a render compute path: the deadline is a plain timer (no
- * Date.now() enters any rasterizer), and every failure mode — thrown/rejected
- * port, ok:false, timeout, missing rendererId, undecodable or mismatched PNGs —
- * returns `{ ok: false, reason }` so the caller degrades to the CPU rasterizer
- * instead of failing the generation.
- *
- * Exported as the single owner of the degrade policy: hosts that assemble their
- * own generation pipeline (rather than calling generateKilnAsset) route their
- * produced GLB through this same shell instead of re-implementing it.
- *
- * T3.3: `capture` selects the grid shape and per-cell cameras, resolved through
- * the SAME {@link resolveGridCapture} the CPU rasterizer uses so both producers
- * lay out identically. Omitted keeps the shipped six-view 3x2 (H-33 env variant
- * included).
- */
-export async function captureViewsViaPort(
-  port: PbrRenderPort,
-  glb: Buffer | Uint8Array,
-  timeoutMs: number = DEFAULT_VIEW_RENDER_TIMEOUT_MS,
-  capture?: CaptureConfig,
-): Promise<PortViewsOutcome> {
-  let resolved: ResolvedCapture;
-  try {
-    resolved = resolveGridCapture(capture, process.env['KILN_GRID_VARIANT']);
-  } catch (err) {
-    return { ok: false, reason: err instanceof Error ? err.message : String(err) };
-  }
-  const views = resolved.views;
-  const shape: CaptureShape = { preset: resolved.preset, cols: resolved.cols, cells: views.length };
-
-  // Per-cell zoom has no equivalent in the port contract: the request carries
-  // view directions only, and the host frames each view to the asset's own
-  // bounds. Rather than silently returning auto-framed cells for a request that
-  // asked for tighter ones, decline and let the CPU rasterizer — which does
-  // implement zoom — produce the sheet that was actually asked for.
-  if (resolved.zooms.some((z) => z !== undefined)) {
-    return {
-      ok: false,
-      reason: 'per-cell zoom is not supported by the view render port',
-    };
-  }
-
-  const result = await captureViewPngsViaPort(
-    port,
-    glb,
-    timeoutMs,
-    views.map((view) => view.dir),
-    384,
-  );
-  if (!result.ok) return result;
-  try {
-    // Annotated with the SAME cell labels + gnomon the CPU path stamps. A host
-    // returns pixels and knows nothing of the Kiln camera vocabulary, so
-    // without this the GPU sheet arrives unlabelled and the model quietly loses
-    // its orientation cues on the one path that cannot tell it happened.
-    // Degrade stays reportable through `renderDegraded` / `viewsRendererId`,
-    // which is a structured field rather than a visual tell.
-    const grid = compositeViewPngGrid(result.pngs, resolved.cols, views);
-    return {
-      ok: true,
-      png: grid.png,
-      rendererId: result.rendererId,
-      capture: shape,
-      width: grid.width,
-      height: grid.height,
-    };
-  } catch (err) {
-    return { ok: false, reason: err instanceof Error ? err.message : String(err) };
-  }
-}
+export {
+  DEFAULT_VIEW_RENDER_TIMEOUT_MS,
+  captureViewPngsViaPort,
+  captureViewsViaPort,
+} from '../views/port';
+export type { PortViewPngsOutcome, PortViewsOutcome } from '../views/port';
 
 /**
  * Run one Kiln agent generation end-to-end: model -> tool loop -> GLB render.

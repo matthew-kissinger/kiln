@@ -1,0 +1,101 @@
+{
+  "startedAt": "2026-09-05T22:38:19.955Z",
+  "platform": "linux",
+  "arch": "x64",
+  "node": "v22.23.1",
+  "stages": [
+    {
+      "name": "extract",
+      "command": "tar",
+      "args": [
+        "-xf",
+        "/input.tar",
+        "-C",
+        "/work"
+      ],
+      "code": 0,
+      "timedOut": false,
+      "elapsedMs": 2632
+    },
+    {
+      "name": "toolchain",
+      "command": "bun",
+      "args": [
+        "run",
+        "check:toolchain"
+      ],
+      "code": 0,
+      "timedOut": false,
+      "elapsedMs": 37
+    },
+    {
+      "name": "install",
+      "command": "bun",
+      "args": [
+        "install",
+        "--frozen-lockfile"
+      ],
+      "code": 0,
+      "timedOut": false,
+      "elapsedMs": 4072
+    },
+    {
+      "name": "identity",
+      "command": "node",
+      "args": [
+        "--input-type=module",
+        "-e",
+        "const{runtimeBuildIdentity}=await import('./scripts/build-runtime.mjs');console.log(JSON.stringify(await runtimeBuildIdentity(process.cwd())));"
+      ],
+      "code": 0,
+      "timedOut": false,
+      "elapsedMs": 127
+    },
+    {
+      "name": "native-versions",
+      "command": "node",
+      "args": [
+        "-e",
+        "console.log(JSON.stringify({node:process.version,sharp:require('sharp').versions},null,2))"
+      ],
+      "code": 0,
+      "timedOut": false,
+      "elapsedMs": 77
+    },
+    {
+      "name": "typecheck",
+      "command": "bun",
+      "args": [
+        "run",
+        "typecheck"
+      ],
+      "code": 0,
+      "timedOut": false,
+      "elapsedMs": 1593
+    },
+    {
+      "name": "lint",
+      "command": "bun",
+      "args": [
+        "run",
+        "lint"
+      ],
+      "code": 0,
+      "timedOut": false,
+      "elapsedMs": 892
+    },
+    {
+      "name": "coverage",
+      "command": "bun",
+      "args": [
+        "run",
+        "test:coverage"
+      ],
+      "code": 0,
+      "timedOut": false,
+      "elapsedMs": 159478
+    }
+  ],
+  "status": "passed",
+  "finishedAt": "2026-09-05T22:41:08.902Z"
+}

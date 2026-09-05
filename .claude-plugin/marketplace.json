@@ -1,15 +1,15 @@
 {
   "$schema": "https://anthropic.com/claude-code/marketplace.schema.json",
   "name": "kiln",
-  "description": "Kiln — author 3D assets as code, with a vision-in-the-loop agent that renders its own work and looks at it",
+  "description": "Kiln: local tools and skills for building, inspecting and revising procedural 3D assets.",
   "owner": {
-    "name": "Matt Kissinger"
+    "name": "Matthew Kissinger"
   },
   "plugins": [
     {
       "name": "kiln",
-      "description": "Author 3D assets as code: your agent writes a Kiln program, renders it, looks at the six-view contact sheet, and fixes what it sees. Outputs a game-ready GLB.",
-      "author": { "name": "Matt Kissinger" },
+      "description": "Build 3D assets, inspect selected views, edit saved source revisions and export GLB files with your coding agent.",
+      "author": { "name": "Matthew Kissinger" },
       "category": "development",
       "source": "./"
     }

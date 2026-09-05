@@ -3,7 +3,7 @@
  */
 
 import { describe, it, expect } from 'bun:test';
-import type * as THREE from 'three';
+import * as THREE from 'three';
 import { gearGeo, bladeGeo } from '../gears';
 
 function bbox(geo: THREE.BufferGeometry) {
@@ -12,13 +12,57 @@ function bbox(geo: THREE.BufferGeometry) {
 }
 
 describe('gearGeo', () => {
+  it('has closed, nondegenerate faces and outward normals at instrument scale, with or without a bore', () => {
+    for (const boreRadius of [0, 0.012]) {
+      const g = gearGeo({
+        teeth: 28,
+        rootRadius: 0.063,
+        tipRadius: 0.075,
+        boreRadius,
+        height: 0.024,
+      });
+      const position = g.getAttribute('position');
+      const normal = g.getAttribute('normal');
+      const edges = new Map<string, number>();
+      const key = (v: THREE.Vector3) =>
+        v
+          .toArray()
+          .map((n) => n.toFixed(7))
+          .join(',');
+      for (let i = 0; i < position.count; i += 3) {
+        const a = new THREE.Vector3().fromBufferAttribute(position, i);
+        const b = new THREE.Vector3().fromBufferAttribute(position, i + 1);
+        const c = new THREE.Vector3().fromBufferAttribute(position, i + 2);
+        const cross = b.clone().sub(a).cross(c.clone().sub(a));
+        expect(cross.length()).toBeGreaterThan(1e-10);
+        expect(new THREE.Vector3().fromBufferAttribute(normal, i).length()).toBeCloseTo(1, 5);
+        const center = a.clone().add(b).add(c).divideScalar(3);
+        const cap = Math.abs(a.y - b.y) < 1e-8 && Math.abs(a.y - c.y) < 1e-8;
+        const inner =
+          boreRadius > 0 &&
+          [a, b, c].every((v) => Math.abs(Math.hypot(v.x, v.z) - boreRadius) < 1e-7);
+        const outward = cap
+          ? new THREE.Vector3(0, Math.sign(center.y), 0)
+          : new THREE.Vector3(center.x, 0, center.z).multiplyScalar(inner ? -1 : 1);
+        expect(cross.dot(outward)).toBeGreaterThan(0);
+        for (const [v, w] of [
+          [a, b],
+          [b, c],
+          [c, a],
+        ] as const) {
+          const edge = [key(v), key(w)].sort().join('|');
+          edges.set(edge, (edges.get(edge) ?? 0) + 1);
+        }
+      }
+      expect([...edges.values()].every((count) => count === 2)).toBe(true);
+    }
+  });
   it('produces a flat-shaded, non-indexed gear with sensible tri count', () => {
     const g = gearGeo({ teeth: 12 });
     expect(g.index).toBeNull();
     const pos = g.getAttribute('position') as THREE.BufferAttribute;
-    // N = 4*teeth = 48. Triangles: 2 caps × N quads × 2 tris + 2 walls × N × 2 = 8N = 384 tris.
-    // Non-indexed: 384 tris × 3 verts = 1152 verts.
-    expect(pos.count).toBe(8 * 4 * 12 * 3);
+    // Three distinct crown vertices per tooth, with two caps and two walls.
+    expect(pos.count).toBe(8 * 3 * 12 * 3);
     const norm = g.getAttribute('normal') as THREE.BufferAttribute;
     expect(norm).toBeDefined();
     expect(norm.count).toBe(pos.count);

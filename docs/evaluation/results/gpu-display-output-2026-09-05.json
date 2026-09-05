@@ -1,0 +1,287 @@
+{
+  "date": "2026-09-05",
+  "patches": {
+    "status": "passed",
+    "rendererId": "dawn-d3d12:nvidia-geforce-rtx-3070:D3D12 driver version 32.0.16.1074",
+    "inputLinearColors": [
+      [
+        0.04,
+        0.04,
+        0.04
+      ],
+      [
+        0.18,
+        0.18,
+        0.18
+      ],
+      [
+        0.5,
+        0.5,
+        0.5
+      ],
+      [
+        1,
+        1,
+        1
+      ],
+      [
+        2,
+        2,
+        2
+      ],
+      [
+        4,
+        4,
+        4
+      ],
+      [
+        0.8,
+        0.05,
+        0.02
+      ],
+      [
+        0.03,
+        0.6,
+        0.05
+      ],
+      [
+        0.02,
+        0.04,
+        0.8
+      ]
+    ],
+    "legacy": [
+      [
+        10,
+        10,
+        10
+      ],
+      [
+        46,
+        46,
+        46
+      ],
+      [
+        127,
+        127,
+        127
+      ],
+      [
+        255,
+        255,
+        255
+      ],
+      [
+        255,
+        255,
+        255
+      ],
+      [
+        255,
+        255,
+        255
+      ],
+      [
+        204,
+        13,
+        5
+      ],
+      [
+        8,
+        153,
+        13
+      ],
+      [
+        5,
+        10,
+        204
+      ]
+    ],
+    "corrected": [
+      [
+        54,
+        54,
+        54
+      ],
+      [
+        151,
+        151,
+        151
+      ],
+      [
+        213,
+        213,
+        213
+      ],
+      [
+        235,
+        235,
+        235
+      ],
+      [
+        246,
+        246,
+        246
+      ],
+      [
+        252,
+        252,
+        252
+      ],
+      [
+        252,
+        95,
+        53
+      ],
+      [
+        140,
+        221,
+        112
+      ],
+      [
+        59,
+        61,
+        231
+      ]
+    ],
+    "expected": [
+      [
+        54,
+        54,
+        54
+      ],
+      [
+        151,
+        151,
+        151
+      ],
+      [
+        213,
+        213,
+        213
+      ],
+      [
+        235,
+        235,
+        235
+      ],
+      [
+        246,
+        246,
+        246
+      ],
+      [
+        252,
+        252,
+        252
+      ],
+      [
+        252,
+        95,
+        54
+      ],
+      [
+        140,
+        221,
+        112
+      ],
+      [
+        59,
+        61,
+        231
+      ]
+    ],
+    "lowerExposure": [
+      [
+        29,
+        29,
+        29
+      ],
+      [
+        102,
+        102,
+        102
+      ],
+      [
+        175,
+        175,
+        175
+      ],
+      [
+        214,
+        214,
+        214
+      ],
+      [
+        236,
+        236,
+        236
+      ],
+      [
+        246,
+        246,
+        246
+      ],
+      [
+        212,
+        42,
+        27
+      ],
+      [
+        63,
+        187,
+        61
+      ],
+      [
+        0,
+        31,
+        200
+      ]
+    ],
+    "toleranceBytes": 2,
+    "checks": [
+      "HDR whites1/2/4 remain distinguishable",
+      "neutral/color patches match ACES+exposure+sRGB",
+      "exposure changes actual output",
+      "unaligned270px readback retains rows"
+    ]
+  },
+  "sameAssetComparison": {
+    "sameGlb": true,
+    "sameCamera": true,
+    "glbSha256": "eb18c8e8ec9b1c6f45f813aa1120285ee16b475d7860018bba4a0a9b7f41eb7e",
+    "stats": {
+      "before": {
+        "allWhitePixels": 63135,
+        "totalPixels": 589824
+      },
+      "after": {
+        "allWhitePixels": 0,
+        "totalPixels": 589824
+      }
+    },
+    "beforeIdentity": {
+      "version": "kiln.capture-producer.v1",
+      "fingerprint": "sha256:9b0be252d06b3f59e00552e5f0c0bf08f7ab4f346cd9eac05a538c76c2c2f32c",
+      "instanceId": "02b3a8f0-e5ce-47ec-91af-68187b727819"
+    },
+    "afterIdentity": {
+      "version": "kiln.capture-producer.v1",
+      "fingerprint": "sha256:97603829651f78acca943207dff0eed67328e826ad601f7a9f2eaedffd95ce74",
+      "instanceId": "d805443a-4b5c-4b88-8f68-cb878f7a8369"
+    },
+    "legacyAndBeautyReturned": true
+  },
+  "legacyBeauty": {
+    "status": "passed",
+    "size": 128,
+    "beautySize": 256,
+    "viewBytes": 27127,
+    "beautyBytes": 90628,
+    "captureIdentity": {
+      "version": "kiln.capture-producer.v1",
+      "fingerprint": "sha256:a2ae15d1dc15399d79a95a005609087493c32c705210378b460bc442966032b1",
+      "instanceId": "191c6307-0c8e-462f-8a6b-5d87b6fd1b90"
+    }
+  }
+}

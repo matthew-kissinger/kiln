@@ -1,0 +1,11 @@
+{
+  "status": "passed",
+  "platform": "win32",
+  "node": "v22.23.1",
+  "tarballSha256": "1d3bf676c9439ab9507e797118b263f2b6f6ce70a8db1c4e6b48c1be022bb806",
+  "packagedMcp": "C:\\Users\\Mattm\\AppData\\Local\\Temp\\kiln-package-café-5bltQy/fresh installation/node_modules/@kiln/engine/dist/mcp-server.mjs",
+  "packagedWorker": "C:\\Users\\Mattm\\AppData\\Local\\Temp\\kiln-package-café-5bltQy/fresh installation/node_modules/@kiln/engine/dist/evaluator-worker.mjs",
+  "transport": "SDK InMemoryTransport with real MCP cancellation; host-injected current evaluator subprocess launcher",
+  "cancelledOutcome": "CANCELLED",
+  "followingValidRequestImage": true
+}

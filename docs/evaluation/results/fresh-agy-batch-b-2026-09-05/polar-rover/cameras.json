@@ -1,0 +1,44 @@
+{
+  "version": "kiln.capture.v1",
+  "output": "grid",
+  "cols": 3,
+  "size": 768,
+  "shots": [
+    {
+      "name": "Hero Front 3/4",
+      "camera": {
+        "type": "orbit",
+        "azimuthDeg": 42,
+        "elevationDeg": 20
+      }
+    },
+    {
+      "name": "Roof & Articulated Mast",
+      "subject": {
+        "path": "/Polar%20Research%20Rover[0]/PolarRover[0]/Mesh_RoofCapIvory[0]"
+      },
+      "visibility": "context",
+      "camera": {
+        "type": "orbit",
+        "relativeTo": "part",
+        "azimuthDeg": 35,
+        "elevationDeg": 28,
+        "padding": 1.4
+      }
+    },
+    {
+      "name": "Rear Science Deck",
+      "subject": {
+        "path": "/Polar%20Research%20Rover[0]/PolarRover[0]/Mesh_SpectrometerHousing[0]"
+      },
+      "visibility": "context",
+      "camera": {
+        "type": "orbit",
+        "relativeTo": "part",
+        "azimuthDeg": 215,
+        "elevationDeg": 24,
+        "padding": 1.4
+      }
+    }
+  ]
+}

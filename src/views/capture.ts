@@ -55,6 +55,11 @@ export interface CaptureCell {
 }
 
 export interface CaptureConfig {
+  version?: 'kiln.capture.v1';
+  shots?: import('./camera').CameraShotV1[];
+  cols?: number;
+  size?: number;
+  output?: 'grid' | 'separate';
   preset?: CapturePreset;
   cells?: CaptureCell[];
 }
@@ -134,7 +139,7 @@ export interface ResolvedCapture {
  * consumer never has to infer the grid shape by dividing image dimensions.
  */
 export interface CaptureShape {
-  preset: CapturePreset;
+  preset: string;
   cols: number;
   cells: number;
 }

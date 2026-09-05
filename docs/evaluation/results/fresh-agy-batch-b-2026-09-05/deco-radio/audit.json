@@ -1,0 +1,179 @@
+{
+  "name": "deco-radio",
+  "base": "C:/Users/Mattm/X/kiln-cleanrooms/fresh-agy-deco-radio-0d457e8f-20260905-gpu",
+  "exit": {
+    "code": 0,
+    "timedOut": false,
+    "finishedAt": "2026-09-05T21:30:37.202Z"
+  },
+  "status": "finished",
+  "model": "gemini-3.8-flash-high",
+  "conversationId": "e62405c1-9891-45ae-9668-a8a1ba75bbd8",
+  "packageSha256": "0d457e8f8763730079da013abfa6662aadc02843f090fcae594c0f711399d16c",
+  "calls": 26,
+  "inlineSourceCalls": 1,
+  "edits": 3,
+  "imageCells": 25,
+  "images": [
+    {
+      "path": "C:\\Users\\Mattm\\X\\kiln-cleanrooms\\fresh-agy-deco-radio-0d457e8f-20260905-gpu\\evidence\\mcp\\images\\006-0.png",
+      "bytes": 109371,
+      "sha256": "e706c0900b72174ad4cecf7e382f744fa0c7cf85d90e3008bbb0c25f0d99ce98"
+    },
+    {
+      "path": "C:\\Users\\Mattm\\X\\kiln-cleanrooms\\fresh-agy-deco-radio-0d457e8f-20260905-gpu\\evidence\\mcp\\images\\007-0.png",
+      "bytes": 26402,
+      "sha256": "c93804e566857fc797209efbceeaf7b0e7c1f4be35ff49c121d8035e5ba047d2"
+    },
+    {
+      "path": "C:\\Users\\Mattm\\X\\kiln-cleanrooms\\fresh-agy-deco-radio-0d457e8f-20260905-gpu\\evidence\\mcp\\images\\008-0.png",
+      "bytes": 16091,
+      "sha256": "0eee1039efebc6d81dd1edbaf58b4c200404b5bf3690973597d0ec3801f036d3"
+    },
+    {
+      "path": "C:\\Users\\Mattm\\X\\kiln-cleanrooms\\fresh-agy-deco-radio-0d457e8f-20260905-gpu\\evidence\\mcp\\images\\015-0.png",
+      "bytes": 96733,
+      "sha256": "65fd32d0c570c75b8af44b9acc0e3cf32081e97e6be11ff8d4d3d8aaf0e41bad"
+    },
+    {
+      "path": "C:\\Users\\Mattm\\X\\kiln-cleanrooms\\fresh-agy-deco-radio-0d457e8f-20260905-gpu\\evidence\\mcp\\images\\019-0.png",
+      "bytes": 132641,
+      "sha256": "8f4f7a96cd2e80a867cdd9a4aa2094310cdac90b77d3755491d3d6a5460ededc"
+    },
+    {
+      "path": "C:\\Users\\Mattm\\X\\kiln-cleanrooms\\fresh-agy-deco-radio-0d457e8f-20260905-gpu\\evidence\\mcp\\images\\020-0.png",
+      "bytes": 9396,
+      "sha256": "886d6eade291e9428a8e8f9991a7572edb26ff4c3366e5d677d7e55c5def71b9"
+    },
+    {
+      "path": "C:\\Users\\Mattm\\X\\kiln-cleanrooms\\fresh-agy-deco-radio-0d457e8f-20260905-gpu\\evidence\\mcp\\images\\024-0.png",
+      "bytes": 142641,
+      "sha256": "4b54041647f3676404b4757191cac3c0b041dea3d91c92d53469d3809eccda0b"
+    }
+  ],
+  "toolErrors": [],
+  "files": [
+    {
+      "file": "final-chosen.png",
+      "bytes": 254412,
+      "sha256": "b6dbbcdea0258d2432672e5e5484818acf632c535dec24fa529b11c68d5d684b"
+    },
+    {
+      "file": "final.glb",
+      "bytes": 206992,
+      "sha256": "6829cc3841de54672db8160be4b9517c0e006ff2ce082dff1e44faf0479544f7"
+    },
+    {
+      "file": "final.kiln.js",
+      "bytes": 15324,
+      "sha256": "d79eec971bd3199993b8af63673f17feb0b968d91745873ad032927ea48a9241"
+    }
+  ],
+  "lastEvent": "result",
+  "acceptedCalls": 25,
+  "deniedCalls": [
+    {
+      "tool": "kiln_source",
+      "reason": "Tool call budget exhausted"
+    }
+  ],
+  "revisions": [
+    {
+      "sourceHash": "98e5e0acc662589323030271bc1cf44987890c33c4228ad1bd3f1d0a7cea1d49",
+      "bytes": 13919
+    },
+    {
+      "sourceHash": "ce748f8b92d155134d6f06938e17d189663418f16d2c0a09afa05ab5cdf80c52",
+      "bytes": 15060
+    },
+    {
+      "sourceHash": "d79eec971bd3199993b8af63673f17feb0b968d91745873ad032927ea48a9241",
+      "bytes": 15324
+    },
+    {
+      "sourceHash": "f2989a63a016b89ed7dc0704537b33c3dda9969f59ee0b759ddff3e620c8b96b",
+      "bytes": 11568
+    }
+  ],
+  "editReplay": [
+    {
+      "parentRef": "sha256:f2989a63a016b89ed7dc0704537b33c3dda9969f59ee0b759ddff3e620c8b96b",
+      "programRef": "sha256:98e5e0acc662589323030271bc1cf44987890c33c4228ad1bd3f1d0a7cea1d49",
+      "occurrences": [
+        1,
+        1,
+        1,
+        1,
+        1
+      ],
+      "rejected": false,
+      "exact": true,
+      "renderOk": true
+    },
+    {
+      "parentRef": "sha256:98e5e0acc662589323030271bc1cf44987890c33c4228ad1bd3f1d0a7cea1d49",
+      "programRef": "sha256:ce748f8b92d155134d6f06938e17d189663418f16d2c0a09afa05ab5cdf80c52",
+      "occurrences": [
+        1,
+        1,
+        1,
+        1
+      ],
+      "rejected": false,
+      "exact": true,
+      "renderOk": true
+    },
+    {
+      "parentRef": "sha256:ce748f8b92d155134d6f06938e17d189663418f16d2c0a09afa05ab5cdf80c52",
+      "programRef": "sha256:d79eec971bd3199993b8af63673f17feb0b968d91745873ad032927ea48a9241",
+      "occurrences": [
+        1,
+        1,
+        1
+      ],
+      "rejected": false,
+      "exact": true,
+      "renderOk": true
+    }
+  ],
+  "viewedImages": [
+    "C:\\Users\\Mattm\\.gemini\\antigravity-cli\\brain\\e62405c1-9891-45ae-9668-a8a1ba75bbd8\\.system_generated\\steps\\53\\media_0.png",
+    "C:\\Users\\Mattm\\.gemini\\antigravity-cli\\brain\\e62405c1-9891-45ae-9668-a8a1ba75bbd8\\.system_generated\\steps\\59\\media_0.png",
+    "C:\\Users\\Mattm\\.gemini\\antigravity-cli\\brain\\e62405c1-9891-45ae-9668-a8a1ba75bbd8\\.system_generated\\steps\\65\\media_0.png",
+    "C:\\Users\\Mattm\\.gemini\\antigravity-cli\\brain\\e62405c1-9891-45ae-9668-a8a1ba75bbd8\\.system_generated\\steps\\81\\media_0.png",
+    "C:\\Users\\Mattm\\.gemini\\antigravity-cli\\brain\\e62405c1-9891-45ae-9668-a8a1ba75bbd8\\.system_generated\\steps\\93\\media_0.png",
+    "C:\\Users\\Mattm\\.gemini\\antigravity-cli\\brain\\e62405c1-9891-45ae-9668-a8a1ba75bbd8\\.system_generated\\steps\\99\\media_0.png",
+    "C:\\Users\\Mattm\\.gemini\\antigravity-cli\\brain\\e62405c1-9891-45ae-9668-a8a1ba75bbd8\\.system_generated\\steps\\111\\media_0.png",
+    "C:\\Users\\Mattm\\X\\kiln-cleanrooms\\fresh-agy-deco-radio-0d457e8f-20260905-gpu\\workspace\\assets\\final-chosen.png"
+  ],
+  "readPaths": [
+    "C:\\Users\\Mattm\\X\\kiln-cleanrooms\\fresh-agy-deco-radio-0d457e8f-20260905-gpu\\workspace\\AGENTS.md",
+    "C:\\Users\\Mattm\\X\\kiln-cleanrooms\\fresh-agy-deco-radio-0d457e8f-20260905-gpu\\workspace\\TASK.md",
+    "C:\\Users\\Mattm\\X\\kiln-cleanrooms\\fresh-agy-deco-radio-0d457e8f-20260905-gpu\\workspace\\skills\\kiln-author-asset\\SKILL.md",
+    "C:\\Users\\Mattm\\X\\kiln-cleanrooms\\fresh-agy-deco-radio-0d457e8f-20260905-gpu\\workspace\\skills\\kiln-refine-asset\\SKILL.md",
+    "C:\\Users\\Mattm\\X\\kiln-cleanrooms\\fresh-agy-deco-radio-0d457e8f-20260905-gpu\\workspace\\skills\\kiln-qa-asset\\SKILL.md",
+    "C:\\Users\\Mattm\\X\\kiln-cleanrooms\\fresh-agy-deco-radio-0d457e8f-20260905-gpu\\workspace\\skills\\kiln-author-asset\\references\\program-contract.md",
+    "C:\\Users\\Mattm\\X\\kiln-cleanrooms\\fresh-agy-deco-radio-0d457e8f-20260905-gpu\\workspace\\skills\\kiln-author-asset\\references\\camera-recipes.md",
+    "C:\\Users\\Mattm\\X\\kiln-cleanrooms\\fresh-agy-deco-radio-0d457e8f-20260905-gpu\\workspace\\skills\\kiln-author-asset\\references\\geometry-recipes.md",
+    "C:\\Users\\Mattm\\X\\kiln-cleanrooms\\fresh-agy-deco-radio-0d457e8f-20260905-gpu\\workspace\\skills\\kiln-refine-asset\\references\\revision-and-views.md",
+    "C:\\Users\\Mattm\\X\\kiln-cleanrooms\\fresh-agy-deco-radio-0d457e8f-20260905-gpu\\workspace\\skills\\kiln-qa-asset\\references\\integration-checks.md",
+    "C:\\Users\\Mattm\\.gemini\\antigravity-cli\\mcp\\kiln_workspace\\kiln_list_primitives.json",
+    "C:\\Users\\Mattm\\.gemini\\antigravity-cli\\mcp\\kiln_workspace\\kiln_render.json",
+    "C:\\Users\\Mattm\\.gemini\\antigravity-cli\\mcp\\kiln_workspace\\kiln_edit.json",
+    "C:\\Users\\Mattm\\.gemini\\antigravity-cli\\mcp\\kiln_workspace\\kiln_screenshot_animation.json",
+    "C:\\Users\\Mattm\\.gemini\\antigravity-cli\\brain\\e62405c1-9891-45ae-9668-a8a1ba75bbd8\\.system_generated\\steps\\53\\output.txt",
+    "C:\\Users\\Mattm\\.gemini\\antigravity-cli\\brain\\e62405c1-9891-45ae-9668-a8a1ba75bbd8\\.system_generated\\steps\\53\\media_0.png",
+    "C:\\Users\\Mattm\\.gemini\\antigravity-cli\\brain\\e62405c1-9891-45ae-9668-a8a1ba75bbd8\\.system_generated\\steps\\59\\output.txt",
+    "C:\\Users\\Mattm\\.gemini\\antigravity-cli\\brain\\e62405c1-9891-45ae-9668-a8a1ba75bbd8\\.system_generated\\steps\\59\\media_0.png",
+    "C:\\Users\\Mattm\\.gemini\\antigravity-cli\\brain\\e62405c1-9891-45ae-9668-a8a1ba75bbd8\\.system_generated\\steps\\65\\media_0.png",
+    "C:\\Users\\Mattm\\.gemini\\antigravity-cli\\brain\\e62405c1-9891-45ae-9668-a8a1ba75bbd8\\.system_generated\\steps\\81\\output.txt",
+    "C:\\Users\\Mattm\\.gemini\\antigravity-cli\\brain\\e62405c1-9891-45ae-9668-a8a1ba75bbd8\\.system_generated\\steps\\81\\media_0.png",
+    "C:\\Users\\Mattm\\.gemini\\antigravity-cli\\brain\\e62405c1-9891-45ae-9668-a8a1ba75bbd8\\.system_generated\\steps\\93\\output.txt",
+    "C:\\Users\\Mattm\\.gemini\\antigravity-cli\\brain\\e62405c1-9891-45ae-9668-a8a1ba75bbd8\\.system_generated\\steps\\93\\media_0.png",
+    "C:\\Users\\Mattm\\.gemini\\antigravity-cli\\brain\\e62405c1-9891-45ae-9668-a8a1ba75bbd8\\.system_generated\\steps\\99\\output.txt",
+    "C:\\Users\\Mattm\\.gemini\\antigravity-cli\\brain\\e62405c1-9891-45ae-9668-a8a1ba75bbd8\\.system_generated\\steps\\99\\media_0.png",
+    "C:\\Users\\Mattm\\.gemini\\antigravity-cli\\brain\\e62405c1-9891-45ae-9668-a8a1ba75bbd8\\.system_generated\\steps\\111\\output.txt",
+    "C:\\Users\\Mattm\\.gemini\\antigravity-cli\\brain\\e62405c1-9891-45ae-9668-a8a1ba75bbd8\\.system_generated\\steps\\111\\media_0.png",
+    "C:\\Users\\Mattm\\X\\kiln-cleanrooms\\fresh-agy-deco-radio-0d457e8f-20260905-gpu\\workspace\\assets\\final-chosen.png"
+  ]
+}

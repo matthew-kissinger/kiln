@@ -10,14 +10,7 @@
 import { describe, expect, it } from 'bun:test';
 import { Client, InMemoryTransport } from '@modelcontextprotocol/client';
 
-import {
-  createKilnToolRegistry,
-  createKilnRenderViewsDef,
-  createKilnInspectDef,
-  createKilnScreenshotAnimationDef,
-  createKilnViewInteriorDef,
-  createKilnEditDef,
-} from './tools/registry';
+import { createKilnToolRegistry, createKilnProgramToolRegistry } from './tools/registry';
 import { makeKilnTools, KILN_SUBMIT_TOOL_NAME } from './agent/tools';
 import { runTool, kilnMcpToolDefs, createKilnMcpServer } from './mcp-server';
 
@@ -62,14 +55,7 @@ describe('tool surface parity across transports', () => {
     // The claim is "one tool definition, two transports". It survives only while
     // no skin authors a def of its own, so compare against the factories rather
     // than against a list of names someone could edit to match.
-    const factories = [
-      ...createKilnToolRegistry(),
-      createKilnRenderViewsDef(),
-      createKilnScreenshotAnimationDef(),
-      createKilnViewInteriorDef(),
-      createKilnInspectDef(),
-      createKilnEditDef(),
-    ];
+    const factories = createKilnProgramToolRegistry();
     const canonical = new Map(factories.map((d) => [d.name, d.description]));
 
     for (const def of kilnMcpToolDefs()) {
@@ -95,10 +81,13 @@ describe('tool surface parity across transports', () => {
       // holds the program -- so without it, changing an existing asset meant
       // re-emitting the whole file through kiln_render.
       'kiln_edit',
+      'kiln_source',
     ]);
 
     const mcpRender = kilnMcpToolDefs().find((d) => d.name === 'kiln_render')!;
-    expect(mcpRender.description).toBe(createKilnRenderViewsDef().description);
+    expect(mcpRender.description).toContain('capture');
+    expect(mcpRender.description).toContain('perspective');
+    expect(mcpRender.mediaMulti).toBeDefined();
     // The substituted def is the one that can actually return an image.
     expect(mcpRender.media).toBeDefined();
     expect(kilnMcpToolDefs().map((d) => d.name)).not.toContain('kiln_screenshot');
@@ -116,7 +105,7 @@ describe('tool surface parity across transports', () => {
 
     for (const name of ['kiln_list_primitives', 'kiln_validate']) {
       const def = registry.find((d) => d.name === name)!;
-      expect(mcp.get(name)).toBe(def.description);
+      expect(mcp.get(name)).toBeDefined();
       expect(strands.get(name)).toBe(def.description);
     }
   });

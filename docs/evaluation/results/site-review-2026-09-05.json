@@ -1,0 +1,84 @@
+{
+  "date": "2026-09-05",
+  "observer": "root agent via CUA visible DOM metrics",
+  "browser": "Chrome152.0.0.0",
+  "os": "Windows",
+  "deviceClass": "desktop",
+  "network": "localhost",
+  "cache": "warm",
+  "throttling": "none",
+  "home1440": {
+    "fcpMs": 88,
+    "lcpMs": 184,
+    "loadObserverMs": 59.2,
+    "glbRequests": 0,
+    "canvases": 0,
+    "poster": {
+      "loaded": true,
+      "width": 1024,
+      "height": 768
+    }
+  },
+  "collection": {
+    "fcpMs": 36,
+    "lcpMs": 68,
+    "loadObserverMs": 25.7,
+    "glbRequests": 0,
+    "canvases": 0,
+    "resourceEntries": 25
+  },
+  "explore": {
+    "canvases": 1,
+    "glbRequests": 1,
+    "glb": "orbital-station",
+    "cachedRequestMs": 17.7,
+    "transferBytes": 300,
+    "clickToTwoFramesMs": 5.8,
+    "longTasksMs": [
+      55
+    ]
+  },
+  "layout": [
+    {
+      "viewport": 360,
+      "clientWidth": 345,
+      "scrollWidth": 345,
+      "overflow": false
+    },
+    {
+      "viewport": 768,
+      "clientWidth": 753,
+      "scrollWidth": 753,
+      "overflow": false
+    },
+    {
+      "viewport": 1440,
+      "clientWidth": 1425,
+      "scrollWidth": 1425,
+      "overflow": false
+    }
+  ],
+  "css200Percent": {
+    "viewport": 1440,
+    "overflow": false,
+    "isBrowserZoom": false
+  },
+  "webglBlocked": {
+    "staticPosterVisible": true,
+    "posterLoaded": true,
+    "glbRequests": 0,
+    "fallbackCanvasRemains": true
+  },
+  "keyboardFocus": "orange focus on Render record observed",
+  "mobileHero": "whole hero visible without cropping",
+  "actualReducedMotion": false,
+  "unmeasured": [
+    "genuine200percent browser zoom",
+    "reduced-motion preference enabled",
+    "physical mobile device",
+    "cold internet load",
+    "INP",
+    "complete3D-ready latency",
+    "sustained GPU performance"
+  ]
+}

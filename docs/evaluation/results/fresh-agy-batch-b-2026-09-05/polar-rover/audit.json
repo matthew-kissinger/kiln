@@ -1,0 +1,198 @@
+{
+  "name": "polar-rover",
+  "base": "C:/Users/Mattm/X/kiln-cleanrooms/fresh-agy-polar-rover-0d457e8f-20260905-gpu",
+  "exit": {
+    "code": 0,
+    "timedOut": false,
+    "finishedAt": "2026-09-05T21:36:13.194Z"
+  },
+  "status": "finished",
+  "model": "gemini-3.8-flash-high",
+  "conversationId": "a10a848f-7cef-4811-b59d-d36fbaa021ec",
+  "packageSha256": "0d457e8f8763730079da013abfa6662aadc02843f090fcae594c0f711399d16c",
+  "calls": 25,
+  "inlineSourceCalls": 0,
+  "edits": 5,
+  "imageCells": 19,
+  "images": [
+    {
+      "path": "C:\\Users\\Mattm\\X\\kiln-cleanrooms\\fresh-agy-polar-rover-0d457e8f-20260905-gpu\\evidence\\mcp\\images\\013-0.png",
+      "bytes": 147268,
+      "sha256": "161bd6aac5afd32dc75de875157dfba6f49d81e133b6912fc71913d18698a8ab"
+    },
+    {
+      "path": "C:\\Users\\Mattm\\X\\kiln-cleanrooms\\fresh-agy-polar-rover-0d457e8f-20260905-gpu\\evidence\\mcp\\images\\014-0.png",
+      "bytes": 48474,
+      "sha256": "25a0e2187ddb8040911f44db90325740960b1c5dfaf490672ca6ce0d2f4b70e4"
+    },
+    {
+      "path": "C:\\Users\\Mattm\\X\\kiln-cleanrooms\\fresh-agy-polar-rover-0d457e8f-20260905-gpu\\evidence\\mcp\\images\\020-0.png",
+      "bytes": 108380,
+      "sha256": "b24d0bdaa760972378ce8392d7a5cce27cbf775764bc66f8e8cc29e5c99e212d"
+    },
+    {
+      "path": "C:\\Users\\Mattm\\X\\kiln-cleanrooms\\fresh-agy-polar-rover-0d457e8f-20260905-gpu\\evidence\\mcp\\images\\024-0.png",
+      "bytes": 167711,
+      "sha256": "faf3dc243cc0bac5bbb6aaf0913cbe25eca5ca81dbf773e8f0c3dd909f4c8ad2"
+    },
+    {
+      "path": "C:\\Users\\Mattm\\X\\kiln-cleanrooms\\fresh-agy-polar-rover-0d457e8f-20260905-gpu\\evidence\\mcp\\images\\025-0.png",
+      "bytes": 52768,
+      "sha256": "cc0f34a90086bf4194966d1ce09a2df252bfa7dd2a508f1b60879050a0d5d6f8"
+    }
+  ],
+  "toolErrors": [],
+  "files": [
+    {
+      "file": "final-chosen.png",
+      "bytes": 337652,
+      "sha256": "cf1e19f351a4efd3815d67ceff1f22c20d0b3b6689ad64fdbf066ff5e6fd8432"
+    },
+    {
+      "file": "final.glb",
+      "bytes": 300068,
+      "sha256": "7fc979534fcaf752439d8db90b41227c25bd0bc7fe2ee616615e3ae05678d0c8"
+    },
+    {
+      "file": "final.kiln.js",
+      "bytes": 32072,
+      "sha256": "aea09b2491cc06ac710648d0de30bb365fa1b2c0fff10712cb70db07e8216515"
+    }
+  ],
+  "lastEvent": "result",
+  "acceptedCalls": 25,
+  "deniedCalls": [],
+  "revisions": [
+    {
+      "sourceHash": "1b95d7f2a6ad8edfcc965624fccbfd89d67fadd5273041b4bd107dcc5874721b",
+      "bytes": 28760
+    },
+    {
+      "sourceHash": "452b4cb2d887a0a249637d2a49aea5bdeb2aab023a9ffe6928d35ee8a809fc4a",
+      "bytes": 26790
+    },
+    {
+      "sourceHash": "80be5bc99e05c37c5b11a0fbc60d9be83991dc1f44d517745238ab976a89907b",
+      "bytes": 26884
+    },
+    {
+      "sourceHash": "aea09b2491cc06ac710648d0de30bb365fa1b2c0fff10712cb70db07e8216515",
+      "bytes": 32072
+    },
+    {
+      "sourceHash": "b93a4f3830cb24b03f44a1436d23173a06af6aae893ab10dc83f5ddce465a048",
+      "bytes": 28799
+    }
+  ],
+  "editReplay": [
+    {
+      "parentRef": "sha256:80be5bc99e05c37c5b11a0fbc60d9be83991dc1f44d517745238ab976a89907b",
+      "programRef": "sha256:452b4cb2d887a0a249637d2a49aea5bdeb2aab023a9ffe6928d35ee8a809fc4a",
+      "occurrences": [
+        1,
+        1,
+        1,
+        1,
+        1,
+        1
+      ],
+      "rejected": false,
+      "exact": true,
+      "renderOk": true
+    },
+    {
+      "parentRef": "sha256:452b4cb2d887a0a249637d2a49aea5bdeb2aab023a9ffe6928d35ee8a809fc4a",
+      "programRef": "sha256:452b4cb2d887a0a249637d2a49aea5bdeb2aab023a9ffe6928d35ee8a809fc4a",
+      "occurrences": [
+        1,
+        1,
+        1,
+        0
+      ],
+      "rejected": true,
+      "exact": true
+    },
+    {
+      "parentRef": "sha256:452b4cb2d887a0a249637d2a49aea5bdeb2aab023a9ffe6928d35ee8a809fc4a",
+      "programRef": "sha256:b93a4f3830cb24b03f44a1436d23173a06af6aae893ab10dc83f5ddce465a048",
+      "occurrences": [
+        1,
+        1,
+        1,
+        1
+      ],
+      "rejected": false,
+      "exact": true,
+      "renderOk": false
+    },
+    {
+      "parentRef": "sha256:b93a4f3830cb24b03f44a1436d23173a06af6aae893ab10dc83f5ddce465a048",
+      "programRef": "sha256:1b95d7f2a6ad8edfcc965624fccbfd89d67fadd5273041b4bd107dcc5874721b",
+      "occurrences": [
+        1
+      ],
+      "rejected": false,
+      "exact": true,
+      "renderOk": true
+    },
+    {
+      "parentRef": "sha256:1b95d7f2a6ad8edfcc965624fccbfd89d67fadd5273041b4bd107dcc5874721b",
+      "programRef": "sha256:aea09b2491cc06ac710648d0de30bb365fa1b2c0fff10712cb70db07e8216515",
+      "occurrences": [
+        1,
+        1,
+        1,
+        1,
+        1
+      ],
+      "rejected": false,
+      "exact": true,
+      "renderOk": true
+    }
+  ],
+  "viewedImages": [
+    "C:/Users/Mattm/.gemini/antigravity-cli/brain/a10a848f-7cef-4811-b59d-d36fbaa021ec/.system_generated/steps/84/media_0.png",
+    "C:/Users/Mattm/.gemini/antigravity-cli/brain/a10a848f-7cef-4811-b59d-d36fbaa021ec/.system_generated/steps/92/media_0.png",
+    "C:/Users/Mattm/.gemini/antigravity-cli/brain/a10a848f-7cef-4811-b59d-d36fbaa021ec/.system_generated/steps/114/media_0.png",
+    "C:/Users/Mattm/.gemini/antigravity-cli/brain/a10a848f-7cef-4811-b59d-d36fbaa021ec/.system_generated/steps/132/media_0.png",
+    "C:/Users/Mattm/.gemini/antigravity-cli/brain/a10a848f-7cef-4811-b59d-d36fbaa021ec/.system_generated/steps/138/media_0.png",
+    "C:/Users/Mattm/X/kiln-cleanrooms/fresh-agy-polar-rover-0d457e8f-20260905-gpu/workspace/assets/final-chosen.png"
+  ],
+  "readPaths": [
+    "C:/Users/Mattm/X/kiln-cleanrooms/fresh-agy-polar-rover-0d457e8f-20260905-gpu/workspace/AGENTS.md",
+    "C:/Users/Mattm/X/kiln-cleanrooms/fresh-agy-polar-rover-0d457e8f-20260905-gpu/workspace/TASK.md",
+    "C:/Users/Mattm/X/kiln-cleanrooms/fresh-agy-polar-rover-0d457e8f-20260905-gpu/workspace/skills/kiln-author-asset/SKILL.md",
+    "C:/Users/Mattm/X/kiln-cleanrooms/fresh-agy-polar-rover-0d457e8f-20260905-gpu/workspace/skills/kiln-refine-asset/SKILL.md",
+    "C:/Users/Mattm/X/kiln-cleanrooms/fresh-agy-polar-rover-0d457e8f-20260905-gpu/workspace/skills/kiln-qa-asset/SKILL.md",
+    "C:/Users/Mattm/X/kiln-cleanrooms/fresh-agy-polar-rover-0d457e8f-20260905-gpu/workspace/skills/kiln-author-asset/references/camera-recipes.md",
+    "C:/Users/Mattm/X/kiln-cleanrooms/fresh-agy-polar-rover-0d457e8f-20260905-gpu/workspace/skills/kiln-author-asset/references/program-contract.md",
+    "C:/Users/Mattm/X/kiln-cleanrooms/fresh-agy-polar-rover-0d457e8f-20260905-gpu/workspace/skills/kiln-author-asset/references/geometry-recipes.md",
+    "C:/Users/Mattm/X/kiln-cleanrooms/fresh-agy-polar-rover-0d457e8f-20260905-gpu/workspace/skills/kiln-refine-asset/references/revision-and-views.md",
+    "C:/Users/Mattm/X/kiln-cleanrooms/fresh-agy-polar-rover-0d457e8f-20260905-gpu/workspace/skills/kiln-qa-asset/references/integration-checks.md",
+    "C:/Users/Mattm/.gemini/antigravity-cli/mcp/kiln_workspace/kiln_list_primitives.json",
+    "C:/Users/Mattm/.gemini/antigravity-cli/brain/a10a848f-7cef-4811-b59d-d36fbaa021ec/.system_generated/steps/37/output.txt",
+    "C:/Users/Mattm/.gemini/antigravity-cli/mcp/kiln_workspace/kiln_render.json",
+    "C:/Users/Mattm/.gemini/antigravity-cli/mcp/kiln_workspace/kiln_source.json",
+    "C:/Users/Mattm/.gemini/antigravity-cli/brain/a10a848f-7cef-4811-b59d-d36fbaa021ec/.system_generated/steps/74/output.txt",
+    "C:/Users/Mattm/.gemini/antigravity-cli/brain/a10a848f-7cef-4811-b59d-d36fbaa021ec/.system_generated/steps/78/output.txt",
+    "C:/Users/Mattm/.gemini/antigravity-cli/mcp/kiln_workspace/kiln_edit.json",
+    "C:/Users/Mattm/.gemini/antigravity-cli/brain/a10a848f-7cef-4811-b59d-d36fbaa021ec/.system_generated/steps/84/output.txt",
+    "C:/Users/Mattm/.gemini/antigravity-cli/brain/a10a848f-7cef-4811-b59d-d36fbaa021ec/.system_generated/steps/84/media_0.png",
+    "C:/Users/Mattm/.gemini/antigravity-cli/mcp/kiln_workspace/kiln_screenshot_animation.json",
+    "C:/Users/Mattm/.gemini/antigravity-cli/brain/a10a848f-7cef-4811-b59d-d36fbaa021ec/.system_generated/steps/92/output.txt",
+    "C:/Users/Mattm/.gemini/antigravity-cli/brain/a10a848f-7cef-4811-b59d-d36fbaa021ec/.system_generated/steps/92/media_0.png",
+    "C:/Users/Mattm/.gemini/antigravity-cli/brain/a10a848f-7cef-4811-b59d-d36fbaa021ec/.system_generated/steps/98/output.txt",
+    "C:/Users/Mattm/.gemini/antigravity-cli/brain/a10a848f-7cef-4811-b59d-d36fbaa021ec/.system_generated/steps/102/output.txt",
+    "C:/Users/Mattm/.gemini/antigravity-cli/brain/a10a848f-7cef-4811-b59d-d36fbaa021ec/.system_generated/steps/110/output.txt",
+    "C:/Users/Mattm/.gemini/antigravity-cli/brain/a10a848f-7cef-4811-b59d-d36fbaa021ec/.system_generated/steps/114/output.txt",
+    "C:/Users/Mattm/.gemini/antigravity-cli/brain/a10a848f-7cef-4811-b59d-d36fbaa021ec/.system_generated/steps/114/media_0.png",
+    "C:/Users/Mattm/.gemini/antigravity-cli/brain/a10a848f-7cef-4811-b59d-d36fbaa021ec/.system_generated/steps/120/output.txt",
+    "C:/Users/Mattm/.gemini/antigravity-cli/brain/a10a848f-7cef-4811-b59d-d36fbaa021ec/.system_generated/steps/124/output.txt",
+    "C:/Users/Mattm/.gemini/antigravity-cli/brain/a10a848f-7cef-4811-b59d-d36fbaa021ec/.system_generated/steps/128/output.txt",
+    "C:/Users/Mattm/.gemini/antigravity-cli/brain/a10a848f-7cef-4811-b59d-d36fbaa021ec/.system_generated/steps/132/output.txt",
+    "C:/Users/Mattm/.gemini/antigravity-cli/brain/a10a848f-7cef-4811-b59d-d36fbaa021ec/.system_generated/steps/132/media_0.png",
+    "C:/Users/Mattm/.gemini/antigravity-cli/brain/a10a848f-7cef-4811-b59d-d36fbaa021ec/.system_generated/steps/138/output.txt",
+    "C:/Users/Mattm/.gemini/antigravity-cli/brain/a10a848f-7cef-4811-b59d-d36fbaa021ec/.system_generated/steps/138/media_0.png",
+    "C:/Users/Mattm/X/kiln-cleanrooms/fresh-agy-polar-rover-0d457e8f-20260905-gpu/workspace/assets/final-chosen.png"
+  ]
+}

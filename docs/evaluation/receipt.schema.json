@@ -1,0 +1,615 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "kiln.evaluation.receipt.v1",
+  "title": "Kiln authoring evaluation receipt v1",
+  "type": "object",
+  "additionalProperties": false,
+  "properties": {
+    "schemaVersion": {
+      "const": "kiln.evaluation.receipt.v1"
+    },
+    "runId": {
+      "type": "string",
+      "minLength": 1
+    },
+    "phase": {
+      "enum": [
+        "pilot",
+        "q1",
+        "cross-harness",
+        "retest"
+      ]
+    },
+    "condition": {
+      "enum": [
+        "A",
+        "B",
+        "C",
+        "shipping"
+      ]
+    },
+    "briefId": {
+      "type": "string",
+      "minLength": 1
+    },
+    "attempt": {
+      "type": "integer",
+      "minimum": 1
+    },
+    "identity": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "requestedModel": {
+          "type": "string",
+          "minLength": 1
+        },
+        "resolvedModel": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "provider": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "harness": {
+          "type": "string",
+          "minLength": 1
+        },
+        "harnessVersion": {
+          "type": "string",
+          "minLength": 1
+        },
+        "packageHash": {
+          "type": "string",
+          "pattern": "^sha256:[a-f0-9]{64}$"
+        },
+        "engineIdentity": {
+          "type": "string",
+          "minLength": 1
+        },
+        "runtime": {
+          "type": "string",
+          "minLength": 1
+        },
+        "dependencyIdentity": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "briefHash": {
+          "type": "string",
+          "pattern": "^sha256:[a-f0-9]{64}$"
+        },
+        "toolDefinitionsHash": {
+          "type": "string",
+          "pattern": "^sha256:[a-f0-9]{64}$"
+        },
+        "conditionAdapterHash": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "skillPacketHash": {
+          "type": "string",
+          "pattern": "^sha256:[a-f0-9]{64}$"
+        },
+        "installedSkillFiles": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "properties": {
+              "path": {
+                "type": "string",
+                "minLength": 1
+              },
+              "hash": {
+                "type": "string",
+                "pattern": "^sha256:[a-f0-9]{64}$"
+              }
+            },
+            "required": [
+              "path",
+              "hash"
+            ]
+          }
+        }
+      },
+      "required": [
+        "requestedModel",
+        "resolvedModel",
+        "provider",
+        "harness",
+        "harnessVersion",
+        "packageHash",
+        "engineIdentity",
+        "runtime",
+        "dependencyIdentity",
+        "briefHash",
+        "toolDefinitionsHash",
+        "conditionAdapterHash",
+        "skillPacketHash",
+        "installedSkillFiles"
+      ]
+    },
+    "context": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "workspace": {
+          "type": "string",
+          "minLength": 1
+        },
+        "freshConversation": {
+          "type": "boolean"
+        },
+        "sourceAccess": {
+          "enum": [
+            "brief-skills-tools-only",
+            "other-disclosed",
+            "unknown"
+          ]
+        },
+        "startingExample": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "inheritedContext": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "humanInterventions": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "minLength": 1
+          }
+        },
+        "suppliedFiles": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "properties": {
+              "path": {
+                "type": "string",
+                "minLength": 1
+              },
+              "hash": {
+                "type": "string",
+                "pattern": "^sha256:[a-f0-9]{64}$"
+              }
+            },
+            "required": [
+              "path",
+              "hash"
+            ]
+          }
+        }
+      },
+      "required": [
+        "workspace",
+        "freshConversation",
+        "sourceAccess",
+        "startingExample",
+        "inheritedContext",
+        "humanInterventions",
+        "suppliedFiles"
+      ]
+    },
+    "budget": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "authorization": {
+          "type": "string",
+          "minLength": 1
+        },
+        "maxRuns": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "maxToolCalls": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "maxImageCells": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "maxCellSide": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "maxWallSeconds": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "spendCap": {
+          "type": [
+            "number",
+            "null"
+          ],
+          "minimum": 0
+        },
+        "currency": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "subscriptionQuotaAuthorization": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "actualCost": {
+          "type": [
+            "number",
+            "null"
+          ],
+          "minimum": 0
+        }
+      },
+      "required": [
+        "authorization",
+        "maxRuns",
+        "maxToolCalls",
+        "maxImageCells",
+        "maxCellSide",
+        "maxWallSeconds",
+        "spendCap",
+        "currency",
+        "subscriptionQuotaAuthorization",
+        "actualCost"
+      ]
+    },
+    "outcome": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "status": {
+          "enum": [
+            "passed",
+            "failed",
+            "unavailable",
+            "budget-exhausted",
+            "pending-review",
+            "invalidated"
+          ]
+        },
+        "failureClasses": {
+          "type": "array",
+          "items": {
+            "enum": [
+              "model-source",
+              "discovery",
+              "condition-policy",
+              "harness-images",
+              "setup-backend",
+              "camera",
+              "materials",
+              "source-integrity",
+              "visual-quality",
+              "quota"
+            ]
+          }
+        },
+        "startedAt": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "endedAt": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "wallSeconds": {
+          "type": [
+            "number",
+            "null"
+          ],
+          "minimum": 0
+        },
+        "toolCalls": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "repairCalls": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "sourceBytesFirstSubmission": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "sourceBytesAfterFirstSubmission": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "buildEvaluations": {
+          "type": [
+            "integer",
+            "null"
+          ],
+          "minimum": 0
+        },
+        "buildCacheHits": {
+          "type": [
+            "integer",
+            "null"
+          ],
+          "minimum": 0
+        },
+        "captureCacheHits": {
+          "type": [
+            "integer",
+            "null"
+          ],
+          "minimum": 0
+        },
+        "imageCellsDelivered": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "pixelsDelivered": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "inputTokens": {
+          "type": [
+            "integer",
+            "null"
+          ],
+          "minimum": 0
+        },
+        "outputTokens": {
+          "type": [
+            "integer",
+            "null"
+          ],
+          "minimum": 0
+        },
+        "modelImageConsumption": {
+          "enum": [
+            "verified",
+            "unknown",
+            "not-delivered"
+          ]
+        }
+      },
+      "required": [
+        "status",
+        "failureClasses",
+        "startedAt",
+        "endedAt",
+        "wallSeconds",
+        "toolCalls",
+        "repairCalls",
+        "sourceBytesFirstSubmission",
+        "sourceBytesAfterFirstSubmission",
+        "buildEvaluations",
+        "buildCacheHits",
+        "captureCacheHits",
+        "imageCellsDelivered",
+        "pixelsDelivered",
+        "inputTokens",
+        "outputTokens",
+        "modelImageConsumption"
+      ]
+    },
+    "evidence": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "trace": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "toolEvents": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "imageDirectory": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "cameraReceipts": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "originalProgramRef": {
+          "anyOf": [
+            {
+              "type": "string",
+              "pattern": "^sha256:[a-f0-9]{64}$"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "finalProgramRef": {
+          "anyOf": [
+            {
+              "type": "string",
+              "pattern": "^sha256:[a-f0-9]{64}$"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "sourcePath": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "sourceHash": {
+          "anyOf": [
+            {
+              "type": "string",
+              "pattern": "^sha256:[a-f0-9]{64}$"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "glbPath": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "glbHash": {
+          "anyOf": [
+            {
+              "type": "string",
+              "pattern": "^sha256:[a-f0-9]{64}$"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "exportAgreement": {
+          "enum": [
+            "verified",
+            "failed",
+            "not-checked"
+          ]
+        },
+        "unrelatedSourcePreserved": {
+          "enum": [
+            "verified",
+            "failed",
+            "not-checked"
+          ]
+        },
+        "humanReview": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "properties": {
+              "criterion": {
+                "enum": [
+                  "silhouette-brief",
+                  "geometry-attachments",
+                  "edit-preservation",
+                  "inspection"
+                ]
+              },
+              "score": {
+                "type": "integer",
+                "minimum": 0,
+                "maximum": 3
+              },
+              "reason": {
+                "type": "string",
+                "minLength": 1
+              },
+              "imagePaths": {
+                "type": "array",
+                "items": {
+                  "type": "string",
+                  "minLength": 1
+                }
+              }
+            },
+            "required": [
+              "criterion",
+              "score",
+              "reason",
+              "imagePaths"
+            ]
+          }
+        }
+      },
+      "required": [
+        "trace",
+        "toolEvents",
+        "imageDirectory",
+        "cameraReceipts",
+        "originalProgramRef",
+        "finalProgramRef",
+        "sourcePath",
+        "sourceHash",
+        "glbPath",
+        "glbHash",
+        "exportAgreement",
+        "unrelatedSourcePreserved",
+        "humanReview"
+      ]
+    },
+    "invalidation": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "supersededBy": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "reason": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "affectedInputs": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "minLength": 1
+          }
+        }
+      },
+      "required": [
+        "supersededBy",
+        "reason",
+        "affectedInputs"
+      ]
+    }
+  },
+  "required": [
+    "schemaVersion",
+    "runId",
+    "phase",
+    "condition",
+    "briefId",
+    "attempt",
+    "identity",
+    "context",
+    "budget",
+    "outcome",
+    "evidence",
+    "invalidation"
+  ]
+}

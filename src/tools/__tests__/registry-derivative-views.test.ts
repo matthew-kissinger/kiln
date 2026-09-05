@@ -69,7 +69,10 @@ describe('derivative review surfaces', () => {
       return {
         ok: true,
         rendererId: 'gpu:derivative-test',
-        viewsPng: [solidPng(request.size!)],
+        cameras: request.cameras,
+        width: request.width,
+        height: request.height,
+        viewsPng: [solidPng(request.width ?? request.size!)],
         derivativeFidelity: { materialFaithful: true, inputGlbSha256 },
       };
     };
@@ -133,7 +136,10 @@ describe('derivative review surfaces', () => {
         return {
           ok: true,
           rendererId: 'gpu:interior',
-          viewsPng: [solidPng(request.size!)],
+          cameras: request.cameras,
+          width: request.width,
+          height: request.height,
+          viewsPng: [solidPng(request.width ?? request.size!)],
           derivativeFidelity: {
             materialFaithful: true,
             inputGlbSha256: `sha256:${createHash('sha256').update(request.glb).digest('hex')}`,
@@ -151,7 +157,7 @@ describe('derivative review surfaces', () => {
     expect(result.viewFidelity?.exactArtifact).toBe(false);
   });
 
-  test('contextual part inspect declines dishonest GPU auto-framing and reports the reason', async () => {
+  test('contextual part inspect rejects a port without camera acknowledgement', async () => {
     let portCalls = 0;
     const result = (await createKilnInspectDef({
       viewRenderPort: async () => {
@@ -160,12 +166,12 @@ describe('derivative review surfaces', () => {
       },
     }).run({ code: ANIMATED, part: 'Blade' })) as KilnInspectResult;
     expect(result.ok).toBe(true);
-    expect(portCalls).toBe(0);
+    expect(portCalls).toBe(1);
     expect(result.viewFidelity).toMatchObject({
       delivered: 'geometry-flat',
       materialFaithful: false,
       exactArtifact: false,
-      reasonCodes: ['FULL_MATERIAL_RENDER_UNAVAILABLE', 'DERIVATIVE_GPU_FRAMING_UNSUPPORTED'],
+      reasonCodes: ['FULL_MATERIAL_RENDER_UNAVAILABLE'],
     });
   });
 
@@ -177,7 +183,10 @@ describe('derivative review surfaces', () => {
         return {
           ok: true,
           rendererId: 'gpu:inspect',
-          viewsPng: [solidPng(request.size!)],
+          cameras: request.cameras,
+          width: request.width,
+          height: request.height,
+          viewsPng: [solidPng(request.width ?? request.size!)],
           derivativeFidelity: {
             materialFaithful: true,
             inputGlbSha256: `sha256:${createHash('sha256').update(request.glb).digest('hex')}`,

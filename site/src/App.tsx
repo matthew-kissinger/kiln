@@ -2,6 +2,7 @@ import { Suspense, lazy, useEffect, useState } from 'react';
 
 import { Gallery } from './Gallery';
 import { Home } from './Home';
+import { PreviewBoundary } from './Hero';
 import { asset } from './repo';
 import type { Specimen } from './types';
 
@@ -13,7 +14,13 @@ import type { Specimen } from './types';
 const Viewer = lazy(() => import('./Viewer').then((m) => ({ default: m.Viewer })));
 
 /** Outside the component, so the listener effect has nothing to depend on. */
-const readRoute = () => decodeURIComponent(location.hash.replace(/^#\/?/, ''));
+const readRoute = () => {
+  try {
+    return decodeURIComponent(location.hash.replace(/^#\/?/, ''));
+  } catch {
+    return '';
+  }
+};
 
 /**
  * Hash routing, because this deploys to static hosting with no server to rewrite
@@ -37,7 +44,10 @@ export function App() {
   useEffect(() => {
     fetch(asset('assets/index.json'))
       .then((r) => (r.ok ? r.json() : Promise.reject(new Error(String(r.status)))))
-      .then(setSpecimens)
+      .then((value) => {
+        if (!Array.isArray(value)) throw new Error('Invalid collection');
+        setSpecimens(value);
+      })
       .catch(() => setFailed(true));
   }, []);
 
@@ -46,17 +56,51 @@ export function App() {
   if (failed) {
     return (
       <div className="loading" style={{ position: 'static', height: '100%' }}>
-        the specimen index did not load
+        The example collection could not load. Please refresh to try again.
       </div>
     );
   }
-  if (!specimens) return null;
+  if (!specimens)
+    return (
+      <div className="loading" role="status">
+        Loading examples…
+      </div>
+    );
 
   const current = specimens.find((s) => s.name === route);
   if (current) {
     return (
       <Suspense fallback={<div className="loading">loading the renderer</div>}>
-        <Viewer all={specimens} current={current} />
+        <PreviewBoundary
+          key={current.name}
+          fallback={
+            <main className="doc">
+              <h1>3D preview unavailable</h1>
+              <p>
+                The asset could not load. You can still download it or return to the collection.
+              </p>
+              <p>
+                <a href={asset(current.file)} download>
+                  Download GLB
+                </a>{' '}
+                ·{' '}
+                {current.source && (
+                  <a href={asset(current.source)} download>
+                    Download source
+                  </a>
+                )}{' '}
+                · <a href="#/gallery">Back to collection</a>
+              </p>
+              <img
+                className="fallback-poster"
+                src={asset(current.thumb)}
+                alt={current.name.replaceAll('-', ' ')}
+              />
+            </main>
+          }
+        >
+          <Viewer all={specimens} current={current} />
+        </PreviewBoundary>
       </Suspense>
     );
   }

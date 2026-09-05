@@ -1,0 +1,108 @@
+{
+  "producer": "10f346ec6287c8d635dabe4668d72925080e6fe3d059dd7a9252f2694ce595c2",
+  "review": "Actual PNGs visually inspected; no clipping/ratio defects.",
+  "records": [
+    {
+      "name": "printing-press",
+      "imageHash": "43fc3eb5542434f6f5e39cc0b63649d95f35f870489519e9a762eafdc3e07e54",
+      "sourceHash": "c6ee2bf3d6ff7a6f8833425ecfef25888af0842ddcb9c749ae43b54d28968ddf",
+      "artifactHash": "373aa5f55fc21271640e36c0364e2a1cd416714a92e5b783387eee6894ce8d37"
+    },
+    {
+      "name": "pumpjack",
+      "imageHash": "b5c80f9bbe55ffdcd63f2928118028d3db269ec144d3e3e4e15042e9c6f7dd30",
+      "sourceHash": "c1b5c04953a5a398185f82cc7f8698089bdc00bc217ca4b2181b28c4dc4a7134",
+      "artifactHash": "1d0fa7845cd3ed293e1c130273b4bea2e05a9af1c3e37b42999583e1952f38ba"
+    },
+    {
+      "name": "radio-telescope",
+      "imageHash": "03dedc36c6337d60d04edf16da1b04994ebd3de0fa2504bb280d0fe93941dd51",
+      "sourceHash": "6414ad919135ddcd1443d1add8973dcfc99ffd95f66590219491fbe9d8951605",
+      "artifactHash": "092cc11a24d28b67a47c74ce5f1c6fe1d07a7be32e9385af5c48862ebf14e02f"
+    },
+    {
+      "name": "research-vessel",
+      "imageHash": "ce7e000d56854a0cf7f2b6813b8a3038567c96abec3a7b728d7c7a6d91a65791",
+      "sourceHash": "1f109fd8c5d6de9fe07507e473a1c7ba674565f1544ac68dd6067a5664371455",
+      "artifactHash": "31daa828d14a8bc9d1c07896df85b50ebf66f874db883f3fd8195245d18489e1"
+    },
+    {
+      "name": "rigid-airship",
+      "imageHash": "92c24438b81f4977477d096007820d1d30ddc0b1963c842bf6d81c7946c64b74",
+      "sourceHash": "9f3341c1f613a399cac20842aeb6e974b7d80bbceaa07b0d1510c53d98ab9ae6",
+      "artifactHash": "eaca192c97b78f27d9dd24b66d8623dcbcec6855a8fdbe7af9b323f3521b4608"
+    },
+    {
+      "name": "robot-arm",
+      "imageHash": "32d4e960f5f7d699e1a80b9500965bda5c63566f6428fcbfeb9bc87893c78523",
+      "sourceHash": "a09a2ba7cd96a937e092028162d49dbbf76330b94023b11bb0b15ce3d7f4ac31",
+      "artifactHash": "11797ec814f8406ffd5d967226c736d74a3297a8d7cb6926d5a3ad909da26f99"
+    },
+    {
+      "name": "steam-locomotive",
+      "imageHash": "021a03ccc25698c24b44bf8fbb64964b312eccd5a5287c2d44a1aa10a6723b1d",
+      "sourceHash": "0c100fb9b080162f13d807920b02e0aa8d8263309b1a1160fcb1d6528c1716aa",
+      "artifactHash": "6e5462c54efe536129073ccabef7d4c2c0a82fe49cbbca4420aea9635cebcbc4"
+    },
+    {
+      "name": "street-lamp",
+      "imageHash": "86c575521c214d64c7c88a24a5ff29e26bea8034751d5fd64e7284bde0fc9261",
+      "sourceHash": "c1d24daf95c30f46b2d32f3c40c0ae6c08827e0a665b190ec499af83a928e1f6",
+      "artifactHash": "0d16f94cbbace428e8d166606a0413cb062c7424601251a6eb10a8360cf98d5b"
+    },
+    {
+      "name": "sushi-store",
+      "imageHash": "1eb0e50187509639da324132701c0ded02e2bc2fd49b37d8cbc670a5a4502609",
+      "sourceHash": "fdd92c6e2ed8fb371d22f8c94c1f0e6ae932d915f0e75cd50c70b6f876bd0743",
+      "artifactHash": "7efe7865e34bb5b526965d8366601de1b991664d20d76895bbf9adf41e7fbb3c"
+    },
+    {
+      "name": "tram",
+      "imageHash": "a50b9e6f883879753a5f81c325b790a7e62545ea2b83f783fdf57bcf88cbbf92",
+      "sourceHash": "29a7d021e6c789ed7ea05fcd838c40f365052555eec24a672b4f74d240273779",
+      "artifactHash": "58508a6cf591625fbc85546b7509c05f118678f51a4a02284eb0541c2dfb77ce"
+    },
+    {
+      "name": "trebuchet",
+      "imageHash": "ad29d1b7ae246d1cec0063562d5c0a7cd7e060918d4031c3ec93dfdab1985529",
+      "sourceHash": "94d40bcb59df7e5dd976d663b6adf6a27ebecbb3d948d62dc5c50e40688e1595",
+      "artifactHash": "20e83b1650588c4998f3b99d982f9a84337a683b20f52513726ee9382a35f2bf"
+    },
+    {
+      "name": "tugboat",
+      "imageHash": "f2272654c4fcd2383fc14906e5c0fad5f00129a6d8fe93b3aff76175ca465a58",
+      "sourceHash": "c826f90f1dccde22891e9c6acc0e6d524aee4a1d5eaab62d762f146c2acea3b3",
+      "artifactHash": "0d077bfe7984f74d0452691d657db8b2b2d48e4046fa54017c97caedd6540c81"
+    },
+    {
+      "name": "twisting-canopy",
+      "imageHash": "44a1eeb9b58ed9e227697177754bed6464914c7d66c15dbb7b29fab02e06b95d",
+      "sourceHash": "2d3d12e4e53613289f017fc5c4e20731fe7736655781839168dc2480be3efdcf",
+      "artifactHash": "0dc4acac3729fda27b1567463dd32d183ebc340d740d8d4f51d8ad1482d8a322"
+    },
+    {
+      "name": "typewriter",
+      "imageHash": "2f77f9100e97fca55c542453c42f9875cffa367de1c5171e38a7a3cdbe5d1903",
+      "sourceHash": "f3b83ab3b81d22cc2b6f553bde8cb73b903923215a0b987c0cafa4fc0de960c1",
+      "artifactHash": "e5b0fbc255afe43c4d17b3356e9f5f35895a5548ec662c3d61ca33b0b7944d2b"
+    },
+    {
+      "name": "vending-machine",
+      "imageHash": "ba3ffa372a4c901947b73667cdef9f189424c29b95f29b4b6617fb281986ab79",
+      "sourceHash": "4ea4db40981f8021107381b739300b4d184d42664eb4c8cf2b7aae756c8f2599",
+      "artifactHash": "58fa9096a65238c7614cbfceda24b6084e7070c6cfbd68398ea168fba020949c"
+    },
+    {
+      "name": "victorian-greenhouse",
+      "imageHash": "c6ff8e3263391eb5da1d0b44aa924164c01685a9997c21973a00e12402cbd88e",
+      "sourceHash": "7fc022a92ca6ec100a328ba5dcc6bfe13ca497ba60226bf92b70848fd06787ee",
+      "artifactHash": "e842f0856cc64ac13081190405868668182ffd41fbf12dcbc91df43147bd5fbc"
+    },
+    {
+      "name": "windmill",
+      "imageHash": "6d9e95ce336ec4966c3272f213f58bb6b5357a7ae0f6c57b5167e542cd5d73ec",
+      "sourceHash": "c1a7eeb546fdc10544635609c9b0035ae9307ea5da4f916630cb3ead9c73f6cb",
+      "artifactHash": "6511a91b7aff2881f9a56898134cb75328cb97f347b08028313be50a18e4f4cb"
+    }
+  ]
+}

@@ -1,40 +1,21 @@
 #!/usr/bin/env bun
 /**
- * Kiln stdio MCP server — the second transport over `tools/registry.ts`.
- *
- * This exists so any MCP client (Claude Code, Codex CLI, Cursor, ...) can drive the
- * Kiln tool surface directly, with the HOST's model as the author. That is the
- * inverse of how the hosted product worked, where a single `generate` operation ran
- * the engine's own agent loop server-side; see docs/history/production-architecture.md.
- *
- * The one invariant: tool names, descriptions, and schemas come from the registry and
- * nowhere else. `agent/tools.ts` (in-process Strands) and this file are skins over the
- * same defs, and `mcp-parity.test.ts` asserts they agree. Hand-writing a definition
- * here would quietly break the claim the repository makes about itself.
- *
- * Registry defs carry zod schemas, and MCP SDK v2 accepts them directly as Standard
- * Schema: the SDK derives the advertised JSON Schema and validates arguments before
- * a handler runs. Nothing here converts or restates a schema, which is exactly why
- * the two transports cannot drift.
- *
- * There is deliberately no `kiln_submit` here. Submit exists in the in-process loop to
- * give the model an unambiguous terminal action; over MCP the host agent already has
- * the program text and writes the file itself.
+ * Stdio adapter for the shared program-aware tool registry.
+ * The CLI entry uses a persistent local source store. Embedded callers can inject
+ * their own store and renderer; schemas and image extraction stay in the registry.
  */
 import { McpServer } from '@modelcontextprotocol/server';
 import { serveStdio } from '@modelcontextprotocol/server/stdio';
+import { AsyncLocalStorage } from 'node:async_hooks';
 
 import {
-  createKilnToolRegistry,
-  createKilnRenderViewsDef,
-  createKilnInspectDef,
-  createKilnScreenshotAnimationDef,
-  createKilnViewInteriorDef,
+  createKilnProgramToolRegistry,
   type KilnToolDef,
   type KilnToolContext,
-  createKilnEditDef,
 } from './tools/registry';
 import { buildRenderPort, resolveRenderMode } from './cli-render-mode';
+import { localProgramStore } from './program-store-node';
+import { createPackagedLocalToolContext } from './local-runtime';
 
 /** Server identity reported in the MCP handshake. */
 export const MCP_SERVER_NAME = 'kiln';
@@ -63,41 +44,9 @@ export type KilnToolResult = {
   isError?: boolean;
 };
 
-/**
- * The defs this transport exposes.
- *
- * Every entry comes from a factory in `tools/registry.ts` — nothing here is
- * hand-written, which is the invariant `mcp-parity.test.ts` exists to hold.
- *
- * The composition mirrors the production unified surface rather than the frozen
- * four-tool bench baseline, for one concrete reason: the baseline's
- * `kiln_screenshot` is CPU-only by construction. Its schema is frozen, it takes no
- * capture config, and it never consults `viewRenderPort`. `createKilnRenderViewsDef`
- * is the def that collapses metrics and views into one call, routes to the GPU when
- * the scene actually needs PBR shading, and reports `viewFidelity` so the agent
- * knows whether it may judge material from the picture. Shipping the baseline pair
- * here would mean shipping a surface on which the render port can never fire.
- *
- * `kiln_validate` stays standalone because, unlike the in-process unified surface,
- * there is no draft buffer over MCP to fold validation into — the host agent holds
- * the program text itself.
- */
+/** Use the shared program-aware definitions, including standalone validation. */
 export function kilnMcpToolDefs(context: KilnToolContext = {}): KilnToolDef[] {
-  const registry = createKilnToolRegistry(context);
-  const byName = (name: string): KilnToolDef => {
-    const def = registry.find((d) => d.name === name);
-    if (!def) throw new Error(`kilnMcpToolDefs: missing registry tool ${name}`);
-    return def;
-  };
-  return [
-    byName('kiln_list_primitives'),
-    byName('kiln_validate'),
-    createKilnRenderViewsDef(context),
-    createKilnScreenshotAnimationDef(context),
-    createKilnViewInteriorDef(context),
-    createKilnInspectDef(context),
-    createKilnEditDef(context),
-  ];
+  return createKilnProgramToolRegistry(context);
 }
 
 /**
@@ -151,8 +100,22 @@ export async function runTool(def: KilnToolDef, args: unknown): Promise<KilnTool
 /** Build the server, registering every def from the registry. */
 export function createKilnMcpServer(context: KilnToolContext = {}): McpServer {
   const server = new McpServer({ name: MCP_SERVER_NAME, version: MCP_SERVER_VERSION });
+  const requests = new AsyncLocalStorage<AbortSignal>();
+  const requestContext: KilnToolContext = {
+    ...context,
+    evaluationControls: () => {
+      const configured = context.evaluationControls?.() ?? {};
+      const signal = requests.getStore();
+      return {
+        ...configured,
+        ...(signal
+          ? { signal: configured.signal ? AbortSignal.any([signal, configured.signal]) : signal }
+          : {}),
+      };
+    },
+  };
 
-  for (const def of kilnMcpToolDefs(context)) {
+  for (const def of kilnMcpToolDefs(requestContext)) {
     server.registerTool(
       def.name,
       {
@@ -164,9 +127,9 @@ export function createKilnMcpServer(context: KilnToolContext = {}): McpServer {
         // registry's, which is the one thing this file exists not to do.
         inputSchema: def.inputSchema,
       },
-      async (args: unknown): Promise<KilnToolResult> => {
+      async (args: unknown, request): Promise<KilnToolResult> => {
         try {
-          return await runTool(def, args);
+          return await requests.run(request.mcpReq.signal, () => runTool(def, args));
         } catch (err) {
           // A tool error is a result, not a transport failure: the calling agent
           // should see the message and correct its program rather than lose the
@@ -189,7 +152,10 @@ if (import.meta.main) {
   const mode = resolveRenderMode(process.env['KILN_RENDER'] ?? 'auto');
   // Resolved once, before the first connection: probing a render service per
   // connection would put a network round trip in front of every client attach.
-  const context = await buildRenderPort(mode, process.env['KILN_RENDER_PORT_URL']);
+  const context = await createPackagedLocalToolContext(
+    await buildRenderPort(mode, process.env['KILN_RENDER_PORT_URL']),
+  );
+  context.programStore = localProgramStore();
   // stdout is the MCP transport; diagnostics must never touch it.
   console.error(`kiln MCP server on stdio (${mode})`);
   void serveStdio(() => createKilnMcpServer(context));

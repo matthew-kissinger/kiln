@@ -1,0 +1,391 @@
+{
+  "node": "v22.23.1",
+  "perCaseTimeoutMs": 20000,
+  "results": [
+    {
+      "id": "bevel-box-profile",
+      "elapsedMs": 12.870100000000008,
+      "triangles": 156,
+      "bounds": {
+        "min": [
+          -1,
+          -1,
+          -1
+        ],
+        "max": [
+          1,
+          1,
+          1
+        ]
+      },
+      "topology": {
+        "vertices": 80,
+        "triangles": 156,
+        "boundaryEdges": 0,
+        "nonManifoldEdges": 0,
+        "orientationConflicts": 0,
+        "degenerateTriangles": 0,
+        "invalidIndices": 0,
+        "nonFiniteVertices": 0
+      }
+    },
+    {
+      "id": "bevel-box-minkowski",
+      "elapsedMs": 68.11739999999999,
+      "triangles": 156,
+      "bounds": {
+        "min": [
+          -1,
+          -1,
+          -1
+        ],
+        "max": [
+          1,
+          1,
+          1
+        ]
+      },
+      "topology": {
+        "vertices": 468,
+        "triangles": 156,
+        "boundaryEdges": 0,
+        "nonManifoldEdges": 0,
+        "orientationConflicts": 0,
+        "degenerateTriangles": 0,
+        "invalidIndices": 0,
+        "nonFiniteVertices": 0
+      },
+      "inputTriangles": 12,
+      "volume": 7.94157735026919
+    },
+    {
+      "id": "bevel-holed-profile",
+      "elapsedMs": 16.7239,
+      "triangles": 288,
+      "bounds": {
+        "min": [
+          -1,
+          -1,
+          -1
+        ],
+        "max": [
+          1,
+          1,
+          1
+        ]
+      },
+      "topology": {
+        "vertices": 864,
+        "triangles": 288,
+        "boundaryEdges": 0,
+        "nonManifoldEdges": 0,
+        "orientationConflicts": 0,
+        "degenerateTriangles": 0,
+        "invalidIndices": 0,
+        "nonFiniteVertices": 0
+      },
+      "capEdgesRounded": false
+    },
+    {
+      "id": "bevel-holed-minkowski",
+      "elapsedMs": 1680.9188000000001,
+      "triangles": 2062,
+      "bounds": {
+        "min": [
+          -1,
+          -1,
+          -1
+        ],
+        "max": [
+          1,
+          1,
+          1
+        ]
+      },
+      "topology": {
+        "vertices": 6186,
+        "triangles": 2062,
+        "boundaryEdges": 0,
+        "nonManifoldEdges": 8,
+        "orientationConflicts": 0,
+        "degenerateTriangles": 4,
+        "invalidIndices": 0,
+        "nonFiniteVertices": 0
+      },
+      "inputTriangles": 80,
+      "volume": 6.948186835980904
+    },
+    {
+      "id": "shell-sphere-normal-offset",
+      "elapsedMs": 10.288200000000003,
+      "triangles": 576,
+      "bounds": {
+        "min": [
+          -1,
+          -1,
+          -1
+        ],
+        "max": [
+          1,
+          1,
+          1
+        ]
+      },
+      "topology": {
+        "vertices": 292,
+        "triangles": 576,
+        "boundaryEdges": 0,
+        "nonManifoldEdges": 0,
+        "orientationConflicts": 0,
+        "degenerateTriangles": 0,
+        "invalidIndices": 0,
+        "nonFiniteVertices": 0
+      },
+      "requestedThickness": 0.1,
+      "axisInset": [
+        0.10000002384185791,
+        0.10000002384185791,
+        0.10000002384185791
+      ],
+      "innerSignedVolume": 2.933396441886613
+    },
+    {
+      "id": "shell-box-normal-offset",
+      "elapsedMs": 4.336299999999994,
+      "triangles": 24,
+      "bounds": {
+        "min": [
+          -1,
+          -1,
+          -1
+        ],
+        "max": [
+          1,
+          1,
+          1
+        ]
+      },
+      "topology": {
+        "vertices": 16,
+        "triangles": 24,
+        "boundaryEdges": 0,
+        "nonManifoldEdges": 0,
+        "orientationConflicts": 0,
+        "degenerateTriangles": 0,
+        "invalidIndices": 0,
+        "nonFiniteVertices": 0
+      },
+      "requestedThickness": 0.1,
+      "axisInset": [
+        0.03333336114883423,
+        0.03333336114883423,
+        0.040824830532073975
+      ],
+      "innerSignedVolume": 6.633069251586424
+    },
+    {
+      "id": "shell-thin-normal-offset",
+      "elapsedMs": 4.516000000000005,
+      "triangles": 24,
+      "bounds": {
+        "min": [
+          -1,
+          -0.05999999865889549,
+          -1
+        ],
+        "max": [
+          1,
+          0.05999999865889549,
+          1
+        ]
+      },
+      "topology": {
+        "vertices": 16,
+        "triangles": 24,
+        "boundaryEdges": 0,
+        "nonManifoldEdges": 0,
+        "orientationConflicts": 0,
+        "degenerateTriangles": 0,
+        "invalidIndices": 0,
+        "nonFiniteVertices": 0
+      },
+      "requestedThickness": 0.1,
+      "axisInset": [
+        0.002993285655975342,
+        0.020089875906705856,
+        0.005946695804595947
+      ],
+      "innerSignedVolume": -0.3109498362876813
+    },
+    {
+      "id": "remesh-box-field",
+      "elapsedMs": 123.5105,
+      "triangles": 4056,
+      "bounds": {
+        "min": [
+          -1,
+          -1,
+          -1
+        ],
+        "max": [
+          1,
+          1,
+          1
+        ]
+      },
+      "topology": {
+        "vertices": 2030,
+        "triangles": 4056,
+        "boundaryEdges": 0,
+        "nonManifoldEdges": 0,
+        "orientationConflicts": 0,
+        "degenerateTriangles": 0,
+        "invalidIndices": 0,
+        "nonFiniteVertices": 0
+      },
+      "inputTriangles": 12,
+      "sourceHalfY": 1,
+      "uvPreserved": false,
+      "maxVertexDistance": 1.1102230246251565e-16
+    },
+    {
+      "id": "remesh-thin-field",
+      "elapsedMs": 102.98100000000001,
+      "triangles": 4056,
+      "bounds": {
+        "min": [
+          -0.956250011920929,
+          -0.029999999329447746,
+          -0.956250011920929
+        ],
+        "max": [
+          0.956250011920929,
+          0.029999999329447746,
+          0.956250011920929
+        ]
+      },
+      "topology": {
+        "vertices": 1742,
+        "triangles": 4056,
+        "boundaryEdges": 0,
+        "nonManifoldEdges": 0,
+        "orientationConflicts": 0,
+        "degenerateTriangles": 0,
+        "invalidIndices": 0,
+        "nonFiniteVertices": 0
+      },
+      "inputTriangles": 12,
+      "sourceHalfY": 0.03,
+      "uvPreserved": false,
+      "maxVertexDistance": 0.029999999329447746
+    },
+    {
+      "id": "sdf-sphere-coarse",
+      "elapsedMs": 15.702100000000002,
+      "triangles": 696,
+      "bounds": {
+        "min": [
+          -1,
+          -1,
+          -1
+        ],
+        "max": [
+          1,
+          1,
+          1
+        ]
+      },
+      "topology": {
+        "vertices": 350,
+        "triangles": 696,
+        "boundaryEdges": 0,
+        "nonManifoldEdges": 0,
+        "orientationConflicts": 0,
+        "degenerateTriangles": 0,
+        "invalidIndices": 0,
+        "nonFiniteVertices": 0
+      },
+      "sampling": {
+        "schemaVersion": 1,
+        "experimental": true,
+        "edgeLength": 0.25,
+        "estimatedGridCells": 1000,
+        "evaluations": 2331,
+        "maxCells": 1000000,
+        "maxEvaluations": 8000000
+      }
+    },
+    {
+      "id": "sdf-sphere-fine",
+      "elapsedMs": 49.1117,
+      "triangles": 6312,
+      "bounds": {
+        "min": [
+          -1,
+          -1,
+          -1
+        ],
+        "max": [
+          1,
+          1,
+          1
+        ]
+      },
+      "topology": {
+        "vertices": 3158,
+        "triangles": 6312,
+        "boundaryEdges": 0,
+        "nonManifoldEdges": 0,
+        "orientationConflicts": 0,
+        "degenerateTriangles": 0,
+        "invalidIndices": 0,
+        "nonFiniteVertices": 0
+      },
+      "sampling": {
+        "schemaVersion": 1,
+        "experimental": true,
+        "edgeLength": 0.1,
+        "estimatedGridCells": 13824,
+        "evaluations": 29449,
+        "maxCells": 1000000,
+        "maxEvaluations": 8000000
+      }
+    },
+    {
+      "id": "sdf-cellular",
+      "elapsedMs": 81.03870000000002,
+      "triangles": 18732,
+      "bounds": {
+        "min": [
+          -0.9742326140403748,
+          -0.9742326140403748,
+          -0.9742326140403748
+        ],
+        "max": [
+          0.9742326140403748,
+          0.9742326140403748,
+          0.9742326140403748
+        ]
+      },
+      "topology": {
+        "vertices": 9928,
+        "triangles": 18732,
+        "boundaryEdges": 0,
+        "nonManifoldEdges": 0,
+        "orientationConflicts": 0,
+        "degenerateTriangles": 0,
+        "invalidIndices": 0,
+        "nonFiniteVertices": 0
+      },
+      "sampling": {
+        "schemaVersion": 1,
+        "experimental": true,
+        "edgeLength": 0.1,
+        "estimatedGridCells": 13824,
+        "evaluations": 29449,
+        "maxCells": 1000000,
+        "maxEvaluations": 8000000
+      }
+    }
+  ]
+}

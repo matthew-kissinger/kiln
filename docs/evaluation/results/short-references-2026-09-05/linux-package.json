@@ -1,0 +1,47 @@
+{
+  "status": "passed",
+  "image": "node:22.23.1-bookworm-slim@sha256:6c74791e557ce11fc957704f6d4fe134a7bc8d6f5ca4403205b2966bd488f6b3",
+  "tarball": "C:\\Users\\Mattm\\X\\kiln-oss\\tmp\\short-ref-ready\\kiln-engine-0.6.0.tgz",
+  "tarballSha256": "19add77366f489f078ca50f58d6d0bcb4c4d3e86a18df4bc8da387285ab90822",
+  "containerMemoryBytes": 2147483648,
+  "containerCpus": 2,
+  "timedOut": false,
+  "exitCode": 0,
+  "smoke": {
+    "root": "/tmp/kiln-package-café-4LzZfi",
+    "platform": "linux",
+    "arch": "x64",
+    "node": "v22.23.1",
+    "checks": [
+      "direct-node-cli-help",
+      "tarball-install-without-dev-dependencies",
+      "node-cli-entry",
+      "npm-init-workspace",
+      "short-reference-full-hash-compatibility",
+      "csg-wasm",
+      "uv-wasm",
+      "cpu-png",
+      "cross-cwd-cli-source-store",
+      "capture-file-part-relative-grid",
+      "capture-file-build-reuse",
+      "packaged-node-worker",
+      "mcp-discovery",
+      "source-reference-edit-images",
+      "server-restart-persistence",
+      "exact-source-export"
+    ],
+    "status": "passed",
+    "npm": "12.0.1",
+    "tarball": "/input/candidate.tgz",
+    "tarballSha256": "19add77366f489f078ca50f58d6d0bcb4c4d3e86a18df4bc8da387285ab90822",
+    "engineVersion": "0.6.0",
+    "bundleHashes": {
+      "cli": "13a7a110b781d06cc3487c3381c422d5f5a386f9a7308bc82fe21da547174217",
+      "mcp": "841bb44b94f010e9ae5efe855fad14c2defb0971103c012f6829b56d80da515d"
+    },
+    "editResult": {
+      "programRef": "p_7fd2baaf40e0",
+      "parentRef": "p_bd1be775f345"
+    }
+  }
+}

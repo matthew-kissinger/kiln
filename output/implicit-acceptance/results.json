@@ -1,0 +1,307 @@
+{
+  "node": "v22.23.1",
+  "bun": "1.3.14",
+  "perCaseTimeoutMs": 20000,
+  "results": [
+    {
+      "name": "organic",
+      "edgeLength": 0.2,
+      "buildMs": 597.5495000000001,
+      "triangles": 800,
+      "sha256": "26f871b90db63022be9c67d019b12c4beef4f80241eba676609fc6d42ced1787",
+      "repeatIdentical": true,
+      "sampling": {
+        "schemaVersion": 1,
+        "experimental": true,
+        "edgeLength": 0.2,
+        "estimatedGridCells": 2160,
+        "evaluations": 5177,
+        "maxCells": 1000000,
+        "maxEvaluations": 8000000
+      },
+      "vertexFieldResidual": {
+        "samples": 402,
+        "max": 0.004322529590527258,
+        "p95": 0.0038077348227620877
+      },
+      "centroidFieldResidual": {
+        "samples": 800,
+        "max": 0.012362306921548827,
+        "p95": 0.011294723239772542
+      },
+      "topology": {
+        "vertices": 402,
+        "triangles": 800,
+        "boundaryEdges": 0,
+        "nonManifoldEdges": 0,
+        "orientationConflicts": 0,
+        "degenerateTriangles": 0,
+        "invalidIndices": 0,
+        "nonFiniteVertices": 0
+      },
+      "bounds": {
+        "min": [
+          -1.0499999523162842,
+          -0.6499999761581421,
+          -0.6499999761581421
+        ],
+        "max": [
+          1.0499999523162842,
+          0.6499999761581421,
+          0.6499999761581421
+        ]
+      },
+      "uvPresent": false
+    },
+    {
+      "name": "organic",
+      "edgeLength": 0.1,
+      "buildMs": 348.79449999999997,
+      "triangles": 4608,
+      "sha256": "b6a43d759ba5ab42fed6980d702dbd4cb3f1f90f41dec227283f2eadffff1f5e",
+      "repeatIdentical": true,
+      "sampling": {
+        "schemaVersion": 1,
+        "experimental": true,
+        "edgeLength": 0.1,
+        "estimatedGridCells": 17280,
+        "evaluations": 37856,
+        "maxCells": 1000000,
+        "maxEvaluations": 8000000
+      },
+      "vertexFieldResidual": {
+        "samples": 2306,
+        "max": 0.0015766188579859897,
+        "p95": 0.0011297709817587043
+      },
+      "centroidFieldResidual": {
+        "samples": 4608,
+        "max": 0.00260172492216737,
+        "p95": 0.0022277351016143365
+      },
+      "topology": {
+        "vertices": 2306,
+        "triangles": 4608,
+        "boundaryEdges": 0,
+        "nonManifoldEdges": 0,
+        "orientationConflicts": 0,
+        "degenerateTriangles": 0,
+        "invalidIndices": 0,
+        "nonFiniteVertices": 0
+      },
+      "bounds": {
+        "min": [
+          -1.0499999523162842,
+          -0.6480664610862732,
+          -0.6480664610862732
+        ],
+        "max": [
+          1.0499999523162842,
+          0.6480664610862732,
+          0.6480664610862732
+        ]
+      },
+      "uvPresent": false
+    },
+    {
+      "name": "mixed",
+      "edgeLength": 0.2,
+      "buildMs": 559.0279999999999,
+      "triangles": 944,
+      "sha256": "375479823e29c611880781217f0c227183195e9af4fd7176202655065de50546",
+      "repeatIdentical": true,
+      "sampling": {
+        "schemaVersion": 1,
+        "experimental": true,
+        "edgeLength": 0.2,
+        "estimatedGridCells": 2160,
+        "evaluations": 5177,
+        "maxCells": 1000000,
+        "maxEvaluations": 8000000
+      },
+      "vertexFieldResidual": {
+        "samples": 474,
+        "max": 0.022727280855178833,
+        "p95": 0.011990147829055775
+      },
+      "centroidFieldResidual": {
+        "samples": 944,
+        "max": 0.045454553763071726,
+        "p95": 0.025716622670491518
+      },
+      "topology": {
+        "vertices": 474,
+        "triangles": 944,
+        "boundaryEdges": 0,
+        "nonManifoldEdges": 0,
+        "orientationConflicts": 0,
+        "degenerateTriangles": 0,
+        "invalidIndices": 0,
+        "nonFiniteVertices": 0
+      },
+      "bounds": {
+        "min": [
+          -0.6000000238418579,
+          -0.648064911365509,
+          -0.648064911365509
+        ],
+        "max": [
+          1.2999999523162842,
+          0.648064911365509,
+          0.648064911365509
+        ]
+      },
+      "uvPresent": false
+    },
+    {
+      "name": "mixed",
+      "edgeLength": 0.1,
+      "buildMs": 1552.5638000000004,
+      "triangles": 4056,
+      "sha256": "d31c653238570f804ea78e4baa9132fd780644cf7babbb6ff36b22d0bb1770cc",
+      "repeatIdentical": true,
+      "sampling": {
+        "schemaVersion": 1,
+        "experimental": true,
+        "edgeLength": 0.1,
+        "estimatedGridCells": 17280,
+        "evaluations": 37856,
+        "maxCells": 1000000,
+        "maxEvaluations": 8000000
+      },
+      "vertexFieldResidual": {
+        "samples": 2030,
+        "max": 0.021266531944274913,
+        "p95": 0.010526335239410378
+      },
+      "centroidFieldResidual": {
+        "samples": 4056,
+        "max": 0.025204789638519298,
+        "p95": 0.01343874136606854
+      },
+      "topology": {
+        "vertices": 2030,
+        "triangles": 4056,
+        "boundaryEdges": 0,
+        "nonManifoldEdges": 0,
+        "orientationConflicts": 0,
+        "degenerateTriangles": 0,
+        "invalidIndices": 0,
+        "nonFiniteVertices": 0
+      },
+      "bounds": {
+        "min": [
+          -0.6000000238418579,
+          -0.6499999761581421,
+          -0.6499999761581421
+        ],
+        "max": [
+          1.2999999523162842,
+          0.6499999761581421,
+          0.6499999761581421
+        ]
+      },
+      "uvPresent": false
+    },
+    {
+      "name": "cellular",
+      "edgeLength": 0.2,
+      "buildMs": 1239.5254999999997,
+      "triangles": 2012,
+      "sha256": "80ea7c01ad5600ce6e02b6757deac565a46ed9e74a555e0d22ea4803336e7486",
+      "repeatIdentical": true,
+      "sampling": {
+        "schemaVersion": 1,
+        "experimental": true,
+        "edgeLength": 0.2,
+        "estimatedGridCells": 2160,
+        "evaluations": 5177,
+        "maxCells": 1000000,
+        "maxEvaluations": 8000000
+      },
+      "vertexFieldResidual": {
+        "samples": 1120,
+        "max": 0.1662729820848902,
+        "p95": 0.13352958414752034
+      },
+      "centroidFieldResidual": {
+        "samples": 2012,
+        "max": 0.1495559891974854,
+        "p95": 0.13381161773703934
+      },
+      "topology": {
+        "vertices": 1120,
+        "triangles": 2012,
+        "boundaryEdges": 0,
+        "nonManifoldEdges": 0,
+        "orientationConflicts": 0,
+        "degenerateTriangles": 0,
+        "invalidIndices": 0,
+        "nonFiniteVertices": 0
+      },
+      "bounds": {
+        "min": [
+          -0.938258171081543,
+          -0.9289612770080566,
+          -0.9499123692512512
+        ],
+        "max": [
+          0.938258171081543,
+          0.9289612770080566,
+          0.9499123692512512
+        ]
+      },
+      "uvPresent": false
+    },
+    {
+      "name": "cellular",
+      "edgeLength": 0.1,
+      "buildMs": 927.5971999999999,
+      "triangles": 17380,
+      "sha256": "cbffbd0f70a485905c02e96ba8b4a9ad04498dd1dc742d27f29cb30f6588fe51",
+      "repeatIdentical": true,
+      "sampling": {
+        "schemaVersion": 1,
+        "experimental": true,
+        "edgeLength": 0.1,
+        "estimatedGridCells": 17280,
+        "evaluations": 37856,
+        "maxCells": 1000000,
+        "maxEvaluations": 8000000
+      },
+      "vertexFieldResidual": {
+        "samples": 9042,
+        "max": 0.14993410087263742,
+        "p95": 0.1239120618275934
+      },
+      "centroidFieldResidual": {
+        "samples": 17380,
+        "max": 0.14998370589610419,
+        "p95": 0.13302853093526015
+      },
+      "topology": {
+        "vertices": 9042,
+        "triangles": 17380,
+        "boundaryEdges": 0,
+        "nonManifoldEdges": 9,
+        "orientationConflicts": 0,
+        "degenerateTriangles": 4,
+        "invalidIndices": 0,
+        "nonFiniteVertices": 0
+      },
+      "bounds": {
+        "min": [
+          -0.9723517298698425,
+          -0.9949924945831299,
+          -0.9942094683647156
+        ],
+        "max": [
+          0.9723517298698425,
+          0.9949924945831299,
+          0.9942094683647156
+        ]
+      },
+      "uvPresent": false
+    }
+  ]
+}

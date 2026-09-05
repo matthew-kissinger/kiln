@@ -1,0 +1,36 @@
+{
+  "phase": "fresh original authoring",
+  "name": "solar-sail-courier",
+  "brief": "A solar sail courier: graceful origami-folded copper/gold solar foil, articulated segmented panels with clear hinge attachments, a compact ivory cargo core, delicate structural spars. Strong angular silhouette with actual custom folded surfaces, not intersecting flat boxes. Animate panel deployment.",
+  "modelRequested": "gemini-3.8-flash-high",
+  "harness": "Antigravity CLI",
+  "node": "v22.23.1",
+  "nodeExecutable": "C:\\Users\\Mattm\\AppData\\Roaming\\fnm\\node-versions\\v22.23.1\\installation\\node.exe",
+  "runtime": "C:/Users/Mattm/AppData/Local/Temp/kiln-package-café-I3KNmI/fresh installation/node_modules/@kiln/engine",
+  "tarballSha256": "0d457e8f8763730079da013abfa6662aadc02843f090fcae594c0f711399d16c",
+  "bundles": {
+    "cli.mjs": "4f70681d55901b2416babe9108b291e4a7ab2de462360f8d13bdd7084bea6126",
+    "mcp-server.mjs": "776d049ab819ff898450320b59540b3d61c0460a6954d2db9c1aaabb7d7f0354",
+    "evaluator-worker.mjs": "5a574c3be5f352c9d1c4bfd4c77dc184e202921bb2767b20dce8b467b69cf150",
+    "build.json": "2b40fed878c3d2470d97382ccac46b51a7b4706d4a0a4e13540d6ef0b73ad4d4"
+  },
+  "skills": {
+    "kiln-author-asset/references/camera-recipes.md": "8959e0b5bf98d8d6712147ff9f4eb05bdff9a58cdda60796304a527329b84c19",
+    "kiln-author-asset/references/geometry-recipes.md": "12e861a7c05b21ee8d0de713f4bde8a843af1dbf37326b5121a8229805693c3c",
+    "kiln-author-asset/references/program-contract.md": "42cc4c17fa14d94febdf0ccbc38454f5972f2d3730f20dbca39151c0fe3aa293",
+    "kiln-author-asset/references/reusable-frame.kiln.js": "9015b2255742efa74e47531f68778573c34566237b3256dcdaab9c360cfc895f",
+    "kiln-author-asset/SKILL.md": "6a69c2ef6315cf719c33a5c024f5b07c87264de8e6fdb987cacbefbfd431f93e",
+    "kiln-qa-asset/references/integration-checks.md": "3d340cc81c0de0a4415ff1d2707c64db1a7433fd7e63f69e1748862739ef5c24",
+    "kiln-qa-asset/SKILL.md": "f2f990a669529f09c7e818a74f1e3af299e474d41a86910434d521a1fd596845",
+    "kiln-refine-asset/references/revision-and-views.md": "78ccb43588fd37b020cabc17e61facd610ea676c7f0c9ebb104f07845edbf3e5",
+    "kiln-refine-asset/SKILL.md": "135af2115e63f09f4c413feceedee5f547d21d154b4d32ed5e88c4077ac56d61"
+  },
+  "promptSha256": "60dd46a3ebdc4b51f01afd41de662104301cdf3f9d47e3321d9597838dc5d304",
+  "observerSha256": "58c6d64f3232510ccff48f7109a7337c6b6f8d64400030073b36f2b6a8e72237",
+  "limits": {
+    "toolCalls": 25,
+    "imageCells": 48,
+    "wallSeconds": 480
+  },
+  "createdAt": "2026-09-05T21:08:23.591Z"
+}

@@ -2,7 +2,7 @@
   "name": "kiln-site",
   "private": true,
   "type": "module",
-  "description": "The Kiln gallery: every checked-in program, built and shown as the GLB it produces.",
+  "description": "The Kiln gallery: selected checked-in programs, built and shown as the GLB it produces.",
   "scripts": {
     "assets": "bun scripts/build-assets.mjs",
     "dev": "vite",

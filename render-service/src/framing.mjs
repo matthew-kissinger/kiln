@@ -21,6 +21,22 @@
 /** 1 / 0.9: the CPU rasterizer's margin, matched here so the two agree. */
 const MARGIN = 1 / 0.9;
 
+/** Perspective beauty framing around a world-space bounding sphere. */
+export function beautyCameraSpec(center, radius) {
+  if (!Array.isArray(center) || center.length !== 3 || !center.every(Number.isFinite)
+      || !Number.isFinite(radius) || radius <= 0) throw new Error('Invalid beauty bounds');
+  const fovDeg = 35;
+  const distance = radius / Math.sin(fovDeg * Math.PI / 360) * 1.08;
+  const length = Math.hypot(1, 0.65, 1);
+  return {
+    projection: 'perspective',
+    position: center.map((value, i) => value + [1, 0.65, 1][i] / length * distance),
+    target: [...center], up: [0, 1, 0], fovDeg, aspect: 1,
+    near: Math.max(radius * 0.001, distance - radius * 1.5),
+    far: distance + radius * 2,
+  };
+}
+
 function cross(a, b) {
   return [a[1] * b[2] - a[2] * b[1], a[2] * b[0] - a[0] * b[2], a[0] * b[1] - a[1] * b[0]];
 }

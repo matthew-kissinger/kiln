@@ -1,0 +1,1036 @@
+{
+  "model": "gemini-3.8-flash-high",
+  "harness": "Antigravity CLI",
+  "kind": "five fresh independent authoring runs",
+  "records": [
+    {
+      "asset": "orchid-conservatory",
+      "base": "C:/Users/Mattm/X/kiln-cleanrooms/new-gemini-orchid-conservatory-0d457e8f-20260905",
+      "setup": {
+        "phase": "fresh independent authoring",
+        "asset": "orchid-conservatory",
+        "brief": "An Art Nouveau orchid conservatory: flowing iron ribs, curved translucent glasshouse, raised planters and a real hinged entrance door. Rich forest green iron, warm brass accents and vivid orchid clusters. Distinct curved silhouette; visible interior rather than a solid glass blob.",
+        "modelRequested": "gemini-3.8-flash-high",
+        "harness": "Antigravity CLI",
+        "node": "v22.23.1",
+        "nodeExecutable": "C:\\Users\\Mattm\\AppData\\Roaming\\fnm\\node-versions\\v22.23.1\\installation\\node.exe",
+        "runtime": "C:\\Users\\Mattm\\AppData\\Local\\Temp\\kiln-package-café-I3KNmI\\fresh installation\\node_modules\\@kiln\\engine",
+        "tarballSha256": "0d457e8f8763730079da013abfa6662aadc02843f090fcae594c0f711399d16c",
+        "bundles": {
+          "cli.mjs": "4f70681d55901b2416babe9108b291e4a7ab2de462360f8d13bdd7084bea6126",
+          "mcp-server.mjs": "776d049ab819ff898450320b59540b3d61c0460a6954d2db9c1aaabb7d7f0354",
+          "evaluator-worker.mjs": "5a574c3be5f352c9d1c4bfd4c77dc184e202921bb2767b20dce8b467b69cf150",
+          "build.json": "2b40fed878c3d2470d97382ccac46b51a7b4706d4a0a4e13540d6ef0b73ad4d4"
+        },
+        "skills": {
+          "kiln-author-asset/references/camera-recipes.md": "8959e0b5bf98d8d6712147ff9f4eb05bdff9a58cdda60796304a527329b84c19",
+          "kiln-author-asset/references/geometry-recipes.md": "12e861a7c05b21ee8d0de713f4bde8a843af1dbf37326b5121a8229805693c3c",
+          "kiln-author-asset/references/program-contract.md": "42cc4c17fa14d94febdf0ccbc38454f5972f2d3730f20dbca39151c0fe3aa293",
+          "kiln-author-asset/references/reusable-frame.kiln.js": "9015b2255742efa74e47531f68778573c34566237b3256dcdaab9c360cfc895f",
+          "kiln-author-asset/SKILL.md": "6a69c2ef6315cf719c33a5c024f5b07c87264de8e6fdb987cacbefbfd431f93e",
+          "kiln-qa-asset/references/integration-checks.md": "3d340cc81c0de0a4415ff1d2707c64db1a7433fd7e63f69e1748862739ef5c24",
+          "kiln-qa-asset/SKILL.md": "f2f990a669529f09c7e818a74f1e3af299e474d41a86910434d521a1fd596845",
+          "kiln-refine-asset/references/revision-and-views.md": "78ccb43588fd37b020cabc17e61facd610ea676c7f0c9ebb104f07845edbf3e5",
+          "kiln-refine-asset/SKILL.md": "135af2115e63f09f4c413feceedee5f547d21d154b4d32ed5e88c4077ac56d61"
+        },
+        "promptSha256": "abfe1354245197b9dfdb93f5213cf63ace3683c32eaaab94b6dacd6ebd94c65b",
+        "observerSha256": "58c6d64f3232510ccff48f7109a7337c6b6f8d64400030073b36f2b6a8e72237",
+        "limits": {
+          "toolCalls": 25,
+          "imageCells": 48,
+          "wallSeconds": 480
+        },
+        "createdAt": "2026-09-05T21:04:04.940Z"
+      },
+      "exit": {
+        "code": 0,
+        "timedOut": false,
+        "finishedAt": "2026-09-05T21:13:37.338Z"
+      },
+      "toolCalls": 10,
+      "acceptedCalls": 10,
+      "deniedRequests": [],
+      "fullSourceMcpCalls": 1,
+      "edits": [
+        {
+          "capture": {
+            "cols": 2,
+            "output": "grid",
+            "shots": [
+              {
+                "camera": {
+                  "azimuthDeg": 35,
+                  "elevationDeg": 20,
+                  "type": "orbit"
+                },
+                "name": "Refined Exterior 3/4"
+              },
+              {
+                "camera": {
+                  "azimuthDeg": 15,
+                  "elevationDeg": 12,
+                  "padding": 1.05,
+                  "type": "orbit"
+                },
+                "name": "Entrance Canopy & Tracery"
+              }
+            ],
+            "size": 512,
+            "version": "kiln.capture.v1"
+          },
+          "edits": [
+            {
+              "newString": "  // ==========================================\n  // 3. Curved Translucent Glass Canopy & Walls (Refinement 1)\n  // ==========================================\n  const glasshouse = createPivot('GlassEnclosure', [0, 0, 0], root);\n\n  // Full-coverage curved glass vault spanning continuously to side walls\n  const glassRoofGeo = parametricSurface(\n    (u, v) => {\n      const x = u;\n      const z = v;\n      const halfWidth = 1.34;\n      const absU = Math.min(1.0, Math.abs(z / halfWidth));\n      let y;\n      if (absU > 0.85) {\n        const wallT = (absU - 0.85) / 0.15;\n        y = 1.85 + (1.92 - 1.85) * (1 - wallT);\n      } else {\n        const roofU = absU / 0.85;\n        const archProfile = Math.pow(Math.cos(roofU * Math.PI * 0.5), 0.75);\n        y = 1.85 + (3.23 - 1.85) * archProfile;\n      }\n      return [x, y, z];\n    },\n    { u: [-1.8, 1.8], v: [-1.34, 1.34], uSegments: 24, vSegments: 36 }\n  );\n  createPart('GlassVaultRoof', glassRoofGeo, glassMat, { parent: glasshouse });\n\n  // Molded eave cornices and gutters along both flanks\n  [-1.34, 1.34].forEach((zSide, sIdx) => {\n    // Eave molding rail\n    const eavePts = [[-1.85, 1.85, zSide], [1.85, 1.85, zSide]];\n    const eaveGeo = pipeAlongPath(eavePts, 0.032, { tubularSegments: 16, radialSegments: 6 });\n    createPart(`EaveCornice_${sIdx}`, eaveGeo, ironMat, { parent: structure });\n\n    // Side wall glass bays and iron mullions\n    for (let b = 0; b < 4; b++) {\n      const bx = -1.35 + b * 0.9;\n      createPart(`GlassWallBay_${sIdx}_${b}`, boxGeo(0.84, 1.42, 0.015), glassMat,\n        { position: [bx, 1.13, zSide], parent: glasshouse });\n      if (b < 3) {\n        createPart(`WallMullion_${sIdx}_${b}`, boxGeo(0.04, 1.44, 0.035), ironDarkMat,\n          { position: [bx + 0.45, 1.13, zSide], parent: glasshouse });\n      }\n    }\n  });\n\n  // Rear Apsidal Wall Glazing & Tracery\n  createPart('RearGlassBay_L', boxGeo(0.015, 1.42, 0.55), glassMat,\n    { position: [-1.80, 1.13, -0.65], parent: glasshouse });\n  createPart('RearGlassBay_C', boxGeo(0.015, 1.95, 0.65), glassMat,\n    { position: [-1.80, 1.38, 0], parent: glasshouse });\n  createPart('RearGlassBay_R', boxGeo(0.015, 1.42, 0.55), glassMat,\n    { position: [-1.80, 1.13, 0.65], parent: glasshouse });\n  // Rear arched tympanum glass\n  createPart('RearTympanumGlass', boxGeo(0.015, 0.85, 1.35), glassMat,\n    { position: [-1.80, 2.50, 0], parent: glasshouse });\n\n  [-0.35, 0.35].forEach((zp, pIdx) => {\n    createPart(`RearPost_${pIdx}`, cylinderGeo(0.03, 0.03, 2.5, 8), ironMat,\n      { position: [-1.80, 1.63, zp], parent: structure });\n  });\n\n  // Front Facade Entrance Portal & Tracery\n  [-0.85, 0.85].forEach((zp, fIdx) => {\n    createPart(`FrontFlankGlass_${fIdx}`, boxGeo(0.015, 1.42, 0.45), glassMat,\n      { position: [1.80, 1.13, zp], parent: glasshouse });\n    createPart(`FrontFlankMullion_${fIdx}`, boxGeo(0.04, 1.44, 0.04), ironMat,\n      { position: [1.80, 1.13, zp], parent: structure });\n    // Upper curved flank glass filling under the arch\n    createPart(`FrontFlankUpperGlass_${fIdx}`, boxGeo(0.015, 0.45, 0.45), glassMat,\n      { position: [1.80, 2.05, zp], parent: glasshouse });\n  });\n\n  // Front Portal Arch Header & Art Nouveau Glass Canopy\n  const portalHeaderPts = [\n    [1.80, 2.25, -0.48],\n    [1.80, 2.50, -0.25],\n    [1.80, 2.58, 0.0],\n    [1.80, 2.50, 0.25],\n    [1.80, 2.25, 0.48]\n  ];\n  const portalArchGeo = pipeAlongPath(portalHeaderPts, 0.035, { tubularSegments: 16, radialSegments: 8 });\n  createPart('EntrancePortalArch', portalArchGeo, ironMat, { parent: structure });\n\n  // Transom glass above entrance door\n  createPart('TransomGlass', boxGeo(0.015, 0.30, 0.90), glassMat,\n    { position: [1.80, 2.39, 0], parent: glasshouse });\n\n  // Art Nouveau radiating fanlight tracery over doorway\n  [-0.30, -0.15, 0.0, 0.15, 0.30].forEach((tz, tIdx) => {\n    const spokePts = [\n      [1.805, 2.24, tz * 0.4],\n      [1.805, 2.50 - Math.abs(tz) * 0.3, tz]\n    ];\n    const spokeGeo = pipeAlongPath(spokePts, 0.010, { tubularSegments: 8, radialSegments: 6 });\n    createPart(`FanlightSpoke_${tIdx}`, spokeGeo, brassMat, { parent: structure });\n  });\n\n  // Art Nouveau Porch Canopy projecting forward over steps\n  const canopyPts = [\n    [1.80, 2.32, -0.52],\n    [2.15, 2.28, -0.48],\n    [2.22, 2.35, 0.0],\n    [2.15, 2.28, 0.48],\n    [1.80, 2.32, 0.52]\n  ];\n  const canopyGeo = pipeAlongPath(canopyPts, 0.025, { tubularSegments: 16, radialSegments: 6 });\n  createPart('PorchCanopyRim', canopyGeo, brassMat, { parent: structure });\n  createPart('PorchCanopyGlass', boxGeo(0.35, 0.015, 0.96), glassMat,\n    { position: [1.98, 2.30, 0], parent: glasshouse });",
+              "oldString": "  // ==========================================\n  // 3. Curved Translucent Glass Canopy & Walls\n  // ==========================================\n  const glasshouse = createPivot('GlassEnclosure', [0, 0, 0], root);\n\n  const glassRoofGeo = parametricSurface(\n    (u, v) => {\n      const x = u;\n      const z = v;\n      const absU = Math.abs(z / 1.15);\n      const archProfile = Math.pow(Math.cos(absU * Math.PI * 0.5), 0.75);\n      const y = 1.86 + (3.23 - 1.86) * archProfile;\n      return [x, y, z];\n    },\n    { u: [-1.8, 1.8], v: [-1.15, 1.15], uSegments: 20, vSegments: 24 }\n  );\n  createPart('GlassVaultRoof', glassRoofGeo, glassMat, { parent: glasshouse });\n\n  [-1.34, 1.34].forEach((zSide, sIdx) => {\n    for (let b = 0; b < 4; b++) {\n      const bx = -1.35 + b * 0.9;\n      createPart(`GlassWallBay_${sIdx}_${b}`, boxGeo(0.84, 1.40, 0.015), glassMat,\n        { position: [bx, 1.12, zSide], parent: glasshouse });\n      if (b < 3) {\n        createPart(`WallMullion_${sIdx}_${b}`, boxGeo(0.04, 1.42, 0.035), ironDarkMat,\n          { position: [bx + 0.45, 1.12, zSide], parent: glasshouse });\n      }\n    }\n  });\n\n  createPart('RearGlassBay_L', boxGeo(0.015, 1.40, 0.55), glassMat,\n    { position: [-1.80, 1.12, -0.65], parent: glasshouse });\n  createPart('RearGlassBay_C', boxGeo(0.015, 1.80, 0.65), glassMat,\n    { position: [-1.80, 1.32, 0], parent: glasshouse });\n  createPart('RearGlassBay_R', boxGeo(0.015, 1.40, 0.55), glassMat,\n    { position: [-1.80, 1.12, 0.65], parent: glasshouse });\n\n  [-0.35, 0.35].forEach((zp, pIdx) => {\n    createPart(`RearPost_${pIdx}`, cylinderGeo(0.03, 0.03, 2.5, 8), ironMat,\n      { position: [-1.80, 1.63, zp], parent: structure });\n  });\n\n  [-0.85, 0.85].forEach((zp, fIdx) => {\n    createPart(`FrontFlankGlass_${fIdx}`, boxGeo(0.015, 1.40, 0.45), glassMat,\n      { position: [1.80, 1.12, zp], parent: glasshouse });\n    createPart(`FrontFlankMullion_${fIdx}`, boxGeo(0.04, 1.44, 0.04), ironMat,\n      { position: [1.80, 1.12, zp], parent: structure });\n  });\n\n  const portalHeaderPts = [\n    [1.80, 2.25, -0.48],\n    [1.80, 2.45, -0.25],\n    [1.80, 2.52, 0.0],\n    [1.80, 2.45, 0.25],\n    [1.80, 2.25, 0.48]\n  ];\n  const portalArchGeo = pipeAlongPath(portalHeaderPts, 0.035, { tubularSegments: 16, radialSegments: 8 });\n  createPart('EntrancePortalArch', portalArchGeo, ironMat, { parent: structure });\n\n  createPart('TransomGlass', boxGeo(0.015, 0.24, 0.90), glassMat,\n    { position: [1.80, 2.36, 0], parent: glasshouse });"
+            }
+          ],
+          "programRef": "sha256:35466b5c2d67cd0a29ecb6d7d993a2049753c63829e8163d63cecc250cdf321a"
+        },
+        {
+          "capture": {
+            "cols": 2,
+            "output": "grid",
+            "shots": [
+              {
+                "camera": {
+                  "azimuthDeg": 35,
+                  "elevationDeg": 20,
+                  "type": "orbit"
+                },
+                "name": "Final Conservatory 3/4"
+              },
+              {
+                "camera": {
+                  "azimuthDeg": 8,
+                  "elevationDeg": 12,
+                  "padding": 0.95,
+                  "type": "orbit"
+                },
+                "name": "Interior Orchids & Entrance Detail"
+              }
+            ],
+            "size": 512,
+            "version": "kiln.capture.v1"
+          },
+          "edits": [
+            {
+              "newString": "  // ==========================================\n  // 6. Vivid Orchid Clusters & Botanical Elements (Refinement 2)\n  // ==========================================\n  const flora = createPivot('OrchidCollection', [0, 0, 0], root);\n\n  const aerialRootMat = gameMaterial(0xa0bc98, { roughness: 0.8, metalness: 0.0 });\n  const yellowOrchidMat = gameMaterial(0xf4c01e, { roughness: 0.38, metalness: 0.08 });\n\n  // Front entrance balustrade cheek-blocks with polished brass finials\n  [-0.68, 0.68].forEach((bz, bIdx) => {\n    createPart(`StepBalustrade_${bIdx}`, boxGeo(0.65, 0.38, 0.16), stoneMat,\n      { position: [2.25, 0.19, bz], parent: plinth });\n    createPart(`StepBalustradeCap_${bIdx}`, boxGeo(0.68, 0.04, 0.18), stoneMat,\n      { position: [2.25, 0.40, bz], parent: plinth });\n    createPart(`StepFinial_${bIdx}`, sphereGeo(0.06, 12, 8), brassMat,\n      { position: [2.45, 0.48, bz], parent: plinth });\n  });\n\n  // Hanging Art Nouveau brass lanterns along the central vaulted spine\n  [-1.0, 0.0, 1.0].forEach((lx, lIdx) => {\n    const lanternGroup = createPivot(`PendantLantern_${lIdx}`, [lx, 2.75, 0], flora);\n    const dropChainPts = [[0, 0.48, 0], [0, 0, 0]];\n    const dropGeo = pipeAlongPath(dropChainPts, 0.005, { tubularSegments: 6, radialSegments: 4 });\n    createPart(`LanternDrop_${lIdx}`, dropGeo, brassMat, { parent: lanternGroup });\n    createPart(`LanternCap_${lIdx}`, coneGeo(0.09, 0.06, 8), brassMat,\n      { position: [0, 0.02, 0], rotation: [180, 0, 0], parent: lanternGroup });\n    createPart(`LanternGlobe_${lIdx}`, sphereGeo(0.065, 10, 8), glassMaterial(0xfff6dd, { opacity: 0.6, roughness: 0.1 }),\n      { position: [0, -0.06, 0], parent: lanternGroup });\n    createPart(`LanternSpire_${lIdx}`, cylinderGeo(0.005, 0.012, 0.08, 6), brassMat,\n      { position: [0, -0.15, 0], parent: lanternGroup });\n  });\n\n  function addOrchidBlossom(name, position, rotation, scale, petalColorMat, parentNode) {\n    const flower = createPivot(name, position, parentNode);\n    if (rotation) {\n      flower.rotation.set(rotation[0] * Math.PI / 180, rotation[1] * Math.PI / 180, rotation[2] * Math.PI / 180);\n    }\n    const s = scale || 1.0;\n\n    createPart('Sepal_Top', sphereGeo(0.052 * s, 8, 6), petalColorMat,\n      { position: [0, 0.055 * s, 0], scale: [0.75, 1.45, 0.22], parent: flower });\n\n    createPart('Sepal_LL', sphereGeo(0.048 * s, 8, 6), petalColorMat,\n      { position: [-0.04 * s, -0.038 * s, 0], rotation: [0, 0, 35], scale: [0.75, 1.35, 0.22], parent: flower });\n    createPart('Sepal_LR', sphereGeo(0.048 * s, 8, 6), petalColorMat,\n      { position: [0.04 * s, -0.038 * s, 0], rotation: [0, 0, -35], scale: [0.75, 1.35, 0.22], parent: flower });\n\n    createPart('Petal_Left', sphereGeo(0.062 * s, 8, 6), petalColorMat,\n      { position: [-0.058 * s, 0.018 * s, 0.005 * s], rotation: [0, 15, 12], scale: [1.25, 0.95, 0.22], parent: flower });\n    createPart('Petal_Right', sphereGeo(0.062 * s, 8, 6), petalColorMat,\n      { position: [0.058 * s, 0.018 * s, 0.005 * s], rotation: [0, -15, -12], scale: [1.25, 0.95, 0.22], parent: flower });\n\n    createPart('Labellum_Lip', sphereGeo(0.044 * s, 8, 6), orchidLipMat,\n      { position: [0, -0.045 * s, 0.022 * s], rotation: [-25, 0, 0], scale: [1.0, 1.25, 0.55], parent: flower });\n\n    createPart('Column_Crest', cylinderGeo(0.013 * s, 0.009 * s, 0.028 * s, 6), orchidCenterMat,\n      { position: [0, -0.006 * s, 0.016 * s], rotation: [45, 0, 0], parent: flower });\n\n    return flower;\n  }\n\n  function addOrchidRosette(name, position, parentNode) {\n    const rosette = createPivot(name, position, parentNode);\n    const leafAngles = [10, 65, 125, 185, 245, 305];\n    leafAngles.forEach((ang, idx) => {\n      const rad = ang * Math.PI / 180;\n      const lx = Math.cos(rad) * 0.19;\n      const lz = Math.sin(rad) * 0.19;\n      createPart(`Leaf_${idx}`, boxGeo(0.28, 0.012, 0.075), leafMat,\n        { position: [lx, 0.035 - idx * 0.004, lz], rotation: [-18 * Math.sin(rad), -ang, 22 * Math.cos(rad)], parent: rosette });\n    });\n    return rosette;\n  }\n\n  const orchidClustersConfig = [\n    { x: -1.1, z: -0.95, y: 0.76, mat: magentaOrchidMat, flowers: 5, rotY: 25 },\n    { x: -0.5, z: -0.90, y: 0.76, mat: yellowOrchidMat, flowers: 5, rotY: -15 },\n    { x: 0.1, z: -0.98, y: 0.76, mat: whiteOrchidMat, flowers: 5, rotY: 40 },\n    { x: 0.7, z: -0.92, y: 0.76, mat: purpleOrchidMat, flowers: 5, rotY: -30 },\n\n    { x: -1.1, z: 0.95, y: 0.76, mat: purpleOrchidMat, flowers: 5, rotY: -20 },\n    { x: -0.5, z: 0.90, y: 0.76, mat: magentaOrchidMat, flowers: 5, rotY: 35 },\n    { x: 0.1, z: 0.98, y: 0.76, mat: yellowOrchidMat, flowers: 5, rotY: -10 },\n    { x: 0.7, z: 0.92, y: 0.76, mat: whiteOrchidMat, flowers: 5, rotY: 25 },\n\n    { x: -0.2, z: 0.0, y: 0.88, mat: yellowOrchidMat, flowers: 4, rotY: 180 },\n    { x: -0.2, z: 0.0, y: 1.36, mat: magentaOrchidMat, flowers: 5, rotY: 0 }\n  ];\n\n  orchidClustersConfig.forEach((cfg, cIdx) => {\n    const cluster = createPivot(`Cluster_${cIdx}`, [cfg.x, cfg.y, cfg.z], flora);\n    addOrchidRosette(`Rosette_${cIdx}`, [0, 0, 0], cluster);\n\n    // Cascading aerial roots spilling over the planter edge\n    [-0.1, 0.1].forEach((rx, rIdx) => {\n      const rootPts = [\n        [rx, 0.01, 0],\n        [rx * 1.4, -0.12, (cfg.z < 0 ? 0.18 : -0.18)],\n        [rx * 1.8, -0.26, (cfg.z < 0 ? 0.22 : -0.22)]\n      ];\n      const rootGeo = pipeAlongPath(rootPts, 0.005, { tubularSegments: 10, radialSegments: 4 });\n      createPart(`AerialRoot_${cIdx}_${rIdx}`, rootGeo, aerialRootMat, { parent: cluster });\n    });\n\n    const stemPts = [\n      [0, 0, 0],\n      [0.05, 0.24, 0.02],\n      [0.10, 0.46, 0.06],\n      [0.18, 0.64, 0.14],\n      [0.30, 0.72, 0.22],\n      [0.44, 0.67, 0.32]\n    ];\n    const stemGeo = pipeAlongPath(stemPts, 0.010, { tubularSegments: 20, radialSegments: 6 });\n    createPart(`Stem_${cIdx}`, stemGeo, stemMat, { parent: cluster });\n\n    for (let f = 0; f < cfg.flowers; f++) {\n      const t = (f + 1) / (cfg.flowers + 1);\n      const fx = 0.07 + t * 0.34;\n      const fy = 0.38 + Math.sin(t * Math.PI) * 0.35;\n      const fz = 0.05 + t * 0.28;\n      const fScale = 0.95 + 0.28 * Math.sin(t * Math.PI);\n      addOrchidBlossom(\n        `Blossom_${cIdx}_${f}`,\n        [fx, fy, fz],\n        [-10, cfg.rotY + f * 12, 15 - f * 5],\n        fScale,\n        cfg.mat,\n        cluster\n      );\n    }\n  });\n\n  [-0.6, 0.4].forEach((hx, hIdx) => {\n    const hangGroup = createPivot(`HangingBasket_${hIdx}`, [hx, 2.35, 0], flora);\n    const chainPts = [[0, 0.85, 0], [0, 0, 0]];\n    const chainGeo = pipeAlongPath(chainPts, 0.006, { tubularSegments: 8, radialSegments: 4 });\n    createPart(`Chain_${hIdx}`, chainGeo, brassMat, { parent: hangGroup });\n\n    createPart(`MossBall_${hIdx}`, sphereGeo(0.12, 10, 8), soilMat,\n      { position: [0, 0, 0], parent: hangGroup });\n    createPart(`BasketHoopA_${hIdx}`, torusGeo(0.125, 0.006, 6, 16), brassMat,\n      { position: [0, 0, 0], parent: hangGroup });\n    createPart(`BasketHoopB_${hIdx}`, torusGeo(0.125, 0.006, 6, 16), brassMat,\n      { position: [0, 0, 0], rotation: [90, 0, 0], parent: hangGroup });\n\n    // Hanging aerial roots\n    for (let ar = 0; ar < 3; ar++) {\n      const aAng = (ar * 120 + 30) * Math.PI / 180;\n      const aPts = [\n        [Math.cos(aAng) * 0.08, -0.08, Math.sin(aAng) * 0.08],\n        [Math.cos(aAng) * 0.12, -0.25, Math.sin(aAng) * 0.12],\n        [Math.cos(aAng) * 0.10, -0.42, Math.sin(aAng) * 0.10]\n      ];\n      const aGeo = pipeAlongPath(aPts, 0.004, { tubularSegments: 10, radialSegments: 4 });\n      createPart(`HangRoot_${hIdx}_${ar}`, aGeo, aerialRootMat, { parent: hangGroup });\n    }\n\n    const hMat = hIdx === 0 ? magentaOrchidMat : yellowOrchidMat;\n    const hangStemPts = [\n      [0, -0.05, 0],\n      [0.08, -0.18, 0.05],\n      [0.16, -0.32, 0.12],\n      [0.22, -0.48, 0.18]\n    ];\n    const hangStemGeo = pipeAlongPath(hangStemPts, 0.007, { tubularSegments: 14, radialSegments: 6 });\n    createPart(`HangStem_${hIdx}`, hangStemGeo, stemMat, { parent: hangGroup });\n\n    for (let f = 0; f < 3; f++) {\n      const hfx = 0.07 + f * 0.06;\n      const hfy = -0.15 - f * 0.11;\n      const hfz = 0.05 + f * 0.05;\n      addOrchidBlossom(`HangBloom_${hIdx}_${f}`, [hfx, hfy, hfz], [25, 45, 10], 0.90, hMat, hangGroup);\n    }\n  });\n\n  return root;\n}",
+              "oldString": "  // ==========================================\n  // 6. Vivid Orchid Clusters & Botanical Elements\n  // ==========================================\n  const flora = createPivot('OrchidCollection', [0, 0, 0], root);\n\n  function addOrchidBlossom(name, position, rotation, scale, petalColorMat, parentNode) {\n    const flower = createPivot(name, position, parentNode);\n    if (rotation) {\n      flower.rotation.set(rotation[0] * Math.PI / 180, rotation[1] * Math.PI / 180, rotation[2] * Math.PI / 180);\n    }\n    const s = scale || 1.0;\n\n    createPart('Sepal_Top', sphereGeo(0.045 * s, 8, 6), petalColorMat,\n      { position: [0, 0.05 * s, 0], scale: [0.7, 1.4, 0.25], parent: flower });\n\n    createPart('Sepal_LL', sphereGeo(0.042 * s, 8, 6), petalColorMat,\n      { position: [-0.035 * s, -0.035 * s, 0], rotation: [0, 0, 35], scale: [0.7, 1.3, 0.25], parent: flower });\n    createPart('Sepal_LR', sphereGeo(0.042 * s, 8, 6), petalColorMat,\n      { position: [0.035 * s, -0.035 * s, 0], rotation: [0, 0, -35], scale: [0.7, 1.3, 0.25], parent: flower });\n\n    createPart('Petal_Left', sphereGeo(0.055 * s, 8, 6), petalColorMat,\n      { position: [-0.05 * s, 0.015 * s, 0.005 * s], rotation: [0, 15, 10], scale: [1.2, 0.9, 0.25], parent: flower });\n    createPart('Petal_Right', sphereGeo(0.055 * s, 8, 6), petalColorMat,\n      { position: [0.05 * s, 0.015 * s, 0.005 * s], rotation: [0, -15, -10], scale: [1.2, 0.9, 0.25], parent: flower });\n\n    createPart('Labellum_Lip', sphereGeo(0.038 * s, 8, 6), orchidLipMat,\n      { position: [0, -0.04 * s, 0.02 * s], rotation: [-25, 0, 0], scale: [0.95, 1.2, 0.6], parent: flower });\n\n    createPart('Column_Crest', cylinderGeo(0.012 * s, 0.008 * s, 0.025 * s, 6), orchidCenterMat,\n      { position: [0, -0.005 * s, 0.015 * s], rotation: [45, 0, 0], parent: flower });\n\n    return flower;\n  }\n\n  function addOrchidRosette(name, position, parentNode) {\n    const rosette = createPivot(name, position, parentNode);\n    const leafAngles = [15, 75, 140, 205, 260, 325];\n    leafAngles.forEach((ang, idx) => {\n      const rad = ang * Math.PI / 180;\n      const lx = Math.cos(rad) * 0.16;\n      const lz = Math.sin(rad) * 0.16;\n      createPart(`Leaf_${idx}`, boxGeo(0.24, 0.01, 0.07), leafMat,\n        { position: [lx, 0.03 - idx * 0.004, lz], rotation: [-15 * Math.sin(rad), -ang, 20 * Math.cos(rad)], parent: rosette });\n    });\n    return rosette;\n  }\n\n  const orchidClustersConfig = [\n    { x: -1.1, z: -0.95, y: 0.76, mat: magentaOrchidMat, flowers: 4, rotY: 25 },\n    { x: -0.5, z: -0.90, y: 0.76, mat: purpleOrchidMat, flowers: 5, rotY: -15 },\n    { x: 0.1, z: -0.98, y: 0.76, mat: whiteOrchidMat, flowers: 4, rotY: 40 },\n    { x: 0.7, z: -0.92, y: 0.76, mat: magentaOrchidMat, flowers: 5, rotY: -30 },\n\n    { x: -1.1, z: 0.95, y: 0.76, mat: purpleOrchidMat, flowers: 4, rotY: -20 },\n    { x: -0.5, z: 0.90, y: 0.76, mat: magentaOrchidMat, flowers: 5, rotY: 35 },\n    { x: 0.1, z: 0.98, y: 0.76, mat: whiteOrchidMat, flowers: 5, rotY: -10 },\n    { x: 0.7, z: 0.92, y: 0.76, mat: purpleOrchidMat, flowers: 4, rotY: 25 },\n\n    { x: -0.2, z: 0.0, y: 0.88, mat: whiteOrchidMat, flowers: 3, rotY: 180 },\n    { x: -0.2, z: 0.0, y: 1.36, mat: magentaOrchidMat, flowers: 4, rotY: 0 }\n  ];\n\n  orchidClustersConfig.forEach((cfg, cIdx) => {\n    const cluster = createPivot(`Cluster_${cIdx}`, [cfg.x, cfg.y, cfg.z], flora);\n    addOrchidRosette(`Rosette_${cIdx}`, [0, 0, 0], cluster);\n\n    const stemPts = [\n      [0, 0, 0],\n      [0.04, 0.22, 0.02],\n      [0.08, 0.42, 0.05],\n      [0.15, 0.58, 0.12],\n      [0.26, 0.65, 0.20],\n      [0.38, 0.61, 0.28]\n    ];\n    const stemGeo = pipeAlongPath(stemPts, 0.009, { tubularSegments: 18, radialSegments: 6 });\n    createPart(`Stem_${cIdx}`, stemGeo, stemMat, { parent: cluster });\n\n    for (let f = 0; f < cfg.flowers; f++) {\n      const t = (f + 1) / (cfg.flowers + 1);\n      const fx = 0.06 + t * 0.30;\n      const fy = 0.35 + Math.sin(t * Math.PI) * 0.32;\n      const fz = 0.04 + t * 0.24;\n      const fScale = 0.9 + 0.25 * Math.sin(t * Math.PI);\n      addOrchidBlossom(\n        `Blossom_${cIdx}_${f}`,\n        [fx, fy, fz],\n        [-10, cfg.rotY + f * 12, 15 - f * 5],\n        fScale,\n        cfg.mat,\n        cluster\n      );\n    }\n  });\n\n  [-0.6, 0.4].forEach((hx, hIdx) => {\n    const hangGroup = createPivot(`HangingBasket_${hIdx}`, [hx, 2.35, 0], flora);\n    const chainPts = [[0, 0.85, 0], [0, 0, 0]];\n    const chainGeo = pipeAlongPath(chainPts, 0.006, { tubularSegments: 8, radialSegments: 4 });\n    createPart(`Chain_${hIdx}`, chainGeo, brassMat, { parent: hangGroup });\n\n    createPart(`MossBall_${hIdx}`, sphereGeo(0.12, 10, 8), soilMat,\n      { position: [0, 0, 0], parent: hangGroup });\n    createPart(`BasketHoopA_${hIdx}`, torusGeo(0.125, 0.006, 6, 16), brassMat,\n      { position: [0, 0, 0], parent: hangGroup });\n    createPart(`BasketHoopB_${hIdx}`, torusGeo(0.125, 0.006, 6, 16), brassMat,\n      { position: [0, 0, 0], rotation: [90, 0, 0], parent: hangGroup });\n\n    const hMat = hIdx === 0 ? magentaOrchidMat : whiteOrchidMat;\n    const hangStemPts = [\n      [0, -0.05, 0],\n      [0.08, -0.18, 0.05],\n      [0.16, -0.32, 0.12],\n      [0.22, -0.48, 0.18]\n    ];\n    const hangStemGeo = pipeAlongPath(hangStemPts, 0.007, { tubularSegments: 14, radialSegments: 6 });\n    createPart(`HangStem_${hIdx}`, hangStemGeo, stemMat, { parent: hangGroup });\n\n    for (let f = 0; f < 3; f++) {\n      const hfx = 0.07 + f * 0.06;\n      const hfy = -0.15 - f * 0.11;\n      const hfz = 0.05 + f * 0.05;\n      addOrchidBlossom(`HangBloom_${hIdx}_${f}`, [hfx, hfy, hfz], [25, 45, 10], 0.85, hMat, hangGroup);\n    }\n  });\n\n  return root;\n}"
+            }
+          ],
+          "programRef": "sha256:382df4d938bb704035d6327876da40de2dcb4a9cc9ef9cee4bc05ea2b3fbc340"
+        }
+      ],
+      "imagesDelivered": 4,
+      "imageCells": 9,
+      "errors": [],
+      "lastBudget": {
+        "calls": 10,
+        "images": 9,
+        "reserved": 0,
+        "maxCalls": 25,
+        "maxImages": 48
+      },
+      "files": [
+        {
+          "name": "final-chosen.png",
+          "bytes": 130187,
+          "sha256": "d14c3f22d903b0f1d9f3e1b948b2def296413f0c11112e7a6a5f6253d7fc67c0"
+        },
+        {
+          "name": "final.glb",
+          "bytes": 415960,
+          "sha256": "dcc157e5cd01e1caafc1a67e969abd63532b973313af6be20ba9941a17d9bfdd"
+        },
+        {
+          "name": "final.kiln.js",
+          "bytes": 23918,
+          "sha256": "8de3359ffa54c4ff6f4f363c5b89188431fe48908c608a726d66b19529f31fcb"
+        },
+        {
+          "name": "initial.kiln.js",
+          "bytes": 19147,
+          "sha256": "35466b5c2d67cd0a29ecb6d7d993a2049753c63829e8163d63cecc250cdf321a"
+        },
+        {
+          "name": "NOTES.md",
+          "bytes": 4846,
+          "sha256": "e41ccca59f02d8f67fc09b8a89cd04cbb3ffaeb3e828cf19b7c9005edd14fdbf"
+        }
+      ],
+      "literalReplayVerified": true,
+      "imageReadEvents": 5
+    },
+    {
+      "asset": "ribbon-tea-pavilion",
+      "base": "C:/Users/Mattm/X/kiln-cleanrooms/new-gemini-ribbon-tea-pavilion-0d457e8f-20260905",
+      "setup": {
+        "phase": "fresh independent authoring",
+        "asset": "ribbon-tea-pavilion",
+        "brief": "A sculptural open-air tea pavilion: sweeping asymmetrical timber lamella roof curling up at one end, convincing beams and benches beneath, stone plinth and a restrained tea setting. Show custom curved geometry, elegant negative space and restrained warm timber/ivory/charcoal palette.",
+        "modelRequested": "gemini-3.8-flash-high",
+        "harness": "Antigravity CLI",
+        "node": "v22.23.1",
+        "nodeExecutable": "C:\\Users\\Mattm\\AppData\\Roaming\\fnm\\node-versions\\v22.23.1\\installation\\node.exe",
+        "runtime": "C:\\Users\\Mattm\\AppData\\Local\\Temp\\kiln-package-café-I3KNmI\\fresh installation\\node_modules\\@kiln\\engine",
+        "tarballSha256": "0d457e8f8763730079da013abfa6662aadc02843f090fcae594c0f711399d16c",
+        "bundles": {
+          "cli.mjs": "4f70681d55901b2416babe9108b291e4a7ab2de462360f8d13bdd7084bea6126",
+          "mcp-server.mjs": "776d049ab819ff898450320b59540b3d61c0460a6954d2db9c1aaabb7d7f0354",
+          "evaluator-worker.mjs": "5a574c3be5f352c9d1c4bfd4c77dc184e202921bb2767b20dce8b467b69cf150",
+          "build.json": "2b40fed878c3d2470d97382ccac46b51a7b4706d4a0a4e13540d6ef0b73ad4d4"
+        },
+        "skills": {
+          "kiln-author-asset/references/camera-recipes.md": "8959e0b5bf98d8d6712147ff9f4eb05bdff9a58cdda60796304a527329b84c19",
+          "kiln-author-asset/references/geometry-recipes.md": "12e861a7c05b21ee8d0de713f4bde8a843af1dbf37326b5121a8229805693c3c",
+          "kiln-author-asset/references/program-contract.md": "42cc4c17fa14d94febdf0ccbc38454f5972f2d3730f20dbca39151c0fe3aa293",
+          "kiln-author-asset/references/reusable-frame.kiln.js": "9015b2255742efa74e47531f68778573c34566237b3256dcdaab9c360cfc895f",
+          "kiln-author-asset/SKILL.md": "6a69c2ef6315cf719c33a5c024f5b07c87264de8e6fdb987cacbefbfd431f93e",
+          "kiln-qa-asset/references/integration-checks.md": "3d340cc81c0de0a4415ff1d2707c64db1a7433fd7e63f69e1748862739ef5c24",
+          "kiln-qa-asset/SKILL.md": "f2f990a669529f09c7e818a74f1e3af299e474d41a86910434d521a1fd596845",
+          "kiln-refine-asset/references/revision-and-views.md": "78ccb43588fd37b020cabc17e61facd610ea676c7f0c9ebb104f07845edbf3e5",
+          "kiln-refine-asset/SKILL.md": "135af2115e63f09f4c413feceedee5f547d21d154b4d32ed5e88c4077ac56d61"
+        },
+        "promptSha256": "7c27207806306828c9ba54ff26e9bc14f7dcd9940561ad3298edd0919cee19d6",
+        "observerSha256": "58c6d64f3232510ccff48f7109a7337c6b6f8d64400030073b36f2b6a8e72237",
+        "limits": {
+          "toolCalls": 25,
+          "imageCells": 48,
+          "wallSeconds": 480
+        },
+        "createdAt": "2026-09-05T21:06:24.157Z"
+      },
+      "exit": {
+        "code": 0,
+        "timedOut": false,
+        "finishedAt": "2026-09-05T21:18:12.391Z"
+      },
+      "toolCalls": 18,
+      "acceptedCalls": 18,
+      "deniedRequests": [],
+      "fullSourceMcpCalls": 1,
+      "edits": [
+        {
+          "capture": null,
+          "edits": [
+            null,
+            null,
+            null,
+            null
+          ],
+          "programRef": "sha256:ef6e8d267c3b0e7cd30b239cd3dcbe88d642e19921d534a5f4f7a6545c34c383"
+        },
+        {
+          "capture": {
+            "cols": 2,
+            "output": "grid",
+            "shots": [
+              {
+                "camera": {
+                  "azimuthDeg": 35,
+                  "elevationDeg": 18,
+                  "type": "orbit"
+                },
+                "name": "Whole asset"
+              },
+              {
+                "camera": {
+                  "azimuthDeg": 75,
+                  "elevationDeg": 26,
+                  "padding": 1.5,
+                  "relativeTo": "part",
+                  "type": "orbit"
+                },
+                "name": "Tea setting detail",
+                "subject": {
+                  "name": "Mesh_TeaTable"
+                },
+                "visibility": "context"
+              }
+            ],
+            "size": 512,
+            "version": "kiln.capture.v1"
+          },
+          "edits": [
+            {
+              "newString": "function evalRoofSurface(u, v) {\n  const xMin = -3.4;\n  const xMax = 4.0;\n  const x = xMin + u * (xMax - xMin);\n\n  // Transverse parameter zn in [-1, 1]\n  const zn = (v - 0.5) * 2.0;\n\n  // Longitudinal spine height: low eaves at u=0 (y=2.05m),\n  // arch peak at u=0.42 (y=3.35m), and soaring upward curl toward u=1.0 (y=4.45m).\n  const spineY = 2.05 + 1.25 * Math.sin(Math.min(1.0, u * 2.1) * Math.PI * 0.5) +\n                 1.35 * Math.pow(Math.max(0, u - 0.32) / 0.68, 2.6);\n\n  // Vault camber: highest in center, dropping toward edges\n  const vaultCamber = -0.36 * (zn * zn);\n\n  // Asymmetrical flare and 3D ribbon twist at the curling end\n  const ribbonTwist = 0.52 * Math.pow(u, 2.2) * zn;\n\n  const y = spineY + vaultCamber + ribbonTwist;\n\n  // Flaring transverse width: expands dynamically toward the soaring open curl\n  const widthScale = 1.0 + 0.28 * Math.pow(u, 2.0);\n  const z = zn * 2.45 * widthScale;\n\n  return [x, y, z];\n}",
+              "oldString": "function evalRoofSurface(u, v) {\n  const xMin = -3.4;\n  const xMax = 3.8;\n  const x = xMin + u * (xMax - xMin);\n\n  // Transverse parameter zn in [-1, 1]\n  const zn = (v - 0.5) * 2.0;\n\n  // Longitudinal spine height: low eaves at u=0 (y=2.10m), arch peak at u=0.45 (y=3.25m),\n  // and soaring upward curl toward u=1.0 (y=4.20m).\n  const spineY = 2.10 + 1.15 * Math.sin(Math.min(1.0, u * 2.1) * Math.PI * 0.5) +\n                 1.05 * Math.pow(Math.max(0, u - 0.35) / 0.65, 2.4);\n\n  // Vault camber: highest in center, dropping toward edges\n  const vaultCamber = -0.32 * (zn * zn);\n\n  // Asymmetrical flare and 3D ribbon twist at the curling end\n  const ribbonTwist = 0.38 * Math.pow(u, 2.0) * zn;\n\n  const y = spineY + vaultCamber + ribbonTwist;\n\n  // Flaring transverse width: expands dynamically toward the curling end\n  const widthScale = 1.0 + 0.22 * Math.pow(u, 2.0);\n  const z = zn * 2.4 * widthScale;\n\n  return [x, y, z];\n}"
+            },
+            {
+              "newString": "  const columnLocs = [\n    { name: 'Col_LowRear', x: -2.0, z: -1.55, h: 2.22 },\n    { name: 'Col_LowFront', x: -2.0, z: 1.55, h: 2.22 },\n    { name: 'Col_HighRear', x: 1.9, z: -1.65, h: 3.20 },\n    { name: 'Col_HighFront', x: 1.9, z: 1.65, h: 3.42 },\n  ];",
+              "oldString": "  const columnLocs = [\n    { name: 'Col_LowRear', x: -2.0, z: -1.5, h: 2.22 },\n    { name: 'Col_LowFront', x: -2.0, z: 1.5, h: 2.22 },\n    { name: 'Col_HighRear', x: 1.6, z: -1.5, h: 2.92 },\n    { name: 'Col_HighFront', x: 1.6, z: 1.5, h: 3.12 },\n  ];"
+            },
+            {
+              "newString": "  // Primary Longitudinal Girders (spanning across columns)\n  createPart('GirderRear', boxGeo(5.2, 0.20, 0.16), matTimberPost, {\n    position: [-0.05, 2.92, -1.60], rotation: [-4.5, 0, 0], parent: frameGroup\n  });\n  createPart('GirderFront', boxGeo(5.2, 0.20, 0.16), matTimberPost, {\n    position: [-0.05, 3.02, 1.60], rotation: [-5.0, 0, 0], parent: frameGroup\n  });\n  // Cross Tie Beams\n  createPart('TieBeamLow', boxGeo(0.16, 0.18, 3.4), matTimberPost, {\n    position: [-2.0, 2.65, 0], parent: frameGroup\n  });\n  createPart('TieBeamHigh', boxGeo(0.16, 0.18, 3.6), matTimberPost, {\n    position: [1.9, 3.62, 0], parent: frameGroup\n  });",
+              "oldString": "  // Primary Longitudinal Girders (spanning across columns)\n  createPart('GirderRear', boxGeo(4.8, 0.20, 0.16), matTimberPost, {\n    position: [-0.2, 2.78, -1.5], rotation: [-3.5, 0, 0], parent: frameGroup\n  });\n  createPart('GirderFront', boxGeo(4.8, 0.20, 0.16), matTimberPost, {\n    position: [-0.2, 2.88, 1.5], rotation: [-4.0, 0, 0], parent: frameGroup\n  });\n  // Cross Tie Beams\n  createPart('TieBeamLow', boxGeo(0.16, 0.18, 3.4), matTimberPost, {\n    position: [-2.0, 2.65, 0], parent: frameGroup\n  });\n  createPart('TieBeamHigh', boxGeo(0.16, 0.18, 3.4), matTimberPost, {\n    position: [1.6, 3.35, 0], parent: frameGroup\n  });"
+            },
+            {
+              "newString": "  // 3A. Longitudinal glulam sweeping ribs (17 ribs across width)\n  const ribCount = 17;\n  const ribProfile = [\n    [-0.032, -0.065],\n    [0.032, -0.065],\n    [0.032, 0.065],\n    [-0.032, 0.065]\n  ];\n\n  for (let i = 0; i < ribCount; i++) {\n    const v = i / (ribCount - 1);\n    const stations = [];\n    const numSamples = 24;\n    for (let s = 0; s < numSamples; s++) {\n      const u = s / (numSamples - 1);\n      stations.push(evalRoofSurface(u, v));\n    }\n    const ribGeo = sweepProfile(ribProfile, stations, { cap: true, up: [0, 1, 0] });\n    createPart(`GlulamRib_${i}`, ribGeo, matTimberRib, { parent: roofGroup });\n  }\n\n  // 3B. Transverse curved arch ribs (13 cross ribs along length)\n  const crossRibCount = 13;\n  const crossProfile = [\n    [-0.045, -0.028],\n    [0.045, -0.028],\n    [0.045, 0.028],\n    [-0.045, 0.028]\n  ];\n\n  for (let j = 0; j < crossRibCount; j++) {\n    const u = j / (crossRibCount - 1);\n    const crossStations = [];\n    const numZSamples = 20;\n    for (let k = 0; k < numZSamples; k++) {\n      const v = k / (numZSamples - 1);\n      crossStations.push(evalRoofSurface(u, v));\n    }\n    const crossGeo = sweepProfile(crossProfile, crossStations, { cap: true, up: [0, 1, 0] });\n    createPart(`CrossRib_${j}`, crossGeo, matTimberRib, { parent: roofGroup });\n  }\n\n  // 3C. Diagonal lamella lattice struts (diamond bracing)\n  const diagSegments = 8;\n  for (let d = 0; d < diagSegments; d++) {\n    const u0 = d / diagSegments;\n    const u1 = (d + 1) / diagSegments;\n    for (let r = 0; r < 8; r++) {\n      const v0 = r / 8;\n      const v1 = (r + 1) / 8;\n      const pA = evalRoofSurface(u0, v0);\n      const pB = evalRoofSurface(u1, v1);\n      const pC = evalRoofSurface(u0, v1);\n      const pD = evalRoofSurface(u1, v0);\n      beamBetween(`DiagLatticeA_${d}_${r}`, pA, pB, 0.016, matTimberRib, { parent: roofGroup });\n      beamBetween(`DiagLatticeB_${d}_${r}`, pC, pD, 0.016, matTimberRib, { parent: roofGroup });\n    }\n  }",
+              "oldString": "  // 3A. Longitudinal glulam sweeping ribs (13 ribs across width)\n  const ribCount = 13;\n  const ribProfile = [\n    [-0.035, -0.07],\n    [0.035, -0.07],\n    [0.035, 0.07],\n    [-0.035, 0.07]\n  ];\n\n  for (let i = 0; i < ribCount; i++) {\n    const v = i / (ribCount - 1);\n    const stations = [];\n    const numSamples = 22;\n    for (let s = 0; s < numSamples; s++) {\n      const u = s / (numSamples - 1);\n      stations.push(evalRoofSurface(u, v));\n    }\n    const ribGeo = sweepProfile(ribProfile, stations, { cap: true, up: [0, 1, 0] });\n    createPart(`GlulamRib_${i}`, ribGeo, matTimberRib, { parent: roofGroup });\n  }\n\n  // 3B. Transverse curved arch ribs (9 cross ribs along length)\n  const crossRibCount = 9;\n  const crossProfile = [\n    [-0.05, -0.03],\n    [0.05, -0.03],\n    [0.05, 0.03],\n    [-0.05, 0.03]\n  ];\n\n  for (let j = 0; j < crossRibCount; j++) {\n    const u = j / (crossRibCount - 1);\n    const crossStations = [];\n    const numZSamples = 18;\n    for (let k = 0; k < numZSamples; k++) {\n      const v = k / (numZSamples - 1);\n      crossStations.push(evalRoofSurface(u, v));\n    }\n    const crossGeo = sweepProfile(crossProfile, crossStations, { cap: true, up: [0, 1, 0] });\n    createPart(`CrossRib_${j}`, crossGeo, matTimberRib, { parent: roofGroup });\n  }\n\n  // 3C. Diagonal lamella lattice struts (diamond bracing)\n  const diagSegments = 6;\n  for (let d = 0; d < diagSegments; d++) {\n    const u0 = d / diagSegments;\n    const u1 = (d + 1) / diagSegments;\n    for (let r = 0; r < 6; r++) {\n      const v0 = r / 6;\n      const v1 = (r + 1) / 6;\n      const pA = evalRoofSurface(u0, v0);\n      const pB = evalRoofSurface(u1, v1);\n      const pC = evalRoofSurface(u0, v1);\n      const pD = evalRoofSurface(u1, v0);\n      beamBetween(`DiagLatticeA_${d}_${r}`, pA, pB, 0.018, matTimberRib, { parent: roofGroup });\n      beamBetween(`DiagLatticeB_${d}_${r}`, pC, pD, 0.018, matTimberRib, { parent: roofGroup });\n    }\n  }"
+            },
+            {
+              "newString": "  createPart('KakehiSpout', cylinderGeo(0.020, 0.020, 0.42, 10), matBamboo, {\n    position: [basinBasePos[0] + 0.18, basinBasePos[1] + 0.60, basinBasePos[2] - 0.16], rotation: [22, 40, 0], parent: gardenGroup\n  });",
+              "oldString": "  createPart('KakehiSpout', cylinderGeo(0.020, 0.020, 0.36, 10), matBamboo, {\n    position: [basinBasePos[0] + 0.14, basinBasePos[1] + 0.65, basinBasePos[2] - 0.12], rotation: [25, 45, 0], parent: gardenGroup\n  });"
+            }
+          ],
+          "programRef": "sha256:ef6e8d267c3b0e7cd30b239cd3dcbe88d642e19921d534a5f4f7a6545c34c383"
+        },
+        {
+          "capture": {
+            "cols": 2,
+            "output": "grid",
+            "shots": [
+              {
+                "camera": {
+                  "azimuthDeg": 35,
+                  "elevationDeg": 18,
+                  "type": "orbit"
+                },
+                "name": "Whole asset"
+              },
+              {
+                "camera": {
+                  "azimuthDeg": 75,
+                  "elevationDeg": 26,
+                  "padding": 1.5,
+                  "relativeTo": "part",
+                  "type": "orbit"
+                },
+                "name": "Tea setting detail",
+                "subject": {
+                  "name": "Mesh_TeaTable"
+                },
+                "visibility": "context"
+              }
+            ],
+            "size": 512,
+            "version": "kiln.capture.v1"
+          },
+          "edits": [
+            {
+              "newString": "    // Corbel capital block (dougong bracket block)\n    const capY = 0.35 + c.h + 0.06;\n    createPart(`${c.name}_Capital`, boxGeo(0.32, 0.12, 0.32), matTimberRib, {\n      position: [c.x, capY, c.z], parent: frameGroup\n    });\n    // Blackened steel joint bracket collar\n    createPart(`${c.name}_JointCollar`, boxGeo(0.24, 0.04, 0.24), matBlackSteel, {\n      position: [c.x, capY - 0.07, c.z], parent: frameGroup\n    });\n    // Transverse bracket arm\n    createPart(`${c.name}_TransArm`, boxGeo(0.14, 0.10, 0.70), matTimberRib, {\n      position: [c.x, capY + 0.08, c.z], parent: frameGroup\n    });",
+              "oldString": "    // Corbel capital block (dougong bracket block)\n    const capY = 0.35 + c.h + 0.06;\n    createPart(`${c.name}_Capital`, boxGeo(0.32, 0.12, 0.32), matTimberRib, {\n      position: [c.x, capY, c.z], parent: frameGroup\n    });\n    // Transverse bracket arm\n    createPart(`${c.name}_TransArm`, boxGeo(0.14, 0.10, 0.70), matTimberRib, {\n      position: [c.x, capY + 0.08, c.z], parent: frameGroup\n    });"
+            },
+            {
+              "newString": "  // 3D. Sculptural Canopy Deck Shell (thin layered cedar skin atop the lattice)\n  const canopyGeo = parametricSurface((u, v) => {\n    const pt = evalRoofSurface(u, v);\n    return [pt[0], pt[1] + 0.07, pt[2]];\n  }, {\n    u: [0, 1],\n    v: [0, 1],\n    uSegments: 52,\n    vSegments: 26,\n    orientation: 'uv'\n  });\n  matCanopyDeck.side = THREE.DoubleSide;\n  createPart('CanopyDeck', canopyGeo, matCanopyDeck, { parent: roofGroup });\n\n  // 3E. Sweeping edge fascia ribbon beams (curving edges)\n  const fasciaProfile = [\n    [-0.04, -0.12],\n    [0.04, -0.12],\n    [0.04, 0.12],\n    [-0.04, 0.12]\n  ];\n  const leftFasciaPts = [];\n  for (let s = 0; s < 30; s++) leftFasciaPts.push(evalRoofSurface(s / 29, 0));\n  createPart('FasciaLeft', sweepProfile(fasciaProfile, leftFasciaPts, { cap: true, up: [0, 1, 0] }), matTimberPost, { parent: roofGroup });\n\n  const rightFasciaPts = [];\n  for (let s = 0; s < 30; s++) rightFasciaPts.push(evalRoofSurface(s / 29, 1));\n  createPart('FasciaRight', sweepProfile(fasciaProfile, rightFasciaPts, { cap: true, up: [0, 1, 0] }), matTimberPost, { parent: roofGroup });\n\n  const curlTipPts = [];\n  for (let s = 0; s < 26; s++) curlTipPts.push(evalRoofSurface(1, s / 25));\n  createPart('CurlingProwBeam', sweepProfile(fasciaProfile, curlTipPts, { cap: true, up: [0, 1, 0] }), matTimberPost, { parent: roofGroup });",
+              "oldString": "  // 3D. Sculptural Canopy Deck Shell (thin layered cedar skin atop the lattice)\n  const canopyGeo = parametricSurface((u, v) => {\n    const pt = evalRoofSurface(u, v);\n    return [pt[0], pt[1] + 0.07, pt[2]];\n  }, {\n    u: [0, 1],\n    v: [0, 1],\n    uSegments: 36,\n    vSegments: 20,\n    orientation: 'uv'\n  });\n  matCanopyDeck.side = THREE.DoubleSide;\n  createPart('CanopyDeck', canopyGeo, matCanopyDeck, { parent: roofGroup });\n\n  // 3E. Sweeping edge fascia ribbon beams (curving edges)\n  const fasciaProfile = [\n    [-0.04, -0.12],\n    [0.04, -0.12],\n    [0.04, 0.12],\n    [-0.04, 0.12]\n  ];\n  const leftFasciaPts = [];\n  for (let s = 0; s < 24; s++) leftFasciaPts.push(evalRoofSurface(s / 23, 0));\n  createPart('FasciaLeft', sweepProfile(fasciaProfile, leftFasciaPts, { cap: true, up: [0, 1, 0] }), matTimberPost, { parent: roofGroup });\n\n  const rightFasciaPts = [];\n  for (let s = 0; s < 24; s++) rightFasciaPts.push(evalRoofSurface(s / 23, 1));\n  createPart('FasciaRight', sweepProfile(fasciaProfile, rightFasciaPts, { cap: true, up: [0, 1, 0] }), matTimberPost, { parent: roofGroup });\n\n  const curlTipPts = [];\n  for (let s = 0; s < 20; s++) curlTipPts.push(evalRoofSurface(1, s / 19));\n  createPart('CurlingProwBeam', sweepProfile(fasciaProfile, curlTipPts, { cap: true, up: [0, 1, 0] }), matTimberPost, { parent: roofGroup });"
+            },
+            {
+              "newString": "  createPart('CushionMaster', boxGeo(0.48, 0.065, 0.48), matIvoryLinen, {\n    position: [0.05, 0.033, 0.60], parent: teaGroup\n  });\n  createPart('CushionMasterTrim', boxGeo(0.49, 0.015, 0.49), matCharcoalStep, {\n    position: [0.05, 0.01, 0.60], parent: teaGroup\n  });\n  createPart('CushionGuest', boxGeo(0.48, 0.065, 0.48), matIvoryLinen, {\n    position: [0.05, 0.033, -0.60], parent: teaGroup\n  });\n  createPart('CushionGuestTrim', boxGeo(0.49, 0.015, 0.49), matCharcoalStep, {\n    position: [0.05, 0.01, -0.60], parent: teaGroup\n  });\n\n  createPart('TeaTray', boxGeo(0.50, 0.025, 0.30), matBasaltPlinth, {\n    position: [0.05, 0.262, 0], parent: teaGroup\n  });\n  createPart('TeaTrayInsert', boxGeo(0.46, 0.01, 0.26), matTimberFine, {\n    position: [0.05, 0.275, 0], parent: teaGroup\n  });\n  // Slotted drainage slats on tea tray\n  for (let s = -2; s <= 2; s++) {\n    createPart(`TeaTraySlat_${s + 2}`, boxGeo(0.42, 0.005, 0.016), matCharcoalStep, {\n      position: [0.05, 0.281, s * 0.045], parent: teaGroup\n    });\n  }",
+              "oldString": "  createPart('CushionMaster', boxGeo(0.46, 0.06, 0.46), matIvoryLinen, {\n    position: [0, 0.03, 0.58], parent: teaGroup\n  });\n  createPart('CushionGuest', boxGeo(0.46, 0.06, 0.46), matIvoryLinen, {\n    position: [0, 0.03, -0.58], parent: teaGroup\n  });\n\n  createPart('TeaTray', boxGeo(0.48, 0.025, 0.28), matBasaltPlinth, {\n    position: [0.05, 0.262, 0], parent: teaGroup\n  });\n  createPart('TeaTrayInsert', boxGeo(0.44, 0.01, 0.24), matTimberFine, {\n    position: [0.05, 0.275, 0], parent: teaGroup\n  });"
+            },
+            {
+              "newString": "  const cupLocations = [\n    { name: 'CupMaster', x: 0.02, z: 0.09 },\n    { name: 'CupGuestA', x: 0.02, z: -0.07 },\n    { name: 'CupGuestB', x: 0.16, z: -0.07 }\n  ];\n  for (const cup of cupLocations) {\n    createPart(`${cup.name}_Bowl`, cylinderGeo(0.032, 0.020, 0.042, 16), matIvoryPorcelain, {\n      position: [cup.x, 0.30, cup.z], parent: teaGroup\n    });\n    createPart(`${cup.name}_Tea`, cylinderGeo(0.028, 0.028, 0.006, 14), matTeaLiquor, {\n      position: [cup.x, 0.312, cup.z], parent: teaGroup\n    });\n  }\n\n  // Cast iron Incense Burner (Koro) on the tea altar\n  createPart('KoroBowl', cylinderGeo(0.038, 0.025, 0.038, 14), matCastIron, {\n    position: [-0.44, 0.27, -0.16], parent: teaGroup\n  });\n  createPart('KoroLid', coneGeo(0.036, 0.025, 12), matBlackSteel, {\n    position: [-0.44, 0.30, -0.16], parent: teaGroup\n  });",
+              "oldString": "  const cupLocations = [\n    { name: 'CupMaster', x: 0.02, z: 0.09 },\n    { name: 'CupGuest', x: 0.02, z: -0.07 }\n  ];\n  for (const cup of cupLocations) {\n    createPart(`${cup.name}_Bowl`, cylinderGeo(0.032, 0.020, 0.042, 16), matIvoryPorcelain, {\n      position: [cup.x, 0.30, cup.z], parent: teaGroup\n    });\n    createPart(`${cup.name}_Tea`, cylinderGeo(0.028, 0.028, 0.006, 14), matTeaLiquor, {\n      position: [cup.x, 0.312, cup.z], parent: teaGroup\n    });\n  }"
+            },
+            {
+              "newString": "  createPart('KakehiSpout', cylinderGeo(0.020, 0.020, 0.42, 10), matBamboo, {\n    position: [basinBasePos[0] + 0.18, basinBasePos[1] + 0.60, basinBasePos[2] - 0.16], rotation: [22, 40, 0], parent: gardenGroup\n  });\n\n  // Bamboo Water Ladle (Hishaku) resting on basin rim\n  createPart('HishakuHandle', cylinderGeo(0.005, 0.005, 0.40, 8), matBamboo, {\n    position: [basinBasePos[0], basinBasePos[1] + 0.46, basinBasePos[2]], rotation: [0, 30, 90], parent: gardenGroup\n  });\n  createPart('HishakuCup', cylinderGeo(0.026, 0.024, 0.035, 10), matBamboo, {\n    position: [basinBasePos[0] - 0.16, basinBasePos[1] + 0.48, basinBasePos[2] - 0.09], parent: gardenGroup\n  });",
+              "oldString": "  createPart('KakehiSpout', cylinderGeo(0.020, 0.020, 0.42, 10), matBamboo, {\n    position: [basinBasePos[0] + 0.18, basinBasePos[1] + 0.60, basinBasePos[2] - 0.16], rotation: [22, 40, 0], parent: gardenGroup\n  });"
+            }
+          ],
+          "programRef": "sha256:8253f39c47e31967c88c10101024b9f33886ad6914315f9be7c0911f1e0a33c8"
+        }
+      ],
+      "imagesDelivered": 3,
+      "imageCells": 6,
+      "errors": [
+        {
+          "tool": "kiln_edit",
+          "content": [
+            {
+              "type": "text",
+              "text": "Input validation error: Invalid arguments for tool kiln_edit: edits.0: Invalid input: expected object, received null, edits.1: Invalid input: expected object, received null, edits.2: Invalid input: expected object, received null, edits.3: Invalid input: expected object, received null, capture: Invalid input"
+            }
+          ]
+        }
+      ],
+      "lastBudget": {
+        "calls": 18,
+        "images": 6,
+        "reserved": 0,
+        "maxCalls": 25,
+        "maxImages": 48
+      },
+      "files": [
+        {
+          "name": "final-chosen.png",
+          "bytes": 48089,
+          "sha256": "c555a84ac4df2d5c54c839c8f387403cadbbb33355550b3c036454ef44cf92bf"
+        },
+        {
+          "name": "final.glb",
+          "bytes": 511744,
+          "sha256": "70ba9966671238d98a97bf1a220e470024422ca9f86ca26a635a9636dcef533d"
+        },
+        {
+          "name": "final.kiln.js",
+          "bytes": 18340,
+          "sha256": "81c0880f18dc90290d667c9101ffbd08e0b74f48ecd605389e4de7a0bd62f054"
+        },
+        {
+          "name": "initial.kiln.js",
+          "bytes": 16785,
+          "sha256": "ef6e8d267c3b0e7cd30b239cd3dcbe88d642e19921d534a5f4f7a6545c34c383"
+        },
+        {
+          "name": "NOTES.md",
+          "bytes": 3942,
+          "sha256": "fc0f25ac9f219e995c4d6fe8cf5b5d3d734c3536f33dbc2f577585f8ea79dda3"
+        }
+      ],
+      "literalReplayVerified": true,
+      "imageReadEvents": 4
+    },
+    {
+      "asset": "clockwork-manta",
+      "base": "C:/Users/Mattm/X/kiln-cleanrooms/new-gemini-clockwork-manta-0d457e8f-20260905",
+      "setup": {
+        "phase": "fresh independent authoring",
+        "asset": "clockwork-manta",
+        "brief": "A clockwork manta ray automaton: copper and deep teal curved segmented wings, mechanical body with visible real linkage and a smoothly looping wing flap. Wings should read as a manta silhouette rather than flat boxes. Carefully attached mechanisms and polished brass details.",
+        "modelRequested": "gemini-3.8-flash-high",
+        "harness": "Antigravity CLI",
+        "node": "v22.23.1",
+        "nodeExecutable": "C:\\Users\\Mattm\\AppData\\Roaming\\fnm\\node-versions\\v22.23.1\\installation\\node.exe",
+        "runtime": "C:\\Users\\Mattm\\AppData\\Local\\Temp\\kiln-package-café-I3KNmI\\fresh installation\\node_modules\\@kiln\\engine",
+        "tarballSha256": "0d457e8f8763730079da013abfa6662aadc02843f090fcae594c0f711399d16c",
+        "bundles": {
+          "cli.mjs": "4f70681d55901b2416babe9108b291e4a7ab2de462360f8d13bdd7084bea6126",
+          "mcp-server.mjs": "776d049ab819ff898450320b59540b3d61c0460a6954d2db9c1aaabb7d7f0354",
+          "evaluator-worker.mjs": "5a574c3be5f352c9d1c4bfd4c77dc184e202921bb2767b20dce8b467b69cf150",
+          "build.json": "2b40fed878c3d2470d97382ccac46b51a7b4706d4a0a4e13540d6ef0b73ad4d4"
+        },
+        "skills": {
+          "kiln-author-asset/references/camera-recipes.md": "8959e0b5bf98d8d6712147ff9f4eb05bdff9a58cdda60796304a527329b84c19",
+          "kiln-author-asset/references/geometry-recipes.md": "12e861a7c05b21ee8d0de713f4bde8a843af1dbf37326b5121a8229805693c3c",
+          "kiln-author-asset/references/program-contract.md": "42cc4c17fa14d94febdf0ccbc38454f5972f2d3730f20dbca39151c0fe3aa293",
+          "kiln-author-asset/references/reusable-frame.kiln.js": "9015b2255742efa74e47531f68778573c34566237b3256dcdaab9c360cfc895f",
+          "kiln-author-asset/SKILL.md": "6a69c2ef6315cf719c33a5c024f5b07c87264de8e6fdb987cacbefbfd431f93e",
+          "kiln-qa-asset/references/integration-checks.md": "3d340cc81c0de0a4415ff1d2707c64db1a7433fd7e63f69e1748862739ef5c24",
+          "kiln-qa-asset/SKILL.md": "f2f990a669529f09c7e818a74f1e3af299e474d41a86910434d521a1fd596845",
+          "kiln-refine-asset/references/revision-and-views.md": "78ccb43588fd37b020cabc17e61facd610ea676c7f0c9ebb104f07845edbf3e5",
+          "kiln-refine-asset/SKILL.md": "135af2115e63f09f4c413feceedee5f547d21d154b4d32ed5e88c4077ac56d61"
+        },
+        "promptSha256": "915620c19b8960f489bd798425e1d72821928e93d8e6cbb019bdecaac610f209",
+        "observerSha256": "58c6d64f3232510ccff48f7109a7337c6b6f8d64400030073b36f2b6a8e72237",
+        "limits": {
+          "toolCalls": 25,
+          "imageCells": 48,
+          "wallSeconds": 480
+        },
+        "createdAt": "2026-09-05T21:06:26.209Z"
+      },
+      "exit": {
+        "code": 0,
+        "timedOut": false,
+        "finishedAt": "2026-09-05T21:22:57.884Z"
+      },
+      "toolCalls": 18,
+      "acceptedCalls": 18,
+      "deniedRequests": [],
+      "fullSourceMcpCalls": 0,
+      "edits": [
+        {
+          "capture": {
+            "cols": 2,
+            "output": "grid",
+            "shots": [
+              {
+                "camera": {
+                  "azimuthDeg": 38,
+                  "elevationDeg": 22,
+                  "padding": 0.85,
+                  "type": "orbit"
+                },
+                "name": "Whole Automaton"
+              },
+              {
+                "camera": {
+                  "fovDeg": 36,
+                  "position": [
+                    0.65,
+                    1.45,
+                    0.55
+                  ],
+                  "projection": "perspective",
+                  "target": [
+                    -0.02,
+                    0.94,
+                    0
+                  ],
+                  "type": "explicit",
+                  "up": [
+                    0,
+                    1,
+                    0
+                  ]
+                },
+                "name": "Gearbox Mechanism"
+              }
+            ],
+            "size": 512,
+            "version": "kiln.capture.v1"
+          },
+          "edits": [
+            {
+              "newString": "  // 3. Clockwork Gearbox Chamber (Dorsal Spine)\n  const coamingGeo = await roundedBoxGeo(0.38, 0.06, 0.28, 0.015);\n  createPart('GearboxCoaming', coamingGeo, matBrass, {\n    position: [-0.02, 0.91, 0],\n    parent: root,\n  });\n\n  const bedPlateGeo = boxGeo(0.34, 0.02, 0.24);\n  createPart('GearboxBedPlate', bedPlateGeo, matDarkSteel, {\n    position: [-0.02, 0.89, 0],\n    parent: root,\n  });\n\n  // Pillow blocks supporting main drive axle\n  createPart('PillowBlock_R', boxGeo(0.024, 0.045, 0.022), matBrass, {\n    position: [0.02, 0.915, 0.08],\n    parent: root,\n  });\n  createPart('PillowBlock_L', boxGeo(0.024, 0.045, 0.022), matBrass, {\n    position: [0.02, 0.915, -0.08],\n    parent: root,\n  });\n\n  // Glowing Aether Core Cell\n  const aetherCell = cylinderGeo(0.032, 0.032, 0.14, 16);\n  createPart('AetherPowerCore', aetherCell, matGlowCore, {\n    position: [-0.12, 0.92, 0],\n    rotation: [90, 0, 0],\n    parent: root,\n  });\n  createPart('CoreRing_1', torusGeo(0.035, 0.005, 8, 16), matBrass, {\n    position: [-0.12, 0.92, 0.04],\n    rotation: [90, 0, 0],\n    parent: root,\n  });\n  createPart('CoreRing_2', torusGeo(0.035, 0.005, 8, 16), matBrass, {\n    position: [-0.12, 0.92, -0.04],\n    rotation: [90, 0, 0],\n    parent: root,\n  });\n\n  // Secondary Reduction Gear\n  const secGear = gearGeo({ teeth: 18, rootRadius: 0.062, tipRadius: 0.078, boreRadius: 0.018, height: 0.022 });\n  createPart('SecondaryGear', secGear, matCopper, {\n    position: [-0.06, 0.93, 0.05],\n    rotation: [90, 0, 0],\n    parent: root,\n  });\n\n  // Escapement Star Wheel & Rocker Pallet Anchor\n  const escGear = gearGeo({ teeth: 14, rootRadius: 0.042, tipRadius: 0.056, boreRadius: 0.014, height: 0.018 });\n  createPart('EscapementWheel', escGear, matPolishedSteel, {\n    position: [0.10, 0.92, -0.04],\n    rotation: [90, 0, 0],\n    parent: root,\n  });\n  createPart('BalanceRing', torusGeo(0.045, 0.004, 8, 16), matGold, {\n    position: [0.10, 0.92, -0.04],\n    rotation: [90, 0, 0],\n    parent: root,\n  });\n  createPart('EscapementAnchor', boxGeo(0.045, 0.010, 0.016), matBrass, {\n    position: [0.10, 0.97, -0.04],\n    parent: root,\n  });\n\n  // Protective arched cage ribs over gearbox\n  const cageArc1 = torusGeo(0.12, 0.006, 8, 16);\n  createPart('CageRib_1', cageArc1, matBrass, {\n    position: [-0.14, 0.93, 0],\n    rotation: [0, 0, 0],\n    parent: root,\n  });\n  const cageArc2 = torusGeo(0.12, 0.006, 8, 16);\n  createPart('CageRib_2', cageArc2, matBrass, {\n    position: [0.10, 0.93, 0],\n    rotation: [0, 0, 0],\n    parent: root,\n  });\n\n  // 4. Animated Crankshaft & Main Drive Gear\n  const pivotCrank = createPivot('Crankshaft', [0.02, 0.94, 0], root);\n\n  const mainGear = gearGeo({ teeth: 24, rootRadius: 0.075, tipRadius: 0.095, boreRadius: 0.022, height: 0.028 });\n  createPart('MainDriveGear', mainGear, matBrass, {\n    position: [0, 0, 0],\n    rotation: [90, 0, 0],\n    parent: pivotCrank,\n  });\n\n  const mainAxle = cylinderGeo(0.012, 0.012, 0.28, 12);\n  createPart('DriveAxle', mainAxle, matPolishedSteel, {\n    position: [0, 0, 0],\n    rotation: [90, 0, 0],\n    parent: pivotCrank,\n  });\n\n  // Eccentric crank arms on shaft ends\n  const crankArmR = boxGeo(0.016, 0.050, 0.012);\n  createPart('CrankArm_R', crankArmR, matBrass, {\n    position: [0, 0.02, 0.12],\n    parent: pivotCrank,\n  });\n  const crankPinR = cylinderGeo(0.007, 0.007, 0.022, 10);\n  createPart('CrankPin_R', crankPinR, matPolishedSteel, {\n    position: [0, 0.038, 0.12],\n    rotation: [90, 0, 0],\n    parent: pivotCrank,\n  });\n\n  const crankArmL = boxGeo(0.016, 0.050, 0.012);\n  createPart('CrankArm_L', crankArmL, matBrass, {\n    position: [0, -0.02, -0.12],\n    parent: pivotCrank,\n  });\n  const crankPinL = cylinderGeo(0.007, 0.007, 0.022, 10);\n  createPart('CrankPin_L', crankPinL, matPolishedSteel, {\n    position: [0, -0.038, -0.12],\n    rotation: [90, 0, 0],\n    parent: pivotCrank,\n  });\n\n  // 5. Segmented Curved Wings (Right & Left)\n  // --- RIGHT WING ---\n  const pivotWingRoot_R = createPivot('WingRoot_R', [-0.02, 0.82, 0.25], root);\n\n  // Wing root hinge knuckle & rocker arm\n  const hingeKnuckleR = cylinderGeo(0.022, 0.022, 0.08, 16);\n  createPart('HingeKnuckle_R', hingeKnuckleR, matBrass, {\n    position: [0, 0, 0],\n    rotation: [0, 0, 90],\n    parent: pivotWingRoot_R,\n  });\n  const rockerHornR = boxGeo(0.014, 0.075, 0.014);\n  createPart('RockerHorn_R', rockerHornR, matBrass, {\n    position: [0, 0.04, 0],\n    parent: pivotWingRoot_R,\n  });\n\n  // Pushrod connecting CrankPin to RockerHorn (Right)\n  beamBetween('Pushrod_R', [0.02, 0.978, 0.12], [-0.02, 0.895, 0.25], 0.007, matPolishedSteel, { parent: root });",
+              "oldString": "  // 3. Clockwork Gearbox Chamber (Dorsal Spine)\n  const coamingGeo = await roundedBoxGeo(0.38, 0.06, 0.28, 0.015);\n  createPart('GearboxCoaming', coamingGeo, matBrass, {\n    position: [-0.02, 0.91, 0],\n    parent: root,\n  });\n\n  const bedPlateGeo = boxGeo(0.34, 0.02, 0.24);\n  createPart('GearboxBedPlate', bedPlateGeo, matDarkSteel, {\n    position: [-0.02, 0.88, 0],\n    parent: root,\n  });\n\n  // Glowing Aether Core Cell\n  const aetherCell = cylinderGeo(0.032, 0.032, 0.14, 16);\n  createPart('AetherPowerCore', aetherCell, matGlowCore, {\n    position: [-0.12, 0.90, 0],\n    rotation: [90, 0, 0],\n    parent: root,\n  });\n  createPart('CoreRing_1', torusGeo(0.035, 0.005, 8, 16), matBrass, {\n    position: [-0.12, 0.90, 0.04],\n    rotation: [90, 0, 0],\n    parent: root,\n  });\n  createPart('CoreRing_2', torusGeo(0.035, 0.005, 8, 16), matBrass, {\n    position: [-0.12, 0.90, -0.04],\n    rotation: [90, 0, 0],\n    parent: root,\n  });\n\n  // Secondary Reduction Gear\n  const secGear = gearGeo({ teeth: 18, rootRadius: 0.062, tipRadius: 0.078, boreRadius: 0.018, height: 0.022 });\n  createPart('SecondaryGear', secGear, matCopper, {\n    position: [-0.06, 0.92, 0.05],\n    rotation: [90, 0, 0],\n    parent: root,\n  });\n\n  // Escapement Star Wheel\n  const escGear = gearGeo({ teeth: 14, rootRadius: 0.042, tipRadius: 0.056, boreRadius: 0.014, height: 0.018 });\n  createPart('EscapementWheel', escGear, matPolishedSteel, {\n    position: [0.10, 0.91, -0.04],\n    rotation: [90, 0, 0],\n    parent: root,\n  });\n  createPart('BalanceRing', torusGeo(0.045, 0.004, 8, 16), matGold, {\n    position: [0.10, 0.91, -0.04],\n    rotation: [90, 0, 0],\n    parent: root,\n  });\n\n  // Protective arched cage ribs over gearbox\n  const cageArc1 = torusGeo(0.12, 0.006, 8, 16);\n  createPart('CageRib_1', cageArc1, matBrass, {\n    position: [-0.14, 0.92, 0],\n    rotation: [0, 0, 0],\n    parent: root,\n  });\n  const cageArc2 = torusGeo(0.12, 0.006, 8, 16);\n  createPart('CageRib_2', cageArc2, matBrass, {\n    position: [0.10, 0.92, 0],\n    rotation: [0, 0, 0],\n    parent: root,\n  });\n\n  // 4. Animated Crankshaft & Main Drive Gear\n  const pivotCrank = createPivot('Crankshaft', [0.02, 0.92, 0], root);\n\n  const mainGear = gearGeo({ teeth: 24, rootRadius: 0.082, tipRadius: 0.102, boreRadius: 0.022, height: 0.028 });\n  createPart('MainDriveGear', mainGear, matBrass, {\n    position: [0, 0, 0],\n    rotation: [90, 0, 0],\n    parent: pivotCrank,\n  });\n\n  const mainAxle = cylinderGeo(0.012, 0.012, 0.28, 12);\n  createPart('DriveAxle', mainAxle, matPolishedSteel, {\n    position: [0, 0, 0],\n    rotation: [90, 0, 0],\n    parent: pivotCrank,\n  });\n\n  // Eccentric crank arms on shaft ends\n  const crankArmR = boxGeo(0.016, 0.055, 0.012);\n  createPart('CrankArm_R', crankArmR, matBrass, {\n    position: [0, 0.02, 0.12],\n    parent: pivotCrank,\n  });\n  const crankPinR = cylinderGeo(0.007, 0.007, 0.022, 10);\n  createPart('CrankPin_R', crankPinR, matPolishedSteel, {\n    position: [0, 0.042, 0.12],\n    rotation: [90, 0, 0],\n    parent: pivotCrank,\n  });\n\n  const crankArmL = boxGeo(0.016, 0.055, 0.012);\n  createPart('CrankArm_L', crankArmL, matBrass, {\n    position: [0, -0.02, -0.12],\n    parent: pivotCrank,\n  });\n  const crankPinL = cylinderGeo(0.007, 0.007, 0.022, 10);\n  createPart('CrankPin_L', crankPinL, matPolishedSteel, {\n    position: [0, -0.042, -0.12],\n    rotation: [90, 0, 0],\n    parent: pivotCrank,\n  });\n\n  // 5. Segmented Curved Wings (Right & Left)\n  // --- RIGHT WING ---\n  const pivotWingRoot_R = createPivot('WingRoot_R', [-0.02, 0.82, 0.25], root);\n\n  // Wing root hinge knuckle & rocker arm\n  const hingeKnuckleR = cylinderGeo(0.022, 0.022, 0.08, 16);\n  createPart('HingeKnuckle_R', hingeKnuckleR, matBrass, {\n    position: [0, 0, 0],\n    rotation: [0, 0, 90],\n    parent: pivotWingRoot_R,\n  });\n  const rockerHornR = boxGeo(0.014, 0.075, 0.014);\n  createPart('RockerHorn_R', rockerHornR, matBrass, {\n    position: [0, 0.04, 0],\n    parent: pivotWingRoot_R,\n  });\n\n  // Pushrod connecting CrankPin to RockerHorn (Right)\n  beamBetween('Pushrod_R', [0.02, 0.962, 0.12], [-0.02, 0.895, 0.25], 0.007, matPolishedSteel, { parent: root });"
+            },
+            {
+              "newString": "  // Inner Wing Segment (Right)\n  const innerWingGeoR = makeAirfoilSegment(0.62, 0.44, 0.38, 0.08, 0.015, 0.042, 1);\n  createPart('InnerWingPlate_R', innerWingGeoR, matTeal, { parent: pivotWingRoot_R });\n\n  // Copper leading spar & trailing slat\n  const innerSparR = cylinderGeo(0.014, 0.010, 0.38, 12);\n  createPart('InnerSpar_R', innerSparR, matCopper, {\n    position: [-0.04, 0.01, 0.19],\n    rotation: [90, 0, 0],\n    parent: pivotWingRoot_R,\n  });\n  const innerVaneGeoR = makeAirfoilSegment(0.30, 0.20, 0.38, 0.12, 0.008, 0.016, 1);\n  createPart('InnerTrailingVane_R', innerVaneGeoR, matCopper, {\n    position: [-0.28, -0.005, 0],\n    parent: pivotWingRoot_R,\n  });\n  createPart('InnerLeadingFascia_R', cylinderGeo(0.008, 0.006, 0.38, 12), matBrass, {\n    position: [0.01, 0.012, 0.19],\n    rotation: [90, 0, 0],\n    parent: pivotWingRoot_R,\n  });\n\n  // Mid Wing Pivot (Right)\n  const pivotWingMid_R = createPivot('WingMid_R', [-0.08, 0.0, 0.38], pivotWingRoot_R);\n\n  const midHingeR = cylinderGeo(0.018, 0.018, 0.06, 14);\n  createPart('MidHinge_R', midHingeR, matBrass, {\n    position: [0, 0, 0],\n    rotation: [0, 0, 90],\n    parent: pivotWingMid_R,\n  });\n\n  // Mid Wing Segment (Right)\n  const midWingGeoR = makeAirfoilSegment(0.44, 0.28, 0.34, 0.12, 0.010, 0.032, 1);\n  createPart('MidWingPlate_R', midWingGeoR, matTeal, { parent: pivotWingMid_R });\n\n  const midSparR = cylinderGeo(0.010, 0.007, 0.34, 12);\n  createPart('MidSpar_R', midSparR, matCopper, {\n    position: [-0.06, 0.008, 0.17],\n    rotation: [90, 0, 0],\n    parent: pivotWingMid_R,\n  });\n  const midVaneGeoR = makeAirfoilSegment(0.24, 0.14, 0.34, 0.15, 0.005, 0.012, 1);\n  createPart('MidTrailingVane_R', midVaneGeoR, matCopper, {\n    position: [-0.18, -0.004, 0],\n    parent: pivotWingMid_R,\n  });\n  createPart('MidLeadingFascia_R', cylinderGeo(0.006, 0.004, 0.34, 12), matBrass, {\n    position: [0.01, 0.010, 0.17],\n    rotation: [90, 0, 0],\n    parent: pivotWingMid_R,\n  });\n\n  // Distal Wingtip Pivot (Right)\n  const pivotWingTip_R = createPivot('WingTip_R', [-0.12, 0.0, 0.34], pivotWingMid_R);\n\n  // Outer Wingtip Segment (Right) - Swept scythe tip\n  const tipWingGeoR = makeAirfoilSegment(0.28, 0.08, 0.32, 0.16, 0.005, 0.020, 1);\n  createPart('TipWingPlate_R', tipWingGeoR, matTeal, { parent: pivotWingTip_R });\n\n  // Brass trailing foil on tip\n  const tipFoilGeoR = makeAirfoilSegment(0.18, 0.04, 0.30, 0.18, 0.002, 0.012, 1);\n  createPart('TipFoil_R', tipFoilGeoR, matCopper, {\n    position: [-0.06, -0.004, 0.01],\n    parent: pivotWingTip_R,\n  });\n  createPart('TipLeadingSpur_R', coneGeo(0.008, 0.12, 8), matBrass, {\n    position: [0.05, 0, 0.28],\n    rotation: [0, 0, -60],\n    parent: pivotWingTip_R,\n  });\n\n  // --- LEFT WING ---\n  const pivotWingRoot_L = createPivot('WingRoot_L', [-0.02, 0.82, -0.25], root);\n\n  const hingeKnuckleL = cylinderGeo(0.022, 0.022, 0.08, 16);\n  createPart('HingeKnuckle_L', hingeKnuckleL, matBrass, {\n    position: [0, 0, 0],\n    rotation: [0, 0, 90],\n    parent: pivotWingRoot_L,\n  });\n  const rockerHornL = boxGeo(0.014, 0.075, 0.014);\n  createPart('RockerHorn_L', rockerHornL, matBrass, {\n    position: [0, 0.04, 0],\n    parent: pivotWingRoot_L,\n  });\n\n  beamBetween('Pushrod_L', [0.02, 0.898, -0.12], [-0.02, 0.895, -0.25], 0.007, matPolishedSteel, { parent: root });\n\n  const innerWingGeoL = makeAirfoilSegment(0.62, 0.44, 0.38, 0.08, 0.015, 0.042, -1);\n  createPart('InnerWingPlate_L', innerWingGeoL, matTeal, { parent: pivotWingRoot_L });\n\n  const innerSparL = cylinderGeo(0.014, 0.010, 0.38, 12);\n  createPart('InnerSpar_L', innerSparL, matCopper, {\n    position: [-0.04, 0.01, -0.19],\n    rotation: [90, 0, 0],\n    parent: pivotWingRoot_L,\n  });\n  const innerVaneGeoL = makeAirfoilSegment(0.30, 0.20, 0.38, 0.12, 0.008, 0.016, -1);\n  createPart('InnerTrailingVane_L', innerVaneGeoL, matCopper, {\n    position: [-0.28, -0.005, 0],\n    parent: pivotWingRoot_L,\n  });\n  createPart('InnerLeadingFascia_L', cylinderGeo(0.008, 0.006, 0.38, 12), matBrass, {\n    position: [0.01, 0.012, -0.19],\n    rotation: [90, 0, 0],\n    parent: pivotWingRoot_L,\n  });\n\n  const pivotWingMid_L = createPivot('WingMid_L', [-0.08, 0.0, -0.38], pivotWingRoot_L);\n\n  const midHingeL = cylinderGeo(0.018, 0.018, 0.06, 14);\n  createPart('MidHinge_L', midHingeL, matBrass, {\n    position: [0, 0, 0],\n    rotation: [0, 0, 90],\n    parent: pivotWingMid_L,\n  });\n\n  const midWingGeoL = makeAirfoilSegment(0.44, 0.28, 0.34, 0.12, 0.010, 0.032, -1);\n  createPart('MidWingPlate_L', midWingGeoL, matTeal, { parent: pivotWingMid_L });\n\n  const midSparL = cylinderGeo(0.010, 0.007, 0.34, 12);\n  createPart('MidSpar_L', midSparL, matCopper, {\n    position: [-0.06, 0.008, -0.17],\n    rotation: [90, 0, 0],\n    parent: pivotWingMid_L,\n  });\n  const midVaneGeoL = makeAirfoilSegment(0.24, 0.14, 0.34, 0.15, 0.005, 0.012, -1);\n  createPart('MidTrailingVane_L', midVaneGeoL, matCopper, {\n    position: [-0.18, -0.004, 0],\n    parent: pivotWingMid_L,\n  });\n  createPart('MidLeadingFascia_L', cylinderGeo(0.006, 0.004, 0.34, 12), matBrass, {\n    position: [0.01, 0.010, -0.17],\n    rotation: [90, 0, 0],\n    parent: pivotWingMid_L,\n  });\n\n  const pivotWingTip_L = createPivot('WingTip_L', [-0.12, 0.0, -0.34], pivotWingMid_L);\n\n  const tipWingGeoL = makeAirfoilSegment(0.28, 0.08, 0.32, 0.16, 0.005, 0.020, -1);\n  createPart('TipWingPlate_L', tipWingGeoL, matTeal, { parent: pivotWingTip_L });\n\n  const tipFoilGeoL = makeAirfoilSegment(0.18, 0.04, 0.30, 0.18, 0.002, 0.012, -1);\n  createPart('TipFoil_L', tipFoilGeoL, matCopper, {\n    position: [-0.06, -0.004, -0.01],\n    parent: pivotWingTip_L,\n  });\n  createPart('TipLeadingSpur_L', coneGeo(0.008, 0.12, 8), matBrass, {\n    position: [0.05, 0, -0.28],\n    rotation: [0, 0, -60],\n    parent: pivotWingTip_L,\n  });",
+              "oldString": "  // Inner Wing Segment (Right)\n  const innerWingGeoR = makeAirfoilSegment(0.62, 0.44, 0.38, 0.08, 0.015, 0.042, 1);\n  createPart('InnerWingPlate_R', innerWingGeoR, matTeal, { parent: pivotWingRoot_R });\n\n  // Copper leading spar & trailing slat\n  const innerSparR = cylinderGeo(0.014, 0.010, 0.38, 12);\n  createPart('InnerSpar_R', innerSparR, matCopper, {\n    position: [-0.04, 0.01, 0.19],\n    rotation: [90, 0, 0],\n    parent: pivotWingRoot_R,\n  });\n\n  // Mid Wing Pivot (Right)\n  const pivotWingMid_R = createPivot('WingMid_R', [-0.08, 0.0, 0.38], pivotWingRoot_R);\n\n  const midHingeR = cylinderGeo(0.018, 0.018, 0.06, 14);\n  createPart('MidHinge_R', midHingeR, matBrass, {\n    position: [0, 0, 0],\n    rotation: [0, 0, 90],\n    parent: pivotWingMid_R,\n  });\n\n  // Mid Wing Segment (Right)\n  const midWingGeoR = makeAirfoilSegment(0.44, 0.28, 0.34, 0.12, 0.010, 0.032, 1);\n  createPart('MidWingPlate_R', midWingGeoR, matTeal, { parent: pivotWingMid_R });\n\n  const midSparR = cylinderGeo(0.010, 0.007, 0.34, 12);\n  createPart('MidSpar_R', midSparR, matCopper, {\n    position: [-0.06, 0.008, 0.17],\n    rotation: [90, 0, 0],\n    parent: pivotWingMid_R,\n  });\n\n  // Distal Wingtip Pivot (Right)\n  const pivotWingTip_R = createPivot('WingTip_R', [-0.12, 0.0, 0.34], pivotWingMid_R);\n\n  // Outer Wingtip Segment (Right) - Swept scythe tip\n  const tipWingGeoR = makeAirfoilSegment(0.28, 0.08, 0.32, 0.16, 0.005, 0.020, 1);\n  createPart('TipWingPlate_R', tipWingGeoR, matTeal, { parent: pivotWingTip_R });\n\n  // Brass trailing foil on tip\n  const tipFoilGeoR = makeAirfoilSegment(0.18, 0.04, 0.30, 0.18, 0.002, 0.012, 1);\n  createPart('TipFoil_R', tipFoilGeoR, matCopper, {\n    position: [-0.06, -0.004, 0.01],\n    parent: pivotWingTip_R,\n  });\n\n  // --- LEFT WING ---\n  const pivotWingRoot_L = createPivot('WingRoot_L', [-0.02, 0.82, -0.25], root);\n\n  const hingeKnuckleL = cylinderGeo(0.022, 0.022, 0.08, 16);\n  createPart('HingeKnuckle_L', hingeKnuckleL, matBrass, {\n    position: [0, 0, 0],\n    rotation: [0, 0, 90],\n    parent: pivotWingRoot_L,\n  });\n  const rockerHornL = boxGeo(0.014, 0.075, 0.014);\n  createPart('RockerHorn_L', rockerHornL, matBrass, {\n    position: [0, 0.04, 0],\n    parent: pivotWingRoot_L,\n  });\n\n  beamBetween('Pushrod_L', [0.02, 0.878, -0.12], [-0.02, 0.895, -0.25], 0.007, matPolishedSteel, { parent: root });\n\n  const innerWingGeoL = makeAirfoilSegment(0.62, 0.44, 0.38, 0.08, 0.015, 0.042, -1);\n  createPart('InnerWingPlate_L', innerWingGeoL, matTeal, { parent: pivotWingRoot_L });\n\n  const innerSparL = cylinderGeo(0.014, 0.010, 0.38, 12);\n  createPart('InnerSpar_L', innerSparL, matCopper, {\n    position: [-0.04, 0.01, -0.19],\n    rotation: [90, 0, 0],\n    parent: pivotWingRoot_L,\n  });\n\n  const pivotWingMid_L = createPivot('WingMid_L', [-0.08, 0.0, -0.38], pivotWingRoot_L);\n\n  const midHingeL = cylinderGeo(0.018, 0.018, 0.06, 14);\n  createPart('MidHinge_L', midHingeL, matBrass, {\n    position: [0, 0, 0],\n    rotation: [0, 0, 90],\n    parent: pivotWingMid_L,\n  });\n\n  const midWingGeoL = makeAirfoilSegment(0.44, 0.28, 0.34, 0.12, 0.010, 0.032, -1);\n  createPart('MidWingPlate_L', midWingGeoL, matTeal, { parent: pivotWingMid_L });\n\n  const midSparL = cylinderGeo(0.010, 0.007, 0.34, 12);\n  createPart('MidSpar_L', midSparL, matCopper, {\n    position: [-0.06, 0.008, -0.17],\n    rotation: [90, 0, 0],\n    parent: pivotWingMid_L,\n  });\n\n  const pivotWingTip_L = createPivot('WingTip_L', [-0.12, 0.0, -0.34], pivotWingMid_L);\n\n  const tipWingGeoL = makeAirfoilSegment(0.28, 0.08, 0.32, 0.16, 0.005, 0.020, -1);\n  createPart('TipWingPlate_L', tipWingGeoL, matTeal, { parent: pivotWingTip_L });\n\n  const tipFoilGeoL = makeAirfoilSegment(0.18, 0.04, 0.30, 0.18, 0.002, 0.012, -1);\n  createPart('TipFoil_L', tipFoilGeoL, matCopper, {\n    position: [-0.06, -0.004, -0.01],\n    parent: pivotWingTip_L,\n  });"
+            }
+          ],
+          "programRef": "sha256:1a8fc48f400385d0ade1b92fc969e3531587a908fff3b393e87a5c535839d07a"
+        },
+        {
+          "capture": {
+            "cols": 2,
+            "output": "grid",
+            "shots": [
+              {
+                "camera": {
+                  "fovDeg": 46,
+                  "position": [
+                    2.1,
+                    1.45,
+                    1.9
+                  ],
+                  "projection": "perspective",
+                  "target": [
+                    -0.06,
+                    0.82,
+                    0
+                  ],
+                  "type": "explicit",
+                  "up": [
+                    0,
+                    1,
+                    0
+                  ]
+                },
+                "name": "Whole Automaton Hero"
+              },
+              {
+                "camera": {
+                  "fovDeg": 38,
+                  "position": [
+                    0.55,
+                    1.4,
+                    0.45
+                  ],
+                  "projection": "perspective",
+                  "target": [
+                    -0.02,
+                    0.93,
+                    0
+                  ],
+                  "type": "explicit",
+                  "up": [
+                    0,
+                    1,
+                    0
+                  ]
+                },
+                "name": "Gearbox Mechanism"
+              }
+            ],
+            "size": 512,
+            "version": "kiln.capture.v1"
+          },
+          "edits": [
+            {
+              "newString": "  // Ocular sensor housings & glowing lenses\n  const eyeR = cylinderGeo(0.026, 0.030, 0.045, 16);\n  createPart('EyeHousing_R', eyeR, matBrass, {\n    position: [0.35, 0.85, 0.26],\n    rotation: [0, 0, 75],\n    parent: root,\n  });\n  createPart('EyeLens_R', sphereGeo(0.020, 14, 10), matGlowCore, {\n    position: [0.35, 0.86, 0.28],\n    parent: root,\n  });\n  createPart('EyeReticle_R', torusGeo(0.021, 0.003, 8, 16), matBrass, {\n    position: [0.35, 0.86, 0.29],\n    parent: root,\n  });\n\n  const eyeL = cylinderGeo(0.026, 0.030, 0.045, 16);\n  createPart('EyeHousing_L', eyeL, matBrass, {\n    position: [0.35, 0.85, -0.26],\n    rotation: [0, 0, -75],\n    parent: root,\n  });\n  createPart('EyeLens_L', sphereGeo(0.020, 14, 10), matGlowCore, {\n    position: [0.35, 0.86, -0.28],\n    parent: root,\n  });\n  createPart('EyeReticle_L', torusGeo(0.021, 0.003, 8, 16), matBrass, {\n    position: [0.35, 0.86, -0.29],\n    parent: root,\n  });\n\n  // Snout intake grille & cheek exhaust pipes\n  const grilleGeo = cylinderGeo(0.025, 0.030, 0.08, 16);\n  createPart('SnoutGrille', grilleGeo, matBrass, {\n    position: [0.51, 0.80, 0],\n    rotation: [0, 0, 90],\n    parent: root,\n  });\n  createPart('CheekPipe_R', pipeAlongPath([[0.48, 0.80, 0.08], [0.42, 0.82, 0.16], [0.32, 0.82, 0.22]], 0.007, { bendRadius: 0.03 }), matCopper, { parent: root });\n  createPart('CheekPipe_L', pipeAlongPath([[0.48, 0.80, -0.08], [0.42, 0.82, -0.16], [0.32, 0.82, -0.22]], 0.007, { bendRadius: 0.03 }), matCopper, { parent: root });\n\n  // 3. Clockwork Gearbox Chamber (Dorsal Spine)\n  const coamingGeo = await roundedBoxGeo(0.38, 0.06, 0.28, 0.015);\n  createPart('GearboxCoaming', coamingGeo, matBrass, {\n    position: [-0.02, 0.91, 0],\n    parent: root,\n  });\n\n  const skirtGeo = boxGeo(0.40, 0.04, 0.30);\n  createPart('GearboxBaseSkirt', skirtGeo, matBrass, {\n    position: [-0.02, 0.87, 0],\n    parent: root,\n  });\n\n  const bedPlateGeo = boxGeo(0.34, 0.02, 0.24);\n  createPart('GearboxBedPlate', bedPlateGeo, matDarkSteel, {\n    position: [-0.02, 0.89, 0],\n    parent: root,\n  });",
+              "oldString": "  // Ocular sensor housings & glowing lenses\n  const eyeR = cylinderGeo(0.026, 0.030, 0.045, 16);\n  createPart('EyeHousing_R', eyeR, matBrass, {\n    position: [0.35, 0.85, 0.26],\n    rotation: [0, 0, 75],\n    parent: root,\n  });\n  createPart('EyeLens_R', sphereGeo(0.020, 14, 10), matGlowCore, {\n    position: [0.35, 0.86, 0.28],\n    parent: root,\n  });\n\n  const eyeL = cylinderGeo(0.026, 0.030, 0.045, 16);\n  createPart('EyeHousing_L', eyeL, matBrass, {\n    position: [0.35, 0.85, -0.26],\n    rotation: [0, 0, -75],\n    parent: root,\n  });\n  createPart('EyeLens_L', sphereGeo(0.020, 14, 10), matGlowCore, {\n    position: [0.35, 0.86, -0.28],\n    parent: root,\n  });\n\n  // Snout intake grille\n  const grilleGeo = cylinderGeo(0.025, 0.030, 0.08, 16);\n  createPart('SnoutGrille', grilleGeo, matBrass, {\n    position: [0.51, 0.80, 0],\n    rotation: [0, 0, 90],\n    parent: root,\n  });\n\n  // 3. Clockwork Gearbox Chamber (Dorsal Spine)\n  const coamingGeo = await roundedBoxGeo(0.38, 0.06, 0.28, 0.015);\n  createPart('GearboxCoaming', coamingGeo, matBrass, {\n    position: [-0.02, 0.91, 0],\n    parent: root,\n  });\n\n  const bedPlateGeo = boxGeo(0.34, 0.02, 0.24);\n  createPart('GearboxBedPlate', bedPlateGeo, matDarkSteel, {\n    position: [-0.02, 0.89, 0],\n    parent: root,\n  });"
+            },
+            {
+              "newString": "  const cageArc2 = torusGeo(0.12, 0.006, 8, 16);\n  createPart('CageRib_2', cageArc2, matBrass, {\n    position: [0.10, 0.93, 0],\n    rotation: [0, 0, 0],\n    parent: root,\n  });\n  createPart('CageSpine', cylinderGeo(0.005, 0.005, 0.26, 8), matBrass, {\n    position: [-0.02, 0.99, 0],\n    rotation: [0, 0, 90],\n    parent: root,\n  });",
+              "oldString": "  const cageArc2 = torusGeo(0.12, 0.006, 8, 16);\n  createPart('CageRib_2', cageArc2, matBrass, {\n    position: [0.10, 0.93, 0],\n    rotation: [0, 0, 0],\n    parent: root,\n  });"
+            },
+            {
+              "newString": "  createPart('TipLeadingSpur_R', coneGeo(0.008, 0.10, 8), matBrass, {\n    position: [0.01, 0.002, 0.29],\n    rotation: [0, 0, -45],\n    parent: pivotWingTip_R,\n  });",
+              "oldString": "  createPart('TipLeadingSpur_R', coneGeo(0.008, 0.12, 8), matBrass, {\n    position: [0.05, 0, 0.28],\n    rotation: [0, 0, -60],\n    parent: pivotWingTip_R,\n  });"
+            },
+            {
+              "newString": "  createPart('TipLeadingSpur_L', coneGeo(0.008, 0.10, 8), matBrass, {\n    position: [0.01, 0.002, -0.29],\n    rotation: [0, 0, 45],\n    parent: pivotWingTip_L,\n  });",
+              "oldString": "  createPart('TipLeadingSpur_L', coneGeo(0.008, 0.12, 8), matBrass, {\n    position: [0.05, 0, -0.28],\n    rotation: [0, 0, -60],\n    parent: pivotWingTip_L,\n  });"
+            },
+            {
+              "newString": "  // Polished brass rudder fins & clockwork counterweight at tail tip\n  const rudderR = boxGeo(0.12, 0.004, 0.06);\n  createPart('TailFoil_R', rudderR, matBrass, {\n    position: [-0.24, 0, 0.04],\n    rotation: [15, 0, 0],\n    parent: pivotTail3,\n  });\n  const rudderL = boxGeo(0.12, 0.004, 0.06);\n  createPart('TailFoil_L', rudderL, matBrass, {\n    position: [-0.24, 0, -0.04],\n    rotation: [-15, 0, 0],\n    parent: pivotTail3,\n  });\n  createPart('TailCounterWeight', sphereGeo(0.016, 12, 8), matBrass, {\n    position: [-0.34, 0, 0],\n    parent: pivotTail3,\n  });\n  createPart('TailDorsalFin', boxGeo(0.08, 0.04, 0.004), matBrass, {\n    position: [-0.22, 0.025, 0],\n    parent: pivotTail3,\n  });",
+              "oldString": "  // Polished brass rudder fins at tail tip\n  const rudderR = boxGeo(0.12, 0.004, 0.06);\n  createPart('TailFoil_R', rudderR, matBrass, {\n    position: [-0.24, 0, 0.04],\n    rotation: [15, 0, 0],\n    parent: pivotTail3,\n  });\n  const rudderL = boxGeo(0.12, 0.004, 0.06);\n  createPart('TailFoil_L', rudderL, matBrass, {\n    position: [-0.24, 0, -0.04],\n    rotation: [-15, 0, 0],\n    parent: pivotTail3,\n  });"
+            }
+          ],
+          "programRef": "sha256:4265656a139b71308c4cd6612f86e3d2ff57c48567a631bf03684dedf79a34be"
+        }
+      ],
+      "imagesDelivered": 4,
+      "imageCells": 10,
+      "errors": [],
+      "lastBudget": {
+        "calls": 18,
+        "images": 10,
+        "reserved": 0,
+        "maxCalls": 25,
+        "maxImages": 48
+      },
+      "files": [
+        {
+          "name": "final-chosen.png",
+          "bytes": 69985,
+          "sha256": "d7c2e30a53839dbcd157647f69f658862bd83883d9814629e3dbc5839b1c3f04"
+        },
+        {
+          "name": "final.glb",
+          "bytes": 1095820,
+          "sha256": "651b06b3f33733b4c038100b8944de1b14e48f8a158631e15020eb6b2a5a3a4c"
+        },
+        {
+          "name": "final.kiln.js",
+          "bytes": 21938,
+          "sha256": "9db19dfe6e366bf6db0ed2fec321d427998e6d05d9c89005c1c5d52c59c5d019"
+        },
+        {
+          "name": "initial.kiln.js",
+          "bytes": 18343,
+          "sha256": "1a8fc48f400385d0ade1b92fc969e3531587a908fff3b393e87a5c535839d07a"
+        },
+        {
+          "name": "NOTES.md",
+          "bytes": 5826,
+          "sha256": "8e179f9bff2dd6372a1e51ed84ef255ea79693beab5da27b04354a0cbf2e5be4"
+        }
+      ],
+      "literalReplayVerified": true,
+      "imageReadEvents": 5
+    },
+    {
+      "asset": "alpine-cable-terminal",
+      "base": "C:/Users/Mattm/X/kiln-cleanrooms/new-gemini-alpine-cable-terminal-0d457e8f-20260905",
+      "setup": {
+        "phase": "fresh independent authoring",
+        "asset": "alpine-cable-terminal",
+        "brief": "A compact alpine cable-car terminal: curved roof station with exposed pulley assembly, supporting frame, boarding platform and one red gondola suspended correctly on the cable. Snow-free architectural model, pine green roof and warm wood, clean crafted proportions. Animate a small coherent service mechanism.",
+        "modelRequested": "gemini-3.8-flash-high",
+        "harness": "Antigravity CLI",
+        "node": "v22.23.1",
+        "nodeExecutable": "C:\\Users\\Mattm\\AppData\\Roaming\\fnm\\node-versions\\v22.23.1\\installation\\node.exe",
+        "runtime": "C:\\Users\\Mattm\\AppData\\Local\\Temp\\kiln-package-café-I3KNmI\\fresh installation\\node_modules\\@kiln\\engine",
+        "tarballSha256": "0d457e8f8763730079da013abfa6662aadc02843f090fcae594c0f711399d16c",
+        "bundles": {
+          "cli.mjs": "4f70681d55901b2416babe9108b291e4a7ab2de462360f8d13bdd7084bea6126",
+          "mcp-server.mjs": "776d049ab819ff898450320b59540b3d61c0460a6954d2db9c1aaabb7d7f0354",
+          "evaluator-worker.mjs": "5a574c3be5f352c9d1c4bfd4c77dc184e202921bb2767b20dce8b467b69cf150",
+          "build.json": "2b40fed878c3d2470d97382ccac46b51a7b4706d4a0a4e13540d6ef0b73ad4d4"
+        },
+        "skills": {
+          "kiln-author-asset/references/camera-recipes.md": "8959e0b5bf98d8d6712147ff9f4eb05bdff9a58cdda60796304a527329b84c19",
+          "kiln-author-asset/references/geometry-recipes.md": "12e861a7c05b21ee8d0de713f4bde8a843af1dbf37326b5121a8229805693c3c",
+          "kiln-author-asset/references/program-contract.md": "42cc4c17fa14d94febdf0ccbc38454f5972f2d3730f20dbca39151c0fe3aa293",
+          "kiln-author-asset/references/reusable-frame.kiln.js": "9015b2255742efa74e47531f68778573c34566237b3256dcdaab9c360cfc895f",
+          "kiln-author-asset/SKILL.md": "6a69c2ef6315cf719c33a5c024f5b07c87264de8e6fdb987cacbefbfd431f93e",
+          "kiln-qa-asset/references/integration-checks.md": "3d340cc81c0de0a4415ff1d2707c64db1a7433fd7e63f69e1748862739ef5c24",
+          "kiln-qa-asset/SKILL.md": "f2f990a669529f09c7e818a74f1e3af299e474d41a86910434d521a1fd596845",
+          "kiln-refine-asset/references/revision-and-views.md": "78ccb43588fd37b020cabc17e61facd610ea676c7f0c9ebb104f07845edbf3e5",
+          "kiln-refine-asset/SKILL.md": "135af2115e63f09f4c413feceedee5f547d21d154b4d32ed5e88c4077ac56d61"
+        },
+        "promptSha256": "87b3f0faf03c035bae4e72666be8a0d825573308e85ea063f7b5201bd29462c2",
+        "observerSha256": "58c6d64f3232510ccff48f7109a7337c6b6f8d64400030073b36f2b6a8e72237",
+        "limits": {
+          "toolCalls": 25,
+          "imageCells": 48,
+          "wallSeconds": 480
+        },
+        "createdAt": "2026-09-05T21:06:28.327Z"
+      },
+      "exit": {
+        "code": 0,
+        "timedOut": false,
+        "finishedAt": "2026-09-05T21:29:05.482Z"
+      },
+      "toolCalls": 26,
+      "acceptedCalls": 25,
+      "deniedRequests": [
+        {
+          "tool": "kiln_source",
+          "reason": "Tool call budget exhausted"
+        }
+      ],
+      "fullSourceMcpCalls": 1,
+      "edits": [
+        {
+          "capture": {
+            "cols": 2,
+            "output": "grid",
+            "shots": [
+              {
+                "camera": {
+                  "azimuthDeg": 40,
+                  "elevationDeg": 22,
+                  "type": "orbit"
+                },
+                "name": "Station Overview"
+              },
+              {
+                "camera": {
+                  "fovDeg": 45,
+                  "position": [
+                    1.8,
+                    1.8,
+                    -2.8
+                  ],
+                  "projection": "perspective",
+                  "target": [
+                    -0.6,
+                    1.5,
+                    -1
+                  ],
+                  "type": "explicit",
+                  "up": [
+                    0,
+                    1,
+                    0
+                  ]
+                },
+                "name": "Gondola & Boarding Detail"
+              }
+            ],
+            "size": 512,
+            "version": "kiln.capture.v1"
+          },
+          "edits": [
+            {
+              "newString": "  const matGondolaTrim = gameMaterial(0x1e2022, { roughness: 0.6, metalness: 0.2 });\n  const matGondolaHanger = gameMaterial(0x32373e, { roughness: 0.4, metalness: 0.7 });\n  const matGondolaGlass = glassMaterial(0x88ccdd, { opacity: 0.4, roughness: 0.1, metalness: 0.15 });",
+              "oldString": "  const matGondolaTrim = gameMaterial(0x1e2022, { roughness: 0.6, metalness: 0.2 });\n  const matGondolaGlass = glassMaterial(0x88ccdd, { opacity: 0.4, roughness: 0.1, metalness: 0.15 });"
+            }
+          ],
+          "programRef": "sha256:da9526b8d41b153a05c49dfc68df8a40beaa22f49c69e3499388e89d46ec07b5"
+        },
+        {
+          "capture": {
+            "cols": 2,
+            "output": "grid",
+            "shots": [
+              {
+                "camera": {
+                  "azimuthDeg": 38,
+                  "elevationDeg": 20,
+                  "type": "orbit"
+                },
+                "name": "Station Hero Overview"
+              },
+              {
+                "camera": {
+                  "fovDeg": 42,
+                  "position": [
+                    3.4,
+                    4.2,
+                    2.6
+                  ],
+                  "projection": "perspective",
+                  "target": [
+                    1.2,
+                    3.2,
+                    0
+                  ],
+                  "type": "explicit",
+                  "up": [
+                    0,
+                    1,
+                    0
+                  ]
+                },
+                "name": "Exposed Pulley & Service Mechanism"
+              }
+            ],
+            "size": 512,
+            "version": "kiln.capture.v1"
+          },
+          "edits": [
+            {
+              "newString": "  const bentX = [-2.4, -1.0, 0.4, 2.4];\n  bentX.forEach((bx, idx) => {\n    const shoeL = boxGeo(0.24, 0.12, 0.24);\n    createPart(`BentShoeL_${idx}`, shoeL, matSteelGantry, { position: [bx, 0.54, -1.9], parent: root });\n    const shoeR = boxGeo(0.24, 0.12, 0.24);\n    createPart(`BentShoeR_${idx}`, shoeR, matSteelGantry, { position: [bx, 0.54, 1.9], parent: root });\n\n    const colGeo = boxGeo(0.2, 3.2, 0.2);\n    createPart(`BentColL_${idx}`, colGeo, matWarmWood, { position: [bx, 2.15, -1.9], parent: root });\n    createPart(`BentColR_${idx}`, colGeo, matWarmWood, { position: [bx, 2.15, 1.9], parent: root });\n\n    const tieBeamGeo = boxGeo(0.18, 0.22, 4.0);\n    createPart(`BentTieBeam_${idx}`, tieBeamGeo, matWarmWood, { position: [bx, 3.65, 0], parent: root });\n\n    const braceGeo = boxGeo(0.12, 0.85, 0.12);\n    createPart(`BentBraceL_${idx}`, braceGeo, matTimberBeam, {\n      position: [bx, 3.35, -1.5],\n      rotation: [0, 0, 45],\n      parent: root\n    });\n    createPart(`BentBraceR_${idx}`, braceGeo, matTimberBeam, {\n      position: [bx, 3.35, 1.5],\n      rotation: [0, 0, -45],\n      parent: root\n    });\n\n    // Curved Glulam Arch supporting roof (bents 0, 1, 2)\n    if (idx < 3) {\n      for (let s = 0; s < 10; s++) {\n        const z0 = -2.1 + s * 0.42;\n        const z1 = z0 + 0.42;\n        const zm = (z0 + z1) * 0.5;\n        const ym = 4.28 - 0.185 * zm * zm;\n        const slope = -0.37 * zm;\n        const angleDeg = Math.atan(slope) * (180 / Math.PI);\n        const segLen = Math.hypot(0.42, slope * 0.42) * 1.02;\n        const archSegGeo = boxGeo(0.16, 0.18, segLen);\n        createPart(`GlulamArch_${idx}_${s}`, archSegGeo, matWarmWood, {\n          position: [bx, ym - 0.09, zm],\n          rotation: [-angleDeg, 0, 0],\n          parent: root\n        });\n      }\n    }\n  });\n\n  // Longitudinal Timber Purlins\n  const purlinZ = [-1.8, -0.9, 0, 0.9, 1.8];\n  purlinZ.forEach((pz, pIdx) => {\n    const py = 4.25 - 0.185 * pz * pz;\n    const purlinGeo = boxGeo(3.8, 0.12, 0.12);\n    createPart(`Purlin_${pIdx}`, purlinGeo, matTimberBeam, {\n      position: [-1.5, py - 0.06, pz],\n      parent: root\n    });\n  });\n\n  // 3. Curved Roof Canopy\n  const roofTop = parametricSurface(\n    (u, v) => [u, 4.45 - 0.185 * v * v + 0.03 * Math.cos(u * 0.8), v],\n    { u: [-3.4, 0.4], v: [-2.45, 2.45], uSegments: 28, vSegments: 26, orientation: 'vu' }\n  );\n  createPart('RoofOuterShell', roofTop, matPineRoof, { parent: root });\n\n  const roofSoffit = parametricSurface(\n    (u, v) => [u, 4.32 - 0.185 * v * v + 0.03 * Math.cos(u * 0.8), v],\n    { u: [-3.38, 0.38], v: [-2.42, 2.42], uSegments: 28, vSegments: 26, orientation: 'uv' }\n  );\n  createPart('RoofTimberSoffit', roofSoffit, matWarmWood, { parent: root });\n\n  // Crafted End Gable Bargeboards\n  [-3.4, 0.4].forEach((gx, gIdx) => {\n    for (let s = 0; s < 12; s++) {\n      const z0 = -2.4 + s * 0.4;\n      const z1 = z0 + 0.4;\n      const zm = (z0 + z1) * 0.5;\n      const ym = 4.44 - 0.185 * zm * zm;\n      const slope = -0.37 * zm;\n      const angleDeg = Math.atan(slope) * (180 / Math.PI);\n      const segLen = Math.hypot(0.4, slope * 0.4) * 1.04;\n      const bargeGeo = boxGeo(0.08, 0.16, segLen);\n      createPart(`GableArch_${gIdx}_${s}`, bargeGeo, matWarmWood, {\n        position: [gx, ym - 0.06, zm],\n        rotation: [-angleDeg, 0, 0],\n        parent: root\n      });\n    }\n  });\n\n  // Fascia boards\n  for (let s = 0; s < 9; s++) {\n    const ux = -3.3 + s * 0.41;\n    const uMid = ux + 0.205;\n    const yL = 4.38 - 0.185 * 2.45 * 2.45 + 0.03 * Math.cos(uMid * 0.8);\n    const fasciaL = boxGeo(0.42, 0.18, 0.08);\n    createPart(`FasciaL_${s}`, fasciaL, matRoofTrim, {\n      position: [uMid, yL, -2.46],\n      parent: root\n    });\n    const fasciaR = boxGeo(0.42, 0.18, 0.08);\n    createPart(`FasciaR_${s}`, fasciaR, matRoofTrim, {\n      position: [uMid, yL, 2.46],\n      parent: root\n    });\n  }\n\n  // Standing Seam ribs\n  const seamZ = [-2.0, -1.0, 0, 1.0, 2.0];\n  seamZ.forEach((sz, sIdx) => {\n    for (let k = 0; k < 6; k++) {\n      const kx = -3.2 + k * 0.6;\n      const kMid = kx + 0.3;\n      const ky = 4.46 - 0.185 * sz * sz + 0.03 * Math.cos(kMid * 0.8);\n      const seamGeo = boxGeo(0.61, 0.04, 0.03);\n      createPart(`RoofSeam_${sIdx}_${k}`, seamGeo, matRoofTrim, {\n        position: [kMid, ky + 0.02, sz],\n        parent: root\n      });\n    }\n  });",
+              "oldString": "  const bentX = [-2.4, -0.8, 0.8, 2.4];\n  bentX.forEach((bx, idx) => {\n    const shoeL = boxGeo(0.24, 0.12, 0.24);\n    createPart(`BentShoeL_${idx}`, shoeL, matSteelGantry, { position: [bx, 0.54, -1.9], parent: root });\n    const shoeR = boxGeo(0.24, 0.12, 0.24);\n    createPart(`BentShoeR_${idx}`, shoeR, matSteelGantry, { position: [bx, 0.54, 1.9], parent: root });\n\n    const colGeo = boxGeo(0.2, 3.2, 0.2);\n    createPart(`BentColL_${idx}`, colGeo, matWarmWood, { position: [bx, 2.15, -1.9], parent: root });\n    createPart(`BentColR_${idx}`, colGeo, matWarmWood, { position: [bx, 2.15, 1.9], parent: root });\n\n    const tieBeamGeo = boxGeo(0.18, 0.22, 4.0);\n    createPart(`BentTieBeam_${idx}`, tieBeamGeo, matWarmWood, { position: [bx, 3.65, 0], parent: root });\n\n    const braceGeo = boxGeo(0.12, 0.85, 0.12);\n    createPart(`BentBraceL_${idx}`, braceGeo, matTimberBeam, {\n      position: [bx, 3.35, -1.5],\n      rotation: [0, 0, 45],\n      parent: root\n    });\n    createPart(`BentBraceR_${idx}`, braceGeo, matTimberBeam, {\n      position: [bx, 3.35, 1.5],\n      rotation: [0, 0, -45],\n      parent: root\n    });\n\n    // Curved Glulam Arch supporting roof\n    for (let s = 0; s < 10; s++) {\n      const z0 = -2.1 + s * 0.42;\n      const z1 = z0 + 0.42;\n      const zm = (z0 + z1) * 0.5;\n      const ym = 4.28 - 0.185 * zm * zm;\n      const slope = -0.37 * zm;\n      const angleDeg = Math.atan(slope) * (180 / Math.PI);\n      const segLen = Math.hypot(0.42, slope * 0.42) * 1.02;\n      const archSegGeo = boxGeo(0.16, 0.18, segLen);\n      createPart(`GlulamArch_${idx}_${s}`, archSegGeo, matWarmWood, {\n        position: [bx, ym - 0.09, zm],\n        rotation: [-angleDeg, 0, 0],\n        parent: root\n      });\n    }\n  });\n\n  // Longitudinal Timber Purlins\n  const purlinZ = [-1.8, -0.9, 0, 0.9, 1.8];\n  purlinZ.forEach((pz, pIdx) => {\n    const py = 4.25 - 0.185 * pz * pz;\n    const purlinGeo = boxGeo(6.8, 0.12, 0.12);\n    createPart(`Purlin_${pIdx}`, purlinGeo, matTimberBeam, {\n      position: [0.1, py - 0.06, pz],\n      parent: root\n    });\n  });\n\n  // 3. Curved Roof Canopy\n  const roofTop = parametricSurface(\n    (u, v) => [u, 4.45 - 0.185 * v * v + 0.04 * Math.cos(u * 0.4), v],\n    { u: [-3.4, 3.7], v: [-2.45, 2.45], uSegments: 40, vSegments: 26 }\n  );\n  createPart('RoofOuterShell', roofTop, matPineRoof, { parent: root });\n\n  const roofSoffit = parametricSurface(\n    (u, v) => [u, 4.32 - 0.185 * v * v + 0.04 * Math.cos(u * 0.4), v],\n    { u: [-3.38, 3.68], v: [-2.42, 2.42], uSegments: 40, vSegments: 26, orientation: 'vu' }\n  );\n  createPart('RoofTimberSoffit', roofSoffit, matWarmWood, { parent: root });\n\n  // Fascia boards\n  for (let s = 0; s < 16; s++) {\n    const ux = -3.3 + s * 0.43;\n    const uMid = ux + 0.215;\n    const yL = 4.38 - 0.185 * 2.45 * 2.45 + 0.04 * Math.cos(uMid * 0.4);\n    const fasciaL = boxGeo(0.44, 0.18, 0.08);\n    createPart(`FasciaL_${s}`, fasciaL, matRoofTrim, {\n      position: [uMid, yL, -2.46],\n      parent: root\n    });\n    const fasciaR = boxGeo(0.44, 0.18, 0.08);\n    createPart(`FasciaR_${s}`, fasciaR, matRoofTrim, {\n      position: [uMid, yL, 2.46],\n      parent: root\n    });\n  }\n\n  // Standing Seam ribs\n  const seamZ = [-2.0, -1.0, 0, 1.0, 2.0];\n  seamZ.forEach((sz, sIdx) => {\n    for (let k = 0; k < 12; k++) {\n      const kx = -3.2 + k * 0.56;\n      const kMid = kx + 0.28;\n      const ky = 4.46 - 0.185 * sz * sz + 0.04 * Math.cos(kMid * 0.4);\n      const seamGeo = boxGeo(0.57, 0.04, 0.03);\n      createPart(`RoofSeam_${sIdx}_${k}`, seamGeo, matRoofTrim, {\n        position: [kMid, ky + 0.02, sz],\n        parent: root\n      });\n    }\n  });"
+            },
+            {
+              "newString": "  const gantryBeam1 = boxGeo(3.2, 0.22, 0.12);\n  createPart('GantryBeam_Left', gantryBeam1, matSteelGantry, { position: [1.4, 3.5, -0.65], parent: root });\n  const gantryBeam2 = boxGeo(3.2, 0.22, 0.12);\n  createPart('GantryBeam_Right', gantryBeam2, matSteelGantry, { position: [1.4, 3.5, 0.65], parent: root });\n\n  const crossGantry1 = boxGeo(0.18, 0.24, 2.6);\n  createPart('GantryCross_Rear', crossGantry1, matSteelGantry, { position: [0.4, 3.52, 0], parent: root });\n  const crossGantry2 = boxGeo(0.22, 0.26, 2.6);\n  createPart('GantryCross_Center', crossGantry2, matSteelGantry, { position: [1.2, 3.52, 0], parent: root });\n  const crossGantry3 = boxGeo(0.18, 0.24, 2.6);\n  createPart('GantryCross_Front', crossGantry3, matSteelGantry, { position: [2.4, 3.52, 0], parent: root });\n\n  const spindleMount = boxGeo(0.48, 0.32, 0.48);\n  createPart('BullwheelSpindleMount', spindleMount, matSteelGantry, { position: [1.2, 3.36, 0], parent: root });\n\n  // 5. Exposed Pulley Assembly & Bullwheel\n  const bullwheelPivot = createPivot('Bullwheel', [1.2, 3.16, 0], root);\n\n  const bwHub = cylinderYGeo(0.28, 0.32, 0.24, 24);\n  createPart('BullwheelHub', bwHub, matBullwheelSteel, { position: [0, 0, 0], parent: bullwheelPivot });\n  const bwBearingCap = cylinderYGeo(0.18, 0.22, 0.1, 20);\n  createPart('BullwheelBearingCap', bwBearingCap, matSafetyYellow, { position: [0, 0.16, 0], parent: bullwheelPivot });\n\n  const bwOuterRing = torusGeo(1.15, 0.055, 12, 36);\n  createPart('BullwheelOuterRing', bwOuterRing, matBullwheelSteel, {\n    position: [0, 0, 0],\n    rotation: [90, 0, 0],\n    parent: bullwheelPivot\n  });\n  const bwFlangeTop = cylinderYGeo(1.18, 1.18, 0.025, 36);\n  createPart('BullwheelFlangeTop', bwFlangeTop, matBullwheelSteel, { position: [0, 0.04, 0], parent: bullwheelPivot });\n  const bwFlangeBot = cylinderYGeo(1.18, 1.18, 0.025, 36);\n  createPart('BullwheelFlangeBot', bwFlangeBot, matBullwheelSteel, { position: [0, -0.04, 0], parent: bullwheelPivot });\n\n  for (let sp = 0; sp < 8; sp++) {\n    const spAngle = sp * 45;\n    const spokeGeo = boxGeo(0.86, 0.06, 0.08);\n    createPart(`BullwheelSpoke_${sp}`, spokeGeo, matBullwheelSteel, {\n      position: [0.58 * Math.cos(spAngle * Math.PI / 180), 0, 0.58 * Math.sin(spAngle * Math.PI / 180)],\n      rotation: [0, -spAngle, 0],\n      parent: bullwheelPivot\n    });\n  }\n\n  const motorGeo = cylinderYGeo(0.22, 0.22, 0.45, 16);\n  createPart('DriveMotor', motorGeo, matSteelGantry, { position: [1.2, 3.82, 0], parent: root });\n  const motorBox = boxGeo(0.5, 0.25, 0.45);\n  createPart('DriveGearbox', motorBox, matSteelGantry, { position: [1.2, 3.65, 0], parent: root });\n\n  [-1.15, 1.15].forEach((sz, bIdx) => {\n    const rockerBeam = boxGeo(1.1, 0.09, 0.08);\n    createPart(`SheaveRocker_${bIdx}`, rockerBeam, matSteelGantry, { position: [2.4, 3.32, sz], parent: root });\n    const hangerStrut = boxGeo(0.08, 0.22, 0.08);\n    createPart(`SheaveHanger_${bIdx}`, hangerStrut, matSteelGantry, { position: [2.4, 3.44, sz], parent: root });\n\n    for (let r = 0; r < 4; r++) {\n      const rx = 2.05 + r * 0.24;\n      const rollerGeo = cylinderZGeo(0.14, 0.14, 0.06, 16);\n      createPart(`RollerSheave_${bIdx}_${r}`, rollerGeo, matSteelPulleys, {\n        position: [rx, 3.2, sz],\n        parent: root\n      });\n      const rollerHub = cylinderZGeo(0.04, 0.04, 0.09, 12);\n      createPart(`RollerHub_${bIdx}_${r}`, rollerHub, matSafetyYellow, {\n        position: [rx, 3.2, sz],\n        parent: root\n      });\n    }\n  });\n\n  // Haul Rope\n  const loopStations = [];\n  for (let a = 0; a <= 18; a++) {\n    const ang = Math.PI * 0.5 + (Math.PI * a / 18);\n    loopStations.push([1.2 + 1.15 * Math.cos(ang), 3.16, 1.15 * Math.sin(ang)]);\n  }\n  const cableCircleProfile = [];\n  for (let c = 0; c < 8; c++) {\n    const ca = c * Math.PI / 4;\n    cableCircleProfile.push([0.018 * Math.cos(ca), 0.018 * Math.sin(ca)]);\n  }\n  const cableLoopGeo = sweepProfile(cableCircleProfile, loopStations, { cap: false, up: [0, 1, 0] });\n  createPart('CableReturnLoop', cableLoopGeo, matCableSteel, { parent: root });\n\n  const leftCable = cylinderXGeo(0.018, 0.018, 4.2, 12);\n  createPart('CableTrack_Left', leftCable, matCableSteel, { position: [3.3, 3.16, -1.15], parent: root });\n  const rightCable = cylinderXGeo(0.018, 0.018, 4.2, 12);\n  createPart('CableTrack_Right', rightCable, matCableSteel, { position: [3.3, 3.16, 1.15], parent: root });",
+              "oldString": "  const gantryBeam1 = boxGeo(4.8, 0.22, 0.12);\n  createPart('GantryBeam_Left', gantryBeam1, matSteelGantry, { position: [0.4, 3.5, -0.65], parent: root });\n  const gantryBeam2 = boxGeo(4.8, 0.22, 0.12);\n  createPart('GantryBeam_Right', gantryBeam2, matSteelGantry, { position: [0.4, 3.5, 0.65], parent: root });\n\n  const crossGantry1 = boxGeo(0.16, 0.24, 2.6);\n  createPart('GantryCross_Rear', crossGantry1, matSteelGantry, { position: [-0.6, 3.52, 0], parent: root });\n  const crossGantry2 = boxGeo(0.2, 0.26, 2.6);\n  createPart('GantryCross_Center', crossGantry2, matSteelGantry, { position: [0.6, 3.52, 0], parent: root });\n  const crossGantry3 = boxGeo(0.16, 0.24, 2.6);\n  createPart('GantryCross_Front', crossGantry3, matSteelGantry, { position: [2.5, 3.52, 0], parent: root });\n\n  const spindleMount = boxGeo(0.45, 0.32, 0.45);\n  createPart('BullwheelSpindleMount', spindleMount, matSteelGantry, { position: [0.6, 3.36, 0], parent: root });\n\n  // 5. Exposed Pulley Assembly & Bullwheel\n  const bullwheelPivot = createPivot('Bullwheel', [0.6, 3.16, 0], root);\n\n  const bwHub = cylinderYGeo(0.28, 0.32, 0.24, 24);\n  createPart('BullwheelHub', bwHub, matBullwheelSteel, { position: [0, 0, 0], parent: bullwheelPivot });\n  const bwBearingCap = cylinderYGeo(0.18, 0.22, 0.1, 20);\n  createPart('BullwheelBearingCap', bwBearingCap, matSafetyYellow, { position: [0, 0.16, 0], parent: bullwheelPivot });\n\n  const bwOuterRing = torusGeo(1.15, 0.055, 12, 36);\n  createPart('BullwheelOuterRing', bwOuterRing, matBullwheelSteel, {\n    position: [0, 0, 0],\n    rotation: [90, 0, 0],\n    parent: bullwheelPivot\n  });\n  const bwFlangeTop = cylinderYGeo(1.18, 1.18, 0.025, 36);\n  createPart('BullwheelFlangeTop', bwFlangeTop, matBullwheelSteel, { position: [0, 0.04, 0], parent: bullwheelPivot });\n  const bwFlangeBot = cylinderYGeo(1.18, 1.18, 0.025, 36);\n  createPart('BullwheelFlangeBot', bwFlangeBot, matBullwheelSteel, { position: [0, -0.04, 0], parent: bullwheelPivot });\n\n  for (let sp = 0; sp < 8; sp++) {\n    const spAngle = sp * 45;\n    const spokeGeo = boxGeo(0.86, 0.06, 0.08);\n    createPart(`BullwheelSpoke_${sp}`, spokeGeo, matBullwheelSteel, {\n      position: [0.58 * Math.cos(spAngle * Math.PI / 180), 0, 0.58 * Math.sin(spAngle * Math.PI / 180)],\n      rotation: [0, -spAngle, 0],\n      parent: bullwheelPivot\n    });\n  }\n\n  const motorGeo = cylinderYGeo(0.22, 0.22, 0.45, 16);\n  createPart('DriveMotor', motorGeo, matSteelGantry, { position: [0.6, 3.82, 0], parent: root });\n  const motorBox = boxGeo(0.5, 0.25, 0.45);\n  createPart('DriveGearbox', motorBox, matSteelGantry, { position: [0.6, 3.65, 0], parent: root });\n\n  [-1.15, 1.15].forEach((sz, bIdx) => {\n    const rockerBeam = boxGeo(1.1, 0.09, 0.08);\n    createPart(`SheaveRocker_${bIdx}`, rockerBeam, matSteelGantry, { position: [2.5, 3.32, sz], parent: root });\n    const hangerStrut = boxGeo(0.08, 0.22, 0.08);\n    createPart(`SheaveHanger_${bIdx}`, hangerStrut, matSteelGantry, { position: [2.5, 3.44, sz], parent: root });\n\n    for (let r = 0; r < 4; r++) {\n      const rx = 2.15 + r * 0.24;\n      const rollerGeo = cylinderZGeo(0.14, 0.14, 0.06, 16);\n      createPart(`RollerSheave_${bIdx}_${r}`, rollerGeo, matSteelPulleys, {\n        position: [rx, 3.2, sz],\n        parent: root\n      });\n      const rollerHub = cylinderZGeo(0.04, 0.04, 0.09, 12);\n      createPart(`RollerHub_${bIdx}_${r}`, rollerHub, matSafetyYellow, {\n        position: [rx, 3.2, sz],\n        parent: root\n      });\n    }\n  });\n\n  // Haul Rope\n  const loopStations = [];\n  for (let a = 0; a <= 18; a++) {\n    const ang = Math.PI * 0.5 + (Math.PI * a / 18);\n    loopStations.push([0.6 + 1.15 * Math.cos(ang), 3.16, 1.15 * Math.sin(ang)]);\n  }\n  const cableCircleProfile = [];\n  for (let c = 0; c < 8; c++) {\n    const ca = c * Math.PI / 4;\n    cableCircleProfile.push([0.018 * Math.cos(ca), 0.018 * Math.sin(ca)]);\n  }\n  const cableLoopGeo = sweepProfile(cableCircleProfile, loopStations, { cap: false, up: [0, 1, 0] });\n  createPart('CableReturnLoop', cableLoopGeo, matCableSteel, { parent: root });\n\n  const leftCable = cylinderXGeo(0.018, 0.018, 4.4, 12);\n  createPart('CableTrack_Left', leftCable, matCableSteel, { position: [2.8, 3.16, -1.15], parent: root });\n  const rightCable = cylinderXGeo(0.018, 0.018, 4.4, 12);\n  createPart('CableTrack_Right', rightCable, matCableSteel, { position: [2.8, 3.16, 1.15], parent: root });"
+            },
+            {
+              "newString": "  const gondolaPivot = createPivot('GondolaSuspension', [-0.9, 3.16, -1.15], root);",
+              "oldString": "  const gondolaPivot = createPivot('GondolaSuspension', [-0.5, 3.16, -1.15], root);"
+            },
+            {
+              "newString": "  // 7. Animated Service Mechanism\n  const craneBase = cylinderYGeo(0.12, 0.14, 0.2, 16);\n  createPart('ServiceCraneBase', craneBase, matSteelGantry, { position: [1.2, 3.65, 0], parent: root });\n\n  const craneArmPivot = createPivot('ServiceCraneArm', [1.2, 3.75, 0], root);",
+              "oldString": "  // 7. Animated Service Mechanism\n  const craneBase = cylinderYGeo(0.12, 0.14, 0.2, 16);\n  createPart('ServiceCraneBase', craneBase, matSteelGantry, { position: [0.6, 3.65, 0], parent: root });\n\n  const craneArmPivot = createPivot('ServiceCraneArm', [0.6, 3.75, 0], root);"
+            }
+          ],
+          "programRef": "sha256:dead910a6df337cb69907cd93cb9eaaed22a806941a154a2f6c415d56a6f2ae6"
+        }
+      ],
+      "imagesDelivered": 3,
+      "imageCells": 7,
+      "errors": [
+        {
+          "tool": "kiln_render",
+          "content": [
+            {
+              "type": "text",
+              "text": "{\n  \"ok\": false,\n  \"error\": \"Generated asset execution was rejected. Check variable spelling and scope: generated code used an undeclared variable. Read the current source and check declarations before retrying.\",\n  \"warnings\": [],\n  \"programRef\": \"sha256:da9526b8d41b153a05c49dfc68df8a40beaa22f49c69e3499388e89d46ec07b5\"\n}"
+            }
+          ]
+        }
+      ],
+      "lastBudget": {
+        "calls": 25,
+        "images": 7,
+        "reserved": 0,
+        "maxCalls": 25,
+        "maxImages": 48
+      },
+      "files": [
+        {
+          "name": "final-chosen.png",
+          "bytes": 50913,
+          "sha256": "87c82fd541a21881a135aae29906c9ecb3bdc0e23c5277804ce0be1c7ae6600f"
+        },
+        {
+          "name": "final.glb",
+          "bytes": 224588,
+          "sha256": "31e04202876fe738b5c47546785ca67ee4461e3dc06972052898aef094521869"
+        },
+        {
+          "name": "final.kiln.js",
+          "bytes": 18386,
+          "sha256": "c368480584e957410a252651f8e2254b3e8823be5cbc94324d65a12d5f5c6d90"
+        },
+        {
+          "name": "initial.kiln.js",
+          "bytes": 17668,
+          "sha256": "dead910a6df337cb69907cd93cb9eaaed22a806941a154a2f6c415d56a6f2ae6"
+        },
+        {
+          "name": "NOTES.md",
+          "bytes": 4240,
+          "sha256": "7d6ba07541f7b0556c922f0629b1e531e620015a6a969317619b5720a5ce7e98"
+        }
+      ],
+      "literalReplayVerified": true,
+      "imageReadEvents": 4
+    },
+    {
+      "asset": "iris-lantern",
+      "base": "C:/Users/Mattm/X/kiln-cleanrooms/new-gemini-iris-lantern-0d457e8f-20260905",
+      "setup": {
+        "phase": "fresh independent authoring",
+        "asset": "iris-lantern",
+        "brief": "A sophisticated brass and cobalt-glass iris lantern: six overlapping sculpted aperture blades around a luminous inner chamber, articulated opening animation, rounded base and finely crafted collar/hinges. The mechanism must visibly open and remain attached, with controlled emissive brightness and rich material contrast.",
+        "modelRequested": "gemini-3.8-flash-high",
+        "harness": "Antigravity CLI",
+        "node": "v22.23.1",
+        "nodeExecutable": "C:\\Users\\Mattm\\AppData\\Roaming\\fnm\\node-versions\\v22.23.1\\installation\\node.exe",
+        "runtime": "C:\\Users\\Mattm\\AppData\\Local\\Temp\\kiln-package-café-I3KNmI\\fresh installation\\node_modules\\@kiln\\engine",
+        "tarballSha256": "0d457e8f8763730079da013abfa6662aadc02843f090fcae594c0f711399d16c",
+        "bundles": {
+          "cli.mjs": "4f70681d55901b2416babe9108b291e4a7ab2de462360f8d13bdd7084bea6126",
+          "mcp-server.mjs": "776d049ab819ff898450320b59540b3d61c0460a6954d2db9c1aaabb7d7f0354",
+          "evaluator-worker.mjs": "5a574c3be5f352c9d1c4bfd4c77dc184e202921bb2767b20dce8b467b69cf150",
+          "build.json": "2b40fed878c3d2470d97382ccac46b51a7b4706d4a0a4e13540d6ef0b73ad4d4"
+        },
+        "skills": {
+          "kiln-author-asset/references/camera-recipes.md": "8959e0b5bf98d8d6712147ff9f4eb05bdff9a58cdda60796304a527329b84c19",
+          "kiln-author-asset/references/geometry-recipes.md": "12e861a7c05b21ee8d0de713f4bde8a843af1dbf37326b5121a8229805693c3c",
+          "kiln-author-asset/references/program-contract.md": "42cc4c17fa14d94febdf0ccbc38454f5972f2d3730f20dbca39151c0fe3aa293",
+          "kiln-author-asset/references/reusable-frame.kiln.js": "9015b2255742efa74e47531f68778573c34566237b3256dcdaab9c360cfc895f",
+          "kiln-author-asset/SKILL.md": "6a69c2ef6315cf719c33a5c024f5b07c87264de8e6fdb987cacbefbfd431f93e",
+          "kiln-qa-asset/references/integration-checks.md": "3d340cc81c0de0a4415ff1d2707c64db1a7433fd7e63f69e1748862739ef5c24",
+          "kiln-qa-asset/SKILL.md": "f2f990a669529f09c7e818a74f1e3af299e474d41a86910434d521a1fd596845",
+          "kiln-refine-asset/references/revision-and-views.md": "78ccb43588fd37b020cabc17e61facd610ea676c7f0c9ebb104f07845edbf3e5",
+          "kiln-refine-asset/SKILL.md": "135af2115e63f09f4c413feceedee5f547d21d154b4d32ed5e88c4077ac56d61"
+        },
+        "promptSha256": "d51d411a0d971f40f20d588239812bd982cb68ce5b53af68f80ea5bcd3658b8d",
+        "observerSha256": "58c6d64f3232510ccff48f7109a7337c6b6f8d64400030073b36f2b6a8e72237",
+        "limits": {
+          "toolCalls": 25,
+          "imageCells": 48,
+          "wallSeconds": 480
+        },
+        "createdAt": "2026-09-05T21:06:30.402Z"
+      },
+      "exit": {
+        "code": 0,
+        "timedOut": false,
+        "finishedAt": "2026-09-05T21:35:02.232Z"
+      },
+      "toolCalls": 22,
+      "acceptedCalls": 22,
+      "deniedRequests": [],
+      "fullSourceMcpCalls": 1,
+      "edits": [
+        {
+          "capture": {
+            "cols": 2,
+            "output": "grid",
+            "shots": [
+              {
+                "camera": {
+                  "azimuthDeg": 35,
+                  "elevationDeg": 20,
+                  "type": "orbit"
+                },
+                "name": "Whole asset"
+              },
+              {
+                "camera": {
+                  "azimuthDeg": 65,
+                  "elevationDeg": 12,
+                  "padding": 1.25,
+                  "type": "orbit"
+                },
+                "name": "Iris mechanism"
+              }
+            ],
+            "size": 512,
+            "version": "kiln.capture.v1"
+          },
+          "edits": [
+            {
+              "newString": "  function getSpinePoint(u, v) {\n    const y = v * height + 0.015 * Math.sin(u * Math.PI) * (1 - v);\n    const arcRadius = 0.158;\n    const theta = u * 1.22;\n    const z = arcRadius * Math.sin(theta);\n    const inwardBulge = 0.026 * Math.sin(u * Math.PI * 0.9);\n    const x = -arcRadius * (1 - Math.cos(theta)) - inwardBulge;\n    return [x, y, z];\n  }",
+              "oldString": "  function getSpinePoint(u, v) {\n    const y = v * height;\n    const arcRadius = 0.165;\n    const theta = u * 1.12;\n    const z = arcRadius * Math.sin(theta);\n    const bulge = 0.032 * Math.sin(u * Math.PI);\n    const taper = 1.0 - 0.18 * v;\n    const x = (-arcRadius * (1 - Math.cos(theta)) - bulge) * taper;\n    return [x, y, z];\n  }"
+            },
+            {
+              "newString": "    const stationGroup = new THREE.Group();\n    stationGroup.name = 'Station_' + i;\n    stationGroup.position.set(hx, 0.180, hz);\n    stationGroup.rotation.y = -rad;\n    root.add(stationGroup);",
+              "oldString": "    const stationGroup = new THREE.Group();\n    stationGroup.name = 'Station_' + i;\n    stationGroup.position.set(hx, 0.180, hz);\n    stationGroup.rotation.y = rad;\n    root.add(stationGroup);"
+            },
+            {
+              "newString": "  // 9. Six Architectural Guard Struts with Turned Mounts and Center Knots\n  const strutRadius = 0.190;\n  for (let i = 0; i < 6; i++) {\n    const angle = (i * 60 + 30) * Math.PI / 180;\n    const sx = strutRadius * Math.cos(angle);\n    const sz = strutRadius * Math.sin(angle);\n\n    createPart('StrutMountLower_' + i, cylinderGeo(0.008, 0.012, 0.018, 16), polishedBrass, {\n      position: [sx, 0.174, sz],\n      parent: root\n    });\n\n    createPart('GuardStrut_' + i, cylinderGeo(0.0055, 0.0055, 0.285, 16), antiqueBronze, {\n      position: [sx, 0.325, sz],\n      parent: root\n    });\n\n    createPart('StrutKnot_' + i, torusGeo(0.009, 0.004, 12, 16), polishedBrass, {\n      position: [sx, 0.325, sz],\n      rotation: [90, 0, 0],\n      parent: root\n    });\n\n    createPart('StrutMountUpper_' + i, cylinderGeo(0.012, 0.008, 0.018, 16), polishedBrass, {\n      position: [sx, 0.476, sz],\n      parent: root\n    });\n  }",
+              "oldString": "  // 9. Six Arched Outer Guard Struts\n  const strutRadius = 0.188;\n  for (let i = 0; i < 6; i++) {\n    const angle = (i * 60 + 30) * Math.PI / 180;\n    const sx = strutRadius * Math.cos(angle);\n    const sz = strutRadius * Math.sin(angle);\n    createPart('GuardStrut_' + i, cylinderGeo(0.0045, 0.0045, 0.315, 12), antiqueBronze, {\n      position: [sx, 0.325, sz],\n      parent: root\n    });\n  }"
+            },
+            {
+              "newString": "  const polishedBrass = gameMaterial(0xdfb743, {\n    metalness: 0.88,\n    roughness: 0.18,\n    flatShading: false\n  });\n\n  const antiqueBronze = gameMaterial(0x5c421e, {\n    metalness: 0.80,\n    roughness: 0.42,\n    flatShading: false\n  });\n\n  const darkSteel = gameMaterial(0x24272c, {\n    metalness: 0.92,\n    roughness: 0.26,\n    flatShading: false\n  });\n\n  const cobaltGlass = glassMaterial(0x09267e, {\n    opacity: 0.58,\n    roughness: 0.10,\n    metalness: 0.25\n  });\n\n  const luminousCoreMat = gameMaterial(0xfff2e0, {\n    emissive: 0xff8818,\n    emissiveIntensity: 2.8,\n    roughness: 0.22,\n    flatShading: false\n  });",
+              "oldString": "  const polishedBrass = gameMaterial(0xd4af37, {\n    metalness: 0.85,\n    roughness: 0.22,\n    flatShading: false\n  });\n\n  const antiqueBronze = gameMaterial(0x6e5229, {\n    metalness: 0.82,\n    roughness: 0.38,\n    flatShading: false\n  });\n\n  const darkSteel = gameMaterial(0x282b30, {\n    metalness: 0.9,\n    roughness: 0.28,\n    flatShading: false\n  });\n\n  const cobaltGlass = glassMaterial(0x0a287a, {\n    opacity: 0.62,\n    roughness: 0.12,\n    metalness: 0.22\n  });\n\n  const luminousCoreMat = gameMaterial(0xffeedd, {\n    emissive: 0xff9024,\n    emissiveIntensity: 2.2,\n    roughness: 0.25,\n    flatShading: false\n  });"
+            }
+          ],
+          "programRef": "sha256:3eae09e4dd63bb5678d58b69cb3acd4cd7dedda58edaf761c65bd501bce7e76a"
+        },
+        {
+          "capture": {
+            "cols": 2,
+            "output": "grid",
+            "shots": [
+              {
+                "camera": {
+                  "azimuthDeg": 35,
+                  "elevationDeg": 20,
+                  "type": "orbit"
+                },
+                "name": "Whole asset"
+              },
+              {
+                "camera": {
+                  "azimuthDeg": 65,
+                  "elevationDeg": 12,
+                  "padding": 1.25,
+                  "type": "orbit"
+                },
+                "name": "Iris mechanism"
+              }
+            ],
+            "size": 512,
+            "version": "kiln.capture.v1"
+          },
+          "edits": [
+            {
+              "newString": "  const cobaltGlass = glassMaterial(0x072274, {\n    opacity: 0.52,\n    roughness: 0.08,\n    metalness: 0.22\n  });\n\n  const luminousCoreMat = gameMaterial(0xfff6ea, {\n    emissive: 0xff9428,\n    emissiveIntensity: 3.2,\n    roughness: 0.18,\n    flatShading: false\n  });\n\n  const innerFlameMat = gameMaterial(0xffffff, {\n    emissive: 0xffd066,\n    emissiveIntensity: 5.0,\n    roughness: 0.1,\n    flatShading: false\n  });",
+              "oldString": "  const cobaltGlass = glassMaterial(0x09267e, {\n    opacity: 0.58,\n    roughness: 0.10,\n    metalness: 0.25\n  });\n\n  const luminousCoreMat = gameMaterial(0xfff2e0, {\n    emissive: 0xff8818,\n    emissiveIntensity: 2.8,\n    roughness: 0.22,\n    flatShading: false\n  });"
+            },
+            {
+              "newString": "  // 4. Luminous Inner Core & Burner Assembly\n  createPart('BurnerBase', cylinderGeo(0.032, 0.042, 0.065, 24), darkSteel, {\n    position: [0, 0.185, 0],\n    parent: root\n  });\n  createPart('BurnerCollar', torusGeo(0.038, 0.004, 12, 24), polishedBrass, {\n    position: [0, 0.215, 0],\n    parent: root\n  });\n  createPart('LuminousCore', sphereGeo(0.042, 24, 18), luminousCoreMat, {\n    position: [0, 0.315, 0],\n    scale: [0.85, 1.25, 0.85],\n    parent: root\n  });\n  createPart('IncandescentBulb', sphereGeo(0.022, 18, 14), innerFlameMat, {\n    position: [0, 0.315, 0],\n    parent: root\n  });\n  createPart('FilamentGuardRing', torusGeo(0.048, 0.003, 12, 32), polishedBrass, {\n    position: [0, 0.315, 0],\n    parent: root\n  });\n  createPart('FilamentVerticalRing', torusGeo(0.048, 0.0025, 12, 32), polishedBrass, {\n    position: [0, 0.315, 0],\n    rotation: [90, 0, 0],\n    parent: root\n  });",
+              "oldString": "  // 4. Luminous Inner Core & Burner Assembly\n  createPart('BurnerBase', cylinderGeo(0.032, 0.042, 0.065, 24), darkSteel, {\n    position: [0, 0.185, 0],\n    parent: root\n  });\n  createPart('LuminousCore', sphereGeo(0.042, 24, 18), luminousCoreMat, {\n    position: [0, 0.315, 0],\n    scale: [0.85, 1.25, 0.85],\n    parent: root\n  });\n  createPart('FilamentGuardRing', torusGeo(0.048, 0.003, 12, 32), polishedBrass, {\n    position: [0, 0.315, 0],\n    parent: root\n  });"
+            },
+            {
+              "newString": "    const knuckleGeo = cylinderGeo(0.010, 0.010, 0.030, 16);\n    createPart('BladeKnuckleBot_' + i, knuckleGeo, antiqueBronze, {\n      position: [0, 0.020, 0],\n      parent: bladePivot\n    });\n    createPart('BladeKnuckleMid_' + i, knuckleGeo, antiqueBronze, {\n      position: [0, 0.140, 0],\n      parent: bladePivot\n    });\n    createPart('BladeKnuckleTop_' + i, knuckleGeo, antiqueBronze, {\n      position: [0, 0.260, 0],\n      parent: bladePivot\n    });\n\n    // Articulated drive pin / actuation lug on the middle knuckle\n    createPart('BladeDriveLug_' + i, cylinderGeo(0.004, 0.004, 0.014, 12), darkSteel, {\n      position: [0.010, 0.140, 0],\n      rotation: [0, 0, 90],\n      parent: bladePivot\n    });\n\n    // Sculpted reinforcing spine along blade hinge line\n    createPart('BladeSpine_' + i, cylinderGeo(0.0035, 0.0035, 0.240, 12), antiqueBronze, {\n      position: [-0.008, 0.140, 0.015],\n      parent: bladePivot\n    });\n\n    createPart('HingePinCap_' + i, sphereGeo(0.008, 12, 10), polishedBrass, {\n      position: [0, 0.285, 0],\n      parent: bladePivot\n    });",
+              "oldString": "    const knuckleGeo = cylinderGeo(0.010, 0.010, 0.030, 16);\n    createPart('BladeKnuckleBot_' + i, knuckleGeo, antiqueBronze, {\n      position: [0, 0.020, 0],\n      parent: bladePivot\n    });\n    createPart('BladeKnuckleMid_' + i, knuckleGeo, antiqueBronze, {\n      position: [0, 0.140, 0],\n      parent: bladePivot\n    });\n    createPart('BladeKnuckleTop_' + i, knuckleGeo, antiqueBronze, {\n      position: [0, 0.260, 0],\n      parent: bladePivot\n    });\n\n    createPart('HingePinCap_' + i, sphereGeo(0.008, 12, 10), polishedBrass, {\n      position: [0, 0.285, 0],\n      parent: bladePivot\n    });"
+            },
+            {
+              "newString": "  // 6. Upper Mechanism Collar & Gallery\n  const upperCollarProfile = [\n    [0.105, 0.460],\n    [0.168, 0.460],\n    [0.174, 0.475],\n    [0.166, 0.492],\n    [0.118, 0.492]\n  ];\n  createPart('UpperCollar', lathe(upperCollarProfile, 48), polishedBrass, { parent: root });\n  createPart('UpperKnurlBead', torusGeo(0.171, 0.004, 12, 48), antiqueBronze, {\n    position: [0, 0.475, 0],\n    parent: root\n  });\n  createPart('LowerKnurlBead', torusGeo(0.174, 0.004, 12, 48), antiqueBronze, {\n    position: [0, 0.158, 0],\n    parent: root\n  });\n\n  // 7. Ventilator Crown & Stepped Dome with Louver Ports\n  const domeProfile = [\n    [0.118, 0.492],\n    [0.142, 0.515],\n    [0.136, 0.535],\n    [0.112, 0.558],\n    [0.082, 0.582],\n    [0.052, 0.605],\n    [0.022, 0.622],\n    [0.000, 0.630]\n  ];\n  createPart('DomeCap', lathe(domeProfile, 48), polishedBrass, { parent: root });\n\n  // 12 Ventilator exhaust ports\n  for (let v = 0; v < 12; v++) {\n    const vAngle = (v * 30) * Math.PI / 180;\n    const vx = 0.126 * Math.cos(vAngle);\n    const vz = 0.126 * Math.sin(vAngle);\n    createPart('VentPort_' + v, cylinderGeo(0.0035, 0.0035, 0.016, 8), darkSteel, {\n      position: [vx, 0.528, vz],\n      rotation: [0, -(v * 30), 45],\n      parent: root\n    });\n  }",
+              "oldString": "  // 6. Upper Mechanism Collar & Gallery\n  const upperCollarProfile = [\n    [0.105, 0.460],\n    [0.168, 0.460],\n    [0.174, 0.475],\n    [0.166, 0.492],\n    [0.118, 0.492]\n  ];\n  createPart('UpperCollar', lathe(upperCollarProfile, 48), polishedBrass, { parent: root });\n\n  // 7. Ventilator Crown & Stepped Dome\n  const domeProfile = [\n    [0.118, 0.492],\n    [0.142, 0.515],\n    [0.136, 0.535],\n    [0.112, 0.558],\n    [0.082, 0.582],\n    [0.052, 0.605],\n    [0.022, 0.622],\n    [0.000, 0.630]\n  ];\n  createPart('DomeCap', lathe(domeProfile, 48), polishedBrass, { parent: root });"
+            }
+          ],
+          "programRef": "sha256:7bd1ab08d1b9fb26143bb1f5a8e73a8952261955c4cde4b6aa2ece620a688b82"
+        },
+        {
+          "capture": {
+            "cols": 2,
+            "output": "grid",
+            "shots": [
+              {
+                "camera": {
+                  "azimuthDeg": 35,
+                  "elevationDeg": 20,
+                  "type": "orbit"
+                },
+                "name": "Whole asset"
+              },
+              {
+                "camera": {
+                  "azimuthDeg": 65,
+                  "elevationDeg": 12,
+                  "padding": 1.25,
+                  "type": "orbit"
+                },
+                "name": "Iris mechanism"
+              }
+            ],
+            "size": 512,
+            "version": "kiln.capture.v1"
+          },
+          "edits": [
+            {
+              "newString": "  createPart('UpperKnurlBead', torusGeo(0.171, 0.004, 12, 48), antiqueBronze, {\n    position: [0, 0.475, 0],\n    rotation: [90, 0, 0],\n    parent: root\n  });\n  createPart('LowerKnurlBead', torusGeo(0.174, 0.004, 12, 48), antiqueBronze, {\n    position: [0, 0.158, 0],\n    rotation: [90, 0, 0],\n    parent: root\n  });",
+              "oldString": "  createPart('UpperKnurlBead', torusGeo(0.171, 0.004, 12, 48), antiqueBronze, {\n    position: [0, 0.475, 0],\n    parent: root\n  });\n  createPart('LowerKnurlBead', torusGeo(0.174, 0.004, 12, 48), antiqueBronze, {\n    position: [0, 0.158, 0],\n    parent: root\n  });"
+            }
+          ],
+          "programRef": "sha256:75728315b406de82f753d6e8e5e3f70d8ef1cc37ff2890e089dd8fe21559bd69"
+        }
+      ],
+      "imagesDelivered": 7,
+      "imageCells": 17,
+      "errors": [],
+      "lastBudget": {
+        "calls": 22,
+        "images": 17,
+        "reserved": 0,
+        "maxCalls": 25,
+        "maxImages": 48
+      },
+      "files": [
+        {
+          "name": "final-chosen.png",
+          "bytes": 132359,
+          "sha256": "70bd7e0475ea645f5fec453385326624dd52788d7fcc5ae054cde8cb9363b6a3"
+        },
+        {
+          "name": "final.glb",
+          "bytes": 332516,
+          "sha256": "bfe59a0149a5564ffa819e8619b6032c7d350bf3efb2d47958250768c04e4ced"
+        },
+        {
+          "name": "final.kiln.js",
+          "bytes": 12887,
+          "sha256": "6837c0195c92b225c419124446710da1abdf911d46662df0fce9226c45fcf3a2"
+        },
+        {
+          "name": "initial.kiln.js",
+          "bytes": 10590,
+          "sha256": "3eae09e4dd63bb5678d58b69cb3acd4cd7dedda58edaf761c65bd501bce7e76a"
+        },
+        {
+          "name": "NOTES.md",
+          "bytes": 3448,
+          "sha256": "59000c894c525ebe1914d924248ec7678c9d14b365f3840f5f31df4fb5a7e0c6"
+        }
+      ],
+      "literalReplayVerified": true,
+      "imageReadEvents": 7
+    }
+  ]
+}

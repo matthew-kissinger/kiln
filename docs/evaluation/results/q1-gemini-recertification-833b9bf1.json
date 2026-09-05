@@ -1,0 +1,112 @@
+{
+  "phase": "post-fix supplied-source recertification",
+  "modelRequested": "gemini-3.8-flash-high",
+  "conversationId": "a96afc62-d06d-43ec-a2a5-e21ac0e19334",
+  "packageSha256": "833b9bf14468798640447d2ba98d16d1bcedaaff8ac8752d266881e29aaabb97",
+  "node": "v22.23.1",
+  "originalRef": "sha256:2d3d12e4e53613289f017fc5c4e20731fe7736655781839168dc2480be3efdcf",
+  "finalRef": "sha256:afa603dfcd3d2bc0a7f0e1838a13f00445b49c5de243183810b708f7780cac1a",
+  "sourceBytes": 8358,
+  "onlyChange": "const serviceOffset = 0.35; -> const serviceOffset = 0.50;",
+  "unrelatedSourceByteExact": true,
+  "inlineSourceCalls": 0,
+  "toolCalls": 9,
+  "imageCells": 7,
+  "pngBlocks": 3,
+  "images": [
+    {
+      "tool": "kiln_render",
+      "images": [
+        {
+          "bytes": 161875,
+          "sha256": "0d92edb4b22c7e86573f4f44ead94b6f84ba4d9a1af4a9ad6805fc4a833ee95e"
+        }
+      ],
+      "chargedCells": 2,
+      "materialFaithful": true
+    },
+    {
+      "tool": "kiln_edit",
+      "images": [
+        {
+          "bytes": 162408,
+          "sha256": "0522f6884dfa9ab2e1fedb43b78663a6e58fb583f6d14bf64475c78f51915d70"
+        }
+      ],
+      "chargedCells": 2,
+      "materialFaithful": true
+    },
+    {
+      "tool": "kiln_screenshot_animation",
+      "images": [
+        {
+          "bytes": 51286,
+          "sha256": "a41a3c70d97bc09f6d8e985ed5acbbe9be839fa2933827b7f85ea6e4d8a57ccb"
+        }
+      ],
+      "chargedCells": 3,
+      "materialFaithful": true
+    }
+  ],
+  "glbSha256": "14e27819da2fae8c1ef9c69960622dc4d792478d8c82acc97a8966ef9fe81e1e",
+  "glbBytes": 139780,
+  "independentNode22ExportHashMatches": true,
+  "chosenPng": {
+    "sha256": "0522f6884dfa9ab2e1fedb43b78663a6e58fb583f6d14bf64475c78f51915d70",
+    "bytes": 162408,
+    "width": 1036,
+    "height": 520,
+    "exactEditedMcpImage": true
+  },
+  "animation": {
+    "node": "ServiceAssembly",
+    "times": [
+      0,
+      0.5,
+      1
+    ],
+    "positions": [
+      0,
+      2.6500000953674316,
+      0.5,
+      0.25,
+      2.6500000953674316,
+      0.5,
+      0,
+      2.6500000953674316,
+      0.5
+    ],
+    "descendants": [
+      "Mesh_TrolleyCarriage_1",
+      "Mesh_TrolleyDropL_1",
+      "Mesh_TrolleyDropR_1",
+      "Mesh_TrolleyCarriage_2",
+      "Mesh_TrolleyDropL_2",
+      "Mesh_TrolleyDropR_2",
+      "Mesh_TrolleyCarriage_3",
+      "Mesh_TrolleyDropL_3",
+      "Mesh_TrolleyDropR_3",
+      "Mesh_LightRailBeam",
+      "Mesh_LightRailEndCap_Neg",
+      "Mesh_LightRailEndCap_Pos",
+      "Mesh_LightHousing_1",
+      "Mesh_LightLens_1",
+      "Mesh_LightHousing_2",
+      "Mesh_LightLens_2",
+      "Mesh_LightHousing_3",
+      "Mesh_LightLens_3",
+      "Mesh_LightHousing_4",
+      "Mesh_LightLens_4"
+    ]
+  },
+  "harness": {
+    "exit": {
+      "code": 0,
+      "timedOut": false,
+      "finishedAt": "2026-09-05T19:16:19.118Z"
+    },
+    "resultStatus": "SUCCESS",
+    "durationSeconds": 155.0535302
+  },
+  "interpretation": "Completed supplied-source regression. Real corrected GPU image delivery and identical CLI chosen grid; exact local source edit and runtime-consistent GLB export. Open-sheet and unchecked-intersection limitations remain; model visual claims are not topology proof."
+}

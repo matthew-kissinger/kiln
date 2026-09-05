@@ -1,0 +1,195 @@
+{
+  "phase": "five fresh original Gemini authoring runs",
+  "rows": [
+    {
+      "name": "solar-sail-courier",
+      "model": "gemini-3.8-flash-high",
+      "conversationId": "0b5d3b00-27e0-4e9d-82f3-f420d0341ccb",
+      "packageSha256": "0d457e8f8763730079da013abfa6662aadc02843f090fcae594c0f711399d16c",
+      "acceptedCalls": 18,
+      "deniedCalls": [],
+      "editRequests": 2,
+      "appliedRevisions": 2,
+      "rejectedEdits": 0,
+      "exactReplay": true,
+      "imageCells": 16,
+      "actualImageReads": 6,
+      "inlineSourceCalls": 0,
+      "tris": 27756,
+      "source": {
+        "file": "final.kiln.js",
+        "bytes": 20923,
+        "sha256": "0a3aac41c77094e96aaeed3414802b20fb3143398715cd8ffcc008d626821164"
+      },
+      "glb": {
+        "file": "final.glb",
+        "bytes": 348568,
+        "sha256": "12af7b1acaf8f073c89bee4a15f1f9fff92d72aa351676ebe3de0ac2a8aec97a"
+      },
+      "png": {
+        "file": "final-chosen.png",
+        "bytes": 247568,
+        "sha256": "f80ae57bb9d7905fdc67ed2821ef3483c6a4c2e4b610998e2f4c6971fd9ca1d4"
+      },
+      "exit": {
+        "code": 0,
+        "timedOut": false,
+        "finishedAt": "2026-09-05T21:13:27.188Z"
+      },
+      "localArtifacts": "C:\\Users\\Mattm\\X\\kiln-cleanrooms\\fresh-agy-solar-sail-courier-0d457e8f-20260905-gpu\\workspace\\assets"
+    },
+    {
+      "name": "seed-vault",
+      "model": "gemini-3.8-flash-high",
+      "conversationId": "cc1c03de-af19-4a40-b457-01a7afa43c9d",
+      "packageSha256": "0d457e8f8763730079da013abfa6662aadc02843f090fcae594c0f711399d16c",
+      "acceptedCalls": 16,
+      "deniedCalls": [],
+      "editRequests": 3,
+      "appliedRevisions": 3,
+      "rejectedEdits": 0,
+      "exactReplay": true,
+      "imageCells": 14,
+      "actualImageReads": 5,
+      "inlineSourceCalls": 1,
+      "tris": 33632,
+      "source": {
+        "file": "final.kiln.js",
+        "bytes": 15869,
+        "sha256": "704f5ca2c787bc3884421d284058499d5760531ddd8f3f586e1d2ba09280d09c"
+      },
+      "glb": {
+        "file": "final.glb",
+        "bytes": 463276,
+        "sha256": "971608219a53003d360334bc11ec47aa3f5fd60cf038187d2deebd92e5c21981"
+      },
+      "png": {
+        "file": "final-chosen.png",
+        "bytes": 348613,
+        "sha256": "f04c5ab54c45e98c428a9fec3eb8ac974bcd734038bc82c8486b8863c8c14827"
+      },
+      "exit": {
+        "code": 0,
+        "timedOut": false,
+        "finishedAt": "2026-09-05T21:18:58.491Z"
+      },
+      "localArtifacts": "C:\\Users\\Mattm\\X\\kiln-cleanrooms\\fresh-agy-seed-vault-0d457e8f-20260905-gpu\\workspace\\assets"
+    },
+    {
+      "name": "kinetic-wave",
+      "model": "gemini-3.8-flash-high",
+      "conversationId": "c13984bc-4b92-4c06-8dc6-756f4f198b89",
+      "packageSha256": "0d457e8f8763730079da013abfa6662aadc02843f090fcae594c0f711399d16c",
+      "acceptedCalls": 18,
+      "deniedCalls": [],
+      "editRequests": 2,
+      "appliedRevisions": 2,
+      "rejectedEdits": 0,
+      "exactReplay": true,
+      "imageCells": 14,
+      "actualImageReads": 6,
+      "inlineSourceCalls": 1,
+      "tris": 18960,
+      "source": {
+        "file": "final.kiln.js",
+        "bytes": 11076,
+        "sha256": "5a4ef2784d7a49e58c9dba495a97bae1bad948d4d9569e65607d97ebddb40151"
+      },
+      "glb": {
+        "file": "final.glb",
+        "bytes": 221224,
+        "sha256": "be25ec9e081de0b493cb41a598e06640f34ce0606efcff69ddb933732643a3dc"
+      },
+      "png": {
+        "file": "final-chosen.png",
+        "bytes": 258442,
+        "sha256": "b88fe6f5c5c9b27094571384421006ca20fdb5cb272f9990ccfc79284cbe0f52"
+      },
+      "exit": {
+        "code": 0,
+        "timedOut": false,
+        "finishedAt": "2026-09-05T21:23:05.638Z"
+      },
+      "localArtifacts": "C:\\Users\\Mattm\\X\\kiln-cleanrooms\\fresh-agy-kinetic-wave-0d457e8f-20260905-gpu\\workspace\\assets"
+    },
+    {
+      "name": "deco-radio",
+      "model": "gemini-3.8-flash-high",
+      "conversationId": "e62405c1-9891-45ae-9668-a8a1ba75bbd8",
+      "packageSha256": "0d457e8f8763730079da013abfa6662aadc02843f090fcae594c0f711399d16c",
+      "acceptedCalls": 25,
+      "deniedCalls": [
+        {
+          "tool": "kiln_source",
+          "reason": "Tool call budget exhausted"
+        }
+      ],
+      "editRequests": 3,
+      "appliedRevisions": 3,
+      "rejectedEdits": 0,
+      "exactReplay": true,
+      "imageCells": 25,
+      "actualImageReads": 8,
+      "inlineSourceCalls": 1,
+      "tris": 13216,
+      "source": {
+        "file": "final.kiln.js",
+        "bytes": 15324,
+        "sha256": "d79eec971bd3199993b8af63673f17feb0b968d91745873ad032927ea48a9241"
+      },
+      "glb": {
+        "file": "final.glb",
+        "bytes": 206992,
+        "sha256": "6829cc3841de54672db8160be4b9517c0e006ff2ce082dff1e44faf0479544f7"
+      },
+      "png": {
+        "file": "final-chosen.png",
+        "bytes": 254412,
+        "sha256": "b6dbbcdea0258d2432672e5e5484818acf632c535dec24fa529b11c68d5d684b"
+      },
+      "exit": {
+        "code": 0,
+        "timedOut": false,
+        "finishedAt": "2026-09-05T21:30:37.202Z"
+      },
+      "localArtifacts": "C:\\Users\\Mattm\\X\\kiln-cleanrooms\\fresh-agy-deco-radio-0d457e8f-20260905-gpu\\workspace\\assets"
+    },
+    {
+      "name": "polar-rover",
+      "model": "gemini-3.8-flash-high",
+      "conversationId": "a10a848f-7cef-4811-b59d-d36fbaa021ec",
+      "packageSha256": "0d457e8f8763730079da013abfa6662aadc02843f090fcae594c0f711399d16c",
+      "acceptedCalls": 25,
+      "deniedCalls": [],
+      "editRequests": 5,
+      "appliedRevisions": 4,
+      "rejectedEdits": 1,
+      "exactReplay": true,
+      "imageCells": 19,
+      "actualImageReads": 6,
+      "inlineSourceCalls": 0,
+      "tris": 22478,
+      "source": {
+        "file": "final.kiln.js",
+        "bytes": 32072,
+        "sha256": "aea09b2491cc06ac710648d0de30bb365fa1b2c0fff10712cb70db07e8216515"
+      },
+      "glb": {
+        "file": "final.glb",
+        "bytes": 300068,
+        "sha256": "7fc979534fcaf752439d8db90b41227c25bd0bc7fe2ee616615e3ae05678d0c8"
+      },
+      "png": {
+        "file": "final-chosen.png",
+        "bytes": 337652,
+        "sha256": "cf1e19f351a4efd3815d67ceff1f22c20d0b3b6689ad64fdbf066ff5e6fd8432"
+      },
+      "exit": {
+        "code": 0,
+        "timedOut": false,
+        "finishedAt": "2026-09-05T21:36:13.194Z"
+      },
+      "localArtifacts": "C:\\Users\\Mattm\\X\\kiln-cleanrooms\\fresh-agy-polar-rover-0d457e8f-20260905-gpu\\workspace\\assets"
+    }
+  ]
+}

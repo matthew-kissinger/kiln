@@ -1,0 +1,24 @@
+{
+  "version": "kiln.capture.v1",
+  "output": "grid",
+  "cols": 2,
+  "size": 768,
+  "shots": [
+    {
+      "name": "Hero 3/4",
+      "camera": { "type": "orbit", "azimuthDeg": 35, "elevationDeg": 20 }
+    },
+    {
+      "name": "Front Elevation",
+      "camera": { "type": "orbit", "azimuthDeg": 0, "elevationDeg": 0 }
+    },
+    {
+      "name": "Front 3/4 Detail",
+      "camera": { "type": "orbit", "azimuthDeg": 15, "elevationDeg": 5, "padding": 0.7 }
+    },
+    {
+      "name": "Rear Architecture",
+      "camera": { "type": "orbit", "azimuthDeg": 180, "elevationDeg": 15 }
+    }
+  ]
+}

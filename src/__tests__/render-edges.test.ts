@@ -25,14 +25,11 @@ describe('executeKilnCode input validation', () => {
   });
 
   test('throws when build is not defined at all', async () => {
-    // The Function-constructor sandbox references `build` unconditionally
-    // in its return wrapper, so a missing declaration surfaces as a
-    // ReferenceError before the typeof check fires. Either failure
-    // mode is acceptable - the contract is "code without build() does
-    // not silently render".
-    await expect(executeKilnCode(`const meta = { name: 'NoBuild' };`)).rejects.toThrow(
-      /build is not defined|did not define `build`/,
-    );
+    // The wrapper's missing build reference receives the same bounded authoring
+    // diagnostic as an undeclared variable in the authored program.
+    await expect(executeKilnCode(`const meta = { name: 'NoBuild' };`)).rejects.toMatchObject({
+      diagnostic: 'UNBOUND_VARIABLE',
+    });
   });
 
   test('throws when build is defined but is not a function', async () => {

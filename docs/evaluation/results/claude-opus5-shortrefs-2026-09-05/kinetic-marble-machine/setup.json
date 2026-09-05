@@ -1,0 +1,36 @@
+{
+  "phase": "fresh original authoring",
+  "name": "kinetic-marble-machine",
+  "brief": "A beautifully engineered kinetic marble machine with a legible continuous marble path, a visible lift mechanism and a sculptural mechanical frame. Make routes, supports and transfers clear. Walnut, brass and contrasting dark rails, colorful restrained glass marbles. Prefer a thoughtful readable system over tangled pipes. Use supported rigid animation when useful, and do not imply physics simulation if motion is authored.",
+  "modelRequested": "claude-opus-5",
+  "harness": "Claude Code 2.1.259",
+  "node": "v22.23.1",
+  "nodeExecutable": "C:\\Users\\Mattm\\AppData\\Roaming\\fnm\\node-versions\\v22.23.1\\installation\\node.exe",
+  "runtime": "C:/Users/Mattm/AppData/Local/Temp/kiln-package-café-fPDlXN/fresh installation/node_modules/@kiln/engine",
+  "tarballSha256": "19add77366f489f078ca50f58d6d0bcb4c4d3e86a18df4bc8da387285ab90822",
+  "bundles": {
+    "cli.mjs": "13a7a110b781d06cc3487c3381c422d5f5a386f9a7308bc82fe21da547174217",
+    "mcp-server.mjs": "841bb44b94f010e9ae5efe855fad14c2defb0971103c012f6829b56d80da515d",
+    "evaluator-worker.mjs": "5a574c3be5f352c9d1c4bfd4c77dc184e202921bb2767b20dce8b467b69cf150",
+    "build.json": "32a9e301d7e8283126c23e27b6fd9694d90951334fa1266730fc5b461366d022"
+  },
+  "skills": {
+    "kiln-author-asset/references/camera-recipes.md": "3a5f1d0fdbdbfc0428b68a27dc86102fe37bb8772bb3af8ffd5cd809860ac157",
+    "kiln-author-asset/references/geometry-recipes.md": "12e861a7c05b21ee8d0de713f4bde8a843af1dbf37326b5121a8229805693c3c",
+    "kiln-author-asset/references/program-contract.md": "42cc4c17fa14d94febdf0ccbc38454f5972f2d3730f20dbca39151c0fe3aa293",
+    "kiln-author-asset/references/reusable-frame.kiln.js": "9015b2255742efa74e47531f68778573c34566237b3256dcdaab9c360cfc895f",
+    "kiln-author-asset/SKILL.md": "603e308138eb9fefc6e5f43d271eb8ee5b1498900105e9c9c652de587fbfff90",
+    "kiln-qa-asset/references/integration-checks.md": "3d340cc81c0de0a4415ff1d2707c64db1a7433fd7e63f69e1748862739ef5c24",
+    "kiln-qa-asset/SKILL.md": "1a4ed26e79df4783c87454cb57a3789801d4719441061f22f4fcd2497b335c8d",
+    "kiln-refine-asset/references/revision-and-views.md": "277e7c5996d51c67a4c67ce8d7be6b227a6dbabb6e3cebc3b947f1c9e6e7a4f9",
+    "kiln-refine-asset/SKILL.md": "8f869ed79c6ecc4f063e8fde93b40c3c7c31e61b1d2eaa891071acb785705cef"
+  },
+  "promptSha256": "c73d4ea6bfd6e0676bf25089731f785898a77ce55afa910a92a1c61d1cd4363c",
+  "observerSha256": "58c6d64f3232510ccff48f7109a7337c6b6f8d64400030073b36f2b6a8e72237",
+  "limits": {
+    "toolCalls": 32,
+    "imageCells": 48,
+    "wallSeconds": 600
+  },
+  "createdAt": "2026-09-05T22:42:18.071Z"
+}

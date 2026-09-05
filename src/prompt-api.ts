@@ -44,12 +44,10 @@ const CATEGORY_HEADERS: Array<[PrimitiveSpec['category'], string]> = [
  */
 const CATEGORY_NOTES: Partial<Record<PrimitiveSpec['category'], string>> = {
   csg:
-    'UVs do NOT survive a boolean: the manifold bridge carries positions only, so the result has ' +
-    'no uv attribute and any texture on it will not appear. Unwrap AFTER the boolean, never before — ' +
-    '`mesh.geometry = await autoUnwrap(mesh.geometry)`. Unwrapping an operand first is wasted work; ' +
-    'the next boolean throws the atlas away. An operand that contributes zero triangles (an empty ' +
-    'Group) and an empty result both throw with the cause named, instead of silently producing an ' +
-    'invisible part.',
+    'For textured or multi-material booleans, pass { preserveAttributes: true } as the final options argument. ' +
+    'This preserves UV0 and source materials through actual operand runs; exposed cut faces inherit the cutter material and UVs. ' +
+    'Legacy calls omit that option and discard UVs, so unwrap their result afterward: `mesh.geometry = await autoUnwrap(mesh.geometry)`. ' +
+    'Tangents are regenerated when needed. Empty operands/results fail with a named cause. Convex hull faces are newly generated and have no original-face provenance.',
 };
 
 const WRAP = 96;

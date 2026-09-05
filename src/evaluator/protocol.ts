@@ -1,3 +1,4 @@
+import { authoringDiagnosticAdvice, type AuthoringDiagnostic } from './authoring-diagnostic';
 import { createHash } from 'node:crypto';
 import { isAssetCategory, validateAssetIntentV1, type AssetIntentV1 } from '../contracts';
 import type { RenderGlbOptions, RenderResult } from '../render';
@@ -17,6 +18,7 @@ export type EvaluatorOutcomeCode =
   | 'EXECUTION_REJECTED'
   | 'QA_BLOCKED'
   | 'DEADLINE_EXCEEDED'
+  | 'CANCELLED'
   | 'OUTPUT_LIMIT_EXCEEDED'
   | 'ISOLATION_UNAVAILABLE'
   | 'WORKER_FAILED'
@@ -27,6 +29,7 @@ const EVALUATOR_OUTCOME_MESSAGES: Record<EvaluatorOutcomeCode, string> = {
   EXECUTION_REJECTED: 'Generated asset execution was rejected.',
   QA_BLOCKED: 'Generated asset did not pass quality checks.',
   DEADLINE_EXCEEDED: 'Evaluator deadline exceeded.',
+  CANCELLED: 'Evaluator request was cancelled.',
   OUTPUT_LIMIT_EXCEEDED: 'Evaluator output limit exceeded.',
   ISOLATION_UNAVAILABLE: 'Isolated evaluator is unavailable.',
   WORKER_FAILED: 'Evaluator worker failed.',
@@ -56,6 +59,7 @@ export interface CreateEvaluatorRequestV1Input {
 export interface EvaluatorTransportControlsV1 {
   deadlineMs: number;
   maxResponseBytes: number;
+  signal?: AbortSignal;
 }
 
 export type EvaluatorTransportV1 = (
@@ -67,6 +71,7 @@ export interface EvaluatorPortCallControlsV1 {
   deadlineMs?: number;
   maxGlbBytes?: number;
   maxResponseBytes?: number;
+  signal?: AbortSignal;
 }
 
 export interface EvaluatorPortV1 {
@@ -94,8 +99,9 @@ export class EvaluatorPortError extends Error {
   constructor(
     readonly code: EvaluatorOutcomeCode,
     message = evaluatorOutcomeMessage(code),
+    readonly diagnostic?: AuthoringDiagnostic,
   ) {
-    super(message);
+    super(diagnostic ? `${message} ${authoringDiagnosticAdvice(diagnostic)}` : message);
     this.name = 'EvaluatorPortError';
   }
 }
@@ -124,6 +130,7 @@ export type EvaluatorResultV1 =
       error: {
         code: EvaluatorOutcomeCode;
         message: string;
+        diagnostic?: AuthoringDiagnostic;
         qa?: {
           report: AssetQaReportV1;
           stage: 'scene' | 'final-glb';
@@ -250,10 +257,17 @@ export function createEvaluatorRequestV1(input: CreateEvaluatorRequestV1Input): 
 }
 
 function parseOptions(value: unknown): Omit<RenderGlbOptions, 'textureResolver'> {
-  if (!isRecord(value) || !hasExactKeys(value, ['optimize', 'instance', 'intent', 'category'])) {
+  if (
+    !isRecord(value) ||
+    !hasExactKeys(value, ['optimize', 'instance', 'intent', 'category', 'geometryPolicy'])
+  ) {
     return fail('request');
   }
   const options: Omit<RenderGlbOptions, 'textureResolver'> = {};
+  if (value.geometryPolicy !== undefined) {
+    if (!['warn', 'strict'].includes(String(value.geometryPolicy))) fail('request');
+    options.geometryPolicy = value.geometryPolicy as 'warn' | 'strict';
+  }
   if (value.optimize !== undefined) {
     if (!['off', 'auto', 'palette', 'full'].includes(String(value.optimize))) fail('request');
     options.optimize = value.optimize as NonNullable<RenderGlbOptions['optimize']>;
@@ -310,7 +324,7 @@ export function encodeRenderResultV1(
   requestId: string,
   render: RenderResult,
 ): WireEvaluatorResultV1 {
-  const { glb, diagnosticViews, ...rest } = render;
+  const { glb, diagnosticViews, buildCache: _hostCacheReceipt, ...rest } = render;
   return {
     version: EVALUATOR_RESULT_VERSION,
     requestId,
@@ -357,7 +371,10 @@ export function decodeEvaluatorResultV1(
   if (expectedRequestId !== undefined && value.requestId !== expectedRequestId) fail('result');
   if (!value.ok) {
     if (value.render !== undefined) return fail('result');
-    if (!isRecord(value.error) || !hasExactKeys(value.error, ['code', 'message', 'qa'])) {
+    if (
+      !isRecord(value.error) ||
+      !hasExactKeys(value.error, ['code', 'message', 'qa', 'diagnostic'])
+    ) {
       return fail('result');
     }
     const codes: EvaluatorOutcomeCode[] = [
@@ -365,6 +382,7 @@ export function decodeEvaluatorResultV1(
       'EXECUTION_REJECTED',
       'QA_BLOCKED',
       'DEADLINE_EXCEEDED',
+      'CANCELLED',
       'OUTPUT_LIMIT_EXCEEDED',
       'ISOLATION_UNAVAILABLE',
       'WORKER_FAILED',
@@ -377,6 +395,13 @@ export function decodeEvaluatorResultV1(
     ) {
       return fail('result');
     }
+    if (
+      value.error.diagnostic !== undefined &&
+      (value.error.code !== 'EXECUTION_REJECTED' ||
+        (value.error.diagnostic !== 'UNBOUND_VARIABLE' &&
+          value.error.diagnostic !== 'GEAR_RADII_ORDER'))
+    )
+      return fail('result');
     if (value.error.qa !== undefined) {
       if (
         value.error.code !== 'QA_BLOCKED' ||
@@ -454,6 +479,8 @@ export function createEvaluatorPortV1(
   let sequence = 0;
   return {
     async render(code, options = {}, controls = {}) {
+      const signal = controls.signal ?? defaults.signal;
+      if (signal?.aborted) throw new EvaluatorPortError('CANCELLED');
       const deadlineMs = boundedControl(
         controls.deadlineMs ?? defaults.deadlineMs,
         DEFAULT_EVALUATOR_DEADLINE_MS,
@@ -473,14 +500,28 @@ export function createEvaluatorPortV1(
       const built = createEvaluatorRequestV1({ requestId, code, options, maxGlbBytes });
       let timer: ReturnType<typeof setTimeout> | undefined;
       let response: string;
+      const transportController = new AbortController();
+      let abort: (() => void) | undefined;
       try {
+        const cancelled = new Promise<never>((_, reject) => {
+          abort = () => {
+            reject(new EvaluatorPortError('CANCELLED'));
+            transportController.abort();
+          };
+          signal?.addEventListener('abort', abort, { once: true });
+        });
         response = await Promise.race([
-          transport(built.json, { deadlineMs, maxResponseBytes }),
+          transport(built.json, {
+            deadlineMs,
+            maxResponseBytes,
+            signal: transportController.signal,
+          }),
+          cancelled,
           new Promise<never>((_, reject) => {
-            timer = setTimeout(
-              () => reject(new EvaluatorPortError('DEADLINE_EXCEEDED')),
-              deadlineMs,
-            );
+            timer = setTimeout(() => {
+              reject(new EvaluatorPortError('DEADLINE_EXCEEDED'));
+              transportController.abort();
+            }, deadlineMs);
           }),
         ]);
       } catch (error) {
@@ -488,7 +529,9 @@ export function createEvaluatorPortV1(
         throw new EvaluatorPortError('WORKER_FAILED');
       } finally {
         clearTimeout(timer);
+        if (abort) signal?.removeEventListener('abort', abort);
       }
+      if (signal?.aborted) throw new EvaluatorPortError('CANCELLED');
       if (typeof response !== 'string') throw new EvaluatorPortError('PROTOCOL_ERROR');
       if (Buffer.byteLength(response, 'utf8') > maxResponseBytes) {
         throw new EvaluatorPortError('OUTPUT_LIMIT_EXCEEDED');
@@ -508,7 +551,7 @@ export function createEvaluatorPortV1(
             result.error.qa.gltfValidation,
           );
         }
-        throw new EvaluatorPortError(result.error.code);
+        throw new EvaluatorPortError(result.error.code, undefined, result.error.diagnostic);
       }
       return result.render;
     },
@@ -518,8 +561,11 @@ export function createEvaluatorPortV1(
 /** Explicit trusted/test compatibility port. Production hosts must inject a
  * transport-backed port and select `evaluator-required`; there is no fallback. */
 export const trustedInProcessEvaluatorPortV1: EvaluatorPortV1 = {
-  async render(code, options = {}) {
+  async render(code, options = {}, controls = {}) {
+    if (controls.signal?.aborted) throw new EvaluatorPortError('CANCELLED');
     const { renderGLBInProcess } = await import('../render');
-    return renderGLBInProcess(code, options);
+    const result = await renderGLBInProcess(code, options);
+    if (controls.signal?.aborted) throw new EvaluatorPortError('CANCELLED');
+    return result;
   },
 };

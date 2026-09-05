@@ -184,7 +184,10 @@ interface Tri {
 }
 
 /** Collect world-space triangles + base colors from a (possibly cross-realm) scene. */
-function collectTriangles(root: DuckObject3D): { tris: Tri[]; bbox: { min: Vec3; max: Vec3 } } {
+export function collectTriangles(root: DuckObject3D): {
+  tris: Tri[];
+  bbox: { min: Vec3; max: Vec3 };
+} {
   root.updateMatrixWorld?.(true);
 
   const tris: Tri[] = [];

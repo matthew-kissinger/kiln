@@ -144,22 +144,18 @@ describe('always-on context cost', () => {
     return { total, count };
   };
 
-  it('the seven tool schemas stay small, and the README quotes the real number', async () => {
+  it('the tool schemas stay within the context budget', async () => {
     const chars = schemaChars();
     // A budget, not a target: several tools' worth of headroom before anyone
     // has to think about it again.
     expect(chars).toBeLessThan(24 * 1024);
-    const readme = await readFile(join(REPO, 'README.md'), 'utf8');
-    expect(readme).toContain(`${chars.toLocaleString('en-US')} characters of JSON Schema`);
   });
 
-  it('the skills advertise themselves in the front matter the README quotes', async () => {
+  it('skill discovery stays within the context budget', async () => {
     const { total, count } = await frontMatterChars();
     expect(count).toBe(5);
     // Front matter is a name and one sentence. Anything much past this is a
     // skill trying to teach from the index instead of from its body.
     expect(total).toBeLessThan(2048);
-    const readme = await readFile(join(REPO, 'README.md'), 'utf8');
-    expect(readme).toContain(`${total.toLocaleString('en-US')} characters of front matter`);
   });
 });

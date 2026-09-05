@@ -1,0 +1,696 @@
+{
+  "count": 53,
+  "total": 53,
+  "elapsedSeconds": 71.596,
+  "records": [
+    {
+      "name": "abyssal-surveyor",
+      "receiptHash": "d48bbecc7dd53ba00237873d815acaab5e7a7c1894eaffa809ae632032bef45a",
+      "sourceHash": "3fad8e8c92fbcbc535007bc08db6ff2564d08ac0cbfb840b355e58ae85c0b633",
+      "artifactHash": "eb18c8e8ec9b1c6f45f813aa1120285ee16b475d7860018bba4a0a9b7f41eb7e",
+      "imageHash": "7e554ff278f71a038a7610ab504137c25fbf8efd6f81dba00ffc35fac04ceb79",
+      "captureIdentity": [
+        "kiln.capture-producer.v1",
+        "sha256:29f09ae21d4cbac001a0012e6776e8f45ccdc77ded3d513fa879d09e258b55da",
+        "2e2fdaf0-55c5-4ad9-88f0-d026dd37625a",
+        "dawn-d3d12:nvidia-geforce-rtx-3070:D3D12 driver version 32.0.16.1074"
+      ]
+    },
+    {
+      "name": "air-defense-radar",
+      "receiptHash": "ad043ae9b30b1c9ce8aea441b7ea3484a135b1f06ccb08cbfd978d70831eadb3",
+      "sourceHash": "05fe2ee0c75f0c2e0124b3c75e4ea88f85165e7836e41156c1572daad19cde97",
+      "artifactHash": "ca0d93b7039bf8a936d412169dd09f4415b67ae1ff02ef2c950ac4eea1104d52",
+      "imageHash": "82d72d15562ac7becf0bc784ef32c90856bbce7d498acd8e003a77987827ccde",
+      "captureIdentity": [
+        "kiln.capture-producer.v1",
+        "sha256:29f09ae21d4cbac001a0012e6776e8f45ccdc77ded3d513fa879d09e258b55da",
+        "2e2fdaf0-55c5-4ad9-88f0-d026dd37625a",
+        "dawn-d3d12:nvidia-geforce-rtx-3070:D3D12 driver version 32.0.16.1074"
+      ]
+    },
+    {
+      "name": "aircraft-carrier",
+      "receiptHash": "482ab8df199068ca6466ca01fa97db20fc8ca0d8153ef3cee95fcda54b54c305",
+      "sourceHash": "b9fb1cf515ff9a089198f97a997b39f14621b86282ef85ed5ce05bfd2ed395a5",
+      "artifactHash": "790be350bf1074356171e9e6df5c9345cde38c9cd6feebe2268a8f2182a22bed",
+      "imageHash": "66fbd0043e7747dea2858a28d3d9930482319c90599b202b21932e65b94607df",
+      "captureIdentity": [
+        "kiln.capture-producer.v1",
+        "sha256:29f09ae21d4cbac001a0012e6776e8f45ccdc77ded3d513fa879d09e258b55da",
+        "2e2fdaf0-55c5-4ad9-88f0-d026dd37625a",
+        "dawn-d3d12:nvidia-geforce-rtx-3070:D3D12 driver version 32.0.16.1074"
+      ]
+    },
+    {
+      "name": "anglerfish",
+      "receiptHash": "8ef6ab4b77ec6889ff4163bc3e8d2f0f7da5364baa42bc77094d9a48e224427b",
+      "sourceHash": "ab5898d2061979708b4db6f9277320081c96c9cde7a985a2de35362a7ede40ff",
+      "artifactHash": "27432aa45b662d44ed4d8b806eb8891e892cda3dfb67ddbcc435c792906bf69d",
+      "imageHash": "dd037e86255267a9d2dd54c773883ca6eff551a2efa824a076fd0d94483bfee7",
+      "captureIdentity": [
+        "kiln.capture-producer.v1",
+        "sha256:29f09ae21d4cbac001a0012e6776e8f45ccdc77ded3d513fa879d09e258b55da",
+        "2e2fdaf0-55c5-4ad9-88f0-d026dd37625a",
+        "dawn-d3d12:nvidia-geforce-rtx-3070:D3D12 driver version 32.0.16.1074"
+      ]
+    },
+    {
+      "name": "arcade-cabinet",
+      "receiptHash": "0cfdd22feae548ac45ad271174f72ceaadf00054a04852e413cb0a3f5b510799",
+      "sourceHash": "b824524867c88ffc1fc0c67fb9152c16cbfbb5bb207f91f7e27ee42994470409",
+      "artifactHash": "764355c39e44b80f5dd81e286d8b8cf8ad6fe9d08c2748f0c1ce565b6c931b23",
+      "imageHash": "c05a7374990bab14c0592677a62102f3ec508213c3fedc4a737d8ec29b18d6b2",
+      "captureIdentity": [
+        "kiln.capture-producer.v1",
+        "sha256:29f09ae21d4cbac001a0012e6776e8f45ccdc77ded3d513fa879d09e258b55da",
+        "2e2fdaf0-55c5-4ad9-88f0-d026dd37625a",
+        "dawn-d3d12:nvidia-geforce-rtx-3070:D3D12 driver version 32.0.16.1074"
+      ]
+    },
+    {
+      "name": "astronomical-clock",
+      "receiptHash": "44cc532a2205371dc01d92240398327fe40f0b2de4a320efe89617cd4cfec950",
+      "sourceHash": "4c027f3366e18a05a7d8b75fc98a3c10f0f3b86977cb81ea03555cdb67d2f61c",
+      "artifactHash": "c498401d68f07a86bde8beda5db900a879aea8b94bbb9f012ff6e72fd55bc07e",
+      "imageHash": "f1b06f82034f4a2402f8e15624da3fe8a6e1aadd595e7a40a1647401040175d6",
+      "captureIdentity": [
+        "kiln.capture-producer.v1",
+        "sha256:29f09ae21d4cbac001a0012e6776e8f45ccdc77ded3d513fa879d09e258b55da",
+        "2e2fdaf0-55c5-4ad9-88f0-d026dd37625a",
+        "dawn-d3d12:nvidia-geforce-rtx-3070:D3D12 driver version 32.0.16.1074"
+      ]
+    },
+    {
+      "name": "bench-refractor",
+      "receiptHash": "c3e4074ed23734ed8c01b4ca25a14e3218705cec35e51afc808c7105db59efc2",
+      "sourceHash": "32223e1d94c3034d14f5d3f401fd7fbb5da3e471ddf92c3acdc319a85a03106d",
+      "artifactHash": "9869570c85b37881853a4e1a78ee101244abcead308d35374e37287e388be749",
+      "imageHash": "471c0720169fb61cd51a4c629a2d59e89c56e6871fc8d096923e353d5a07753e",
+      "captureIdentity": [
+        "kiln.capture-producer.v1",
+        "sha256:29f09ae21d4cbac001a0012e6776e8f45ccdc77ded3d513fa879d09e258b55da",
+        "2e2fdaf0-55c5-4ad9-88f0-d026dd37625a",
+        "dawn-d3d12:nvidia-geforce-rtx-3070:D3D12 driver version 32.0.16.1074"
+      ]
+    },
+    {
+      "name": "blast-furnace",
+      "receiptHash": "6e104efbcaeb066d44bf050b0687823b3f9132142203b0f6904b78cfc60d3fe5",
+      "sourceHash": "8879da09bc2e38dc0bd398dd43ab62e631900193308548a20be3806165e34567",
+      "artifactHash": "3b056d11e1ebcf0cd37b57998c73009fd1fe71a1a454f8a41a72f8706ae2f22b",
+      "imageHash": "dddd5fcd55c51f1b0653b68bcbbe94a096fff0a9061b1716bdaa608e5d6d63ac",
+      "captureIdentity": [
+        "kiln.capture-producer.v1",
+        "sha256:29f09ae21d4cbac001a0012e6776e8f45ccdc77ded3d513fa879d09e258b55da",
+        "2e2fdaf0-55c5-4ad9-88f0-d026dd37625a",
+        "dawn-d3d12:nvidia-geforce-rtx-3070:D3D12 driver version 32.0.16.1074"
+      ]
+    },
+    {
+      "name": "cable-stayed-bridge",
+      "receiptHash": "73095bcf777e8bf56c4cdb6623d345f9b20742c5524a44a839e836865d953282",
+      "sourceHash": "601194504f7a18d6dfb7e914b343e608885f3778ca17447d6555cae5104a1508",
+      "artifactHash": "67be59e264c9c568b2228f6c9a26e1b8b7c220241344e56e644cdf3fea814855",
+      "imageHash": "9ce2468b0e4763e0b152be3b95b703ea7451b2d8573654e95e1920c800ca0cf7",
+      "captureIdentity": [
+        "kiln.capture-producer.v1",
+        "sha256:29f09ae21d4cbac001a0012e6776e8f45ccdc77ded3d513fa879d09e258b55da",
+        "2e2fdaf0-55c5-4ad9-88f0-d026dd37625a",
+        "dawn-d3d12:nvidia-geforce-rtx-3070:D3D12 driver version 32.0.16.1074"
+      ]
+    },
+    {
+      "name": "cafe-racer",
+      "receiptHash": "4f2fb54404a05dbc72eb8e295833314d2290564667655e317ffdb3b71649f173",
+      "sourceHash": "17553756d649fbd5d49b67cfa8a2d3b1918d1d331fd58b6783b6ea4e06f58006",
+      "artifactHash": "c825f5f6fc0fb1aa8782a304ff54e9593be3edabc2acd46d50ef42e34d1bcf49",
+      "imageHash": "4bc8ea9c5b0bed235dd3c58de5ed902708687fa905725377524247bcdd6150e5",
+      "captureIdentity": [
+        "kiln.capture-producer.v1",
+        "sha256:29f09ae21d4cbac001a0012e6776e8f45ccdc77ded3d513fa879d09e258b55da",
+        "2e2fdaf0-55c5-4ad9-88f0-d026dd37625a",
+        "dawn-d3d12:nvidia-geforce-rtx-3070:D3D12 driver version 32.0.16.1074"
+      ]
+    },
+    {
+      "name": "carousel",
+      "receiptHash": "192d940dcb6b7ff288379b53024ddb5b7f11d0a957d86721e574723b1874e0a9",
+      "sourceHash": "f93b8b3c92a3cecba5620c61e7c4deb2d94470ca2c7fcb098579d5fa0d16a773",
+      "artifactHash": "b5217272c3fda0e28e8ad88cf628cc74dc5a7d86a9509a6e56b156d2dd45fd7f",
+      "imageHash": "b0d2d2e56f32a2f0d7ea538063f045bf08562b6d4415355c3e0a7ec6aa86b3be",
+      "captureIdentity": [
+        "kiln.capture-producer.v1",
+        "sha256:29f09ae21d4cbac001a0012e6776e8f45ccdc77ded3d513fa879d09e258b55da",
+        "2e2fdaf0-55c5-4ad9-88f0-d026dd37625a",
+        "dawn-d3d12:nvidia-geforce-rtx-3070:D3D12 driver version 32.0.16.1074"
+      ]
+    },
+    {
+      "name": "cathedral",
+      "receiptHash": "ff5d23617aa18cad137545ab245a372d1bec1c8c814e893d4687d9befa4442ef",
+      "sourceHash": "eefd46ab244dff7ab3d9f2b1acae42265afed0ef3059130c32589804ccb20c98",
+      "artifactHash": "490eaa7dd5c3f6f4f41489e9ac609c26cc1245ba4e8464ed5d0d37d369a9e1ca",
+      "imageHash": "569f51f0899ece181126a11b7042fcdaa703941693c6c8ef8c8694a1dfa2b2a5",
+      "captureIdentity": [
+        "kiln.capture-producer.v1",
+        "sha256:29f09ae21d4cbac001a0012e6776e8f45ccdc77ded3d513fa879d09e258b55da",
+        "2e2fdaf0-55c5-4ad9-88f0-d026dd37625a",
+        "dawn-d3d12:nvidia-geforce-rtx-3070:D3D12 driver version 32.0.16.1074"
+      ]
+    },
+    {
+      "name": "clock-tower",
+      "receiptHash": "8e3764f5ebcef21b53e72c266f5a4f5bede20c3608c90f33e8bf278dd7b7ff16",
+      "sourceHash": "641fe2de7491061214b88d4bc06a824dcfc0e582f408f6af8986bd6498f0e731",
+      "artifactHash": "dfd7e07b394e511aad15f04d7023d84285273c3156d1428210baae1d6fac0957",
+      "imageHash": "d1542cb89e77bc5ac10a11efc798415984ab833933dc0afc7f993ecf2cf6dbd0",
+      "captureIdentity": [
+        "kiln.capture-producer.v1",
+        "sha256:29f09ae21d4cbac001a0012e6776e8f45ccdc77ded3d513fa879d09e258b55da",
+        "2e2fdaf0-55c5-4ad9-88f0-d026dd37625a",
+        "dawn-d3d12:nvidia-geforce-rtx-3070:D3D12 driver version 32.0.16.1074"
+      ]
+    },
+    {
+      "name": "comms-satellite",
+      "receiptHash": "f8071944f4a060ff382ff5dd0dfc8ef9cdeb4b054285c8e40d4f958d398edb08",
+      "sourceHash": "7a7754a7b3945001db47534c05995b4af8e2fbf730426a1f9ee45df7f95c7198",
+      "artifactHash": "4ccd8959415a3e8ca67d47a3404299adeef517c277b4f516c66631de55e93fff",
+      "imageHash": "8aa790a2fa996fc588c34cd2e524c61975b8de9c32c32a9ce02cd7d5ed426389",
+      "captureIdentity": [
+        "kiln.capture-producer.v1",
+        "sha256:29f09ae21d4cbac001a0012e6776e8f45ccdc77ded3d513fa879d09e258b55da",
+        "2e2fdaf0-55c5-4ad9-88f0-d026dd37625a",
+        "dawn-d3d12:nvidia-geforce-rtx-3070:D3D12 driver version 32.0.16.1074"
+      ]
+    },
+    {
+      "name": "crawler-crane",
+      "receiptHash": "a4ce5bb996955fa130cfbbb45c720c8834adce1151e37a87b57941844a44e6ef",
+      "sourceHash": "228406376aa8a86dfb4d0fb0335ae37b33ae36b2e063ec3ce14ab6b7fed08570",
+      "artifactHash": "8c479df7a86c6efe234219a41e5f6cfec3a082c81228579791e3fe391abaa2ce",
+      "imageHash": "61e540b839e4fd2402ccc14cd728d62f3f105afada931106d6533157c875ecbe",
+      "captureIdentity": [
+        "kiln.capture-producer.v1",
+        "sha256:29f09ae21d4cbac001a0012e6776e8f45ccdc77ded3d513fa879d09e258b55da",
+        "2e2fdaf0-55c5-4ad9-88f0-d026dd37625a",
+        "dawn-d3d12:nvidia-geforce-rtx-3070:D3D12 driver version 32.0.16.1074"
+      ]
+    },
+    {
+      "name": "deep-sea-diver",
+      "receiptHash": "70f07bf2074d2bd319cfe7fbadabe76b23532d082a11eb28762bc4701fb30b6d",
+      "sourceHash": "1e461d16ca2e965bdb8fd1e32d9cfff40bf78e835c823065851e6a8558afb8eb",
+      "artifactHash": "f5859987780a73e576da68c9d7814fe573a44728884860188582dfe9e2bf84d7",
+      "imageHash": "5023c842caf67409b4f9f86662077488a98f484b8d902a15157951b13a921e75",
+      "captureIdentity": [
+        "kiln.capture-producer.v1",
+        "sha256:29f09ae21d4cbac001a0012e6776e8f45ccdc77ded3d513fa879d09e258b55da",
+        "2e2fdaf0-55c5-4ad9-88f0-d026dd37625a",
+        "dawn-d3d12:nvidia-geforce-rtx-3070:D3D12 driver version 32.0.16.1074"
+      ]
+    },
+    {
+      "name": "diving-helmet",
+      "receiptHash": "d171a90b131336e712d9cefebb58b0dbaa851a0970a74387d9be31a54a227b87",
+      "sourceHash": "e04bda302f223945b734687c5d23700e42259b87ec7ebbb9da4ba7b22940b679",
+      "artifactHash": "75c2817dd6e7bb0fd26fd702856ddb1eed11f4e8fbe7685315f509dd27859654",
+      "imageHash": "eae4c6fddb7aa105e7d1b5eec80d1a0841cbe705f2a7137901f1bac6fed9db2f",
+      "captureIdentity": [
+        "kiln.capture-producer.v1",
+        "sha256:29f09ae21d4cbac001a0012e6776e8f45ccdc77ded3d513fa879d09e258b55da",
+        "2e2fdaf0-55c5-4ad9-88f0-d026dd37625a",
+        "dawn-d3d12:nvidia-geforce-rtx-3070:D3D12 driver version 32.0.16.1074"
+      ]
+    },
+    {
+      "name": "drilling-rig",
+      "receiptHash": "9ca256f383698df8d6456d592d63ae860c2fb88cf502265bcb458027385cc613",
+      "sourceHash": "013e4ff5f7b414f8f387faa12934217959a78a1a436904cc1b447b1068f7e6dd",
+      "artifactHash": "8918a1fdb276872b79fe5cb3c79e2774ded0c04602a33f935a254699953b739f",
+      "imageHash": "7569ac42851e987c731f43a937e62bc74f6d16d39f351c0e4c2e36b1fbba0ecb",
+      "captureIdentity": [
+        "kiln.capture-producer.v1",
+        "sha256:29f09ae21d4cbac001a0012e6776e8f45ccdc77ded3d513fa879d09e258b55da",
+        "2e2fdaf0-55c5-4ad9-88f0-d026dd37625a",
+        "dawn-d3d12:nvidia-geforce-rtx-3070:D3D12 driver version 32.0.16.1074"
+      ]
+    },
+    {
+      "name": "espresso-machine",
+      "receiptHash": "d077df824e5dc01dbe9361878f966a446e0118e0e0c641a8d90af61a54eeb2a9",
+      "sourceHash": "ad5fc985db72c19ab43f6ac7d77d0d06a8d7be42a3e363bee5576a2992d58a6c",
+      "artifactHash": "1a5933c8e9883f9dfe63ca2764bfa9ac92cccd616d5873ccdbbadfca37b47711",
+      "imageHash": "95d972e146c1281e3693ebdac84bcb1e0bd162d0685a908394209e122cfce872",
+      "captureIdentity": [
+        "kiln.capture-producer.v1",
+        "sha256:29f09ae21d4cbac001a0012e6776e8f45ccdc77ded3d513fa879d09e258b55da",
+        "2e2fdaf0-55c5-4ad9-88f0-d026dd37625a",
+        "dawn-d3d12:nvidia-geforce-rtx-3070:D3D12 driver version 32.0.16.1074"
+      ]
+    },
+    {
+      "name": "excavator",
+      "receiptHash": "5561decca6fae48e9391ab199441644611335ec521ae049dd9d753e8afea24d3",
+      "sourceHash": "5efa00cbc9e610b656f529a692f8e942b8dbd6bc7013715dabc9f821a5287d05",
+      "artifactHash": "fdb06dc365fc88b52a9e2bb8acc3f7588ca0a0c536bce1b567a4b7ea826c82bf",
+      "imageHash": "1971df626d6137488bbea44bae471261f06f72b285a8d64baaf3142fd333c659",
+      "captureIdentity": [
+        "kiln.capture-producer.v1",
+        "sha256:29f09ae21d4cbac001a0012e6776e8f45ccdc77ded3d513fa879d09e258b55da",
+        "2e2fdaf0-55c5-4ad9-88f0-d026dd37625a",
+        "dawn-d3d12:nvidia-geforce-rtx-3070:D3D12 driver version 32.0.16.1074"
+      ]
+    },
+    {
+      "name": "ferris-wheel",
+      "receiptHash": "e084832021fbd0ff2555fe2e6cb5c4ff2b04f6f02702226d5013d16cde0e9371",
+      "sourceHash": "5fcdd06693b1653a8b9f90041c15c00ef8068413eb3f01d7fbfd46c7fb6311a1",
+      "artifactHash": "299fc7e7f55a6514017bec784a7e2f2fce6e3c691605efe056bcfed717baf265",
+      "imageHash": "c31a9d1bc8232e9bb0e28c45bbe33d831ec4e742a0231967785c086d4175e89d",
+      "captureIdentity": [
+        "kiln.capture-producer.v1",
+        "sha256:29f09ae21d4cbac001a0012e6776e8f45ccdc77ded3d513fa879d09e258b55da",
+        "2e2fdaf0-55c5-4ad9-88f0-d026dd37625a",
+        "dawn-d3d12:nvidia-geforce-rtx-3070:D3D12 driver version 32.0.16.1074"
+      ]
+    },
+    {
+      "name": "field-gun",
+      "receiptHash": "c52a389982a0de12b8a8fea0e84d3f4ede05b6f4f88c5354e0367c807701d03e",
+      "sourceHash": "f27ff0adf535ef28afb3f2818048d406ef639cdfd2bf163e548e07440832e304",
+      "artifactHash": "3669237760efeeac78aa5a337f793d506020fd701ebb93229fc2d71695c2f717",
+      "imageHash": "68e63ba0733e42065e4036200dfe73b3ba97572a9638c34f066310bd4c1d5138",
+      "captureIdentity": [
+        "kiln.capture-producer.v1",
+        "sha256:29f09ae21d4cbac001a0012e6776e8f45ccdc77ded3d513fa879d09e258b55da",
+        "2e2fdaf0-55c5-4ad9-88f0-d026dd37625a",
+        "dawn-d3d12:nvidia-geforce-rtx-3070:D3D12 driver version 32.0.16.1074"
+      ]
+    },
+    {
+      "name": "fighter-jet",
+      "receiptHash": "7cc80069455ccc23c89a5765a19e421a904030a3e020f21d46e0a255b45c8fac",
+      "sourceHash": "08813f64ca19872516d3ecaf5c10e0175cd3e8608289137b2e19d9dfe2f8493e",
+      "artifactHash": "727cb8a940817a4bee08b6e047e31a09a698c8c02492c28be4b0e4335a9918a6",
+      "imageHash": "394e56b59fafa6f5955ca3ca13a84b2d05970dc665987549e348cad8de4f9b61",
+      "captureIdentity": [
+        "kiln.capture-producer.v1",
+        "sha256:29f09ae21d4cbac001a0012e6776e8f45ccdc77ded3d513fa879d09e258b55da",
+        "2e2fdaf0-55c5-4ad9-88f0-d026dd37625a",
+        "dawn-d3d12:nvidia-geforce-rtx-3070:D3D12 driver version 32.0.16.1074"
+      ]
+    },
+    {
+      "name": "gothic-gatehouse",
+      "receiptHash": "36496de141fa14b60177f8547c0ddb4d35d55e9fa112188e591afc5cda8fd356",
+      "sourceHash": "cdda0ed41156c36ace847ea4dd0296316f09f0922708fb5f7024c2c212e73a55",
+      "artifactHash": "0434b1a54ab25216682353346c4533f2569b159394608d46699b6fb6d2c5872f",
+      "imageHash": "e326a16454b1d64a34de1b734753af6882268d561f5a9676284e36e7eb0dc5aa",
+      "captureIdentity": [
+        "kiln.capture-producer.v1",
+        "sha256:29f09ae21d4cbac001a0012e6776e8f45ccdc77ded3d513fa879d09e258b55da",
+        "2e2fdaf0-55c5-4ad9-88f0-d026dd37625a",
+        "dawn-d3d12:nvidia-geforce-rtx-3070:D3D12 driver version 32.0.16.1074"
+      ]
+    },
+    {
+      "name": "gramophone",
+      "receiptHash": "d48c2dc3f2efe8f38da98a17a1c5ca05835b200f83cd1e8455b238001ce0a7b9",
+      "sourceHash": "13f50784b88b7e018bd3eb27e1c04c99845b30d9f4e66ef8159ffddaf6c16139",
+      "artifactHash": "6375f5e8ca90cd333e3a289a193db9de85ef8be3db9154a4e981df9037535bbc",
+      "imageHash": "845138038647e78859e651f4ecd212efb343bdc9b38ce8878715065cb634c097",
+      "captureIdentity": [
+        "kiln.capture-producer.v1",
+        "sha256:29f09ae21d4cbac001a0012e6776e8f45ccdc77ded3d513fa879d09e258b55da",
+        "2e2fdaf0-55c5-4ad9-88f0-d026dd37625a",
+        "dawn-d3d12:nvidia-geforce-rtx-3070:D3D12 driver version 32.0.16.1074"
+      ]
+    },
+    {
+      "name": "harbour-crane",
+      "receiptHash": "53b746a2bb0d3f3620f9b658a139985068d5b95cdb301eb32df0e4f4a766d907",
+      "sourceHash": "0aa97fb40d1e35a3b12a33908d885fc461978975af9d3a5314f9ae784486aff8",
+      "artifactHash": "ef7aeef0b20ed4cec37f5fc8cf2f290a88eb52c1e622b6628761e102c65b0a0d",
+      "imageHash": "6d6547360c8d8e11ec84a6874e9c9a089cdc653775323754bacf9cd88a0df2d1",
+      "captureIdentity": [
+        "kiln.capture-producer.v1",
+        "sha256:29f09ae21d4cbac001a0012e6776e8f45ccdc77ded3d513fa879d09e258b55da",
+        "2e2fdaf0-55c5-4ad9-88f0-d026dd37625a",
+        "dawn-d3d12:nvidia-geforce-rtx-3070:D3D12 driver version 32.0.16.1074"
+      ]
+    },
+    {
+      "name": "hot-air-balloon",
+      "receiptHash": "4d80ad133c0d778893b5648c8814cfcffc45100974dcc56afc501e7e95c8908f",
+      "sourceHash": "1e4847824a88156db594e4b67cc722d30b9b61a66c38070fc7d1229aa3e87e26",
+      "artifactHash": "eef1687ac74589f2b1611ab3f37356fb4eb7869833cb8074f09f425d9137c8db",
+      "imageHash": "07b5ebe6dda7e657f324afbac967ef5e5e958082bd41229cdfcf14f956b4daf6",
+      "captureIdentity": [
+        "kiln.capture-producer.v1",
+        "sha256:29f09ae21d4cbac001a0012e6776e8f45ccdc77ded3d513fa879d09e258b55da",
+        "2e2fdaf0-55c5-4ad9-88f0-d026dd37625a",
+        "dawn-d3d12:nvidia-geforce-rtx-3070:D3D12 driver version 32.0.16.1074"
+      ]
+    },
+    {
+      "name": "lighthouse",
+      "receiptHash": "d1a1e3e20938bca89a1a4b155b946cee95e73f3225890fe64fc0eadb43f8fc7e",
+      "sourceHash": "432847b5d3f7ad1f164602484559379d4d9ff0a98ce05d8b7abd55c229a5db08",
+      "artifactHash": "b1ecd6eb6c637281b8b1b1c30f1cc64fb66bcd1219c3115288e72ad89ae59b84",
+      "imageHash": "57344fdec792b5be86612d296160ed20c3c4003167d0c7bd1f48b058deb4db95",
+      "captureIdentity": [
+        "kiln.capture-producer.v1",
+        "sha256:29f09ae21d4cbac001a0012e6776e8f45ccdc77ded3d513fa879d09e258b55da",
+        "2e2fdaf0-55c5-4ad9-88f0-d026dd37625a",
+        "dawn-d3d12:nvidia-geforce-rtx-3070:D3D12 driver version 32.0.16.1074"
+      ]
+    },
+    {
+      "name": "longcase-clock",
+      "receiptHash": "eb1dc2d875b7b418f554a1ec0dbf0559c7a65258d3b62f11f89812e14613ed4f",
+      "sourceHash": "4fcc5a79caaf3533966314a92883e374aabff6c8b2a254c8cfec3dc5ceb4c93c",
+      "artifactHash": "773420e0d0dcc6b66b0be1a6416b4491c757c04a6d24b99efbb2550ab18a5322",
+      "imageHash": "d1e6f0b246d26b7a85fe180bc5c57f36a952ef9c9f0e3bcc1f409e9677791d35",
+      "captureIdentity": [
+        "kiln.capture-producer.v1",
+        "sha256:29f09ae21d4cbac001a0012e6776e8f45ccdc77ded3d513fa879d09e258b55da",
+        "2e2fdaf0-55c5-4ad9-88f0-d026dd37625a",
+        "dawn-d3d12:nvidia-geforce-rtx-3070:D3D12 driver version 32.0.16.1074"
+      ]
+    },
+    {
+      "name": "mech",
+      "receiptHash": "5ddc679e02e2680afde06eaf09d2b0d44e1575ae447d9d91b56f93f246a18f07",
+      "sourceHash": "c0924f2e075f5cb240fefb75c02475d7a36dcdffb1ad152f22d042ce4245cf89",
+      "artifactHash": "05dc958b7e820d3ac3f3e40757f1ddf67477c8c8f34109e573ff5ccb6b000ee4",
+      "imageHash": "909f4e7abdeb838c7c8803f45731fceb43086c0b8607cb4de76e4115f3e9e161",
+      "captureIdentity": [
+        "kiln.capture-producer.v1",
+        "sha256:29f09ae21d4cbac001a0012e6776e8f45ccdc77ded3d513fa879d09e258b55da",
+        "2e2fdaf0-55c5-4ad9-88f0-d026dd37625a",
+        "dawn-d3d12:nvidia-geforce-rtx-3070:D3D12 driver version 32.0.16.1074"
+      ]
+    },
+    {
+      "name": "orbital-station",
+      "receiptHash": "95737ff0d7f226632e7551b1ef4704d371267594fa741891609fcaf476caa25f",
+      "sourceHash": "d2c1693ef6938a14e482a3640c838bbf17c721aa333a7559ad496593ae1f33ea",
+      "artifactHash": "0270271ecfef25ead0652c480c8959e72fdacddb60aa91a97021679cdfc8d053",
+      "imageHash": "962e766c6e2cd95993b283a306c91c7e0394c686c54e70cfa95a9cfe49103a13",
+      "captureIdentity": [
+        "kiln.capture-producer.v1",
+        "sha256:29f09ae21d4cbac001a0012e6776e8f45ccdc77ded3d513fa879d09e258b55da",
+        "2e2fdaf0-55c5-4ad9-88f0-d026dd37625a",
+        "dawn-d3d12:nvidia-geforce-rtx-3070:D3D12 driver version 32.0.16.1074"
+      ]
+    },
+    {
+      "name": "orrery",
+      "receiptHash": "b0ec3d98eb075b61c50b2ed33670f1b08e1de4fab1b7f6dcb0e8cafe189535ba",
+      "sourceHash": "3e0b46fa8bb5c4a7a086e4a55e29f1163b32a022b8b646d26398c71254b4c755",
+      "artifactHash": "9a479427676dbff95a6b1e958ff8d8bbd08b75d377d45ed66c6c3ea9c00d7ff3",
+      "imageHash": "d446c95f0f1050fc1ae63f483475676b0c19fba97869987b3865a688ef35e565",
+      "captureIdentity": [
+        "kiln.capture-producer.v1",
+        "sha256:29f09ae21d4cbac001a0012e6776e8f45ccdc77ded3d513fa879d09e258b55da",
+        "2e2fdaf0-55c5-4ad9-88f0-d026dd37625a",
+        "dawn-d3d12:nvidia-geforce-rtx-3070:D3D12 driver version 32.0.16.1074"
+      ]
+    },
+    {
+      "name": "penny-farthing",
+      "receiptHash": "a05fab07c55cac58830138f0c704cdd47b5b1ac64c4f1bd91d9a0e3b2519e23f",
+      "sourceHash": "a243562feabdc46ea5b2d084b723d50b71c0ba801ecf24572d3da0341f1b9544",
+      "artifactHash": "ba367254573499c71991f2ad4a8e4a55fda6efde53d159af177ff9893b4a7fae",
+      "imageHash": "d41a7c398897d3d3a626609e9ef760db3bfab73ac2e63245a94df4618c765ded",
+      "captureIdentity": [
+        "kiln.capture-producer.v1",
+        "sha256:29f09ae21d4cbac001a0012e6776e8f45ccdc77ded3d513fa879d09e258b55da",
+        "2e2fdaf0-55c5-4ad9-88f0-d026dd37625a",
+        "dawn-d3d12:nvidia-geforce-rtx-3070:D3D12 driver version 32.0.16.1074"
+      ]
+    },
+    {
+      "name": "pinball-machine",
+      "receiptHash": "40820d4a0b62ca63e7d54ca8eb401a347506fbf827daed2f4af054a994150960",
+      "sourceHash": "35eef6aebfe01ae582e27fb7e5f29cb367029194c58908d2ff274c8999e8f065",
+      "artifactHash": "53af70cb9820328777bad2a67c204b6bd0ff82c097f030d251e06729891746bb",
+      "imageHash": "556d6962a8704044af3b062dfbd4af612c77e0b4405fbb974a5d546465d4d5b1",
+      "captureIdentity": [
+        "kiln.capture-producer.v1",
+        "sha256:29f09ae21d4cbac001a0012e6776e8f45ccdc77ded3d513fa879d09e258b55da",
+        "2e2fdaf0-55c5-4ad9-88f0-d026dd37625a",
+        "dawn-d3d12:nvidia-geforce-rtx-3070:D3D12 driver version 32.0.16.1074"
+      ]
+    },
+    {
+      "name": "pipe-organ",
+      "receiptHash": "6a2d9b0f790cf659a244c36b483bab4007b6e52104d3b55d06c7bd05616c15cc",
+      "sourceHash": "4e4ed8e01e007891a84f3c13117c1367264570311f233c711206f2c18629db41",
+      "artifactHash": "0cd4ab232e27b69e8b336d09a5a948f803f1e2b503650549a98520a13b3d0484",
+      "imageHash": "2558ff47f58bea7a18ac1dc32d8ce8b95d7c467170ca503f3a6e72d503789cae",
+      "captureIdentity": [
+        "kiln.capture-producer.v1",
+        "sha256:29f09ae21d4cbac001a0012e6776e8f45ccdc77ded3d513fa879d09e258b55da",
+        "2e2fdaf0-55c5-4ad9-88f0-d026dd37625a",
+        "dawn-d3d12:nvidia-geforce-rtx-3070:D3D12 driver version 32.0.16.1074"
+      ]
+    },
+    {
+      "name": "planetarium-projector",
+      "receiptHash": "a57b6b36109fddf1b1d3ce856d50aed72b6b09d94a00576b77c1c9340eb34dd8",
+      "sourceHash": "1d885b43ff02292d306ade1333dd3a8106da77fc13d2822f073d1fd81622ec84",
+      "artifactHash": "667f98c95fd380731d62b09b5541b7b0588c35756ab70e695431cd1d918a93ea",
+      "imageHash": "f8ef5b285421d5897224e478a6184f36f7161f3e586d9cecace1d4374ed8c35a",
+      "captureIdentity": [
+        "kiln.capture-producer.v1",
+        "sha256:29f09ae21d4cbac001a0012e6776e8f45ccdc77ded3d513fa879d09e258b55da",
+        "2e2fdaf0-55c5-4ad9-88f0-d026dd37625a",
+        "dawn-d3d12:nvidia-geforce-rtx-3070:D3D12 driver version 32.0.16.1074"
+      ]
+    },
+    {
+      "name": "printing-press",
+      "receiptHash": "48a422d6c4ab7ce7bf9fa3d2ff9225d285996747fa7677ae5c1aeb9d95da5666",
+      "sourceHash": "c6ee2bf3d6ff7a6f8833425ecfef25888af0842ddcb9c749ae43b54d28968ddf",
+      "artifactHash": "373aa5f55fc21271640e36c0364e2a1cd416714a92e5b783387eee6894ce8d37",
+      "imageHash": "17538451a79c8bc87130ae307e7d10fb708e1b8f2a626f918e747adaed8e1cb0",
+      "captureIdentity": [
+        "kiln.capture-producer.v1",
+        "sha256:29f09ae21d4cbac001a0012e6776e8f45ccdc77ded3d513fa879d09e258b55da",
+        "2e2fdaf0-55c5-4ad9-88f0-d026dd37625a",
+        "dawn-d3d12:nvidia-geforce-rtx-3070:D3D12 driver version 32.0.16.1074"
+      ]
+    },
+    {
+      "name": "pumpjack",
+      "receiptHash": "e10bf2d17b519d9d08b0dcd0249a0e1627620a9023b49da5f131e4efbc7ce20a",
+      "sourceHash": "c1b5c04953a5a398185f82cc7f8698089bdc00bc217ca4b2181b28c4dc4a7134",
+      "artifactHash": "1d0fa7845cd3ed293e1c130273b4bea2e05a9af1c3e37b42999583e1952f38ba",
+      "imageHash": "08a9c0077751ab801be4517946b85738f14ae238f14ccf11661bf5c60bed136a",
+      "captureIdentity": [
+        "kiln.capture-producer.v1",
+        "sha256:29f09ae21d4cbac001a0012e6776e8f45ccdc77ded3d513fa879d09e258b55da",
+        "2e2fdaf0-55c5-4ad9-88f0-d026dd37625a",
+        "dawn-d3d12:nvidia-geforce-rtx-3070:D3D12 driver version 32.0.16.1074"
+      ]
+    },
+    {
+      "name": "radio-telescope",
+      "receiptHash": "8a82fb10302d91638fac2b1b9a2317417b2406d03cbbed2491c31631abbca69b",
+      "sourceHash": "6414ad919135ddcd1443d1add8973dcfc99ffd95f66590219491fbe9d8951605",
+      "artifactHash": "092cc11a24d28b67a47c74ce5f1c6fe1d07a7be32e9385af5c48862ebf14e02f",
+      "imageHash": "20ac97f1f1a76abd9f2c242e5d947957a1852f0ac622e9b47309c70398ede720",
+      "captureIdentity": [
+        "kiln.capture-producer.v1",
+        "sha256:29f09ae21d4cbac001a0012e6776e8f45ccdc77ded3d513fa879d09e258b55da",
+        "2e2fdaf0-55c5-4ad9-88f0-d026dd37625a",
+        "dawn-d3d12:nvidia-geforce-rtx-3070:D3D12 driver version 32.0.16.1074"
+      ]
+    },
+    {
+      "name": "research-vessel",
+      "receiptHash": "51e694197a74f919d537ee0c0bfc5d7706df5095b23ab7b845490f939b9fcdf8",
+      "sourceHash": "1f109fd8c5d6de9fe07507e473a1c7ba674565f1544ac68dd6067a5664371455",
+      "artifactHash": "31daa828d14a8bc9d1c07896df85b50ebf66f874db883f3fd8195245d18489e1",
+      "imageHash": "17247bff8dce65e38780bfcb0c513744214c4c3ba9c75c4a4e91ed685e155336",
+      "captureIdentity": [
+        "kiln.capture-producer.v1",
+        "sha256:29f09ae21d4cbac001a0012e6776e8f45ccdc77ded3d513fa879d09e258b55da",
+        "2e2fdaf0-55c5-4ad9-88f0-d026dd37625a",
+        "dawn-d3d12:nvidia-geforce-rtx-3070:D3D12 driver version 32.0.16.1074"
+      ]
+    },
+    {
+      "name": "rigid-airship",
+      "receiptHash": "128656db4eb37b495010111e6b9efe1ff9610d43af01d70fc7cc827640297455",
+      "sourceHash": "9f3341c1f613a399cac20842aeb6e974b7d80bbceaa07b0d1510c53d98ab9ae6",
+      "artifactHash": "eaca192c97b78f27d9dd24b66d8623dcbcec6855a8fdbe7af9b323f3521b4608",
+      "imageHash": "5aad6d97eb47298cdd0f5b513718a8ed0ed71733a8934e9a7b57b12321f92218",
+      "captureIdentity": [
+        "kiln.capture-producer.v1",
+        "sha256:29f09ae21d4cbac001a0012e6776e8f45ccdc77ded3d513fa879d09e258b55da",
+        "2e2fdaf0-55c5-4ad9-88f0-d026dd37625a",
+        "dawn-d3d12:nvidia-geforce-rtx-3070:D3D12 driver version 32.0.16.1074"
+      ]
+    },
+    {
+      "name": "robot-arm",
+      "receiptHash": "2b59277d8cd7811d268852c547067be8e27f8434948ca378ea6774345cd9cb87",
+      "sourceHash": "a09a2ba7cd96a937e092028162d49dbbf76330b94023b11bb0b15ce3d7f4ac31",
+      "artifactHash": "11797ec814f8406ffd5d967226c736d74a3297a8d7cb6926d5a3ad909da26f99",
+      "imageHash": "cb3bbf8c29aa2748d11caef84da9e719abb2a094e071be42bf2787409bcd9189",
+      "captureIdentity": [
+        "kiln.capture-producer.v1",
+        "sha256:29f09ae21d4cbac001a0012e6776e8f45ccdc77ded3d513fa879d09e258b55da",
+        "2e2fdaf0-55c5-4ad9-88f0-d026dd37625a",
+        "dawn-d3d12:nvidia-geforce-rtx-3070:D3D12 driver version 32.0.16.1074"
+      ]
+    },
+    {
+      "name": "steam-locomotive",
+      "receiptHash": "c5d626b88868f7f100d86e5539e5fa328ff8ebb27f028a91c83f506bc55a1c10",
+      "sourceHash": "0c100fb9b080162f13d807920b02e0aa8d8263309b1a1160fcb1d6528c1716aa",
+      "artifactHash": "6e5462c54efe536129073ccabef7d4c2c0a82fe49cbbca4420aea9635cebcbc4",
+      "imageHash": "f0c832811ca38ec94d7cf24a2d4b9a23b2ce439015a0e372fe482611d2a5e68e",
+      "captureIdentity": [
+        "kiln.capture-producer.v1",
+        "sha256:29f09ae21d4cbac001a0012e6776e8f45ccdc77ded3d513fa879d09e258b55da",
+        "2e2fdaf0-55c5-4ad9-88f0-d026dd37625a",
+        "dawn-d3d12:nvidia-geforce-rtx-3070:D3D12 driver version 32.0.16.1074"
+      ]
+    },
+    {
+      "name": "street-lamp",
+      "receiptHash": "b46febba5df7cc9b167c648d39714aaed2aa683e18993c4a7ba9cc6005075c9c",
+      "sourceHash": "c1d24daf95c30f46b2d32f3c40c0ae6c08827e0a665b190ec499af83a928e1f6",
+      "artifactHash": "0d16f94cbbace428e8d166606a0413cb062c7424601251a6eb10a8360cf98d5b",
+      "imageHash": "217101100191a1a7108d7738ce463ddc6cddd12820ff107eab15211c16cff25a",
+      "captureIdentity": [
+        "kiln.capture-producer.v1",
+        "sha256:29f09ae21d4cbac001a0012e6776e8f45ccdc77ded3d513fa879d09e258b55da",
+        "2e2fdaf0-55c5-4ad9-88f0-d026dd37625a",
+        "dawn-d3d12:nvidia-geforce-rtx-3070:D3D12 driver version 32.0.16.1074"
+      ]
+    },
+    {
+      "name": "sushi-store",
+      "receiptHash": "034dfdbe4beba53cd68a999386aadc2fb5557a7dfdf1d36b88e79376bb48821a",
+      "sourceHash": "fdd92c6e2ed8fb371d22f8c94c1f0e6ae932d915f0e75cd50c70b6f876bd0743",
+      "artifactHash": "7efe7865e34bb5b526965d8366601de1b991664d20d76895bbf9adf41e7fbb3c",
+      "imageHash": "821fba86c1a79d99835014cbb9e9a5e58eb2dcab7d43c72d38f709227b5903ad",
+      "captureIdentity": [
+        "kiln.capture-producer.v1",
+        "sha256:29f09ae21d4cbac001a0012e6776e8f45ccdc77ded3d513fa879d09e258b55da",
+        "2e2fdaf0-55c5-4ad9-88f0-d026dd37625a",
+        "dawn-d3d12:nvidia-geforce-rtx-3070:D3D12 driver version 32.0.16.1074"
+      ]
+    },
+    {
+      "name": "tram",
+      "receiptHash": "60946cb0205cff2343dc269419521f80acd7dd946867303e2dc3156cd0107362",
+      "sourceHash": "29a7d021e6c789ed7ea05fcd838c40f365052555eec24a672b4f74d240273779",
+      "artifactHash": "58508a6cf591625fbc85546b7509c05f118678f51a4a02284eb0541c2dfb77ce",
+      "imageHash": "33bff43ad6dbe5880260fb5bf38e154075fa62b5fd764d50dcd8a427d1d3d146",
+      "captureIdentity": [
+        "kiln.capture-producer.v1",
+        "sha256:29f09ae21d4cbac001a0012e6776e8f45ccdc77ded3d513fa879d09e258b55da",
+        "2e2fdaf0-55c5-4ad9-88f0-d026dd37625a",
+        "dawn-d3d12:nvidia-geforce-rtx-3070:D3D12 driver version 32.0.16.1074"
+      ]
+    },
+    {
+      "name": "trebuchet",
+      "receiptHash": "0678453401d124131bc5f51d0244e5e04688488f87789459f5f79bbf43b35b19",
+      "sourceHash": "94d40bcb59df7e5dd976d663b6adf6a27ebecbb3d948d62dc5c50e40688e1595",
+      "artifactHash": "20e83b1650588c4998f3b99d982f9a84337a683b20f52513726ee9382a35f2bf",
+      "imageHash": "51680a5b576a9c5c726f2a147f38cb6985fd095f2a23a5dfc3e7a3400a7b39b2",
+      "captureIdentity": [
+        "kiln.capture-producer.v1",
+        "sha256:29f09ae21d4cbac001a0012e6776e8f45ccdc77ded3d513fa879d09e258b55da",
+        "2e2fdaf0-55c5-4ad9-88f0-d026dd37625a",
+        "dawn-d3d12:nvidia-geforce-rtx-3070:D3D12 driver version 32.0.16.1074"
+      ]
+    },
+    {
+      "name": "tugboat",
+      "receiptHash": "b919ef1a5a5d9225e3d55819bab250464fda3959fafeaaba61ddab62802603ec",
+      "sourceHash": "c826f90f1dccde22891e9c6acc0e6d524aee4a1d5eaab62d762f146c2acea3b3",
+      "artifactHash": "0d077bfe7984f74d0452691d657db8b2b2d48e4046fa54017c97caedd6540c81",
+      "imageHash": "979801ab648d99f34c1c7a61c67623c1e7bb6de6906e2d094c5a33f457d18529",
+      "captureIdentity": [
+        "kiln.capture-producer.v1",
+        "sha256:29f09ae21d4cbac001a0012e6776e8f45ccdc77ded3d513fa879d09e258b55da",
+        "2e2fdaf0-55c5-4ad9-88f0-d026dd37625a",
+        "dawn-d3d12:nvidia-geforce-rtx-3070:D3D12 driver version 32.0.16.1074"
+      ]
+    },
+    {
+      "name": "twisting-canopy",
+      "receiptHash": "c8c3938096b9a80213a2c3909029fbd2fa7be3e8a13d98b87db62034a4d3072f",
+      "sourceHash": "2d3d12e4e53613289f017fc5c4e20731fe7736655781839168dc2480be3efdcf",
+      "artifactHash": "0dc4acac3729fda27b1567463dd32d183ebc340d740d8d4f51d8ad1482d8a322",
+      "imageHash": "9d3e2078a962d2cbfcf53d5db6f0095770e9ca6c3d820d60205d047a3e3ce83f",
+      "captureIdentity": [
+        "kiln.capture-producer.v1",
+        "sha256:29f09ae21d4cbac001a0012e6776e8f45ccdc77ded3d513fa879d09e258b55da",
+        "2e2fdaf0-55c5-4ad9-88f0-d026dd37625a",
+        "dawn-d3d12:nvidia-geforce-rtx-3070:D3D12 driver version 32.0.16.1074"
+      ]
+    },
+    {
+      "name": "typewriter",
+      "receiptHash": "2274b30ac6672d0f863ff4513602ab2a90217b2d25d7ddf4b29972e78662279f",
+      "sourceHash": "f3b83ab3b81d22cc2b6f553bde8cb73b903923215a0b987c0cafa4fc0de960c1",
+      "artifactHash": "e5b0fbc255afe43c4d17b3356e9f5f35895a5548ec662c3d61ca33b0b7944d2b",
+      "imageHash": "8a4c4258316e5fc097e7b9e2fc17b818b5ef5ffe02409a1c7cd121c0ff2cfc9c",
+      "captureIdentity": [
+        "kiln.capture-producer.v1",
+        "sha256:29f09ae21d4cbac001a0012e6776e8f45ccdc77ded3d513fa879d09e258b55da",
+        "2e2fdaf0-55c5-4ad9-88f0-d026dd37625a",
+        "dawn-d3d12:nvidia-geforce-rtx-3070:D3D12 driver version 32.0.16.1074"
+      ]
+    },
+    {
+      "name": "vending-machine",
+      "receiptHash": "81c5e2a231e4c0fe1a35d7f738bffc2ee95c933a8896fbff7b229fc5269d349f",
+      "sourceHash": "4ea4db40981f8021107381b739300b4d184d42664eb4c8cf2b7aae756c8f2599",
+      "artifactHash": "58fa9096a65238c7614cbfceda24b6084e7070c6cfbd68398ea168fba020949c",
+      "imageHash": "926addb12811a5b360741b5a9ccd71b144629d06e6c7ef2f34abf1fd352d9158",
+      "captureIdentity": [
+        "kiln.capture-producer.v1",
+        "sha256:29f09ae21d4cbac001a0012e6776e8f45ccdc77ded3d513fa879d09e258b55da",
+        "2e2fdaf0-55c5-4ad9-88f0-d026dd37625a",
+        "dawn-d3d12:nvidia-geforce-rtx-3070:D3D12 driver version 32.0.16.1074"
+      ]
+    },
+    {
+      "name": "victorian-greenhouse",
+      "receiptHash": "de4fbf11521880f1dee8b31cf3d596bd7cabf4b24c52ea56e87d16577444e468",
+      "sourceHash": "7fc022a92ca6ec100a328ba5dcc6bfe13ca497ba60226bf92b70848fd06787ee",
+      "artifactHash": "e842f0856cc64ac13081190405868668182ffd41fbf12dcbc91df43147bd5fbc",
+      "imageHash": "fecfbe2fd89af307c48dc7f265a44345633bb2f8f99130b316ad323a2332959e",
+      "captureIdentity": [
+        "kiln.capture-producer.v1",
+        "sha256:29f09ae21d4cbac001a0012e6776e8f45ccdc77ded3d513fa879d09e258b55da",
+        "2e2fdaf0-55c5-4ad9-88f0-d026dd37625a",
+        "dawn-d3d12:nvidia-geforce-rtx-3070:D3D12 driver version 32.0.16.1074"
+      ]
+    },
+    {
+      "name": "windmill",
+      "receiptHash": "0a33e889ca75ef0f3e8f63efaa70b03a9c00be30bcb04343ab10ee0ad73f2d8b",
+      "sourceHash": "c1a7eeb546fdc10544635609c9b0035ae9307ea5da4f916630cb3ead9c73f6cb",
+      "artifactHash": "6511a91b7aff2881f9a56898134cb75328cb97f347b08028313be50a18e4f4cb",
+      "imageHash": "e7c035b1aae46dd5e4ee808f784d8f89e0e6058203081490728776b29f673155",
+      "captureIdentity": [
+        "kiln.capture-producer.v1",
+        "sha256:29f09ae21d4cbac001a0012e6776e8f45ccdc77ded3d513fa879d09e258b55da",
+        "2e2fdaf0-55c5-4ad9-88f0-d026dd37625a",
+        "dawn-d3d12:nvidia-geforce-rtx-3070:D3D12 driver version 32.0.16.1074"
+      ]
+    }
+  ]
+}

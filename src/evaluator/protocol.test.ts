@@ -67,6 +67,7 @@ describe('evaluator protocol v1', () => {
         },
       ] as never,
       integrationManifest: {} as never,
+      buildCache: { key: hash, hit: true },
     });
     const decoded = decodeEvaluatorResultV1(JSON.stringify(wire), 1024);
     expect(decoded.version).toBe(EVALUATOR_RESULT_VERSION);
@@ -77,6 +78,16 @@ describe('evaluator protocol v1', () => {
     }
 
     if (!wire.ok) throw new Error('expected success wire result');
+    expect(wire.render.buildCache).toBeUndefined();
+    expect(() =>
+      decodeEvaluatorResultV1(
+        JSON.stringify({
+          ...wire,
+          render: { ...wire.render, buildCache: { key: hash, hit: true } },
+        }),
+        1024,
+      ),
+    ).toThrow('invalid evaluator result');
     const corrupt = {
       ...wire,
       render: { ...wire.render, artifactGlbSha256: `sha256:${'0'.repeat(64)}` },

@@ -11,13 +11,20 @@
 import { readFileSync } from 'node:fs';
 
 function engineVersion(): string {
-  try {
-    const raw = readFileSync(new URL('../../package.json', import.meta.url), 'utf8');
-    const version = (JSON.parse(raw) as { version?: unknown }).version;
-    return typeof version === 'string' && version.length > 0 ? version : 'unknown';
-  } catch {
-    return 'unknown';
+  // Source lives in src/views; Node bundles live directly in dist. Never use
+  // a consuming application's package version as the engine identity.
+  for (const path of ['../package.json', '../../package.json']) {
+    try {
+      const raw = readFileSync(new URL(path, import.meta.url), 'utf8');
+      const pkg = JSON.parse(raw) as { name?: unknown; version?: unknown };
+      if (pkg.name === '@kiln/engine' && typeof pkg.version === 'string' && pkg.version) {
+        return pkg.version;
+      }
+    } catch {
+      // Try the other supported source/bundle layout.
+    }
   }
+  return 'unknown';
 }
 
 /** e.g. "cpu-raster:0.6.0" — the CPU rasterizer's deterministic rendererId. */

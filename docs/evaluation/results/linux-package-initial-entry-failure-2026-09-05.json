@@ -1,0 +1,30 @@
+{
+  "status": "failed",
+  "image": "node:22.23.1-bookworm-slim@sha256:6c74791e557ce11fc957704f6d4fe134a7bc8d6f5ca4403205b2966bd488f6b3",
+  "tarball": "kiln-engine-0.6.0.tgz",
+  "tarballSha256": "4c06188247cf1ec09af7e5f0fcd891a40bda72b0283d28e822046fa607f133bd",
+  "containerMemoryBytes": 2147483648,
+  "containerCpus": 2,
+  "timedOut": false,
+  "exitCode": 1,
+  "smoke": {
+    "root": "[ephemeral Linux workspace removed with container]",
+    "platform": "linux",
+    "arch": "x64",
+    "node": "v22.23.1",
+    "checks": [
+      "direct-node-cli-help"
+    ],
+    "status": "failed",
+    "npm": "12.0.1",
+    "tarball": "/input/candidate.tgz",
+    "tarballSha256": "4c06188247cf1ec09af7e5f0fcd891a40bda72b0283d28e822046fa607f133bd",
+    "engineVersion": "0.6.0",
+    "bundleHashes": {
+      "cli": "1bd87c25ea64595187996ae4cec52766c2442b19f79558a369b0d6ce71ced2a8",
+      "mcp": "6bd514925d902b54b170c321eff112c91a9c7be55ef9b7a6c237c04d34efe62b"
+    },
+    "error": "npm bin entry must print help (including Linux symlinks)"
+  },
+  "error": "Error: Command failed: /usr/local/bin/node /checks/smoke-package.mjs --tarball /input/candidate.tgz\n\n\n1 !== 0\n"
+}

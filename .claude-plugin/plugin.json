@@ -1,9 +1,9 @@
 {
   "name": "kiln",
-  "description": "Author 3D assets as code: your agent writes a Kiln program, renders it, looks at the six-view contact sheet, and fixes what it sees. Outputs a game-ready GLB.",
+  "description": "Build and revise 3D assets with your coding agent. Write JavaScript, inspect selected views, edit saved source revisions, and export GLB files locally.",
   "version": "0.6.0",
   "author": {
-    "name": "Matt Kissinger"
+    "name": "Matthew Kissinger"
   },
   "homepage": "https://github.com/matthew-kissinger/kiln",
   "license": "MIT",

@@ -20,6 +20,14 @@ import {
 } from './architecture';
 import * as gears from './gears';
 import * as ops from './ops';
+import * as geometry from './geometry';
+import * as deform from './deform';
+import * as sweep from './sweep';
+import { implicitSurface } from './implicit';
+export * from './implicit';
+export * from './sweep';
+export * from './deform';
+export * from './geometry';
 import * as profile from './profile';
 import * as solids from './solids';
 import * as proceduralTextures from './procedural-texture';
@@ -1473,6 +1481,7 @@ export function spinAnimation(
  * For 4 wheels on a truck: build one `cylinderGeo(...)`, pass it through
  * `cloneGeometry` to each `createPart` call. Four meshes, one geometry.
  */
+/** @deprecated Reuses its input. Use copyGeometry for an independent editable copy. */
 export function cloneGeometry(geo: THREE.BufferGeometry): THREE.BufferGeometry {
   return geo;
 }
@@ -1480,8 +1489,19 @@ export function cloneGeometry(geo: THREE.BufferGeometry): THREE.BufferGeometry {
 /**
  * Shared material reference. See `cloneGeometry` for the pattern.
  */
+/** @deprecated Reuses its input. Use copyMaterial for independent material properties. */
 export function cloneMaterial(mat: THREE.Material): THREE.Material {
   return mat;
+}
+
+/** Own vertex buffers before deforming a memoized primitive. */
+export function copyGeometry(geo: THREE.BufferGeometry): THREE.BufferGeometry {
+  return geo.clone();
+}
+
+/** Copy material properties. Referenced textures remain shared. */
+export function copyMaterial<T extends THREE.Material>(mat: T): T {
+  return mat.clone();
 }
 
 /**
@@ -1814,6 +1834,19 @@ export function buildSandboxGlobals(
     spinAnimation: wrap('spinAnimation', spinAnimation),
     bobbingAnimation: wrap('bobbingAnimation', bobbingAnimation),
     idleBreathing: wrap('idleBreathing', idleBreathing),
+    implicitSurface: wrap('implicitSurface', implicitSurface),
+    sweepProfile: wrap('sweepProfile', sweep.sweepProfile),
+    loftProfiles: wrap('loftProfiles', sweep.loftProfiles),
+    bend: wrap('bend', deform.bend),
+    twist: wrap('twist', deform.twist),
+    taper: wrap('taper', deform.taper),
+    displace: wrap('displace', deform.displace),
+    copyGeometry: wrap('copyGeometry', copyGeometry),
+    copyMaterial: wrap('copyMaterial', copyMaterial),
+    meshGeo: wrap('meshGeo', geometry.meshGeo),
+    parametricSurface: wrap('parametricSurface', geometry.parametricSurface),
+    creaseNormals: wrap('creaseNormals', geometry.creaseNormals),
+    geometryDiagnostics: wrap('geometryDiagnostics', geometry.geometryDiagnostics),
     cloneGeometry: wrap('cloneGeometry', cloneGeometry),
     cloneMaterial: wrap('cloneMaterial', cloneMaterial),
     createInstance: wrap('createInstance', createInstance),
