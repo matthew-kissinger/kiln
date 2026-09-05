@@ -193,10 +193,17 @@ bun run kiln render examples/crate.kiln.js \\
         </p>
         <p>
           Every one except <code>kiln_list_primitives</code> takes the program itself as its{' '}
-          <code>code</code> argument. There is no session on the server holding a half-finished
-          asset. The model keeps the source in its own context and sends it with each call, so the
-          program is the only state, and the same tools behave identically whether they reach you
-          over MCP, through the CLI, or imported straight into your process.
+          <code>code</code> argument. Nothing on the server holds a half-finished asset between
+          calls, which is why the same tools behave identically whether they reach you over MCP,
+          through the CLI, or imported straight into your process.
+        </p>
+        <p>
+          That does not mean writing it again to change it. <code>kiln_edit</code> is the second
+          verb for a reason: it takes the current source plus exact-string replacements, so the
+          model patches rather than re-emits, every line it did not touch comes back byte for byte,
+          and the reply is a diff. A rewrite cannot promise that, and what it quietly loses is
+          invisible in a render: a constant that shifted, a part that lost its name, a comment
+          carrying the reason for a number.
         </p>
         <dl className="tools">
           {TOOLS.map((t) => (
