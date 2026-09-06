@@ -1,39 +1,39 @@
 {
-  "sourceHash": "d2c1693ef6938a14e482a3640c838bbf17c721aa333a7559ad496593ae1f33ea",
+  "sourceHash": "cac72b1669d259d4083d1f094dfd6c49d842f03ef45e509d6b24f70672cd55fd",
   "model": "GPT-6 Astra",
   "harness": "Codex",
   "provenance": {
     "attribution": "Source-header credit",
-    "sourceAccess": "Source header declares no repository implementation or finished examples supplied",
-    "inheritedContext": "Not independently recorded; source-header declarations only",
-    "startingExample": "None supplied, according to source header",
-    "humanIntervention": "Header declares no hand-authored source; other intervention not recorded",
-    "reviewFidelity": "Six-view review declared; renderer fidelity not recorded",
+    "sourceAccess": "Existing station source and repository implementation available during this refinement.",
+    "inheritedContext": "Owner screenshot and feedback on the rear silhouette.",
+    "startingExample": "Original orbital station, retained in gallery revision history.",
+    "humanIntervention": "Owner art direction; source refinement authored by Codex.",
+    "reviewFidelity": "Refinement reviewed separately from the original authoring session.",
     "poster": "Gallery GPU render of the exact downloadable GLB. Source, artifact, image hashes and camera settings are recorded alongside the poster.",
     "posterReceipt": {
       "captureIdentity": [
         "kiln.capture-producer.v1",
         "sha256:10f346ec6287c8d635dabe4668d72925080e6fe3d059dd7a9252f2694ce595c2",
-        "a3fa7ff0-5d67-45ca-b663-3de687c939da",
+        "457e4f85-753d-4e1a-ac20-f7d20c989694",
         "dawn-d3d12:nvidia-geforce-rtx-3070:D3D12 driver version 32.0.16.1074"
       ],
-      "sourceHash": "d2c1693ef6938a14e482a3640c838bbf17c721aa333a7559ad496593ae1f33ea",
-      "artifactHash": "0270271ecfef25ead0652c480c8959e72fdacddb60aa91a97021679cdfc8d053",
-      "imageHash": "f077deae87a1b85f8a1eec1e3349a8b76de5c1302b64362ff081f9aa97eef445",
+      "sourceHash": "cac72b1669d259d4083d1f094dfd6c49d842f03ef45e509d6b24f70672cd55fd",
+      "artifactHash": "699399dc2d43ea206c5265a09f88358608cd1b4f7111a6aaebd57f51080de235",
+      "imageHash": "be2b64375a12f3dbdd8bfe8057beb8260b3d56bcd44a7181b56fee444d92fd31",
       "width": 1024,
       "height": 1024,
       "camera": {
         "version": "kiln.camera.v1",
         "projection": "orthographic",
         "position": [
-          69.77844410950888,
-          44.189336425386585,
-          50.67984019060035
+          69.83758324436859,
+          44.21772321011923,
+          50.72123758500214
         ],
         "target": [
-          0.3301681944798219,
-          10.854163986172633,
-          2.0660470500800145
+          0.21141063955594783,
+          10.797160359809173,
+          1.9829167616333045
         ],
         "up": [
           0,
@@ -42,7 +42,7 @@
         ],
         "aspect": 1,
         "near": 0.01,
-        "far": 227.72787533357985,
+        "far": 228.3112164555806,
         "halfHeight": 18.799998408372225
       },
       "rendererId": "dawn-d3d12:nvidia-geforce-rtx-3070:D3D12 driver version 32.0.16.1074",

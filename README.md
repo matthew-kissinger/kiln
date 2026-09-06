@@ -17,11 +17,17 @@ the model; Kiln does not require a separate model API key for its tools.
 | --- | --- | --- |
 | [![Curved-hull survey submersible with an articulated sampling arm](examples/renders/abyssal-surveyor.png)](examples/abyssal-surveyor.kiln.js) | [![Mechanical typewriter](examples/renders/typewriter.png)](examples/typewriter.kiln.js) | [![Faceted gold solar sails supported by dark trussed spars](examples/renders/solar-sail-courier.png)](examples/solar-sail-courier.kiln.js) |
 
-<p align="center"><a href="https://kilnstudio.tools/#/mechanical-peacock"><img src="examples/renders/mechanical-peacock.png" width="460" alt="Mechanical peacock with a jewel-coloured fan and brass frame"></a></p>
+| Mechanical peacock · Claude Opus 5 | Orbital station · GPT-6 Astra |
+| --- | --- |
+| [![Mechanical peacock with a jewel-coloured fan and brass frame](examples/renders/mechanical-peacock.png)](examples/mechanical-peacock.kiln.js) | [![Orbital station with a symmetric rear service hub, paired radiators and communications dishes](examples/renders/orbital-station.png)](examples/orbital-station.kiln.js) |
 
 Mechanical peacock · Claude Opus 5. Maintainer-agent repairs connect the neck and
 correct the body shell's face direction; the [source revisions](site/examples/history/mechanical-peacock/history.json)
 record the original and repaired programs.
+
+Orbital station · Codex refinement following owner art direction: mirrored rear
+assemblies, a recessed service hatch, supported radiators and smoother material finish.
+The [source revisions](site/examples/history/orbital-station/history.json) retain the original.
 
 [Browse the interactive gallery](https://kilnstudio.tools/#/gallery)
 · [All examples and model credits](docs/examples.md)
