@@ -401,10 +401,13 @@ cd ../my-assets
               Install the authoring and refinement skills with their reference files, then select
               Kiln in your chat. This currently requires developer setup.
             </p>
-            <Code>{`Make a field recorder, review the renders, save it to my project collection, and show it with kiln_present.`}</Code>
+            <Code>{`Make a field recorder.
+Review the renders and save it
+to my project collection.
+Show it with kiln_present.`}</Code>
             <p>
               Supporting MCP App clients show an interactive 3D card. ChatGPT viewing has been
-              verified with real saved assets, including animation and orbit controls.
+              verified with real saved assets and orbit controls.
             </p>
           </section>
           <section className="setup-card" aria-labelledby="chat-keep">
