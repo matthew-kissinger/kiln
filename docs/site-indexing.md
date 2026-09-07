@@ -48,13 +48,15 @@ Reference: [Google's canonicalization guidance](https://developers.google.com/se
 
 ## Remaining Search Console work
 
-1. Submit `https://kilnstudio.tools/sitemap.xml` after deployment.
-2. Allow Google to recrawl. Deployment cannot guarantee indexing or immediately
+1. Allow Google to recrawl. Deployment cannot guarantee indexing or immediately
    clear the report. A duplicate excluded in favor of the intended root is normal.
-3. If the report persists after a fresh crawl, inspect Google's selected canonical
+2. If the report persists after a fresh crawl, inspect Google's selected canonical
    for the remaining examples. The retired `play` host could be simplified to a
    direct permanent redirect at its hosting configuration; that infrastructure
    is not owned by this GitHub Pages repository and was not changed here.
 
-No account permissions were changed. Recheck the submitted sitemap index after
-deployment and retain the final deployment/submission receipt locally.
+After deployment, the homepage, robots file, sitemap, and sitemap index all
+returned 200. The existing sitemap index was resubmitted in Search Console, which
+confirmed **Sitemap submitted successfully** and then **Success**, with its last
+read on September 6. Discovered pages initially remained zero; processing and
+indexing are separate from successful retrieval. No account permissions changed.
