@@ -62,6 +62,7 @@ export function Home({ specimens }: { specimens: Specimen[] }) {
         </a>
         <div>
           <a href="#/gallery">Examples</a>
+          <a href="#chat">Chat setup</a>
           <a href={`${DOCS}/install.md`}>Docs</a>
           <a href={REPO}>GitHub ↗</a>
         </div>
@@ -95,7 +96,7 @@ export function Home({ specimens }: { specimens: Specimen[] }) {
         </div>
       </div>
       <div className="capability-strip">
-        <span>Local CLI + MCP</span>
+        <span>CLI + MCP + chat viewer</span>
         <span>Editable JavaScript</span>
         <span>Named parts & materials</span>
         <span>GLB export · MIT</span>
@@ -381,6 +382,44 @@ cd ../my-assets
               <a href={`${DOCS}/clean-room.md`}>Clean-room boundaries</a> ·{' '}
               <a href={`${DOCS}/install.md`}>Package and plugin installation</a>
             </p>
+          </section>
+        </div>
+      </section>
+      <section className="band setup-section" aria-labelledby="chat">
+        <div className="section-heading">
+          <div>
+            <p className="eyebrow">Kiln in your chat client</p>
+            <h2 id="chat">Make it. Save it. Turn it around in chat.</h2>
+          </div>
+          <a href={`${DOCS}/chatgpt.md`}>ChatGPT setup guide →</a>
+        </div>
+        <div className="setup-grid">
+          <section className="setup-card" aria-labelledby="chat-connect">
+            <h3 id="chat-connect">Connect once, then ask for an asset</h3>
+            <p>
+              Connect Kiln's local MCP server to ChatGPT through a private Secure MCP Tunnel.
+              Install the authoring and refinement skills with their reference files, then select
+              Kiln in your chat. This currently requires developer setup.
+            </p>
+            <Code>{`Make a field recorder, review the renders, save it to my project collection, and show it with kiln_present.`}</Code>
+            <p>
+              Supporting MCP App clients show an interactive 3D card. ChatGPT viewing has been
+              verified with real saved assets, including animation and orbit controls.
+            </p>
+          </section>
+          <section className="setup-card" aria-labelledby="chat-keep">
+            <h3 id="chat-keep">Keep a collection you can refine</h3>
+            <p>
+              Save the GLB alongside its source, build records, and revision history. Open your
+              project collection or personal library in the local viewer to browse, compare
+              revisions, and download a GLB or editable ZIP bundle.
+            </p>
+            <Code>{`node kiln.mjs view`}</Code>
+            <p>
+              ChatGPT-native GLB and ZIP attachments remain unverified. Downloads in chat depend on
+              the client's file support or a host-provided delivery link.
+            </p>
+            <a href={`${DOCS}/collections.md`}>Collections, downloads, and source provenance →</a>
           </section>
         </div>
       </section>

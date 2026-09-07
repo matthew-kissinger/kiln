@@ -4,12 +4,15 @@
  * The CLI entry uses a persistent local source store. Embedded callers can inject
  * their own store and renderer; schemas and image extraction stay in the registry.
  */
-import { McpServer } from '@modelcontextprotocol/server';
+import { McpServer, ResourceTemplate } from '@modelcontextprotocol/server';
+import { localAssetLibrary } from './assets-node';
+import { readAssetResource, type AssetLink } from './assets-resources';
 import { serveStdio } from '@modelcontextprotocol/server/stdio';
 import { AsyncLocalStorage } from 'node:async_hooks';
 
 import {
   createKilnProgramToolRegistry,
+  KILN_ASSET_WIDGET_URI,
   type KilnToolDef,
   type KilnToolContext,
 } from './tools/registry';
@@ -23,6 +26,7 @@ export const MCP_SERVER_VERSION = '0.6.0';
 
 /** One MCP content block. Mirrors the SDK's `CallToolResult['content']` element. */
 type ContentBlock =
+  | AssetLink
   | { type: 'text'; text: string }
   | { type: 'image'; data: string; mimeType: string };
 
@@ -42,6 +46,8 @@ type ContentBlock =
 export type KilnToolResult = {
   content: ContentBlock[];
   isError?: boolean;
+  structuredContent?: Record<string, unknown>;
+  _meta?: Record<string, unknown>;
 };
 
 /** Use the shared program-aware definitions, including standalone validation. */
@@ -94,12 +100,76 @@ export async function runTool(def: KilnToolDef, args: unknown): Promise<KilnTool
   const asText = def.text?.(output);
   if (asText !== undefined) return { content: [{ type: 'text', text: asText }] };
 
-  return { content: [{ type: 'text', text: JSON.stringify(output, null, 2) }] };
+  const resources = (output as { resources?: AssetLink[] } | null)?.resources ?? [];
+  const payload = resources.length ? { ...(output as object), resources: undefined } : output;
+  return {
+    content: [{ type: 'text', text: JSON.stringify(payload, null, 2) }, ...resources],
+    ...(def.ui
+      ? {
+          structuredContent: output as Record<string, unknown>,
+          _meta: await def.ui.data(output),
+        }
+      : {}),
+  };
 }
 
 /** Build the server, registering every def from the registry. */
 export function createKilnMcpServer(context: KilnToolContext = {}): McpServer {
-  const server = new McpServer({ name: MCP_SERVER_NAME, version: MCP_SERVER_VERSION });
+  const server = new McpServer({
+    name: MCP_SERVER_NAME,
+    version: MCP_SERVER_VERSION,
+  });
+  server.registerResource(
+    'kiln-asset-viewer',
+    KILN_ASSET_WIDGET_URI,
+    {
+      description: 'Interactive Kiln asset viewer and downloads',
+      mimeType: 'text/html;profile=mcp-app',
+    },
+    async (uri) => ({
+      contents: [
+        {
+          uri: uri.href,
+          mimeType: 'text/html;profile=mcp-app',
+          text: await (await import('./asset-widget')).readAssetWidgetHtml(),
+          _meta: {
+            ui: {
+              prefersBorder: true,
+              csp: { connectDomains: [], resourceDomains: [] },
+            },
+            'openai/widgetDescription':
+              'Inspect the saved 3D asset and download its GLB or editable bundle.',
+            'openai/widgetPrefersBorder': true,
+          },
+        },
+      ],
+    }),
+  );
+  if (context.assetLibrary) {
+    server.registerResource(
+      'asset-file',
+      new ResourceTemplate('kiln://assets/{collection}/{asset}/{revision}/{file}', {
+        list: undefined,
+      }),
+      {
+        description: 'Exact saved GLB, editable source, preview, manifest, or portable bundle.',
+      },
+      async (uri) => {
+        const file = await readAssetResource(context.assetLibrary!, uri.href);
+        return {
+          contents: [
+            {
+              uri: uri.href,
+              mimeType: file.mimeType,
+              ...(file.name.endsWith('.json') || file.name.endsWith('.js')
+                ? { text: new TextDecoder().decode(file.bytes) }
+                : { blob: Buffer.from(file.bytes).toString('base64') }),
+            },
+          ],
+        };
+      },
+    );
+  }
   const requests = new AsyncLocalStorage<AbortSignal>();
   const requestContext: KilnToolContext = {
     ...context,
@@ -109,7 +179,9 @@ export function createKilnMcpServer(context: KilnToolContext = {}): McpServer {
       return {
         ...configured,
         ...(signal
-          ? { signal: configured.signal ? AbortSignal.any([signal, configured.signal]) : signal }
+          ? {
+              signal: configured.signal ? AbortSignal.any([signal, configured.signal]) : signal,
+            }
           : {}),
       };
     },
@@ -120,12 +192,23 @@ export function createKilnMcpServer(context: KilnToolContext = {}): McpServer {
       def.name,
       {
         description: def.description,
+        annotations: def.annotations,
+        ...(def.ui
+          ? {
+              _meta: {
+                ui: { resourceUri: def.ui.resourceUri },
+                'openai/outputTemplate': def.ui.resourceUri,
+                'openai/widgetAccessible': true,
+              },
+            }
+          : {}),
         // The registry's zod schema, passed straight through as Standard Schema.
         // The SDK advertises the derived JSON Schema and validates arguments, so
         // there is no second copy of the schema anywhere in this file. No cast:
         // a cast here would silently decouple the advertised schema from the
         // registry's, which is the one thing this file exists not to do.
         inputSchema: def.inputSchema,
+        ...(def.outputSchema ? { outputSchema: def.outputSchema } : {}),
       },
       async (args: unknown, request): Promise<KilnToolResult> => {
         try {
@@ -137,7 +220,10 @@ export function createKilnMcpServer(context: KilnToolContext = {}): McpServer {
           return {
             isError: true,
             content: [
-              { type: 'text' as const, text: err instanceof Error ? err.message : String(err) },
+              {
+                type: 'text' as const,
+                text: err instanceof Error ? err.message : String(err),
+              },
             ],
           };
         }
@@ -156,6 +242,28 @@ if (import.meta.main) {
     await buildRenderPort(mode, process.env['KILN_RENDER_PORT_URL']),
   );
   context.programStore = localProgramStore();
+  context.assetLibrary = localAssetLibrary();
+  const deliveryBase = process.env['KILN_ASSET_DOWNLOAD_BASE_URL'];
+  if (deliveryBase) {
+    const base = new URL(deliveryBase);
+    if (
+      base.protocol !== 'https:' &&
+      !(base.protocol === 'http:' && ['127.0.0.1', 'localhost', '[::1]'].includes(base.hostname))
+    )
+      throw new Error('Asset download base must use HTTPS or loopback HTTP');
+    context.assetDownloadUrls = async (collection, assetId, revisionId) =>
+      Object.fromEntries(
+        ['asset.glb', 'editable.zip', 'source.kiln.js', 'preview.png', 'manifest.json'].map(
+          (file) => [
+            file,
+            new URL(
+              `files/${collection}/${assetId}/${revisionId}/${file}?download`,
+              base.href.endsWith('/') ? base.href : `${base.href}/`,
+            ).href,
+          ],
+        ),
+      );
+  }
   // stdout is the MCP transport; diagnostics must never touch it.
   console.error(`kiln MCP server on stdio (${mode})`);
   void serveStdio(() => createKilnMcpServer(context));

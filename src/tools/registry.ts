@@ -10,7 +10,8 @@ import {
  */
 
 import { z } from 'zod';
-import { MemoryProgramStore, type ProgramStore } from '../program-store';
+import { assetManifestSchema } from '../assets';
+import { MemoryProgramStore, retainProgram, type ProgramStore } from '../program-store';
 import { createKilnSourceDef, withProgramReferences } from './programs';
 import { createKilnDiscoveryDef } from './discovery';
 import { createCachedEvaluatorPort, MemoryBuildCache, type BuildCache } from '../build-cache';
@@ -50,7 +51,20 @@ import type { TextureUsage } from '../textures';
 // Tool definition contract
 // =============================================================================
 
+export const KILN_ASSET_WIDGET_URI = 'ui://kiln/asset-v3.html';
 export interface KilnToolDef {
+  outputSchema?: z.ZodType;
+  /** Optional MCP App presentation; metadata is hidden from the language model. */
+  ui?: {
+    resourceUri: string;
+    data(output: unknown): Promise<Record<string, unknown>>;
+  };
+  annotations?: {
+    readOnlyHint: boolean;
+    destructiveHint: boolean;
+    idempotentHint: boolean;
+    openWorldHint: boolean;
+  };
   /** Stable tool name exposed to the model (in-process and over MCP). */
   name: string;
   /** Model-facing description, consistent with the kiln-glb SKILL.md language. */
@@ -103,6 +117,16 @@ export interface KilnToolDef {
  * category field.
  */
 export interface KilnToolContext {
+  /** Durable user collections, supplied by the host; never a disposable build cache. */
+  assetLibrary?: import('../assets').AssetLibrary;
+  /** Host-owned delivery URLs, for example expiring HTTPS links or a running local viewer. */
+  assetDownloadUrls?: (
+    collection: string,
+    assetId: string,
+    revisionId: string,
+  ) => Promise<Record<string, string>>;
+  /** Effective host defaults, captured for saved build provenance. */
+  assetBuildOptions?: Record<string, unknown>;
   geometryPolicy?: import('../geometry-export').GeometryExportPolicy;
   localExecution?: import('../local-runtime').LocalExecution;
   evaluationControls?: () => import('../evaluator/protocol').EvaluatorPortCallControlsV1;
@@ -467,20 +491,21 @@ async function renderDerivativeCell(
       ...(input.backfaceCull !== undefined ? { backfaceCull: input.backfaceCull } : {}),
       ...(input.frameBounds ? { frameBounds: input.frameBounds } : {}),
     });
-  const flat: import('../views').GlbViewCellResult & { captureCache?: { hit: boolean } } =
-    context.captureCache
-      ? await (await import('../views/capture-cache')).captureCpuCell(
-          context.captureCache,
-          {
-            artifactGlbSha256: inputGlbSha256,
-            rendererId: CPU_RASTER_RENDERER_ID,
-            camera,
-            size: input.size,
-            backfaceCull: input.backfaceCull ?? true,
-          },
-          produceFlat,
-        )
-      : await produceFlat();
+  const flat: import('../views').GlbViewCellResult & {
+    captureCache?: { hit: boolean };
+  } = context.captureCache
+    ? await (await import('../views/capture-cache')).captureCpuCell(
+        context.captureCache,
+        {
+          artifactGlbSha256: inputGlbSha256,
+          rendererId: CPU_RASTER_RENDERER_ID,
+          camera,
+          size: input.size,
+          backfaceCull: input.backfaceCull ?? true,
+        },
+        produceFlat,
+      )
+    : await produceFlat();
   if (flat.inputGlbSha256 !== inputGlbSha256) {
     throw new Error(
       `derivative GLB fallback hash mismatch (${flat.inputGlbSha256} != ${inputGlbSha256})`,
@@ -653,7 +678,10 @@ const cameraShotInput = z
             target: cameraVec3Input.optional(),
             relativeTo: z.enum(['world', 'asset', 'part', 'local']).optional(),
             frame: z
-              .object({ origin: cameraVec3Input.optional(), rotation: cameraVec3Input.optional() })
+              .object({
+                origin: cameraVec3Input.optional(),
+                rotation: cameraVec3Input.optional(),
+              })
               .strict()
               .optional(),
             framing: z.enum(['explicit', 'bounds']).optional(),
@@ -702,7 +730,9 @@ const captureInput = z
   .union(
     [
       advancedCaptureInput,
-      z.strictObject(legacyCaptureInput.unwrap().shape, { error: taggedCaptureError }),
+      z.strictObject(legacyCaptureInput.unwrap().shape, {
+        error: taggedCaptureError,
+      }),
     ],
     { error: taggedCaptureError },
   )
@@ -968,7 +998,9 @@ async function runScreenshot(
   try {
     const { renderGlbViewGrid } = await import('../views');
     const { root, rendered } = await loadEvaluatedReviewScene(input.code, context);
-    const warnings = inspectSceneStructure(root, { category: trustedCategory(context) });
+    const warnings = inspectSceneStructure(root, {
+      category: trustedCategory(context),
+    });
     // No capture config here on purpose: kiln_screenshot belongs to the frozen
     // four-tool baseline, whose schemas stay byte-for-byte unchanged.
     const grid = await renderGlbViewGrid(rendered.glb);
@@ -1179,7 +1211,9 @@ async function runRenderViews(
           renderer: CPU_RASTER_RENDERER_ID,
           degraded: neededPbr,
           ...(neededPbr
-            ? { degradedReason: 'material-faithful view render port unavailable' }
+            ? {
+                degradedReason: 'material-faithful view render port unavailable',
+              }
             : {}),
           neededPbr,
         };
@@ -1333,7 +1367,9 @@ async function runScreenshotAnimation(
   try {
     const { renderClipAnimation } = await import('../views');
     const { root, clips } = await loadEvaluatedReviewScene(input.code, context);
-    const warnings = inspectSceneStructure(root, { category: trustedCategory(context) });
+    const warnings = inspectSceneStructure(root, {
+      category: trustedCategory(context),
+    });
     const r = await renderClipAnimation(root, clips, {
       clip: input.clip,
       ...(input.shot ? { shot: input.shot } : {}),
@@ -1402,7 +1438,10 @@ export function screenshotAnimationMediaMulti(
   const o = output as KilnScreenshotAnimationResult | undefined;
   if (!o || !Array.isArray(o.framesBase64) || o.framesBase64.length === 0) return undefined;
   const { pngBase64: _png, framesBase64: _frames, ...json } = o;
-  return { pngs: o.framesBase64.map((b) => new Uint8Array(Buffer.from(b, 'base64'))), json };
+  return {
+    pngs: o.framesBase64.map((b) => new Uint8Array(Buffer.from(b, 'base64'))),
+    json,
+  };
 }
 
 /**
@@ -1501,7 +1540,9 @@ async function runViewInterior(
       ...(nodeName ? { nodeName } : {}),
       renderDerivativeCell: (cell) => renderDerivativeCell(cell, context),
     });
-    const warnings = inspectSceneStructure(root, { category: trustedCategory(context) });
+    const warnings = inspectSceneStructure(root, {
+      category: trustedCategory(context),
+    });
     if (grid.roofsHidden === 0) {
       warnings.push(
         nodeName
@@ -1780,7 +1821,10 @@ async function runInspect(
       ...(viewEvidence ? { viewEvidence } : {}),
     };
   } catch (err) {
-    return { ok: false, error: err instanceof Error ? err.message : String(err) };
+    return {
+      ok: false,
+      error: err instanceof Error ? err.message : String(err),
+    };
   }
 }
 
@@ -2163,7 +2207,10 @@ async function guardCaptureBudget(
     }
     return out;
   } catch (error) {
-    return { ok: false, error: error instanceof Error ? error.message : String(error) };
+    return {
+      ok: false,
+      error: error instanceof Error ? error.message : String(error),
+    };
   }
 }
 
@@ -2178,7 +2225,12 @@ function withCaptureCache(context: KilnToolContext): KilnToolContext {
     ...context,
     captureCache: cache,
     ...(context.viewRenderPort && context.captureCacheIdentity
-      ? { viewRenderPort: createCachedRenderPort(context.viewRenderPort, { cache, identity }) }
+      ? {
+          viewRenderPort: createCachedRenderPort(context.viewRenderPort, {
+            cache,
+            identity,
+          }),
+        }
       : {}),
   };
 }
@@ -2200,5 +2252,273 @@ export function createKilnProgramToolRegistry(
       createKilnEditDef(context),
     ].map((def) => withProgramReferences(def, store)),
     createKilnSourceDef(store),
+    ...createKilnAssetDefs({ ...context, programStore: store }),
+  ].map((def) => ({
+    ...def,
+    annotations: {
+      readOnlyHint: ['kiln_source', 'kiln_list_primitives', 'kiln_export', 'kiln_present'].includes(
+        def.name,
+      ),
+      destructiveHint: false,
+      idempotentHint: def.name !== 'kiln_save',
+      openWorldHint: false,
+    },
+  }));
+}
+
+const assetSelector = {
+  collection: z
+    .string()
+    .regex(/^[a-z][a-z0-9_-]{0,79}$/)
+    .default('project'),
+  assetId: z.string().regex(/^[a-z][a-z0-9_-]{0,79}$/),
+  revisionId: z.string().regex(/^[a-z][a-z0-9_-]{0,79}$/),
+};
+
+/** All asset operation schemas live here, alongside the existing tool definitions. */
+export function createKilnAssetDefs(context: KilnToolContext): KilnToolDef[] {
+  const library = () => {
+    if (!context.assetLibrary)
+      throw new Error(
+        'No asset library configured. The local CLI/MCP host supplies workspace collections; embedded hosts must inject assetLibrary.',
+      );
+    return context.assetLibrary;
+  };
+  const links = async (collection: string, asset: import('../assets').AssetManifest) => ({
+    ok: true,
+    collection,
+    asset: {
+      assetId: asset.assetId,
+      revisionId: asset.revisionId,
+      parentRevision: asset.parentRevision,
+      name: asset.name,
+      tags: asset.tags,
+      createdAt: asset.createdAt,
+      editable: asset.editable,
+      files: asset.files,
+      build: asset.build && {
+        engine: asset.build.engine,
+        rebuild: asset.build.rebuild,
+        warningCount: asset.build.warnings.length,
+        warnings: asset.build.warnings.slice(0, 3).map((warning) => warning.slice(0, 200)),
+      },
+    },
+    resources: (await import('../assets-resources')).assetLinks(collection, asset),
+    downloadUrls: await context.assetDownloadUrls?.(collection, asset.assetId, asset.revisionId),
+  });
+  const saveInput = z.object({
+    collection: assetSelector.collection,
+    programRef: z.string(),
+    name: z.string().min(1).max(200),
+    assetId: assetSelector.assetId.optional(),
+    parentRevision: assetSelector.revisionId.optional(),
+    tags: z.array(z.string().max(80)).max(30).optional(),
+    brief: z.string().max(8000).optional(),
+    description: z.string().max(4000).optional(),
+    attribution: z
+      .object({
+        model: z.string().max(200).optional(),
+        harness: z.string().max(200).optional(),
+        author: z.string().max(200).optional(),
+      })
+      .optional(),
+  });
+  const assetsInput = z.object({
+    action: z.enum(['collections', 'list', 'get', 'restore']).default('list'),
+    collection: assetSelector.collection,
+    assetId: assetSelector.assetId.optional(),
+    revisionId: assetSelector.revisionId.optional(),
+    query: z.string().max(200).optional(),
+    offset: z.number().int().min(0).default(0),
+    limit: z.number().int().min(1).max(50).default(20),
+  });
+  const exportInput = z.object(assetSelector);
+  const importInput = z.object({
+    ...assetSelector,
+    sourceCollection: assetSelector.collection,
+  });
+  return [
+    {
+      name: 'kiln_save',
+      description:
+        'Save a completed source revision as a durable asset with its exact GLB, source, preview, and build record. Use programRef returned by render/edit. To revise an existing asset, supply its assetId and parentRevision; previous revisions remain intact. Returns downloadable resources. Draft renders do not populate collections.',
+      inputSchema: saveInput,
+      run: async (raw) => {
+        const input = saveInput.parse(raw);
+        const target = library();
+        const code = await context.programStore!.get(input.programRef);
+        const rendered = await evaluateGeneratedSource(code, context);
+        let preview: Uint8Array | undefined;
+        let previewInfo: import('../assets').AssetManifest['preview'];
+        try {
+          const result = await runRenderViews({ code } as z.infer<typeof renderViewsInput>, {
+            ...context,
+            evaluatorPort: { render: async () => rendered },
+          });
+          if (!result.ok || !result.pngBase64)
+            throw new Error(result.error ?? 'Preview unavailable');
+          preview = Uint8Array.from(Buffer.from(result.pngBase64, 'base64'));
+          previewInfo = { fidelity: result.viewFidelity };
+        } catch (error) {
+          previewInfo = {
+            error: error instanceof Error ? error.message : String(error),
+          };
+        }
+        const dependencies = rendered.materialResourceProvenance ?? [];
+        const asset = await target.save(input.collection, {
+          ...input,
+          code,
+          glb: rendered.glb,
+          preview,
+          previewInfo,
+          build: {
+            engine: context.localExecution?.runtimeIdentity ?? 'source-development:unverified',
+            options: {
+              ...context.assetBuildOptions,
+              optimize: 'off',
+              instance: context.assetBuildOptions?.instance ?? 'unspecified-by-host',
+              geometryPolicy: context.geometryPolicy ?? 'warn',
+              category: trustedCategory(context),
+              intent: context.intent,
+            },
+            warnings: rendered.warnings,
+            integration: rendered.integrationManifest,
+            qa: rendered.meta.qaReport,
+            dependencies,
+            rebuild: dependencies.some((d) => d.delivery === 'runtime')
+              ? 'external-dependencies-required'
+              : 'engine-required',
+          },
+        });
+        return links(input.collection, asset);
+      },
+    },
+    {
+      name: 'kiln_assets',
+      description:
+        'Discover collections; list/search saved asset revisions; get a build record and downloads; or restore exact editable source into the current program store for kiln_source/kiln_edit. List is paginated. Binary-only imports cannot restore source.',
+      inputSchema: assetsInput,
+      run: async (raw) => {
+        const input = assetsInput.parse(raw);
+        const target = library();
+        if (input.action === 'collections') return { collections: target.collections() };
+        if (input.action === 'list') {
+          const query = input.query?.toLowerCase();
+          const all = (await target.list(input.collection)).filter(
+            (a) =>
+              (!input.assetId || a.assetId === input.assetId) &&
+              (!query || `${a.name} ${a.tags.join(' ')}`.toLowerCase().includes(query)),
+          );
+          return {
+            collection: input.collection,
+            total: all.length,
+            nextOffset: input.offset + input.limit < all.length ? input.offset + input.limit : null,
+            assets: all.slice(input.offset, input.offset + input.limit).map((a) => ({
+              assetId: a.assetId,
+              revisionId: a.revisionId,
+              parentRevision: a.parentRevision,
+              name: a.name,
+              tags: a.tags,
+              editable: a.editable,
+              createdAt: a.createdAt,
+            })),
+          };
+        }
+        if (!input.assetId || !input.revisionId)
+          throw new Error('get/restore requires assetId and revisionId');
+        const record = await target.read(input.collection, input.assetId, input.revisionId);
+        if (input.action === 'get') return links(input.collection, record.manifest);
+        const code = record.files['source.kiln.js'];
+        if (!code) throw new Error('Source unavailable: this asset contains only a GLB');
+        return {
+          ...(await links(input.collection, record.manifest)),
+          programRef: await retainProgram(context.programStore!, new TextDecoder().decode(code)),
+        };
+      },
+    },
+    {
+      name: 'kiln_present',
+      description:
+        'Show a saved asset in an interactive chat viewer with GLB, editable ZIP, and source download buttons. Call after saving or when the user wants to see or download an asset. Other hosts receive portable resource links.',
+      inputSchema: exportInput,
+      outputSchema: z.object({
+        ok: z.literal(true),
+        collection: z.string(),
+        asset: assetManifestSchema
+          .pick({
+            assetId: true,
+            revisionId: true,
+            parentRevision: true,
+            name: true,
+            tags: true,
+            createdAt: true,
+            editable: true,
+            files: true,
+          })
+          .extend({
+            build: z
+              .object({
+                engine: z.string(),
+                rebuild: z.enum(['engine-required', 'external-dependencies-required']),
+                warningCount: z.number().int(),
+                warnings: z.array(z.string()),
+              })
+              .optional(),
+          }),
+        resources: z.array(
+          z.object({
+            type: z.literal('resource_link'),
+            name: z.string(),
+            uri: z.string(),
+            mimeType: z.string(),
+          }),
+        ),
+        downloadUrls: z.record(z.string(), z.string()).optional(),
+      }),
+      ui: {
+        resourceUri: KILN_ASSET_WIDGET_URI,
+        data: async (output) =>
+          (await import('../asset-widget')).assetWidgetData(
+            library(),
+            output as {
+              collection: string;
+              asset: { assetId: string; revisionId: string };
+            },
+          ),
+      },
+      run: async (raw) => {
+        const input = exportInput.parse(raw);
+        return links(
+          input.collection,
+          (await library().read(input.collection, input.assetId, input.revisionId)).manifest,
+        );
+      },
+    },
+    {
+      name: 'kiln_export',
+      description:
+        'Get downloadable GLB, source, manifest, and portable ZIP resource links for one exact saved revision. The ZIP contains source when available and does not require the original program store. Use the host resource reader/download UI; no binary bytes are placed in tool text.',
+      inputSchema: exportInput,
+      run: async (raw) => {
+        const input = exportInput.parse(raw);
+        return links(
+          input.collection,
+          (await library().read(input.collection, input.assetId, input.revisionId)).manifest,
+        );
+      },
+    },
+    {
+      name: 'kiln_import',
+      description:
+        'Copy a pinned asset revision between configured project/personal collections, preserving identity and provenance. Copies never track later edits automatically. For a GLB or downloaded ZIP on disk, use kiln import <file> --collection <name> in the CLI.',
+      inputSchema: importInput,
+      run: async (raw) => {
+        const input = importInput.parse(raw);
+        const target = library();
+        const record = await target.read(input.sourceCollection, input.assetId, input.revisionId);
+        await target.import(input.collection, [record]);
+        return links(input.collection, record.manifest);
+      },
+    },
   ];
 }

@@ -3,6 +3,22 @@
 Changes to `@kiln/engine`. Source and installable packages are distributed through
 GitHub. The package is not published on the npm registry.
 
+## Collections and chat viewing — 2026-09-06
+
+- Save assets into project or personal collections with immutable revisions,
+  hashed provenance, original source, and portable editable ZIP bundles.
+- Browse collections and imported GLBs in a local viewer with animation controls,
+  revision inspection, and GLB/source/bundle downloads.
+- Present saved assets in supporting MCP App clients with `kiln_present`.
+  ChatGPT viewing was verified; native GLB/ZIP attachment delivery remains
+  unverified. Host-provided download links are supported.
+- Package complete skills independently or bind them to a ChatGPT connector.
+- Add a canonical-only sitemap and crawler discovery file to the project site.
+
+See [dogfood results and remaining work](docs/collections-dogfood.md) and
+[indexing diagnostics](docs/site-indexing.md). Package version remains 0.6.0;
+this change does not publish a new npm package or promote dogfood assets.
+
 ## Public OSS snapshot — 2026-09-05
 
 - Short, immutable source references work across rendering, source reads, edits,

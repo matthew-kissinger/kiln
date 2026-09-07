@@ -12,6 +12,7 @@ dist/*
 !dist/build.json
 !dist/agent-run.mjs
 !dist/agent-providers.mjs
+!dist/viewer/
 .kiln/
 coverage/
 # `kiln render` writes here when no --out is given, so it lands at the repo

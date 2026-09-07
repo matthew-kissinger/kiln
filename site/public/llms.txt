@@ -8,6 +8,8 @@ Your coding harness supplies the model. The tools do not require a separate mode
 ## Start here
 
 - Website and examples: https://kilnstudio.tools/
+- ChatGPT connection, interactive chat viewing, skills, and download limits: https://github.com/matthew-kissinger/kiln/blob/main/docs/chatgpt.md
+- Saved collections, revisions, local viewer, and editable bundles: https://github.com/matthew-kissinger/kiln/blob/main/docs/collections.md
 - Repository: https://github.com/matthew-kissinger/kiln
 - Installation: https://raw.githubusercontent.com/matthew-kissinger/kiln/main/docs/install.md
 - Project-local setup: https://raw.githubusercontent.com/matthew-kissinger/kiln/main/docs/clean-room.md

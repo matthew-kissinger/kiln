@@ -82,6 +82,17 @@ export function createKilnDiscoveryDef(context: KilnToolContext): KilnToolDef {
           boundedRead: true,
           atomicEdit: true,
         },
+        assets: {
+          available: Boolean(context.assetLibrary),
+          collections: context.assetLibrary?.collections() ?? [],
+          save: 'kiln_save persists exact GLB, source and provenance; draft renders do not populate collections',
+          resume:
+            'kiln_assets action=restore imports a saved revision into the current program store',
+          downloads:
+            'kiln_export returns GLB/source/ZIP resource links; client presentation varies',
+          viewer:
+            'kiln_present opens a saved revision in supporting chat clients with 3D viewing and downloads; kiln view opens a local collection or standalone GLB/ZIP',
+        },
         geometry: {
           attributes: ['position', 'normal', 'uv', 'tangent'],
           indexedTriangles: true,

@@ -11,7 +11,7 @@ import { describe, expect, it } from 'bun:test';
 import { Client, InMemoryTransport } from '@modelcontextprotocol/client';
 
 import { createKilnToolRegistry, createKilnProgramToolRegistry } from './tools/registry';
-import { makeKilnTools, KILN_SUBMIT_TOOL_NAME } from './agent/tools';
+import { makeKilnTools, makeKilnProgramTools, KILN_SUBMIT_TOOL_NAME } from './agent/tools';
 import { runTool, kilnMcpToolDefs, createKilnMcpServer } from './mcp-server';
 
 /**
@@ -23,7 +23,12 @@ import { runTool, kilnMcpToolDefs, createKilnMcpServer } from './mcp-server';
  * converter would have been a test of the converter, not of the surface.
  */
 async function listToolsOverMcp(): Promise<
-  { name: string; description?: string; inputSchema: unknown }[]
+  {
+    name: string;
+    description?: string;
+    inputSchema: unknown;
+    annotations?: { readOnlyHint?: boolean; destructiveHint?: boolean };
+  }[]
 > {
   const [clientTransport, serverTransport] = InMemoryTransport.createLinkedPair();
   const server = createKilnMcpServer();
@@ -39,6 +44,19 @@ async function listToolsOverMcp(): Promise<
 }
 
 describe('tool surface parity across transports', () => {
+  it('advertises reads and immutable writes without destructive defaults', async () => {
+    const tools = await listToolsOverMcp();
+    for (const tool of tools) expect(tool.annotations?.destructiveHint).toBe(false);
+    for (const name of ['kiln_source', 'kiln_list_primitives', 'kiln_export'])
+      expect(tools.find((t) => t.name === name)?.annotations?.readOnlyHint).toBe(true);
+    expect(tools.find((t) => t.name === 'kiln_save')?.annotations?.readOnlyHint).toBe(false);
+  });
+  it('the reference-based Strands skin shares every MCP definition plus terminal submit', () => {
+    expect(makeKilnProgramTools({}).map((t) => t.name)).toEqual([
+      ...kilnMcpToolDefs().map((d) => d.name),
+      KILN_SUBMIT_TOOL_NAME,
+    ]);
+  });
   it('the MCP skin advertises its defs verbatim', async () => {
     const defs = kilnMcpToolDefs();
     const advertised = await listToolsOverMcp();
@@ -82,6 +100,11 @@ describe('tool surface parity across transports', () => {
       // re-emitting the whole file through kiln_render.
       'kiln_edit',
       'kiln_source',
+      'kiln_save',
+      'kiln_assets',
+      'kiln_present',
+      'kiln_export',
+      'kiln_import',
     ]);
 
     const mcpRender = kilnMcpToolDefs().find((d) => d.name === 'kiln_render')!;
@@ -150,16 +173,18 @@ function build() {
     expect(kinds).toContain('image');
     expect(kinds).toContain('text');
 
-    const image = result.content.find((c) => c.type === 'image') as { data: string };
+    const image = result.content.find((c) => c.type === 'image') as {
+      data: string;
+    };
     // A PNG, base64-encoded: the agent literally sees the render.
     expect(Buffer.from(image.data, 'base64').subarray(1, 4).toString('ascii')).toBe('PNG');
   });
 
   it('a failing tool call is an error result, not a thrown transport failure', async () => {
     const def = kilnMcpToolDefs().find((d) => d.name === 'kiln_render');
-    const result = await runTool(def!, { code: 'this is not valid kiln source' }).catch(
-      () => undefined,
-    );
+    const result = await runTool(def!, {
+      code: 'this is not valid kiln source',
+    }).catch(() => undefined);
     // Either the def handled it and returned content, or runTool surfaced it — what
     // must never happen is an unhandled rejection killing the MCP session.
     expect(result).toBeDefined();

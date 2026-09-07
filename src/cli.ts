@@ -15,6 +15,7 @@ import { resolveRenderMode, buildRenderPort, describeDrawnBy } from './cli-rende
 import type { RenderMode } from './cli-render-mode';
 import { localProgramStore } from './program-store-node';
 import { retainProgram, programRefPattern } from './program-store';
+import { ASSET_USAGE } from './asset-cli';
 
 const USAGE = `kiln — vision-in-the-loop 3D asset generation
 
@@ -318,6 +319,16 @@ async function cmdSource(args: Args): Promise<number> {
 }
 
 export async function main(argv: readonly string[]): Promise<number> {
+  if (
+    ['save', 'collections', 'assets', 'asset', 'export', 'import', 'view'].includes(argv[0] ?? '')
+  ) {
+    try {
+      return await (await import('./asset-cli')).assetMain(argv);
+    } catch (error) {
+      console.error(error instanceof Error ? error.message : String(error));
+      return 1;
+    }
+  }
   let args: Args;
   try {
     args = parseArgs(argv);
@@ -326,7 +337,7 @@ export async function main(argv: readonly string[]): Promise<number> {
     return 2;
   }
   if (args.help || !args.command) {
-    console.log(USAGE);
+    console.log(USAGE + ASSET_USAGE);
     return args.help ? 0 : 2;
   }
   try {

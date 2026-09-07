@@ -1,0 +1,122 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width,initial-scale=1" />
+    <title>Kiln Asset</title>
+    <style>
+      * {
+        box-sizing: border-box;
+      }
+      body {
+        margin: 0;
+        font:
+          14px system-ui,
+          sans-serif;
+        background: #151a12;
+        color: #f1f2e7;
+      }
+      header {
+        padding: 18px 20px 12px;
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+      }
+      h1 {
+        font-size: 19px;
+        margin: 5px 0;
+      }
+      small,
+      #revision,
+      #stats,
+      #status {
+        color: #b6bfaa;
+        font-size: 12px;
+      }
+      small {
+        letter-spacing: 2px;
+        font-weight: 700;
+      }
+      #stage {
+        height: 320px;
+        width: 100%;
+        position: relative;
+      }
+      #stage canvas {
+        display: block;
+        width: 100%;
+        height: 100%;
+      }
+      #stage img {
+        width: 100%;
+        height: 100%;
+        object-fit: contain;
+      }
+      .bar {
+        padding: 10px 20px;
+        display: flex;
+        gap: 8px;
+        align-items: center;
+        flex-wrap: wrap;
+      }
+      button,
+      select {
+        font: inherit;
+        background: #2b3424;
+        border: 1px solid #4b5840;
+        color: #f1f2e7;
+        border-radius: 8px;
+        padding: 9px 12px;
+        cursor: pointer;
+      }
+      button:hover {
+        background: #3b4930;
+      }
+      button:disabled {
+        opacity: 0.45;
+        cursor: wait;
+      }
+      button.primary {
+        background: #d5f4a2;
+        color: #20300f;
+        border-color: #d5f4a2;
+        font-weight: 650;
+      }
+      #status {
+        padding: 4px 20px 16px;
+        min-height: 35px;
+        margin: 0;
+      }
+      #stats {
+        margin-right: auto;
+      }
+      [hidden] {
+        display: none !important;
+      }
+    </style>
+  </head>
+  <body>
+    <header>
+      <div>
+        <small>KILN</small>
+        <h1 id="name">Your 3D asset</h1>
+        <div id="revision">Saved with provenance</div>
+      </div>
+      <button id="reset" aria-label="Reset camera">Reset view</button>
+    </header>
+    <div id="stage" aria-label="Interactive 3D asset viewer"></div>
+    <div class="bar">
+      <span id="stats"></span
+      ><select id="clips" aria-label="Animation" hidden></select>
+    </div>
+    <div class="bar">
+      <button class="primary" data-download="glb" disabled>Download GLB</button
+      ><button data-download="bundle" disabled>Editable bundle</button
+      ><button id="source" data-download="source" disabled>Source code</button>
+    </div>
+    <p id="status" role="status">Loading asset from Kiln…</p>
+    <script type="module">
+      /* KILN_CHAT_APP */
+    </script>
+  </body>
+</html>

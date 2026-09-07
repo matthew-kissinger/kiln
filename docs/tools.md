@@ -1770,3 +1770,268 @@ Read a saved program revision without changing it. Returns exact source text in 
 ```
 
 </details>
+
+## kiln_save
+
+Save a completed source revision as a durable asset with its exact GLB, source, preview, and build record. Use programRef returned by render/edit. To revise an existing asset, supply its assetId and parentRevision; previous revisions remain intact. Returns downloadable resources. Draft renders do not populate collections.
+
+<details>
+<summary>Input JSON Schema</summary>
+
+
+```json
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "type": "object",
+  "properties": {
+    "collection": {
+      "default": "project",
+      "type": "string",
+      "pattern": "^[a-z][a-z0-9_-]{0,79}$"
+    },
+    "programRef": {
+      "type": "string"
+    },
+    "name": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 200
+    },
+    "assetId": {
+      "type": "string",
+      "pattern": "^[a-z][a-z0-9_-]{0,79}$"
+    },
+    "parentRevision": {
+      "type": "string",
+      "pattern": "^[a-z][a-z0-9_-]{0,79}$"
+    },
+    "tags": {
+      "maxItems": 30,
+      "type": "array",
+      "items": {
+        "type": "string",
+        "maxLength": 80
+      }
+    },
+    "brief": {
+      "type": "string",
+      "maxLength": 8000
+    },
+    "description": {
+      "type": "string",
+      "maxLength": 4000
+    },
+    "attribution": {
+      "type": "object",
+      "properties": {
+        "model": {
+          "type": "string",
+          "maxLength": 200
+        },
+        "harness": {
+          "type": "string",
+          "maxLength": 200
+        },
+        "author": {
+          "type": "string",
+          "maxLength": 200
+        }
+      },
+      "additionalProperties": false
+    }
+  },
+  "required": [
+    "collection",
+    "programRef",
+    "name"
+  ],
+  "additionalProperties": false
+}
+```
+
+</details>
+
+## kiln_assets
+
+Discover collections; list/search saved asset revisions; get a build record and downloads; or restore exact editable source into the current program store for kiln_source/kiln_edit. List is paginated. Binary-only imports cannot restore source.
+
+<details>
+<summary>Input JSON Schema</summary>
+
+
+```json
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "type": "object",
+  "properties": {
+    "action": {
+      "default": "list",
+      "type": "string",
+      "enum": [
+        "collections",
+        "list",
+        "get",
+        "restore"
+      ]
+    },
+    "collection": {
+      "default": "project",
+      "type": "string",
+      "pattern": "^[a-z][a-z0-9_-]{0,79}$"
+    },
+    "assetId": {
+      "type": "string",
+      "pattern": "^[a-z][a-z0-9_-]{0,79}$"
+    },
+    "revisionId": {
+      "type": "string",
+      "pattern": "^[a-z][a-z0-9_-]{0,79}$"
+    },
+    "query": {
+      "type": "string",
+      "maxLength": 200
+    },
+    "offset": {
+      "default": 0,
+      "type": "integer",
+      "minimum": 0,
+      "maximum": 9007199254740991
+    },
+    "limit": {
+      "default": 20,
+      "type": "integer",
+      "minimum": 1,
+      "maximum": 50
+    }
+  },
+  "required": [
+    "action",
+    "collection",
+    "offset",
+    "limit"
+  ],
+  "additionalProperties": false
+}
+```
+
+</details>
+
+## kiln_present
+
+Show a saved asset in an interactive chat viewer with GLB, editable ZIP, and source download buttons. Call after saving or when the user wants to see or download an asset. Other hosts receive portable resource links.
+
+<details>
+<summary>Input JSON Schema</summary>
+
+
+```json
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "type": "object",
+  "properties": {
+    "collection": {
+      "default": "project",
+      "type": "string",
+      "pattern": "^[a-z][a-z0-9_-]{0,79}$"
+    },
+    "assetId": {
+      "type": "string",
+      "pattern": "^[a-z][a-z0-9_-]{0,79}$"
+    },
+    "revisionId": {
+      "type": "string",
+      "pattern": "^[a-z][a-z0-9_-]{0,79}$"
+    }
+  },
+  "required": [
+    "collection",
+    "assetId",
+    "revisionId"
+  ],
+  "additionalProperties": false
+}
+```
+
+</details>
+
+## kiln_export
+
+Get downloadable GLB, source, manifest, and portable ZIP resource links for one exact saved revision. The ZIP contains source when available and does not require the original program store. Use the host resource reader/download UI; no binary bytes are placed in tool text.
+
+<details>
+<summary>Input JSON Schema</summary>
+
+
+```json
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "type": "object",
+  "properties": {
+    "collection": {
+      "default": "project",
+      "type": "string",
+      "pattern": "^[a-z][a-z0-9_-]{0,79}$"
+    },
+    "assetId": {
+      "type": "string",
+      "pattern": "^[a-z][a-z0-9_-]{0,79}$"
+    },
+    "revisionId": {
+      "type": "string",
+      "pattern": "^[a-z][a-z0-9_-]{0,79}$"
+    }
+  },
+  "required": [
+    "collection",
+    "assetId",
+    "revisionId"
+  ],
+  "additionalProperties": false
+}
+```
+
+</details>
+
+## kiln_import
+
+Copy a pinned asset revision between configured project/personal collections, preserving identity and provenance. Copies never track later edits automatically. For a GLB or downloaded ZIP on disk, use kiln import <file> --collection <name> in the CLI.
+
+<details>
+<summary>Input JSON Schema</summary>
+
+
+```json
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "type": "object",
+  "properties": {
+    "collection": {
+      "default": "project",
+      "type": "string",
+      "pattern": "^[a-z][a-z0-9_-]{0,79}$"
+    },
+    "assetId": {
+      "type": "string",
+      "pattern": "^[a-z][a-z0-9_-]{0,79}$"
+    },
+    "revisionId": {
+      "type": "string",
+      "pattern": "^[a-z][a-z0-9_-]{0,79}$"
+    },
+    "sourceCollection": {
+      "default": "project",
+      "type": "string",
+      "pattern": "^[a-z][a-z0-9_-]{0,79}$"
+    }
+  },
+  "required": [
+    "collection",
+    "assetId",
+    "revisionId",
+    "sourceCollection"
+  ],
+  "additionalProperties": false
+}
+```
+
+</details>

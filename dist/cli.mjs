@@ -25543,6 +25543,2302 @@ var init_subprocess = __esm(() => {
   };
 });
 
+// src/program-store.ts
+function assertProgramRef(ref) {
+  if (typeof ref !== "string" || !programRefPattern.test(ref))
+    throw new Error("Invalid program reference; use a p_ handle or full sha256 reference returned by Kiln.");
+}
+async function retainProgram(store, code) {
+  const canonical2 = await store.put(code);
+  return store.shortRef ? store.shortRef(canonical2) : canonical2;
+}
+function* shortProgramRefCandidates(canonical2) {
+  if (!canonicalProgramRefPattern.test(canonical2) || canonical2.length !== 71)
+    throw new Error("Invalid canonical program reference.");
+  for (let length3 = 12;length3 <= 64; length3 += 4)
+    yield `p_${canonical2.slice(7, 7 + length3)}`;
+}
+async function programReference(code) {
+  const bytes = new TextEncoder().encode(code);
+  if (bytes.length > MAX_PROGRAM_BYTES)
+    throw new Error("Program exceeds the 1 MiB source limit.");
+  if (new TextDecoder("utf-8", { ignoreBOM: true }).decode(bytes) !== code)
+    throw new Error("Program must be valid Unicode.");
+  const hash = new Uint8Array(await crypto.subtle.digest("SHA-256", bytes));
+  return `sha256:${Array.from(hash, (b) => b.toString(16).padStart(2, "0")).join("")}`;
+}
+
+class MemoryProgramStore {
+  maxBytes;
+  programs = new Map;
+  handles = new Map;
+  constructor(maxBytes = 64 * 1024 * 1024) {
+    this.maxBytes = maxBytes;
+  }
+  bytes = 0;
+  async put(code) {
+    const ref = await programReference(code);
+    if (!this.programs.has(ref)) {
+      const size = new TextEncoder().encode(code).length;
+      if (this.bytes + size > this.maxBytes)
+        throw new Error("Program store is full; export your work and start a new store.");
+      this.programs.set(ref, code);
+      this.bytes += size;
+    }
+    return ref;
+  }
+  async stats() {
+    return {
+      entries: this.programs.size,
+      bytes: this.bytes,
+      maxSourceBytes: MAX_PROGRAM_BYTES,
+      maxBytes: this.maxBytes,
+      eviction: "none"
+    };
+  }
+  async get(ref) {
+    assertProgramRef(ref);
+    const canonical2 = ref.startsWith("p_") ? this.handles.get(ref) : ref;
+    const code = canonical2 === undefined ? undefined : this.programs.get(canonical2);
+    if (code === undefined)
+      throw new Error(`Program not found: ${ref}. Import the source into this store again.`);
+    return code;
+  }
+  async shortRef(ref) {
+    await this.get(ref);
+    if (ref.startsWith("p_"))
+      return ref;
+    for (const handle of shortProgramRefCandidates(ref)) {
+      const owner = this.handles.get(handle);
+      if (owner === ref)
+        return handle;
+      if (owner === undefined) {
+        this.handles.set(handle, ref);
+        return handle;
+      }
+    }
+    throw new Error("Unable to register an immutable program handle.");
+  }
+}
+var MAX_PROGRAM_BYTES, canonicalProgramRefPattern, programRefPattern;
+var init_program_store = __esm(() => {
+  MAX_PROGRAM_BYTES = 1024 * 1024;
+  canonicalProgramRefPattern = /^sha256:[a-f0-9]{64}(?![\s\S])/;
+  programRefPattern = /^(?:sha256:[a-f0-9]{64}|p_[a-f0-9]{12}(?:[a-f0-9]{4}){0,13})(?![\s\S])/;
+});
+
+// src/program-store-node.ts
+import { link, lstat, mkdir, readFile as readFile2, readdir, stat, unlink, writeFile as writeFile2 } from "node:fs/promises";
+import { randomUUID } from "node:crypto";
+import { join as join3, resolve } from "node:path";
+
+class FileProgramStore {
+  directory;
+  constructor(directory) {
+    this.directory = directory;
+  }
+  async stats() {
+    let entries = 0;
+    let bytes = 0;
+    try {
+      for (const entry of await readdir(this.directory, { withFileTypes: true })) {
+        if (!entry.isFile() || !/^[a-f0-9]{64}\.js$/.test(entry.name))
+          continue;
+        try {
+          bytes += (await stat(join3(this.directory, entry.name))).size;
+          entries++;
+        } catch (error) {
+          if (error.code !== "ENOENT")
+            throw error;
+        }
+      }
+    } catch (error) {
+      if (error.code !== "ENOENT")
+        throw error;
+    }
+    return { entries, bytes, maxSourceBytes: MAX_PROGRAM_BYTES, eviction: "none" };
+  }
+  async get(ref) {
+    assertProgramRef(ref);
+    const canonical2 = ref.startsWith("p_") ? await this.readHandle(ref) : ref;
+    if (canonical2 === undefined)
+      throw this.notFound(ref);
+    const path = join3(this.directory, `${canonical2.slice(7)}.js`);
+    let code;
+    try {
+      if ((await stat(path)).size > MAX_PROGRAM_BYTES)
+        throw new Error("Stored program exceeds the 1 MiB source limit.");
+      code = await readFile2(path, "utf8");
+    } catch (error) {
+      if (error.code === "ENOENT")
+        throw this.notFound(ref);
+      throw error;
+    }
+    if (await programReference(code) !== canonical2)
+      throw new Error(`Program integrity check failed: ${ref}`);
+    return code;
+  }
+  notFound(ref) {
+    return new Error(`Program not found: ${ref}. Use the same KILN_PROGRAM_STORE or import the source again.`);
+  }
+  async readHandle(handle) {
+    const path = join3(this.directory, "refs", `${handle}.ref`);
+    try {
+      const info = await lstat(path);
+      if (!info.isFile() || info.size !== 71)
+        throw new Error(`Program handle integrity check failed: ${handle}`);
+      const canonical2 = await readFile2(path, "utf8");
+      if (!canonicalProgramRefPattern.test(canonical2) || !canonical2.slice(7).startsWith(handle.slice(2)))
+        throw new Error(`Program handle integrity check failed: ${handle}`);
+      return canonical2;
+    } catch (error) {
+      if (error.code === "ENOENT")
+        return;
+      throw error;
+    }
+  }
+  async shortRef(ref) {
+    await this.get(ref);
+    if (ref.startsWith("p_"))
+      return ref;
+    const directory = join3(this.directory, "refs");
+    await mkdir(directory, { recursive: true });
+    for (const handle of shortProgramRefCandidates(ref)) {
+      const owner = await this.readHandle(handle);
+      if (owner === ref)
+        return handle;
+      if (owner !== undefined)
+        continue;
+      const temporary = join3(directory, `.write-${randomUUID()}`);
+      await writeFile2(temporary, ref, { encoding: "utf8", flag: "wx", mode: 384 });
+      try {
+        try {
+          await link(temporary, join3(directory, `${handle}.ref`));
+          return handle;
+        } catch (error) {
+          if (error.code !== "EEXIST")
+            throw error;
+          if (await this.readHandle(handle) === ref)
+            return handle;
+        }
+      } finally {
+        await unlink(temporary);
+      }
+    }
+    throw new Error("Unable to register an immutable program handle.");
+  }
+  async put(code) {
+    const ref = await programReference(code);
+    await mkdir(this.directory, { recursive: true });
+    const target = join3(this.directory, `${ref.slice(7)}.js`);
+    const temporary = join3(this.directory, `.write-${randomUUID()}`);
+    await writeFile2(temporary, code, { encoding: "utf8", flag: "wx", mode: 384 });
+    try {
+      try {
+        await link(temporary, target);
+      } catch (error) {
+        if (error.code !== "EEXIST")
+          throw error;
+        await this.get(ref);
+      }
+    } finally {
+      await unlink(temporary);
+    }
+    return ref;
+  }
+}
+function localProgramStore() {
+  return new FileProgramStore(resolve(process.env["KILN_PROGRAM_STORE"] ?? ".kiln/programs"));
+}
+var init_program_store_node = __esm(() => {
+  init_program_store();
+});
+
+// src/build-cache.ts
+import { createHash as createHash7 } from "node:crypto";
+import * as acorn2 from "acorn";
+import * as walk2 from "acorn-walk";
+function sourceHasAmbientInputs(code) {
+  let ambient = false;
+  const property = (node) => !node.computed && node.property.type === "Identifier" ? node.property.name : node.computed && node.property.type === "Literal" && typeof node.property.value === "string" ? node.property.value : undefined;
+  try {
+    const ast = acorn2.parse(code, { ecmaVersion: "latest", sourceType: "script" });
+    walk2.ancestor(ast, {
+      Identifier(node, _state, ancestors) {
+        const parent = ancestors.at(-2);
+        if (["Date", "performance", "crypto"].includes(node.name))
+          ambient = true;
+        if (node.name === "Math") {
+          if (parent?.type !== "MemberExpression" || parent.object !== node)
+            ambient = true;
+          else {
+            const name = property(parent);
+            if (!name || name === "random")
+              ambient = true;
+          }
+        }
+      },
+      MemberExpression(node, _state, ancestors) {
+        if (node.object.type !== "Identifier" || node.object.name !== "THREE" || property(node) !== "MathUtils")
+          return;
+        const parent = ancestors.at(-2);
+        if (parent?.type !== "MemberExpression" || parent.object !== node) {
+          ambient = true;
+          return;
+        }
+        const name = property(parent);
+        if (!name || ["randInt", "randFloat", "randFloatSpread", "seededRandom", "generateUUID"].includes(name))
+          ambient = true;
+      }
+    });
+  } catch {
+    return true;
+  }
+  return ambient;
+}
+function copy(result) {
+  return { ...structuredClone(result), glb: Buffer.from(result.glb) };
+}
+
+class MemoryBuildCache {
+  maxBytes;
+  entries = new Map;
+  bytes = 0;
+  constructor(maxBytes = 64 * 1024 * 1024) {
+    this.maxBytes = maxBytes;
+    if (!Number.isSafeInteger(maxBytes) || maxBytes < 0)
+      throw new Error("Build cache size must be a nonnegative integer.");
+  }
+  async get(key) {
+    const entry = this.entries.get(key);
+    if (!entry)
+      return;
+    this.entries.delete(key);
+    this.entries.set(key, entry);
+    return copy(entry.result);
+  }
+  async put(key, result) {
+    const { glb, ...metadata } = result;
+    const size = glb.byteLength + Buffer.byteLength(JSON.stringify(metadata));
+    if (size > this.maxBytes)
+      return;
+    const old = this.entries.get(key);
+    if (old) {
+      this.bytes -= old.bytes;
+      this.entries.delete(key);
+    }
+    while (this.bytes + size > this.maxBytes) {
+      const first = this.entries.keys().next().value;
+      if (first === undefined)
+        break;
+      this.bytes -= this.entries.get(first).bytes;
+      this.entries.delete(first);
+    }
+    this.entries.set(key, { result: copy(result), bytes: size });
+    this.bytes += size;
+  }
+  stats() {
+    return { entries: this.entries.size, bytes: this.bytes, maxBytes: this.maxBytes };
+  }
+}
+function canonical2(value) {
+  if (value === undefined || value === null || typeof value === "string" || typeof value === "boolean")
+    return value;
+  if (typeof value === "number" && Number.isFinite(value))
+    return value;
+  if (Array.isArray(value))
+    return value.map(canonical2);
+  if (typeof value === "object")
+    return Object.fromEntries(Object.entries(value).filter(([, v]) => v !== undefined).sort(([a], [b]) => a.localeCompare(b)).map(([key, v]) => [key, canonical2(v)]));
+  throw new Error("Build input contains a non-data dependency.");
+}
+function createCachedEvaluatorPort(evaluator, options) {
+  const pending = new Map;
+  return {
+    async render(code, renderOptions, controls) {
+      const signal = controls?.signal;
+      const checkCancelled = () => {
+        if (signal?.aborted)
+          throw new EvaluatorPortError("CANCELLED");
+      };
+      checkCancelled();
+      const identity = options.identity();
+      if (!identity || renderOptions?.textureResolver || sourceHasAmbientInputs(code))
+        return evaluator.render(code, renderOptions, controls);
+      let serialized;
+      try {
+        renderOptions = structuredClone(renderOptions);
+        const { signal: _signal, ...dataControls } = controls ?? {};
+        const snapshotControls = structuredClone(dataControls);
+        controls = { ...snapshotControls, ...signal ? { signal } : {} };
+        serialized = JSON.stringify(canonical2({ identity, code, options: renderOptions ?? {}, controls: snapshotControls }));
+      } catch {
+        return evaluator.render(code, renderOptions, controls);
+      }
+      const key = `sha256:${createHash7("sha256").update(serialized).digest("hex")}`;
+      const cached = await options.cache.get(key).catch(() => {
+        return;
+      });
+      checkCancelled();
+      if (cached)
+        return { ...cached, buildCache: { key, hit: true } };
+      const existing = signal ? undefined : pending.get(key);
+      if (existing) {
+        const completed = await existing;
+        if (!completed.shareable)
+          return evaluator.render(code, renderOptions, controls);
+        return { ...copy(completed.result), buildCache: { key, hit: true } };
+      }
+      const build = (async () => {
+        const result = await evaluator.render(code, renderOptions, controls);
+        checkCancelled();
+        let snapshot;
+        try {
+          snapshot = copy(result);
+        } catch {
+          return { result, shareable: false };
+        }
+        await options.cache.put(key, snapshot).catch(() => {});
+        return { result: snapshot, shareable: true };
+      })();
+      if (!signal)
+        pending.set(key, build);
+      try {
+        const completed = await build;
+        checkCancelled();
+        return completed.shareable ? { ...copy(completed.result), buildCache: { key, hit: false } } : completed.result;
+      } finally {
+        if (!signal)
+          pending.delete(key);
+      }
+    }
+  };
+}
+var init_build_cache = __esm(() => {
+  init_protocol();
+});
+
+// src/build-cache-node.ts
+import { createHash as createHash8, randomUUID as randomUUID2 } from "node:crypto";
+import {
+  mkdir as mkdir2,
+  readFile as readFile3,
+  readdir as readdir2,
+  rename,
+  stat as stat2,
+  unlink as unlink2,
+  utimes,
+  writeFile as writeFile3
+} from "node:fs/promises";
+import { join as join4, resolve as resolve2 } from "node:path";
+
+class FileBuildCache {
+  maxBytes;
+  directory;
+  constructor(directory, maxBytes = 128 * 1024 * 1024) {
+    this.maxBytes = maxBytes;
+    this.directory = resolve2(directory);
+    if (!Number.isSafeInteger(maxBytes) || maxBytes < 0 || maxBytes > 1024 * 1024 * 1024)
+      throw new Error("File build cache size must be 0..1 GiB.");
+  }
+  path(key) {
+    if (!keyPattern.test(key))
+      throw new Error("Invalid build cache key.");
+    return join4(this.directory, `${key.slice(7)}.json`);
+  }
+  async get(key) {
+    const path = this.path(key);
+    try {
+      const entry = await stat2(path);
+      if (entry.size > this.maxBytes || entry.size > 96 * 1024 * 1024)
+        return;
+      const envelope = JSON.parse(await readFile3(path, "utf8"));
+      if (envelope.version !== 1 || envelope.key !== key || typeof envelope.payload !== "string" || envelope.checksum !== digest2(envelope.payload))
+        return;
+      const decoded = decodeEvaluatorResultV1(envelope.payload, 64 * 1024 * 1024);
+      if (!decoded.ok)
+        return;
+      const now = new Date;
+      await utimes(path, now, now).catch(() => {});
+      return decoded.render;
+    } catch {
+      return;
+    }
+  }
+  async put(key, result) {
+    const path = this.path(key);
+    const payload = JSON.stringify(encodeRenderResultV1("cached-build", result));
+    const bytes = JSON.stringify({ version: 1, key, payload, checksum: digest2(payload) });
+    if (Buffer.byteLength(bytes) > Math.min(this.maxBytes, 96 * 1024 * 1024))
+      return;
+    await mkdir2(this.directory, { recursive: true });
+    const temporary = join4(this.directory, `.write-${randomUUID2()}`);
+    await writeFile3(temporary, bytes, { encoding: "utf8", flag: "wx", mode: 384 });
+    try {
+      await rename(temporary, path);
+    } finally {
+      await unlink2(temporary).catch(() => {});
+    }
+    await this.trim();
+  }
+  async trim() {
+    const entries = [];
+    for (const name of await readdir2(this.directory)) {
+      if (!filePattern.test(name))
+        continue;
+      const path = join4(this.directory, name);
+      try {
+        const item = await stat2(path);
+        entries.push({ path, size: item.size, used: item.mtimeMs });
+      } catch {}
+    }
+    let bytes = entries.reduce((sum, item) => sum + item.size, 0);
+    entries.sort((a, b) => a.used - b.used || a.path.localeCompare(b.path));
+    for (const entry of entries) {
+      if (bytes <= this.maxBytes)
+        break;
+      await unlink2(entry.path).catch(() => {});
+      bytes -= entry.size;
+    }
+  }
+}
+var keyPattern, filePattern, digest2 = (text2) => createHash8("sha256").update(text2).digest("hex");
+var init_build_cache_node = __esm(() => {
+  init_protocol();
+  keyPattern = /^sha256:[a-f0-9]{64}$/;
+  filePattern = /^[a-f0-9]{64}\.json$/;
+});
+
+// src/runtime-identity.ts
+import { createHash as createHash9 } from "node:crypto";
+import { readFile as readFile4, readdir as readdir3, realpath, stat as stat3 } from "node:fs/promises";
+import { createRequire as createRequire2 } from "node:module";
+import { dirname, join as join5, relative } from "node:path";
+async function installedRuntimeIdentity(root, limits = {}) {
+  let bytes = 0;
+  let files = 0;
+  const maxBytes = limits.maxBytes ?? 512 * 1024 * 1024;
+  const maxFiles = limits.maxFiles ?? 40000;
+  const manifest = async (directory) => JSON.parse(await readFile4(join5(directory, "package.json"), "utf8"));
+  let readers = 0;
+  const waiting = [];
+  const read = async (path) => {
+    if (readers >= 24)
+      await new Promise((resolve3) => waiting.push(resolve3));
+    else
+      readers++;
+    try {
+      const info = await stat3(path);
+      if (++files > maxFiles || bytes + info.size > maxBytes)
+        throw new Error("Installed runtime fingerprint exceeds its scan budget.");
+      bytes += info.size;
+      return await readFile4(path);
+    } finally {
+      const next = waiting.shift();
+      if (next)
+        next();
+      else
+        readers--;
+    }
+  };
+  try {
+    const pkg = await manifest(root);
+    if (pkg.name !== "@kiln/engine")
+      throw new Error("Not a Kiln installation.");
+    const build = JSON.parse(await readFile4(join5(root, "dist", "build.json"), "utf8"));
+    const worker = build.entries?.worker;
+    if (build.schemaVersion !== 1 || worker?.file !== "evaluator-worker.mjs" || !/^sha256:[a-f0-9]{64}$/.test(worker.identity))
+      throw new Error("No valid packaged worker identity.");
+    const workerHash = `sha256:${digest3(await read(join5(root, "dist", worker.file)))}`;
+    if (worker.bundleHash !== workerHash)
+      throw new Error("Packaged worker differs from its build manifest.");
+    const records = [];
+    const visited = new Map;
+    async function resolvePackage(parent, name) {
+      const require2 = createRequire2(join5(parent, "package.json"));
+      let found;
+      try {
+        found = require2.resolve(`${name}/package.json`);
+      } catch {
+        try {
+          found = require2.resolve(name);
+        } catch {
+          for (const modules of require2.resolve.paths(name) ?? []) {
+            const candidate = join5(modules, name);
+            try {
+              if ((await manifest(candidate)).name === name)
+                return await realpath(candidate);
+            } catch {}
+          }
+          throw new Error(`Cannot resolve installed dependency ${name}.`);
+        }
+      }
+      let directory = dirname(found);
+      for (;; ) {
+        try {
+          if ((await manifest(directory)).name === name)
+            return await realpath(directory);
+        } catch {}
+        const next = dirname(directory);
+        if (next === directory)
+          throw new Error(`Cannot identify installed dependency ${name}.`);
+        directory = next;
+      }
+    }
+    async function tree(directory, base) {
+      const entries = (await readdir3(directory, { withFileTypes: true })).sort((a, b) => compare(a.name, b.name));
+      return (await Promise.all(entries.map(async (entry) => {
+        if (entry.name === "node_modules" || entry.name === ".git")
+          return [];
+        const path = join5(directory, entry.name);
+        if (entry.isSymbolicLink())
+          throw new Error("Dependency contains an untracked internal symlink.");
+        if (entry.isDirectory())
+          return tree(path, base);
+        if (entry.isFile())
+          return [[relative(base, path).replaceAll("\\", "/"), digest3(await read(path))]];
+        throw new Error("Dependency contains a non-file runtime input.");
+      }))).flat();
+    }
+    async function visit(directory, path) {
+      const canonical3 = await realpath(directory);
+      const previous = visited.get(canonical3);
+      if (previous) {
+        records.push([path, `same-package:${previous}`]);
+        return;
+      }
+      visited.set(canonical3, path);
+      const metadata = await manifest(canonical3);
+      records.push([path, digest3(JSON.stringify(await tree(canonical3, canonical3)))]);
+      await dependencies(canonical3, metadata, path);
+    }
+    async function dependencies(directory, metadata, prefix) {
+      const names = [
+        ...new Set([
+          ...Object.keys(metadata.dependencies ?? {}),
+          ...Object.keys(metadata.optionalDependencies ?? {}),
+          ...Object.keys(metadata.peerDependencies ?? {})
+        ])
+      ].sort(compare);
+      for (const name of names) {
+        let child;
+        try {
+          child = await resolvePackage(directory, name);
+        } catch {
+          if (name in (metadata.optionalDependencies ?? {}) || metadata.peerDependenciesMeta?.[name]?.optional) {
+            records.push([`${prefix}/${name}`, "optional-absent"]);
+            continue;
+          }
+          throw new Error(`Cannot fingerprint missing installed dependency ${name}.`);
+        }
+        await visit(child, `${prefix}/${name}`);
+      }
+    }
+    await dependencies(root, { ...pkg, peerDependencies: {} }, "dependencies");
+    const inputs = {
+      version: 1,
+      engine: pkg.version,
+      workerHash,
+      build: worker.identity,
+      runtime: {
+        node: process.versions.node,
+        bun: process.versions.bun,
+        modules: process.versions.modules,
+        platform: process.platform,
+        arch: process.arch
+      },
+      dependencies: records
+    };
+    return { identity: `sha256:${digest3(JSON.stringify(inputs))}`, files, bytes };
+  } catch (error) {
+    return { reason: error instanceof Error ? error.message : String(error), files, bytes };
+  }
+}
+var digest3 = (bytes) => createHash9("sha256").update(bytes).digest("hex"), compare = (a, b) => a < b ? -1 : a > b ? 1 : 0;
+var init_runtime_identity = () => {};
+
+// src/local-runtime.ts
+import { dirname as dirname2, join as join6, resolve as resolve3 } from "node:path";
+import { fileURLToPath as fileURLToPath3 } from "node:url";
+function integer2(env, name, fallback, min, max) {
+  const value = env[name] === undefined ? fallback : Number(env[name]);
+  if (!Number.isInteger(value) || value < min || value > max)
+    throw new Error(`${name} requires an integer from ${min} to ${max}.`);
+  return value;
+}
+function createLocalToolContext(base = {}, env = process.env) {
+  const geometryPolicy = base.geometryPolicy ?? env.KILN_GEOMETRY_POLICY ?? "warn";
+  if (!["warn", "strict"].includes(geometryPolicy))
+    throw new Error("KILN_GEOMETRY_POLICY must be warn or strict.");
+  const mode = resolveEvaluatorMode({
+    KILN_EVALUATOR_MODE: env.KILN_EVALUATOR_MODE ?? "subprocess"
+  });
+  const deadlineMs = integer2(env, "KILN_EVALUATOR_TIMEOUT_MS", 60000, 1, 120000);
+  const heapMb = integer2(env, "KILN_EVALUATOR_HEAP_MB", 512, 64, 4096);
+  if (mode === "subprocess" && process.versions.bun && env.KILN_EVALUATOR_HEAP_MB !== undefined) {
+    throw new Error("KILN_EVALUATOR_HEAP_MB requires the packaged Node runtime.");
+  }
+  if (mode !== "in-process" && ["observe", "off"].includes(env.KILN_QA_MODE ?? "")) {
+    throw new Error("KILN_QA_MODE overrides are not transported to the local worker. Remove the override or explicitly select trusted KILN_EVALUATOR_MODE=in-process.");
+  }
+  const optimize = ["auto", "palette", "full"].includes(env.KILN_BAKE_OPTIMIZE ?? "") ? env.KILN_BAKE_OPTIMIZE : "off";
+  const instance2 = ["off", "auto", "on"].includes(env.KILN_BAKE_INSTANCE ?? "") ? env.KILN_BAKE_INSTANCE : "auto";
+  const maxGlbBytes = 16 * 1024 * 1024;
+  const maxResponseBytes = 32 * 1024 * 1024;
+  const evaluatorPort = {
+    async render(code, options = {}, controls = {}) {
+      if (controls.signal?.aborted) {
+        const { EvaluatorPortError: EvaluatorPortError2 } = await Promise.resolve().then(() => (init_protocol(), exports_protocol));
+        throw new EvaluatorPortError2("CANCELLED");
+      }
+      if (options.geometryPolicy !== undefined && !["warn", "strict"].includes(options.geometryPolicy))
+        throw new Error("geometryPolicy must be warn or strict");
+      const resolved2 = {
+        optimize,
+        instance: instance2,
+        ...options,
+        geometryPolicy: geometryPolicy === "strict" ? "strict" : options.geometryPolicy ?? "warn"
+      };
+      if (mode === "in-process") {
+        const result = await renderGLBInProcess(code, resolved2);
+        if (controls.signal?.aborted) {
+          const { EvaluatorPortError: EvaluatorPortError2 } = await Promise.resolve().then(() => (init_protocol(), exports_protocol));
+          throw new EvaluatorPortError2("CANCELLED");
+        }
+        return result;
+      }
+      const limits = { deadlineMs, maxGlbBytes, maxResponseBytes, ...controls };
+      if (mode === "isolated")
+        return renderGLBViaIsolatedEvaluator(code, resolved2, limits);
+      return renderGLBViaSubprocess(code, resolved2, {
+        ...limits,
+        ...!process.versions.bun ? { maxHeapMb: heapMb } : {}
+      });
+    }
+  };
+  const localExecution = {
+    mode,
+    terminable: mode !== "in-process",
+    ...mode !== "in-process" ? { deadlineMs } : {},
+    ...mode === "subprocess" && !process.versions.bun ? { nodeHeapMb: heapMb } : {},
+    ...mode !== "in-process" ? { maxGlbBytes, maxResponseBytes } : {},
+    totalMemoryLimited: false,
+    cacheScope: "process"
+  };
+  return {
+    ...base,
+    geometryPolicy,
+    programStore: base.programStore ?? new FileProgramStore(resolve3(env.KILN_PROGRAM_STORE ?? ".kiln/programs")),
+    evaluatorPort,
+    assetBuildOptions: {
+      optimize,
+      instance: instance2,
+      geometryPolicy,
+      qaMode: env.KILN_QA_MODE ?? "enforce",
+      evaluatorMode: mode
+    },
+    buildCache: new MemoryBuildCache,
+    evaluatorCacheIdentity: `kiln-local-${process.pid}-${++scope}:${JSON.stringify({ mode, optimize, instance: instance2, geometryPolicy, qa: env.KILN_QA_MODE, deadlineMs, heapMb })}`,
+    localExecution
+  };
+}
+async function createPackagedLocalToolContext(base = {}, env = process.env, installationRoot = fileURLToPath3(new URL("../", import.meta.url))) {
+  const context = createLocalToolContext(base, env);
+  const managed = () => {
+    const identity2 = context.evaluatorCacheIdentity;
+    const cached = createCachedEvaluatorPort(context.evaluatorPort, {
+      cache: context.buildCache,
+      identity: () => typeof identity2 === "function" ? identity2() : identity2
+    });
+    context.evaluatorPort = {
+      render: (code, options, controls) => cached.render(code, {
+        ...options,
+        geometryPolicy: context.geometryPolicy === "strict" ? "strict" : options?.geometryPolicy ?? context.geometryPolicy
+      }, controls)
+    };
+    context.evaluatorCacheManaged = true;
+    return context;
+  };
+  const policy = env.KILN_BUILD_CACHE ?? "disk";
+  if (!["disk", "memory", "off"].includes(policy))
+    throw new Error("KILN_BUILD_CACHE must be disk, memory, or off.");
+  if (policy === "off" || base.cacheEvaluations === false) {
+    context.cacheEvaluations = false;
+    context.localExecution.cacheScope = "disabled";
+    return context;
+  }
+  if (policy === "memory")
+    return managed();
+  if (process.versions.bun || context.localExecution.mode !== "subprocess") {
+    context.localExecution.cacheReason = "Disk reuse requires the packaged Node subprocess evaluator; this host uses process memory.";
+    return managed();
+  }
+  const identity = await installedRuntimeIdentity(installationRoot);
+  if (!identity.identity) {
+    context.localExecution.cacheReason = identity.reason;
+    return managed();
+  }
+  const cacheBytes = integer2(env, "KILN_BUILD_CACHE_MB", 128, 0, 1024) * 1024 * 1024;
+  const store = context.programStore;
+  const directory = resolve3(env.KILN_BUILD_CACHE_DIR ?? join6(store instanceof FileProgramStore ? dirname2(store.directory) : ".kiln", "cache", "builds"));
+  context.buildCache = new FileBuildCache(directory, cacheBytes);
+  context.evaluatorCacheIdentity = `${identity.identity}:${JSON.stringify({
+    execution: context.localExecution,
+    optimize: env.KILN_BAKE_OPTIMIZE ?? "off",
+    instance: env.KILN_BAKE_INSTANCE ?? "auto",
+    qa: env.KILN_QA_MODE ?? "enforce",
+    geometryPolicy: context.geometryPolicy,
+    timezone: env.TZ
+  })}`;
+  context.localExecution = {
+    ...context.localExecution,
+    cacheScope: "disk",
+    cacheBytes,
+    runtimeIdentity: identity.identity
+  };
+  return managed();
+}
+var scope = 0;
+var init_local_runtime = __esm(() => {
+  init_subprocess();
+  init_isolation();
+  init_render();
+  init_program_store_node();
+  init_build_cache();
+  init_build_cache_node();
+  init_runtime_identity();
+});
+
+// src/assets.ts
+import { z } from "zod";
+import { zipSync, unzipSync } from "three/addons/libs/fflate.module.js";
+function validateRecordShape(record5) {
+  const manifest = assetManifestSchema.parse(record5.manifest);
+  const names = Object.keys(record5.files);
+  if (names.length !== Object.keys(manifest.files).length || !names.includes("asset.glb"))
+    throw new Error("Asset file inventory mismatch");
+  let total = 0;
+  for (const name of names) {
+    if (!allowedFiles.has(name) || !manifest.files[name] || manifest.files[name].bytes !== record5.files[name].length)
+      throw new Error("Invalid asset file inventory");
+    total += record5.files[name].length;
+  }
+  if (total > ASSET_LIMIT || manifest.editable !== names.includes("source.kiln.js"))
+    throw new Error("Invalid asset size or source inventory");
+  if ((record5.files["source.kiln.js"]?.length ?? 0) > 1024 * 1024)
+    throw new Error("Source exceeds 1 MiB");
+  validateAssetGlb(record5.files["asset.glb"]);
+}
+function validateAssetGlb(bytes) {
+  if (bytes.length < 20 || bytes.length > ASSET_LIMIT)
+    throw new Error("Invalid GLB size");
+  const view = new DataView(bytes.buffer, bytes.byteOffset, bytes.byteLength);
+  if (view.getUint32(0, true) !== 1179937895 || view.getUint32(4, true) !== 2 || view.getUint32(8, true) !== bytes.length || view.getUint32(16, true) !== 1313821514)
+    throw new Error("Invalid GLB header");
+  const end = 20 + view.getUint32(12, true);
+  if (end > bytes.length)
+    throw new Error("Invalid GLB JSON length");
+  const json = JSON.parse(new TextDecoder().decode(bytes.subarray(20, end)));
+  for (const resource of [...json.buffers ?? [], ...json.images ?? []]) {
+    if (resource.uri && !String(resource.uri).startsWith("data:"))
+      throw new Error("GLB must embed its resources");
+  }
+}
+function encodeAssetBundle(records) {
+  if (!records.length || records.length > 100)
+    throw new Error("Bundle requires 1..100 revisions");
+  const files = {};
+  let total = 0;
+  for (const record5 of records) {
+    validateRecordShape(record5);
+    const prefix = `${record5.manifest.assetId}/${record5.manifest.revisionId}/`;
+    if (files[`${prefix}manifest.json`])
+      throw new Error("Duplicate bundle revision");
+    files[`${prefix}manifest.json`] = new TextEncoder().encode(JSON.stringify(record5.manifest, null, 2));
+    for (const [name, bytes] of Object.entries(record5.files))
+      files[prefix + name] = bytes;
+  }
+  for (const bytes of Object.values(files))
+    total += bytes.length;
+  if (total > ASSET_LIMIT)
+    throw new Error("Bundle exceeds 64 MiB");
+  return zipSync(files, { level: 0 });
+}
+function decodeAssetBundle(bytes) {
+  if (bytes.length > ASSET_LIMIT + 1024 * 1024)
+    throw new Error("Bundle exceeds 64 MiB");
+  let total = 0;
+  let count = 0;
+  const files = unzipSync(bytes, {
+    filter: (entry) => {
+      total += entry.originalSize;
+      count++;
+      if (total > ASSET_LIMIT || count > 400 || !/^[a-z][a-z0-9_-]{0,79}\/[a-z][a-z0-9_-]{0,79}\/(manifest\.json|asset\.glb|source\.kiln\.js|preview\.png)$/.test(entry.name))
+        throw new Error("Unsafe or oversized asset bundle");
+      return true;
+    }
+  });
+  const records = [];
+  const used = new Set;
+  for (const [path, data] of Object.entries(files)) {
+    if (!path.endsWith("/manifest.json"))
+      continue;
+    if (data.length > 1024 * 1024)
+      throw new Error("Manifest exceeds 1 MiB");
+    const manifest = assetManifestSchema.parse(JSON.parse(new TextDecoder().decode(data)));
+    const prefix = `${manifest.assetId}/${manifest.revisionId}/`;
+    if (path !== `${prefix}manifest.json`)
+      throw new Error("Bundle identity mismatch");
+    const record5 = { manifest, files: {} };
+    used.add(path);
+    for (const name of Object.keys(manifest.files)) {
+      if (!files[prefix + name])
+        throw new Error("Bundle file missing");
+      record5.files[name] = files[prefix + name];
+      used.add(prefix + name);
+    }
+    validateRecordShape(record5);
+    records.push(record5);
+  }
+  if (!records.length || used.size !== Object.keys(files).length)
+    throw new Error("Incomplete asset bundle");
+  return records;
+}
+var ASSET_LIMIT, assetIdSchema, hash, assetManifestSchema, allowedFiles;
+var init_assets = __esm(() => {
+  ASSET_LIMIT = 64 * 1024 * 1024;
+  assetIdSchema = z.string().regex(/^[a-z][a-z0-9_-]{0,79}$/);
+  hash = z.string().regex(/^sha256:[a-f0-9]{64}$/);
+  assetManifestSchema = z.object({
+    version: z.literal("kiln.asset.v1"),
+    assetId: assetIdSchema,
+    revisionId: assetIdSchema,
+    parentRevision: assetIdSchema.optional(),
+    name: z.string().min(1).max(200),
+    tags: z.array(z.string().max(80)).max(30),
+    createdAt: z.string().datetime(),
+    description: z.string().max(4000).optional(),
+    brief: z.string().max(8000).optional(),
+    attribution: z.object({
+      model: z.string().max(200).optional(),
+      harness: z.string().max(200).optional(),
+      author: z.string().max(200).optional()
+    }).optional(),
+    editable: z.boolean(),
+    files: z.record(z.string(), z.object({ sha256: hash, bytes: z.number().int().nonnegative().max(ASSET_LIMIT) })),
+    build: z.object({
+      engine: z.string(),
+      options: z.record(z.string(), z.unknown()),
+      warnings: z.array(z.string()),
+      integration: z.unknown().optional(),
+      qa: z.unknown().optional(),
+      dependencies: z.array(z.unknown()).optional(),
+      rebuild: z.enum(["engine-required", "external-dependencies-required"])
+    }).optional(),
+    preview: z.object({ fidelity: z.unknown().optional(), error: z.string().optional() }).optional()
+  });
+  allowedFiles = new Set(["asset.glb", "source.kiln.js", "preview.png"]);
+});
+
+// src/tools/programs.ts
+import { z as z2 } from "zod";
+function withProgramReferences(def, store) {
+  if (!(def.inputSchema instanceof z2.ZodObject))
+    throw new Error(`${def.name} must have an object input schema.`);
+  const inputSchema = def.inputSchema.extend({
+    code: z2.string().optional().describe("New source. Supply code OR programRef."),
+    programRef: refInput.optional(),
+    ...def.name === "kiln_edit" ? {
+      includeCode: z2.boolean().optional().describe("Return the full updated source. Defaults to false with programRef, true with code.")
+    } : {}
+  }).refine((input) => input.code !== undefined !== (input.programRef !== undefined), {
+    message: "Supply exactly one of code or programRef."
+  });
+  const summaries = {
+    kiln_validate: "Check program syntax and sandbox rules before building. Returns validation findings; use kiln_render to evaluate geometry and see the asset.",
+    kiln_render: "Build a program and return geometry metrics, exact part paths and images. Omit capture for six views; choose preset/cells for orbit grids or version kiln.capture.v1 plus shots for part-local framing, perspective and separate images. Check viewFidelity before judging materials. Failed builds return errors without an image.",
+    kiln_screenshot_animation: "Render sampled animation frames to check motion and attachments. Use shot for the shared camera controls, frameTimes for selected phases, and framing locked (default) or follow. The program must define animate(). Check viewFidelity before judging materials.",
+    kiln_view_interior: "Render roof-off floor-plan, dollhouse, and eye-level cutaway views. Optional versioned capture selects custom roof-off shots. Select a roof by nodeName or let Kiln resolve its role/name. Review roofsHidden and warnings for unresolved occlusion.",
+    kiln_inspect: "Inspect a part with context or isolation. Use legacy part/orbit controls or shot for exact paths, part-local axes and perspective. Use names from the source or render result; check viewFidelity before judging materials."
+  };
+  const description = def.name === "kiln_edit" ? "Apply exact-string replacements to a program revision and render the result (render:false skips images). Edits are ordered and atomic: missing or ambiguous matches fail without changing the base. Returns a new programRef, parentRef and diff; untouched text stays identical. Read anchors with kiln_source. Optional capture chooses the same cameras as kiln_render. Use includeCode only when full source is needed." : `${summaries[def.name] ?? def.description} Supply code once or reuse programRef from an earlier result. Returns programRef even for an invalid draft. kiln_source reads that revision.`;
+  return {
+    ...def,
+    inputSchema,
+    description,
+    run: async (input) => {
+      const args = inputSchema.parse(input);
+      const code = typeof args.code === "string" ? args.code : await store.get(args.programRef);
+      const parentRef = await retainProgram(store, code);
+      const output = await def.run({ ...args, code });
+      if (def.name !== "kiln_edit" || output.ok !== true || typeof output.code !== "string")
+        return { ...output, programRef: parentRef };
+      const programRef = await retainProgram(store, output.code);
+      const { code: updatedCode, ...rest } = output;
+      const includeCode = args.includeCode ?? args.code !== undefined;
+      const diff = typeof rest.diff === "string" ? rest.diff : "";
+      return {
+        ...rest,
+        programRef,
+        parentRef,
+        ...includeCode ? { code: updatedCode } : {
+          diff: diff.slice(0, 8000),
+          diffTruncated: diff.length > 8000
+        }
+      };
+    }
+  };
+}
+function createKilnSourceDef(store) {
+  const inputSchema = z2.object({
+    programRef: refInput,
+    offset: z2.number().int().min(0).default(0).describe("UTF-16 character offset; use nextOffset to continue."),
+    limit: z2.number().int().min(1).max(16000).default(8000).describe("Maximum characters returned."),
+    query: z2.string().min(1).max(1000).optional().describe("Find literal text at or after offset; return bounded surrounding source.")
+  });
+  return {
+    name: "kiln_source",
+    description: "Read a saved program revision without changing it. Returns exact source text in bounded pages, or searches for literal text with surrounding context. Copy edit anchors from code. Follow nextOffset for more; use matchOffset + 1 to find the next match. Offsets count UTF-16 characters, not bytes.",
+    inputSchema,
+    run: async (input) => {
+      const { programRef, offset, limit, query } = inputSchema.parse(input);
+      const source = await store.get(programRef);
+      const matchOffset = query ? source.indexOf(query, offset) : undefined;
+      const start = matchOffset !== undefined && matchOffset >= 0 ? Math.max(offset, matchOffset - Math.floor(limit / 4)) : Math.min(offset, source.length);
+      const code = matchOffset === -1 ? "" : source.slice(start, start + limit);
+      const end = start + code.length;
+      return {
+        programRef,
+        code,
+        offset: start,
+        nextOffset: matchOffset === -1 || end >= source.length ? null : end,
+        totalCharacters: source.length,
+        totalBytes: new TextEncoder().encode(source).length,
+        ...matchOffset !== undefined ? { matchOffset, found: matchOffset >= 0 } : {}
+      };
+    }
+  };
+}
+var refInput;
+var init_programs = __esm(() => {
+  init_program_store();
+  refInput = z2.string().regex(programRefPattern).describe("Returned p_ handle or full sha256 ref.");
+});
+
+// src/geometry-catalog.ts
+var geometryPrimitives;
+var init_geometry_catalog = __esm(() => {
+  geometryPrimitives = [
+    {
+      name: "copyGeometry",
+      signature: "copyGeometry(geometry: BufferGeometry)",
+      returns: "THREE.BufferGeometry",
+      category: "instancing",
+      description: "Returns an independent geometry with copied vertex buffers. Use before direct mutation of a cached primitive.",
+      example: "const editable = copyGeometry(boxGeo(1, 1, 1)); editable.translate(0, 0.5, 0);"
+    },
+    {
+      name: "copyMaterial",
+      signature: "copyMaterial(material: Material)",
+      returns: "THREE.Material (same subtype)",
+      category: "instancing",
+      description: "Copies material properties so edits do not change other parts. Referenced textures remain shared.",
+      example: "const red = copyMaterial(steel); red.color.set(0xaa2222);"
+    },
+    {
+      name: "meshGeo",
+      signature: "meshGeo({ positions: number[], indices?: number[], normals?: number[], uvs?: number[], tangents?: number[] })",
+      returns: "THREE.BufferGeometry",
+      category: "geometry",
+      description: "Builds an owned triangle mesh from flat numeric arrays. Validates finite values, attribute lengths and indices; computes normals if absent. Counterclockwise winding.",
+      example: "const triangle = meshGeo({ positions: [0,0,0, 1,0,0, 0,1,0], indices: [0,1,2] });"
+    },
+    {
+      name: "parametricSurface",
+      signature: "parametricSurface(sample: (u,v) => [x,y,z], opts?: { u?: [0,1], v?: [0,1], uSegments?: 24, vSegments?: 24, periodicU?: false, periodicV?: false, orientation?: 'uv'|'vu' })",
+      returns: "THREE.BufferGeometry",
+      category: "geometry",
+      description: "Samples an equation into an owned surface with UVs. Periodic endpoints must coincide; UV seams retain matching normals. A surface is not automatically a watertight solid.",
+      example: "const canopy = parametricSurface((u,v) => [u, 0.3*Math.sin(u*3)*Math.cos(v*2), v], { u: [-2,2], v: [-1,1] });"
+    },
+    {
+      name: "geometryDiagnostics",
+      signature: "geometryDiagnostics(geometry: BufferGeometry, tolerance?: 1e-6)",
+      returns: "{ vertices, triangles, boundaryEdges, nonManifoldEdges, orientationConflicts, degenerateTriangles, invalidIndices, nonFiniteVertices }",
+      category: "utility",
+      description: "Counts mesh topology problems after position-based seam matching. Open boundaries are valid for sheets; closed edges alone do not prove a self-intersection-free solid.",
+      example: "const topology = geometryDiagnostics(shell);"
+    },
+    {
+      name: "creaseNormals",
+      signature: "creaseNormals(geometry: BufferGeometry, opts?: { angle?: 60, tolerance?: number })",
+      returns: "THREE.BufferGeometry",
+      category: "mesh-ops",
+      description: "Returns owned geometry with angle-limited smooth normals, preserving UV corners. Angle is degrees. Invalidates tangents; use after shaping for sharp rims and smooth walls.",
+      example: "const shell = creaseNormals(cylinderGeo(1,1,2,32), { angle: 45 });"
+    },
+    {
+      name: "bend",
+      signature: "bend(geometry, { angle, frame?: { origin, rotation }, interval?: [minY,maxY], falloff?: t => weight })",
+      returns: "THREE.BufferGeometry",
+      category: "mesh-ops",
+      description: "Bends local +Y toward +X through angle degrees. Returns owned geometry and updated normals/bounds; preserves UVs, invalidates tangents. Frame rotation is Euler XYZ degrees.",
+      promptNotes: "Deformation interval uses local Y distances; outside vertices stay unchanged. Add enough segments before bending. Falloff returns 0..1; use it to avoid a discontinuity at a selected interval boundary.",
+      example: "const arch = bend(planeGeo(1,4,4,32), { angle: 90 });"
+    },
+    {
+      name: "twist",
+      signature: "twist(geometry, { angle, frame?: { origin, rotation }, interval?: [minY,maxY], falloff?: t => weight })",
+      returns: "THREE.BufferGeometry",
+      category: "mesh-ops",
+      description: "Rotates the cross-section progressively around local +Y, reaching angle degrees at the end. Returns owned geometry; frame rotation uses Euler XYZ degrees.",
+      example: "const spiral = twist(column, { angle: 120 });"
+    },
+    {
+      name: "taper",
+      signature: "taper(geometry, { startScale?: [1,1], endScale: [x,z], frame?: { origin, rotation }, interval?: [minY,maxY], falloff?: t => weight })",
+      returns: "THREE.BufferGeometry",
+      category: "mesh-ops",
+      description: "Scales local X/Z across the local Y interval using positive start/end scale pairs. Returns owned geometry; preserves UVs and invalidates tangents.",
+      example: "const narrowed = taper(column, { endScale: [0.4,0.7] });"
+    },
+    {
+      name: "displace",
+      signature: "displace(geometry, offset: ([x,y,z], t) => [dx,dy,dz], opts?: { frame?: { origin, rotation }, interval?: [minY,maxY], falloff?: t => weight })",
+      returns: "THREE.BufferGeometry",
+      category: "mesh-ops",
+      description: "Adds an authored displacement vector in the chosen local frame. Returns owned geometry; callback coordinates are local and t is normalized along the interval.",
+      example: "const rippled = displace(surface, ([x,y,z]) => [0, 0.1*Math.sin(x*8), 0]);"
+    },
+    {
+      name: "sweepProfile",
+      signature: "sweepProfile(profile: [x,z][], path: [x,y,z][], opts?: { cap?: true, closed?: false, up?: [x,y,z], twist?: 0, scale?: number | [x,z][] })",
+      returns: "THREE.BufferGeometry",
+      category: "curves",
+      description: "Sweeps a simple noncircular profile along polyline stations using transported frames. Supports total twist in degrees and per-station scales. Generates UVs and optional caps.",
+      promptNotes: "First version supports one simple profile without holes. Closed paths omit the repeated endpoint and require twist to be a multiple of 360. up sets the initial profile +Z direction and cannot parallel the path. Tight-turn warnings do not replace visual inspection for self-intersections.",
+      example: "const rail = sweepProfile([[-.1,-.2],[.1,-.2],[.1,.2],[-.1,.2]], [[0,0,0],[0,1,0],[1,2,0]]);"
+    },
+    {
+      name: "loftProfiles",
+      signature: "loftProfiles(sections: { profile: [x,z][], frame?: { origin, rotation } }[], opts?: { cap?: true })",
+      returns: "THREE.BufferGeometry",
+      category: "curves",
+      description: "Joins corresponding simple profiles in explicit local XZ planes. Each frame uses Euler XYZ degrees and local +Y along the loft. Profiles need equal point counts and corresponding vertices.",
+      promptNotes: "No holes or automatic profile correspondence. Opposite winding is normalized while preserving the first point. Caps close boundaries but do not prove the loft has no self-intersections.",
+      example: "const hull = loftProfiles([{ profile: wide }, { profile: narrow, frame: { origin: [0,2,0] } }]);"
+    },
+    {
+      name: "implicitSurface",
+      signature: "await implicitSurface(sample: ([x,y,z]) => signedValue, { bounds: { min, max }, edgeLength, maxCells?: 1000000, maxEvaluations?: 8000000, level?: 0, tolerance?: -1, smooth?: true })",
+      returns: "Promise<THREE.BufferGeometry>",
+      category: "geometry",
+      description: "Experimental positive-inside implicit field sampled into a solid mesh. Requires explicit bounds and resolution; checks grid size and actual evaluation count. Output has no UVs.",
+      promptNotes: "Use async build and await. Smaller edgeLength increases cost sharply. This helper cannot stop a callback that never returns; the host evaluator process provides that boundary. Thin features and geometric accuracy require inspection.",
+      example: "const blob = await implicitSurface(([x,y,z]) => 1-Math.hypot(x,y,z), { bounds: { min: [-1.2,-1.2,-1.2], max: [1.2,1.2,1.2] }, edgeLength: 0.15 });"
+    }
+  ];
+});
+
+// src/list-primitives.ts
+function listPrimitives() {
+  return PRIMITIVES.map((p) => ({ ...p }));
+}
+var PRIMITIVES;
+var init_list_primitives = __esm(() => {
+  init_geometry_catalog();
+  PRIMITIVES = [
+    ...geometryPrimitives,
+    {
+      name: "createRoot",
+      signature: "createRoot(name: string)",
+      returns: "THREE.Object3D",
+      category: "structure",
+      description: "Creates the root Object3D for an asset. Call first in build().",
+      example: "const root = createRoot('FuelDrum');"
+    },
+    {
+      name: "createPivot",
+      signature: "createPivot(name: string, position?: [x, y, z], parent?: Object3D)",
+      returns: "THREE.Object3D (prefixed `Joint_`)",
+      category: "structure",
+      description: "Creates an empty pivot node for skeletal animation. Name is auto-prefixed with `Joint_`.",
+      example: "const hip = createPivot('Hip', [0, 1, 0], root);"
+    },
+    {
+      name: "createJointChain",
+      signature: "createJointChain(name, segments: { role, offset, aliases?, side?, localForwardAxis?, localBendAxis?, endEffector?, contact? }[], opts?: { parent?, parentRole? })",
+      returns: "{ root, end, nodes, byRole, descriptors }",
+      category: "structure",
+      description: "Creates one body-plan-neutral deterministic Joint_* chain with explicit parent edges, rest frames, local axes, end effectors, contacts, and semantic metadata.",
+      example: "const leg = createJointChain('LegL', [{ role: 'hip.left', offset: [0, 1, -0.2], side: 'left' }, { role: 'knee.left', offset: [0, -0.5, 0], side: 'left' }, { role: 'ankle.left', offset: [0, -0.5, 0], side: 'left', endEffector: true, contact: true }], { parent: root });",
+      promptNotes: "Use only the resolved body-plan graph. Offsets are local to the previous joint; contact end effectors must land at world Y=0."
+    },
+    {
+      name: "createVehicleFrame",
+      signature: "createVehicleFrame(name, opts?: { chassis?, axles?, seats?, contacts?, steering?, propulsion?, parent? })",
+      returns: "{ root, chassis, axles, seats, contacts, steering, propulsion }",
+      category: "structure",
+      description: "Creates a canonical +X-forward/+Y-up/+Z-right vehicle frame with typed semantic sockets for chassis, support, steering, and propulsion.",
+      example: "const frame = createVehicleFrame('CarFrame', { axles: [{ id: 'front', position: [1.2, 0.45, 0] }, { id: 'rear', position: [-1.2, 0.45, 0] }], parent: root });",
+      promptNotes: "Generated vehicles keep +X as front. Boats and other non-wheeled subtypes use declared support/propulsion sockets, not wheel rules."
+    },
+    {
+      name: "createWheelGeometrySet",
+      signature: "createWheelGeometrySet(radius: number, width: number)",
+      returns: "{ tire, rim, hub } shared THREE.BufferGeometry set",
+      category: "instancing",
+      description: "Creates one reusable +Z-axle tire/rim/hub geometry set for instanced wheel assemblies.",
+      example: "const wheelGeo = createWheelGeometrySet(0.45, 0.22);"
+    },
+    {
+      name: "createWheelAssembly",
+      signature: "createWheelAssembly(name, { tire, rim, hub? }, { radius, width, side, index, position?, rimRadius?, hubRadius?, steering?, loadBearing?, geometries?, parent? })",
+      returns: "{ root, steeringPivot?, spinPivot, tire, rim, hub, contact, radius, width, side, index, spinAxis }",
+      category: "structure",
+      description: "Creates one axle-centered wheel pivot containing concentric tire/rim/hub roles, a contact marker, +Z spin frame, and optional steering pivot.",
+      example: "createWheelAssembly('FrontLeft', { tire: rubber, rim: metal }, { radius: 0.45, width: 0.22, side: 'left', index: 'front', position: [1.2, 0.45, -0.9], steering: true, geometries: wheelGeo, parent: frame.root });",
+      promptNotes: "Keep tire, rim, and hub descendants concentric at the axle pivot. Reuse one geometry set across matching wheels."
+    },
+    {
+      name: "createPart",
+      signature: "createPart(name, geometry, material, opts?: { position, rotation: [xDeg, yDeg, zDeg], scale, pivot, parent })",
+      returns: "THREE.Object3D (mesh or wrapping pivot)",
+      category: "structure",
+      description: "Creates a mesh, optionally wrapped in a pivot, and attaches it to `opts.parent`. `rotation` is in DEGREES (like rotationTrack), NOT radians: [0, 0, 90] is a quarter turn; [0, 0, 1.57] is a no-op.",
+      example: "createPart('Barrel', cylinderGeo(0.1, 0.1, 1), gameMaterial(0x556b2f), { position: [0, 0.5, 0], rotation: [0, 0, 90], parent: root });",
+      promptNotes: "AUTO-ADDS to opts.parent. NEVER call parent.add(createPart(...)) — pass { parent } instead. rotation is DEGREES — writing radians (e.g. 0.785 or Math.PI/4) silently produces ~zero rotation."
+    },
+    {
+      name: "beamBetween",
+      signature: "beamBetween(name, start: [x,y,z], end: [x,y,z], radius, material, opts?: { segments, parent })",
+      returns: "THREE.Object3D (prefixed `Mesh_`)",
+      category: "structure",
+      description: "Creates a cylindrical rail/strut exactly between two endpoints. Use for braces, gun barrels, skid struts, cables, and scaffolding.",
+      example: "beamBetween('SkidBraceA', [0.8, 0.3, 0.7], [0.8, 1.0, 0.45], 0.025, black, { parent: root });"
+    },
+    {
+      name: "snapTo",
+      signature: "snapTo(part: Object3D, host: Object3D, opts?: { axis?: 'x'|'y'|'z', overlap?: 0.02 })",
+      returns: "THREE.Object3D (the part, for chaining)",
+      category: "structure",
+      description: 'Translates `part` by the minimal vector that brings its bounding box into contact with `host` (plus a small overlap). The direct cure for a "Floating parts" warning — attach the part instead of eyeballing a corrective offset. No-op if they already touch.',
+      example: `const scope = createPart('Scope', cylinderXGeo(0.04, 0.04, 0.3), steel, { parent: root, position: [0.1, 0.32, 0] });
+snapTo(scope, receiver);`
+    },
+    {
+      name: "createLadder",
+      signature: "createLadder(name, { bottom, top, material, width?, rungCount?, railRadius?, rungRadius?, widthAxis?, parent? })",
+      returns: "{ leftRail: Object3D, rightRail: Object3D, rungs: Object3D[] }",
+      category: "structure",
+      description: "Builds two continuous rails plus evenly-spaced rungs. Use this instead of loose boxes for ladders.",
+      example: "createLadder('TowerLadder', { bottom: [0,0,0], top: [0,2.2,0], width: 0.45, rungCount: 7, material: steel, parent: root });"
+    },
+    {
+      name: "createWingPair",
+      signature: "createWingPair(name, material, { rootZ, span, rootChord, tipChord, sweep?, thickness?, dihedral?, rootX?, rootY?, parent? })",
+      returns: "{ right: Object3D, left: Object3D }",
+      category: "structure",
+      description: "Creates mirrored trapezoid aircraft wings with roots attached at +/-rootZ. Use for aircraft wings and helicopter stub wings.",
+      example: "createWingPair('MainWing', olive, { rootX: 0, rootY: 1.0, rootZ: 0.42, span: 2.4, rootChord: 0.9, tipChord: 0.35, sweep: 0.25, dihedral: 0.08, parent: root });"
+    },
+    {
+      name: "room",
+      signature: "room(name, material, { width?, depth?, height?, wallThickness?, floor?, floorThickness?, openings?: [{ wall: 'front'|'back'|'left'|'right', kind?: 'door'|'window', offset?, width?, height?, sill? }], parent? })",
+      returns: "{ root: Object3D, walls: { front, back, left, right }, floor: Object3D | null }",
+      category: "structure",
+      description: "Builds a HOLLOW, enterable room: four thin walls + a floor, human-scaled (defaults: 2.8m ceiling, a centered 1.1x2.1m front door so it is enterable by default). `front` faces +X; the floor sits on the ground. The keystone of an architecture asset — add a roof with createRoofPlanes and fixtures as separate parts.",
+      example: "const { root: hut } = room('Hut', wood, { width: 5, depth: 4, height: 2.8, openings: [{ wall: 'front', kind: 'door' }, { wall: 'right', kind: 'window' }], parent: root });",
+      promptNotes: "Use for any building the player enters. Do NOT model a building as a solid block — room() guarantees real interior space and a doorway gap. Pass openings to add windows / side doors."
+    },
+    {
+      name: "wallWithOpening",
+      signature: "wallWithOpening(name, material, { length, height, thickness, axis?: 'x'|'z', opening?: { kind?: 'door'|'window', offset?, width?, height?, sill? }, parent? })",
+      returns: "THREE.Object3D (wall container)",
+      category: "structure",
+      description: "A single wall panel with an optional real door/window cut, composed from solid box segments (side panels + lintel + window sill) — no CSG. Base at local Y=0, centered on the run axis. Use to compose custom building layouts or interior dividing walls beyond the default room().",
+      example: "wallWithOpening('Partition', plaster, { length: 4, height: 2.8, thickness: 0.12, axis: 'x', opening: { kind: 'door', offset: 0.5 }, parent: root });"
+    },
+    {
+      name: "createRoofPlanes",
+      signature: "createRoofPlanes(name, material, { width, depth, height, overhang?, ridgeAxis?: 'x'|'z', thickness?, parent? })",
+      returns: "{ root: Object3D, slopes: [Object3D, Object3D] }",
+      category: "structure",
+      description: "A pitched roof: two thin slopes meeting at one ridge and falling DOWN-AND-OUTWARD (opposite tilts — never mirrored the same way), footprint-matched with an eave overhang. Eave at local Y=0, ridge at Y=height, so position the group at Y=wallHeight. Returns a named group (e.g. `Roof`) the engine can lift to reveal the interior.",
+      example: `const { root: roof } = createRoofPlanes('Roof', shingle, { width: 5, depth: 4, height: 1.6, overhang: 0.4, ridgeAxis: 'x', parent: root });
+roof.position.y = 2.8;`,
+      promptNotes: "The two slopes must fall AWAY from each other from the ridge — createRoofPlanes does this for you. Drop it onto the walls (position.y = wall height)."
+    },
+    {
+      name: "createGableRoof",
+      signature: "createGableRoof(name, material, { spanX, spanZ, rise?, pitchDegrees?, overhang?, ridgeAxis?: 'x'|'z', thickness?, parent? })",
+      returns: "{ root, slopes: [Object3D, Object3D], faces: [RoofFaceFrame, RoofFaceFrame], rise, pitchDegrees }",
+      category: "structure",
+      description: "Explicit-axis gable roof using unambiguous footprint spans. Each face owns a rigid frame with ridge tangent, outward normal, downhill direction, ridge/eave endpoints, dimensions, and a live local-to-world transform.",
+      example: "const roof = createGableRoof('Roof', shingles, { spanX: 8, spanZ: 5, pitchDegrees: 35, overhang: 0.35, ridgeAxis: 'x', parent: root });",
+      promptNotes: "Prefer this over width/depth roof math. ridgeAxis is the direction of the ridge; roof panels run along each returned face downhill direction."
+    },
+    {
+      name: "createGableEndPanel",
+      signature: "createGableEndPanel(name, material, { span, rise, thickness?, ridgeAxis?: 'x'|'z', side?: 'positive'|'negative', openings?: [{ id?, offset?, bottom?, width, height }], parent? })",
+      returns: "{ root, geometry, openings }",
+      category: "structure",
+      description: "Exact thick triangular end closure for a gable roof, with optional rectangular openings cut from the geometry and semantic boundary metadata.",
+      example: "createGableEndPanel('FrontGable', siding, { span: 5, rise: 1.8, ridgeAxis: 'x', side: 'positive', parent: root });"
+    },
+    {
+      name: "createGableShell",
+      signature: "createGableShell(name, { wall, roof, floor?, gable? }, { spanX, spanZ, wallHeight?, rise?, pitchDegrees?, overhang?, ridgeAxis?: 'x'|'z', thickness?, wallThickness?, floorThickness?, closedEnds?, enterable?, openings?, gableOpenings?, parent? })",
+      returns: "{ root, walls, floor, roof, gables, openings }",
+      category: "structure",
+      description: "Closed-by-default, correct-by-construction gable building: hollow room, floor, two opposing roof slopes, two complete gable ends, and a real front doorway when enterable.",
+      example: "const house = createGableShell('House', { wall: plaster, roof: shingles }, { spanX: 8, spanZ: 5, wallHeight: 2.8, pitchDegrees: 35, ridgeAxis: 'x', parent: root });",
+      promptNotes: "Use for complete gable buildings. It stamps wall, floor, slope, gable, opening, adjacency, coverage, and separability semantics for deterministic QA and roof-off views."
+    },
+    {
+      name: "createRoofSurfaceLayout",
+      signature: "createRoofSurfaceLayout(name, material, { face, kind: 'panels'|'shingles'|'seams'|'corrugations', parent?, panelWidth?, rowHeight?, spacing?, thickness? })",
+      returns: "{ root, items: Object3D[] }",
+      category: "structure",
+      description: "Places roof-local panels, shingles, seams, or corrugations from a returned RoofFaceFrame, so repeated elements run ridge-to-eave for either ridge axis without manual Euler rotations.",
+      example: "for (const face of roof.faces) createRoofSurfaceLayout('Panels_' + face.side, metal, { face, kind: 'panels', parent: roof.root });",
+      promptNotes: "Always pass the face object returned by createGableRoof/createGableShell. Never infer the panel rotation from world axes."
+    },
+    {
+      name: "createStairs",
+      signature: "createStairs(name, material, { steps?, totalRise, totalRun, width, axis?: 'x'|'z', treadThickness?, riser?, parent? })",
+      returns: "{ root: Object3D, steps: Object3D[] }",
+      category: "structure",
+      description: "A straight flight of stairs: box treads (with optional risers) climbing totalRise over totalRun from local origin toward +axis. Use for porch/entry steps or to connect storeys in a multi-storey building.",
+      example: "createStairs('Porch', stone, { steps: 4, totalRise: 0.6, totalRun: 1.0, width: 1.4, axis: 'x', parent: root });"
+    },
+    {
+      name: "boxGeo",
+      signature: "boxGeo(width: number, height: number, depth: number)",
+      returns: "THREE.BoxGeometry",
+      category: "geometry",
+      description: "6-face box. 12 tris regardless of size. Cheapest geometry.",
+      example: "const geo = boxGeo(1, 0.5, 2);"
+    },
+    {
+      name: "sphereGeo",
+      signature: "sphereGeo(radius: number, widthSegments?: 8, heightSegments?: 6)",
+      returns: "THREE.SphereGeometry",
+      category: "geometry",
+      description: "UV sphere. Default 8x6 segments = 84 tris. Bump segments for smoother curves.",
+      example: "const geo = sphereGeo(0.5, 12, 8);"
+    },
+    {
+      name: "cylinderGeo",
+      signature: "cylinderGeo(radiusTop: number, radiusBottom: number, height: number, segments?: 8)",
+      returns: "THREE.CylinderGeometry",
+      category: "geometry",
+      description: "Y-axis cylinder. Use radiusTop != radiusBottom for cones / tapered pieces.",
+      example: "const geo = cylinderGeo(0.25, 0.25, 1, 12);"
+    },
+    {
+      name: "cylinderYGeo",
+      signature: "cylinderYGeo(radiusTop: number, radiusBottom: number, height: number, segments?: 8)",
+      returns: "THREE.CylinderGeometry",
+      category: "geometry",
+      description: "Alias for cylinderGeo — a Y-axis cylinder. Provided because the sandbox exposes cylinderXGeo / cylinderZGeo and the symmetric Y form is commonly reached for.",
+      example: "const geo = cylinderYGeo(0.25, 0.25, 1, 12);"
+    },
+    {
+      name: "cylinderXGeo",
+      signature: "cylinderXGeo(radiusTop: number, radiusBottom: number, length: number, segments?: 8)",
+      returns: "THREE.CylinderGeometry",
+      category: "geometry",
+      description: "Cylinder pre-rotated to run along +X/-X. Use for fuselages, cannons, barrels, axles, and forward-facing tubes.",
+      example: "const geo = cylinderXGeo(0.1, 0.1, 1.2, 12);"
+    },
+    {
+      name: "cylinderZGeo",
+      signature: "cylinderZGeo(radiusTop: number, radiusBottom: number, length: number, segments?: 8)",
+      returns: "THREE.CylinderGeometry",
+      category: "geometry",
+      description: "Cylinder pre-rotated to run along +Z/-Z. Use for side-mounted weapons, rails, crossbars, and pipes.",
+      example: "const geo = cylinderZGeo(0.08, 0.08, 0.9, 10);"
+    },
+    {
+      name: "cylinderOnAxis",
+      signature: "cylinderOnAxis(center: [x,y,z], normal: [x,y,z], radiusBottom: number, height: number, opts?: { radiusTop?, segments? })",
+      returns: "THREE.CylinderGeometry",
+      category: "geometry",
+      description: "Frame-first cylinder: position + axis specified directly, no post-hoc rotation. Use when the cylinder needs to point along a non-cardinal direction (struts inside CSG operands, antennas off a tilted surface). For cardinal axes prefer the terser cylinderXGeo / cylinderYGeo / cylinderZGeo helpers.",
+      example: "const strut = cylinderOnAxis([0.5, 0.7, 0], [1, 1, 0.3], 0.05, 0.9);"
+    },
+    {
+      name: "capsuleGeo",
+      signature: "capsuleGeo(radius: number, height: number, segments?: 6)",
+      returns: "THREE.CapsuleGeometry",
+      category: "geometry",
+      description: "Stadium shape (cylinder with hemispherical caps). Good for limbs.",
+      example: "const geo = capsuleGeo(0.1, 0.5, 6);"
+    },
+    {
+      name: "capsuleYGeo",
+      signature: "capsuleYGeo(radius: number, height: number, segments?: 6)",
+      returns: "THREE.CapsuleGeometry",
+      category: "geometry",
+      description: "Alias for capsuleGeo — a Y-axis capsule. Provided for symmetry with capsuleXGeo / capsuleZGeo.",
+      example: "const geo = capsuleYGeo(0.1, 0.5, 6);"
+    },
+    {
+      name: "capsuleXGeo",
+      signature: "capsuleXGeo(radius: number, length: number, segments?: 6)",
+      returns: "THREE.CapsuleGeometry",
+      category: "geometry",
+      description: "Capsule pre-rotated to run along +X/-X. Use for aircraft bodies, rounded vehicle hulls, and missiles.",
+      example: "const geo = capsuleXGeo(0.35, 2.4, 10);"
+    },
+    {
+      name: "capsuleZGeo",
+      signature: "capsuleZGeo(radius: number, length: number, segments?: 6)",
+      returns: "THREE.CapsuleGeometry",
+      category: "geometry",
+      description: "Capsule pre-rotated to run along +Z/-Z. Use for lateral pods, floats, and side tanks.",
+      example: "const geo = capsuleZGeo(0.18, 1.1, 8);"
+    },
+    {
+      name: "coneGeo",
+      signature: "coneGeo(radius: number, height: number, segments?: 8)",
+      returns: "THREE.ConeGeometry",
+      category: "geometry",
+      description: "Y-axis cone (pointed up). Use for spikes, roofs, projectiles.",
+      example: "const geo = coneGeo(0.3, 0.8, 8);"
+    },
+    {
+      name: "coneYGeo",
+      signature: "coneYGeo(radius: number, height: number, segments?: 8)",
+      returns: "THREE.ConeGeometry",
+      category: "geometry",
+      description: "Alias for coneGeo — a Y-axis cone (point +Y). Provided for symmetry with coneXGeo / coneZGeo.",
+      example: "const geo = coneYGeo(0.3, 0.8, 8);"
+    },
+    {
+      name: "coneXGeo",
+      signature: "coneXGeo(radius: number, length: number, segments?: 8)",
+      returns: "THREE.ConeGeometry",
+      category: "geometry",
+      description: "Cone pre-rotated so its point faces +X. Use for noses, rockets, shells, and forward-facing tips.",
+      example: "const geo = coneXGeo(0.18, 0.45, 12);"
+    },
+    {
+      name: "coneZGeo",
+      signature: "coneZGeo(radius: number, length: number, segments?: 8)",
+      returns: "THREE.ConeGeometry",
+      category: "geometry",
+      description: "Cone pre-rotated so its point faces +Z. Use for side-facing projectiles and tips.",
+      example: "const geo = coneZGeo(0.12, 0.35, 10);"
+    },
+    {
+      name: "taperConeGeo",
+      signature: "taperConeGeo(radiusBottom: number, radiusTop: number, height: number, axis?: 'x'|'y'|'z', segments?: 8)",
+      returns: "THREE.CylinderGeometry",
+      category: "geometry",
+      description: "Truncated cone (frustum) — exposes both bottom and top radius. radiusTop=0 matches coneGeo, radiusTop=radiusBottom matches cylinderGeo. Use for pylon caps, soda cans, lampshades, anything tapered that does not come to a point. axis selects orientation (default Y).",
+      example: "const cap = taperConeGeo(0.3, 0.18, 0.4);  // frustum"
+    },
+    {
+      name: "torusGeo",
+      signature: "torusGeo(radius: number, tube: number, radialSegments?: 8, tubularSegments?: 12)",
+      returns: "THREE.TorusGeometry",
+      category: "geometry",
+      description: "Donut shape. For rings, tyres, barrel ribs.",
+      example: "const geo = torusGeo(0.4, 0.04, 8, 16);"
+    },
+    {
+      name: "planeGeo",
+      signature: "planeGeo(width: number, height: number, widthSegments?: 1, heightSegments?: 1)",
+      returns: "THREE.PlaneGeometry",
+      category: "geometry",
+      description: "Flat quad for TEXTURED surfaces (ground, signs, walls with albedo maps). For solid-color decals like red stars, hull numbers, stamps, or window cutouts on no-texture assets use decalBox — a bare planeGeo without a texture will render as a disconnected 2-tri square and get flagged as a stray plane.",
+      example: "const geo = planeGeo(4, 4);"
+    },
+    {
+      name: "decalBox",
+      signature: "decalBox(width: number, height: number, depth?: 0.01)",
+      returns: "THREE.BoxGeometry",
+      category: "geometry",
+      description: "Thin box for solid-color surface decals: red stars, hull numbers, stamps, no-texture windows. Unlike planeGeo, has real depth so it visibly attaches to its host surface. Must be placed on a surface with position + rotation.",
+      example: `const star = decalBox(0.18, 0.18, 0.01);
+createPart('Mesh_StarPort', star, gameMaterial(0xc61f2a), { position: [0.4, 0.6, 0.41], parent: fuselage });`,
+      promptNotes: "Offset at least 0.01 outside the host surface to avoid z-fighting (a 0.8-wide hull has faces at z=±0.4, so place the decal at z=±0.41)."
+    },
+    {
+      name: "foliageCardGeo",
+      signature: "foliageCardGeo(opts?: { width?, height?, yPivot?: 0..1 })",
+      returns: "THREE.PlaneGeometry",
+      category: "geometry",
+      description: "Single-quad foliage card with a configurable Y pivot. yPivot=0 plants the quad on the ground. Pair with an alpha-tested material and a leaf/plant sprite.",
+      example: `const leaves = await materialRecipe('kiln.material.leaf.v1');
+const quad = foliageCardGeo({ width: 4, height: 6, yPivot: 0 });
+createPart('Mesh_Fern', quad, leaves, { parent: root });`
+    },
+    {
+      name: "crossedQuadsGeo",
+      signature: "crossedQuadsGeo(opts?: { width?, height?, planes?: 2 | 3, yPivot? })",
+      returns: "THREE.BufferGeometry",
+      category: "geometry",
+      description: "Cross-billboard bush primitive: 2 or 3 planes intersecting along the Y axis. Reads as a dense plant from any angle, cheaper than real geometry.",
+      example: `const leaves = await materialRecipe('kiln.material.leaf.v1');
+const bush = crossedQuadsGeo({ width: 2, height: 2, planes: 3 });
+createPart('Mesh_Bush', bush, leaves, { parent: root });`
+    },
+    {
+      name: "octaGridPlane",
+      signature: "octaGridPlane({ tilesX, tilesY, width?, height?, yPivot? })",
+      returns: "THREE.PlaneGeometry",
+      category: "geometry",
+      description: "Atlas-ready billboard quad. UVs are pre-scaled to cover one tile of a tilesX×tilesY atlas; the consumer shader adds per-instance tile offsets at draw time.",
+      example: "const card = octaGridPlane({ tilesX: 4, tilesY: 4, width: 6, height: 6 });"
+    },
+    {
+      name: "wingGeo",
+      signature: "wingGeo(opts?: { span, rootChord, tipChord, sweep, thickness, dihedral })",
+      returns: "THREE.BufferGeometry",
+      category: "geometry",
+      description: "Trapezoid wing panel. Local root edge is at Z=0, span extends toward +Z, positive sweep moves the tip aft along -X.",
+      example: "const geo = wingGeo({ span: 2.2, rootChord: 0.8, tipChord: 0.3, sweep: 0.25, dihedral: 0.08 });"
+    },
+    {
+      name: "gearGeo",
+      signature: "gearGeo(opts?: { teeth?: 12, rootRadius?: 0.8, tipRadius?: 1.0, boreRadius?: 0.2, height?: 0.3, toothWidthFrac?: 0.5 })",
+      returns: "THREE.BufferGeometry",
+      category: "geometry",
+      description: "Stylized gear with flat edges and an optional center bore; no CSG. Use boreRadius < rootRadius < tipRadius. Radii are absolute: an omitted rootRadius stays 0.8 when tipRadius changes. Set all three radii for small gears.",
+      example: `const g = gearGeo({ teeth: 28, rootRadius: 0.063, tipRadius: 0.075, boreRadius: 0.012, height: 0.024 });
+createPart('Gear', g, gameMaterial(0x909090, { metalness: 0.8 }), { parent: root });`
+    },
+    {
+      name: "bladeGeo",
+      signature: "bladeGeo(opts?: { length?: 1.5, baseWidth?: 0.1, thickness?: 0.015, tipLength?: 0.25, edgeBevel?: 0 })",
+      returns: "THREE.BufferGeometry",
+      category: "geometry",
+      description: "Parametric sword blade: rectangular base tapering to a point over tipLength. edgeBevel > 0 pinches the cross-section toward a diamond ridge.",
+      example: `const b = bladeGeo({ length: 1.6, baseWidth: 0.09, tipLength: 0.3, edgeBevel: 0.5 });
+createPart('Blade', b, steel, { position: [0, 0, 0], parent: root });`
+    },
+    {
+      name: "gameMaterial",
+      signature: "gameMaterial(color, opts?: { metalness, roughness, emissive, emissiveIntensity, flatShading })",
+      returns: "THREE.MeshStandardMaterial",
+      category: "material",
+      description: "Flat-shaded PBR material. Default for game-ready low-poly. Use for 95% of parts.",
+      example: "const mat = gameMaterial(0x8b7355, { roughness: 0.9 });"
+    },
+    {
+      name: "materialRecipe",
+      signature: "await materialRecipe(recipeId, overrides?: { baseColor?, roughness?, metalness?, opacity?, alphaCutoff?, doubleSided?, emissiveColor?, emissiveIntensity?, textureResources? })",
+      returns: "Promise<THREE.MeshStandardMaterial>",
+      category: "material",
+      description: "Resolves a versioned portable bark/leaf/wood/stone/rubber/painted-metal/cloth/skin/glass/emissive recipe to standard glTF PBR.",
+      example: "const bark = await materialRecipe('kiln.material.bark.v1', { baseColor: '#6b4328' });",
+      promptNotes: "Use only listed kiln.material.*.v1 IDs and approved kiln.texture.* resource IDs. Leaf is MASK, glass is BLEND, and host file paths are forbidden."
+    },
+    {
+      name: "compilePortableMaterialSpecV2",
+      signature: "await compilePortableMaterialSpecV2({ schemaVersion: 2, model: 'pbrMetallicRoughness', name?, baseColor?, roughness?, metalness?, emissive?, emissiveIntensity?, alphaMode?, alphaCutoff?, doubleSided?, textures?: { baseColor?, normal?, metallicRoughness?, emissive?, occlusion? } })",
+      returns: "Promise<THREE.MeshStandardMaterial>",
+      category: "material",
+      description: "Compiles the strict portable material contract. Texture refs are either typed procedural V2 specs or closed approved kiln.texture.* IDs; paths, URLs, raw textures, callbacks, and shader source are rejected.",
+      example: "const steel = await compilePortableMaterialSpecV2({ schemaVersion: 2, model: 'pbrMetallicRoughness', roughness: 0.45, metalness: 0.85, textures: { metallicRoughness: { kind: 'procedural', spec: { schemaVersion: 2, usage: 'metallicRoughness', size: 64, layers: [{ op: 'solid', color: 0x0080cc }] } } } });",
+      promptNotes: "Use metallicRoughness as one packed G=roughness/B=metalness map. Every procedural ref usage must match its slot; resource refs must be approved for that exact slot."
+    },
+    {
+      name: "basicMaterial",
+      signature: "basicMaterial(color, opts?: { transparent, opacity })",
+      returns: "THREE.MeshBasicMaterial",
+      category: "material",
+      description: "Unlit flat material. For UI / effects where lighting is baked in.",
+      example: "const mat = basicMaterial(0xffffff, { transparent: true, opacity: 0.5 });"
+    },
+    {
+      name: "glassMaterial",
+      signature: "glassMaterial(color, opts?: { opacity, roughness, metalness })",
+      returns: "THREE.MeshStandardMaterial",
+      category: "material",
+      description: "Semi-transparent double-sided material. Panels need ~0.05 offset to avoid z-fighting.",
+      example: "const mat = glassMaterial(0x66ccff, { opacity: 0.3 });"
+    },
+    {
+      name: "lambertMaterial",
+      signature: "lambertMaterial(color, opts?: { flatShading, emissive })",
+      returns: "THREE.MeshLambertMaterial",
+      category: "material",
+      description: "Cheaper than gameMaterial. No metalness/roughness. Use when PBR is overkill.",
+      example: "const mat = lambertMaterial(0x2a4d14, { flatShading: true });"
+    },
+    {
+      name: "rotationTrack",
+      signature: "rotationTrack(jointName: string, keyframes: Array<{ time, rotation: [xDeg, yDeg, zDeg] }>, interp?: 'LINEAR' | 'STEP')",
+      returns: "THREE.QuaternionKeyframeTrack",
+      category: "animation",
+      description: "Rotation track in degrees, auto-converted to quaternions. Joint name must include `Joint_` prefix.",
+      example: "rotationTrack('Joint_Lid', [{ time: 0, rotation: [0, 0, 0] }, { time: 1, rotation: [90, 0, 0] }]);"
+    },
+    {
+      name: "positionTrack",
+      signature: "positionTrack(jointName: string, keyframes: Array<{ time, position: [x, y, z] }>, interp?: 'LINEAR' | 'STEP')",
+      returns: "THREE.VectorKeyframeTrack",
+      category: "animation",
+      description: "Position track in world units. Always use `position:` not `value:` in keyframes.",
+      example: "positionTrack('Joint_Body', [{ time: 0, position: [0, 0, 0] }, { time: 1, position: [0, 0.1, 0] }]);"
+    },
+    {
+      name: "scaleTrack",
+      signature: "scaleTrack(jointName: string, keyframes: Array<{ time, scale: [x, y, z] }>, interp?: 'LINEAR' | 'STEP')",
+      returns: "THREE.VectorKeyframeTrack",
+      category: "animation",
+      description: "Uniform or per-axis scale track.",
+      example: "scaleTrack('Joint_Chest', [{ time: 0, scale: [1, 1, 1] }, { time: 1, scale: [1.1, 1.1, 1.1] }]);"
+    },
+    {
+      name: "createClip",
+      signature: "createClip(name: string, duration: number, tracks: KeyframeTrack[])",
+      returns: "THREE.AnimationClip",
+      category: "animation",
+      description: "Collects tracks into a named clip. Returned from animate().",
+      example: "return [createClip('Open', 1, [rotationTrack('Joint_Lid', [...])])];"
+    },
+    {
+      name: "idleBreathing",
+      signature: "idleBreathing(bodyJoint: string, duration?: 2, amount?: 0.02)",
+      returns: "THREE.AnimationClip",
+      category: "animation",
+      description: "Gentle Y-axis bob. For NPC idle states.",
+      example: "return [idleBreathing('Joint_Body')];"
+    },
+    {
+      name: "bobbingAnimation",
+      signature: "bobbingAnimation(rootName: string, duration?: 2, height?: 0.1)",
+      returns: "THREE.AnimationClip",
+      category: "animation",
+      description: "Floating / bobbing loop for pickups and effects.",
+      example: "return [bobbingAnimation('Joint_Root', 1.5, 0.08)];"
+    },
+    {
+      name: "spinAnimation",
+      signature: "spinAnimation(jointName: string, duration?: 2, axis?: 'x' | 'y' | 'z')",
+      returns: "THREE.AnimationClip",
+      category: "animation",
+      description: "360° rotation over `duration` around `axis`.",
+      example: "return [spinAnimation('Joint_Rotor', 0.5, 'y')];"
+    },
+    {
+      name: "cloneGeometry",
+      signature: "cloneGeometry(geo: BufferGeometry)",
+      returns: "THREE.BufferGeometry (same ref)",
+      category: "instancing",
+      description: "Deprecated name: returns the SAME geometry, without copying. Use copyGeometry for independent vertex edits, or pass the original geometry directly for intentional sharing.",
+      example: "const wheelGeo = cylinderGeo(0.4, 0.4, 0.2, 12);"
+    },
+    {
+      name: "cloneMaterial",
+      signature: "cloneMaterial(mat: Material)",
+      returns: "THREE.Material (same ref)",
+      category: "instancing",
+      description: "Deprecated name: returns the SAME material. Use copyMaterial for independent property edits, or pass the original for intentional sharing.",
+      example: "const rubberMat = gameMaterial(0x1a1a1a, { roughness: 0.95 });"
+    },
+    {
+      name: "createInstance",
+      signature: "createInstance(name, source, opts?: { position, rotation: [xDeg, yDeg, zDeg], scale, parent })",
+      returns: "THREE.Object3D",
+      category: "instancing",
+      description: "Creates a new mesh reusing an existing part's geometry + material at a new transform. Cheapest way to replicate wheels / bolts / fence posts / windows. `rotation` is in DEGREES, like createPart.",
+      example: `const wheelFL = createPart('WheelFL', wheelGeo, rubberMat, { position: [-0.8, 0.3, 1.2], parent: root });
+createInstance('WheelFR', wheelFL, { position: [0.8, 0.3, 1.2], parent: root });
+createInstance('WheelRL', wheelFL, { position: [-0.8, 0.3, -1.2], parent: root });
+createInstance('WheelRR', wheelFL, { position: [0.8, 0.3, -1.2], parent: root });`
+    },
+    {
+      name: "boolUnion",
+      signature: "await boolUnion(name: string, ...parts: Object3D[], opts?: { smooth?: false, preserveAttributes?: boolean })",
+      returns: "Promise<THREE.Mesh>",
+      category: "csg",
+      description: "Merges two or more parts into one watertight manifold mesh. Default flat shading (hard edges) — pass { smooth: true } as last arg for averaged normals on organic merges.",
+      example: `const body = new THREE.Mesh(boxGeo(2, 1, 1), steel);
+const turret = new THREE.Mesh(cylinderGeo(0.3, 0.3, 0.4, 16), steel);
+turret.position.y = 0.5;
+const hull = await boolUnion('Hull', body, turret);`
+    },
+    {
+      name: "boolDiff",
+      signature: "await boolDiff(name: string, body: Object3D, ...cutters: Object3D[], opts?: { smooth?: false, preserveAttributes?: boolean })",
+      returns: "Promise<THREE.Mesh>",
+      category: "csg",
+      description: "Subtracts cutters from a body (holes, button recesses, window slots). Default flat shading for sharp mechanical edges.",
+      example: `const body = new THREE.Mesh(cylinderGeo(1, 1, 0.3, 32), steel);
+const teeth = [...]; // 8 radially-arrayed box meshes
+const gear = await boolDiff('Gear', body, ...teeth);  // hard-edged`
+    },
+    {
+      name: "roundedBoxGeo",
+      signature: "await roundedBoxGeo(width: number, height: number, depth: number, radius: number, opts?: { style?: 'round' | 'chamfer', segments?: 12, smooth?: boolean })",
+      returns: "Promise<THREE.BufferGeometry>",
+      category: "csg",
+      description: "A box with all twelve edges rounded (or chamfered) at the EXACT outer size requested — roundedBoxGeo(1, 1, 1, 0.1) measures 1x1x1, it does not grow. Use it anywhere boxGeo reads too sharp: consoles, crates, appliances, handheld props, machined blocks.",
+      promptNotes: "Real objects almost never have perfectly sharp box edges, and a small radius is the single cheapest upgrade to how manufactured an asset looks. Prefer this over boxGeo for anything moulded, cast, or machined. Keep radius small relative to the box (5-10% of the smallest dimension); radius must be less than half the smallest dimension or the call throws. style: 'chamfer' reads as machined metal, 'round' as moulded plastic. This is async — build() must be async and the call must use await.",
+      example: `const geo = await roundedBoxGeo(1.2, 0.6, 0.8, 0.05);
+createPart('Console', geo, plastic, { position: [0, 0.3, 0], parent: root });`
+    },
+    {
+      name: "extrudeProfile",
+      signature: "await extrudeProfile(profile: [number, number][], opts?: { depth?: 1, holes?: [number, number][][], bevel?: 0, bevelStyle?: 'round' | 'chamfer', segments?: 12, twist?: 0, taper?: number | [number, number], divisions?: number, axis?: 'x' | 'y' | 'z', center?: true, smooth?: false })",
+      returns: "Promise<THREE.BufferGeometry>",
+      category: "csg",
+      description: "Sweeps a closed 2D outline into a watertight solid, with optional holes, corner rounding/chamfering, twist, and taper. The way to build any cross-section that is not a box or a cylinder: L-brackets, I-beams, gaskets, washers, star and gear plates, signage, extruded trim.",
+      promptNotes: "The bevel rounds the edges PARALLEL to the sweep axis (the profile corners) — the two flat caps stay sharp. For a box rounded on all twelve edges use roundedBoxGeo instead. Holes are subtracted, so their winding order does not matter. A bevel larger than half the outline's narrowest feature throws rather than silently returning an empty solid. Output is manifold, so it feeds straight into boolUnion / boolDiff / boolIntersect. Async — await it inside an async build().",
+      example: `// L-bracket, inner AND outer corners filleted
+const outline = [[0, 0], [2, 0], [2, 0.4], [0.4, 0.4], [0.4, 2], [0, 2]];
+const geo = await extrudeProfile(outline, { depth: 0.5, bevel: 0.06 });
+createPart('Bracket', geo, steel, { parent: root });`
+    },
+    {
+      name: "revolveProfile",
+      signature: "await revolveProfile(profile: [number, number][], opts?: { segments?: 24, angle?: 360, bevel?: 0, bevelStyle?: 'round' | 'chamfer', bevelSegments?: 12, axis?: 'x' | 'y' | 'z', smooth?: true })",
+      returns: "Promise<THREE.BufferGeometry>",
+      category: "csg",
+      description: "Revolves a closed 2D outline around an axis into a watertight SOLID, optionally rounding the profile corners first. Bottles, tanks, pressure vessels, wheels, turned wood, domes, buttons, pills.",
+      promptNotes: "Use this instead of lathe/revolveGeo whenever the result must survive a boolean or needs a rounded rim — lathe and revolveGeo build an open surface, this builds a closed solid. Profile convention matches lathe: x is distance from the axis, y is position along it, and only the x >= 0 side is used. Async — await it inside an async build().",
+      example: `// capsule tank with a rounded rim, then carve a port into it
+const profile = [[0, -0.5], [0.4, -0.5], [0.4, 0.5], [0, 0.5]];
+const body = await revolveProfile(profile, { bevel: 0.08, segments: 32 });
+const tank = await boolDiff('Tank', createPart('B', body, steel), portCutter);`
+    },
+    {
+      name: "circleProfile",
+      signature: "circleProfile(radius: number, segments?: 24, center?: [number, number])",
+      returns: "[number, number][]",
+      category: "csg",
+      description: "Builds a closed circular outline for extrudeProfile / revolveProfile, so you never hand-write the trigonometry. Synchronous.",
+      example: `const washer = await extrudeProfile(circleProfile(1), {
+  depth: 0.1,
+  holes: [circleProfile(0.4), circleProfile(0.1, 16, [0.7, 0])],
+});`
+    },
+    {
+      name: "boolIntersect",
+      signature: "await boolIntersect(name: string, a: Object3D, b: Object3D, opts?: { smooth?: false })",
+      returns: "Promise<THREE.Mesh>",
+      category: "csg",
+      description: "Keeps only the volume where both operands overlap. Default flat shading.",
+      example: "const lens = await boolIntersect('Lens', boxMesh, sphereMesh);"
+    },
+    {
+      name: "hull",
+      signature: "await hull(name: string, ...parts: Object3D[], opts?: { smooth?: true })",
+      returns: "Promise<THREE.Mesh>",
+      category: "csg",
+      description: "Tightest convex mesh enclosing all input points. Default smooth shading (rocks, collision volumes). Pass { smooth: false } for a faceted look.",
+      example: `const rockChunks = [...]; // scattered box meshes
+const rock = await hull('Rock', ...rockChunks);`
+    },
+    {
+      name: "arrayLinear",
+      signature: "arrayLinear(namePrefix, source, count, offset: [x,y,z], parent?)",
+      returns: "THREE.Object3D[]",
+      category: "arrays",
+      description: "Places N copies of `source` along a constant offset vector. Copies share geometry + material via createInstance.",
+      example: `const post = createPart('Post0', cylinderGeo(0.05,0.05,1.5,6), wood, { position: [0,0.75,0], parent: root });
+arrayLinear('Post', post, 10, [0.5, 0, 0], root);`
+    },
+    {
+      name: "arrayRadial",
+      signature: "arrayRadial(namePrefix, source, count, axis?: 'x'|'y'|'z', parent?)",
+      returns: "THREE.Object3D[]",
+      category: "arrays",
+      description: "Places N copies of `source` around the given axis. Source's local rotation is oriented outward. Perfect for gear teeth, radial bolts, circle of columns.",
+      example: `const bolt = createPart('Bolt0', cylinderGeo(0.02,0.02,0.1,6), steel, { position: [1,0,0], parent: root });
+arrayRadial('Bolt', bolt, 8, 'y', root);`
+    },
+    {
+      name: "mirror",
+      signature: "mirror(name, source, axis: 'x'|'y'|'z', parent?)",
+      returns: "THREE.Object3D",
+      category: "arrays",
+      description: "Reflects source across the plane whose normal is `axis`. Uses negative scale (winding flip handled by viewers).",
+      example: "mirror('WingR', wingL, 'x', root);"
+    },
+    {
+      name: "subdivide",
+      signature: "subdivide(geometry: BufferGeometry, iterations?: 1, opts?: { preserveUV?: boolean, split?: boolean, uvSmooth?: boolean, preserveEdges?: boolean, flatOnly?: boolean, weld?: boolean })",
+      returns: "THREE.BufferGeometry",
+      category: "mesh-ops",
+      description: "Loop subdivision returns new geometry; each iteration roughly quadruples triangles and smooths the surface. Use preserveUV:true for textured meshes. Legacy position-only welding discards UVs and reports that loss. This smooths shapes, not selected-edge beveling.",
+      example: "const smoothRock = subdivide(boxGeo(1, 1, 1), 2);"
+    },
+    {
+      name: "mergeVertices",
+      signature: "mergeVertices(geometry: BufferGeometry, opts?: { tolerance?: 1e-4, positionOnly?: boolean } | number)",
+      returns: "THREE.BufferGeometry",
+      category: "mesh-ops",
+      description: "Returns indexed geometry. Default welding preserves attribute seams, so a textured cube retains separate face corners. positionOnly:true welds coincident positions and discards other attributes; use it explicitly when changing topology and regenerate shading/UVs afterward.",
+      example: `const welded = mergeVertices(boxGeo(1, 1, 1), { positionOnly: true });
+const rock = displace(subdivide(welded, 2), ([x,y,z]) => [0.08*Math.sin(y*7+z*3), 0.04*Math.sin(x*9), 0]);`
+    },
+    {
+      name: "curveToMesh",
+      signature: "curveToMesh(points: [x,y,z][], radius, tubularSegs?: 32, radialSegs?: 8, closed?: false)",
+      returns: "THREE.BufferGeometry",
+      category: "curves",
+      description: "Sweeps a circular profile along a path. Equivalent to Blender's Curve to Mesh node with a circle profile. Use for pipes, cables, tubular frames.",
+      example: "const pipe = curveToMesh([[0,0,0],[0,1,0],[1,1,0],[1,2,0]], 0.1);"
+    },
+    {
+      name: "pipeAlongPath",
+      signature: "pipeAlongPath(points: [x,y,z][], radius: number, opts?: { bendRadius?: 0, closed?: false, tubularSegments?: 32, radialSegments?: 8 })",
+      returns: "THREE.BufferGeometry",
+      category: "curves",
+      description: "Path-driven swept circle with optional bend smoothing. Generalises beamBetween (point-to-point) and curveToMesh (raw spline) into one helper. bendRadius>0 inserts interpolated waypoints near interior corners so the spline reads as a rounded turn instead of pinching to the control point.",
+      example: "const cable = pipeAlongPath([[0, 0.5, 0], [1, 0.5, 0], [1, 0.5, 2]], 0.02, { bendRadius: 0.1 });"
+    },
+    {
+      name: "lathe",
+      signature: "lathe(profile: [x,y][], segments?: 12)",
+      returns: "THREE.BufferGeometry",
+      category: "curves",
+      description: "Surface of revolution. Spins a 2D profile around the Y axis. For bottles, vases, wheels, turned wood parts.",
+      example: "const vase = lathe([[0.1,0],[0.3,0.5],[0.2,1],[0.1,1.2]], 16);"
+    },
+    {
+      name: "revolveGeo",
+      signature: "revolveGeo(profile: [x,y][], opts?: { angle?: 2π, axis?: [x,y,z]=[0,1,0], segments?: 12 })",
+      returns: "THREE.BufferGeometry",
+      category: "curves",
+      description: "Surface of revolution with explicit axis + sweep angle. Generalises lathe — use it when you need a partial sweep (half-dome, 90° wedge) or revolution around a non-Y axis. Profile convention is identical to lathe: x = radial distance, y = position along the axis.",
+      example: `// Half-dome (180° sweep around +Y):
+const quarter = [...Array(8)].map((_, i) => { const t = (i/7)*Math.PI/2; return [Math.cos(t), Math.sin(t)] as [number, number]; });
+const dome = revolveGeo(quarter, { angle: Math.PI });`
+    },
+    {
+      name: "bezierCurve",
+      signature: "bezierCurve(controlPoints: [x,y,z][], samples?: 32)",
+      returns: "[x,y,z][]",
+      category: "curves",
+      description: "Samples a quadratic (3 ctrl pts) or cubic (4 ctrl pts) Bézier into a point list you can feed into curveToMesh.",
+      example: `const path = bezierCurve([[0,0,0],[1,2,0],[3,2,0],[4,0,0]], 24);
+const geo = curveToMesh(path, 0.1);`
+    },
+    {
+      name: "autoUnwrap",
+      signature: "await autoUnwrap(geometry: BufferGeometry, opts?: { resolution?: 1024, padding?: 2, useNormals?: false })",
+      returns: "Promise<THREE.BufferGeometry>",
+      category: "uv",
+      description: "xatlas-based UV atlas for ANY geometry (CSG output, subdivided, deformed). Output is a packed atlas with arbitrary per-chart rotation — use for non-tileable baked textures. For directional tileable textures on box/cylinder/plane primitives, prefer the shape-aware unwraps below.",
+      example: `const unwrapped = await autoUnwrap(someCsgResult, { resolution: 1024 });
+const mesh = new THREE.Mesh(unwrapped, bakedPbr);`
+    },
+    {
+      name: "boxUnwrap",
+      signature: "boxUnwrap(geometry: BufferGeometry)",
+      returns: "THREE.BufferGeometry",
+      category: "uv",
+      description: "Preserves BoxGeometry's built-in per-face UVs — every face maps [0,1] with consistent orientation. Use for crates/blocks with a tileable texture. Sync; no WASM cost.",
+      example: `const crate = boxUnwrap(boxGeo(1, 1, 1));
+const mesh = new THREE.Mesh(crate, pbrMaterial({ albedo: planksTex }));`
+    },
+    {
+      name: "cylinderUnwrap",
+      signature: "cylinderUnwrap(geometry: BufferGeometry)",
+      returns: "THREE.BufferGeometry",
+      category: "uv",
+      description: "Preserves CylinderGeometry's built-in UVs: u wraps around the axis (horizontal texture features ring the cylinder), v runs up the height. Caps use circle-in-square. Sync; no WASM cost.",
+      example: `const barrel = cylinderUnwrap(cylinderGeo(0.5, 0.5, 1.2, 24));
+const mesh = new THREE.Mesh(barrel, pbrMaterial({ albedo: bandsTex }));`
+    },
+    {
+      name: "planeUnwrap",
+      signature: "planeUnwrap(geometry: BufferGeometry)",
+      returns: "THREE.BufferGeometry",
+      category: "uv",
+      description: "Projects xy-extent of the bbox to [0,1]. Use for signs/decals/posters where you want ONE readable texture and no edge-face bleeding. Sync.",
+      example: `const sign = planeUnwrap(planeGeo(1, 0.6));
+const mesh = new THREE.Mesh(sign, pbrMaterial({ albedo: kilnTextTex }));`
+    },
+    {
+      name: "panelRemapV",
+      signature: "panelRemapV(geo, vScale=0.30, vOffset=0, uScale=1, uOffset=0)",
+      returns: "THREE.BufferGeometry",
+      category: "uv",
+      description: "Scales an existing UV attribute so a small mesh samples a sub-region of a SHARED texture. Replaces the broken texture.clone() pattern (Three.js Texture.clone() runs JSON.stringify on userData, mangling encoded PNG bytes — panelRemapV avoids that by remapping UVs on the geometry instead). Typical use: multi-zone albedo where v=0..0.30 is plain panel and v=0.30..1 has windows/markings — small parts call panelRemapV(unwrap(geo), 0.30) to sample only the clean strip.",
+      example: `const cowlGeo = panelRemapV(cylinderUnwrap(capsuleXGeo(0.45, 1.0)), 0.30);
+const cowl = new THREE.Mesh(cowlGeo, bodyMat); // SAME bodyMat as fuselage, no clone needed`
+    },
+    {
+      name: "loadApprovedTexture",
+      signature: "await loadApprovedTexture(resourceId)",
+      returns: "Promise<THREE.DataTexture>",
+      category: "textures",
+      description: "Loads one approved kiln.texture.* resource ID through the host-injected closed resolver. The registry fixes bytes, MIME, usage, dimensions, hash, and deadline; paths, URLs, byte arrays, resolver objects, hashes, and options are rejected.",
+      example: "const bark = await loadApprovedTexture('kiln.texture.bark-brown-01-albedo.v1');",
+      promptNotes: "Use only a concrete resource ID listed in material capabilities; never invent one. Prefer materialRecipe when a recipe already binds the family, or proceduralTexture V2 for authored surfaces. NEVER texture.clone() a loaded texture (clone() corrupts encoded bytes and breaks GLB export)."
+    },
+    {
+      name: "proceduralTexture",
+      signature: "proceduralTexture({ schemaVersion: 2, size?: 4..1024 pow2, usage?, name?, layers: [{ op: 'solid'|'checker'|'stripes'|'gradient'|'bricks'|'noise', ...params, blend?: 'normal'|'multiply'|'screen'|'overlay', opacity?: 0..1 }] })",
+      returns: "THREE.DataTexture (tiling, sRGB or linear per usage)",
+      category: "textures",
+      description: "Builds a tiling texture from a bounded layer stack — no image file needed. Layers composite bottom-first. Noise is seeded and tileable, so the same spec always produces the same bytes and a repeating material shows no seam. Baked to PNG and embedded in the GLB automatically.",
+      example: "const bark = proceduralTexture({ schemaVersion: 2, size: 256, usage: 'albedo', name: 'Bark', layers: [{ op: 'solid', color: 0x5a4632 }, { op: 'noise', colorA: 0x3d2f21, colorB: 0x7a6248, scale: 6, octaves: 4, blend: 'overlay' }] });",
+      promptNotes: "Sync — no await. Strict V2 JSON boundary: unknown/prototype keys, callbacks, paths, URLs, and shader source are rejected. Prefer this over approved resources for describable surfaces. Max 8 layers, power-of-two size up to 1024. Only the six listed ops exist."
+    },
+    {
+      name: "normalMapFromHeight",
+      signature: "normalMapFromHeight(source: THREE.Texture, { strength?: number, name?: string })",
+      returns: "THREE.DataTexture (linear normal map)",
+      category: "textures",
+      description: "Derives a tangent-space normal map from the source texture's brightness, treating it as height. The cheap way to get real PBR surface relief out of a procedural albedo. Wraps at the edges, so a tiling source gives a tiling normal map.",
+      example: `const bark = proceduralTexture({ schemaVersion: 2, usage: 'albedo', layers: [{ op: 'noise', colorA: 0x3d2f21, colorB: 0x7a6248, scale: 6, octaves: 4 }] });
+const mat = pbrMaterial({ albedo: bark, normal: normalMapFromHeight(bark, { strength: 4 }) });`,
+      promptNotes: "strength 1 is subtle, 4-8 reads clearly at normal viewing distance. Output is always linear data — never assign it to an albedo/emissive slot."
+    },
+    {
+      name: "pbrMaterial",
+      signature: "pbrMaterial({ albedo?, normal?, roughness?, metalness?, metallicRoughness?, emissive?, aoMap?, alphaMode?, alphaCutoff?, doubleSided? })",
+      returns: "THREE.MeshStandardMaterial",
+      category: "material",
+      description: "Portable glTF PBR material. Use an explicit packed metallicRoughness texture (G=roughness, B=metalness); separate data maps are rejected instead of silently dropping a channel. Supports OPAQUE/MASK/BLEND and double-sided output.",
+      example: `const wood = proceduralTexture({ schemaVersion: 2, usage: 'albedo', layers: [{ op: 'noise', colorA: 0x4f301c, colorB: 0x9a6b3e, scale: 8, octaves: 3, seed: 4 }] });
+const crate = pbrMaterial({ albedo: wood, roughness: 0.85, metalness: 0 });`
+    },
+    {
+      name: "foliageMaterial",
+      signature: "foliageMaterial(albedo, { alphaCutoff?, roughness?, doubleSided? })",
+      returns: "THREE.MeshStandardMaterial",
+      category: "material",
+      description: "Portable foliage material that defaults to glTF MASK, cutoff 0.5, rough nonmetal, and double-sided. Use an alpha-bearing albedo texture.",
+      example: "const mat = await materialRecipe('kiln.material.leaf.v1');"
+    },
+    {
+      name: "countTriangles",
+      signature: "countTriangles(root: Object3D)",
+      returns: "number",
+      category: "utility",
+      description: "Sums triangle count across every mesh in the subtree.",
+      example: "meta.tris = countTriangles(root);"
+    },
+    {
+      name: "countMaterials",
+      signature: "countMaterials(root: Object3D)",
+      returns: "number",
+      category: "utility",
+      description: "Unique material count (by reference) across the subtree.",
+      example: "const mats = countMaterials(root);"
+    },
+    {
+      name: "getJointNames",
+      signature: "getJointNames(root: Object3D)",
+      returns: "string[]",
+      category: "utility",
+      description: "All node names beginning with `Joint_`. Use to sanity-check animation targets.",
+      example: "const joints = getJointNames(root);"
+    },
+    {
+      name: "validateAsset",
+      signature: "validateAsset(root: Object3D, category: 'character' | 'prop' | 'vfx' | 'environment' | 'architecture' | 'vegetation' | 'vehicle')",
+      returns: "{ valid, errors, warnings }",
+      category: "utility",
+      description: "Checks geometry and material costs for the selected category. No default triangle limit; choose detail for the intended runtime and inspect measured draw calls.",
+      example: "const v = validateAsset(root, 'prop');"
+    }
+  ];
+});
+
+// src/tools/discovery.ts
+import { z as z3 } from "zod";
+function createKilnDiscoveryDef(context) {
+  return {
+    name: "kiln_list_primitives",
+    description: "Discover Kiln helpers and capabilities. No arguments returns a compact overview. Use names for up to six exact signatures/examples together, name for one, query for a modeling operation, or category to browse; detailed results are paged. Custom THREE.BufferGeometry and ordinary functions are available inside the retained program.",
+    inputSchema,
+    run: async (value) => {
+      const input = inputSchema.parse(value);
+      if (input.names && Object.keys(input).some((key) => key !== "names")) {
+        const error = "Use names alone; category, query, paging and capability selectors are separate requests.";
+        return { primitives: [], total: 0, nextOffset: null, categories: [], error, text: error };
+      }
+      const capabilities = {
+        version: "kiln.capabilities.v1",
+        execution: context.localExecution ?? (context.evaluatorPort ? { mode: "host-injected", limits: "unspecified by host" } : context.evaluatorProfile === "evaluator-required" ? { mode: "host-required", available: false } : { mode: "trusted-local", terminable: false }),
+        source: {
+          ...input.capabilities && context.programStore?.stats ? { storage: await context.programStore.stats() } : {},
+          maxBytes: MAX_PROGRAM_BYTES,
+          transportEvaluatorMaxBytes: MAX_EVALUATOR_CODE_BYTES,
+          immutableRevisions: true,
+          boundedRead: true,
+          atomicEdit: true
+        },
+        assets: {
+          available: Boolean(context.assetLibrary),
+          collections: context.assetLibrary?.collections() ?? [],
+          save: "kiln_save persists exact GLB, source and provenance; draft renders do not populate collections",
+          resume: "kiln_assets action=restore imports a saved revision into the current program store",
+          downloads: "kiln_export returns GLB/source/ZIP resource links; client presentation varies",
+          viewer: "kiln_present opens a saved revision in supporting chat clients with 3D viewing and downloads; kiln view opens a local collection or standalone GLB/ZIP"
+        },
+        geometry: {
+          attributes: ["position", "normal", "uv", "tangent"],
+          indexedTriangles: true,
+          materialGroups: true,
+          unsupported: ["vertex colors", "UV1+", "skinning", "morphs"],
+          strictExport: "geometryPolicy:strict on GLB export or host context; local KILN_GEOMETRY_POLICY=strict",
+          implicitSurfaces: "experimental"
+        },
+        camera: {
+          version: "kiln.capture.v1",
+          maxShots: 9,
+          cellSize: [128, 1024],
+          output: ["grid", "separate"],
+          projection: ["orthographic", "perspective"],
+          subjects: ["asset", "exact node path", "unambiguous name"],
+          visibility: ["context", "isolate"],
+          orbitFrames: ["world", "asset", "part"],
+          explicitFrames: ["world", "asset", "part", "local"],
+          framing: ["explicit", "bounds"],
+          limits: resolveCaptureLimits(context.captureLimits),
+          defaultViews: 6
+        },
+        materials: {
+          gpuPortConfigured: Boolean(context.viewRenderPort),
+          gpuRequired: Boolean(context.viewRenderRequired),
+          deliveredEvidence: "viewFidelity and per-cell cameraFidelity",
+          cpu: "geometry/base color"
+        }
+      };
+      const capabilityText = `Capabilities
+${JSON.stringify(capabilities, null, 2)}`;
+      if (input.capabilities)
+        return { capabilities, text: capabilityText };
+      const all = listPrimitives();
+      const categories = [...new Set(all.map((entry) => entry.category))].sort();
+      const category = input.category?.toLowerCase();
+      const missing = (error) => ({
+        primitives: [],
+        total: 0,
+        nextOffset: null,
+        categories,
+        error,
+        text: `${error}
+Categories: ${categories.join(", ")}. Use query to search or omit arguments for an overview.`
+      });
+      const detail = (entry) => `${entry.signature} -> ${entry.returns}
+${entry.description}
+e.g. ${entry.example}${entry.promptNotes ? `
+Note: ${entry.promptNotes}` : ""}`;
+      if (input.names) {
+        const requested = input.names.filter((name, index, names) => names.findIndex((candidate) => candidate.toLowerCase() === name.toLowerCase()) === index);
+        const selected = requested.map((name) => all.find((entry) => entry.name.toLowerCase() === name.toLowerCase()));
+        const unknown = requested.filter((_, index) => !selected[index]);
+        if (unknown.length)
+          return missing(`Unknown helpers: ${unknown.join(", ")}.`);
+        const primitives2 = selected.filter((entry) => Boolean(entry));
+        return {
+          primitives: primitives2,
+          total: primitives2.length,
+          nextOffset: null,
+          categories,
+          text: [`${primitives2.length} requested helpers.`, ...primitives2.map(detail)].join(`
+
+`)
+        };
+      }
+      if (category && !categories.some((entry) => entry === category))
+        return missing(`Unknown category "${input.category}".`);
+      const words = input.query?.toLowerCase().split(/\s+/) ?? [];
+      const matches = all.filter((entry) => {
+        if (category && entry.category !== category)
+          return false;
+        if (input.name && entry.name.toLowerCase() !== input.name.toLowerCase())
+          return false;
+        const searchable = `${entry.name} ${entry.signature} ${entry.description} ${entry.example} ${entry.promptNotes ?? ""}`.toLowerCase();
+        return words.every((word) => searchable.includes(word));
+      });
+      if (!matches.length)
+        return missing(`No helper matches ${input.name ? `name "${input.name}"` : `query "${input.query ?? input.category}"`}.`);
+      const overview = input.overview ?? !(input.name || input.query || input.category || input.offset || input.limit);
+      if (overview) {
+        const text3 = [
+          'Kiln helper overview. Use {names:["boxGeo","createPart"]} for up to six signatures/examples together, {name:"boxGeo"} for one, {query:"holes"} for an operation, or {category:"geometry"} to browse.',
+          ...categories.map((group) => `${group}: ${matches.filter((entry) => entry.category === group).map((entry) => entry.name).join(", ")}`).filter((line) => !line.endsWith(": ")),
+          "Custom geometry: THREE.BufferGeometry, indexed triangles and ordinary functions are available. GLB exports position, normal, UV0, tangent, indices and material groups. Query meshGeo, parametricSurface, sweepProfile, loftProfiles or twist for focused examples.",
+          "Source: send code once; reuse programRef for source reads, edits and all later view calls. Local CLI/MCP stores survive restarts; an injected memory store lasts for its registry instance.",
+          'Views: legacy capture uses preset/cells with azimuthDeg, elevationDeg, zoom (padding) and name. For exact part paths, part-relative orbit, explicit orthographic/perspective cameras or separate images, use capture:{version:"kiln.capture.v1",shots:[...]}. Choose one to nine useful views; omission keeps six. kiln_inspect also reports part frames and optional anchor measurements.',
+          `Execution: ${JSON.stringify(capabilities.execution)}. Source snapshots accept 1 MiB; subprocess/transport evaluation accepts 512 KiB. Use {capabilities:true} for the complete current host/export/camera contract.`,
+          `Materials: ${context.viewRenderPort ? "a GPU render port is configured; check delivered viewFidelity" : "CPU geometry/base-color views; material-faithful review requires a configured GPU port"}. Geometry, materials and draw calls have runtime costs; choose detail for the intended asset.`
+        ].join(`
+
+`);
+        return {
+          primitives: matches,
+          total: matches.length,
+          nextOffset: null,
+          categories,
+          capabilities,
+          text: text3
+        };
+      }
+      const offset = input.offset ?? 0;
+      const primitives = matches.slice(offset, offset + (input.limit ?? 6));
+      const nextOffset = offset + primitives.length < matches.length ? offset + primitives.length : null;
+      const text2 = [
+        `${matches.length} matching helpers. Showing ${primitives.length ? offset + 1 : 0}–${offset + primitives.length}.`,
+        ...primitives.map(detail),
+        ...nextOffset === null ? [] : [`More results: repeat this query with offset:${nextOffset}.`]
+      ].join(`
+
+`);
+      return { primitives, total: matches.length, nextOffset, categories, text: text2 };
+    },
+    text: (output) => output.text
+  };
+}
+var inputSchema;
+var init_discovery = __esm(() => {
+  init_list_primitives();
+  init_program_store();
+  init_protocol();
+  init_capture_limits();
+  inputSchema = z3.object({
+    names: z3.array(z3.string().trim().min(1).max(80)).min(1).max(6).optional().describe("Get up to six exact helper signatures together, in this order. Use without other selectors."),
+    category: z3.string().trim().min(1).max(80).optional().describe("Category from the overview."),
+    name: z3.string().trim().min(1).max(80).optional().describe("Exact helper name; returns its signature and example."),
+    query: z3.string().trim().min(1).max(200).optional().describe("Words to find in helper names, descriptions and examples."),
+    overview: z3.boolean().optional().describe("Compact names by category. Default when no search or category is supplied."),
+    capabilities: z3.boolean().optional().describe("Return only runtime, source, geometry export and camera capabilities."),
+    offset: z3.number().int().min(0).max(1e4).optional(),
+    limit: z3.number().int().min(1).max(12).optional().describe("Detailed results per page; default 6, maximum 12.")
+  }).strict();
+});
+
+// src/edit-buffer.ts
+class KilnDraftBuffer {
+  buf;
+  edits = [];
+  constructor(seedCode = "") {
+    this.buf = seedCode;
+  }
+  get code() {
+    return this.buf;
+  }
+  get lineCount() {
+    return this.buf.split(`
+`).length;
+  }
+  view() {
+    return { code: this.buf, lines: this.lineCount };
+  }
+  draft(code) {
+    this.buf = code;
+    return { ok: true, bytes: this.buf.length, lines: this.lineCount };
+  }
+  apply(input) {
+    const { oldString, newString } = input;
+    const replaceAll = input.replaceAll ?? false;
+    if (oldString.length === 0) {
+      return { ok: false, error: "oldString must not be empty." };
+    }
+    if (oldString === newString) {
+      return {
+        ok: false,
+        error: "oldString and newString are identical - there is nothing to change."
+      };
+    }
+    const occurrences = this.buf.split(oldString).length - 1;
+    if (occurrences === 0) {
+      return {
+        ok: false,
+        error: "oldString was not found in the current code.",
+        hint: "Call kiln_view and copy an exact span (including whitespace and indentation) to edit."
+      };
+    }
+    if (occurrences > 1 && !replaceAll) {
+      return {
+        ok: false,
+        occurrences,
+        error: `oldString matched ${occurrences} times, so the edit is ambiguous.`,
+        hint: "Add surrounding context to make oldString unique, or set replaceAll:true to change every occurrence."
+      };
+    }
+    if (replaceAll) {
+      this.buf = this.buf.split(oldString).join(newString);
+    } else {
+      const at = this.buf.indexOf(oldString);
+      this.buf = this.buf.slice(0, at) + newString + this.buf.slice(at + oldString.length);
+    }
+    const applied = replaceAll ? occurrences : 1;
+    this.edits.push({ oldString, newString, replaceAll, occurrences: applied });
+    return { ok: true, occurrences: applied, newBytes: this.buf.length };
+  }
+}
+var init_edit_buffer = () => {};
+
+// src/agent/diff.ts
+function diffLines(a, b) {
+  const n = a.length;
+  const m = b.length;
+  const lcs = Array.from({ length: n + 1 }, () => new Array(m + 1).fill(0));
+  for (let i2 = n - 1;i2 >= 0; i2--) {
+    for (let j2 = m - 1;j2 >= 0; j2--) {
+      lcs[i2][j2] = a[i2] === b[j2] ? lcs[i2 + 1][j2 + 1] + 1 : Math.max(lcs[i2 + 1][j2], lcs[i2][j2 + 1]);
+    }
+  }
+  const ops = [];
+  let i = 0;
+  let j = 0;
+  while (i < n && j < m) {
+    if (a[i] === b[j]) {
+      ops.push({ tag: " ", line: a[i] });
+      i++;
+      j++;
+    } else if (lcs[i + 1][j] >= lcs[i][j + 1]) {
+      ops.push({ tag: "-", line: a[i] });
+      i++;
+    } else {
+      ops.push({ tag: "+", line: b[j] });
+      j++;
+    }
+  }
+  while (i < n)
+    ops.push({ tag: "-", line: a[i++] });
+  while (j < m)
+    ops.push({ tag: "+", line: b[j++] });
+  return ops;
+}
+function unifiedDiff(before, after, opts = {}) {
+  if (before === after)
+    return "";
+  const context = Math.max(0, opts.context ?? 3);
+  const a = before.split(`
+`);
+  const b = after.split(`
+`);
+  let ai = 0;
+  let bi = 0;
+  const located = diffLines(a, b).map((op) => {
+    const rec = { tag: op.tag, line: op.line, a: ai, b: bi };
+    if (op.tag === " ") {
+      ai++;
+      bi++;
+    } else if (op.tag === "-") {
+      ai++;
+    } else {
+      bi++;
+    }
+    return rec;
+  });
+  const changeIdx = located.map((o, k) => o.tag === " " ? -1 : k).filter((k) => k >= 0);
+  if (changeIdx.length === 0)
+    return "";
+  const groups = [];
+  let gStart = Math.max(0, changeIdx[0] - context);
+  let gEnd = Math.min(located.length - 1, changeIdx[0] + context);
+  for (let k = 1;k < changeIdx.length; k++) {
+    const ci = changeIdx[k];
+    if (ci - context <= gEnd + 1) {
+      gEnd = Math.min(located.length - 1, ci + context);
+    } else {
+      groups.push([gStart, gEnd]);
+      gStart = Math.max(0, ci - context);
+      gEnd = Math.min(located.length - 1, ci + context);
+    }
+  }
+  groups.push([gStart, gEnd]);
+  const out = [];
+  if (opts.fromLabel || opts.toLabel) {
+    out.push(`--- ${opts.fromLabel ?? "a"}`);
+    out.push(`+++ ${opts.toLabel ?? "b"}`);
+  }
+  for (const [s, e] of groups) {
+    const slice = located.slice(s, e + 1);
+    const first = slice[0];
+    let aLen = 0;
+    let bLen = 0;
+    for (const o of slice) {
+      if (o.tag === " ") {
+        aLen++;
+        bLen++;
+      } else if (o.tag === "-") {
+        aLen++;
+      } else {
+        bLen++;
+      }
+    }
+    const aStart = aLen > 0 ? first.a + 1 : first.a;
+    const bStart = bLen > 0 ? first.b + 1 : first.b;
+    out.push(`@@ -${aStart},${aLen} +${bStart},${bLen} @@`);
+    for (const o of slice)
+      out.push(`${o.tag}${o.line}`);
+  }
+  return out.join(`
+`);
+}
+
+// src/agent/view-render-timeout.ts
+function boundedTimeout(value, fallback) {
+  if (Number.isNaN(value))
+    return fallback;
+  if (value === Number.POSITIVE_INFINITY)
+    return MAX_VIEW_RENDER_TIMEOUT_MS;
+  if (value === Number.NEGATIVE_INFINITY)
+    return MIN_VIEW_RENDER_TIMEOUT_MS;
+  return Math.min(MAX_VIEW_RENDER_TIMEOUT_MS, Math.max(MIN_VIEW_RENDER_TIMEOUT_MS, Math.floor(value)));
+}
+function optionalBudget(value) {
+  if (value === undefined || Number.isNaN(value))
+    return;
+  if (value === Number.POSITIVE_INFINITY)
+    return MAX_VIEW_RENDER_TIMEOUT_MS;
+  if (value === Number.NEGATIVE_INFINITY)
+    return 0;
+  return Math.min(MAX_VIEW_RENDER_TIMEOUT_MS, Math.max(0, Math.floor(value)));
+}
+function resolveViewRenderTimeoutMs(input) {
+  const defaultTimeoutMs = boundedTimeout(input.defaultTimeoutMs, MIN_VIEW_RENDER_TIMEOUT_MS);
+  const timeoutMs = boundedTimeout(input.timeoutMs ?? defaultTimeoutMs, defaultTimeoutMs);
+  let hostContext = input.context;
+  let hostContextAvailable = true;
+  if (input.contextProvider) {
+    try {
+      hostContext = input.contextProvider();
+    } catch {
+      hostContext = undefined;
+      hostContextAvailable = false;
+    }
+  }
+  const remainingGenerationBudgetMs = optionalBudget(hostContext?.remainingGenerationBudgetMs);
+  const rendererDeadlineMs = optionalBudget(hostContext?.rendererDeadlineMs);
+  const warmUpState = WARM_UP_STATES.has(hostContext?.warmUpState) ? hostContext?.warmUpState : "unknown";
+  const resolverContext = Object.freeze({
+    requestKind: input.requestKind,
+    defaultTimeoutMs,
+    timeoutMs,
+    warmUpState,
+    ...remainingGenerationBudgetMs !== undefined ? { remainingGenerationBudgetMs } : {},
+    ...rendererDeadlineMs !== undefined ? { rendererDeadlineMs } : {}
+  });
+  let resolved2 = timeoutMs;
+  if (input.resolver && hostContextAvailable) {
+    try {
+      resolved2 = boundedTimeout(input.resolver(resolverContext), timeoutMs);
+    } catch {
+      resolved2 = timeoutMs;
+    }
+  }
+  if (rendererDeadlineMs !== undefined)
+    resolved2 = Math.min(resolved2, rendererDeadlineMs);
+  if (remainingGenerationBudgetMs !== undefined) {
+    resolved2 = Math.min(resolved2, remainingGenerationBudgetMs);
+  }
+  return boundedTimeout(resolved2, timeoutMs);
+}
+var MIN_VIEW_RENDER_TIMEOUT_MS = 1, MAX_VIEW_RENDER_TIMEOUT_MS = 120000, WARM_UP_STATES;
+var init_view_render_timeout = __esm(() => {
+  WARM_UP_STATES = new Set(["unknown", "pending", "ready", "degraded"]);
+});
+
 // src/views/port.ts
 var exports_port = {};
 __export(exports_port, {
@@ -25695,7 +27991,7 @@ async function captureViewsViaPort(port, glb, timeoutMs = DEFAULT_VIEW_RENDER_TI
   const views = resolved2.views;
   const shape = { preset: resolved2.preset, cols: resolved2.cols, cells: views.length };
   let cameras;
-  if (resolved2.zooms.some((z3) => z3 !== undefined)) {
+  if (resolved2.zooms.some((z4) => z4 !== undefined)) {
     try {
       const { loadGlbReviewScene: loadGlbReviewScene2, measureBounds: measureBounds2, cameraFromBounds: cameraFromBounds2 } = await Promise.resolve().then(() => (init_views(), exports_views));
       const loaded = await loadGlbReviewScene2(Uint8Array.from(glb));
@@ -25958,2145 +28254,76 @@ var init_measurement = __esm(() => {
   init_camera();
 });
 
-// src/cli.ts
-import { open, readFile as readFile5, writeFile as writeFile4 } from "node:fs/promises";
-import { realpathSync } from "node:fs";
-import { resolve as resolvePath } from "node:path";
-
-// src/local-runtime.ts
-init_subprocess();
-init_isolation();
-init_render();
-
-// src/program-store-node.ts
-import { link, lstat, mkdir, readFile as readFile2, readdir, stat, unlink, writeFile as writeFile2 } from "node:fs/promises";
-import { randomUUID } from "node:crypto";
-import { join as join3, resolve } from "node:path";
-
-// src/program-store.ts
-var MAX_PROGRAM_BYTES = 1024 * 1024;
-var canonicalProgramRefPattern = /^sha256:[a-f0-9]{64}(?![\s\S])/;
-var programRefPattern = /^(?:sha256:[a-f0-9]{64}|p_[a-f0-9]{12}(?:[a-f0-9]{4}){0,13})(?![\s\S])/;
-function assertProgramRef(ref) {
-  if (typeof ref !== "string" || !programRefPattern.test(ref))
-    throw new Error("Invalid program reference; use a p_ handle or full sha256 reference returned by Kiln.");
+// src/assets-resources.ts
+var exports_assets_resources = {};
+__export(exports_assets_resources, {
+  readAssetResource: () => readAssetResource,
+  assetMime: () => assetMime,
+  assetLinks: () => assetLinks
+});
+function assetLinks(collection, manifest) {
+  return [...Object.keys(manifest.files), "manifest.json", "editable.zip"].map((name) => ({
+    type: "resource_link",
+    name,
+    uri: `kiln://assets/${collection}/${manifest.assetId}/${manifest.revisionId}/${name}`,
+    mimeType: assetMime(name)
+  }));
 }
-async function retainProgram(store, code) {
-  const canonical2 = await store.put(code);
-  return store.shortRef ? store.shortRef(canonical2) : canonical2;
+function assetMime(name) {
+  return name.endsWith(".glb") ? "model/gltf-binary" : name.endsWith(".png") ? "image/png" : name.endsWith(".zip") ? "application/zip" : name.endsWith(".json") ? "application/json" : "text/javascript";
 }
-function* shortProgramRefCandidates(canonical2) {
-  if (!canonicalProgramRefPattern.test(canonical2) || canonical2.length !== 71)
-    throw new Error("Invalid canonical program reference.");
-  for (let length3 = 12;length3 <= 64; length3 += 4)
-    yield `p_${canonical2.slice(7, 7 + length3)}`;
+async function readAssetResource(library, uri) {
+  const match = /^kiln:\/\/assets\/([a-z][a-z0-9_-]{0,79})\/([a-z][a-z0-9_-]{0,79})\/([a-z][a-z0-9_-]{0,79})\/(asset\.glb|source\.kiln\.js|preview\.png|manifest\.json|editable\.zip)$/.exec(uri);
+  if (!match)
+    throw new Error("Unknown asset resource");
+  const collection = match[1];
+  const asset2 = match[2];
+  const revision = match[3];
+  const name = match[4];
+  const record5 = await library.read(collection, asset2, revision);
+  const bytes = name === "editable.zip" ? encodeAssetBundle([record5]) : name === "manifest.json" ? new TextEncoder().encode(JSON.stringify(record5.manifest, null, 2)) : record5.files[name];
+  if (!bytes)
+    throw new Error("Asset file unavailable");
+  return { bytes, mimeType: assetMime(name), name };
 }
-async function programReference(code) {
-  const bytes = new TextEncoder().encode(code);
-  if (bytes.length > MAX_PROGRAM_BYTES)
-    throw new Error("Program exceeds the 1 MiB source limit.");
-  if (new TextDecoder("utf-8", { ignoreBOM: true }).decode(bytes) !== code)
-    throw new Error("Program must be valid Unicode.");
-  const hash = new Uint8Array(await crypto.subtle.digest("SHA-256", bytes));
-  return `sha256:${Array.from(hash, (b) => b.toString(16).padStart(2, "0")).join("")}`;
-}
+var init_assets_resources = __esm(() => {
+  init_assets();
+});
 
-class MemoryProgramStore {
-  maxBytes;
-  programs = new Map;
-  handles = new Map;
-  constructor(maxBytes = 64 * 1024 * 1024) {
-    this.maxBytes = maxBytes;
-  }
-  bytes = 0;
-  async put(code) {
-    const ref = await programReference(code);
-    if (!this.programs.has(ref)) {
-      const size = new TextEncoder().encode(code).length;
-      if (this.bytes + size > this.maxBytes)
-        throw new Error("Program store is full; export your work and start a new store.");
-      this.programs.set(ref, code);
-      this.bytes += size;
-    }
-    return ref;
-  }
-  async stats() {
+// src/asset-widget.ts
+var exports_asset_widget = {};
+__export(exports_asset_widget, {
+  readAssetWidgetHtml: () => readAssetWidgetHtml,
+  assetWidgetData: () => assetWidgetData
+});
+import { readFile as readFile5 } from "node:fs/promises";
+async function assetWidgetData(library, selector) {
+  const record5 = await library.read(selector.collection, selector.asset.assetId, selector.asset.revisionId);
+  if (Object.values(record5.files).reduce((sum, bytes) => sum + bytes.length, 0) > 16 * 1024 * 1024)
     return {
-      entries: this.programs.size,
-      bytes: this.bytes,
-      maxSourceBytes: MAX_PROGRAM_BYTES,
-      maxBytes: this.maxBytes,
-      eviction: "none"
+      kilnAsset: {
+        error: "This asset exceeds the 16 MiB chat preview limit. Open it with kiln view."
+      }
     };
-  }
-  async get(ref) {
-    assertProgramRef(ref);
-    const canonical2 = ref.startsWith("p_") ? this.handles.get(ref) : ref;
-    const code = canonical2 === undefined ? undefined : this.programs.get(canonical2);
-    if (code === undefined)
-      throw new Error(`Program not found: ${ref}. Import the source into this store again.`);
-    return code;
-  }
-  async shortRef(ref) {
-    await this.get(ref);
-    if (ref.startsWith("p_"))
-      return ref;
-    for (const handle of shortProgramRefCandidates(ref)) {
-      const owner = this.handles.get(handle);
-      if (owner === ref)
-        return handle;
-      if (owner === undefined) {
-        this.handles.set(handle, ref);
-        return handle;
-      }
-    }
-    throw new Error("Unable to register an immutable program handle.");
-  }
-}
-
-// src/program-store-node.ts
-class FileProgramStore {
-  directory;
-  constructor(directory) {
-    this.directory = directory;
-  }
-  async stats() {
-    let entries = 0;
-    let bytes = 0;
-    try {
-      for (const entry of await readdir(this.directory, { withFileTypes: true })) {
-        if (!entry.isFile() || !/^[a-f0-9]{64}\.js$/.test(entry.name))
-          continue;
-        try {
-          bytes += (await stat(join3(this.directory, entry.name))).size;
-          entries++;
-        } catch (error) {
-          if (error.code !== "ENOENT")
-            throw error;
-        }
-      }
-    } catch (error) {
-      if (error.code !== "ENOENT")
-        throw error;
-    }
-    return { entries, bytes, maxSourceBytes: MAX_PROGRAM_BYTES, eviction: "none" };
-  }
-  async get(ref) {
-    assertProgramRef(ref);
-    const canonical2 = ref.startsWith("p_") ? await this.readHandle(ref) : ref;
-    if (canonical2 === undefined)
-      throw this.notFound(ref);
-    const path = join3(this.directory, `${canonical2.slice(7)}.js`);
-    let code;
-    try {
-      if ((await stat(path)).size > MAX_PROGRAM_BYTES)
-        throw new Error("Stored program exceeds the 1 MiB source limit.");
-      code = await readFile2(path, "utf8");
-    } catch (error) {
-      if (error.code === "ENOENT")
-        throw this.notFound(ref);
-      throw error;
-    }
-    if (await programReference(code) !== canonical2)
-      throw new Error(`Program integrity check failed: ${ref}`);
-    return code;
-  }
-  notFound(ref) {
-    return new Error(`Program not found: ${ref}. Use the same KILN_PROGRAM_STORE or import the source again.`);
-  }
-  async readHandle(handle) {
-    const path = join3(this.directory, "refs", `${handle}.ref`);
-    try {
-      const info = await lstat(path);
-      if (!info.isFile() || info.size !== 71)
-        throw new Error(`Program handle integrity check failed: ${handle}`);
-      const canonical2 = await readFile2(path, "utf8");
-      if (!canonicalProgramRefPattern.test(canonical2) || !canonical2.slice(7).startsWith(handle.slice(2)))
-        throw new Error(`Program handle integrity check failed: ${handle}`);
-      return canonical2;
-    } catch (error) {
-      if (error.code === "ENOENT")
-        return;
-      throw error;
-    }
-  }
-  async shortRef(ref) {
-    await this.get(ref);
-    if (ref.startsWith("p_"))
-      return ref;
-    const directory = join3(this.directory, "refs");
-    await mkdir(directory, { recursive: true });
-    for (const handle of shortProgramRefCandidates(ref)) {
-      const owner = await this.readHandle(handle);
-      if (owner === ref)
-        return handle;
-      if (owner !== undefined)
-        continue;
-      const temporary = join3(directory, `.write-${randomUUID()}`);
-      await writeFile2(temporary, ref, { encoding: "utf8", flag: "wx", mode: 384 });
-      try {
-        try {
-          await link(temporary, join3(directory, `${handle}.ref`));
-          return handle;
-        } catch (error) {
-          if (error.code !== "EEXIST")
-            throw error;
-          if (await this.readHandle(handle) === ref)
-            return handle;
-        }
-      } finally {
-        await unlink(temporary);
-      }
-    }
-    throw new Error("Unable to register an immutable program handle.");
-  }
-  async put(code) {
-    const ref = await programReference(code);
-    await mkdir(this.directory, { recursive: true });
-    const target = join3(this.directory, `${ref.slice(7)}.js`);
-    const temporary = join3(this.directory, `.write-${randomUUID()}`);
-    await writeFile2(temporary, code, { encoding: "utf8", flag: "wx", mode: 384 });
-    try {
-      try {
-        await link(temporary, target);
-      } catch (error) {
-        if (error.code !== "EEXIST")
-          throw error;
-        await this.get(ref);
-      }
-    } finally {
-      await unlink(temporary);
-    }
-    return ref;
-  }
-}
-function localProgramStore() {
-  return new FileProgramStore(resolve(process.env["KILN_PROGRAM_STORE"] ?? ".kiln/programs"));
-}
-
-// src/build-cache.ts
-init_protocol();
-import { createHash as createHash7 } from "node:crypto";
-import * as acorn2 from "acorn";
-import * as walk2 from "acorn-walk";
-function sourceHasAmbientInputs(code) {
-  let ambient = false;
-  const property = (node) => !node.computed && node.property.type === "Identifier" ? node.property.name : node.computed && node.property.type === "Literal" && typeof node.property.value === "string" ? node.property.value : undefined;
-  try {
-    const ast = acorn2.parse(code, { ecmaVersion: "latest", sourceType: "script" });
-    walk2.ancestor(ast, {
-      Identifier(node, _state, ancestors) {
-        const parent = ancestors.at(-2);
-        if (["Date", "performance", "crypto"].includes(node.name))
-          ambient = true;
-        if (node.name === "Math") {
-          if (parent?.type !== "MemberExpression" || parent.object !== node)
-            ambient = true;
-          else {
-            const name = property(parent);
-            if (!name || name === "random")
-              ambient = true;
-          }
-        }
-      },
-      MemberExpression(node, _state, ancestors) {
-        if (node.object.type !== "Identifier" || node.object.name !== "THREE" || property(node) !== "MathUtils")
-          return;
-        const parent = ancestors.at(-2);
-        if (parent?.type !== "MemberExpression" || parent.object !== node) {
-          ambient = true;
-          return;
-        }
-        const name = property(parent);
-        if (!name || ["randInt", "randFloat", "randFloatSpread", "seededRandom", "generateUUID"].includes(name))
-          ambient = true;
-      }
-    });
-  } catch {
-    return true;
-  }
-  return ambient;
-}
-function copy(result) {
-  return { ...structuredClone(result), glb: Buffer.from(result.glb) };
-}
-
-class MemoryBuildCache {
-  maxBytes;
-  entries = new Map;
-  bytes = 0;
-  constructor(maxBytes = 64 * 1024 * 1024) {
-    this.maxBytes = maxBytes;
-    if (!Number.isSafeInteger(maxBytes) || maxBytes < 0)
-      throw new Error("Build cache size must be a nonnegative integer.");
-  }
-  async get(key) {
-    const entry = this.entries.get(key);
-    if (!entry)
-      return;
-    this.entries.delete(key);
-    this.entries.set(key, entry);
-    return copy(entry.result);
-  }
-  async put(key, result) {
-    const { glb, ...metadata } = result;
-    const size = glb.byteLength + Buffer.byteLength(JSON.stringify(metadata));
-    if (size > this.maxBytes)
-      return;
-    const old = this.entries.get(key);
-    if (old) {
-      this.bytes -= old.bytes;
-      this.entries.delete(key);
-    }
-    while (this.bytes + size > this.maxBytes) {
-      const first = this.entries.keys().next().value;
-      if (first === undefined)
-        break;
-      this.bytes -= this.entries.get(first).bytes;
-      this.entries.delete(first);
-    }
-    this.entries.set(key, { result: copy(result), bytes: size });
-    this.bytes += size;
-  }
-  stats() {
-    return { entries: this.entries.size, bytes: this.bytes, maxBytes: this.maxBytes };
-  }
-}
-function canonical2(value) {
-  if (value === undefined || value === null || typeof value === "string" || typeof value === "boolean")
-    return value;
-  if (typeof value === "number" && Number.isFinite(value))
-    return value;
-  if (Array.isArray(value))
-    return value.map(canonical2);
-  if (typeof value === "object")
-    return Object.fromEntries(Object.entries(value).filter(([, v]) => v !== undefined).sort(([a], [b]) => a.localeCompare(b)).map(([key, v]) => [key, canonical2(v)]));
-  throw new Error("Build input contains a non-data dependency.");
-}
-function createCachedEvaluatorPort(evaluator, options) {
-  const pending = new Map;
   return {
-    async render(code, renderOptions, controls) {
-      const signal = controls?.signal;
-      const checkCancelled = () => {
-        if (signal?.aborted)
-          throw new EvaluatorPortError("CANCELLED");
-      };
-      checkCancelled();
-      const identity = options.identity();
-      if (!identity || renderOptions?.textureResolver || sourceHasAmbientInputs(code))
-        return evaluator.render(code, renderOptions, controls);
-      let serialized;
-      try {
-        renderOptions = structuredClone(renderOptions);
-        const { signal: _signal, ...dataControls } = controls ?? {};
-        const snapshotControls = structuredClone(dataControls);
-        controls = { ...snapshotControls, ...signal ? { signal } : {} };
-        serialized = JSON.stringify(canonical2({ identity, code, options: renderOptions ?? {}, controls: snapshotControls }));
-      } catch {
-        return evaluator.render(code, renderOptions, controls);
-      }
-      const key = `sha256:${createHash7("sha256").update(serialized).digest("hex")}`;
-      const cached = await options.cache.get(key).catch(() => {
-        return;
-      });
-      checkCancelled();
-      if (cached)
-        return { ...cached, buildCache: { key, hit: true } };
-      const existing = signal ? undefined : pending.get(key);
-      if (existing) {
-        const completed = await existing;
-        if (!completed.shareable)
-          return evaluator.render(code, renderOptions, controls);
-        return { ...copy(completed.result), buildCache: { key, hit: true } };
-      }
-      const build = (async () => {
-        const result = await evaluator.render(code, renderOptions, controls);
-        checkCancelled();
-        let snapshot;
-        try {
-          snapshot = copy(result);
-        } catch {
-          return { result, shareable: false };
-        }
-        await options.cache.put(key, snapshot).catch(() => {});
-        return { result: snapshot, shareable: true };
-      })();
-      if (!signal)
-        pending.set(key, build);
-      try {
-        const completed = await build;
-        checkCancelled();
-        return completed.shareable ? { ...copy(completed.result), buildCache: { key, hit: false } } : completed.result;
-      } finally {
-        if (!signal)
-          pending.delete(key);
-      }
+    kilnAsset: {
+      manifest: record5.manifest,
+      downloadUrls: selector.downloadUrls,
+      files: Object.fromEntries(Object.entries(record5.files).map(([name, bytes]) => [
+        name,
+        Buffer.from(bytes).toString("base64")
+      ]))
     }
   };
 }
-
-// src/build-cache-node.ts
-init_protocol();
-import { createHash as createHash8, randomUUID as randomUUID2 } from "node:crypto";
-import {
-  mkdir as mkdir2,
-  readFile as readFile3,
-  readdir as readdir2,
-  rename,
-  stat as stat2,
-  unlink as unlink2,
-  utimes,
-  writeFile as writeFile3
-} from "node:fs/promises";
-import { join as join4, resolve as resolve2 } from "node:path";
-var keyPattern = /^sha256:[a-f0-9]{64}$/;
-var filePattern = /^[a-f0-9]{64}\.json$/;
-var digest2 = (text2) => createHash8("sha256").update(text2).digest("hex");
-
-class FileBuildCache {
-  maxBytes;
-  directory;
-  constructor(directory, maxBytes = 128 * 1024 * 1024) {
-    this.maxBytes = maxBytes;
-    this.directory = resolve2(directory);
-    if (!Number.isSafeInteger(maxBytes) || maxBytes < 0 || maxBytes > 1024 * 1024 * 1024)
-      throw new Error("File build cache size must be 0..1 GiB.");
-  }
-  path(key) {
-    if (!keyPattern.test(key))
-      throw new Error("Invalid build cache key.");
-    return join4(this.directory, `${key.slice(7)}.json`);
-  }
-  async get(key) {
-    const path = this.path(key);
-    try {
-      const entry = await stat2(path);
-      if (entry.size > this.maxBytes || entry.size > 96 * 1024 * 1024)
-        return;
-      const envelope = JSON.parse(await readFile3(path, "utf8"));
-      if (envelope.version !== 1 || envelope.key !== key || typeof envelope.payload !== "string" || envelope.checksum !== digest2(envelope.payload))
-        return;
-      const decoded = decodeEvaluatorResultV1(envelope.payload, 64 * 1024 * 1024);
-      if (!decoded.ok)
-        return;
-      const now = new Date;
-      await utimes(path, now, now).catch(() => {});
-      return decoded.render;
-    } catch {
-      return;
-    }
-  }
-  async put(key, result) {
-    const path = this.path(key);
-    const payload = JSON.stringify(encodeRenderResultV1("cached-build", result));
-    const bytes = JSON.stringify({ version: 1, key, payload, checksum: digest2(payload) });
-    if (Buffer.byteLength(bytes) > Math.min(this.maxBytes, 96 * 1024 * 1024))
-      return;
-    await mkdir2(this.directory, { recursive: true });
-    const temporary = join4(this.directory, `.write-${randomUUID2()}`);
-    await writeFile3(temporary, bytes, { encoding: "utf8", flag: "wx", mode: 384 });
-    try {
-      await rename(temporary, path);
-    } finally {
-      await unlink2(temporary).catch(() => {});
-    }
-    await this.trim();
-  }
-  async trim() {
-    const entries = [];
-    for (const name of await readdir2(this.directory)) {
-      if (!filePattern.test(name))
-        continue;
-      const path = join4(this.directory, name);
-      try {
-        const item = await stat2(path);
-        entries.push({ path, size: item.size, used: item.mtimeMs });
-      } catch {}
-    }
-    let bytes = entries.reduce((sum, item) => sum + item.size, 0);
-    entries.sort((a, b) => a.used - b.used || a.path.localeCompare(b.path));
-    for (const entry of entries) {
-      if (bytes <= this.maxBytes)
-        break;
-      await unlink2(entry.path).catch(() => {});
-      bytes -= entry.size;
-    }
-  }
+async function readAssetWidgetHtml() {
+  return readFile5(new URL("../dist/viewer/chat.html", import.meta.url), "utf8");
 }
-
-// src/runtime-identity.ts
-import { createHash as createHash9 } from "node:crypto";
-import { readFile as readFile4, readdir as readdir3, realpath, stat as stat3 } from "node:fs/promises";
-import { createRequire as createRequire2 } from "node:module";
-import { dirname, join as join5, relative } from "node:path";
-var digest3 = (bytes) => createHash9("sha256").update(bytes).digest("hex");
-var compare = (a, b) => a < b ? -1 : a > b ? 1 : 0;
-async function installedRuntimeIdentity(root, limits = {}) {
-  let bytes = 0;
-  let files = 0;
-  const maxBytes = limits.maxBytes ?? 512 * 1024 * 1024;
-  const maxFiles = limits.maxFiles ?? 40000;
-  const manifest = async (directory) => JSON.parse(await readFile4(join5(directory, "package.json"), "utf8"));
-  let readers = 0;
-  const waiting = [];
-  const read = async (path) => {
-    if (readers >= 24)
-      await new Promise((resolve3) => waiting.push(resolve3));
-    else
-      readers++;
-    try {
-      const info = await stat3(path);
-      if (++files > maxFiles || bytes + info.size > maxBytes)
-        throw new Error("Installed runtime fingerprint exceeds its scan budget.");
-      bytes += info.size;
-      return await readFile4(path);
-    } finally {
-      const next = waiting.shift();
-      if (next)
-        next();
-      else
-        readers--;
-    }
-  };
-  try {
-    const pkg = await manifest(root);
-    if (pkg.name !== "@kiln/engine")
-      throw new Error("Not a Kiln installation.");
-    const build = JSON.parse(await readFile4(join5(root, "dist", "build.json"), "utf8"));
-    const worker = build.entries?.worker;
-    if (build.schemaVersion !== 1 || worker?.file !== "evaluator-worker.mjs" || !/^sha256:[a-f0-9]{64}$/.test(worker.identity))
-      throw new Error("No valid packaged worker identity.");
-    const workerHash = `sha256:${digest3(await read(join5(root, "dist", worker.file)))}`;
-    if (worker.bundleHash !== workerHash)
-      throw new Error("Packaged worker differs from its build manifest.");
-    const records = [];
-    const visited = new Map;
-    async function resolvePackage(parent, name) {
-      const require2 = createRequire2(join5(parent, "package.json"));
-      let found;
-      try {
-        found = require2.resolve(`${name}/package.json`);
-      } catch {
-        try {
-          found = require2.resolve(name);
-        } catch {
-          for (const modules of require2.resolve.paths(name) ?? []) {
-            const candidate = join5(modules, name);
-            try {
-              if ((await manifest(candidate)).name === name)
-                return await realpath(candidate);
-            } catch {}
-          }
-          throw new Error(`Cannot resolve installed dependency ${name}.`);
-        }
-      }
-      let directory = dirname(found);
-      for (;; ) {
-        try {
-          if ((await manifest(directory)).name === name)
-            return await realpath(directory);
-        } catch {}
-        const next = dirname(directory);
-        if (next === directory)
-          throw new Error(`Cannot identify installed dependency ${name}.`);
-        directory = next;
-      }
-    }
-    async function tree(directory, base) {
-      const entries = (await readdir3(directory, { withFileTypes: true })).sort((a, b) => compare(a.name, b.name));
-      return (await Promise.all(entries.map(async (entry) => {
-        if (entry.name === "node_modules" || entry.name === ".git")
-          return [];
-        const path = join5(directory, entry.name);
-        if (entry.isSymbolicLink())
-          throw new Error("Dependency contains an untracked internal symlink.");
-        if (entry.isDirectory())
-          return tree(path, base);
-        if (entry.isFile())
-          return [[relative(base, path).replaceAll("\\", "/"), digest3(await read(path))]];
-        throw new Error("Dependency contains a non-file runtime input.");
-      }))).flat();
-    }
-    async function visit(directory, path) {
-      const canonical3 = await realpath(directory);
-      const previous = visited.get(canonical3);
-      if (previous) {
-        records.push([path, `same-package:${previous}`]);
-        return;
-      }
-      visited.set(canonical3, path);
-      const metadata = await manifest(canonical3);
-      records.push([path, digest3(JSON.stringify(await tree(canonical3, canonical3)))]);
-      await dependencies(canonical3, metadata, path);
-    }
-    async function dependencies(directory, metadata, prefix) {
-      const names = [
-        ...new Set([
-          ...Object.keys(metadata.dependencies ?? {}),
-          ...Object.keys(metadata.optionalDependencies ?? {}),
-          ...Object.keys(metadata.peerDependencies ?? {})
-        ])
-      ].sort(compare);
-      for (const name of names) {
-        let child;
-        try {
-          child = await resolvePackage(directory, name);
-        } catch {
-          if (name in (metadata.optionalDependencies ?? {}) || metadata.peerDependenciesMeta?.[name]?.optional) {
-            records.push([`${prefix}/${name}`, "optional-absent"]);
-            continue;
-          }
-          throw new Error(`Cannot fingerprint missing installed dependency ${name}.`);
-        }
-        await visit(child, `${prefix}/${name}`);
-      }
-    }
-    await dependencies(root, { ...pkg, peerDependencies: {} }, "dependencies");
-    const inputs = {
-      version: 1,
-      engine: pkg.version,
-      workerHash,
-      build: worker.identity,
-      runtime: {
-        node: process.versions.node,
-        bun: process.versions.bun,
-        modules: process.versions.modules,
-        platform: process.platform,
-        arch: process.arch
-      },
-      dependencies: records
-    };
-    return { identity: `sha256:${digest3(JSON.stringify(inputs))}`, files, bytes };
-  } catch (error) {
-    return { reason: error instanceof Error ? error.message : String(error), files, bytes };
-  }
-}
-
-// src/local-runtime.ts
-import { dirname as dirname2, join as join6, resolve as resolve3 } from "node:path";
-import { fileURLToPath as fileURLToPath3 } from "node:url";
-var scope = 0;
-function integer2(env, name, fallback, min, max) {
-  const value = env[name] === undefined ? fallback : Number(env[name]);
-  if (!Number.isInteger(value) || value < min || value > max)
-    throw new Error(`${name} requires an integer from ${min} to ${max}.`);
-  return value;
-}
-function createLocalToolContext(base = {}, env = process.env) {
-  const geometryPolicy = base.geometryPolicy ?? env.KILN_GEOMETRY_POLICY ?? "warn";
-  if (!["warn", "strict"].includes(geometryPolicy))
-    throw new Error("KILN_GEOMETRY_POLICY must be warn or strict.");
-  const mode = resolveEvaluatorMode({
-    KILN_EVALUATOR_MODE: env.KILN_EVALUATOR_MODE ?? "subprocess"
-  });
-  const deadlineMs = integer2(env, "KILN_EVALUATOR_TIMEOUT_MS", 60000, 1, 120000);
-  const heapMb = integer2(env, "KILN_EVALUATOR_HEAP_MB", 512, 64, 4096);
-  if (mode === "subprocess" && process.versions.bun && env.KILN_EVALUATOR_HEAP_MB !== undefined) {
-    throw new Error("KILN_EVALUATOR_HEAP_MB requires the packaged Node runtime.");
-  }
-  if (mode !== "in-process" && ["observe", "off"].includes(env.KILN_QA_MODE ?? "")) {
-    throw new Error("KILN_QA_MODE overrides are not transported to the local worker. Remove the override or explicitly select trusted KILN_EVALUATOR_MODE=in-process.");
-  }
-  const optimize = ["auto", "palette", "full"].includes(env.KILN_BAKE_OPTIMIZE ?? "") ? env.KILN_BAKE_OPTIMIZE : "off";
-  const instance2 = ["off", "auto", "on"].includes(env.KILN_BAKE_INSTANCE ?? "") ? env.KILN_BAKE_INSTANCE : "auto";
-  const maxGlbBytes = 16 * 1024 * 1024;
-  const maxResponseBytes = 32 * 1024 * 1024;
-  const evaluatorPort = {
-    async render(code, options = {}, controls = {}) {
-      if (controls.signal?.aborted) {
-        const { EvaluatorPortError: EvaluatorPortError2 } = await Promise.resolve().then(() => (init_protocol(), exports_protocol));
-        throw new EvaluatorPortError2("CANCELLED");
-      }
-      if (options.geometryPolicy !== undefined && !["warn", "strict"].includes(options.geometryPolicy))
-        throw new Error("geometryPolicy must be warn or strict");
-      const resolved2 = {
-        optimize,
-        instance: instance2,
-        ...options,
-        geometryPolicy: geometryPolicy === "strict" ? "strict" : options.geometryPolicy ?? "warn"
-      };
-      if (mode === "in-process") {
-        const result = await renderGLBInProcess(code, resolved2);
-        if (controls.signal?.aborted) {
-          const { EvaluatorPortError: EvaluatorPortError2 } = await Promise.resolve().then(() => (init_protocol(), exports_protocol));
-          throw new EvaluatorPortError2("CANCELLED");
-        }
-        return result;
-      }
-      const limits = { deadlineMs, maxGlbBytes, maxResponseBytes, ...controls };
-      if (mode === "isolated")
-        return renderGLBViaIsolatedEvaluator(code, resolved2, limits);
-      return renderGLBViaSubprocess(code, resolved2, {
-        ...limits,
-        ...!process.versions.bun ? { maxHeapMb: heapMb } : {}
-      });
-    }
-  };
-  const localExecution = {
-    mode,
-    terminable: mode !== "in-process",
-    ...mode !== "in-process" ? { deadlineMs } : {},
-    ...mode === "subprocess" && !process.versions.bun ? { nodeHeapMb: heapMb } : {},
-    ...mode !== "in-process" ? { maxGlbBytes, maxResponseBytes } : {},
-    totalMemoryLimited: false,
-    cacheScope: "process"
-  };
-  return {
-    ...base,
-    geometryPolicy,
-    programStore: base.programStore ?? new FileProgramStore(resolve3(env.KILN_PROGRAM_STORE ?? ".kiln/programs")),
-    evaluatorPort,
-    buildCache: new MemoryBuildCache,
-    evaluatorCacheIdentity: `kiln-local-${process.pid}-${++scope}:${JSON.stringify({ mode, optimize, instance: instance2, geometryPolicy, qa: env.KILN_QA_MODE, deadlineMs, heapMb })}`,
-    localExecution
-  };
-}
-async function createPackagedLocalToolContext(base = {}, env = process.env, installationRoot = fileURLToPath3(new URL("../", import.meta.url))) {
-  const context = createLocalToolContext(base, env);
-  const managed = () => {
-    const identity2 = context.evaluatorCacheIdentity;
-    const cached = createCachedEvaluatorPort(context.evaluatorPort, {
-      cache: context.buildCache,
-      identity: () => typeof identity2 === "function" ? identity2() : identity2
-    });
-    context.evaluatorPort = {
-      render: (code, options, controls) => cached.render(code, {
-        ...options,
-        geometryPolicy: context.geometryPolicy === "strict" ? "strict" : options?.geometryPolicy ?? context.geometryPolicy
-      }, controls)
-    };
-    context.evaluatorCacheManaged = true;
-    return context;
-  };
-  const policy = env.KILN_BUILD_CACHE ?? "disk";
-  if (!["disk", "memory", "off"].includes(policy))
-    throw new Error("KILN_BUILD_CACHE must be disk, memory, or off.");
-  if (policy === "off" || base.cacheEvaluations === false) {
-    context.cacheEvaluations = false;
-    context.localExecution.cacheScope = "disabled";
-    return context;
-  }
-  if (policy === "memory")
-    return managed();
-  if (process.versions.bun || context.localExecution.mode !== "subprocess") {
-    context.localExecution.cacheReason = "Disk reuse requires the packaged Node subprocess evaluator; this host uses process memory.";
-    return managed();
-  }
-  const identity = await installedRuntimeIdentity(installationRoot);
-  if (!identity.identity) {
-    context.localExecution.cacheReason = identity.reason;
-    return managed();
-  }
-  const cacheBytes = integer2(env, "KILN_BUILD_CACHE_MB", 128, 0, 1024) * 1024 * 1024;
-  const store = context.programStore;
-  const directory = resolve3(env.KILN_BUILD_CACHE_DIR ?? join6(store instanceof FileProgramStore ? dirname2(store.directory) : ".kiln", "cache", "builds"));
-  context.buildCache = new FileBuildCache(directory, cacheBytes);
-  context.evaluatorCacheIdentity = `${identity.identity}:${JSON.stringify({
-    execution: context.localExecution,
-    optimize: env.KILN_BAKE_OPTIMIZE ?? "off",
-    instance: env.KILN_BAKE_INSTANCE ?? "auto",
-    qa: env.KILN_QA_MODE ?? "enforce",
-    geometryPolicy: context.geometryPolicy,
-    timezone: env.TZ
-  })}`;
-  context.localExecution = {
-    ...context.localExecution,
-    cacheScope: "disk",
-    cacheBytes,
-    runtimeIdentity: identity.identity
-  };
-  return managed();
-}
+var init_asset_widget = () => {};
 
 // src/tools/registry.ts
-init_capture_cache();
-import { z as z3 } from "zod";
-
-// src/tools/programs.ts
-import { z } from "zod";
-var refInput = z.string().regex(programRefPattern).describe("Returned p_ handle or full sha256 ref.");
-function withProgramReferences(def, store) {
-  if (!(def.inputSchema instanceof z.ZodObject))
-    throw new Error(`${def.name} must have an object input schema.`);
-  const inputSchema = def.inputSchema.extend({
-    code: z.string().optional().describe("New source. Supply code OR programRef."),
-    programRef: refInput.optional(),
-    ...def.name === "kiln_edit" ? {
-      includeCode: z.boolean().optional().describe("Return the full updated source. Defaults to false with programRef, true with code.")
-    } : {}
-  }).refine((input) => input.code !== undefined !== (input.programRef !== undefined), {
-    message: "Supply exactly one of code or programRef."
-  });
-  const summaries = {
-    kiln_validate: "Check program syntax and sandbox rules before building. Returns validation findings; use kiln_render to evaluate geometry and see the asset.",
-    kiln_render: "Build a program and return geometry metrics, exact part paths and images. Omit capture for six views; choose preset/cells for orbit grids or version kiln.capture.v1 plus shots for part-local framing, perspective and separate images. Check viewFidelity before judging materials. Failed builds return errors without an image.",
-    kiln_screenshot_animation: "Render sampled animation frames to check motion and attachments. Use shot for the shared camera controls, frameTimes for selected phases, and framing locked (default) or follow. The program must define animate(). Check viewFidelity before judging materials.",
-    kiln_view_interior: "Render roof-off floor-plan, dollhouse, and eye-level cutaway views. Optional versioned capture selects custom roof-off shots. Select a roof by nodeName or let Kiln resolve its role/name. Review roofsHidden and warnings for unresolved occlusion.",
-    kiln_inspect: "Inspect a part with context or isolation. Use legacy part/orbit controls or shot for exact paths, part-local axes and perspective. Use names from the source or render result; check viewFidelity before judging materials."
-  };
-  const description = def.name === "kiln_edit" ? "Apply exact-string replacements to a program revision and render the result (render:false skips images). Edits are ordered and atomic: missing or ambiguous matches fail without changing the base. Returns a new programRef, parentRef and diff; untouched text stays identical. Read anchors with kiln_source. Optional capture chooses the same cameras as kiln_render. Use includeCode only when full source is needed." : `${summaries[def.name] ?? def.description} Supply code once or reuse programRef from an earlier result. Returns programRef even for an invalid draft. kiln_source reads that revision.`;
-  return {
-    ...def,
-    inputSchema,
-    description,
-    run: async (input) => {
-      const args = inputSchema.parse(input);
-      const code = typeof args.code === "string" ? args.code : await store.get(args.programRef);
-      const parentRef = await retainProgram(store, code);
-      const output = await def.run({ ...args, code });
-      if (def.name !== "kiln_edit" || output.ok !== true || typeof output.code !== "string")
-        return { ...output, programRef: parentRef };
-      const programRef = await retainProgram(store, output.code);
-      const { code: updatedCode, ...rest } = output;
-      const includeCode = args.includeCode ?? args.code !== undefined;
-      const diff = typeof rest.diff === "string" ? rest.diff : "";
-      return {
-        ...rest,
-        programRef,
-        parentRef,
-        ...includeCode ? { code: updatedCode } : {
-          diff: diff.slice(0, 8000),
-          diffTruncated: diff.length > 8000
-        }
-      };
-    }
-  };
-}
-function createKilnSourceDef(store) {
-  const inputSchema = z.object({
-    programRef: refInput,
-    offset: z.number().int().min(0).default(0).describe("UTF-16 character offset; use nextOffset to continue."),
-    limit: z.number().int().min(1).max(16000).default(8000).describe("Maximum characters returned."),
-    query: z.string().min(1).max(1000).optional().describe("Find literal text at or after offset; return bounded surrounding source.")
-  });
-  return {
-    name: "kiln_source",
-    description: "Read a saved program revision without changing it. Returns exact source text in bounded pages, or searches for literal text with surrounding context. Copy edit anchors from code. Follow nextOffset for more; use matchOffset + 1 to find the next match. Offsets count UTF-16 characters, not bytes.",
-    inputSchema,
-    run: async (input) => {
-      const { programRef, offset, limit, query } = inputSchema.parse(input);
-      const source = await store.get(programRef);
-      const matchOffset = query ? source.indexOf(query, offset) : undefined;
-      const start = matchOffset !== undefined && matchOffset >= 0 ? Math.max(offset, matchOffset - Math.floor(limit / 4)) : Math.min(offset, source.length);
-      const code = matchOffset === -1 ? "" : source.slice(start, start + limit);
-      const end = start + code.length;
-      return {
-        programRef,
-        code,
-        offset: start,
-        nextOffset: matchOffset === -1 || end >= source.length ? null : end,
-        totalCharacters: source.length,
-        totalBytes: new TextEncoder().encode(source).length,
-        ...matchOffset !== undefined ? { matchOffset, found: matchOffset >= 0 } : {}
-      };
-    }
-  };
-}
-
-// src/tools/discovery.ts
-import { z as z2 } from "zod";
-
-// src/geometry-catalog.ts
-var geometryPrimitives = [
-  {
-    name: "copyGeometry",
-    signature: "copyGeometry(geometry: BufferGeometry)",
-    returns: "THREE.BufferGeometry",
-    category: "instancing",
-    description: "Returns an independent geometry with copied vertex buffers. Use before direct mutation of a cached primitive.",
-    example: "const editable = copyGeometry(boxGeo(1, 1, 1)); editable.translate(0, 0.5, 0);"
-  },
-  {
-    name: "copyMaterial",
-    signature: "copyMaterial(material: Material)",
-    returns: "THREE.Material (same subtype)",
-    category: "instancing",
-    description: "Copies material properties so edits do not change other parts. Referenced textures remain shared.",
-    example: "const red = copyMaterial(steel); red.color.set(0xaa2222);"
-  },
-  {
-    name: "meshGeo",
-    signature: "meshGeo({ positions: number[], indices?: number[], normals?: number[], uvs?: number[], tangents?: number[] })",
-    returns: "THREE.BufferGeometry",
-    category: "geometry",
-    description: "Builds an owned triangle mesh from flat numeric arrays. Validates finite values, attribute lengths and indices; computes normals if absent. Counterclockwise winding.",
-    example: "const triangle = meshGeo({ positions: [0,0,0, 1,0,0, 0,1,0], indices: [0,1,2] });"
-  },
-  {
-    name: "parametricSurface",
-    signature: "parametricSurface(sample: (u,v) => [x,y,z], opts?: { u?: [0,1], v?: [0,1], uSegments?: 24, vSegments?: 24, periodicU?: false, periodicV?: false, orientation?: 'uv'|'vu' })",
-    returns: "THREE.BufferGeometry",
-    category: "geometry",
-    description: "Samples an equation into an owned surface with UVs. Periodic endpoints must coincide; UV seams retain matching normals. A surface is not automatically a watertight solid.",
-    example: "const canopy = parametricSurface((u,v) => [u, 0.3*Math.sin(u*3)*Math.cos(v*2), v], { u: [-2,2], v: [-1,1] });"
-  },
-  {
-    name: "geometryDiagnostics",
-    signature: "geometryDiagnostics(geometry: BufferGeometry, tolerance?: 1e-6)",
-    returns: "{ vertices, triangles, boundaryEdges, nonManifoldEdges, orientationConflicts, degenerateTriangles, invalidIndices, nonFiniteVertices }",
-    category: "utility",
-    description: "Counts mesh topology problems after position-based seam matching. Open boundaries are valid for sheets; closed edges alone do not prove a self-intersection-free solid.",
-    example: "const topology = geometryDiagnostics(shell);"
-  },
-  {
-    name: "creaseNormals",
-    signature: "creaseNormals(geometry: BufferGeometry, opts?: { angle?: 60, tolerance?: number })",
-    returns: "THREE.BufferGeometry",
-    category: "mesh-ops",
-    description: "Returns owned geometry with angle-limited smooth normals, preserving UV corners. Angle is degrees. Invalidates tangents; use after shaping for sharp rims and smooth walls.",
-    example: "const shell = creaseNormals(cylinderGeo(1,1,2,32), { angle: 45 });"
-  },
-  {
-    name: "bend",
-    signature: "bend(geometry, { angle, frame?: { origin, rotation }, interval?: [minY,maxY], falloff?: t => weight })",
-    returns: "THREE.BufferGeometry",
-    category: "mesh-ops",
-    description: "Bends local +Y toward +X through angle degrees. Returns owned geometry and updated normals/bounds; preserves UVs, invalidates tangents. Frame rotation is Euler XYZ degrees.",
-    promptNotes: "Deformation interval uses local Y distances; outside vertices stay unchanged. Add enough segments before bending. Falloff returns 0..1; use it to avoid a discontinuity at a selected interval boundary.",
-    example: "const arch = bend(planeGeo(1,4,4,32), { angle: 90 });"
-  },
-  {
-    name: "twist",
-    signature: "twist(geometry, { angle, frame?: { origin, rotation }, interval?: [minY,maxY], falloff?: t => weight })",
-    returns: "THREE.BufferGeometry",
-    category: "mesh-ops",
-    description: "Rotates the cross-section progressively around local +Y, reaching angle degrees at the end. Returns owned geometry; frame rotation uses Euler XYZ degrees.",
-    example: "const spiral = twist(column, { angle: 120 });"
-  },
-  {
-    name: "taper",
-    signature: "taper(geometry, { startScale?: [1,1], endScale: [x,z], frame?: { origin, rotation }, interval?: [minY,maxY], falloff?: t => weight })",
-    returns: "THREE.BufferGeometry",
-    category: "mesh-ops",
-    description: "Scales local X/Z across the local Y interval using positive start/end scale pairs. Returns owned geometry; preserves UVs and invalidates tangents.",
-    example: "const narrowed = taper(column, { endScale: [0.4,0.7] });"
-  },
-  {
-    name: "displace",
-    signature: "displace(geometry, offset: ([x,y,z], t) => [dx,dy,dz], opts?: { frame?: { origin, rotation }, interval?: [minY,maxY], falloff?: t => weight })",
-    returns: "THREE.BufferGeometry",
-    category: "mesh-ops",
-    description: "Adds an authored displacement vector in the chosen local frame. Returns owned geometry; callback coordinates are local and t is normalized along the interval.",
-    example: "const rippled = displace(surface, ([x,y,z]) => [0, 0.1*Math.sin(x*8), 0]);"
-  },
-  {
-    name: "sweepProfile",
-    signature: "sweepProfile(profile: [x,z][], path: [x,y,z][], opts?: { cap?: true, closed?: false, up?: [x,y,z], twist?: 0, scale?: number | [x,z][] })",
-    returns: "THREE.BufferGeometry",
-    category: "curves",
-    description: "Sweeps a simple noncircular profile along polyline stations using transported frames. Supports total twist in degrees and per-station scales. Generates UVs and optional caps.",
-    promptNotes: "First version supports one simple profile without holes. Closed paths omit the repeated endpoint and require twist to be a multiple of 360. up sets the initial profile +Z direction and cannot parallel the path. Tight-turn warnings do not replace visual inspection for self-intersections.",
-    example: "const rail = sweepProfile([[-.1,-.2],[.1,-.2],[.1,.2],[-.1,.2]], [[0,0,0],[0,1,0],[1,2,0]]);"
-  },
-  {
-    name: "loftProfiles",
-    signature: "loftProfiles(sections: { profile: [x,z][], frame?: { origin, rotation } }[], opts?: { cap?: true })",
-    returns: "THREE.BufferGeometry",
-    category: "curves",
-    description: "Joins corresponding simple profiles in explicit local XZ planes. Each frame uses Euler XYZ degrees and local +Y along the loft. Profiles need equal point counts and corresponding vertices.",
-    promptNotes: "No holes or automatic profile correspondence. Opposite winding is normalized while preserving the first point. Caps close boundaries but do not prove the loft has no self-intersections.",
-    example: "const hull = loftProfiles([{ profile: wide }, { profile: narrow, frame: { origin: [0,2,0] } }]);"
-  },
-  {
-    name: "implicitSurface",
-    signature: "await implicitSurface(sample: ([x,y,z]) => signedValue, { bounds: { min, max }, edgeLength, maxCells?: 1000000, maxEvaluations?: 8000000, level?: 0, tolerance?: -1, smooth?: true })",
-    returns: "Promise<THREE.BufferGeometry>",
-    category: "geometry",
-    description: "Experimental positive-inside implicit field sampled into a solid mesh. Requires explicit bounds and resolution; checks grid size and actual evaluation count. Output has no UVs.",
-    promptNotes: "Use async build and await. Smaller edgeLength increases cost sharply. This helper cannot stop a callback that never returns; the host evaluator process provides that boundary. Thin features and geometric accuracy require inspection.",
-    example: "const blob = await implicitSurface(([x,y,z]) => 1-Math.hypot(x,y,z), { bounds: { min: [-1.2,-1.2,-1.2], max: [1.2,1.2,1.2] }, edgeLength: 0.15 });"
-  }
-];
-
-// src/list-primitives.ts
-var PRIMITIVES = [
-  ...geometryPrimitives,
-  {
-    name: "createRoot",
-    signature: "createRoot(name: string)",
-    returns: "THREE.Object3D",
-    category: "structure",
-    description: "Creates the root Object3D for an asset. Call first in build().",
-    example: "const root = createRoot('FuelDrum');"
-  },
-  {
-    name: "createPivot",
-    signature: "createPivot(name: string, position?: [x, y, z], parent?: Object3D)",
-    returns: "THREE.Object3D (prefixed `Joint_`)",
-    category: "structure",
-    description: "Creates an empty pivot node for skeletal animation. Name is auto-prefixed with `Joint_`.",
-    example: "const hip = createPivot('Hip', [0, 1, 0], root);"
-  },
-  {
-    name: "createJointChain",
-    signature: "createJointChain(name, segments: { role, offset, aliases?, side?, localForwardAxis?, localBendAxis?, endEffector?, contact? }[], opts?: { parent?, parentRole? })",
-    returns: "{ root, end, nodes, byRole, descriptors }",
-    category: "structure",
-    description: "Creates one body-plan-neutral deterministic Joint_* chain with explicit parent edges, rest frames, local axes, end effectors, contacts, and semantic metadata.",
-    example: "const leg = createJointChain('LegL', [{ role: 'hip.left', offset: [0, 1, -0.2], side: 'left' }, { role: 'knee.left', offset: [0, -0.5, 0], side: 'left' }, { role: 'ankle.left', offset: [0, -0.5, 0], side: 'left', endEffector: true, contact: true }], { parent: root });",
-    promptNotes: "Use only the resolved body-plan graph. Offsets are local to the previous joint; contact end effectors must land at world Y=0."
-  },
-  {
-    name: "createVehicleFrame",
-    signature: "createVehicleFrame(name, opts?: { chassis?, axles?, seats?, contacts?, steering?, propulsion?, parent? })",
-    returns: "{ root, chassis, axles, seats, contacts, steering, propulsion }",
-    category: "structure",
-    description: "Creates a canonical +X-forward/+Y-up/+Z-right vehicle frame with typed semantic sockets for chassis, support, steering, and propulsion.",
-    example: "const frame = createVehicleFrame('CarFrame', { axles: [{ id: 'front', position: [1.2, 0.45, 0] }, { id: 'rear', position: [-1.2, 0.45, 0] }], parent: root });",
-    promptNotes: "Generated vehicles keep +X as front. Boats and other non-wheeled subtypes use declared support/propulsion sockets, not wheel rules."
-  },
-  {
-    name: "createWheelGeometrySet",
-    signature: "createWheelGeometrySet(radius: number, width: number)",
-    returns: "{ tire, rim, hub } shared THREE.BufferGeometry set",
-    category: "instancing",
-    description: "Creates one reusable +Z-axle tire/rim/hub geometry set for instanced wheel assemblies.",
-    example: "const wheelGeo = createWheelGeometrySet(0.45, 0.22);"
-  },
-  {
-    name: "createWheelAssembly",
-    signature: "createWheelAssembly(name, { tire, rim, hub? }, { radius, width, side, index, position?, rimRadius?, hubRadius?, steering?, loadBearing?, geometries?, parent? })",
-    returns: "{ root, steeringPivot?, spinPivot, tire, rim, hub, contact, radius, width, side, index, spinAxis }",
-    category: "structure",
-    description: "Creates one axle-centered wheel pivot containing concentric tire/rim/hub roles, a contact marker, +Z spin frame, and optional steering pivot.",
-    example: "createWheelAssembly('FrontLeft', { tire: rubber, rim: metal }, { radius: 0.45, width: 0.22, side: 'left', index: 'front', position: [1.2, 0.45, -0.9], steering: true, geometries: wheelGeo, parent: frame.root });",
-    promptNotes: "Keep tire, rim, and hub descendants concentric at the axle pivot. Reuse one geometry set across matching wheels."
-  },
-  {
-    name: "createPart",
-    signature: "createPart(name, geometry, material, opts?: { position, rotation: [xDeg, yDeg, zDeg], scale, pivot, parent })",
-    returns: "THREE.Object3D (mesh or wrapping pivot)",
-    category: "structure",
-    description: "Creates a mesh, optionally wrapped in a pivot, and attaches it to `opts.parent`. `rotation` is in DEGREES (like rotationTrack), NOT radians: [0, 0, 90] is a quarter turn; [0, 0, 1.57] is a no-op.",
-    example: "createPart('Barrel', cylinderGeo(0.1, 0.1, 1), gameMaterial(0x556b2f), { position: [0, 0.5, 0], rotation: [0, 0, 90], parent: root });",
-    promptNotes: "AUTO-ADDS to opts.parent. NEVER call parent.add(createPart(...)) — pass { parent } instead. rotation is DEGREES — writing radians (e.g. 0.785 or Math.PI/4) silently produces ~zero rotation."
-  },
-  {
-    name: "beamBetween",
-    signature: "beamBetween(name, start: [x,y,z], end: [x,y,z], radius, material, opts?: { segments, parent })",
-    returns: "THREE.Object3D (prefixed `Mesh_`)",
-    category: "structure",
-    description: "Creates a cylindrical rail/strut exactly between two endpoints. Use for braces, gun barrels, skid struts, cables, and scaffolding.",
-    example: "beamBetween('SkidBraceA', [0.8, 0.3, 0.7], [0.8, 1.0, 0.45], 0.025, black, { parent: root });"
-  },
-  {
-    name: "snapTo",
-    signature: "snapTo(part: Object3D, host: Object3D, opts?: { axis?: 'x'|'y'|'z', overlap?: 0.02 })",
-    returns: "THREE.Object3D (the part, for chaining)",
-    category: "structure",
-    description: 'Translates `part` by the minimal vector that brings its bounding box into contact with `host` (plus a small overlap). The direct cure for a "Floating parts" warning — attach the part instead of eyeballing a corrective offset. No-op if they already touch.',
-    example: `const scope = createPart('Scope', cylinderXGeo(0.04, 0.04, 0.3), steel, { parent: root, position: [0.1, 0.32, 0] });
-snapTo(scope, receiver);`
-  },
-  {
-    name: "createLadder",
-    signature: "createLadder(name, { bottom, top, material, width?, rungCount?, railRadius?, rungRadius?, widthAxis?, parent? })",
-    returns: "{ leftRail: Object3D, rightRail: Object3D, rungs: Object3D[] }",
-    category: "structure",
-    description: "Builds two continuous rails plus evenly-spaced rungs. Use this instead of loose boxes for ladders.",
-    example: "createLadder('TowerLadder', { bottom: [0,0,0], top: [0,2.2,0], width: 0.45, rungCount: 7, material: steel, parent: root });"
-  },
-  {
-    name: "createWingPair",
-    signature: "createWingPair(name, material, { rootZ, span, rootChord, tipChord, sweep?, thickness?, dihedral?, rootX?, rootY?, parent? })",
-    returns: "{ right: Object3D, left: Object3D }",
-    category: "structure",
-    description: "Creates mirrored trapezoid aircraft wings with roots attached at +/-rootZ. Use for aircraft wings and helicopter stub wings.",
-    example: "createWingPair('MainWing', olive, { rootX: 0, rootY: 1.0, rootZ: 0.42, span: 2.4, rootChord: 0.9, tipChord: 0.35, sweep: 0.25, dihedral: 0.08, parent: root });"
-  },
-  {
-    name: "room",
-    signature: "room(name, material, { width?, depth?, height?, wallThickness?, floor?, floorThickness?, openings?: [{ wall: 'front'|'back'|'left'|'right', kind?: 'door'|'window', offset?, width?, height?, sill? }], parent? })",
-    returns: "{ root: Object3D, walls: { front, back, left, right }, floor: Object3D | null }",
-    category: "structure",
-    description: "Builds a HOLLOW, enterable room: four thin walls + a floor, human-scaled (defaults: 2.8m ceiling, a centered 1.1x2.1m front door so it is enterable by default). `front` faces +X; the floor sits on the ground. The keystone of an architecture asset — add a roof with createRoofPlanes and fixtures as separate parts.",
-    example: "const { root: hut } = room('Hut', wood, { width: 5, depth: 4, height: 2.8, openings: [{ wall: 'front', kind: 'door' }, { wall: 'right', kind: 'window' }], parent: root });",
-    promptNotes: "Use for any building the player enters. Do NOT model a building as a solid block — room() guarantees real interior space and a doorway gap. Pass openings to add windows / side doors."
-  },
-  {
-    name: "wallWithOpening",
-    signature: "wallWithOpening(name, material, { length, height, thickness, axis?: 'x'|'z', opening?: { kind?: 'door'|'window', offset?, width?, height?, sill? }, parent? })",
-    returns: "THREE.Object3D (wall container)",
-    category: "structure",
-    description: "A single wall panel with an optional real door/window cut, composed from solid box segments (side panels + lintel + window sill) — no CSG. Base at local Y=0, centered on the run axis. Use to compose custom building layouts or interior dividing walls beyond the default room().",
-    example: "wallWithOpening('Partition', plaster, { length: 4, height: 2.8, thickness: 0.12, axis: 'x', opening: { kind: 'door', offset: 0.5 }, parent: root });"
-  },
-  {
-    name: "createRoofPlanes",
-    signature: "createRoofPlanes(name, material, { width, depth, height, overhang?, ridgeAxis?: 'x'|'z', thickness?, parent? })",
-    returns: "{ root: Object3D, slopes: [Object3D, Object3D] }",
-    category: "structure",
-    description: "A pitched roof: two thin slopes meeting at one ridge and falling DOWN-AND-OUTWARD (opposite tilts — never mirrored the same way), footprint-matched with an eave overhang. Eave at local Y=0, ridge at Y=height, so position the group at Y=wallHeight. Returns a named group (e.g. `Roof`) the engine can lift to reveal the interior.",
-    example: `const { root: roof } = createRoofPlanes('Roof', shingle, { width: 5, depth: 4, height: 1.6, overhang: 0.4, ridgeAxis: 'x', parent: root });
-roof.position.y = 2.8;`,
-    promptNotes: "The two slopes must fall AWAY from each other from the ridge — createRoofPlanes does this for you. Drop it onto the walls (position.y = wall height)."
-  },
-  {
-    name: "createGableRoof",
-    signature: "createGableRoof(name, material, { spanX, spanZ, rise?, pitchDegrees?, overhang?, ridgeAxis?: 'x'|'z', thickness?, parent? })",
-    returns: "{ root, slopes: [Object3D, Object3D], faces: [RoofFaceFrame, RoofFaceFrame], rise, pitchDegrees }",
-    category: "structure",
-    description: "Explicit-axis gable roof using unambiguous footprint spans. Each face owns a rigid frame with ridge tangent, outward normal, downhill direction, ridge/eave endpoints, dimensions, and a live local-to-world transform.",
-    example: "const roof = createGableRoof('Roof', shingles, { spanX: 8, spanZ: 5, pitchDegrees: 35, overhang: 0.35, ridgeAxis: 'x', parent: root });",
-    promptNotes: "Prefer this over width/depth roof math. ridgeAxis is the direction of the ridge; roof panels run along each returned face downhill direction."
-  },
-  {
-    name: "createGableEndPanel",
-    signature: "createGableEndPanel(name, material, { span, rise, thickness?, ridgeAxis?: 'x'|'z', side?: 'positive'|'negative', openings?: [{ id?, offset?, bottom?, width, height }], parent? })",
-    returns: "{ root, geometry, openings }",
-    category: "structure",
-    description: "Exact thick triangular end closure for a gable roof, with optional rectangular openings cut from the geometry and semantic boundary metadata.",
-    example: "createGableEndPanel('FrontGable', siding, { span: 5, rise: 1.8, ridgeAxis: 'x', side: 'positive', parent: root });"
-  },
-  {
-    name: "createGableShell",
-    signature: "createGableShell(name, { wall, roof, floor?, gable? }, { spanX, spanZ, wallHeight?, rise?, pitchDegrees?, overhang?, ridgeAxis?: 'x'|'z', thickness?, wallThickness?, floorThickness?, closedEnds?, enterable?, openings?, gableOpenings?, parent? })",
-    returns: "{ root, walls, floor, roof, gables, openings }",
-    category: "structure",
-    description: "Closed-by-default, correct-by-construction gable building: hollow room, floor, two opposing roof slopes, two complete gable ends, and a real front doorway when enterable.",
-    example: "const house = createGableShell('House', { wall: plaster, roof: shingles }, { spanX: 8, spanZ: 5, wallHeight: 2.8, pitchDegrees: 35, ridgeAxis: 'x', parent: root });",
-    promptNotes: "Use for complete gable buildings. It stamps wall, floor, slope, gable, opening, adjacency, coverage, and separability semantics for deterministic QA and roof-off views."
-  },
-  {
-    name: "createRoofSurfaceLayout",
-    signature: "createRoofSurfaceLayout(name, material, { face, kind: 'panels'|'shingles'|'seams'|'corrugations', parent?, panelWidth?, rowHeight?, spacing?, thickness? })",
-    returns: "{ root, items: Object3D[] }",
-    category: "structure",
-    description: "Places roof-local panels, shingles, seams, or corrugations from a returned RoofFaceFrame, so repeated elements run ridge-to-eave for either ridge axis without manual Euler rotations.",
-    example: "for (const face of roof.faces) createRoofSurfaceLayout('Panels_' + face.side, metal, { face, kind: 'panels', parent: roof.root });",
-    promptNotes: "Always pass the face object returned by createGableRoof/createGableShell. Never infer the panel rotation from world axes."
-  },
-  {
-    name: "createStairs",
-    signature: "createStairs(name, material, { steps?, totalRise, totalRun, width, axis?: 'x'|'z', treadThickness?, riser?, parent? })",
-    returns: "{ root: Object3D, steps: Object3D[] }",
-    category: "structure",
-    description: "A straight flight of stairs: box treads (with optional risers) climbing totalRise over totalRun from local origin toward +axis. Use for porch/entry steps or to connect storeys in a multi-storey building.",
-    example: "createStairs('Porch', stone, { steps: 4, totalRise: 0.6, totalRun: 1.0, width: 1.4, axis: 'x', parent: root });"
-  },
-  {
-    name: "boxGeo",
-    signature: "boxGeo(width: number, height: number, depth: number)",
-    returns: "THREE.BoxGeometry",
-    category: "geometry",
-    description: "6-face box. 12 tris regardless of size. Cheapest geometry.",
-    example: "const geo = boxGeo(1, 0.5, 2);"
-  },
-  {
-    name: "sphereGeo",
-    signature: "sphereGeo(radius: number, widthSegments?: 8, heightSegments?: 6)",
-    returns: "THREE.SphereGeometry",
-    category: "geometry",
-    description: "UV sphere. Default 8x6 segments = 84 tris. Bump segments for smoother curves.",
-    example: "const geo = sphereGeo(0.5, 12, 8);"
-  },
-  {
-    name: "cylinderGeo",
-    signature: "cylinderGeo(radiusTop: number, radiusBottom: number, height: number, segments?: 8)",
-    returns: "THREE.CylinderGeometry",
-    category: "geometry",
-    description: "Y-axis cylinder. Use radiusTop != radiusBottom for cones / tapered pieces.",
-    example: "const geo = cylinderGeo(0.25, 0.25, 1, 12);"
-  },
-  {
-    name: "cylinderYGeo",
-    signature: "cylinderYGeo(radiusTop: number, radiusBottom: number, height: number, segments?: 8)",
-    returns: "THREE.CylinderGeometry",
-    category: "geometry",
-    description: "Alias for cylinderGeo — a Y-axis cylinder. Provided because the sandbox exposes cylinderXGeo / cylinderZGeo and the symmetric Y form is commonly reached for.",
-    example: "const geo = cylinderYGeo(0.25, 0.25, 1, 12);"
-  },
-  {
-    name: "cylinderXGeo",
-    signature: "cylinderXGeo(radiusTop: number, radiusBottom: number, length: number, segments?: 8)",
-    returns: "THREE.CylinderGeometry",
-    category: "geometry",
-    description: "Cylinder pre-rotated to run along +X/-X. Use for fuselages, cannons, barrels, axles, and forward-facing tubes.",
-    example: "const geo = cylinderXGeo(0.1, 0.1, 1.2, 12);"
-  },
-  {
-    name: "cylinderZGeo",
-    signature: "cylinderZGeo(radiusTop: number, radiusBottom: number, length: number, segments?: 8)",
-    returns: "THREE.CylinderGeometry",
-    category: "geometry",
-    description: "Cylinder pre-rotated to run along +Z/-Z. Use for side-mounted weapons, rails, crossbars, and pipes.",
-    example: "const geo = cylinderZGeo(0.08, 0.08, 0.9, 10);"
-  },
-  {
-    name: "cylinderOnAxis",
-    signature: "cylinderOnAxis(center: [x,y,z], normal: [x,y,z], radiusBottom: number, height: number, opts?: { radiusTop?, segments? })",
-    returns: "THREE.CylinderGeometry",
-    category: "geometry",
-    description: "Frame-first cylinder: position + axis specified directly, no post-hoc rotation. Use when the cylinder needs to point along a non-cardinal direction (struts inside CSG operands, antennas off a tilted surface). For cardinal axes prefer the terser cylinderXGeo / cylinderYGeo / cylinderZGeo helpers.",
-    example: "const strut = cylinderOnAxis([0.5, 0.7, 0], [1, 1, 0.3], 0.05, 0.9);"
-  },
-  {
-    name: "capsuleGeo",
-    signature: "capsuleGeo(radius: number, height: number, segments?: 6)",
-    returns: "THREE.CapsuleGeometry",
-    category: "geometry",
-    description: "Stadium shape (cylinder with hemispherical caps). Good for limbs.",
-    example: "const geo = capsuleGeo(0.1, 0.5, 6);"
-  },
-  {
-    name: "capsuleYGeo",
-    signature: "capsuleYGeo(radius: number, height: number, segments?: 6)",
-    returns: "THREE.CapsuleGeometry",
-    category: "geometry",
-    description: "Alias for capsuleGeo — a Y-axis capsule. Provided for symmetry with capsuleXGeo / capsuleZGeo.",
-    example: "const geo = capsuleYGeo(0.1, 0.5, 6);"
-  },
-  {
-    name: "capsuleXGeo",
-    signature: "capsuleXGeo(radius: number, length: number, segments?: 6)",
-    returns: "THREE.CapsuleGeometry",
-    category: "geometry",
-    description: "Capsule pre-rotated to run along +X/-X. Use for aircraft bodies, rounded vehicle hulls, and missiles.",
-    example: "const geo = capsuleXGeo(0.35, 2.4, 10);"
-  },
-  {
-    name: "capsuleZGeo",
-    signature: "capsuleZGeo(radius: number, length: number, segments?: 6)",
-    returns: "THREE.CapsuleGeometry",
-    category: "geometry",
-    description: "Capsule pre-rotated to run along +Z/-Z. Use for lateral pods, floats, and side tanks.",
-    example: "const geo = capsuleZGeo(0.18, 1.1, 8);"
-  },
-  {
-    name: "coneGeo",
-    signature: "coneGeo(radius: number, height: number, segments?: 8)",
-    returns: "THREE.ConeGeometry",
-    category: "geometry",
-    description: "Y-axis cone (pointed up). Use for spikes, roofs, projectiles.",
-    example: "const geo = coneGeo(0.3, 0.8, 8);"
-  },
-  {
-    name: "coneYGeo",
-    signature: "coneYGeo(radius: number, height: number, segments?: 8)",
-    returns: "THREE.ConeGeometry",
-    category: "geometry",
-    description: "Alias for coneGeo — a Y-axis cone (point +Y). Provided for symmetry with coneXGeo / coneZGeo.",
-    example: "const geo = coneYGeo(0.3, 0.8, 8);"
-  },
-  {
-    name: "coneXGeo",
-    signature: "coneXGeo(radius: number, length: number, segments?: 8)",
-    returns: "THREE.ConeGeometry",
-    category: "geometry",
-    description: "Cone pre-rotated so its point faces +X. Use for noses, rockets, shells, and forward-facing tips.",
-    example: "const geo = coneXGeo(0.18, 0.45, 12);"
-  },
-  {
-    name: "coneZGeo",
-    signature: "coneZGeo(radius: number, length: number, segments?: 8)",
-    returns: "THREE.ConeGeometry",
-    category: "geometry",
-    description: "Cone pre-rotated so its point faces +Z. Use for side-facing projectiles and tips.",
-    example: "const geo = coneZGeo(0.12, 0.35, 10);"
-  },
-  {
-    name: "taperConeGeo",
-    signature: "taperConeGeo(radiusBottom: number, radiusTop: number, height: number, axis?: 'x'|'y'|'z', segments?: 8)",
-    returns: "THREE.CylinderGeometry",
-    category: "geometry",
-    description: "Truncated cone (frustum) — exposes both bottom and top radius. radiusTop=0 matches coneGeo, radiusTop=radiusBottom matches cylinderGeo. Use for pylon caps, soda cans, lampshades, anything tapered that does not come to a point. axis selects orientation (default Y).",
-    example: "const cap = taperConeGeo(0.3, 0.18, 0.4);  // frustum"
-  },
-  {
-    name: "torusGeo",
-    signature: "torusGeo(radius: number, tube: number, radialSegments?: 8, tubularSegments?: 12)",
-    returns: "THREE.TorusGeometry",
-    category: "geometry",
-    description: "Donut shape. For rings, tyres, barrel ribs.",
-    example: "const geo = torusGeo(0.4, 0.04, 8, 16);"
-  },
-  {
-    name: "planeGeo",
-    signature: "planeGeo(width: number, height: number, widthSegments?: 1, heightSegments?: 1)",
-    returns: "THREE.PlaneGeometry",
-    category: "geometry",
-    description: "Flat quad for TEXTURED surfaces (ground, signs, walls with albedo maps). For solid-color decals like red stars, hull numbers, stamps, or window cutouts on no-texture assets use decalBox — a bare planeGeo without a texture will render as a disconnected 2-tri square and get flagged as a stray plane.",
-    example: "const geo = planeGeo(4, 4);"
-  },
-  {
-    name: "decalBox",
-    signature: "decalBox(width: number, height: number, depth?: 0.01)",
-    returns: "THREE.BoxGeometry",
-    category: "geometry",
-    description: "Thin box for solid-color surface decals: red stars, hull numbers, stamps, no-texture windows. Unlike planeGeo, has real depth so it visibly attaches to its host surface. Must be placed on a surface with position + rotation.",
-    example: `const star = decalBox(0.18, 0.18, 0.01);
-createPart('Mesh_StarPort', star, gameMaterial(0xc61f2a), { position: [0.4, 0.6, 0.41], parent: fuselage });`,
-    promptNotes: "Offset at least 0.01 outside the host surface to avoid z-fighting (a 0.8-wide hull has faces at z=±0.4, so place the decal at z=±0.41)."
-  },
-  {
-    name: "foliageCardGeo",
-    signature: "foliageCardGeo(opts?: { width?, height?, yPivot?: 0..1 })",
-    returns: "THREE.PlaneGeometry",
-    category: "geometry",
-    description: "Single-quad foliage card with a configurable Y pivot. yPivot=0 plants the quad on the ground. Pair with an alpha-tested material and a leaf/plant sprite.",
-    example: `const leaves = await materialRecipe('kiln.material.leaf.v1');
-const quad = foliageCardGeo({ width: 4, height: 6, yPivot: 0 });
-createPart('Mesh_Fern', quad, leaves, { parent: root });`
-  },
-  {
-    name: "crossedQuadsGeo",
-    signature: "crossedQuadsGeo(opts?: { width?, height?, planes?: 2 | 3, yPivot? })",
-    returns: "THREE.BufferGeometry",
-    category: "geometry",
-    description: "Cross-billboard bush primitive: 2 or 3 planes intersecting along the Y axis. Reads as a dense plant from any angle, cheaper than real geometry.",
-    example: `const leaves = await materialRecipe('kiln.material.leaf.v1');
-const bush = crossedQuadsGeo({ width: 2, height: 2, planes: 3 });
-createPart('Mesh_Bush', bush, leaves, { parent: root });`
-  },
-  {
-    name: "octaGridPlane",
-    signature: "octaGridPlane({ tilesX, tilesY, width?, height?, yPivot? })",
-    returns: "THREE.PlaneGeometry",
-    category: "geometry",
-    description: "Atlas-ready billboard quad. UVs are pre-scaled to cover one tile of a tilesX×tilesY atlas; the consumer shader adds per-instance tile offsets at draw time.",
-    example: "const card = octaGridPlane({ tilesX: 4, tilesY: 4, width: 6, height: 6 });"
-  },
-  {
-    name: "wingGeo",
-    signature: "wingGeo(opts?: { span, rootChord, tipChord, sweep, thickness, dihedral })",
-    returns: "THREE.BufferGeometry",
-    category: "geometry",
-    description: "Trapezoid wing panel. Local root edge is at Z=0, span extends toward +Z, positive sweep moves the tip aft along -X.",
-    example: "const geo = wingGeo({ span: 2.2, rootChord: 0.8, tipChord: 0.3, sweep: 0.25, dihedral: 0.08 });"
-  },
-  {
-    name: "gearGeo",
-    signature: "gearGeo(opts?: { teeth?: 12, rootRadius?: 0.8, tipRadius?: 1.0, boreRadius?: 0.2, height?: 0.3, toothWidthFrac?: 0.5 })",
-    returns: "THREE.BufferGeometry",
-    category: "geometry",
-    description: "Stylized gear with flat edges and an optional center bore; no CSG. Use boreRadius < rootRadius < tipRadius. Radii are absolute: an omitted rootRadius stays 0.8 when tipRadius changes. Set all three radii for small gears.",
-    example: `const g = gearGeo({ teeth: 28, rootRadius: 0.063, tipRadius: 0.075, boreRadius: 0.012, height: 0.024 });
-createPart('Gear', g, gameMaterial(0x909090, { metalness: 0.8 }), { parent: root });`
-  },
-  {
-    name: "bladeGeo",
-    signature: "bladeGeo(opts?: { length?: 1.5, baseWidth?: 0.1, thickness?: 0.015, tipLength?: 0.25, edgeBevel?: 0 })",
-    returns: "THREE.BufferGeometry",
-    category: "geometry",
-    description: "Parametric sword blade: rectangular base tapering to a point over tipLength. edgeBevel > 0 pinches the cross-section toward a diamond ridge.",
-    example: `const b = bladeGeo({ length: 1.6, baseWidth: 0.09, tipLength: 0.3, edgeBevel: 0.5 });
-createPart('Blade', b, steel, { position: [0, 0, 0], parent: root });`
-  },
-  {
-    name: "gameMaterial",
-    signature: "gameMaterial(color, opts?: { metalness, roughness, emissive, emissiveIntensity, flatShading })",
-    returns: "THREE.MeshStandardMaterial",
-    category: "material",
-    description: "Flat-shaded PBR material. Default for game-ready low-poly. Use for 95% of parts.",
-    example: "const mat = gameMaterial(0x8b7355, { roughness: 0.9 });"
-  },
-  {
-    name: "materialRecipe",
-    signature: "await materialRecipe(recipeId, overrides?: { baseColor?, roughness?, metalness?, opacity?, alphaCutoff?, doubleSided?, emissiveColor?, emissiveIntensity?, textureResources? })",
-    returns: "Promise<THREE.MeshStandardMaterial>",
-    category: "material",
-    description: "Resolves a versioned portable bark/leaf/wood/stone/rubber/painted-metal/cloth/skin/glass/emissive recipe to standard glTF PBR.",
-    example: "const bark = await materialRecipe('kiln.material.bark.v1', { baseColor: '#6b4328' });",
-    promptNotes: "Use only listed kiln.material.*.v1 IDs and approved kiln.texture.* resource IDs. Leaf is MASK, glass is BLEND, and host file paths are forbidden."
-  },
-  {
-    name: "compilePortableMaterialSpecV2",
-    signature: "await compilePortableMaterialSpecV2({ schemaVersion: 2, model: 'pbrMetallicRoughness', name?, baseColor?, roughness?, metalness?, emissive?, emissiveIntensity?, alphaMode?, alphaCutoff?, doubleSided?, textures?: { baseColor?, normal?, metallicRoughness?, emissive?, occlusion? } })",
-    returns: "Promise<THREE.MeshStandardMaterial>",
-    category: "material",
-    description: "Compiles the strict portable material contract. Texture refs are either typed procedural V2 specs or closed approved kiln.texture.* IDs; paths, URLs, raw textures, callbacks, and shader source are rejected.",
-    example: "const steel = await compilePortableMaterialSpecV2({ schemaVersion: 2, model: 'pbrMetallicRoughness', roughness: 0.45, metalness: 0.85, textures: { metallicRoughness: { kind: 'procedural', spec: { schemaVersion: 2, usage: 'metallicRoughness', size: 64, layers: [{ op: 'solid', color: 0x0080cc }] } } } });",
-    promptNotes: "Use metallicRoughness as one packed G=roughness/B=metalness map. Every procedural ref usage must match its slot; resource refs must be approved for that exact slot."
-  },
-  {
-    name: "basicMaterial",
-    signature: "basicMaterial(color, opts?: { transparent, opacity })",
-    returns: "THREE.MeshBasicMaterial",
-    category: "material",
-    description: "Unlit flat material. For UI / effects where lighting is baked in.",
-    example: "const mat = basicMaterial(0xffffff, { transparent: true, opacity: 0.5 });"
-  },
-  {
-    name: "glassMaterial",
-    signature: "glassMaterial(color, opts?: { opacity, roughness, metalness })",
-    returns: "THREE.MeshStandardMaterial",
-    category: "material",
-    description: "Semi-transparent double-sided material. Panels need ~0.05 offset to avoid z-fighting.",
-    example: "const mat = glassMaterial(0x66ccff, { opacity: 0.3 });"
-  },
-  {
-    name: "lambertMaterial",
-    signature: "lambertMaterial(color, opts?: { flatShading, emissive })",
-    returns: "THREE.MeshLambertMaterial",
-    category: "material",
-    description: "Cheaper than gameMaterial. No metalness/roughness. Use when PBR is overkill.",
-    example: "const mat = lambertMaterial(0x2a4d14, { flatShading: true });"
-  },
-  {
-    name: "rotationTrack",
-    signature: "rotationTrack(jointName: string, keyframes: Array<{ time, rotation: [xDeg, yDeg, zDeg] }>, interp?: 'LINEAR' | 'STEP')",
-    returns: "THREE.QuaternionKeyframeTrack",
-    category: "animation",
-    description: "Rotation track in degrees, auto-converted to quaternions. Joint name must include `Joint_` prefix.",
-    example: "rotationTrack('Joint_Lid', [{ time: 0, rotation: [0, 0, 0] }, { time: 1, rotation: [90, 0, 0] }]);"
-  },
-  {
-    name: "positionTrack",
-    signature: "positionTrack(jointName: string, keyframes: Array<{ time, position: [x, y, z] }>, interp?: 'LINEAR' | 'STEP')",
-    returns: "THREE.VectorKeyframeTrack",
-    category: "animation",
-    description: "Position track in world units. Always use `position:` not `value:` in keyframes.",
-    example: "positionTrack('Joint_Body', [{ time: 0, position: [0, 0, 0] }, { time: 1, position: [0, 0.1, 0] }]);"
-  },
-  {
-    name: "scaleTrack",
-    signature: "scaleTrack(jointName: string, keyframes: Array<{ time, scale: [x, y, z] }>, interp?: 'LINEAR' | 'STEP')",
-    returns: "THREE.VectorKeyframeTrack",
-    category: "animation",
-    description: "Uniform or per-axis scale track.",
-    example: "scaleTrack('Joint_Chest', [{ time: 0, scale: [1, 1, 1] }, { time: 1, scale: [1.1, 1.1, 1.1] }]);"
-  },
-  {
-    name: "createClip",
-    signature: "createClip(name: string, duration: number, tracks: KeyframeTrack[])",
-    returns: "THREE.AnimationClip",
-    category: "animation",
-    description: "Collects tracks into a named clip. Returned from animate().",
-    example: "return [createClip('Open', 1, [rotationTrack('Joint_Lid', [...])])];"
-  },
-  {
-    name: "idleBreathing",
-    signature: "idleBreathing(bodyJoint: string, duration?: 2, amount?: 0.02)",
-    returns: "THREE.AnimationClip",
-    category: "animation",
-    description: "Gentle Y-axis bob. For NPC idle states.",
-    example: "return [idleBreathing('Joint_Body')];"
-  },
-  {
-    name: "bobbingAnimation",
-    signature: "bobbingAnimation(rootName: string, duration?: 2, height?: 0.1)",
-    returns: "THREE.AnimationClip",
-    category: "animation",
-    description: "Floating / bobbing loop for pickups and effects.",
-    example: "return [bobbingAnimation('Joint_Root', 1.5, 0.08)];"
-  },
-  {
-    name: "spinAnimation",
-    signature: "spinAnimation(jointName: string, duration?: 2, axis?: 'x' | 'y' | 'z')",
-    returns: "THREE.AnimationClip",
-    category: "animation",
-    description: "360° rotation over `duration` around `axis`.",
-    example: "return [spinAnimation('Joint_Rotor', 0.5, 'y')];"
-  },
-  {
-    name: "cloneGeometry",
-    signature: "cloneGeometry(geo: BufferGeometry)",
-    returns: "THREE.BufferGeometry (same ref)",
-    category: "instancing",
-    description: "Deprecated name: returns the SAME geometry, without copying. Use copyGeometry for independent vertex edits, or pass the original geometry directly for intentional sharing.",
-    example: "const wheelGeo = cylinderGeo(0.4, 0.4, 0.2, 12);"
-  },
-  {
-    name: "cloneMaterial",
-    signature: "cloneMaterial(mat: Material)",
-    returns: "THREE.Material (same ref)",
-    category: "instancing",
-    description: "Deprecated name: returns the SAME material. Use copyMaterial for independent property edits, or pass the original for intentional sharing.",
-    example: "const rubberMat = gameMaterial(0x1a1a1a, { roughness: 0.95 });"
-  },
-  {
-    name: "createInstance",
-    signature: "createInstance(name, source, opts?: { position, rotation: [xDeg, yDeg, zDeg], scale, parent })",
-    returns: "THREE.Object3D",
-    category: "instancing",
-    description: "Creates a new mesh reusing an existing part's geometry + material at a new transform. Cheapest way to replicate wheels / bolts / fence posts / windows. `rotation` is in DEGREES, like createPart.",
-    example: `const wheelFL = createPart('WheelFL', wheelGeo, rubberMat, { position: [-0.8, 0.3, 1.2], parent: root });
-createInstance('WheelFR', wheelFL, { position: [0.8, 0.3, 1.2], parent: root });
-createInstance('WheelRL', wheelFL, { position: [-0.8, 0.3, -1.2], parent: root });
-createInstance('WheelRR', wheelFL, { position: [0.8, 0.3, -1.2], parent: root });`
-  },
-  {
-    name: "boolUnion",
-    signature: "await boolUnion(name: string, ...parts: Object3D[], opts?: { smooth?: false, preserveAttributes?: boolean })",
-    returns: "Promise<THREE.Mesh>",
-    category: "csg",
-    description: "Merges two or more parts into one watertight manifold mesh. Default flat shading (hard edges) — pass { smooth: true } as last arg for averaged normals on organic merges.",
-    example: `const body = new THREE.Mesh(boxGeo(2, 1, 1), steel);
-const turret = new THREE.Mesh(cylinderGeo(0.3, 0.3, 0.4, 16), steel);
-turret.position.y = 0.5;
-const hull = await boolUnion('Hull', body, turret);`
-  },
-  {
-    name: "boolDiff",
-    signature: "await boolDiff(name: string, body: Object3D, ...cutters: Object3D[], opts?: { smooth?: false, preserveAttributes?: boolean })",
-    returns: "Promise<THREE.Mesh>",
-    category: "csg",
-    description: "Subtracts cutters from a body (holes, button recesses, window slots). Default flat shading for sharp mechanical edges.",
-    example: `const body = new THREE.Mesh(cylinderGeo(1, 1, 0.3, 32), steel);
-const teeth = [...]; // 8 radially-arrayed box meshes
-const gear = await boolDiff('Gear', body, ...teeth);  // hard-edged`
-  },
-  {
-    name: "roundedBoxGeo",
-    signature: "await roundedBoxGeo(width: number, height: number, depth: number, radius: number, opts?: { style?: 'round' | 'chamfer', segments?: 12, smooth?: boolean })",
-    returns: "Promise<THREE.BufferGeometry>",
-    category: "csg",
-    description: "A box with all twelve edges rounded (or chamfered) at the EXACT outer size requested — roundedBoxGeo(1, 1, 1, 0.1) measures 1x1x1, it does not grow. Use it anywhere boxGeo reads too sharp: consoles, crates, appliances, handheld props, machined blocks.",
-    promptNotes: "Real objects almost never have perfectly sharp box edges, and a small radius is the single cheapest upgrade to how manufactured an asset looks. Prefer this over boxGeo for anything moulded, cast, or machined. Keep radius small relative to the box (5-10% of the smallest dimension); radius must be less than half the smallest dimension or the call throws. style: 'chamfer' reads as machined metal, 'round' as moulded plastic. This is async — build() must be async and the call must use await.",
-    example: `const geo = await roundedBoxGeo(1.2, 0.6, 0.8, 0.05);
-createPart('Console', geo, plastic, { position: [0, 0.3, 0], parent: root });`
-  },
-  {
-    name: "extrudeProfile",
-    signature: "await extrudeProfile(profile: [number, number][], opts?: { depth?: 1, holes?: [number, number][][], bevel?: 0, bevelStyle?: 'round' | 'chamfer', segments?: 12, twist?: 0, taper?: number | [number, number], divisions?: number, axis?: 'x' | 'y' | 'z', center?: true, smooth?: false })",
-    returns: "Promise<THREE.BufferGeometry>",
-    category: "csg",
-    description: "Sweeps a closed 2D outline into a watertight solid, with optional holes, corner rounding/chamfering, twist, and taper. The way to build any cross-section that is not a box or a cylinder: L-brackets, I-beams, gaskets, washers, star and gear plates, signage, extruded trim.",
-    promptNotes: "The bevel rounds the edges PARALLEL to the sweep axis (the profile corners) — the two flat caps stay sharp. For a box rounded on all twelve edges use roundedBoxGeo instead. Holes are subtracted, so their winding order does not matter. A bevel larger than half the outline's narrowest feature throws rather than silently returning an empty solid. Output is manifold, so it feeds straight into boolUnion / boolDiff / boolIntersect. Async — await it inside an async build().",
-    example: `// L-bracket, inner AND outer corners filleted
-const outline = [[0, 0], [2, 0], [2, 0.4], [0.4, 0.4], [0.4, 2], [0, 2]];
-const geo = await extrudeProfile(outline, { depth: 0.5, bevel: 0.06 });
-createPart('Bracket', geo, steel, { parent: root });`
-  },
-  {
-    name: "revolveProfile",
-    signature: "await revolveProfile(profile: [number, number][], opts?: { segments?: 24, angle?: 360, bevel?: 0, bevelStyle?: 'round' | 'chamfer', bevelSegments?: 12, axis?: 'x' | 'y' | 'z', smooth?: true })",
-    returns: "Promise<THREE.BufferGeometry>",
-    category: "csg",
-    description: "Revolves a closed 2D outline around an axis into a watertight SOLID, optionally rounding the profile corners first. Bottles, tanks, pressure vessels, wheels, turned wood, domes, buttons, pills.",
-    promptNotes: "Use this instead of lathe/revolveGeo whenever the result must survive a boolean or needs a rounded rim — lathe and revolveGeo build an open surface, this builds a closed solid. Profile convention matches lathe: x is distance from the axis, y is position along it, and only the x >= 0 side is used. Async — await it inside an async build().",
-    example: `// capsule tank with a rounded rim, then carve a port into it
-const profile = [[0, -0.5], [0.4, -0.5], [0.4, 0.5], [0, 0.5]];
-const body = await revolveProfile(profile, { bevel: 0.08, segments: 32 });
-const tank = await boolDiff('Tank', createPart('B', body, steel), portCutter);`
-  },
-  {
-    name: "circleProfile",
-    signature: "circleProfile(radius: number, segments?: 24, center?: [number, number])",
-    returns: "[number, number][]",
-    category: "csg",
-    description: "Builds a closed circular outline for extrudeProfile / revolveProfile, so you never hand-write the trigonometry. Synchronous.",
-    example: `const washer = await extrudeProfile(circleProfile(1), {
-  depth: 0.1,
-  holes: [circleProfile(0.4), circleProfile(0.1, 16, [0.7, 0])],
-});`
-  },
-  {
-    name: "boolIntersect",
-    signature: "await boolIntersect(name: string, a: Object3D, b: Object3D, opts?: { smooth?: false })",
-    returns: "Promise<THREE.Mesh>",
-    category: "csg",
-    description: "Keeps only the volume where both operands overlap. Default flat shading.",
-    example: "const lens = await boolIntersect('Lens', boxMesh, sphereMesh);"
-  },
-  {
-    name: "hull",
-    signature: "await hull(name: string, ...parts: Object3D[], opts?: { smooth?: true })",
-    returns: "Promise<THREE.Mesh>",
-    category: "csg",
-    description: "Tightest convex mesh enclosing all input points. Default smooth shading (rocks, collision volumes). Pass { smooth: false } for a faceted look.",
-    example: `const rockChunks = [...]; // scattered box meshes
-const rock = await hull('Rock', ...rockChunks);`
-  },
-  {
-    name: "arrayLinear",
-    signature: "arrayLinear(namePrefix, source, count, offset: [x,y,z], parent?)",
-    returns: "THREE.Object3D[]",
-    category: "arrays",
-    description: "Places N copies of `source` along a constant offset vector. Copies share geometry + material via createInstance.",
-    example: `const post = createPart('Post0', cylinderGeo(0.05,0.05,1.5,6), wood, { position: [0,0.75,0], parent: root });
-arrayLinear('Post', post, 10, [0.5, 0, 0], root);`
-  },
-  {
-    name: "arrayRadial",
-    signature: "arrayRadial(namePrefix, source, count, axis?: 'x'|'y'|'z', parent?)",
-    returns: "THREE.Object3D[]",
-    category: "arrays",
-    description: "Places N copies of `source` around the given axis. Source's local rotation is oriented outward. Perfect for gear teeth, radial bolts, circle of columns.",
-    example: `const bolt = createPart('Bolt0', cylinderGeo(0.02,0.02,0.1,6), steel, { position: [1,0,0], parent: root });
-arrayRadial('Bolt', bolt, 8, 'y', root);`
-  },
-  {
-    name: "mirror",
-    signature: "mirror(name, source, axis: 'x'|'y'|'z', parent?)",
-    returns: "THREE.Object3D",
-    category: "arrays",
-    description: "Reflects source across the plane whose normal is `axis`. Uses negative scale (winding flip handled by viewers).",
-    example: "mirror('WingR', wingL, 'x', root);"
-  },
-  {
-    name: "subdivide",
-    signature: "subdivide(geometry: BufferGeometry, iterations?: 1, opts?: { preserveUV?: boolean, split?: boolean, uvSmooth?: boolean, preserveEdges?: boolean, flatOnly?: boolean, weld?: boolean })",
-    returns: "THREE.BufferGeometry",
-    category: "mesh-ops",
-    description: "Loop subdivision returns new geometry; each iteration roughly quadruples triangles and smooths the surface. Use preserveUV:true for textured meshes. Legacy position-only welding discards UVs and reports that loss. This smooths shapes, not selected-edge beveling.",
-    example: "const smoothRock = subdivide(boxGeo(1, 1, 1), 2);"
-  },
-  {
-    name: "mergeVertices",
-    signature: "mergeVertices(geometry: BufferGeometry, opts?: { tolerance?: 1e-4, positionOnly?: boolean } | number)",
-    returns: "THREE.BufferGeometry",
-    category: "mesh-ops",
-    description: "Returns indexed geometry. Default welding preserves attribute seams, so a textured cube retains separate face corners. positionOnly:true welds coincident positions and discards other attributes; use it explicitly when changing topology and regenerate shading/UVs afterward.",
-    example: `const welded = mergeVertices(boxGeo(1, 1, 1), { positionOnly: true });
-const rock = displace(subdivide(welded, 2), ([x,y,z]) => [0.08*Math.sin(y*7+z*3), 0.04*Math.sin(x*9), 0]);`
-  },
-  {
-    name: "curveToMesh",
-    signature: "curveToMesh(points: [x,y,z][], radius, tubularSegs?: 32, radialSegs?: 8, closed?: false)",
-    returns: "THREE.BufferGeometry",
-    category: "curves",
-    description: "Sweeps a circular profile along a path. Equivalent to Blender's Curve to Mesh node with a circle profile. Use for pipes, cables, tubular frames.",
-    example: "const pipe = curveToMesh([[0,0,0],[0,1,0],[1,1,0],[1,2,0]], 0.1);"
-  },
-  {
-    name: "pipeAlongPath",
-    signature: "pipeAlongPath(points: [x,y,z][], radius: number, opts?: { bendRadius?: 0, closed?: false, tubularSegments?: 32, radialSegments?: 8 })",
-    returns: "THREE.BufferGeometry",
-    category: "curves",
-    description: "Path-driven swept circle with optional bend smoothing. Generalises beamBetween (point-to-point) and curveToMesh (raw spline) into one helper. bendRadius>0 inserts interpolated waypoints near interior corners so the spline reads as a rounded turn instead of pinching to the control point.",
-    example: "const cable = pipeAlongPath([[0, 0.5, 0], [1, 0.5, 0], [1, 0.5, 2]], 0.02, { bendRadius: 0.1 });"
-  },
-  {
-    name: "lathe",
-    signature: "lathe(profile: [x,y][], segments?: 12)",
-    returns: "THREE.BufferGeometry",
-    category: "curves",
-    description: "Surface of revolution. Spins a 2D profile around the Y axis. For bottles, vases, wheels, turned wood parts.",
-    example: "const vase = lathe([[0.1,0],[0.3,0.5],[0.2,1],[0.1,1.2]], 16);"
-  },
-  {
-    name: "revolveGeo",
-    signature: "revolveGeo(profile: [x,y][], opts?: { angle?: 2π, axis?: [x,y,z]=[0,1,0], segments?: 12 })",
-    returns: "THREE.BufferGeometry",
-    category: "curves",
-    description: "Surface of revolution with explicit axis + sweep angle. Generalises lathe — use it when you need a partial sweep (half-dome, 90° wedge) or revolution around a non-Y axis. Profile convention is identical to lathe: x = radial distance, y = position along the axis.",
-    example: `// Half-dome (180° sweep around +Y):
-const quarter = [...Array(8)].map((_, i) => { const t = (i/7)*Math.PI/2; return [Math.cos(t), Math.sin(t)] as [number, number]; });
-const dome = revolveGeo(quarter, { angle: Math.PI });`
-  },
-  {
-    name: "bezierCurve",
-    signature: "bezierCurve(controlPoints: [x,y,z][], samples?: 32)",
-    returns: "[x,y,z][]",
-    category: "curves",
-    description: "Samples a quadratic (3 ctrl pts) or cubic (4 ctrl pts) Bézier into a point list you can feed into curveToMesh.",
-    example: `const path = bezierCurve([[0,0,0],[1,2,0],[3,2,0],[4,0,0]], 24);
-const geo = curveToMesh(path, 0.1);`
-  },
-  {
-    name: "autoUnwrap",
-    signature: "await autoUnwrap(geometry: BufferGeometry, opts?: { resolution?: 1024, padding?: 2, useNormals?: false })",
-    returns: "Promise<THREE.BufferGeometry>",
-    category: "uv",
-    description: "xatlas-based UV atlas for ANY geometry (CSG output, subdivided, deformed). Output is a packed atlas with arbitrary per-chart rotation — use for non-tileable baked textures. For directional tileable textures on box/cylinder/plane primitives, prefer the shape-aware unwraps below.",
-    example: `const unwrapped = await autoUnwrap(someCsgResult, { resolution: 1024 });
-const mesh = new THREE.Mesh(unwrapped, bakedPbr);`
-  },
-  {
-    name: "boxUnwrap",
-    signature: "boxUnwrap(geometry: BufferGeometry)",
-    returns: "THREE.BufferGeometry",
-    category: "uv",
-    description: "Preserves BoxGeometry's built-in per-face UVs — every face maps [0,1] with consistent orientation. Use for crates/blocks with a tileable texture. Sync; no WASM cost.",
-    example: `const crate = boxUnwrap(boxGeo(1, 1, 1));
-const mesh = new THREE.Mesh(crate, pbrMaterial({ albedo: planksTex }));`
-  },
-  {
-    name: "cylinderUnwrap",
-    signature: "cylinderUnwrap(geometry: BufferGeometry)",
-    returns: "THREE.BufferGeometry",
-    category: "uv",
-    description: "Preserves CylinderGeometry's built-in UVs: u wraps around the axis (horizontal texture features ring the cylinder), v runs up the height. Caps use circle-in-square. Sync; no WASM cost.",
-    example: `const barrel = cylinderUnwrap(cylinderGeo(0.5, 0.5, 1.2, 24));
-const mesh = new THREE.Mesh(barrel, pbrMaterial({ albedo: bandsTex }));`
-  },
-  {
-    name: "planeUnwrap",
-    signature: "planeUnwrap(geometry: BufferGeometry)",
-    returns: "THREE.BufferGeometry",
-    category: "uv",
-    description: "Projects xy-extent of the bbox to [0,1]. Use for signs/decals/posters where you want ONE readable texture and no edge-face bleeding. Sync.",
-    example: `const sign = planeUnwrap(planeGeo(1, 0.6));
-const mesh = new THREE.Mesh(sign, pbrMaterial({ albedo: kilnTextTex }));`
-  },
-  {
-    name: "panelRemapV",
-    signature: "panelRemapV(geo, vScale=0.30, vOffset=0, uScale=1, uOffset=0)",
-    returns: "THREE.BufferGeometry",
-    category: "uv",
-    description: "Scales an existing UV attribute so a small mesh samples a sub-region of a SHARED texture. Replaces the broken texture.clone() pattern (Three.js Texture.clone() runs JSON.stringify on userData, mangling encoded PNG bytes — panelRemapV avoids that by remapping UVs on the geometry instead). Typical use: multi-zone albedo where v=0..0.30 is plain panel and v=0.30..1 has windows/markings — small parts call panelRemapV(unwrap(geo), 0.30) to sample only the clean strip.",
-    example: `const cowlGeo = panelRemapV(cylinderUnwrap(capsuleXGeo(0.45, 1.0)), 0.30);
-const cowl = new THREE.Mesh(cowlGeo, bodyMat); // SAME bodyMat as fuselage, no clone needed`
-  },
-  {
-    name: "loadApprovedTexture",
-    signature: "await loadApprovedTexture(resourceId)",
-    returns: "Promise<THREE.DataTexture>",
-    category: "textures",
-    description: "Loads one approved kiln.texture.* resource ID through the host-injected closed resolver. The registry fixes bytes, MIME, usage, dimensions, hash, and deadline; paths, URLs, byte arrays, resolver objects, hashes, and options are rejected.",
-    example: "const bark = await loadApprovedTexture('kiln.texture.bark-brown-01-albedo.v1');",
-    promptNotes: "Use only a concrete resource ID listed in material capabilities; never invent one. Prefer materialRecipe when a recipe already binds the family, or proceduralTexture V2 for authored surfaces. NEVER texture.clone() a loaded texture (clone() corrupts encoded bytes and breaks GLB export)."
-  },
-  {
-    name: "proceduralTexture",
-    signature: "proceduralTexture({ schemaVersion: 2, size?: 4..1024 pow2, usage?, name?, layers: [{ op: 'solid'|'checker'|'stripes'|'gradient'|'bricks'|'noise', ...params, blend?: 'normal'|'multiply'|'screen'|'overlay', opacity?: 0..1 }] })",
-    returns: "THREE.DataTexture (tiling, sRGB or linear per usage)",
-    category: "textures",
-    description: "Builds a tiling texture from a bounded layer stack — no image file needed. Layers composite bottom-first. Noise is seeded and tileable, so the same spec always produces the same bytes and a repeating material shows no seam. Baked to PNG and embedded in the GLB automatically.",
-    example: "const bark = proceduralTexture({ schemaVersion: 2, size: 256, usage: 'albedo', name: 'Bark', layers: [{ op: 'solid', color: 0x5a4632 }, { op: 'noise', colorA: 0x3d2f21, colorB: 0x7a6248, scale: 6, octaves: 4, blend: 'overlay' }] });",
-    promptNotes: "Sync — no await. Strict V2 JSON boundary: unknown/prototype keys, callbacks, paths, URLs, and shader source are rejected. Prefer this over approved resources for describable surfaces. Max 8 layers, power-of-two size up to 1024. Only the six listed ops exist."
-  },
-  {
-    name: "normalMapFromHeight",
-    signature: "normalMapFromHeight(source: THREE.Texture, { strength?: number, name?: string })",
-    returns: "THREE.DataTexture (linear normal map)",
-    category: "textures",
-    description: "Derives a tangent-space normal map from the source texture's brightness, treating it as height. The cheap way to get real PBR surface relief out of a procedural albedo. Wraps at the edges, so a tiling source gives a tiling normal map.",
-    example: `const bark = proceduralTexture({ schemaVersion: 2, usage: 'albedo', layers: [{ op: 'noise', colorA: 0x3d2f21, colorB: 0x7a6248, scale: 6, octaves: 4 }] });
-const mat = pbrMaterial({ albedo: bark, normal: normalMapFromHeight(bark, { strength: 4 }) });`,
-    promptNotes: "strength 1 is subtle, 4-8 reads clearly at normal viewing distance. Output is always linear data — never assign it to an albedo/emissive slot."
-  },
-  {
-    name: "pbrMaterial",
-    signature: "pbrMaterial({ albedo?, normal?, roughness?, metalness?, metallicRoughness?, emissive?, aoMap?, alphaMode?, alphaCutoff?, doubleSided? })",
-    returns: "THREE.MeshStandardMaterial",
-    category: "material",
-    description: "Portable glTF PBR material. Use an explicit packed metallicRoughness texture (G=roughness, B=metalness); separate data maps are rejected instead of silently dropping a channel. Supports OPAQUE/MASK/BLEND and double-sided output.",
-    example: `const wood = proceduralTexture({ schemaVersion: 2, usage: 'albedo', layers: [{ op: 'noise', colorA: 0x4f301c, colorB: 0x9a6b3e, scale: 8, octaves: 3, seed: 4 }] });
-const crate = pbrMaterial({ albedo: wood, roughness: 0.85, metalness: 0 });`
-  },
-  {
-    name: "foliageMaterial",
-    signature: "foliageMaterial(albedo, { alphaCutoff?, roughness?, doubleSided? })",
-    returns: "THREE.MeshStandardMaterial",
-    category: "material",
-    description: "Portable foliage material that defaults to glTF MASK, cutoff 0.5, rough nonmetal, and double-sided. Use an alpha-bearing albedo texture.",
-    example: "const mat = await materialRecipe('kiln.material.leaf.v1');"
-  },
-  {
-    name: "countTriangles",
-    signature: "countTriangles(root: Object3D)",
-    returns: "number",
-    category: "utility",
-    description: "Sums triangle count across every mesh in the subtree.",
-    example: "meta.tris = countTriangles(root);"
-  },
-  {
-    name: "countMaterials",
-    signature: "countMaterials(root: Object3D)",
-    returns: "number",
-    category: "utility",
-    description: "Unique material count (by reference) across the subtree.",
-    example: "const mats = countMaterials(root);"
-  },
-  {
-    name: "getJointNames",
-    signature: "getJointNames(root: Object3D)",
-    returns: "string[]",
-    category: "utility",
-    description: "All node names beginning with `Joint_`. Use to sanity-check animation targets.",
-    example: "const joints = getJointNames(root);"
-  },
-  {
-    name: "validateAsset",
-    signature: "validateAsset(root: Object3D, category: 'character' | 'prop' | 'vfx' | 'environment' | 'architecture' | 'vegetation' | 'vehicle')",
-    returns: "{ valid, errors, warnings }",
-    category: "utility",
-    description: "Checks geometry and material costs for the selected category. No default triangle limit; choose detail for the intended runtime and inspect measured draw calls.",
-    example: "const v = validateAsset(root, 'prop');"
-  }
-];
-function listPrimitives() {
-  return PRIMITIVES.map((p) => ({ ...p }));
-}
-
-// src/tools/discovery.ts
-init_protocol();
-init_capture_limits();
-var inputSchema = z2.object({
-  names: z2.array(z2.string().trim().min(1).max(80)).min(1).max(6).optional().describe("Get up to six exact helper signatures together, in this order. Use without other selectors."),
-  category: z2.string().trim().min(1).max(80).optional().describe("Category from the overview."),
-  name: z2.string().trim().min(1).max(80).optional().describe("Exact helper name; returns its signature and example."),
-  query: z2.string().trim().min(1).max(200).optional().describe("Words to find in helper names, descriptions and examples."),
-  overview: z2.boolean().optional().describe("Compact names by category. Default when no search or category is supplied."),
-  capabilities: z2.boolean().optional().describe("Return only runtime, source, geometry export and camera capabilities."),
-  offset: z2.number().int().min(0).max(1e4).optional(),
-  limit: z2.number().int().min(1).max(12).optional().describe("Detailed results per page; default 6, maximum 12.")
-}).strict();
-function createKilnDiscoveryDef(context) {
-  return {
-    name: "kiln_list_primitives",
-    description: "Discover Kiln helpers and capabilities. No arguments returns a compact overview. Use names for up to six exact signatures/examples together, name for one, query for a modeling operation, or category to browse; detailed results are paged. Custom THREE.BufferGeometry and ordinary functions are available inside the retained program.",
-    inputSchema,
-    run: async (value) => {
-      const input = inputSchema.parse(value);
-      if (input.names && Object.keys(input).some((key) => key !== "names")) {
-        const error = "Use names alone; category, query, paging and capability selectors are separate requests.";
-        return { primitives: [], total: 0, nextOffset: null, categories: [], error, text: error };
-      }
-      const capabilities = {
-        version: "kiln.capabilities.v1",
-        execution: context.localExecution ?? (context.evaluatorPort ? { mode: "host-injected", limits: "unspecified by host" } : context.evaluatorProfile === "evaluator-required" ? { mode: "host-required", available: false } : { mode: "trusted-local", terminable: false }),
-        source: {
-          ...input.capabilities && context.programStore?.stats ? { storage: await context.programStore.stats() } : {},
-          maxBytes: MAX_PROGRAM_BYTES,
-          transportEvaluatorMaxBytes: MAX_EVALUATOR_CODE_BYTES,
-          immutableRevisions: true,
-          boundedRead: true,
-          atomicEdit: true
-        },
-        geometry: {
-          attributes: ["position", "normal", "uv", "tangent"],
-          indexedTriangles: true,
-          materialGroups: true,
-          unsupported: ["vertex colors", "UV1+", "skinning", "morphs"],
-          strictExport: "geometryPolicy:strict on GLB export or host context; local KILN_GEOMETRY_POLICY=strict",
-          implicitSurfaces: "experimental"
-        },
-        camera: {
-          version: "kiln.capture.v1",
-          maxShots: 9,
-          cellSize: [128, 1024],
-          output: ["grid", "separate"],
-          projection: ["orthographic", "perspective"],
-          subjects: ["asset", "exact node path", "unambiguous name"],
-          visibility: ["context", "isolate"],
-          orbitFrames: ["world", "asset", "part"],
-          explicitFrames: ["world", "asset", "part", "local"],
-          framing: ["explicit", "bounds"],
-          limits: resolveCaptureLimits(context.captureLimits),
-          defaultViews: 6
-        },
-        materials: {
-          gpuPortConfigured: Boolean(context.viewRenderPort),
-          gpuRequired: Boolean(context.viewRenderRequired),
-          deliveredEvidence: "viewFidelity and per-cell cameraFidelity",
-          cpu: "geometry/base color"
-        }
-      };
-      const capabilityText = `Capabilities
-${JSON.stringify(capabilities, null, 2)}`;
-      if (input.capabilities)
-        return { capabilities, text: capabilityText };
-      const all = listPrimitives();
-      const categories = [...new Set(all.map((entry) => entry.category))].sort();
-      const category = input.category?.toLowerCase();
-      const missing = (error) => ({
-        primitives: [],
-        total: 0,
-        nextOffset: null,
-        categories,
-        error,
-        text: `${error}
-Categories: ${categories.join(", ")}. Use query to search or omit arguments for an overview.`
-      });
-      const detail = (entry) => `${entry.signature} -> ${entry.returns}
-${entry.description}
-e.g. ${entry.example}${entry.promptNotes ? `
-Note: ${entry.promptNotes}` : ""}`;
-      if (input.names) {
-        const requested = input.names.filter((name, index, names) => names.findIndex((candidate) => candidate.toLowerCase() === name.toLowerCase()) === index);
-        const selected = requested.map((name) => all.find((entry) => entry.name.toLowerCase() === name.toLowerCase()));
-        const unknown = requested.filter((_, index) => !selected[index]);
-        if (unknown.length)
-          return missing(`Unknown helpers: ${unknown.join(", ")}.`);
-        const primitives2 = selected.filter((entry) => Boolean(entry));
-        return {
-          primitives: primitives2,
-          total: primitives2.length,
-          nextOffset: null,
-          categories,
-          text: [`${primitives2.length} requested helpers.`, ...primitives2.map(detail)].join(`
-
-`)
-        };
-      }
-      if (category && !categories.some((entry) => entry === category))
-        return missing(`Unknown category "${input.category}".`);
-      const words = input.query?.toLowerCase().split(/\s+/) ?? [];
-      const matches = all.filter((entry) => {
-        if (category && entry.category !== category)
-          return false;
-        if (input.name && entry.name.toLowerCase() !== input.name.toLowerCase())
-          return false;
-        const searchable = `${entry.name} ${entry.signature} ${entry.description} ${entry.example} ${entry.promptNotes ?? ""}`.toLowerCase();
-        return words.every((word) => searchable.includes(word));
-      });
-      if (!matches.length)
-        return missing(`No helper matches ${input.name ? `name "${input.name}"` : `query "${input.query ?? input.category}"`}.`);
-      const overview = input.overview ?? !(input.name || input.query || input.category || input.offset || input.limit);
-      if (overview) {
-        const text3 = [
-          'Kiln helper overview. Use {names:["boxGeo","createPart"]} for up to six signatures/examples together, {name:"boxGeo"} for one, {query:"holes"} for an operation, or {category:"geometry"} to browse.',
-          ...categories.map((group) => `${group}: ${matches.filter((entry) => entry.category === group).map((entry) => entry.name).join(", ")}`).filter((line) => !line.endsWith(": ")),
-          "Custom geometry: THREE.BufferGeometry, indexed triangles and ordinary functions are available. GLB exports position, normal, UV0, tangent, indices and material groups. Query meshGeo, parametricSurface, sweepProfile, loftProfiles or twist for focused examples.",
-          "Source: send code once; reuse programRef for source reads, edits and all later view calls. Local CLI/MCP stores survive restarts; an injected memory store lasts for its registry instance.",
-          'Views: legacy capture uses preset/cells with azimuthDeg, elevationDeg, zoom (padding) and name. For exact part paths, part-relative orbit, explicit orthographic/perspective cameras or separate images, use capture:{version:"kiln.capture.v1",shots:[...]}. Choose one to nine useful views; omission keeps six. kiln_inspect also reports part frames and optional anchor measurements.',
-          `Execution: ${JSON.stringify(capabilities.execution)}. Source snapshots accept 1 MiB; subprocess/transport evaluation accepts 512 KiB. Use {capabilities:true} for the complete current host/export/camera contract.`,
-          `Materials: ${context.viewRenderPort ? "a GPU render port is configured; check delivered viewFidelity" : "CPU geometry/base-color views; material-faithful review requires a configured GPU port"}. Geometry, materials and draw calls have runtime costs; choose detail for the intended asset.`
-        ].join(`
-
-`);
-        return {
-          primitives: matches,
-          total: matches.length,
-          nextOffset: null,
-          categories,
-          capabilities,
-          text: text3
-        };
-      }
-      const offset = input.offset ?? 0;
-      const primitives = matches.slice(offset, offset + (input.limit ?? 6));
-      const nextOffset = offset + primitives.length < matches.length ? offset + primitives.length : null;
-      const text2 = [
-        `${matches.length} matching helpers. Showing ${primitives.length ? offset + 1 : 0}–${offset + primitives.length}.`,
-        ...primitives.map(detail),
-        ...nextOffset === null ? [] : [`More results: repeat this query with offset:${nextOffset}.`]
-      ].join(`
-
-`);
-      return { primitives, total: matches.length, nextOffset, categories, text: text2 };
-    },
-    text: (output) => output.text
-  };
-}
-
-// src/tools/registry.ts
-init_validation();
-init_render();
+import { z as z4 } from "zod";
 import * as THREE35 from "three";
-init_evaluator();
-init_material_resources();
-
-// src/edit-buffer.ts
-class KilnDraftBuffer {
-  buf;
-  edits = [];
-  constructor(seedCode = "") {
-    this.buf = seedCode;
-  }
-  get code() {
-    return this.buf;
-  }
-  get lineCount() {
-    return this.buf.split(`
-`).length;
-  }
-  view() {
-    return { code: this.buf, lines: this.lineCount };
-  }
-  draft(code) {
-    this.buf = code;
-    return { ok: true, bytes: this.buf.length, lines: this.lineCount };
-  }
-  apply(input) {
-    const { oldString, newString } = input;
-    const replaceAll = input.replaceAll ?? false;
-    if (oldString.length === 0) {
-      return { ok: false, error: "oldString must not be empty." };
-    }
-    if (oldString === newString) {
-      return {
-        ok: false,
-        error: "oldString and newString are identical - there is nothing to change."
-      };
-    }
-    const occurrences = this.buf.split(oldString).length - 1;
-    if (occurrences === 0) {
-      return {
-        ok: false,
-        error: "oldString was not found in the current code.",
-        hint: "Call kiln_view and copy an exact span (including whitespace and indentation) to edit."
-      };
-    }
-    if (occurrences > 1 && !replaceAll) {
-      return {
-        ok: false,
-        occurrences,
-        error: `oldString matched ${occurrences} times, so the edit is ambiguous.`,
-        hint: "Add surrounding context to make oldString unique, or set replaceAll:true to change every occurrence."
-      };
-    }
-    if (replaceAll) {
-      this.buf = this.buf.split(oldString).join(newString);
-    } else {
-      const at = this.buf.indexOf(oldString);
-      this.buf = this.buf.slice(0, at) + newString + this.buf.slice(at + oldString.length);
-    }
-    const applied = replaceAll ? occurrences : 1;
-    this.edits.push({ oldString, newString, replaceAll, occurrences: applied });
-    return { ok: true, occurrences: applied, newBytes: this.buf.length };
-  }
-}
-
-// src/agent/diff.ts
-function diffLines(a, b) {
-  const n = a.length;
-  const m = b.length;
-  const lcs = Array.from({ length: n + 1 }, () => new Array(m + 1).fill(0));
-  for (let i2 = n - 1;i2 >= 0; i2--) {
-    for (let j2 = m - 1;j2 >= 0; j2--) {
-      lcs[i2][j2] = a[i2] === b[j2] ? lcs[i2 + 1][j2 + 1] + 1 : Math.max(lcs[i2 + 1][j2], lcs[i2][j2 + 1]);
-    }
-  }
-  const ops = [];
-  let i = 0;
-  let j = 0;
-  while (i < n && j < m) {
-    if (a[i] === b[j]) {
-      ops.push({ tag: " ", line: a[i] });
-      i++;
-      j++;
-    } else if (lcs[i + 1][j] >= lcs[i][j + 1]) {
-      ops.push({ tag: "-", line: a[i] });
-      i++;
-    } else {
-      ops.push({ tag: "+", line: b[j] });
-      j++;
-    }
-  }
-  while (i < n)
-    ops.push({ tag: "-", line: a[i++] });
-  while (j < m)
-    ops.push({ tag: "+", line: b[j++] });
-  return ops;
-}
-function unifiedDiff(before, after, opts = {}) {
-  if (before === after)
-    return "";
-  const context = Math.max(0, opts.context ?? 3);
-  const a = before.split(`
-`);
-  const b = after.split(`
-`);
-  let ai = 0;
-  let bi = 0;
-  const located = diffLines(a, b).map((op) => {
-    const rec = { tag: op.tag, line: op.line, a: ai, b: bi };
-    if (op.tag === " ") {
-      ai++;
-      bi++;
-    } else if (op.tag === "-") {
-      ai++;
-    } else {
-      bi++;
-    }
-    return rec;
-  });
-  const changeIdx = located.map((o, k) => o.tag === " " ? -1 : k).filter((k) => k >= 0);
-  if (changeIdx.length === 0)
-    return "";
-  const groups = [];
-  let gStart = Math.max(0, changeIdx[0] - context);
-  let gEnd = Math.min(located.length - 1, changeIdx[0] + context);
-  for (let k = 1;k < changeIdx.length; k++) {
-    const ci = changeIdx[k];
-    if (ci - context <= gEnd + 1) {
-      gEnd = Math.min(located.length - 1, ci + context);
-    } else {
-      groups.push([gStart, gEnd]);
-      gStart = Math.max(0, ci - context);
-      gEnd = Math.min(located.length - 1, ci + context);
-    }
-  }
-  groups.push([gStart, gEnd]);
-  const out = [];
-  if (opts.fromLabel || opts.toLabel) {
-    out.push(`--- ${opts.fromLabel ?? "a"}`);
-    out.push(`+++ ${opts.toLabel ?? "b"}`);
-  }
-  for (const [s, e] of groups) {
-    const slice = located.slice(s, e + 1);
-    const first = slice[0];
-    let aLen = 0;
-    let bLen = 0;
-    for (const o of slice) {
-      if (o.tag === " ") {
-        aLen++;
-        bLen++;
-      } else if (o.tag === "-") {
-        aLen++;
-      } else {
-        bLen++;
-      }
-    }
-    const aStart = aLen > 0 ? first.a + 1 : first.a;
-    const bStart = bLen > 0 ? first.b + 1 : first.b;
-    out.push(`@@ -${aStart},${aLen} +${bStart},${bLen} @@`);
-    for (const o of slice)
-      out.push(`${o.tag}${o.line}`);
-  }
-  return out.join(`
-`);
-}
-
-// src/agent/view-render-timeout.ts
-var MIN_VIEW_RENDER_TIMEOUT_MS = 1;
-var MAX_VIEW_RENDER_TIMEOUT_MS = 120000;
-var WARM_UP_STATES = new Set(["unknown", "pending", "ready", "degraded"]);
-function boundedTimeout(value, fallback) {
-  if (Number.isNaN(value))
-    return fallback;
-  if (value === Number.POSITIVE_INFINITY)
-    return MAX_VIEW_RENDER_TIMEOUT_MS;
-  if (value === Number.NEGATIVE_INFINITY)
-    return MIN_VIEW_RENDER_TIMEOUT_MS;
-  return Math.min(MAX_VIEW_RENDER_TIMEOUT_MS, Math.max(MIN_VIEW_RENDER_TIMEOUT_MS, Math.floor(value)));
-}
-function optionalBudget(value) {
-  if (value === undefined || Number.isNaN(value))
-    return;
-  if (value === Number.POSITIVE_INFINITY)
-    return MAX_VIEW_RENDER_TIMEOUT_MS;
-  if (value === Number.NEGATIVE_INFINITY)
-    return 0;
-  return Math.min(MAX_VIEW_RENDER_TIMEOUT_MS, Math.max(0, Math.floor(value)));
-}
-function resolveViewRenderTimeoutMs(input) {
-  const defaultTimeoutMs = boundedTimeout(input.defaultTimeoutMs, MIN_VIEW_RENDER_TIMEOUT_MS);
-  const timeoutMs = boundedTimeout(input.timeoutMs ?? defaultTimeoutMs, defaultTimeoutMs);
-  let hostContext = input.context;
-  let hostContextAvailable = true;
-  if (input.contextProvider) {
-    try {
-      hostContext = input.contextProvider();
-    } catch {
-      hostContext = undefined;
-      hostContextAvailable = false;
-    }
-  }
-  const remainingGenerationBudgetMs = optionalBudget(hostContext?.remainingGenerationBudgetMs);
-  const rendererDeadlineMs = optionalBudget(hostContext?.rendererDeadlineMs);
-  const warmUpState = WARM_UP_STATES.has(hostContext?.warmUpState) ? hostContext?.warmUpState : "unknown";
-  const resolverContext = Object.freeze({
-    requestKind: input.requestKind,
-    defaultTimeoutMs,
-    timeoutMs,
-    warmUpState,
-    ...remainingGenerationBudgetMs !== undefined ? { remainingGenerationBudgetMs } : {},
-    ...rendererDeadlineMs !== undefined ? { rendererDeadlineMs } : {}
-  });
-  let resolved2 = timeoutMs;
-  if (input.resolver && hostContextAvailable) {
-    try {
-      resolved2 = boundedTimeout(input.resolver(resolverContext), timeoutMs);
-    } catch {
-      resolved2 = timeoutMs;
-    }
-  }
-  if (rendererDeadlineMs !== undefined)
-    resolved2 = Math.min(resolved2, rendererDeadlineMs);
-  if (remainingGenerationBudgetMs !== undefined) {
-    resolved2 = Math.min(resolved2, remainingGenerationBudgetMs);
-  }
-  return boundedTimeout(resolved2, timeoutMs);
-}
-
-// src/tools/registry.ts
-init_evidence_history();
 function proceduralTextureMaterialContract(rendered, context) {
   const required = [...new Set(context.requiredProceduralTextureUsages ?? [])];
   if (required.length === 0)
@@ -28119,7 +28346,6 @@ function missingProceduralTextureResult(rendered, context) {
     ...rendered.meta.qaReport ? { qaReport: rendered.meta.qaReport } : {}
   };
 }
-var DEFAULT_INLOOP_VIEW_RENDER_TIMEOUT_MS = 6000;
 function resolveInLoopViewRenderTimeoutMs(context, requestKind) {
   return resolveViewRenderTimeoutMs({
     requestKind,
@@ -28146,8 +28372,6 @@ async function loadEvaluatedReviewScene(code, context) {
   const scene = await loadGlbReviewScene2(rendered.glb);
   return { rendered, ...scene };
 }
-var viewEvidenceHistoryByContext = new WeakMap;
-var VIEW_EVIDENCE_GUIDANCE = " viewEvidence.current describes ONLY this request. lastFaithful is older hash-only evidence for reference, not reused pixels and not current verification.";
 function withViewEvidenceHistory(context) {
   if (context.viewEvidenceHistory)
     return context;
@@ -28308,67 +28532,6 @@ function derivativeReviewFidelity(receipts) {
     ...reasonCodes.length ? { reasonCodes } : {}
   };
 }
-var listPrimitivesInput = z3.object({
-  category: z3.string().optional().describe("Optional category filter: geometry, material, structure, animation, utility, instancing, csg, arrays, mesh-ops, curves, uv, textures.")
-});
-var validateInput = z3.object({
-  code: z3.string().describe("Kiln source code (defines `meta` + `build()`, optional `animate()`).")
-});
-var renderInput = z3.object({
-  code: z3.string().describe("Kiln source code to execute and render to an in-memory GLB.")
-});
-var screenshotInput = z3.object({
-  code: z3.string().describe("Kiln source code to execute and render to a six-view image grid.")
-});
-var legacyCaptureInput = z3.object({
-  preset: z3.enum(["1x1", "1x2", "2x1", "3x1", "2x2", "3x2", "3x3"]).optional().describe("Grid shape as COLSxROWS. Default 3x2. Choose fewer views for simple shapes, up to 3x3 for more angles."),
-  cells: z3.array(z3.object({
-    azimuthDeg: z3.number().describe("0 = front, 90 = right, 180 = back, 270 = left. Wraps."),
-    elevationDeg: z3.number().describe("0 = eye level, positive looks down, negative from below. Clamped to -89..89."),
-    zoom: z3.number().optional().describe("Padding multiplier around the asset bounds for this cell only. Omit for the default framing; below 1 crops in, above 1 pulls back."),
-    name: z3.string().optional().describe("Cell label. Auto-derived from the angles if omitted.")
-  })).optional().describe("One camera per cell, in row-major order. Omit to use the preset default cameras. Must not exceed the preset capacity (max 9 overall).")
-}).optional().describe("Optional. Choose the contact-sheet shape and cameras. Omit it entirely for the standard six-view 3x2 grid, which is the right default for most assets.");
-var cameraVec3Input = z3.tuple([z3.number(), z3.number(), z3.number()]);
-var cameraShotInput = z3.object({
-  name: z3.string().optional(),
-  subject: z3.object({ path: z3.string().optional(), name: z3.string().optional() }).strict().refine((v) => v.path === undefined !== (v.name === undefined), {
-    message: "Choose subject path OR exact name."
-  }).optional(),
-  visibility: z3.enum(["context", "isolate"]).optional(),
-  camera: z3.discriminatedUnion("type", [
-    z3.object({
-      type: z3.literal("orbit"),
-      azimuthDeg: z3.number().optional(),
-      elevationDeg: z3.number().optional(),
-      relativeTo: z3.enum(["world", "asset", "part"]).optional(),
-      padding: z3.number().positive().max(100).optional()
-    }).strict(),
-    z3.object({
-      type: z3.literal("explicit"),
-      projection: z3.enum(["orthographic", "perspective"]),
-      position: cameraVec3Input,
-      target: cameraVec3Input.optional(),
-      relativeTo: z3.enum(["world", "asset", "part", "local"]).optional(),
-      frame: z3.object({ origin: cameraVec3Input.optional(), rotation: cameraVec3Input.optional() }).strict().optional(),
-      framing: z3.enum(["explicit", "bounds"]).optional(),
-      padding: z3.number().positive().max(100).optional(),
-      targetOffset: cameraVec3Input.optional(),
-      up: cameraVec3Input.optional(),
-      halfHeight: z3.number().positive().optional(),
-      fovDeg: z3.number().positive().lt(180).optional(),
-      near: z3.number().positive().optional(),
-      far: z3.number().positive().optional()
-    }).strict()
-  ]).optional()
-}).strict();
-var advancedCaptureInput = z3.object({
-  version: z3.literal("kiln.capture.v1"),
-  shots: z3.array(cameraShotInput).min(1).max(9),
-  cols: z3.number().int().min(1).max(3).optional(),
-  size: z3.number().int().min(128).max(1024).optional(),
-  output: z3.enum(["grid", "separate"]).optional()
-}).strict();
 function taggedCaptureError(issue) {
   const input = issue.input;
   if (typeof input !== "object" || input === null || !("version" in input) || input.version !== "kiln.capture.v1")
@@ -28380,27 +28543,6 @@ function taggedCaptureError(issue) {
   const details = issues.slice(0, 6).map((problem) => `${problem.path.join(".") || "capture"}: ${problem.message.slice(0, 240)}`);
   return `Invalid kiln.capture.v1: ${details.join("; ")}${issues.length > 6 ? "; additional issues omitted" : ""}`;
 }
-var captureInput = z3.union([
-  advancedCaptureInput,
-  z3.strictObject(legacyCaptureInput.unwrap().shape, { error: taggedCaptureError })
-], { error: taggedCaptureError }).optional().describe("Use legacy preset/cells for an orbit sheet, or version kiln.capture.v1 with 1..9 shots for exact part framing, local axes, perspective and separate images. Omit for six default views.");
-var renderViewsInput = renderInput.extend({ capture: captureInput });
-var renderViewsBufferInput = renderViewsInput.omit({ code: true });
-var screenshotAnimationInput = z3.object({
-  shot: cameraShotInput.optional(),
-  frames: z3.number().int().min(2).max(6).optional(),
-  frameTimes: z3.array(z3.number().min(0).max(1)).min(1).max(9).optional().describe("Ordered phase fractions 0..1; mutually exclusive with frames."),
-  framing: z3.enum(["locked", "follow"]).optional(),
-  code: z3.string().describe("Kiln source code to execute; must define animate() returning the named clip."),
-  clip: z3.string().describe('The animation clip to view, by name (e.g. "walk", "attack"). Must be one your animate() returns.'),
-  camera: z3.string().optional().describe("Camera angle: right (default — side profile, best for leg swing + knee bend direction), front " + "(reveals sideways/lateral motion), back, left, top, or three-quarter."),
-  perFrame: z3.boolean().optional().describe("Return the frames as separate high-res images instead of one composite grid. Default false.")
-});
-var viewInteriorInput = z3.object({
-  capture: advancedCaptureInput.optional(),
-  code: z3.string().describe("Kiln source code to execute and render with the roof hidden."),
-  nodeName: z3.string().optional().describe("Override: lift the roof by exact node name instead of by role. Matches that node and its " + "children. Normally OMIT it — Kiln finds the roof from its semantic role (anything built " + 'with createRoofPlanes/createGableRoof), falling back to historical "Roof" naming.')
-});
 function runListPrimitives(input) {
   const all = listPrimitives();
   const category = input.category?.trim().toLowerCase();
@@ -28496,7 +28638,9 @@ async function runScreenshot(input, context) {
   try {
     const { renderGlbViewGrid: renderGlbViewGrid2 } = await Promise.resolve().then(() => (init_views(), exports_views));
     const { root, rendered } = await loadEvaluatedReviewScene(input.code, context);
-    const warnings = inspectSceneStructure(root, { category: trustedCategory(context) });
+    const warnings = inspectSceneStructure(root, {
+      category: trustedCategory(context)
+    });
     const grid = await renderGlbViewGrid2(rendered.glb);
     return {
       ok: true,
@@ -28605,7 +28749,9 @@ async function runRenderViews(input, context) {
     drawnBy ??= context.viewRenderPort ? { renderer: CPU_RASTER_RENDERER_ID2, degraded: false, neededPbr } : {
       renderer: CPU_RASTER_RENDERER_ID2,
       degraded: neededPbr,
-      ...neededPbr ? { degradedReason: "material-faithful view render port unavailable" } : {},
+      ...neededPbr ? {
+        degradedReason: "material-faithful view render port unavailable"
+      } : {},
       neededPbr
     };
     const hashInput = new Uint8Array(rendered.glb.byteLength);
@@ -28664,7 +28810,6 @@ async function runRenderViews(input, context) {
     };
   }
 }
-var KILN_RENDER_VIEWS_DESCRIPTION = "Build the current asset and return geometry metrics, exact part paths and images. Omit capture for six orthographic views. Choose preset/cells for a smaller orbit sheet, or version kiln.capture.v1 with shots for per-part framing, local axes, perspective and separate images. +X is forward, +Y up, +Z right. Review silhouette, attachments, proportion and ground contact. GPU PBR shading supports textured or metallic materials; a flat-shaded CPU render supports geometry review. Read viewFidelity; do not judge material fidelity from CPU views. Failed builds return errors without images." + VIEW_EVIDENCE_GUIDANCE;
 function createKilnRenderViewsDef(context = {}) {
   const statefulContext = withViewEvidenceHistory(context);
   return {
@@ -28676,12 +28821,13 @@ function createKilnRenderViewsDef(context = {}) {
     media: screenshotMedia
   };
 }
-var kilnRenderViewsDef = createKilnRenderViewsDef();
 async function runScreenshotAnimation(input, context) {
   try {
     const { renderClipAnimation: renderClipAnimation2 } = await Promise.resolve().then(() => (init_views(), exports_views));
     const { root, clips } = await loadEvaluatedReviewScene(input.code, context);
-    const warnings = inspectSceneStructure(root, { category: trustedCategory(context) });
+    const warnings = inspectSceneStructure(root, {
+      category: trustedCategory(context)
+    });
     const r = await renderClipAnimation2(root, clips, {
       clip: input.clip,
       ...input.shot ? { shot: input.shot } : {},
@@ -28743,9 +28889,11 @@ function screenshotAnimationMediaMulti(output) {
   if (!o || !Array.isArray(o.framesBase64) || o.framesBase64.length === 0)
     return;
   const { pngBase64: _png, framesBase64: _frames, ...json } = o;
-  return { pngs: o.framesBase64.map((b) => new Uint8Array(Buffer.from(b, "base64"))), json };
+  return {
+    pngs: o.framesBase64.map((b) => new Uint8Array(Buffer.from(b, "base64"))),
+    json
+  };
 }
-var KILN_SCREENSHOT_ANIMATION_DESCRIPTION = "SEE one animation clip move: renders the named clip as six frames sampled evenly from start to end (each labeled with its phase %) from one camera, as a 3x2 grid. Use this after animating ANY asset to " + "verify the MOTION — a static screenshot cannot show it — whether it is a character walking, a door or " + "chest lid swinging on its hinge, a wheel/gear/turret/windmill turning on its axle, a lever or hatch throwing, or a flag/frond/branch swaying. Read the side (right) view and confirm each moving part travels the way it should about its OWN real pivot, and that the static base stays put. For a character specifically: a walk swings the legs forward and back (not splayed sideways and not sliding the body sideways), knees bend backward at the joint (not forward like a bird), an attack swings down and FORWARD through the front (not behind the back), and a held weapon tracks the hand through the swing. args: clip (required, the clip name), camera (default right; also front/back/left/top/three-quarter), perFrame (optional, separate high-res frames). If unresolvedTracks comes back " + "non-empty the clip targets joints that do not exist (a name mismatch) and looks frozen — fix the " + "track names. Each frame is rendered from deterministic posed GLB bytes: GPU PBR when available, otherwise a GLB-native geometry-flat fallback. Read viewFidelity before judging materials; writes no files." + VIEW_EVIDENCE_GUIDANCE;
 function createKilnScreenshotAnimationDef(context = {}) {
   const statefulContext = withViewEvidenceHistory(context);
   return {
@@ -28757,7 +28905,6 @@ function createKilnScreenshotAnimationDef(context = {}) {
     mediaMulti: screenshotAnimationMediaMulti
   };
 }
-var kilnScreenshotAnimationDef = createKilnScreenshotAnimationDef();
 async function runViewInterior(input, context) {
   try {
     const { renderInteriorGrid: renderInteriorGrid2 } = await Promise.resolve().then(() => (init_views(), exports_views));
@@ -28768,7 +28915,9 @@ async function runViewInterior(input, context) {
       ...nodeName2 ? { nodeName: nodeName2 } : {},
       renderDerivativeCell: (cell) => renderDerivativeCell(cell, context)
     });
-    const warnings = inspectSceneStructure(root, { category: trustedCategory(context) });
+    const warnings = inspectSceneStructure(root, {
+      category: trustedCategory(context)
+    });
     if (grid.roofsHidden === 0) {
       warnings.push(nodeName2 ? `No node named "${nodeName2}" was found, so the roof could not be lifted and the interior is still occluded. Check that name, or omit nodeName so the roof is found by its semantic role instead.` : 'No roof was found, so nothing could be lifted and the interior is still occluded. Build the roof with createRoofPlanes/createGableRoof (which tag it as a roof), or name the roof group "Roof".');
     }
@@ -28795,7 +28944,6 @@ async function runViewInterior(input, context) {
     };
   }
 }
-var KILN_VIEW_INTERIOR_DESCRIPTION = "SEE INSIDE an enterable building: renders it with the roof lifted off, as a " + "three-view grid. (1) Floor plan: top-down — check the interior is open and walkable and the footprint " + "is right. (2) Dollhouse: a 3/4 cutaway — check built-in fixtures (hearth, counter, shelves) rest ON the " + "floor, not floating or sunk, and the walls enclose a real volume with headroom. (3) Eye-level: a low " + "angle looking in through the doorway with the near walls also removed — confirm the doorway is a REAL " + "gap you could walk through (not a panel) and no wall or glass is buried inside a solid mass. Call this before finalizing any building. Take no argument: the roof is found from its semantic role, so any roof built with createRoofPlanes/createGableRoof lifts whatever it is named. If " + "roofsHidden comes back 0 no roof was resolvable and the interior stays hidden — build the roof " + 'with a roof primitive (or name the group "Roof"). Each cell is rendered from deterministic cutaway GLB bytes: GPU PBR when available, otherwise a GLB-native geometry-flat fallback. Read viewFidelity before judging materials; writes no files.' + VIEW_EVIDENCE_GUIDANCE;
 function createKilnViewInteriorDef(context = {}) {
   const statefulContext = withViewEvidenceHistory(context);
   return {
@@ -28807,23 +28955,6 @@ function createKilnViewInteriorDef(context = {}) {
     media: screenshotMedia
   };
 }
-var kilnViewInteriorDef = createKilnViewInteriorDef();
-var attachmentEndpointInput = z3.object({
-  subject: z3.object({ path: z3.string().optional(), name: z3.string().optional() }).strict(),
-  point: cameraVec3Input.optional()
-}).strict();
-var inspectInput = z3.object({
-  measure: z3.object({ from: attachmentEndpointInput, to: attachmentEndpointInput }).strict().optional().describe("Straight-line distance between exact named node origins or subject-local points; asset units, not surface clearance."),
-  shot: cameraShotInput.optional().describe("Exact framed shot; omit legacy part/view/orbit fields when using this."),
-  code: z3.string().describe("Kiln source code to execute and inspect."),
-  part: z3.string().optional().describe("The part to frame, by node name from your program (case-insensitive; substring match as a fallback). Omit to frame the whole asset."),
-  view: z3.string().optional().describe("Camera angle: front, right, back, left, top, or three-quarter (default). Ignored when azimuthDeg or elevationDeg is given."),
-  azimuthDeg: z3.number().optional().describe("Orbit the camera around the asset: 0 = front, 90 = right, 180 = back, 270 = left. Wraps, " + "so 315 and -45 are the same. Use it to look between the named views — at a corner, a " + "seam, or whatever angle the last render left ambiguous."),
-  elevationDeg: z3.number().optional().describe("Orbit the camera up or down: 0 = eye level, positive looks down from above, negative from below. Clamped to -89..89. Combine with azimuthDeg for any three-quarter angle you want."),
-  zoom: z3.number().optional().describe("Padding multiplier around the part bounds, clamped to 1-4. Default 1.2; raise it to see more surrounding context."),
-  isolate: z3.boolean().optional().describe("Hide everything except the named part (and its descendants) so nothing can block the view. Use it when the part is buried inside or behind other geometry. Needs `part`; without " + "one it does nothing. Default false — surrounding geometry stays visible for context.")
-});
-var inspectBufferInput = inspectInput.omit({ code: true });
 async function runInspect(input, context) {
   try {
     const { prepareInspectView: prepareInspectView2 } = await Promise.resolve().then(() => (init_inspect(), exports_inspect));
@@ -28898,10 +29029,12 @@ async function runInspect(input, context) {
       ...viewEvidence ? { viewEvidence } : {}
     };
   } catch (err) {
-    return { ok: false, error: err instanceof Error ? err.message : String(err) };
+    return {
+      ok: false,
+      error: err instanceof Error ? err.message : String(err)
+    };
   }
 }
-var KILN_INSPECT_DESCRIPTION = "ZOOM IN on one part: renders a single 512x512 close-up framed to the named part (the node name you gave createPart, matched case-insensitively with a substring fallback) and its descendants, " + "from one camera. Use it after kiln_render reveals a suspect region — a floating part, a bad " + "joint, a wrong proportion — to see fine detail one grid cell cannot show. args: part (omit to " + "frame the whole asset in one large view), view (front/right/back/left/top/three-quarter, default three-quarter), azimuthDeg + elevationDeg (orbit to ANY angle instead of a named view: azimuth 0 = front, 90 = right, 180 = back, 270 = left; elevation 0 = eye level, positive looks down, clamped to -89..89), zoom (padding multiplier around the part bounds, 1 = tight crop up to 4 = wide context, default 1.2), isolate (hide everything except that part, default false). Reach for the orbit angles when a named view puts the thing you need to judge edge-on or " + "behind something — the reply always tells you the azimuth/elevation it used, so you can step " + "from there. " + "If the part name does not resolve you get the list of available part names back — pick one and " + "retry. By default surrounding geometry stays visible for context and can occlude the part: either pick a different view, or set isolate:true to hide everything else and see the part unobstructed (use it for anything buried inside or behind other geometry). The view is rendered from deterministic derivative GLB bytes; GPU PBR is used only when it can preserve the requested framing, otherwise the GLB-native geometry-flat fallback reports why in viewFidelity. Writes no files." + VIEW_EVIDENCE_GUIDANCE;
 function createKilnInspectDef(context = {}) {
   const statefulContext = withViewEvidenceHistory(context);
   return {
@@ -28912,18 +29045,6 @@ function createKilnInspectDef(context = {}) {
     media: screenshotMedia
   };
 }
-var kilnInspectDef = createKilnInspectDef();
-var editOperationInput = z3.object({
-  oldString: z3.string().describe("The exact text to replace, copied verbatim from the program (including whitespace and indentation, and with no line-number prefixes). Must be unique unless replaceAll is true."),
-  newString: z3.string().describe("The replacement text. Use an empty string to delete."),
-  replaceAll: z3.boolean().optional().describe("Replace every occurrence instead of failing when oldString matches more than once.")
-});
-var editInput = z3.object({
-  code: z3.string().describe("The Kiln program to patch. The full current source."),
-  edits: z3.array(editOperationInput).min(1).max(20).describe("Edits applied in order against the program. If any one fails to match, none are applied and the reply says which. Batch related changes into a single call."),
-  render: z3.boolean().optional().describe("Render the patched program and return the views (default true). false = patch only."),
-  capture: captureInput
-});
 async function runEdit(input, context) {
   const buffer = new KilnDraftBuffer(input.code);
   const applied = [];
@@ -28958,7 +29079,6 @@ async function runEdit(input, context) {
     ...framesBase64 ? { framesBase64 } : {}
   };
 }
-var KILN_EDIT_DESCRIPTION = "Patch an EXISTING Kiln program with exact-string replacements and render the result in one call. This is the refine verb: use it to change an asset you already have rather than re-emitting the whole file, so every line you did not touch stays byte-for-byte identical and the reply carries a unified diff of what actually changed. Pass the full current source as `code` and one or more { oldString, newString } edits, copied verbatim from that source. Edits apply in order and the call is all-or-nothing: if any oldString does not match, or matches more than once without replaceAll, NOTHING is applied and the reply names the edit that failed -- fix it and call again. The patched program comes back as `code`; write it to your file to keep it. Renders by default, so you see the change immediately; pass render:false to patch without rendering. Writes no files.";
 function createKilnEditDef(context = {}) {
   const statefulContext = withViewEvidenceHistory(context);
   return {
@@ -28976,7 +29096,6 @@ function createKilnEditDef(context = {}) {
     }
   };
 }
-var kilnEditDef = createKilnEditDef();
 function createKilnToolRegistry(context = {}) {
   return [
     {
@@ -29007,8 +29126,6 @@ function createKilnToolRegistry(context = {}) {
     }
   ];
 }
-var kilnToolRegistry = createKilnToolRegistry();
-var localCacheScope = 0;
 function withBuildCache(context) {
   if (context.evaluatorCacheManaged || context.cacheEvaluations === false || context.evaluatorPort && !context.evaluatorCacheIdentity)
     return context;
@@ -29075,7 +29192,10 @@ async function guardCaptureBudget(name, input, context, run2) {
     }
     return out;
   } catch (error) {
-    return { ok: false, error: error instanceof Error ? error.message : String(error) };
+    return {
+      ok: false,
+      error: error instanceof Error ? error.message : String(error)
+    };
   }
 }
 function withCaptureCache(context) {
@@ -29086,7 +29206,12 @@ function withCaptureCache(context) {
   return {
     ...context,
     captureCache: cache,
-    ...context.viewRenderPort && context.captureCacheIdentity ? { viewRenderPort: createCachedRenderPort(context.viewRenderPort, { cache, identity }) } : {}
+    ...context.viewRenderPort && context.captureCacheIdentity ? {
+      viewRenderPort: createCachedRenderPort(context.viewRenderPort, {
+        cache,
+        identity
+      })
+    } : {}
   };
 }
 function createKilnProgramToolRegistry(suppliedContext = {}) {
@@ -29103,19 +29228,383 @@ function createKilnProgramToolRegistry(suppliedContext = {}) {
       createKilnInspectDef(context),
       createKilnEditDef(context)
     ].map((def) => withProgramReferences(def, store)),
-    createKilnSourceDef(store)
+    createKilnSourceDef(store),
+    ...createKilnAssetDefs({ ...context, programStore: store })
+  ].map((def) => ({
+    ...def,
+    annotations: {
+      readOnlyHint: ["kiln_source", "kiln_list_primitives", "kiln_export", "kiln_present"].includes(def.name),
+      destructiveHint: false,
+      idempotentHint: def.name !== "kiln_save",
+      openWorldHint: false
+    }
+  }));
+}
+function createKilnAssetDefs(context) {
+  const library = () => {
+    if (!context.assetLibrary)
+      throw new Error("No asset library configured. The local CLI/MCP host supplies workspace collections; embedded hosts must inject assetLibrary.");
+    return context.assetLibrary;
+  };
+  const links = async (collection, asset2) => ({
+    ok: true,
+    collection,
+    asset: {
+      assetId: asset2.assetId,
+      revisionId: asset2.revisionId,
+      parentRevision: asset2.parentRevision,
+      name: asset2.name,
+      tags: asset2.tags,
+      createdAt: asset2.createdAt,
+      editable: asset2.editable,
+      files: asset2.files,
+      build: asset2.build && {
+        engine: asset2.build.engine,
+        rebuild: asset2.build.rebuild,
+        warningCount: asset2.build.warnings.length,
+        warnings: asset2.build.warnings.slice(0, 3).map((warning) => warning.slice(0, 200))
+      }
+    },
+    resources: (await Promise.resolve().then(() => (init_assets_resources(), exports_assets_resources))).assetLinks(collection, asset2),
+    downloadUrls: await context.assetDownloadUrls?.(collection, asset2.assetId, asset2.revisionId)
+  });
+  const saveInput = z4.object({
+    collection: assetSelector.collection,
+    programRef: z4.string(),
+    name: z4.string().min(1).max(200),
+    assetId: assetSelector.assetId.optional(),
+    parentRevision: assetSelector.revisionId.optional(),
+    tags: z4.array(z4.string().max(80)).max(30).optional(),
+    brief: z4.string().max(8000).optional(),
+    description: z4.string().max(4000).optional(),
+    attribution: z4.object({
+      model: z4.string().max(200).optional(),
+      harness: z4.string().max(200).optional(),
+      author: z4.string().max(200).optional()
+    }).optional()
+  });
+  const assetsInput = z4.object({
+    action: z4.enum(["collections", "list", "get", "restore"]).default("list"),
+    collection: assetSelector.collection,
+    assetId: assetSelector.assetId.optional(),
+    revisionId: assetSelector.revisionId.optional(),
+    query: z4.string().max(200).optional(),
+    offset: z4.number().int().min(0).default(0),
+    limit: z4.number().int().min(1).max(50).default(20)
+  });
+  const exportInput = z4.object(assetSelector);
+  const importInput = z4.object({
+    ...assetSelector,
+    sourceCollection: assetSelector.collection
+  });
+  return [
+    {
+      name: "kiln_save",
+      description: "Save a completed source revision as a durable asset with its exact GLB, source, preview, and build record. Use programRef returned by render/edit. To revise an existing asset, supply its assetId and parentRevision; previous revisions remain intact. Returns downloadable resources. Draft renders do not populate collections.",
+      inputSchema: saveInput,
+      run: async (raw) => {
+        const input = saveInput.parse(raw);
+        const target = library();
+        const code = await context.programStore.get(input.programRef);
+        const rendered = await evaluateGeneratedSource(code, context);
+        let preview;
+        let previewInfo;
+        try {
+          const result = await runRenderViews({ code }, {
+            ...context,
+            evaluatorPort: { render: async () => rendered }
+          });
+          if (!result.ok || !result.pngBase64)
+            throw new Error(result.error ?? "Preview unavailable");
+          preview = Uint8Array.from(Buffer.from(result.pngBase64, "base64"));
+          previewInfo = { fidelity: result.viewFidelity };
+        } catch (error) {
+          previewInfo = {
+            error: error instanceof Error ? error.message : String(error)
+          };
+        }
+        const dependencies = rendered.materialResourceProvenance ?? [];
+        const asset2 = await target.save(input.collection, {
+          ...input,
+          code,
+          glb: rendered.glb,
+          preview,
+          previewInfo,
+          build: {
+            engine: context.localExecution?.runtimeIdentity ?? "source-development:unverified",
+            options: {
+              ...context.assetBuildOptions,
+              optimize: "off",
+              instance: context.assetBuildOptions?.instance ?? "unspecified-by-host",
+              geometryPolicy: context.geometryPolicy ?? "warn",
+              category: trustedCategory(context),
+              intent: context.intent
+            },
+            warnings: rendered.warnings,
+            integration: rendered.integrationManifest,
+            qa: rendered.meta.qaReport,
+            dependencies,
+            rebuild: dependencies.some((d) => d.delivery === "runtime") ? "external-dependencies-required" : "engine-required"
+          }
+        });
+        return links(input.collection, asset2);
+      }
+    },
+    {
+      name: "kiln_assets",
+      description: "Discover collections; list/search saved asset revisions; get a build record and downloads; or restore exact editable source into the current program store for kiln_source/kiln_edit. List is paginated. Binary-only imports cannot restore source.",
+      inputSchema: assetsInput,
+      run: async (raw) => {
+        const input = assetsInput.parse(raw);
+        const target = library();
+        if (input.action === "collections")
+          return { collections: target.collections() };
+        if (input.action === "list") {
+          const query = input.query?.toLowerCase();
+          const all = (await target.list(input.collection)).filter((a) => (!input.assetId || a.assetId === input.assetId) && (!query || `${a.name} ${a.tags.join(" ")}`.toLowerCase().includes(query)));
+          return {
+            collection: input.collection,
+            total: all.length,
+            nextOffset: input.offset + input.limit < all.length ? input.offset + input.limit : null,
+            assets: all.slice(input.offset, input.offset + input.limit).map((a) => ({
+              assetId: a.assetId,
+              revisionId: a.revisionId,
+              parentRevision: a.parentRevision,
+              name: a.name,
+              tags: a.tags,
+              editable: a.editable,
+              createdAt: a.createdAt
+            }))
+          };
+        }
+        if (!input.assetId || !input.revisionId)
+          throw new Error("get/restore requires assetId and revisionId");
+        const record5 = await target.read(input.collection, input.assetId, input.revisionId);
+        if (input.action === "get")
+          return links(input.collection, record5.manifest);
+        const code = record5.files["source.kiln.js"];
+        if (!code)
+          throw new Error("Source unavailable: this asset contains only a GLB");
+        return {
+          ...await links(input.collection, record5.manifest),
+          programRef: await retainProgram(context.programStore, new TextDecoder().decode(code))
+        };
+      }
+    },
+    {
+      name: "kiln_present",
+      description: "Show a saved asset in an interactive chat viewer with GLB, editable ZIP, and source download buttons. Call after saving or when the user wants to see or download an asset. Other hosts receive portable resource links.",
+      inputSchema: exportInput,
+      outputSchema: z4.object({
+        ok: z4.literal(true),
+        collection: z4.string(),
+        asset: assetManifestSchema.pick({
+          assetId: true,
+          revisionId: true,
+          parentRevision: true,
+          name: true,
+          tags: true,
+          createdAt: true,
+          editable: true,
+          files: true
+        }).extend({
+          build: z4.object({
+            engine: z4.string(),
+            rebuild: z4.enum(["engine-required", "external-dependencies-required"]),
+            warningCount: z4.number().int(),
+            warnings: z4.array(z4.string())
+          }).optional()
+        }),
+        resources: z4.array(z4.object({
+          type: z4.literal("resource_link"),
+          name: z4.string(),
+          uri: z4.string(),
+          mimeType: z4.string()
+        })),
+        downloadUrls: z4.record(z4.string(), z4.string()).optional()
+      }),
+      ui: {
+        resourceUri: KILN_ASSET_WIDGET_URI,
+        data: async (output) => (await Promise.resolve().then(() => (init_asset_widget(), exports_asset_widget))).assetWidgetData(library(), output)
+      },
+      run: async (raw) => {
+        const input = exportInput.parse(raw);
+        return links(input.collection, (await library().read(input.collection, input.assetId, input.revisionId)).manifest);
+      }
+    },
+    {
+      name: "kiln_export",
+      description: "Get downloadable GLB, source, manifest, and portable ZIP resource links for one exact saved revision. The ZIP contains source when available and does not require the original program store. Use the host resource reader/download UI; no binary bytes are placed in tool text.",
+      inputSchema: exportInput,
+      run: async (raw) => {
+        const input = exportInput.parse(raw);
+        return links(input.collection, (await library().read(input.collection, input.assetId, input.revisionId)).manifest);
+      }
+    },
+    {
+      name: "kiln_import",
+      description: "Copy a pinned asset revision between configured project/personal collections, preserving identity and provenance. Copies never track later edits automatically. For a GLB or downloaded ZIP on disk, use kiln import <file> --collection <name> in the CLI.",
+      inputSchema: importInput,
+      run: async (raw) => {
+        const input = importInput.parse(raw);
+        const target = library();
+        const record5 = await target.read(input.sourceCollection, input.assetId, input.revisionId);
+        await target.import(input.collection, [record5]);
+        return links(input.collection, record5.manifest);
+      }
+    }
   ];
 }
-
-// src/cli.ts
-import { fileURLToPath as fileURLToPath4 } from "node:url";
+var KILN_ASSET_WIDGET_URI = "ui://kiln/asset-v3.html", DEFAULT_INLOOP_VIEW_RENDER_TIMEOUT_MS = 6000, viewEvidenceHistoryByContext, VIEW_EVIDENCE_GUIDANCE = " viewEvidence.current describes ONLY this request. lastFaithful is older hash-only evidence for reference, not reused pixels and not current verification.", listPrimitivesInput, validateInput, renderInput, screenshotInput, legacyCaptureInput, cameraVec3Input, cameraShotInput, advancedCaptureInput, captureInput, renderViewsInput, renderViewsBufferInput, screenshotAnimationInput, viewInteriorInput, KILN_RENDER_VIEWS_DESCRIPTION, kilnRenderViewsDef, KILN_SCREENSHOT_ANIMATION_DESCRIPTION, kilnScreenshotAnimationDef, KILN_VIEW_INTERIOR_DESCRIPTION, kilnViewInteriorDef, attachmentEndpointInput, inspectInput, inspectBufferInput, KILN_INSPECT_DESCRIPTION, kilnInspectDef, editOperationInput, editInput, KILN_EDIT_DESCRIPTION = "Patch an EXISTING Kiln program with exact-string replacements and render the result in one call. This is the refine verb: use it to change an asset you already have rather than re-emitting the whole file, so every line you did not touch stays byte-for-byte identical and the reply carries a unified diff of what actually changed. Pass the full current source as `code` and one or more { oldString, newString } edits, copied verbatim from that source. Edits apply in order and the call is all-or-nothing: if any oldString does not match, or matches more than once without replaceAll, NOTHING is applied and the reply names the edit that failed -- fix it and call again. The patched program comes back as `code`; write it to your file to keep it. Renders by default, so you see the change immediately; pass render:false to patch without rendering. Writes no files.", kilnEditDef, kilnToolRegistry, localCacheScope = 0, assetSelector;
+var init_registry2 = __esm(() => {
+  init_capture_cache();
+  init_assets();
+  init_program_store();
+  init_programs();
+  init_discovery();
+  init_build_cache();
+  init_validation();
+  init_render();
+  init_list_primitives();
+  init_evaluator();
+  init_material_resources();
+  init_edit_buffer();
+  init_view_render_timeout();
+  init_evidence_history();
+  viewEvidenceHistoryByContext = new WeakMap;
+  listPrimitivesInput = z4.object({
+    category: z4.string().optional().describe("Optional category filter: geometry, material, structure, animation, utility, instancing, csg, arrays, mesh-ops, curves, uv, textures.")
+  });
+  validateInput = z4.object({
+    code: z4.string().describe("Kiln source code (defines `meta` + `build()`, optional `animate()`).")
+  });
+  renderInput = z4.object({
+    code: z4.string().describe("Kiln source code to execute and render to an in-memory GLB.")
+  });
+  screenshotInput = z4.object({
+    code: z4.string().describe("Kiln source code to execute and render to a six-view image grid.")
+  });
+  legacyCaptureInput = z4.object({
+    preset: z4.enum(["1x1", "1x2", "2x1", "3x1", "2x2", "3x2", "3x3"]).optional().describe("Grid shape as COLSxROWS. Default 3x2. Choose fewer views for simple shapes, up to 3x3 for more angles."),
+    cells: z4.array(z4.object({
+      azimuthDeg: z4.number().describe("0 = front, 90 = right, 180 = back, 270 = left. Wraps."),
+      elevationDeg: z4.number().describe("0 = eye level, positive looks down, negative from below. Clamped to -89..89."),
+      zoom: z4.number().optional().describe("Padding multiplier around the asset bounds for this cell only. Omit for the default framing; below 1 crops in, above 1 pulls back."),
+      name: z4.string().optional().describe("Cell label. Auto-derived from the angles if omitted.")
+    })).optional().describe("One camera per cell, in row-major order. Omit to use the preset default cameras. Must not exceed the preset capacity (max 9 overall).")
+  }).optional().describe("Optional. Choose the contact-sheet shape and cameras. Omit it entirely for the standard six-view 3x2 grid, which is the right default for most assets.");
+  cameraVec3Input = z4.tuple([z4.number(), z4.number(), z4.number()]);
+  cameraShotInput = z4.object({
+    name: z4.string().optional(),
+    subject: z4.object({ path: z4.string().optional(), name: z4.string().optional() }).strict().refine((v) => v.path === undefined !== (v.name === undefined), {
+      message: "Choose subject path OR exact name."
+    }).optional(),
+    visibility: z4.enum(["context", "isolate"]).optional(),
+    camera: z4.discriminatedUnion("type", [
+      z4.object({
+        type: z4.literal("orbit"),
+        azimuthDeg: z4.number().optional(),
+        elevationDeg: z4.number().optional(),
+        relativeTo: z4.enum(["world", "asset", "part"]).optional(),
+        padding: z4.number().positive().max(100).optional()
+      }).strict(),
+      z4.object({
+        type: z4.literal("explicit"),
+        projection: z4.enum(["orthographic", "perspective"]),
+        position: cameraVec3Input,
+        target: cameraVec3Input.optional(),
+        relativeTo: z4.enum(["world", "asset", "part", "local"]).optional(),
+        frame: z4.object({
+          origin: cameraVec3Input.optional(),
+          rotation: cameraVec3Input.optional()
+        }).strict().optional(),
+        framing: z4.enum(["explicit", "bounds"]).optional(),
+        padding: z4.number().positive().max(100).optional(),
+        targetOffset: cameraVec3Input.optional(),
+        up: cameraVec3Input.optional(),
+        halfHeight: z4.number().positive().optional(),
+        fovDeg: z4.number().positive().lt(180).optional(),
+        near: z4.number().positive().optional(),
+        far: z4.number().positive().optional()
+      }).strict()
+    ]).optional()
+  }).strict();
+  advancedCaptureInput = z4.object({
+    version: z4.literal("kiln.capture.v1"),
+    shots: z4.array(cameraShotInput).min(1).max(9),
+    cols: z4.number().int().min(1).max(3).optional(),
+    size: z4.number().int().min(128).max(1024).optional(),
+    output: z4.enum(["grid", "separate"]).optional()
+  }).strict();
+  captureInput = z4.union([
+    advancedCaptureInput,
+    z4.strictObject(legacyCaptureInput.unwrap().shape, {
+      error: taggedCaptureError
+    })
+  ], { error: taggedCaptureError }).optional().describe("Use legacy preset/cells for an orbit sheet, or version kiln.capture.v1 with 1..9 shots for exact part framing, local axes, perspective and separate images. Omit for six default views.");
+  renderViewsInput = renderInput.extend({ capture: captureInput });
+  renderViewsBufferInput = renderViewsInput.omit({ code: true });
+  screenshotAnimationInput = z4.object({
+    shot: cameraShotInput.optional(),
+    frames: z4.number().int().min(2).max(6).optional(),
+    frameTimes: z4.array(z4.number().min(0).max(1)).min(1).max(9).optional().describe("Ordered phase fractions 0..1; mutually exclusive with frames."),
+    framing: z4.enum(["locked", "follow"]).optional(),
+    code: z4.string().describe("Kiln source code to execute; must define animate() returning the named clip."),
+    clip: z4.string().describe('The animation clip to view, by name (e.g. "walk", "attack"). Must be one your animate() returns.'),
+    camera: z4.string().optional().describe("Camera angle: right (default — side profile, best for leg swing + knee bend direction), front " + "(reveals sideways/lateral motion), back, left, top, or three-quarter."),
+    perFrame: z4.boolean().optional().describe("Return the frames as separate high-res images instead of one composite grid. Default false.")
+  });
+  viewInteriorInput = z4.object({
+    capture: advancedCaptureInput.optional(),
+    code: z4.string().describe("Kiln source code to execute and render with the roof hidden."),
+    nodeName: z4.string().optional().describe("Override: lift the roof by exact node name instead of by role. Matches that node and its " + "children. Normally OMIT it — Kiln finds the roof from its semantic role (anything built " + 'with createRoofPlanes/createGableRoof), falling back to historical "Roof" naming.')
+  });
+  KILN_RENDER_VIEWS_DESCRIPTION = "Build the current asset and return geometry metrics, exact part paths and images. Omit capture for six orthographic views. Choose preset/cells for a smaller orbit sheet, or version kiln.capture.v1 with shots for per-part framing, local axes, perspective and separate images. +X is forward, +Y up, +Z right. Review silhouette, attachments, proportion and ground contact. GPU PBR shading supports textured or metallic materials; a flat-shaded CPU render supports geometry review. Read viewFidelity; do not judge material fidelity from CPU views. Failed builds return errors without images." + VIEW_EVIDENCE_GUIDANCE;
+  kilnRenderViewsDef = createKilnRenderViewsDef();
+  KILN_SCREENSHOT_ANIMATION_DESCRIPTION = "SEE one animation clip move: renders the named clip as six frames sampled evenly from start to end (each labeled with its phase %) from one camera, as a 3x2 grid. Use this after animating ANY asset to " + "verify the MOTION — a static screenshot cannot show it — whether it is a character walking, a door or " + "chest lid swinging on its hinge, a wheel/gear/turret/windmill turning on its axle, a lever or hatch throwing, or a flag/frond/branch swaying. Read the side (right) view and confirm each moving part travels the way it should about its OWN real pivot, and that the static base stays put. For a character specifically: a walk swings the legs forward and back (not splayed sideways and not sliding the body sideways), knees bend backward at the joint (not forward like a bird), an attack swings down and FORWARD through the front (not behind the back), and a held weapon tracks the hand through the swing. args: clip (required, the clip name), camera (default right; also front/back/left/top/three-quarter), perFrame (optional, separate high-res frames). If unresolvedTracks comes back " + "non-empty the clip targets joints that do not exist (a name mismatch) and looks frozen — fix the " + "track names. Each frame is rendered from deterministic posed GLB bytes: GPU PBR when available, otherwise a GLB-native geometry-flat fallback. Read viewFidelity before judging materials; writes no files." + VIEW_EVIDENCE_GUIDANCE;
+  kilnScreenshotAnimationDef = createKilnScreenshotAnimationDef();
+  KILN_VIEW_INTERIOR_DESCRIPTION = "SEE INSIDE an enterable building: renders it with the roof lifted off, as a " + "three-view grid. (1) Floor plan: top-down — check the interior is open and walkable and the footprint " + "is right. (2) Dollhouse: a 3/4 cutaway — check built-in fixtures (hearth, counter, shelves) rest ON the " + "floor, not floating or sunk, and the walls enclose a real volume with headroom. (3) Eye-level: a low " + "angle looking in through the doorway with the near walls also removed — confirm the doorway is a REAL " + "gap you could walk through (not a panel) and no wall or glass is buried inside a solid mass. Call this before finalizing any building. Take no argument: the roof is found from its semantic role, so any roof built with createRoofPlanes/createGableRoof lifts whatever it is named. If " + "roofsHidden comes back 0 no roof was resolvable and the interior stays hidden — build the roof " + 'with a roof primitive (or name the group "Roof"). Each cell is rendered from deterministic cutaway GLB bytes: GPU PBR when available, otherwise a GLB-native geometry-flat fallback. Read viewFidelity before judging materials; writes no files.' + VIEW_EVIDENCE_GUIDANCE;
+  kilnViewInteriorDef = createKilnViewInteriorDef();
+  attachmentEndpointInput = z4.object({
+    subject: z4.object({ path: z4.string().optional(), name: z4.string().optional() }).strict(),
+    point: cameraVec3Input.optional()
+  }).strict();
+  inspectInput = z4.object({
+    measure: z4.object({ from: attachmentEndpointInput, to: attachmentEndpointInput }).strict().optional().describe("Straight-line distance between exact named node origins or subject-local points; asset units, not surface clearance."),
+    shot: cameraShotInput.optional().describe("Exact framed shot; omit legacy part/view/orbit fields when using this."),
+    code: z4.string().describe("Kiln source code to execute and inspect."),
+    part: z4.string().optional().describe("The part to frame, by node name from your program (case-insensitive; substring match as a fallback). Omit to frame the whole asset."),
+    view: z4.string().optional().describe("Camera angle: front, right, back, left, top, or three-quarter (default). Ignored when azimuthDeg or elevationDeg is given."),
+    azimuthDeg: z4.number().optional().describe("Orbit the camera around the asset: 0 = front, 90 = right, 180 = back, 270 = left. Wraps, " + "so 315 and -45 are the same. Use it to look between the named views — at a corner, a " + "seam, or whatever angle the last render left ambiguous."),
+    elevationDeg: z4.number().optional().describe("Orbit the camera up or down: 0 = eye level, positive looks down from above, negative from below. Clamped to -89..89. Combine with azimuthDeg for any three-quarter angle you want."),
+    zoom: z4.number().optional().describe("Padding multiplier around the part bounds, clamped to 1-4. Default 1.2; raise it to see more surrounding context."),
+    isolate: z4.boolean().optional().describe("Hide everything except the named part (and its descendants) so nothing can block the view. Use it when the part is buried inside or behind other geometry. Needs `part`; without " + "one it does nothing. Default false — surrounding geometry stays visible for context.")
+  });
+  inspectBufferInput = inspectInput.omit({ code: true });
+  KILN_INSPECT_DESCRIPTION = "ZOOM IN on one part: renders a single 512x512 close-up framed to the named part (the node name you gave createPart, matched case-insensitively with a substring fallback) and its descendants, " + "from one camera. Use it after kiln_render reveals a suspect region — a floating part, a bad " + "joint, a wrong proportion — to see fine detail one grid cell cannot show. args: part (omit to " + "frame the whole asset in one large view), view (front/right/back/left/top/three-quarter, default three-quarter), azimuthDeg + elevationDeg (orbit to ANY angle instead of a named view: azimuth 0 = front, 90 = right, 180 = back, 270 = left; elevation 0 = eye level, positive looks down, clamped to -89..89), zoom (padding multiplier around the part bounds, 1 = tight crop up to 4 = wide context, default 1.2), isolate (hide everything except that part, default false). Reach for the orbit angles when a named view puts the thing you need to judge edge-on or " + "behind something — the reply always tells you the azimuth/elevation it used, so you can step " + "from there. " + "If the part name does not resolve you get the list of available part names back — pick one and " + "retry. By default surrounding geometry stays visible for context and can occlude the part: either pick a different view, or set isolate:true to hide everything else and see the part unobstructed (use it for anything buried inside or behind other geometry). The view is rendered from deterministic derivative GLB bytes; GPU PBR is used only when it can preserve the requested framing, otherwise the GLB-native geometry-flat fallback reports why in viewFidelity. Writes no files." + VIEW_EVIDENCE_GUIDANCE;
+  kilnInspectDef = createKilnInspectDef();
+  editOperationInput = z4.object({
+    oldString: z4.string().describe("The exact text to replace, copied verbatim from the program (including whitespace and indentation, and with no line-number prefixes). Must be unique unless replaceAll is true."),
+    newString: z4.string().describe("The replacement text. Use an empty string to delete."),
+    replaceAll: z4.boolean().optional().describe("Replace every occurrence instead of failing when oldString matches more than once.")
+  });
+  editInput = z4.object({
+    code: z4.string().describe("The Kiln program to patch. The full current source."),
+    edits: z4.array(editOperationInput).min(1).max(20).describe("Edits applied in order against the program. If any one fails to match, none are applied and the reply says which. Batch related changes into a single call."),
+    render: z4.boolean().optional().describe("Render the patched program and return the views (default true). false = patch only."),
+    capture: captureInput
+  });
+  kilnEditDef = createKilnEditDef();
+  kilnToolRegistry = createKilnToolRegistry();
+  assetSelector = {
+    collection: z4.string().regex(/^[a-z][a-z0-9_-]{0,79}$/).default("project"),
+    assetId: z4.string().regex(/^[a-z][a-z0-9_-]{0,79}$/),
+    revisionId: z4.string().regex(/^[a-z][a-z0-9_-]{0,79}$/)
+  };
+});
 
 // src/cli-render-mode.ts
 import { createHash as createHash10 } from "node:crypto";
-var DEFAULT_LOCAL_PORT_URL = "http://127.0.0.1:8000";
-var HEALTH_PROBE_TIMEOUT_MS = 1500;
-var HEALTH_PROBE_BUSY_TIMEOUT_MS = 8000;
-var CLI_VIEW_RENDER_TIMEOUT_MS = 20000;
 function resolveRenderMode(value) {
   if (value === "auto" || value === "cpu" || value === "gpu")
     return value;
@@ -29212,7 +29701,6 @@ async function probeRenderService(url) {
   const second = await probeOnce(url, HEALTH_PROBE_BUSY_TIMEOUT_MS);
   return second.kind === "ok" ? second.rendererId : undefined;
 }
-var selected = new WeakMap;
 function describeRenderMode(context) {
   return selected.get(context) ?? "cpu raster";
 }
@@ -29258,8 +29746,502 @@ async function buildRenderPort(mode, portUrl) {
   selected.set(context, "cpu raster (no GPU service found)");
   return context;
 }
+var DEFAULT_LOCAL_PORT_URL = "http://127.0.0.1:8000", HEALTH_PROBE_TIMEOUT_MS = 1500, HEALTH_PROBE_BUSY_TIMEOUT_MS = 8000, CLI_VIEW_RENDER_TIMEOUT_MS = 20000, selected;
+var init_cli_render_mode = __esm(() => {
+  selected = new WeakMap;
+});
+
+// src/assets-node.ts
+var exports_assets_node = {};
+__export(exports_assets_node, {
+  verifyAssetRecord: () => verifyAssetRecord,
+  localAssetLibrary: () => localAssetLibrary,
+  collectionConfigPath: () => collectionConfigPath,
+  FileAssetLibrary: () => FileAssetLibrary
+});
+import { createHash as createHash11, randomUUID as randomUUID3 } from "node:crypto";
+import { readFileSync as readFileSync2 } from "node:fs";
+import { lstat as lstat2, mkdir as mkdir3, readFile as readFile6, readdir as readdir4, realpath as realpath2, rename as rename2, rm as rm2, writeFile as writeFile4 } from "node:fs/promises";
+import { dirname as dirname3, join as join7, relative as relative2, resolve as resolve4, sep } from "node:path";
+async function verifyAssetRecord(record5) {
+  for (const [name, info] of Object.entries(record5.manifest.files)) {
+    const bytes = record5.files[name];
+    if (!bytes || bytes.length !== info.bytes || digest4(bytes) !== info.sha256)
+      throw new Error(`Asset integrity failure: ${name}`);
+  }
+  validateRecordShape(record5);
+}
+
+class FileAssetLibrary {
+  roots;
+  constructor(roots) {
+    if (!Object.keys(roots).length)
+      throw new Error("Configure at least one collection");
+    this.roots = Object.fromEntries(Object.entries(roots).map(([id, path]) => [assetIdSchema.parse(id), resolve4(path)]));
+  }
+  collections() {
+    return Object.keys(this.roots).map((id) => ({ id, label: id }));
+  }
+  directory(collection) {
+    const root = this.roots[collection];
+    if (!root || !Object.hasOwn(this.roots, collection))
+      throw new Error("Unknown collection");
+    return root;
+  }
+  async path(collection, ...parts) {
+    const root = this.directory(collection);
+    await mkdir3(root, { recursive: true });
+    const canonical3 = await realpath2(root);
+    let path = root;
+    for (const part of parts) {
+      assetIdSchema.parse(part);
+      path = join7(path, part);
+      try {
+        const entry = await lstat2(path);
+        if (entry.isSymbolicLink())
+          throw new Error("Collection symlinks are not supported");
+        const rel = relative2(canonical3, await realpath2(path));
+        if (rel === ".." || rel.startsWith(`..${sep}`))
+          throw new Error("Collection path escapes root");
+      } catch (error) {
+        if (error.code !== "ENOENT")
+          throw error;
+      }
+    }
+    return path;
+  }
+  async list(collection) {
+    const root = await this.path(collection);
+    const records = [];
+    for (const asset2 of await readdir4(root, { withFileTypes: true })) {
+      if (!asset2.isDirectory() || !assetIdSchema.safeParse(asset2.name).success)
+        continue;
+      const revisions = await this.path(collection, asset2.name, "revisions");
+      let entries;
+      try {
+        entries = await readdir4(revisions, { withFileTypes: true });
+      } catch (error) {
+        if (error.code === "ENOENT")
+          continue;
+        throw error;
+      }
+      for (const revision of entries) {
+        if (!revision.isDirectory() || !revision.name.startsWith("r_"))
+          continue;
+        const dir = await this.path(collection, asset2.name, "revisions", revision.name);
+        const manifest = assetManifestSchema.parse(JSON.parse(new TextDecoder().decode(await this.file(dir, "manifest.json", 1024 * 1024))));
+        if (manifest.assetId !== asset2.name || manifest.revisionId !== revision.name)
+          throw new Error("Asset identity mismatch");
+        records.push(manifest);
+      }
+    }
+    return records.sort((a, b) => b.createdAt.localeCompare(a.createdAt) || a.revisionId.localeCompare(b.revisionId));
+  }
+  async file(dir, name, limit = ASSET_LIMIT) {
+    const path = join7(dir, name);
+    const info = await lstat2(path);
+    if (!info.isFile() || info.isSymbolicLink() || info.size > limit)
+      throw new Error("Invalid collection file");
+    return new Uint8Array(await readFile6(path));
+  }
+  async read(collection, assetId, revisionId) {
+    const dir = await this.path(collection, assetId, "revisions", revisionId);
+    const manifest = assetManifestSchema.parse(JSON.parse(new TextDecoder().decode(await this.file(dir, "manifest.json", 1024 * 1024))));
+    if (manifest.assetId !== assetId || manifest.revisionId !== revisionId)
+      throw new Error("Asset identity mismatch");
+    const files = {};
+    for (const name of Object.keys(manifest.files)) {
+      if (!["asset.glb", "source.kiln.js", "preview.png"].includes(name))
+        throw new Error("Invalid collection filename");
+      files[name] = await this.file(dir, name);
+    }
+    const record5 = { manifest, files };
+    await verifyAssetRecord(record5);
+    return record5;
+  }
+  async save(collection, draft) {
+    const assetId = draft.assetId ?? `a_${randomUUID3().replaceAll("-", "")}`;
+    if (draft.parentRevision)
+      await this.read(collection, assetId, draft.parentRevision);
+    if (draft.assetId && !draft.parentRevision && (await this.list(collection)).some((m) => m.assetId === assetId))
+      throw new Error("An existing asset requires parentRevision");
+    const files = { "asset.glb": Uint8Array.from(draft.glb) };
+    if (draft.code !== undefined)
+      files["source.kiln.js"] = new TextEncoder().encode(draft.code);
+    if (draft.preview)
+      files["preview.png"] = Uint8Array.from(draft.preview);
+    const manifest = assetManifestSchema.parse({
+      version: "kiln.asset.v1",
+      assetId,
+      revisionId: `r_${randomUUID3().replaceAll("-", "")}`,
+      parentRevision: draft.parentRevision,
+      name: draft.name,
+      tags: draft.tags ?? [],
+      createdAt: new Date().toISOString(),
+      brief: draft.brief,
+      description: draft.description,
+      attribution: draft.attribution,
+      editable: draft.code !== undefined,
+      files: Object.fromEntries(Object.entries(files).map(([name, bytes]) => [
+        name,
+        { sha256: digest4(bytes), bytes: bytes.length }
+      ])),
+      build: draft.build ? { ...draft.build, rebuild: draft.build.rebuild ?? "engine-required" } : undefined,
+      preview: draft.previewInfo
+    });
+    await this.import(collection, [{ manifest, files }]);
+    return manifest;
+  }
+  async import(collection, records) {
+    if (!records.length || records.length > 100)
+      throw new Error("Import requires 1..100 revisions");
+    for (const record5 of records)
+      await verifyAssetRecord(record5);
+    for (const record5 of records) {
+      const { manifest, files } = record5;
+      const dest = await this.path(collection, manifest.assetId, "revisions", manifest.revisionId);
+      const parent = dirname3(dest);
+      await mkdir3(parent, { recursive: true });
+      const stage = join7(parent, `.write-${randomUUID3()}`);
+      await mkdir3(stage);
+      try {
+        for (const [name, bytes] of Object.entries(files))
+          await writeFile4(join7(stage, name), bytes, { flag: "wx" });
+        await writeFile4(join7(stage, "manifest.json"), `${JSON.stringify(manifest, null, 2)}
+`, {
+          flag: "wx"
+        });
+        try {
+          await rename2(stage, dest);
+        } catch (error) {
+          const existing = await this.read(collection, manifest.assetId, manifest.revisionId).catch(() => {
+            return;
+          });
+          if (!existing || JSON.stringify(existing.manifest) !== JSON.stringify(manifest))
+            throw error;
+        }
+      } finally {
+        await rm2(stage, { recursive: true, force: true });
+      }
+    }
+    return records.map((r) => r.manifest);
+  }
+}
+function collectionConfigPath(env = process.env) {
+  const workspace = env.KILN_PROGRAM_STORE ? dirname3(dirname3(resolve4(env.KILN_PROGRAM_STORE))) : process.cwd();
+  return join7(workspace, ".kiln", "collections.json");
+}
+function localAssetLibrary(env = process.env) {
+  if (env.KILN_COLLECTIONS) {
+    const value = JSON.parse(env.KILN_COLLECTIONS);
+    if (!value || typeof value !== "object" || Array.isArray(value) || Object.values(value).some((v) => typeof v !== "string" || !v))
+      throw new Error("KILN_COLLECTIONS must map collection names to directories");
+    return new FileAssetLibrary(value);
+  }
+  const config = collectionConfigPath(env);
+  try {
+    const text2 = readFileSync2(config, "utf8");
+    if (!text2.trim())
+      throw new Error("Collection configuration is empty");
+    return localAssetLibrary({ ...env, KILN_COLLECTIONS: text2 });
+  } catch (error) {
+    if (error.code !== "ENOENT")
+      throw error;
+  }
+  const workspace = dirname3(dirname3(config));
+  return new FileAssetLibrary({ project: join7(workspace, "assets", "kiln") });
+}
+var digest4 = (bytes) => `sha256:${createHash11("sha256").update(bytes).digest("hex")}`;
+var init_assets_node = __esm(() => {
+  init_assets();
+});
+
+// src/asset-viewer.ts
+import { createServer } from "node:http";
+import { readFile as readFile7 } from "node:fs/promises";
+import { dirname as dirname4, join as join8 } from "node:path";
+import { fileURLToPath as fileURLToPath4 } from "node:url";
+async function startAssetViewer(library, options = {}) {
+  const staticDirectory = options.staticDirectory ?? (import.meta.url.endsWith(".ts") ? join8(dirname4(fileURLToPath4(import.meta.url)), "..", "dist", "viewer") : join8(dirname4(fileURLToPath4(import.meta.url)), "viewer"));
+  const server = createServer(async (req, res) => {
+    res.setHeader("X-Content-Type-Options", "nosniff");
+    res.setHeader("Referrer-Policy", "no-referrer");
+    res.setHeader("Cache-Control", "no-store");
+    const address2 = server.address();
+    const origin = `http://127.0.0.1:${typeof address2 === "object" && address2 ? address2.port : 0}`;
+    if (req.headers.host !== origin.slice(7) || req.headers.origin && req.headers.origin !== origin) {
+      res.writeHead(403);
+      res.end("Forbidden origin");
+      return;
+    }
+    if (req.method !== "GET" && req.method !== "HEAD") {
+      res.writeHead(405);
+      res.end("Read-only viewer");
+      return;
+    }
+    const send = (bytes, mime = "application/json", name) => {
+      res.setHeader("Content-Type", mime);
+      if (name)
+        res.setHeader("Content-Disposition", `attachment; filename="${name}"`);
+      res.end(req.method === "HEAD" ? undefined : bytes);
+    };
+    try {
+      const url = new URL(req.url ?? "/", origin);
+      if (url.pathname === "/api/collections")
+        return send(JSON.stringify({ collections: library.collections() }));
+      if (url.pathname === "/api/assets")
+        return send(JSON.stringify({
+          assets: await library.list(url.searchParams.get("collection") ?? "project")
+        }));
+      if (url.pathname === "/api/standalone" && options.standalone)
+        return send(options.standalone.bytes, options.standalone.name.endsWith(".zip") ? "application/zip" : "model/gltf-binary");
+      if (url.pathname === "/api/bundle") {
+        const selected2 = url.searchParams.getAll("revision");
+        if (!selected2.length || selected2.length > 100)
+          throw new Error("Select 1..100 revisions");
+        const records = await Promise.all(selected2.map((value) => {
+          const [collection, asset2, revision, extra] = value.split("/");
+          if (!collection || !asset2 || !revision || extra)
+            throw new Error("Invalid revision");
+          return library.read(collection, asset2, revision);
+        }));
+        return send(encodeAssetBundle(records), "application/zip", "kiln-assets.zip");
+      }
+      if (url.pathname.startsWith("/files/")) {
+        const file2 = await readAssetResource(library, `kiln://assets/${url.pathname.slice(7)}`);
+        return send(file2.bytes, file2.mimeType, url.searchParams.has("download") ? file2.name : undefined);
+      }
+      const staticFiles = {
+        "/": ["index.html", "text/html; charset=utf-8"],
+        "/app.js": ["app.js", "text/javascript"],
+        "/style.css": ["style.css", "text/css"]
+      };
+      const file = staticFiles[url.pathname];
+      if (!file) {
+        res.writeHead(404);
+        res.end("Not found");
+        return;
+      }
+      res.setHeader("Content-Security-Policy", "default-src 'self'; script-src 'self'; style-src 'self'; img-src 'self' blob: data:; connect-src 'self' blob: data:; worker-src 'self' blob:; object-src 'none'; base-uri 'none'; frame-ancestors 'none'");
+      return send(await readFile7(join8(staticDirectory, file[0])), file[1]);
+    } catch (error) {
+      res.statusCode = 400;
+      send(JSON.stringify({ error: error instanceof Error ? error.message : "Asset unavailable" }));
+    }
+  });
+  await new Promise((resolve5, reject) => {
+    server.once("error", reject);
+    server.listen(options.port ?? 4318, "127.0.0.1", resolve5);
+  });
+  const address = server.address();
+  if (!address || typeof address === "string")
+    throw new Error("Viewer did not bind");
+  return {
+    url: `http://127.0.0.1:${address.port}/`,
+    close: () => new Promise((resolve5, reject) => {
+      server.close((error) => error ? reject(error) : resolve5());
+      server.closeAllConnections();
+    })
+  };
+}
+var init_asset_viewer = __esm(() => {
+  init_assets();
+  init_assets_resources();
+});
+
+// src/asset-cli.ts
+var exports_asset_cli = {};
+__export(exports_asset_cli, {
+  assetMain: () => assetMain,
+  ASSET_USAGE: () => ASSET_USAGE
+});
+import { readFile as readFile8, writeFile as writeFile5, stat as stat4, mkdir as mkdir4, rename as rename3 } from "node:fs/promises";
+import { basename, resolve as resolve5, dirname as dirname5 } from "node:path";
+import { randomUUID as randomUUID4 } from "node:crypto";
+async function assetMain(argv) {
+  const command = argv[0];
+  const positional = [];
+  const flags = {};
+  const tags = [];
+  const allowed = new Set([
+    "collection",
+    "name",
+    "asset",
+    "parent",
+    "description",
+    "brief",
+    "tag",
+    "out",
+    "format",
+    "port",
+    "render"
+  ]);
+  for (let i = 1;i < argv.length; i++) {
+    const arg = argv[i];
+    if (arg === "--help" || arg === "-h") {
+      console.log(ASSET_USAGE);
+      return 0;
+    }
+    if (arg === "--restore") {
+      flags.restore = "true";
+      continue;
+    }
+    if (arg.startsWith("--")) {
+      const key = arg.slice(2);
+      const value = argv[++i];
+      if (!allowed.has(key) || value === undefined)
+        throw new Error(`Invalid option ${arg}`);
+      if (key === "tag")
+        tags.push(value);
+      else
+        flags[key] = value;
+    } else
+      positional.push(arg);
+  }
+  const library = localAssetLibrary();
+  const collection = flags.collection ?? "project";
+  const fileBytes = async (path) => {
+    if ((await stat4(path)).size > ASSET_LIMIT)
+      throw new Error("File exceeds 64 MiB");
+    return new Uint8Array(await readFile8(path));
+  };
+  if (command === "collections") {
+    if (positional[0] === "add") {
+      if (process.env.KILN_COLLECTIONS)
+        throw new Error("KILN_COLLECTIONS overrides saved configuration. Unset it before changing workspace collections.");
+      const [, name, directory] = positional;
+      if (!name || !directory)
+        throw new Error("collections add requires name and directory");
+      assetIdSchema.parse(name);
+      const roots = Object.fromEntries(library.collections().map((c) => [c.id, library.directory(c.id)]));
+      if (roots[name] && roots[name] !== resolve5(directory))
+        throw new Error("Collection name already points to another directory");
+      roots[name] = resolve5(directory);
+      const path = collectionConfigPath();
+      await mkdir4(dirname5(path), { recursive: true });
+      const temporary = `${path}.${randomUUID4()}.tmp`;
+      await writeFile5(temporary, JSON.stringify(roots, null, 2), { flag: "wx" });
+      await rename3(temporary, path);
+      console.log(`Collection ${name}: ${roots[name]}. Restart running MCP/viewer processes to load it.`);
+    } else
+      console.log(JSON.stringify({ collections: library.collections() }, null, 2));
+  } else if (command === "assets")
+    console.log(JSON.stringify({ assets: await library.list(collection) }, null, 2));
+  else if (command === "save") {
+    const input = positional[0];
+    if (!input || !flags.name)
+      throw new Error("save requires source/ref and --name");
+    const store = localProgramStore();
+    const programRef = programRefPattern.test(input) ? input : await retainProgram(store, new TextDecoder().decode(await fileBytes(input)));
+    const context = await createPackagedLocalToolContext(await buildRenderPort(resolveRenderMode(flags.render ?? "auto"), undefined));
+    const def = createKilnProgramToolRegistry({
+      ...context,
+      assetLibrary: library,
+      programStore: store
+    }).find((d) => d.name === "kiln_save");
+    console.log(JSON.stringify(await def.run({
+      collection,
+      programRef,
+      name: flags.name,
+      assetId: flags.asset,
+      parentRevision: flags.parent,
+      description: flags.description,
+      brief: flags.brief,
+      tags
+    }), null, 2));
+  } else if (command === "asset" || command === "export") {
+    const [assetId, revisionId] = positional;
+    if (!assetId || !revisionId)
+      throw new Error(`${command} requires asset ID and revision ID`);
+    const record5 = await library.read(collection, assetId, revisionId);
+    if (command === "asset") {
+      if (flags.restore) {
+        const source = record5.files["source.kiln.js"];
+        if (!source)
+          throw new Error("Source unavailable");
+        console.log(JSON.stringify({
+          asset: record5.manifest,
+          programRef: await retainProgram(localProgramStore(), new TextDecoder().decode(source))
+        }, null, 2));
+      } else
+        console.log(JSON.stringify(record5.manifest, null, 2));
+    } else {
+      if (!flags.out)
+        throw new Error("export requires --out");
+      const format = flags.format ?? "bundle";
+      if (!["bundle", "glb", "source"].includes(format))
+        throw new Error("Unknown export format");
+      const bytes = format === "bundle" ? encodeAssetBundle([record5]) : record5.files[format === "glb" ? "asset.glb" : "source.kiln.js"];
+      if (!bytes)
+        throw new Error("Source unavailable");
+      await writeFile5(resolve5(flags.out), bytes, { flag: "wx" });
+      console.log(`Saved ${resolve5(flags.out)}`);
+    }
+  } else if (command === "import") {
+    const file = positional[0];
+    if (!file)
+      throw new Error("import requires a ZIP or GLB file");
+    const bytes = await fileBytes(file);
+    const assets = file.toLowerCase().endsWith(".glb") ? [await library.save(collection, { name: flags.name ?? basename(file, ".glb"), glb: bytes })] : await library.import(collection, decodeAssetBundle(bytes));
+    console.log(JSON.stringify({ collection, assets }, null, 2));
+  } else if (command === "view") {
+    let target = library;
+    let standalone;
+    const file = positional[0];
+    if (file) {
+      if ((await stat4(file)).isDirectory()) {
+        const { FileAssetLibrary: FileAssetLibrary2 } = await Promise.resolve().then(() => (init_assets_node(), exports_assets_node));
+        target = new FileAssetLibrary2({ project: resolve5(file) });
+      } else
+        standalone = { name: basename(file), bytes: await fileBytes(file) };
+    }
+    const port = flags.port === undefined ? 4318 : Number(flags.port);
+    if (!Number.isInteger(port) || port < 0 || port > 65535)
+      throw new Error("Invalid port");
+    const viewer = await startAssetViewer(target, { port, standalone });
+    console.log(`${viewer.url}${standalone ? "?open=standalone" : ""}`);
+    console.log("Kiln viewer · local files · Ctrl+C to stop");
+  }
+  return 0;
+}
+var ASSET_USAGE = `
+ASSETS & VIEWER
+  kiln save <source.js|programRef> --name <name> [--collection project]
+       [--asset <id> --parent <revision>] [--description <text>] [--tag <tag>]
+  kiln collections                        list configured collection names
+  kiln collections add <name> <directory>  remember a project or personal collection
+  kiln assets [--collection project]      list saved revisions (JSON)
+  kiln asset <id> <revision> [--collection project] [--restore]
+  kiln export <id> <revision> --out asset.zip [--format bundle|glb|source]
+  kiln import <asset.zip|asset.glb> [--collection project] [--name <name>]
+  kiln view [collection-directory|asset.glb|asset.zip] [--port 4318]
+
+KILN_COLLECTIONS is an optional JSON map of collection names to absolute folders.
+Default: project -> <workspace>/assets/kiln. Existing source/render commands still work.
+View prints a local browser URL and remains running until interrupted.
+`;
+var init_asset_cli = __esm(() => {
+  init_assets_node();
+  init_assets();
+  init_program_store_node();
+  init_program_store();
+  init_registry2();
+  init_local_runtime();
+  init_cli_render_mode();
+  init_asset_viewer();
+});
 
 // src/cli.ts
+init_local_runtime();
+init_registry2();
+init_cli_render_mode();
+init_program_store_node();
+init_program_store();
+init_asset_cli();
+import { open, readFile as readFile9, writeFile as writeFile6 } from "node:fs/promises";
+import { realpathSync } from "node:fs";
+import { resolve as resolvePath } from "node:path";
+import { fileURLToPath as fileURLToPath5 } from "node:url";
 var USAGE = `kiln — vision-in-the-loop 3D asset generation
 
 USAGE
@@ -29395,7 +30377,7 @@ async function emit(code, args, context) {
     console.log(`  build ${result.buildCache.hit ? "reused" : "created"} ${result.buildCache.key}`);
   const out = args.out ?? (args.views ? undefined : "out.glb");
   if (out) {
-    await writeFile4(resolvePath(out), result.glb);
+    await writeFile6(resolvePath(out), result.glb);
     console.log(`  ${out}  ${result.tris} tris  ${(result.glb.length / 1024).toFixed(1)} KB`);
   } else {
     console.log(`  ${result.tris} tris  ${(result.glb.length / 1024).toFixed(1)} KB`);
@@ -29427,7 +30409,7 @@ async function emit(code, args, context) {
     const media = def.media?.(output);
     if (!media)
       throw new Error("kiln_render returned no image");
-    await writeFile4(resolvePath(args.views), media.png);
+    await writeFile6(resolvePath(args.views), media.png);
     console.log(`  ${args.views}  (${describeDrawnBy(output, context)})`);
   }
 }
@@ -29439,7 +30421,7 @@ async function cmdRender(args) {
     console.error(USAGE);
     return 2;
   }
-  const code = file.startsWith("sha256:") || programRefPattern.test(file) ? await localProgramStore().get(file) : await readFile5(resolvePath(file), "utf8");
+  const code = file.startsWith("sha256:") || programRefPattern.test(file) ? await localProgramStore().get(file) : await readFile9(resolvePath(file), "utf8");
   const context = await createPackagedLocalToolContext(await buildRenderPort(args.render, args.renderPort));
   console.log(`rendering ${file}`);
   await emit(code, args, context);
@@ -29487,7 +30469,7 @@ async function cmdGenerate(args) {
   const outPath = args.out ?? "out.glb";
   await emit(run2.code, { ...args, out: outPath }, context);
   const source = outPath.replace(/\.glb$/i, ".kiln.js");
-  await writeFile4(resolvePath(source), run2.code, "utf8");
+  await writeFile6(resolvePath(source), run2.code, "utf8");
   console.log(`  ${source}  (the program — edit and re-render it)`);
   return 0;
 }
@@ -29499,18 +30481,26 @@ async function cmdSource(args) {
   if (input.startsWith("sha256:") || programRefPattern.test(input)) {
     const code = await store.get(input);
     if (args.out) {
-      await writeFile4(resolvePath(args.out), code, { encoding: "utf8", flag: "wx" });
+      await writeFile6(resolvePath(args.out), code, { encoding: "utf8", flag: "wx" });
       console.log(`Saved ${input} to ${args.out}`);
     } else
       process.stdout.write(code);
   } else {
     if (args.out)
       throw new Error("Use source <programRef> --out <new-file.js> to export a saved revision.");
-    console.log(await retainProgram(store, await readFile5(resolvePath(input), "utf8")));
+    console.log(await retainProgram(store, await readFile9(resolvePath(input), "utf8")));
   }
   return 0;
 }
 async function main(argv) {
+  if (["save", "collections", "assets", "asset", "export", "import", "view"].includes(argv[0] ?? "")) {
+    try {
+      return await (await Promise.resolve().then(() => (init_asset_cli(), exports_asset_cli))).assetMain(argv);
+    } catch (error) {
+      console.error(error instanceof Error ? error.message : String(error));
+      return 1;
+    }
+  }
   let args;
   try {
     args = parseArgs(argv);
@@ -29519,7 +30509,7 @@ async function main(argv) {
     return 2;
   }
   if (args.help || !args.command) {
-    console.log(USAGE);
+    console.log(USAGE + ASSET_USAGE);
     return args.help ? 0 : 2;
   }
   try {
@@ -29551,7 +30541,7 @@ function isDirectCliEntry() {
   if (!process.argv[1])
     return false;
   try {
-    return realpathSync(resolvePath(process.argv[1])) === realpathSync(fileURLToPath4(import.meta.url));
+    return realpathSync(resolvePath(process.argv[1])) === realpathSync(fileURLToPath5(import.meta.url));
   } catch {
     return false;
   }

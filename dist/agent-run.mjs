@@ -7210,6 +7210,45 @@ var init_capture_cache = __esm(() => {
   init_capture_limits();
 });
 
+// src/assets.ts
+import { z } from "zod";
+import { zipSync, unzipSync } from "three/addons/libs/fflate.module.js";
+var ASSET_LIMIT, assetIdSchema, hash, assetManifestSchema, allowedFiles;
+var init_assets = __esm(() => {
+  ASSET_LIMIT = 64 * 1024 * 1024;
+  assetIdSchema = z.string().regex(/^[a-z][a-z0-9_-]{0,79}$/);
+  hash = z.string().regex(/^sha256:[a-f0-9]{64}$/);
+  assetManifestSchema = z.object({
+    version: z.literal("kiln.asset.v1"),
+    assetId: assetIdSchema,
+    revisionId: assetIdSchema,
+    parentRevision: assetIdSchema.optional(),
+    name: z.string().min(1).max(200),
+    tags: z.array(z.string().max(80)).max(30),
+    createdAt: z.string().datetime(),
+    description: z.string().max(4000).optional(),
+    brief: z.string().max(8000).optional(),
+    attribution: z.object({
+      model: z.string().max(200).optional(),
+      harness: z.string().max(200).optional(),
+      author: z.string().max(200).optional()
+    }).optional(),
+    editable: z.boolean(),
+    files: z.record(z.string(), z.object({ sha256: hash, bytes: z.number().int().nonnegative().max(ASSET_LIMIT) })),
+    build: z.object({
+      engine: z.string(),
+      options: z.record(z.string(), z.unknown()),
+      warnings: z.array(z.string()),
+      integration: z.unknown().optional(),
+      qa: z.unknown().optional(),
+      dependencies: z.array(z.unknown()).optional(),
+      rebuild: z.enum(["engine-required", "external-dependencies-required"])
+    }).optional(),
+    preview: z.object({ fidelity: z.unknown().optional(), error: z.string().optional() }).optional()
+  });
+  allowedFiles = new Set(["asset.glb", "source.kiln.js", "preview.png"]);
+});
+
 // src/evaluator/authoring-diagnostic.ts
 function authoringDiagnosticAdvice(diagnostic) {
   if (diagnostic === "UNBOUND_VARIABLE")
@@ -7547,7 +7586,7 @@ function buildFace(roofRoot, profile, sideSign) {
     return roofRoot.matrixWorld.clone().multiply(localToRoof);
   };
   const direction = (axis) => axis.clone().transformDirection(world());
-  const point = (x, z2) => new THREE4.Vector3(x, 0, z2).applyMatrix4(world());
+  const point = (x, z3) => new THREE4.Vector3(x, 0, z3).applyMatrix4(world());
   return {
     side,
     ridgeAxis: profile.ridgeAxis,
@@ -8244,8 +8283,8 @@ function normalizeSurfaceNormals(geo) {
   for (let i = 0;i < normal.count; i++) {
     const x = normal.getX(i);
     const y = normal.getY(i);
-    const z2 = normal.getZ(i);
-    const len = Math.hypot(x, y, z2);
+    const z3 = normal.getZ(i);
+    const len = Math.hypot(x, y, z3);
     if (!Number.isFinite(len) || len < 0.000000000001) {
       normal.setXYZ(i, 0, 1, 0);
       repaired = true;
@@ -8253,7 +8292,7 @@ function normalizeSurfaceNormals(geo) {
     }
     if (Math.abs(len - 1) <= 0.000001)
       continue;
-    normal.setXYZ(i, x / len, y / len, z2 / len);
+    normal.setXYZ(i, x / len, y / len, z3 / len);
     repaired = true;
   }
   if (repaired)
@@ -8807,11 +8846,11 @@ function sweepProfile(profile, path, options = {}) {
   const up = options.up ? new THREE9.Vector3(...options.up) : Math.abs(tangents[0].z) < 0.9 ? new THREE9.Vector3(0, 0, 1) : new THREE9.Vector3(1, 0, 0);
   if (![up.x, up.y, up.z].every(Number.isFinite) || up.lengthSq() < 0.00000000000000000001)
     throw new Error("sweepProfile up must be a finite nonzero vector");
-  let z2 = up.clone().addScaledVector(tangents[0], -up.dot(tangents[0]));
-  if (z2.lengthSq() < 0.000000000001)
+  let z3 = up.clone().addScaledVector(tangents[0], -up.dot(tangents[0]));
+  if (z3.lengthSq() < 0.000000000001)
     throw new Error("sweepProfile up must not be parallel to the first path tangent");
-  z2.normalize();
-  const normals = [z2.clone()];
+  z3.normalize();
+  const normals = [z3.clone()];
   if (closed) {
     stations.push(stations[0].clone());
     tangents.push(tangents[0].clone());
@@ -8819,8 +8858,8 @@ function sweepProfile(profile, path, options = {}) {
   }
   const distances = [0];
   for (let i = 1;i < stations.length; i++) {
-    z2 = z2.clone().applyQuaternion(new THREE9.Quaternion().setFromUnitVectors(tangents[i - 1], tangents[i]));
-    normals.push(z2);
+    z3 = z3.clone().applyQuaternion(new THREE9.Quaternion().setFromUnitVectors(tangents[i - 1], tangents[i]));
+    normals.push(z3);
     distances.push(distances[i - 1] + stations[i].distanceTo(stations[i - 1]));
   }
   const total = distances[distances.length - 1];
@@ -10253,8 +10292,8 @@ function repairZeroNormals(geo) {
   for (let i = 0;i < normal.count; i++) {
     const x = normal.getX(i);
     const y = normal.getY(i);
-    const z2 = normal.getZ(i);
-    if (!Number.isFinite(x + y + z2) || Math.hypot(x, y, z2) < 0.000001)
+    const z3 = normal.getZ(i);
+    if (!Number.isFinite(x + y + z3) || Math.hypot(x, y, z3) < 0.000001)
       broken.add(i);
   }
   if (broken.size === 0)
@@ -10345,15 +10384,15 @@ function cylindricalProjectToUVs(geo) {
   for (let i = 0;i < pos.count; i++) {
     const x = pos.getX(i);
     const y = pos.getY(i);
-    const z2 = pos.getZ(i);
+    const z3 = pos.getZ(i);
     if (nrm && Math.abs(nrm.getY(i)) > 0.7) {
       uv[i * 2] = (x - bb.min.x) / spanX;
-      uv[i * 2 + 1] = (z2 - bb.min.z) / spanZ;
+      uv[i * 2 + 1] = (z3 - bb.min.z) / spanZ;
       continue;
     }
-    const a = Math.atan2(z2, x);
+    const a = Math.atan2(z3, x);
     uv[i * 2] = span > 0.000001 ? (a - minA) / span : 0.5;
-    uv[i * 2 + 1] = height > 0.000001 ? (y - minY) / height : Math.hypot(x, z2) / maxR;
+    uv[i * 2 + 1] = height > 0.000001 ? (y - minY) / height : Math.hypot(x, z3) / maxR;
   }
   geo.setAttribute("uv", new THREE13.BufferAttribute(uv, 2));
 }
@@ -12592,7 +12631,7 @@ function endFindings(context, architecture, evidence) {
   }
   return findings;
 }
-function pointInProjectedTriangle(x, z2, triangle) {
+function pointInProjectedTriangle(x, z3, triangle) {
   const ax = triangle.a.x;
   const az = triangle.a.z;
   const bx = triangle.b.x;
@@ -12602,8 +12641,8 @@ function pointInProjectedTriangle(x, z2, triangle) {
   const denominator = (bz - cz) * (ax - cx) + (cx - bx) * (az - cz);
   if (Math.abs(denominator) <= EPSILON2)
     return { inside: false, weights: [0, 0, 0] };
-  const wa = ((bz - cz) * (x - cx) + (cx - bx) * (z2 - cz)) / denominator;
-  const wb = ((cz - az) * (x - cx) + (ax - cx) * (z2 - cz)) / denominator;
+  const wa = ((bz - cz) * (x - cx) + (cx - bx) * (z3 - cz)) / denominator;
+  const wb = ((cz - az) * (x - cx) + (ax - cx) * (z3 - cz)) / denominator;
   const wc = 1 - wa - wb;
   const tolerance = 0.00001;
   return {
@@ -12611,10 +12650,10 @@ function pointInProjectedTriangle(x, z2, triangle) {
     weights: [wa, wb, wc]
   };
 }
-function nearestRoofHeight(triangles, x, z2, targetY) {
+function nearestRoofHeight(triangles, x, z3, targetY) {
   const heights = [];
   for (const triangle of triangles) {
-    const projected = pointInProjectedTriangle(x, z2, triangle);
+    const projected = pointInProjectedTriangle(x, z3, triangle);
     if (!projected.inside)
       continue;
     const [wa, wb, wc] = projected.weights;
@@ -12648,8 +12687,8 @@ function envelopeFindings(context, architecture, evidence) {
     for (const offset of offsets) {
       const ridge = offset * ridgeSpan;
       const x = ridgeAxis === "x" ? ridge : lateral;
-      const z2 = ridgeAxis === "x" ? lateral : ridge;
-      const roofY = nearestRoofHeight(roof.triangles, x, z2, wallTop);
+      const z3 = ridgeAxis === "x" ? lateral : ridge;
+      const roofY = nearestRoofHeight(roof.triangles, x, z3, wallTop);
       if (roofY !== undefined)
         separations.push(roofY - wallTop);
     }
@@ -14234,16 +14273,16 @@ function probeLocalFrameFromQuaternion(id, origin, quaternion) {
   if (Math.abs(quaternionLength - 1) > 0.000001) {
     throw new TypeError("Probe frame quaternion must be normalized within 1e-6.");
   }
-  const [x, y, z2, w] = quaternion;
+  const [x, y, z3, w] = quaternion;
   const xx = x * x;
   const yy = y * y;
-  const zz = z2 * z2;
+  const zz = z3 * z3;
   const xy = x * y;
-  const xz = x * z2;
-  const yz = y * z2;
+  const xz = x * z3;
+  const yz = y * z3;
   const wx = w * x;
   const wy = w * y;
-  const wz = w * z2;
+  const wz = w * z3;
   return createProbeLocalFrame3({
     id,
     origin,
@@ -14535,8 +14574,8 @@ function objectBoundsInFrame2(object, frame) {
     const matrix = worldToFrame.clone().multiply(part.matrixWorld);
     for (const x of [box.min.x, box.max.x])
       for (const y of [box.min.y, box.max.y])
-        for (const z2 of [box.min.z, box.max.z]) {
-          bounds.expandByPoint(new THREE20.Vector3(x, y, z2).applyMatrix4(matrix));
+        for (const z3 of [box.min.z, box.max.z]) {
+          bounds.expandByPoint(new THREE20.Vector3(x, y, z3).applyMatrix4(matrix));
           found = true;
         }
   });
@@ -15071,8 +15110,8 @@ function renderableMinYInRoot(rootInverse2, node) {
     const matrix = rootInverse2.clone().multiply(part.matrixWorld);
     for (const x of [bounds.min.x, bounds.max.x]) {
       for (const y of [bounds.min.y, bounds.max.y]) {
-        for (const z2 of [bounds.min.z, bounds.max.z]) {
-          minimum = Math.min(minimum, new THREE21.Vector3(x, y, z2).applyMatrix4(matrix).y);
+        for (const z3 of [bounds.min.z, bounds.max.z]) {
+          minimum = Math.min(minimum, new THREE21.Vector3(x, y, z3).applyMatrix4(matrix).y);
         }
       }
     }
@@ -15360,8 +15399,8 @@ function meshLocalBox(mesh, rootInverse2) {
   const result = new THREE22.Box3;
   for (const x of [source.min.x, source.max.x]) {
     for (const y of [source.min.y, source.max.y]) {
-      for (const z2 of [source.min.z, source.max.z]) {
-        result.expandByPoint(new THREE22.Vector3(x, y, z2).applyMatrix4(transform));
+      for (const z3 of [source.min.z, source.max.z]) {
+        result.expandByPoint(new THREE22.Vector3(x, y, z3).applyMatrix4(transform));
       }
     }
   }
@@ -16185,8 +16224,8 @@ function transformedBox(source, transform) {
   const result = new THREE23.Box3;
   for (const x of [source.min.x, source.max.x]) {
     for (const y of [source.min.y, source.max.y]) {
-      for (const z2 of [source.min.z, source.max.z]) {
-        result.expandByPoint(new THREE23.Vector3(x, y, z2).applyMatrix4(transform));
+      for (const z3 of [source.min.z, source.max.z]) {
+        result.expandByPoint(new THREE23.Vector3(x, y, z3).applyMatrix4(transform));
       }
     }
   }
@@ -17161,8 +17200,8 @@ function transformedBox2(source, transform) {
   const result = new THREE26.Box3;
   for (const x of [source.min.x, source.max.x]) {
     for (const y of [source.min.y, source.max.y]) {
-      for (const z2 of [source.min.z, source.max.z]) {
-        result.expandByPoint(new THREE26.Vector3(x, y, z2).applyMatrix4(transform));
+      for (const z3 of [source.min.z, source.max.z]) {
+        result.expandByPoint(new THREE26.Vector3(x, y, z3).applyMatrix4(transform));
       }
     }
   }
@@ -18204,8 +18243,8 @@ function localRenderableBox(rootInverse2, node) {
   const result = new THREE27.Box3;
   for (const x of [source.min.x, source.max.x]) {
     for (const y of [source.min.y, source.max.y]) {
-      for (const z2 of [source.min.z, source.max.z]) {
-        result.expandByPoint(new THREE27.Vector3(x, y, z2).applyMatrix4(transform));
+      for (const z3 of [source.min.z, source.max.z]) {
+        result.expandByPoint(new THREE27.Vector3(x, y, z3).applyMatrix4(transform));
       }
     }
   }
@@ -19601,13 +19640,13 @@ var MATERIAL_BUDGET_PROFILES_V1, materialTextures3 = (material) => [
   material.getNormalTexture(),
   material.getOcclusionTexture(),
   material.getEmissiveTexture()
-], hasTexture = (material) => materialTextures3(material).some(Boolean), transformPoint = (matrix, x, y, z2) => {
-  const w = matrix[3] * x + matrix[7] * y + matrix[11] * z2 + matrix[15];
+], hasTexture = (material) => materialTextures3(material).some(Boolean), transformPoint = (matrix, x, y, z3) => {
+  const w = matrix[3] * x + matrix[7] * y + matrix[11] * z3 + matrix[15];
   const reciprocal = w === 0 ? 1 : 1 / w;
   return [
-    (matrix[0] * x + matrix[4] * y + matrix[8] * z2 + matrix[12]) * reciprocal,
-    (matrix[1] * x + matrix[5] * y + matrix[9] * z2 + matrix[13]) * reciprocal,
-    (matrix[2] * x + matrix[6] * y + matrix[10] * z2 + matrix[14]) * reciprocal
+    (matrix[0] * x + matrix[4] * y + matrix[8] * z3 + matrix[12]) * reciprocal,
+    (matrix[1] * x + matrix[5] * y + matrix[9] * z3 + matrix[13]) * reciprocal,
+    (matrix[2] * x + matrix[6] * y + matrix[10] * z3 + matrix[14]) * reciprocal
   ];
 }, accessorPoint = (accessor, index, matrix) => {
   const array = accessor.getArray();
@@ -20829,7 +20868,7 @@ function computeTangentBasis(geometry2) {
     const z1 = position.getZ(b) - position.getZ(a);
     const x2 = position.getX(c) - position.getX(a);
     const y2 = position.getY(c) - position.getY(a);
-    const z2 = position.getZ(c) - position.getZ(a);
+    const z22 = position.getZ(c) - position.getZ(a);
     const s1 = uv.getX(b) - uv.getX(a);
     const t1 = uv.getY(b) - uv.getY(a);
     const s2 = uv.getX(c) - uv.getX(a);
@@ -20840,10 +20879,10 @@ function computeTangentBasis(geometry2) {
     const r = 1 / det;
     const sdx = (t2 * x1 - t1 * x2) * r;
     const sdy = (t2 * y1 - t1 * y2) * r;
-    const sdz = (t2 * z1 - t1 * z2) * r;
+    const sdz = (t2 * z1 - t1 * z22) * r;
     const tdx = (s1 * x2 - s2 * x1) * r;
     const tdy = (s1 * y2 - s2 * y1) * r;
-    const tdz = (s1 * z2 - s2 * z1) * r;
+    const tdz = (s1 * z22 - s2 * z1) * r;
     for (const v of [a, b, c]) {
       const o = v * 3;
       tan1[o] = (tan1[o] ?? 0) + sdx;
@@ -20947,12 +20986,12 @@ function chainIdFor(descriptor2, byRole) {
   return current.role;
 }
 function colorFor(value) {
-  let hash = 2166136261;
+  let hash3 = 2166136261;
   for (let index = 0;index < value.length; index++) {
-    hash ^= value.charCodeAt(index);
-    hash = Math.imul(hash, 16777619);
+    hash3 ^= value.charCodeAt(index);
+    hash3 = Math.imul(hash3, 16777619);
   }
-  return CHAIN_COLORS[Math.abs(hash) % CHAIN_COLORS.length];
+  return CHAIN_COLORS[Math.abs(hash3) % CHAIN_COLORS.length];
 }
 function buildCharacterDiagnosticDescriptor(root, findings = []) {
   root.updateMatrixWorld(true);
@@ -21185,16 +21224,16 @@ function composeLocalMatrix(node) {
   }
   const x2 = q.x + q.x;
   const y2 = q.y + q.y;
-  const z2 = q.z + q.z;
+  const z22 = q.z + q.z;
   const xx = q.x * x2;
   const xy = q.x * y2;
-  const xz = q.x * z2;
+  const xz = q.x * z22;
   const yy = q.y * y2;
-  const yz = q.y * z2;
-  const zz = q.z * z2;
+  const yz = q.y * z22;
+  const zz = q.z * z22;
   const wx = q.w * x2;
   const wy = q.w * y2;
-  const wz = q.w * z2;
+  const wz = q.w * z22;
   return new Float64Array([
     (1 - (yy + zz)) * s.x,
     (xy + wz) * s.x,
@@ -21214,11 +21253,11 @@ function composeLocalMatrix(node) {
     1
   ]);
 }
-function transformPoint2(matrix, x, y, z2) {
+function transformPoint2(matrix, x, y, z3) {
   return [
-    matrix[0] * x + matrix[4] * y + matrix[8] * z2 + matrix[12],
-    matrix[1] * x + matrix[5] * y + matrix[9] * z2 + matrix[13],
-    matrix[2] * x + matrix[6] * y + matrix[10] * z2 + matrix[14]
+    matrix[0] * x + matrix[4] * y + matrix[8] * z3 + matrix[12],
+    matrix[1] * x + matrix[5] * y + matrix[9] * z3 + matrix[13],
+    matrix[2] * x + matrix[6] * y + matrix[10] * z3 + matrix[14]
   ];
 }
 function matchesRole(roles2, prefixes) {
@@ -21324,12 +21363,12 @@ function dot4(a, b) {
   return a[0] * b[0] + a[1] * b[1] + a[2] * b[2];
 }
 function stableColor(key) {
-  let hash = 2166136261;
+  let hash3 = 2166136261;
   for (let index = 0;index < key.length; index++) {
-    hash ^= key.charCodeAt(index);
-    hash = Math.imul(hash, 16777619);
+    hash3 ^= key.charCodeAt(index);
+    hash3 = Math.imul(hash3, 16777619);
   }
-  return [96 + (hash & 127), 96 + (hash >>> 8 & 127), 96 + (hash >>> 16 & 127)];
+  return [96 + (hash3 & 127), 96 + (hash3 >>> 8 & 127), 96 + (hash3 >>> 16 & 127)];
 }
 function projectScene(scene, camera, size) {
   const zAxis = normalize3(camera.dir);
@@ -23026,8 +23065,8 @@ function chassisBounds(root, inverse) {
       const matrix = inverse.clone().multiply(part.matrixWorld);
       for (const x of [box.min.x, box.max.x])
         for (const y of [box.min.y, box.max.y])
-          for (const z2 of [box.min.z, box.max.z]) {
-            bounds.expandByPoint(new THREE32.Vector3(x, y, z2).applyMatrix4(matrix));
+          for (const z3 of [box.min.z, box.max.z]) {
+            bounds.expandByPoint(new THREE32.Vector3(x, y, z3).applyMatrix4(matrix));
             found = true;
           }
     });
@@ -23445,7 +23484,7 @@ async function renderViewGrid(root, opts = {}) {
   enforceCapturePixels(views.length, size, cols, opts.captureLimits);
   if (opts.snapPalette?.length)
     snapSceneToPalette(root, opts.snapPalette);
-  const wantsZoom = resolved2.zooms.some((z2) => z2 !== undefined);
+  const wantsZoom = resolved2.zooms.some((z3) => z3 !== undefined);
   const sceneBounds = wantsZoom ? measureBounds(root) : undefined;
   const cache = opts.snapPalette?.length ? undefined : opts.captureCache;
   let reused = 0;
@@ -25582,7 +25621,7 @@ async function captureViewsViaPort(port, glb, timeoutMs = DEFAULT_VIEW_RENDER_TI
   const views = resolved2.views;
   const shape = { preset: resolved2.preset, cols: resolved2.cols, cells: views.length };
   let cameras;
-  if (resolved2.zooms.some((z3) => z3 !== undefined)) {
+  if (resolved2.zooms.some((z4) => z4 !== undefined)) {
     try {
       const { loadGlbReviewScene: loadGlbReviewScene2, measureBounds: measureBounds2, cameraFromBounds: cameraFromBounds2 } = await Promise.resolve().then(() => (init_views(), exports_views));
       const loaded = await loadGlbReviewScene2(Uint8Array.from(glb));
@@ -28011,11 +28050,12 @@ Generate the complete code.`);
 // src/agent/tools.ts
 init_evidence_history();
 import { tool, ImageBlock, JsonBlock } from "@strands-agents/sdk";
-import { z as z4 } from "zod";
+import { z as z5 } from "zod";
 
 // src/tools/registry.ts
 init_capture_cache();
-import { z as z3 } from "zod";
+init_assets();
+import { z as z4 } from "zod";
 
 // src/program-store.ts
 var MAX_PROGRAM_BYTES = 1024 * 1024;
@@ -28037,8 +28077,8 @@ async function programReference(code) {
     throw new Error("Program exceeds the 1 MiB source limit.");
   if (new TextDecoder("utf-8", { ignoreBOM: true }).decode(bytes) !== code)
     throw new Error("Program must be valid Unicode.");
-  const hash = new Uint8Array(await crypto.subtle.digest("SHA-256", bytes));
-  return `sha256:${Array.from(hash, (b) => b.toString(16).padStart(2, "0")).join("")}`;
+  const hash2 = new Uint8Array(await crypto.subtle.digest("SHA-256", bytes));
+  return `sha256:${Array.from(hash2, (b) => b.toString(16).padStart(2, "0")).join("")}`;
 }
 
 class MemoryProgramStore {
@@ -28095,22 +28135,22 @@ class MemoryProgramStore {
 }
 
 // src/tools/programs.ts
-import { z } from "zod";
-var refInput = z.string().regex(programRefPattern).describe("Returned p_ handle or full sha256 ref.");
+import { z as z2 } from "zod";
+var refInput = z2.string().regex(programRefPattern).describe("Returned p_ handle or full sha256 ref.");
 
 // src/tools/discovery.ts
-import { z as z2 } from "zod";
+import { z as z3 } from "zod";
 init_protocol();
 init_capture_limits();
-var inputSchema = z2.object({
-  names: z2.array(z2.string().trim().min(1).max(80)).min(1).max(6).optional().describe("Get up to six exact helper signatures together, in this order. Use without other selectors."),
-  category: z2.string().trim().min(1).max(80).optional().describe("Category from the overview."),
-  name: z2.string().trim().min(1).max(80).optional().describe("Exact helper name; returns its signature and example."),
-  query: z2.string().trim().min(1).max(200).optional().describe("Words to find in helper names, descriptions and examples."),
-  overview: z2.boolean().optional().describe("Compact names by category. Default when no search or category is supplied."),
-  capabilities: z2.boolean().optional().describe("Return only runtime, source, geometry export and camera capabilities."),
-  offset: z2.number().int().min(0).max(1e4).optional(),
-  limit: z2.number().int().min(1).max(12).optional().describe("Detailed results per page; default 6, maximum 12.")
+var inputSchema = z3.object({
+  names: z3.array(z3.string().trim().min(1).max(80)).min(1).max(6).optional().describe("Get up to six exact helper signatures together, in this order. Use without other selectors."),
+  category: z3.string().trim().min(1).max(80).optional().describe("Category from the overview."),
+  name: z3.string().trim().min(1).max(80).optional().describe("Exact helper name; returns its signature and example."),
+  query: z3.string().trim().min(1).max(200).optional().describe("Words to find in helper names, descriptions and examples."),
+  overview: z3.boolean().optional().describe("Compact names by category. Default when no search or category is supplied."),
+  capabilities: z3.boolean().optional().describe("Return only runtime, source, geometry export and camera capabilities."),
+  offset: z3.number().int().min(0).max(1e4).optional(),
+  limit: z3.number().int().min(1).max(12).optional().describe("Detailed results per page; default 6, maximum 12.")
 }).strict();
 
 // src/build-cache.ts
@@ -28607,66 +28647,69 @@ function derivativeReviewFidelity(receipts) {
     ...reasonCodes.length ? { reasonCodes } : {}
   };
 }
-var listPrimitivesInput = z3.object({
-  category: z3.string().optional().describe("Optional category filter: geometry, material, structure, animation, utility, instancing, csg, arrays, mesh-ops, curves, uv, textures.")
+var listPrimitivesInput = z4.object({
+  category: z4.string().optional().describe("Optional category filter: geometry, material, structure, animation, utility, instancing, csg, arrays, mesh-ops, curves, uv, textures.")
 });
-var validateInput = z3.object({
-  code: z3.string().describe("Kiln source code (defines `meta` + `build()`, optional `animate()`).")
+var validateInput = z4.object({
+  code: z4.string().describe("Kiln source code (defines `meta` + `build()`, optional `animate()`).")
 });
-var renderInput = z3.object({
-  code: z3.string().describe("Kiln source code to execute and render to an in-memory GLB.")
+var renderInput = z4.object({
+  code: z4.string().describe("Kiln source code to execute and render to an in-memory GLB.")
 });
-var screenshotInput = z3.object({
-  code: z3.string().describe("Kiln source code to execute and render to a six-view image grid.")
+var screenshotInput = z4.object({
+  code: z4.string().describe("Kiln source code to execute and render to a six-view image grid.")
 });
-var legacyCaptureInput = z3.object({
-  preset: z3.enum(["1x1", "1x2", "2x1", "3x1", "2x2", "3x2", "3x3"]).optional().describe("Grid shape as COLSxROWS. Default 3x2. Choose fewer views for simple shapes, up to 3x3 for more angles."),
-  cells: z3.array(z3.object({
-    azimuthDeg: z3.number().describe("0 = front, 90 = right, 180 = back, 270 = left. Wraps."),
-    elevationDeg: z3.number().describe("0 = eye level, positive looks down, negative from below. Clamped to -89..89."),
-    zoom: z3.number().optional().describe("Padding multiplier around the asset bounds for this cell only. Omit for the default framing; below 1 crops in, above 1 pulls back."),
-    name: z3.string().optional().describe("Cell label. Auto-derived from the angles if omitted.")
+var legacyCaptureInput = z4.object({
+  preset: z4.enum(["1x1", "1x2", "2x1", "3x1", "2x2", "3x2", "3x3"]).optional().describe("Grid shape as COLSxROWS. Default 3x2. Choose fewer views for simple shapes, up to 3x3 for more angles."),
+  cells: z4.array(z4.object({
+    azimuthDeg: z4.number().describe("0 = front, 90 = right, 180 = back, 270 = left. Wraps."),
+    elevationDeg: z4.number().describe("0 = eye level, positive looks down, negative from below. Clamped to -89..89."),
+    zoom: z4.number().optional().describe("Padding multiplier around the asset bounds for this cell only. Omit for the default framing; below 1 crops in, above 1 pulls back."),
+    name: z4.string().optional().describe("Cell label. Auto-derived from the angles if omitted.")
   })).optional().describe("One camera per cell, in row-major order. Omit to use the preset default cameras. Must not exceed the preset capacity (max 9 overall).")
 }).optional().describe("Optional. Choose the contact-sheet shape and cameras. Omit it entirely for the standard six-view 3x2 grid, which is the right default for most assets.");
-var cameraVec3Input = z3.tuple([z3.number(), z3.number(), z3.number()]);
-var cameraShotInput = z3.object({
-  name: z3.string().optional(),
-  subject: z3.object({ path: z3.string().optional(), name: z3.string().optional() }).strict().refine((v) => v.path === undefined !== (v.name === undefined), {
+var cameraVec3Input = z4.tuple([z4.number(), z4.number(), z4.number()]);
+var cameraShotInput = z4.object({
+  name: z4.string().optional(),
+  subject: z4.object({ path: z4.string().optional(), name: z4.string().optional() }).strict().refine((v) => v.path === undefined !== (v.name === undefined), {
     message: "Choose subject path OR exact name."
   }).optional(),
-  visibility: z3.enum(["context", "isolate"]).optional(),
-  camera: z3.discriminatedUnion("type", [
-    z3.object({
-      type: z3.literal("orbit"),
-      azimuthDeg: z3.number().optional(),
-      elevationDeg: z3.number().optional(),
-      relativeTo: z3.enum(["world", "asset", "part"]).optional(),
-      padding: z3.number().positive().max(100).optional()
+  visibility: z4.enum(["context", "isolate"]).optional(),
+  camera: z4.discriminatedUnion("type", [
+    z4.object({
+      type: z4.literal("orbit"),
+      azimuthDeg: z4.number().optional(),
+      elevationDeg: z4.number().optional(),
+      relativeTo: z4.enum(["world", "asset", "part"]).optional(),
+      padding: z4.number().positive().max(100).optional()
     }).strict(),
-    z3.object({
-      type: z3.literal("explicit"),
-      projection: z3.enum(["orthographic", "perspective"]),
+    z4.object({
+      type: z4.literal("explicit"),
+      projection: z4.enum(["orthographic", "perspective"]),
       position: cameraVec3Input,
       target: cameraVec3Input.optional(),
-      relativeTo: z3.enum(["world", "asset", "part", "local"]).optional(),
-      frame: z3.object({ origin: cameraVec3Input.optional(), rotation: cameraVec3Input.optional() }).strict().optional(),
-      framing: z3.enum(["explicit", "bounds"]).optional(),
-      padding: z3.number().positive().max(100).optional(),
+      relativeTo: z4.enum(["world", "asset", "part", "local"]).optional(),
+      frame: z4.object({
+        origin: cameraVec3Input.optional(),
+        rotation: cameraVec3Input.optional()
+      }).strict().optional(),
+      framing: z4.enum(["explicit", "bounds"]).optional(),
+      padding: z4.number().positive().max(100).optional(),
       targetOffset: cameraVec3Input.optional(),
       up: cameraVec3Input.optional(),
-      halfHeight: z3.number().positive().optional(),
-      fovDeg: z3.number().positive().lt(180).optional(),
-      near: z3.number().positive().optional(),
-      far: z3.number().positive().optional()
+      halfHeight: z4.number().positive().optional(),
+      fovDeg: z4.number().positive().lt(180).optional(),
+      near: z4.number().positive().optional(),
+      far: z4.number().positive().optional()
     }).strict()
   ]).optional()
 }).strict();
-var advancedCaptureInput = z3.object({
-  version: z3.literal("kiln.capture.v1"),
-  shots: z3.array(cameraShotInput).min(1).max(9),
-  cols: z3.number().int().min(1).max(3).optional(),
-  size: z3.number().int().min(128).max(1024).optional(),
-  output: z3.enum(["grid", "separate"]).optional()
+var advancedCaptureInput = z4.object({
+  version: z4.literal("kiln.capture.v1"),
+  shots: z4.array(cameraShotInput).min(1).max(9),
+  cols: z4.number().int().min(1).max(3).optional(),
+  size: z4.number().int().min(128).max(1024).optional(),
+  output: z4.enum(["grid", "separate"]).optional()
 }).strict();
 function taggedCaptureError(issue) {
   const input = issue.input;
@@ -28679,26 +28722,28 @@ function taggedCaptureError(issue) {
   const details = issues.slice(0, 6).map((problem) => `${problem.path.join(".") || "capture"}: ${problem.message.slice(0, 240)}`);
   return `Invalid kiln.capture.v1: ${details.join("; ")}${issues.length > 6 ? "; additional issues omitted" : ""}`;
 }
-var captureInput = z3.union([
+var captureInput = z4.union([
   advancedCaptureInput,
-  z3.strictObject(legacyCaptureInput.unwrap().shape, { error: taggedCaptureError })
+  z4.strictObject(legacyCaptureInput.unwrap().shape, {
+    error: taggedCaptureError
+  })
 ], { error: taggedCaptureError }).optional().describe("Use legacy preset/cells for an orbit sheet, or version kiln.capture.v1 with 1..9 shots for exact part framing, local axes, perspective and separate images. Omit for six default views.");
 var renderViewsInput = renderInput.extend({ capture: captureInput });
 var renderViewsBufferInput = renderViewsInput.omit({ code: true });
-var screenshotAnimationInput = z3.object({
+var screenshotAnimationInput = z4.object({
   shot: cameraShotInput.optional(),
-  frames: z3.number().int().min(2).max(6).optional(),
-  frameTimes: z3.array(z3.number().min(0).max(1)).min(1).max(9).optional().describe("Ordered phase fractions 0..1; mutually exclusive with frames."),
-  framing: z3.enum(["locked", "follow"]).optional(),
-  code: z3.string().describe("Kiln source code to execute; must define animate() returning the named clip."),
-  clip: z3.string().describe('The animation clip to view, by name (e.g. "walk", "attack"). Must be one your animate() returns.'),
-  camera: z3.string().optional().describe("Camera angle: right (default — side profile, best for leg swing + knee bend direction), front " + "(reveals sideways/lateral motion), back, left, top, or three-quarter."),
-  perFrame: z3.boolean().optional().describe("Return the frames as separate high-res images instead of one composite grid. Default false.")
+  frames: z4.number().int().min(2).max(6).optional(),
+  frameTimes: z4.array(z4.number().min(0).max(1)).min(1).max(9).optional().describe("Ordered phase fractions 0..1; mutually exclusive with frames."),
+  framing: z4.enum(["locked", "follow"]).optional(),
+  code: z4.string().describe("Kiln source code to execute; must define animate() returning the named clip."),
+  clip: z4.string().describe('The animation clip to view, by name (e.g. "walk", "attack"). Must be one your animate() returns.'),
+  camera: z4.string().optional().describe("Camera angle: right (default — side profile, best for leg swing + knee bend direction), front " + "(reveals sideways/lateral motion), back, left, top, or three-quarter."),
+  perFrame: z4.boolean().optional().describe("Return the frames as separate high-res images instead of one composite grid. Default false.")
 });
-var viewInteriorInput = z3.object({
+var viewInteriorInput = z4.object({
   capture: advancedCaptureInput.optional(),
-  code: z3.string().describe("Kiln source code to execute and render with the roof hidden."),
-  nodeName: z3.string().optional().describe("Override: lift the roof by exact node name instead of by role. Matches that node and its " + "children. Normally OMIT it — Kiln finds the roof from its semantic role (anything built " + 'with createRoofPlanes/createGableRoof), falling back to historical "Roof" naming.')
+  code: z4.string().describe("Kiln source code to execute and render with the roof hidden."),
+  nodeName: z4.string().optional().describe("Override: lift the roof by exact node name instead of by role. Matches that node and its " + "children. Normally OMIT it — Kiln finds the roof from its semantic role (anything built " + 'with createRoofPlanes/createGableRoof), falling back to historical "Roof" naming.')
 });
 function runListPrimitives(input) {
   const all = listPrimitives();
@@ -28795,7 +28840,9 @@ async function runScreenshot(input, context) {
   try {
     const { renderGlbViewGrid: renderGlbViewGrid2 } = await Promise.resolve().then(() => (init_views(), exports_views));
     const { root, rendered } = await loadEvaluatedReviewScene(input.code, context);
-    const warnings = inspectSceneStructure(root, { category: trustedCategory(context) });
+    const warnings = inspectSceneStructure(root, {
+      category: trustedCategory(context)
+    });
     const grid = await renderGlbViewGrid2(rendered.glb);
     return {
       ok: true,
@@ -28904,7 +28951,9 @@ async function runRenderViews(input, context) {
     drawnBy ??= context.viewRenderPort ? { renderer: CPU_RASTER_RENDERER_ID2, degraded: false, neededPbr } : {
       renderer: CPU_RASTER_RENDERER_ID2,
       degraded: neededPbr,
-      ...neededPbr ? { degradedReason: "material-faithful view render port unavailable" } : {},
+      ...neededPbr ? {
+        degradedReason: "material-faithful view render port unavailable"
+      } : {},
       neededPbr
     };
     const hashInput = new Uint8Array(rendered.glb.byteLength);
@@ -28980,7 +29029,9 @@ async function runScreenshotAnimation(input, context) {
   try {
     const { renderClipAnimation: renderClipAnimation2 } = await Promise.resolve().then(() => (init_views(), exports_views));
     const { root, clips } = await loadEvaluatedReviewScene(input.code, context);
-    const warnings = inspectSceneStructure(root, { category: trustedCategory(context) });
+    const warnings = inspectSceneStructure(root, {
+      category: trustedCategory(context)
+    });
     const r = await renderClipAnimation2(root, clips, {
       clip: input.clip,
       ...input.shot ? { shot: input.shot } : {},
@@ -29042,7 +29093,10 @@ function screenshotAnimationMediaMulti(output) {
   if (!o || !Array.isArray(o.framesBase64) || o.framesBase64.length === 0)
     return;
   const { pngBase64: _png, framesBase64: _frames, ...json } = o;
-  return { pngs: o.framesBase64.map((b) => new Uint8Array(Buffer.from(b, "base64"))), json };
+  return {
+    pngs: o.framesBase64.map((b) => new Uint8Array(Buffer.from(b, "base64"))),
+    json
+  };
 }
 var KILN_SCREENSHOT_ANIMATION_DESCRIPTION = "SEE one animation clip move: renders the named clip as six frames sampled evenly from start to end (each labeled with its phase %) from one camera, as a 3x2 grid. Use this after animating ANY asset to " + "verify the MOTION — a static screenshot cannot show it — whether it is a character walking, a door or " + "chest lid swinging on its hinge, a wheel/gear/turret/windmill turning on its axle, a lever or hatch throwing, or a flag/frond/branch swaying. Read the side (right) view and confirm each moving part travels the way it should about its OWN real pivot, and that the static base stays put. For a character specifically: a walk swings the legs forward and back (not splayed sideways and not sliding the body sideways), knees bend backward at the joint (not forward like a bird), an attack swings down and FORWARD through the front (not behind the back), and a held weapon tracks the hand through the swing. args: clip (required, the clip name), camera (default right; also front/back/left/top/three-quarter), perFrame (optional, separate high-res frames). If unresolvedTracks comes back " + "non-empty the clip targets joints that do not exist (a name mismatch) and looks frozen — fix the " + "track names. Each frame is rendered from deterministic posed GLB bytes: GPU PBR when available, otherwise a GLB-native geometry-flat fallback. Read viewFidelity before judging materials; writes no files." + VIEW_EVIDENCE_GUIDANCE;
 function createKilnScreenshotAnimationDef(context = {}) {
@@ -29067,7 +29121,9 @@ async function runViewInterior(input, context) {
       ...nodeName2 ? { nodeName: nodeName2 } : {},
       renderDerivativeCell: (cell) => renderDerivativeCell(cell, context)
     });
-    const warnings = inspectSceneStructure(root, { category: trustedCategory(context) });
+    const warnings = inspectSceneStructure(root, {
+      category: trustedCategory(context)
+    });
     if (grid.roofsHidden === 0) {
       warnings.push(nodeName2 ? `No node named "${nodeName2}" was found, so the roof could not be lifted and the interior is still occluded. Check that name, or omit nodeName so the roof is found by its semantic role instead.` : 'No roof was found, so nothing could be lifted and the interior is still occluded. Build the roof with createRoofPlanes/createGableRoof (which tag it as a roof), or name the roof group "Roof".');
     }
@@ -29107,20 +29163,20 @@ function createKilnViewInteriorDef(context = {}) {
   };
 }
 var kilnViewInteriorDef = createKilnViewInteriorDef();
-var attachmentEndpointInput = z3.object({
-  subject: z3.object({ path: z3.string().optional(), name: z3.string().optional() }).strict(),
+var attachmentEndpointInput = z4.object({
+  subject: z4.object({ path: z4.string().optional(), name: z4.string().optional() }).strict(),
   point: cameraVec3Input.optional()
 }).strict();
-var inspectInput = z3.object({
-  measure: z3.object({ from: attachmentEndpointInput, to: attachmentEndpointInput }).strict().optional().describe("Straight-line distance between exact named node origins or subject-local points; asset units, not surface clearance."),
+var inspectInput = z4.object({
+  measure: z4.object({ from: attachmentEndpointInput, to: attachmentEndpointInput }).strict().optional().describe("Straight-line distance between exact named node origins or subject-local points; asset units, not surface clearance."),
   shot: cameraShotInput.optional().describe("Exact framed shot; omit legacy part/view/orbit fields when using this."),
-  code: z3.string().describe("Kiln source code to execute and inspect."),
-  part: z3.string().optional().describe("The part to frame, by node name from your program (case-insensitive; substring match as a fallback). Omit to frame the whole asset."),
-  view: z3.string().optional().describe("Camera angle: front, right, back, left, top, or three-quarter (default). Ignored when azimuthDeg or elevationDeg is given."),
-  azimuthDeg: z3.number().optional().describe("Orbit the camera around the asset: 0 = front, 90 = right, 180 = back, 270 = left. Wraps, " + "so 315 and -45 are the same. Use it to look between the named views — at a corner, a " + "seam, or whatever angle the last render left ambiguous."),
-  elevationDeg: z3.number().optional().describe("Orbit the camera up or down: 0 = eye level, positive looks down from above, negative from below. Clamped to -89..89. Combine with azimuthDeg for any three-quarter angle you want."),
-  zoom: z3.number().optional().describe("Padding multiplier around the part bounds, clamped to 1-4. Default 1.2; raise it to see more surrounding context."),
-  isolate: z3.boolean().optional().describe("Hide everything except the named part (and its descendants) so nothing can block the view. Use it when the part is buried inside or behind other geometry. Needs `part`; without " + "one it does nothing. Default false — surrounding geometry stays visible for context.")
+  code: z4.string().describe("Kiln source code to execute and inspect."),
+  part: z4.string().optional().describe("The part to frame, by node name from your program (case-insensitive; substring match as a fallback). Omit to frame the whole asset."),
+  view: z4.string().optional().describe("Camera angle: front, right, back, left, top, or three-quarter (default). Ignored when azimuthDeg or elevationDeg is given."),
+  azimuthDeg: z4.number().optional().describe("Orbit the camera around the asset: 0 = front, 90 = right, 180 = back, 270 = left. Wraps, " + "so 315 and -45 are the same. Use it to look between the named views — at a corner, a " + "seam, or whatever angle the last render left ambiguous."),
+  elevationDeg: z4.number().optional().describe("Orbit the camera up or down: 0 = eye level, positive looks down from above, negative from below. Clamped to -89..89. Combine with azimuthDeg for any three-quarter angle you want."),
+  zoom: z4.number().optional().describe("Padding multiplier around the part bounds, clamped to 1-4. Default 1.2; raise it to see more surrounding context."),
+  isolate: z4.boolean().optional().describe("Hide everything except the named part (and its descendants) so nothing can block the view. Use it when the part is buried inside or behind other geometry. Needs `part`; without " + "one it does nothing. Default false — surrounding geometry stays visible for context.")
 });
 var inspectBufferInput = inspectInput.omit({ code: true });
 async function runInspect(input, context) {
@@ -29197,7 +29253,10 @@ async function runInspect(input, context) {
       ...viewEvidence ? { viewEvidence } : {}
     };
   } catch (err) {
-    return { ok: false, error: err instanceof Error ? err.message : String(err) };
+    return {
+      ok: false,
+      error: err instanceof Error ? err.message : String(err)
+    };
   }
 }
 var KILN_INSPECT_DESCRIPTION = "ZOOM IN on one part: renders a single 512x512 close-up framed to the named part (the node name you gave createPart, matched case-insensitively with a substring fallback) and its descendants, " + "from one camera. Use it after kiln_render reveals a suspect region — a floating part, a bad " + "joint, a wrong proportion — to see fine detail one grid cell cannot show. args: part (omit to " + "frame the whole asset in one large view), view (front/right/back/left/top/three-quarter, default three-quarter), azimuthDeg + elevationDeg (orbit to ANY angle instead of a named view: azimuth 0 = front, 90 = right, 180 = back, 270 = left; elevation 0 = eye level, positive looks down, clamped to -89..89), zoom (padding multiplier around the part bounds, 1 = tight crop up to 4 = wide context, default 1.2), isolate (hide everything except that part, default false). Reach for the orbit angles when a named view puts the thing you need to judge edge-on or " + "behind something — the reply always tells you the azimuth/elevation it used, so you can step " + "from there. " + "If the part name does not resolve you get the list of available part names back — pick one and " + "retry. By default surrounding geometry stays visible for context and can occlude the part: either pick a different view, or set isolate:true to hide everything else and see the part unobstructed (use it for anything buried inside or behind other geometry). The view is rendered from deterministic derivative GLB bytes; GPU PBR is used only when it can preserve the requested framing, otherwise the GLB-native geometry-flat fallback reports why in viewFidelity. Writes no files." + VIEW_EVIDENCE_GUIDANCE;
@@ -29212,15 +29271,15 @@ function createKilnInspectDef(context = {}) {
   };
 }
 var kilnInspectDef = createKilnInspectDef();
-var editOperationInput = z3.object({
-  oldString: z3.string().describe("The exact text to replace, copied verbatim from the program (including whitespace and indentation, and with no line-number prefixes). Must be unique unless replaceAll is true."),
-  newString: z3.string().describe("The replacement text. Use an empty string to delete."),
-  replaceAll: z3.boolean().optional().describe("Replace every occurrence instead of failing when oldString matches more than once.")
+var editOperationInput = z4.object({
+  oldString: z4.string().describe("The exact text to replace, copied verbatim from the program (including whitespace and indentation, and with no line-number prefixes). Must be unique unless replaceAll is true."),
+  newString: z4.string().describe("The replacement text. Use an empty string to delete."),
+  replaceAll: z4.boolean().optional().describe("Replace every occurrence instead of failing when oldString matches more than once.")
 });
-var editInput = z3.object({
-  code: z3.string().describe("The Kiln program to patch. The full current source."),
-  edits: z3.array(editOperationInput).min(1).max(20).describe("Edits applied in order against the program. If any one fails to match, none are applied and the reply says which. Batch related changes into a single call."),
-  render: z3.boolean().optional().describe("Render the patched program and return the views (default true). false = patch only."),
+var editInput = z4.object({
+  code: z4.string().describe("The Kiln program to patch. The full current source."),
+  edits: z4.array(editOperationInput).min(1).max(20).describe("Edits applied in order against the program. If any one fails to match, none are applied and the reply says which. Batch related changes into a single call."),
+  render: z4.boolean().optional().describe("Render the patched program and return the views (default true). false = patch only."),
   capture: captureInput
 });
 async function runEdit(input, context) {
@@ -29347,14 +29406,22 @@ async function guardCaptureBudget(name, input, context, run2) {
     }
     return out;
   } catch (error) {
-    return { ok: false, error: error instanceof Error ? error.message : String(error) };
+    return {
+      ok: false,
+      error: error instanceof Error ? error.message : String(error)
+    };
   }
 }
+var assetSelector = {
+  collection: z4.string().regex(/^[a-z][a-z0-9_-]{0,79}$/).default("project"),
+  assetId: z4.string().regex(/^[a-z][a-z0-9_-]{0,79}$/),
+  revisionId: z4.string().regex(/^[a-z][a-z0-9_-]{0,79}$/)
+};
 
 // src/agent/tools.ts
 var KILN_SUBMIT_TOOL_NAME = "kiln_submit";
-var submitInput = z4.object({
-  code: z4.string().describe("The complete, final Kiln program (defines `meta` + `build()`, optional `animate()`). " + "Call this exactly once when you are done to record your answer.")
+var submitInput = z5.object({
+  code: z5.string().describe("The complete, final Kiln program (defines `meta` + `build()`, optional `animate()`). " + "Call this exactly once when you are done to record your answer.")
 });
 function withVisualObservation(json, visualObservation) {
   if (json && typeof json === "object" && !Array.isArray(json)) {
@@ -29446,17 +29513,17 @@ function makeKilnTools(sink, context = {}) {
   });
   return [...kilnTools, animationTool, submitTool];
 }
-var viewInput = z4.object({});
-var editInput2 = z4.object({
-  oldString: z4.string().describe("The exact text to replace, copied verbatim from the current code (no line-number prefixes). " + "Must be unique in the buffer unless replaceAll is true."),
-  newString: z4.string().describe("The replacement text. Must differ from oldString."),
-  replaceAll: z4.boolean().optional().describe("Replace every occurrence instead of requiring a unique match. Default false.")
+var viewInput = z5.object({});
+var editInput2 = z5.object({
+  oldString: z5.string().describe("The exact text to replace, copied verbatim from the current code (no line-number prefixes). " + "Must be unique in the buffer unless replaceAll is true."),
+  newString: z5.string().describe("The replacement text. Must differ from oldString."),
+  replaceAll: z5.boolean().optional().describe("Replace every occurrence instead of requiring a unique match. Default false.")
 });
-var bufferCodeInput = z4.object({
-  code: z4.string().optional().describe("Kiln source to check. Omit to use the current working buffer (your edited code).")
+var bufferCodeInput = z5.object({
+  code: z5.string().optional().describe("Kiln source to check. Omit to use the current working buffer (your edited code).")
 });
-var submitEditInput = z4.object({
-  code: z4.string().optional().describe("The complete final program. Omit to submit the current working buffer (your applied edits) - " + "recommended. Pass a full program only to replace the buffer wholesale.")
+var submitEditInput = z5.object({
+  code: z5.string().optional().describe("The complete final program. Omit to submit the current working buffer (your applied edits) - " + "recommended. Pass a full program only to replace the buffer wholesale.")
 });
 function makeKilnEditTools(opts) {
   const buffer = new KilnDraftBuffer(opts.seedCode);
@@ -29544,8 +29611,8 @@ function makeKilnEditTools(opts) {
   ];
 }
 var MAX_POST_RENDER_REWRITES = 0;
-var draftInput = z4.object({
-  code: z4.string().describe("The complete Kiln program (defines `meta` + `build()`, optional `animate()`).")
+var draftInput = z5.object({
+  code: z5.string().describe("The complete Kiln program (defines `meta` + `build()`, optional `animate()`).")
 });
 function makeKilnUnifiedTools(opts) {
   const maxPostRenderRewrites = opts.maxPostRenderRewrites ?? MAX_POST_RENDER_REWRITES;
