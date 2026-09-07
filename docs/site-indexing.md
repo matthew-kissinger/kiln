@@ -32,6 +32,9 @@ validation or indexed every duplicate. Analytics configuration was not changed.
 
 This change adds a crawl-allowing robots file referencing a sitemap that contains
 only the canonical root. The existing canonical remains in the original HTML.
+The account already had `/sitemap-index.xml` submitted from the old site, with an
+error and zero discovered pages. That path is restored as a sitemap index pointing
+to the new root sitemap, so Google's existing submission remains usable.
 Hash routes such as `#/gallery` are views within one document; they are not listed
 as separate crawlable pages or given fragment canonicals. Individually indexed
 gallery pages would require real page URLs and distinct page content.
@@ -53,5 +56,5 @@ Reference: [Google's canonicalization guidance](https://developers.google.com/se
    direct permanent redirect at its hosting configuration; that infrastructure
    is not owned by this GitHub Pages repository and was not changed here.
 
-No account permissions were changed. Deployment and sitemap submission receipts
-are recorded in the release handoff.
+No account permissions were changed. Recheck the submitted sitemap index after
+deployment and retain the final deployment/submission receipt locally.

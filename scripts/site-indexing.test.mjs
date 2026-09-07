@@ -10,4 +10,6 @@ test('crawler discovery points only to the canonical document, without hash rout
   expect([...sitemap.matchAll(/<loc>(.*?)<\/loc>/g)].map((match) => match[1])).toEqual(['https://kilnstudio.tools/']);
   expect(robots).toContain('Sitemap: https://kilnstudio.tools/sitemap.xml');
   expect(robots).not.toMatch(/Disallow:\s*\//);
+  const index = await readFile(new URL('../site/public/sitemap-index.xml', import.meta.url), 'utf8');
+  expect([...index.matchAll(/<loc>(.*?)<\/loc>/g)].map((match) => match[1])).toEqual(['https://kilnstudio.tools/sitemap.xml']);
 });
