@@ -31,7 +31,13 @@ The local viewer delivered the recorder's editable bundle through the browser do
 
 Supported toolchain check, typecheck, lint, packaged runtime smoke test, plugin packaging checks, and skill/plugin validators passed. The collection implementation passed **1,752 tests, two skipped, zero failed**. The first widget/download-helper coverage run passed **1,755 tests, two skipped, zero failed**, with functions **95.48%** and lines **92.71%**, above the unchanged 92%/91% gates. After adding host-provided delivery URLs and the presentation output schema, the focused 15-test set passed; two full coverage attempts aborted in the previously documented Windows GLib `g_system_thread_free`/invalid `CloseHandle` fault at `examples.test.ts`. Those attempts are not clean gates. No dependency version, thread limit, or coverage threshold was changed to mask the fault. Existing lint warnings remain.
 
-A final non-coverage suite also aborted at `examples.test.ts`, reporting `GetQueuedCompletionStatusEx: (735) ERROR_ABANDONED_WAIT_0`. The latest tree therefore does not have a completed full offline gate. Logs are `.dogfood-widget-final-coverage.log`, `.dogfood-widget-final-coverage-retry.log`, and `.dogfood-widget-final-test.log`; the successful focused/package logs are retained separately.
+A final local non-coverage suite also aborted at `examples.test.ts`, reporting `GetQueuedCompletionStatusEx: (735) ERROR_ABANDONED_WAIT_0`. These Windows attempts did not complete a full offline gate. Logs are `.dogfood-widget-final-coverage.log`, `.dogfood-widget-final-coverage-retry.log`, and `.dogfood-widget-final-test.log`; the successful focused/package logs are retained separately.
+
+Hosted validation subsequently passed on both the release candidate and merged
+code: **1,758 passed, two skipped, zero failed**, functions **94.75%**, lines
+**93.30%**. The portable package and both macOS architectures passed too.
+[Merged-code CI](https://github.com/matthew-kissinger/kiln/actions/runs/34070595879).
+The Windows fault remains unresolved; a successful Linux run is not its repair.
 
 ## ChatGPT integration
 
@@ -80,3 +86,13 @@ typecheck, lint, and the site build passed. A further local coverage run aborted
 with `ERROR_ABANDONED_WAIT_0` during CLI render-mode tests rather than examples
 (`.dogfood-release-coverage.log`). The fault is not confined to the example file.
 No speculative runtime mitigation or relaxed gate was introduced.
+
+## Publication receipt
+
+[PR #54](https://github.com/matthew-kissinger/kiln/pull/54) merged as
+`c15413ae32bec296d02acd38160c8971341adcbd`. The
+[Pages deployment](https://github.com/matthew-kissinger/kiln/actions/runs/34070595924)
+succeeded for that code. Live HTML referenced the same `index-xZWkf3qz.js` bundle
+as the local build; the chat section was present, and all three crawler files
+returned 200. README and site distinguish verified chat viewing from unverified
+native attachments. No dogfood asset or private tunnel configuration was published.
