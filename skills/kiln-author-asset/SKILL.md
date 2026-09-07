@@ -28,7 +28,11 @@ Inspect the actual images. Check silhouette, proportion, orientation, attachment
 
 Read a bounded source region with `kiln_source({ programRef, query: "dimensionOrPart" })`. Copy an exact anchor into `kiln_edit`, batch related replacements, and continue with its new `programRef`. Rendering is on by default; `capture` can keep the relevant framing. An applied edit can still fail to build, so inspect `render.ok` separately.
 
-Save the final reference without model transcription:
+When the collection tools are available, save completed work with `kiln_save({ programRef, name, collection: "project", brief, description })`. Use `kiln_assets({ action: "collections" })` to discover other configured destinations. Record only known model/harness attribution. Saving returns the asset ID, revision ID, and download resources for its exact GLB, source, and ZIP bundle. Return those links to the user using the host's resource/download interface; do not transcribe binary data. The local viewer opens with `node kiln.mjs view`.
+
+If `kiln_present` is available, call it with the saved collection, asset ID, and revision ID to show the interactive viewer. Use returned download URLs when provided; never invent HTTPS URLs or claim that a host supports native attachments without evidence. A `kiln://` resource may require the host's resource reader or local viewer.
+
+Save at meaningful completion points, not after each draft or camera change. Retain source revisions while working. For direct filesystem exports without collection tools:
 
 ```sh
 node kiln.mjs source RETURNED_REF --out asset-v1.kiln.js

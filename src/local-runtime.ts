@@ -116,6 +116,13 @@ export function createLocalToolContext(
       base.programStore ??
       new FileProgramStore(resolve(env.KILN_PROGRAM_STORE ?? '.kiln/programs')),
     evaluatorPort,
+    assetBuildOptions: {
+      optimize,
+      instance,
+      geometryPolicy,
+      qaMode: env.KILN_QA_MODE ?? 'enforce',
+      evaluatorMode: mode,
+    },
     buildCache: new MemoryBuildCache(),
     evaluatorCacheIdentity: `kiln-local-${process.pid}-${++scope}:${JSON.stringify({ mode, optimize, instance, geometryPolicy, qa: env.KILN_QA_MODE, deadlineMs, heapMb })}`,
     localExecution,

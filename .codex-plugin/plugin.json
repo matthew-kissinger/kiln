@@ -1,0 +1,20 @@
+{
+  "name": "kiln-oss",
+  "version": "0.6.0",
+  "description": "Create, review, save, and refine procedural 3D assets with portable source and GLB collections.",
+  "author": {
+    "name": "Matthew Kissinger"
+  },
+  "skills": "./skills/",
+  "interface": {
+    "displayName": "Kiln",
+    "shortDescription": "Build and collect editable 3D assets",
+    "longDescription": "Author JavaScript, inspect camera views, and save GLBs with source revisions for later refinement.",
+    "developerName": "Matthew Kissinger",
+    "category": "Developer Tools",
+    "capabilities": ["Read", "Write"],
+    "defaultPrompt": ["Create a game prop and save its editable GLB bundle.", "Browse my collection and refine an existing asset."]
+  },
+  "mcpServers": "./.mcp.json",
+  "license": "MIT"
+}

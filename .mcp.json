@@ -1,0 +1,9 @@
+{
+  "mcpServers": {
+    "kiln": {
+      "command": "node",
+      "args": ["${PLUGIN_ROOT}/dist/mcp-server.mjs"],
+      "env": { "KILN_RENDER": "auto" }
+    }
+  }
+}

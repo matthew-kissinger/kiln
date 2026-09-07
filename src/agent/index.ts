@@ -49,6 +49,7 @@ export type {
 
 export {
   makeKilnTools,
+  makeKilnProgramTools,
   makeKilnEditTools,
   makeKilnUnifiedTools,
   KilnDraftBuffer,

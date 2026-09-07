@@ -24,6 +24,7 @@ import { ViewEvidenceHistoryStore } from '../views/evidence-history';
 
 import {
   createKilnToolRegistry,
+  createKilnProgramToolRegistry,
   createKilnInspectDef,
   createKilnRenderViewsDef,
   createKilnScreenshotAnimationDef,
@@ -161,6 +162,13 @@ function toStrandsTool(def: KilnToolDef, context: KilnToolContext = {}): Tool {
     inputSchema: def.inputSchema as z.ZodType,
     callback: async (input) => toCallbackResult(def, await def.run(input), context),
   });
+}
+
+/** Reference-based authoring and collections, identical to MCP, plus explicit submit. */
+export function makeKilnProgramTools(sink: SubmitSink, context: KilnToolContext = {}): Tool[] {
+  const definitions = createKilnProgramToolRegistry(context);
+  const submit = makeKilnTools(sink, context).find((t) => t.name === KILN_SUBMIT_TOOL_NAME)!;
+  return [...definitions.map((def) => toStrandsTool(def, context)), submit];
 }
 
 /**
