@@ -87,6 +87,33 @@ harnesses and the plugin path.
 
 ## Revise an asset
 
+Save finished work into a collection with `node kiln.mjs save workbench.kiln.js --name "Workbench"`.
+Run `node kiln.mjs view` to browse saved assets, inspect revisions, and download GLBs
+or editable ZIP bundles. Project collections and personal libraries use the same
+portable folders. See [saved assets and the viewer](docs/collections.md).
+
+## Use Kiln in a chat client
+
+Create and refine assets in ChatGPT through a private MCP connection, then ask to
+see a saved revision. `kiln_present` opens an interactive 3D card in supporting
+MCP App clients. Orbit the model and inspect its animation without leaving chat.
+ChatGPT viewing was verified with real saved assets.
+
+1. Build the runtime and connect its stdio MCP server through an OpenAI Secure
+   MCP Tunnel scoped to your workspace.
+2. Install the authoring and refinement skills with their reference files using
+   ChatGPT's native skill uploader.
+3. Ask: “Make a field recorder, review the renders, save it to my project
+   collection, and show it with `kiln_present`.”
+
+The [ChatGPT setup guide](docs/chatgpt.md) covers connection, skill packaging, and
+host requirements. This currently needs developer setup; it is not a public
+one-click ChatGPT app. Local GLB and editable ZIP downloads work through
+`kiln view`. ChatGPT-native GLB/ZIP attachments remain unverified; download support
+depends on the client or a host-provided delivery link.
+
+## Restore source for another edit
+
 Import an existing program from your asset workspace:
 
 ```sh

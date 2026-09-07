@@ -17,6 +17,8 @@
     "kiln-init": "./scripts/create-workspace.mjs"
   },
   "exports": {
+    "./assets": "./src/assets.ts",
+    "./assets/node": "./src/assets-node.ts",
     ".": "./src/cli.ts",
     "./agent": "./src/agent/index.ts",
     "./tools": "./src/tools/registry.ts",
@@ -58,6 +60,7 @@
     "./world-runtime": "./src/composer/terrain-runtime.ts"
   },
   "files": [
+    "dist/viewer/",
     "src/**/*.ts",
     "src/**/*.mjs",
     "!src/**/*.test.ts",
@@ -66,7 +69,10 @@
     "dist/build.json",
     "plugin.json",
     ".claude-plugin/",
+    ".codex-plugin/",
+    ".mcp.json",
     "scripts/create-workspace.mjs",
+    "scripts/package-plugin.mjs",
     "skills/",
     "docs/",
     "README.md",
@@ -82,12 +88,13 @@
     "build:mcp": "node scripts/build-runtime.mjs mcp",
     "build:cli": "node scripts/build-runtime.mjs cli",
     "build:worker": "node scripts/build-runtime.mjs worker",
-    "build:runtime": "node scripts/build-runtime.mjs all",
+    "build:runtime": "node scripts/build-viewer.mjs && node scripts/build-runtime.mjs all",
+    "build:viewer": "node scripts/build-viewer.mjs",
     "docs:tools": "bun scripts/generate-tool-reference.ts",
     "test": "KILN_SPIKE_LIVE=0 KILN_RENDER=cpu bun test src scripts",
     "test:coverage": "KILN_SPIKE_LIVE=0 KILN_RENDER=cpu bun test src scripts --coverage && bun scripts/check-coverage.mjs",
     "test:live": "KILN_SPIKE_LIVE=1 bun test",
-    "test:package": "node scripts/smoke-package.mjs",
+    "test:package": "node scripts/test-plugin-package.mjs && node scripts/smoke-package.mjs",
     "lint": "biome check .",
     "site:assets": "cd site && bun scripts/build-assets.mjs",
     "site:dev": "bun run --cwd site dev",

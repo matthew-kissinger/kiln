@@ -8,7 +8,13 @@ license: MIT
 
 Work from the saved program. A GLB alone does not contain editable Kiln JavaScript. Keep the user's requested change distinct from unrelated redesign.
 
+For a collection asset, first call `kiln_assets` with `action: "restore"`, `collection`, `assetId`, and `revisionId`. This imports its exact source into the current program store and returns a fresh `programRef`. A downloaded ZIP can be imported with `node kiln.mjs import bundle.zip`. A binary-only GLB has no source to restore.
+
+After reviewing the change, use `kiln_save` with the new `programRef`, the original `assetId`, and `parentRevision` set to the revision you started from. Preserve the collection, name, and relevant tags; describe the change. Return the new revision's download resources. Prior revisions remain intact; copying to a different collection does not make a live link.
+
 ## Read, change, compare
+
+After saving the reviewed child revision, call `kiln_present` when available with its exact collection, asset ID, and revision ID. This opens an interactive view in supporting chat hosts. Return actual download URLs when supplied; do not invent links or assume `kiln://` resources are native chat attachments.
 
 1. Copy the returned `programRef` exactly, or import a file with `node kiln.mjs source asset.kiln.js`. Built-in stores return short immutable handles such as `p_7c94a132b8e0`; full SHA-256 references also work. Do not shorten a hash yourself. Submit source inline only when introducing a new draft to the store.
 2. Obtain a before view when it resolves an uncertainty. Use returned exact part paths for targeted framing; the [revision and view recipes](references/revision-and-views.md) show source paging, custom cameras, and animation phases.

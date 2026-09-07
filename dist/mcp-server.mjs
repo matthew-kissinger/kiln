@@ -18,6 +18,97 @@ var __export = (target, all) => {
 var __esm = (fn, res) => () => (fn && (res = fn(fn = 0)), res);
 var __require = /* @__PURE__ */ createRequire(import.meta.url);
 
+// src/assets.ts
+import { z } from "zod";
+import { zipSync, unzipSync } from "three/addons/libs/fflate.module.js";
+function validateRecordShape(record) {
+  const manifest = assetManifestSchema.parse(record.manifest);
+  const names = Object.keys(record.files);
+  if (names.length !== Object.keys(manifest.files).length || !names.includes("asset.glb"))
+    throw new Error("Asset file inventory mismatch");
+  let total = 0;
+  for (const name of names) {
+    if (!allowedFiles.has(name) || !manifest.files[name] || manifest.files[name].bytes !== record.files[name].length)
+      throw new Error("Invalid asset file inventory");
+    total += record.files[name].length;
+  }
+  if (total > ASSET_LIMIT || manifest.editable !== names.includes("source.kiln.js"))
+    throw new Error("Invalid asset size or source inventory");
+  if ((record.files["source.kiln.js"]?.length ?? 0) > 1024 * 1024)
+    throw new Error("Source exceeds 1 MiB");
+  validateAssetGlb(record.files["asset.glb"]);
+}
+function validateAssetGlb(bytes) {
+  if (bytes.length < 20 || bytes.length > ASSET_LIMIT)
+    throw new Error("Invalid GLB size");
+  const view = new DataView(bytes.buffer, bytes.byteOffset, bytes.byteLength);
+  if (view.getUint32(0, true) !== 1179937895 || view.getUint32(4, true) !== 2 || view.getUint32(8, true) !== bytes.length || view.getUint32(16, true) !== 1313821514)
+    throw new Error("Invalid GLB header");
+  const end = 20 + view.getUint32(12, true);
+  if (end > bytes.length)
+    throw new Error("Invalid GLB JSON length");
+  const json = JSON.parse(new TextDecoder().decode(bytes.subarray(20, end)));
+  for (const resource of [...json.buffers ?? [], ...json.images ?? []]) {
+    if (resource.uri && !String(resource.uri).startsWith("data:"))
+      throw new Error("GLB must embed its resources");
+  }
+}
+function encodeAssetBundle(records) {
+  if (!records.length || records.length > 100)
+    throw new Error("Bundle requires 1..100 revisions");
+  const files = {};
+  let total = 0;
+  for (const record of records) {
+    validateRecordShape(record);
+    const prefix = `${record.manifest.assetId}/${record.manifest.revisionId}/`;
+    if (files[`${prefix}manifest.json`])
+      throw new Error("Duplicate bundle revision");
+    files[`${prefix}manifest.json`] = new TextEncoder().encode(JSON.stringify(record.manifest, null, 2));
+    for (const [name, bytes] of Object.entries(record.files))
+      files[prefix + name] = bytes;
+  }
+  for (const bytes of Object.values(files))
+    total += bytes.length;
+  if (total > ASSET_LIMIT)
+    throw new Error("Bundle exceeds 64 MiB");
+  return zipSync(files, { level: 0 });
+}
+var ASSET_LIMIT, assetIdSchema, hash, assetManifestSchema, allowedFiles;
+var init_assets = __esm(() => {
+  ASSET_LIMIT = 64 * 1024 * 1024;
+  assetIdSchema = z.string().regex(/^[a-z][a-z0-9_-]{0,79}$/);
+  hash = z.string().regex(/^sha256:[a-f0-9]{64}$/);
+  assetManifestSchema = z.object({
+    version: z.literal("kiln.asset.v1"),
+    assetId: assetIdSchema,
+    revisionId: assetIdSchema,
+    parentRevision: assetIdSchema.optional(),
+    name: z.string().min(1).max(200),
+    tags: z.array(z.string().max(80)).max(30),
+    createdAt: z.string().datetime(),
+    description: z.string().max(4000).optional(),
+    brief: z.string().max(8000).optional(),
+    attribution: z.object({
+      model: z.string().max(200).optional(),
+      harness: z.string().max(200).optional(),
+      author: z.string().max(200).optional()
+    }).optional(),
+    editable: z.boolean(),
+    files: z.record(z.string(), z.object({ sha256: hash, bytes: z.number().int().nonnegative().max(ASSET_LIMIT) })),
+    build: z.object({
+      engine: z.string(),
+      options: z.record(z.string(), z.unknown()),
+      warnings: z.array(z.string()),
+      integration: z.unknown().optional(),
+      qa: z.unknown().optional(),
+      dependencies: z.array(z.unknown()).optional(),
+      rebuild: z.enum(["engine-required", "external-dependencies-required"])
+    }).optional(),
+    preview: z.object({ fidelity: z.unknown().optional(), error: z.string().optional() }).optional()
+  });
+  allowedFiles = new Set(["asset.glb", "source.kiln.js", "preview.png"]);
+});
+
 // src/views/background.ts
 var GRID_BACKGROUND_RGB, GRID_BACKGROUND_HEX = "#1a1a1a";
 var init_background = __esm(() => {
@@ -32,8 +123,8 @@ function orbitDir(azimuthDeg, elevationDeg) {
   return [cosEl * Math.cos(az), Math.sin(el), cosEl * Math.sin(az)];
 }
 function orbitAnglesOf(dir) {
-  const [x, y, z] = normalize(dir);
-  const azimuthDeg = (Math.atan2(z, x) * 180 / Math.PI % 360 + 360) % 360;
+  const [x, y, z2] = normalize(dir);
+  const azimuthDeg = (Math.atan2(z2, x) * 180 / Math.PI % 360 + 360) % 360;
   return {
     azimuthDeg: +azimuthDeg.toFixed(2),
     elevationDeg: +(Math.asin(Math.min(1, Math.max(-1, y))) * 180 / Math.PI).toFixed(2)
@@ -89,10 +180,10 @@ function collectTriangles(root) {
     for (let i = 0;i < pos.count; i++) {
       const x = arr[i * 3];
       const y = arr[i * 3 + 1];
-      const z = arr[i * 3 + 2];
-      const wx = m[0] * x + m[4] * y + m[8] * z + m[12];
-      const wy = m[1] * x + m[5] * y + m[9] * z + m[13];
-      const wz = m[2] * x + m[6] * y + m[10] * z + m[14];
+      const z2 = arr[i * 3 + 2];
+      const wx = m[0] * x + m[4] * y + m[8] * z2 + m[12];
+      const wy = m[1] * x + m[5] * y + m[9] * z2 + m[13];
+      const wz = m[2] * x + m[6] * y + m[10] * z2 + m[14];
       world[i * 3] = wx;
       world[i * 3 + 1] = wy;
       world[i * 3 + 2] = wz;
@@ -163,10 +254,10 @@ function rasterizeView(root, dir, opts = {}) {
   }
   if (tris.length === 0)
     return out;
-  const z = normalize(dir);
-  const upHint = Math.abs(z[1]) > 0.99 ? [0, 0, -1] : [0, 1, 0];
-  const x = normalize(cross(upHint, z));
-  const y = cross(z, x);
+  const z2 = normalize(dir);
+  const upHint = Math.abs(z2[1]) > 0.99 ? [0, 0, -1] : [0, 1, 0];
+  const x = normalize(cross(upHint, z2));
+  const y = cross(z2, x);
   const frameMin = opts.frameBounds ? opts.frameBounds.min : bbox.min;
   const frameMax = opts.frameBounds ? opts.frameBounds.max : bbox.max;
   const center = [
@@ -196,7 +287,7 @@ function rasterizeView(root, dir, opts = {}) {
     if (nLen < 0.000000000001)
       continue;
     const N = [n[0] / nLen, n[1] / nLen, n[2] / nLen];
-    const facing = dot(N, z);
+    const facing = dot(N, z2);
     if (cull && facing <= 0 && !tri.doubleSided)
       continue;
     if (tri.alpha <= 0)
@@ -208,7 +299,7 @@ function rasterizeView(root, dir, opts = {}) {
       const p = [px, py, pz];
       sx[i] = half + dot(p, x) * scale;
       sy[i] = half - dot(p, y) * scale;
-      sz[i] = dot(p, z);
+      sz[i] = dot(p, z2);
     }
     const lambert = Math.max(0, dot(N, KEY_DIR));
     const lit = Math.min(1, AMBIENT + KEY_INTENSITY * lambert);
@@ -353,14 +444,14 @@ function cameraFromBounds(bounds, dir, padding = 1, up, sceneBounds = bounds) {
   if (!Number.isFinite(padding) || padding <= 0 || padding > 100)
     throw new Error("padding must be in (0,100]");
   const target = vec(bounds.min).add(vec(bounds.max)).multiplyScalar(0.5);
-  const z = vec(dir).normalize();
-  if (!z.length())
+  const z2 = vec(dir).normalize();
+  if (!z2.length())
     throw new Error("camera direction must be non-zero");
-  const hint = up ? vec(up) : Math.abs(z.y) > 0.99 ? new Vector3(0, 0, -1) : new Vector3(0, 1, 0);
-  const x = hint.clone().cross(z).normalize();
+  const hint = up ? vec(up) : Math.abs(z2.y) > 0.99 ? new Vector3(0, 0, -1) : new Vector3(0, 1, 0);
+  const x = hint.clone().cross(z2).normalize();
   if (x.length() < 0.000000001)
     throw new Error("camera up must not be collinear with view");
-  const y = z.clone().cross(x);
+  const y = z2.clone().cross(x);
   let extent = 0.000001;
   for (let i = 0;i < 8; i++) {
     const p = new Vector3((i & 1 ? bounds.max : bounds.min)[0], (i & 2 ? bounds.max : bounds.min)[1], (i & 4 ? bounds.max : bounds.min)[2]).sub(target);
@@ -373,7 +464,7 @@ function cameraFromBounds(bounds, dir, padding = 1, up, sceneBounds = bounds) {
   return {
     version: "kiln.camera.v1",
     projection: "orthographic",
-    position: tuple(target.clone().addScaledVector(z, distance)),
+    position: tuple(target.clone().addScaledVector(z2, distance)),
     target: tuple(target),
     up: tuple(y),
     aspect: 1,
@@ -433,13 +524,13 @@ function resolveAssetCamera(root, shot = {}) {
   let camera;
   if (request.type === "orbit") {
     strict(request, ["type", "azimuthDeg", "elevationDeg", "relativeTo", "padding"], "camera");
-    const relative = request.relativeTo ?? "world";
-    if (!["world", "asset", "part"].includes(relative))
+    const relative2 = request.relativeTo ?? "world";
+    if (!["world", "asset", "part"].includes(relative2))
       throw new Error("invalid relativeTo");
     const dir = vec(orbitDir(finite(request.azimuthDeg ?? 45, "azimuthDeg"), finite(request.elevationDeg ?? 25, "elevationDeg")));
     let up;
-    if (relative !== "world") {
-      const node = relative === "part" ? selected.node : rootNode;
+    if (relative2 !== "world") {
+      const node = relative2 === "part" ? selected.node : rootNode;
       dir.transformDirection(node.matrixWorld);
       up = tuple(new Vector3(0, 1, 0).transformDirection(node.matrixWorld));
     }
@@ -463,10 +554,10 @@ function resolveAssetCamera(root, shot = {}) {
     ], "camera");
     if (request.projection === "orthographic" && request.fovDeg !== undefined || request.projection === "perspective" && request.halfHeight !== undefined)
       throw new Error("projection and lens fields conflict");
-    const relative = request.relativeTo ?? "world";
-    if (!["world", "asset", "part", "local"].includes(relative))
+    const relative2 = request.relativeTo ?? "world";
+    if (!["world", "asset", "part", "local"].includes(relative2))
       throw new Error("invalid relativeTo");
-    if (relative === "local" !== Boolean(request.frame))
+    if (relative2 === "local" !== Boolean(request.frame))
       throw new Error("local coordinates require frame; frame is only valid for local coordinates");
     if (request.framing !== undefined && !["explicit", "bounds"].includes(request.framing))
       throw new Error("invalid framing");
@@ -477,8 +568,8 @@ function resolveAssetCamera(root, shot = {}) {
     if (request.framing === "bounds" && request.halfHeight !== undefined)
       throw new Error("bounds framing derives halfHeight");
     let matrix = new Matrix4;
-    if (relative === "asset" || relative === "part")
-      matrix = (relative === "asset" ? rootNode : selected.node).matrixWorld;
+    if (relative2 === "asset" || relative2 === "part")
+      matrix = (relative2 === "asset" ? rootNode : selected.node).matrixWorld;
     if (request.frame) {
       strict(request.frame, ["origin", "rotation"], "frame");
       const rotation = triple(request.frame.rotation ?? [0, 0, 0], "frame.rotation");
@@ -559,7 +650,7 @@ function rasterizeCamera(root, input, size = 384, backfaceCull = true) {
   const camera = validateResolvedAssetCamera(input);
   if (!Number.isInteger(size) || size < 1 || size > 2048)
     throw new Error("camera size must be an integer in 1..2048");
-  const z = vec(camera.position).sub(vec(camera.target)).normalize(), x = vec(camera.up).cross(z).normalize(), y = z.clone().cross(x), position = vec(camera.position);
+  const z2 = vec(camera.position).sub(vec(camera.target)).normalize(), x = vec(camera.up).cross(z2).normalize(), y = z2.clone().cross(x), position = vec(camera.position);
   const out = new Uint8Array(size * size * 3);
   for (let i = 0;i < size * size; i++)
     out.set(GRID_BACKGROUND_RGB, i * 3);
@@ -581,7 +672,7 @@ function rasterizeCamera(root, input, size = 384, backfaceCull = true) {
   for (const tri of collectTriangles(root).tris) {
     const world = [0, 1, 2].map((i) => new Vector3(tri.v[i * 3], tri.v[i * 3 + 1], tri.v[i * 3 + 2]));
     const normal = world[1].clone().sub(world[0]).cross(world[2].clone().sub(world[0])).normalize();
-    if (backfaceCull && !tri.doubleSided && normal.dot(camera.projection === "perspective" ? position.clone().sub(world[0]) : z) <= 0)
+    if (backfaceCull && !tri.doubleSided && normal.dot(camera.projection === "perspective" ? position.clone().sub(world[0]) : z2) <= 0)
       continue;
     if (tri.alpha <= 0)
       continue;
@@ -589,7 +680,7 @@ function rasterizeCamera(root, input, size = 384, backfaceCull = true) {
     const color = tri.color.map((c) => Math.round(srgb(c * light) * 255));
     let polygon = world.map((p) => {
       const d = p.clone().sub(position);
-      return new Vector3(d.dot(x), d.dot(y), -d.dot(z));
+      return new Vector3(d.dot(x), d.dot(y), -d.dot(z2));
     });
     polygon = clip(clip(polygon, camera.near, true), camera.far, false);
     for (let t = 1;t < polygon.length - 1; t++) {
@@ -1173,19 +1264,19 @@ var init_pose = __esm(() => {
 // src/views/annotate.ts
 function stampAxisGnomon(rgb, size, viewDir) {
   const zl = Math.hypot(viewDir[0], viewDir[1], viewDir[2]) || 1;
-  const z = [viewDir[0] / zl, viewDir[1] / zl, viewDir[2] / zl];
-  const up = Math.abs(z[1]) > 0.99 ? [0, 0, -1] : [0, 1, 0];
+  const z2 = [viewDir[0] / zl, viewDir[1] / zl, viewDir[2] / zl];
+  const up = Math.abs(z2[1]) > 0.99 ? [0, 0, -1] : [0, 1, 0];
   const cx = [
-    up[1] * z[2] - up[2] * z[1],
-    up[2] * z[0] - up[0] * z[2],
-    up[0] * z[1] - up[1] * z[0]
+    up[1] * z2[2] - up[2] * z2[1],
+    up[2] * z2[0] - up[0] * z2[2],
+    up[0] * z2[1] - up[1] * z2[0]
   ];
   const xl = Math.hypot(cx[0], cx[1], cx[2]) || 1;
   const bx = [cx[0] / xl, cx[1] / xl, cx[2] / xl];
   const by = [
-    z[1] * bx[2] - z[2] * bx[1],
-    z[2] * bx[0] - z[0] * bx[2],
-    z[0] * bx[1] - z[1] * bx[0]
+    z2[1] * bx[2] - z2[2] * bx[1],
+    z2[2] * bx[0] - z2[0] * bx[2],
+    z2[0] * bx[1] - z2[1] * bx[0]
   ];
   const len = Math.max(12, Math.round(size * 0.055));
   const ox = len + 10;
@@ -1354,7 +1445,7 @@ __export(exports_capture_cache, {
   captureCpuCell: () => captureCpuCell,
   MemoryCaptureCache: () => MemoryCaptureCache
 });
-import { createHash } from "node:crypto";
+import { createHash as createHash2 } from "node:crypto";
 function clone(entry) {
   const result = structuredClone(entry);
   if (result.kind === "cpu")
@@ -1421,9 +1512,9 @@ function canonical(value) {
     return value;
   throw new Error("Capture identity must be data");
 }
-function usable(result, request, hash) {
+function usable(result, request, hash2) {
   try {
-    if (!result.ok || !result.rendererId?.trim() || result.derivativeFidelity?.materialFaithful !== true || result.derivativeFidelity.inputGlbSha256 !== hash)
+    if (!result.ok || !result.rendererId?.trim() || result.derivativeFidelity?.materialFaithful !== true || result.derivativeFidelity.inputGlbSha256 !== hash2)
       return false;
     const count = (request.cameras ?? request.viewDirs).length;
     if (result.viewsPng?.length !== count)
@@ -1450,13 +1541,13 @@ function createCachedRenderPort(port, options) {
       return port(input);
     const validated = validatePbrRenderRequest(input);
     const request = { ...validated, glb: Uint8Array.from(validated.glb) };
-    const hash = digest(request.glb);
+    const hash2 = digest2(request.glb);
     const selectors = request.cameras ?? request.viewDirs;
-    const keys = selectors.map((selector) => digest(text({
+    const keys = selectors.map((selector) => digest2(text({
       version: "kiln.capture-cache.v1",
       kind: "gpu",
       identity,
-      artifact: hash,
+      artifact: hash2,
       selector,
       size: request.size,
       width: request.width,
@@ -1473,7 +1564,7 @@ function createCachedRenderPort(port, options) {
         ...request,
         ...request.cameras ? { cameras: [request.cameras[i]] } : { viewDirs: [request.viewDirs[i]] }
       };
-      if (cached?.kind === "gpu" && usable(cached.result, single, hash))
+      if (cached?.kind === "gpu" && usable(cached.result, single, hash2))
         cells[i] = cached.result;
       else
         missing.push(i);
@@ -1493,7 +1584,7 @@ function createCachedRenderPort(port, options) {
           rendererId: produced.rendererId,
           error: "capture producer changed during render"
         };
-      if (!usable(produced, subrequest, hash)) {
+      if (!usable(produced, subrequest, hash2)) {
         return missing.length === selectors.length ? produced : {
           ok: false,
           rendererId: produced.rendererId,
@@ -1532,7 +1623,7 @@ function createCachedRenderPort(port, options) {
 }
 async function captureCpuCell(cache, identity, produce) {
   const snapshot = structuredClone(identity);
-  const key = digest(text({ version: "kiln.capture-cache.v1", kind: "cpu", ...snapshot }));
+  const key = digest2(text({ version: "kiln.capture-cache.v1", kind: "cpu", ...snapshot }));
   const valid = (result2) => {
     try {
       enforcePngCaptureBudget([result2.png]);
@@ -1553,7 +1644,7 @@ async function captureCpuCell(cache, identity, produce) {
   await cache.put(key, { kind: "cpu", result }).catch(() => {});
   return { ...result, png: Buffer.from(result.png), captureCache: { hit: false } };
 }
-var text = (value) => JSON.stringify(canonical(value)), digest = (value) => `sha256:${createHash("sha256").update(value).digest("hex")}`;
+var text = (value) => JSON.stringify(canonical(value)), digest2 = (value) => `sha256:${createHash2("sha256").update(value).digest("hex")}`;
 var init_capture_cache = __esm(() => {
   init_render_port();
   init_png();
@@ -3855,7 +3946,7 @@ var init_types = __esm(() => {
 });
 
 // src/qa/registry.ts
-import { createHash as createHash2 } from "node:crypto";
+import { createHash as createHash3 } from "node:crypto";
 function canonicalCalibrationReportEvidence(report) {
   return JSON.stringify({
     schemaVersion: report.schemaVersion,
@@ -3888,7 +3979,7 @@ function canonicalCalibrationReportEvidence(report) {
   });
 }
 function calibrationReportEvidenceSha256(report) {
-  return createHash2("sha256").update(canonicalCalibrationReportEvidence(report)).digest("hex");
+  return createHash3("sha256").update(canonicalCalibrationReportEvidence(report)).digest("hex");
 }
 function conformancePromotionAuthorization(fixtureSetId, fixturePath, evidenceSha256, owner = KILN_ENGINE_QA_OWNER, frozenAt = "2026-07-09T00:00:00.000Z", authorizedMode = "enforce", rendererId = LEGACY_CPU_RASTER_RENDERER_ID) {
   return {
@@ -4868,7 +4959,7 @@ function endFindings(context, architecture, evidence) {
   }
   return findings;
 }
-function pointInProjectedTriangle(x, z2, triangle) {
+function pointInProjectedTriangle(x, z3, triangle) {
   const ax = triangle.a.x;
   const az = triangle.a.z;
   const bx = triangle.b.x;
@@ -4878,8 +4969,8 @@ function pointInProjectedTriangle(x, z2, triangle) {
   const denominator = (bz - cz) * (ax - cx) + (cx - bx) * (az - cz);
   if (Math.abs(denominator) <= EPSILON)
     return { inside: false, weights: [0, 0, 0] };
-  const wa = ((bz - cz) * (x - cx) + (cx - bx) * (z2 - cz)) / denominator;
-  const wb = ((cz - az) * (x - cx) + (ax - cx) * (z2 - cz)) / denominator;
+  const wa = ((bz - cz) * (x - cx) + (cx - bx) * (z3 - cz)) / denominator;
+  const wb = ((cz - az) * (x - cx) + (ax - cx) * (z3 - cz)) / denominator;
   const wc = 1 - wa - wb;
   const tolerance = 0.00001;
   return {
@@ -4887,10 +4978,10 @@ function pointInProjectedTriangle(x, z2, triangle) {
     weights: [wa, wb, wc]
   };
 }
-function nearestRoofHeight(triangles, x, z2, targetY) {
+function nearestRoofHeight(triangles, x, z3, targetY) {
   const heights = [];
   for (const triangle of triangles) {
-    const projected = pointInProjectedTriangle(x, z2, triangle);
+    const projected = pointInProjectedTriangle(x, z3, triangle);
     if (!projected.inside)
       continue;
     const [wa, wb, wc] = projected.weights;
@@ -4924,8 +5015,8 @@ function envelopeFindings(context, architecture, evidence) {
     for (const offset of offsets) {
       const ridge = offset * ridgeSpan;
       const x = ridgeAxis === "x" ? ridge : lateral;
-      const z2 = ridgeAxis === "x" ? lateral : ridge;
-      const roofY = nearestRoofHeight(roof.triangles, x, z2, wallTop);
+      const z3 = ridgeAxis === "x" ? lateral : ridge;
+      const roofY = nearestRoofHeight(roof.triangles, x, z3, wallTop);
       if (roofY !== undefined)
         separations.push(roofY - wallTop);
     }
@@ -7248,8 +7339,8 @@ function objectBoundsInFrame(object, frame) {
     const matrix = worldToFrame.clone().multiply(node.matrixWorld);
     for (const x of [local.min.x, local.max.x])
       for (const y of [local.min.y, local.max.y])
-        for (const z2 of [local.min.z, local.max.z]) {
-          bounds.expandByPoint(new THREE6.Vector3(x, y, z2).applyMatrix4(matrix));
+        for (const z3 of [local.min.z, local.max.z]) {
+          bounds.expandByPoint(new THREE6.Vector3(x, y, z3).applyMatrix4(matrix));
           found = true;
         }
   });
@@ -7421,16 +7512,16 @@ function probeLocalFrameFromQuaternion(id, origin, quaternion) {
   if (Math.abs(quaternionLength - 1) > 0.000001) {
     throw new TypeError("Probe frame quaternion must be normalized within 1e-6.");
   }
-  const [x, y, z2, w] = quaternion;
+  const [x, y, z3, w] = quaternion;
   const xx = x * x;
   const yy = y * y;
-  const zz = z2 * z2;
+  const zz = z3 * z3;
   const xy = x * y;
-  const xz = x * z2;
-  const yz = y * z2;
+  const xz = x * z3;
+  const yz = y * z3;
   const wx = w * x;
   const wy = w * y;
-  const wz = w * z2;
+  const wz = w * z3;
   return createProbeLocalFrame3({
     id,
     origin,
@@ -7722,8 +7813,8 @@ function objectBoundsInFrame2(object, frame) {
     const matrix = worldToFrame.clone().multiply(part.matrixWorld);
     for (const x of [box.min.x, box.max.x])
       for (const y of [box.min.y, box.max.y])
-        for (const z2 of [box.min.z, box.max.z]) {
-          bounds.expandByPoint(new THREE7.Vector3(x, y, z2).applyMatrix4(matrix));
+        for (const z3 of [box.min.z, box.max.z]) {
+          bounds.expandByPoint(new THREE7.Vector3(x, y, z3).applyMatrix4(matrix));
           found = true;
         }
   });
@@ -8258,8 +8349,8 @@ function renderableMinYInRoot(rootInverse2, node) {
     const matrix = rootInverse2.clone().multiply(part.matrixWorld);
     for (const x of [bounds.min.x, bounds.max.x]) {
       for (const y of [bounds.min.y, bounds.max.y]) {
-        for (const z2 of [bounds.min.z, bounds.max.z]) {
-          minimum = Math.min(minimum, new THREE8.Vector3(x, y, z2).applyMatrix4(matrix).y);
+        for (const z3 of [bounds.min.z, bounds.max.z]) {
+          minimum = Math.min(minimum, new THREE8.Vector3(x, y, z3).applyMatrix4(matrix).y);
         }
       }
     }
@@ -8547,8 +8638,8 @@ function meshLocalBox(mesh, rootInverse2) {
   const result = new THREE9.Box3;
   for (const x of [source.min.x, source.max.x]) {
     for (const y of [source.min.y, source.max.y]) {
-      for (const z2 of [source.min.z, source.max.z]) {
-        result.expandByPoint(new THREE9.Vector3(x, y, z2).applyMatrix4(transform));
+      for (const z3 of [source.min.z, source.max.z]) {
+        result.expandByPoint(new THREE9.Vector3(x, y, z3).applyMatrix4(transform));
       }
     }
   }
@@ -8829,9 +8920,9 @@ function growthNodeMeasurement(root, candidate, allCandidates, band) {
   if (!geometryBox || geometryBox.isEmpty())
     return;
   root.updateWorldMatrix(true, true);
-  const relative = root.matrixWorld.clone().invert().multiply(candidate.node.matrixWorld);
+  const relative2 = root.matrixWorld.clone().invert().multiply(candidate.node.matrixWorld);
   const relativeScale = new THREE9.Vector3;
-  relative.decompose(new THREE9.Vector3, new THREE9.Quaternion, relativeScale);
+  relative2.decompose(new THREE9.Vector3, new THREE9.Quaternion, relativeScale);
   const size = geometryBox.getSize(new THREE9.Vector3);
   const scaledSizes = [
     Math.abs(size.x * relativeScale.x),
@@ -8846,8 +8937,8 @@ function growthNodeMeasurement(root, candidate, allCandidates, band) {
   const second = endpointRadius(position, axis, maximum, tolerance, relativeScale);
   if (!first || !second)
     return;
-  const firstPoint = first.center.clone().applyMatrix4(relative);
-  const secondPoint = second.center.clone().applyMatrix4(relative);
+  const firstPoint = first.center.clone().applyMatrix4(relative2);
+  const secondPoint = second.center.clone().applyMatrix4(relative2);
   const supportBoxes = allCandidates.filter((value) => value !== candidate).map((value) => value.box);
   let firstIsBase;
   if (candidate.kind === "trunk") {
@@ -9372,8 +9463,8 @@ function transformedBox(source, transform) {
   const result = new THREE10.Box3;
   for (const x of [source.min.x, source.max.x]) {
     for (const y of [source.min.y, source.max.y]) {
-      for (const z2 of [source.min.z, source.max.z]) {
-        result.expandByPoint(new THREE10.Vector3(x, y, z2).applyMatrix4(transform));
+      for (const z3 of [source.min.z, source.max.z]) {
+        result.expandByPoint(new THREE10.Vector3(x, y, z3).applyMatrix4(transform));
       }
     }
   }
@@ -10348,26 +10439,26 @@ function transformedBox2(source, transform) {
   const result = new THREE13.Box3;
   for (const x of [source.min.x, source.max.x]) {
     for (const y of [source.min.y, source.max.y]) {
-      for (const z2 of [source.min.z, source.max.z]) {
-        result.expandByPoint(new THREE13.Vector3(x, y, z2).applyMatrix4(transform));
+      for (const z3 of [source.min.z, source.max.z]) {
+        result.expandByPoint(new THREE13.Vector3(x, y, z3).applyMatrix4(transform));
       }
     }
   }
   return result;
 }
 function orientedBoxFromLocalBounds(root, node, source) {
-  const relative = root.matrixWorld.clone().invert().multiply(node.matrixWorld);
-  if (!relative.elements.every(Number.isFinite))
+  const relative2 = root.matrixWorld.clone().invert().multiply(node.matrixWorld);
+  if (!relative2.elements.every(Number.isFinite))
     return;
   const position = new THREE13.Vector3;
   const rotation = new THREE13.Quaternion;
   const scale2 = new THREE13.Vector3;
-  relative.decompose(position, rotation, scale2);
+  relative2.decompose(position, rotation, scale2);
   const recomposed = new THREE13.Matrix4().compose(position, rotation, scale2);
-  const residual = Math.max(...relative.elements.map((component, index) => Math.abs(component - (recomposed.elements[index] ?? component))));
+  const residual = Math.max(...relative2.elements.map((component, index) => Math.abs(component - (recomposed.elements[index] ?? component))));
   if (residual > 0.00001)
     return;
-  const center = source.getCenter(new THREE13.Vector3).applyMatrix4(relative);
+  const center = source.getCenter(new THREE13.Vector3).applyMatrix4(relative2);
   const sourceHalf = source.getSize(new THREE13.Vector3).multiplyScalar(0.5);
   const halfExtents = [
     Math.abs(sourceHalf.x * scale2.x),
@@ -11391,8 +11482,8 @@ function localRenderableBox(rootInverse2, node) {
   const result = new THREE14.Box3;
   for (const x of [source.min.x, source.max.x]) {
     for (const y of [source.min.y, source.max.y]) {
-      for (const z2 of [source.min.z, source.max.z]) {
-        result.expandByPoint(new THREE14.Vector3(x, y, z2).applyMatrix4(transform));
+      for (const z3 of [source.min.z, source.max.z]) {
+        result.expandByPoint(new THREE14.Vector3(x, y, z3).applyMatrix4(transform));
       }
     }
   }
@@ -11552,8 +11643,8 @@ function dominantGeometryAxis(root, mode) {
       { score: size2.z, direction: new THREE14.Vector3(0, 0, 1) }
     ];
     const selected = axes2.reduce((candidate, value) => mode === "length" ? value.score > candidate.score ? value : candidate : value.score < candidate.score ? value : candidate);
-    const relative = inverse.clone().multiply(node.matrixWorld);
-    const direction = selected.direction.transformDirection(relative);
+    const relative2 = inverse.clone().multiply(node.matrixWorld);
+    const direction = selected.direction.transformDirection(relative2);
     const score = selected.score * node.getWorldScale(new THREE14.Vector3).length();
     if (!best || (mode === "length" ? score > best.score : score < best.score)) {
       best = { score, direction };
@@ -11738,8 +11829,8 @@ function analyzeModularEvidenceV1(root, trustedGrid) {
   const pair = sockets.flatMap((a, index) => sockets.slice(index + 1).map((b) => [a, b])).find(([a, b]) => a.contract.pieceId !== b.contract.pieceId && a.contract.compatibleTypes.includes(b.contract.type) && b.contract.compatibleTypes.includes(a.contract.type));
   if (!pair)
     return { kit };
-  const relative = pair[0].worldRotation.clone().invert().multiply(pair[1].worldRotation);
-  const euler = new THREE14.Euler().setFromQuaternion(relative, "YXZ");
+  const relative2 = pair[0].worldRotation.clone().invert().multiply(pair[1].worldRotation);
+  const euler = new THREE14.Euler().setFromQuaternion(relative2, "YXZ");
   const rotation = THREE14.MathUtils.euclideanModulo(THREE14.MathUtils.radToDeg(euler.y), 360);
   return {
     kit,
@@ -12590,7 +12681,7 @@ function buildFace(roofRoot, profile, sideSign) {
     return roofRoot.matrixWorld.clone().multiply(localToRoof);
   };
   const direction = (axis) => axis.clone().transformDirection(world());
-  const point = (x, z2) => new THREE15.Vector3(x, 0, z2).applyMatrix4(world());
+  const point = (x, z3) => new THREE15.Vector3(x, 0, z3).applyMatrix4(world());
   return {
     side,
     ridgeAxis: profile.ridgeAxis,
@@ -13287,8 +13378,8 @@ function normalizeSurfaceNormals(geo) {
   for (let i = 0;i < normal.count; i++) {
     const x = normal.getX(i);
     const y = normal.getY(i);
-    const z2 = normal.getZ(i);
-    const len = Math.hypot(x, y, z2);
+    const z3 = normal.getZ(i);
+    const len = Math.hypot(x, y, z3);
     if (!Number.isFinite(len) || len < 0.000000000001) {
       normal.setXYZ(i, 0, 1, 0);
       repaired = true;
@@ -13296,7 +13387,7 @@ function normalizeSurfaceNormals(geo) {
     }
     if (Math.abs(len - 1) <= 0.000001)
       continue;
-    normal.setXYZ(i, x / len, y / len, z2 / len);
+    normal.setXYZ(i, x / len, y / len, z3 / len);
     repaired = true;
   }
   if (repaired)
@@ -13525,7 +13616,7 @@ function parametricSurface(sample, options = {}) {
       i = groups[i];
     return i;
   };
-  const join = (a, b, label) => {
+  const join2 = (a, b, label) => {
     const pa = positions.slice(a * 3, a * 3 + 3), pb = positions.slice(b * 3, b * 3 + 3);
     const scale2 = Math.max(1, ...pa.map(Math.abs), ...pb.map(Math.abs));
     if (Math.hypot(...pa.map((x, k) => x - pb[k])) > scale2 * 0.000001)
@@ -13536,10 +13627,10 @@ function parametricSurface(sample, options = {}) {
   };
   if (periodicU)
     for (let j = 0;j <= nv; j++)
-      join(j * (nu + 1), j * (nu + 1) + nu, "periodicU");
+      join2(j * (nu + 1), j * (nu + 1) + nu, "periodicU");
   if (periodicV)
     for (let i = 0;i <= nu; i++)
-      join(i, nv * (nu + 1) + i, "periodicV");
+      join2(i, nv * (nu + 1) + i, "periodicV");
   for (let j = 0;j < nv; j++)
     for (let i = 0;i < nu; i++) {
       const a = j * (nu + 1) + i, b = a + 1, c = a + nu + 1, d = c + 1;
@@ -13850,11 +13941,11 @@ function sweepProfile(profile, path, options = {}) {
   const up = options.up ? new THREE20.Vector3(...options.up) : Math.abs(tangents[0].z) < 0.9 ? new THREE20.Vector3(0, 0, 1) : new THREE20.Vector3(1, 0, 0);
   if (![up.x, up.y, up.z].every(Number.isFinite) || up.lengthSq() < 0.00000000000000000001)
     throw new Error("sweepProfile up must be a finite nonzero vector");
-  let z2 = up.clone().addScaledVector(tangents[0], -up.dot(tangents[0]));
-  if (z2.lengthSq() < 0.000000000001)
+  let z3 = up.clone().addScaledVector(tangents[0], -up.dot(tangents[0]));
+  if (z3.lengthSq() < 0.000000000001)
     throw new Error("sweepProfile up must not be parallel to the first path tangent");
-  z2.normalize();
-  const normals = [z2.clone()];
+  z3.normalize();
+  const normals = [z3.clone()];
   if (closed) {
     stations.push(stations[0].clone());
     tangents.push(tangents[0].clone());
@@ -13862,8 +13953,8 @@ function sweepProfile(profile, path, options = {}) {
   }
   const distances = [0];
   for (let i = 1;i < stations.length; i++) {
-    z2 = z2.clone().applyQuaternion(new THREE20.Quaternion().setFromUnitVectors(tangents[i - 1], tangents[i]));
-    normals.push(z2);
+    z3 = z3.clone().applyQuaternion(new THREE20.Quaternion().setFromUnitVectors(tangents[i - 1], tangents[i]));
+    normals.push(z3);
     distances.push(distances[i - 1] + stations[i].distanceTo(stations[i - 1]));
   }
   const total = distances[distances.length - 1];
@@ -14257,17 +14348,17 @@ function orientSweep(geo, axis) {
   return geo;
 }
 function bevelCrossSection(cs, bevel, style, segments, label) {
-  const join = JOIN_FOR_STYLE[style];
-  if (!join) {
+  const join2 = JOIN_FOR_STYLE[style];
+  if (!join2) {
     throw new Error(`${label}: bevelStyle must be 'round' or 'chamfer' (got ${String(style)}).`);
   }
-  const eroded = cs.offset(-bevel, join, 2, segments);
+  const eroded = cs.offset(-bevel, join2, 2, segments);
   if (eroded.isEmpty()) {
     eroded.delete();
     throw new Error(`${label}: bevel ${bevel} is too large for this profile — eroding by it leaves nothing. ` + `Use a bevel smaller than half the narrowest part of the outline.`);
   }
-  const dilated = eroded.offset(2 * bevel, join, 2, segments);
-  const out = dilated.offset(-bevel, join, 2, segments);
+  const dilated = eroded.offset(2 * bevel, join2, 2, segments);
+  const out = dilated.offset(-bevel, join2, 2, segments);
   eroded.delete();
   dilated.delete();
   return out;
@@ -17150,12 +17241,12 @@ var init_material_recipes = __esm(() => {
 });
 
 // src/material-resources.ts
-import { createHash as createHash3 } from "node:crypto";
-function provenance(descriptor2, hash) {
+import { createHash as createHash4 } from "node:crypto";
+function provenance(descriptor2, hash3) {
   return {
     schemaVersion: 1,
     resourceId: descriptor2.id,
-    contentHash: hash,
+    contentHash: hash3,
     hashAlgorithm: "sha256",
     usage: descriptor2.usage,
     colorSpace: descriptor2.colorSpace,
@@ -17201,11 +17292,11 @@ function verifyResourcePayload(descriptor2, payload) {
   if (!Number.isSafeInteger(pixels) || pixels > TEXTURE_RESOLVER_LIMITS_V1.maxPixels) {
     throw new ApprovedTextureResourceUnavailableError(descriptor2.id, `pixel limit is ${TEXTURE_RESOLVER_LIMITS_V1.maxPixels}; received ${pixels}`);
   }
-  const hash = sha256(bytes);
-  if (hash !== descriptor2.contentHash) {
-    throw new ApprovedTextureResourceUnavailableError(descriptor2.id, `content hash ${hash} does not match the pinned ${descriptor2.contentHash}`);
+  const hash3 = sha256(bytes);
+  if (hash3 !== descriptor2.contentHash) {
+    throw new ApprovedTextureResourceUnavailableError(descriptor2.id, `content hash ${hash3} does not match the pinned ${descriptor2.contentHash}`);
   }
-  return hash;
+  return hash3;
 }
 
 class ApprovedTextureResourceCache {
@@ -17240,31 +17331,31 @@ class ApprovedTextureResourceCache {
       return false;
     return this.#registry[id].delivery === "embedded" || this.#resolver !== undefined;
   }
-  #cacheBytes(id, hash, bytes) {
-    let canonical2 = this.#bytesByHash.get(hash);
+  #cacheBytes(id, hash3, bytes) {
+    let canonical2 = this.#bytesByHash.get(hash3);
     if (!canonical2) {
       canonical2 = bytes;
-      this.#bytesByHash.set(hash, canonical2);
+      this.#bytesByHash.set(hash3, canonical2);
     }
-    this.#hashById.set(id, hash);
+    this.#hashById.set(id, hash3);
     return canonical2;
   }
-  #resolution(id, hash) {
-    const canonical2 = this.#bytesByHash.get(hash);
+  #resolution(id, hash3) {
+    const canonical2 = this.#bytesByHash.get(hash3);
     if (!canonical2)
-      throw new Error(`Approved resource cache lost content ${hash}.`);
+      throw new Error(`Approved resource cache lost content ${hash3}.`);
     return {
       descriptor: this.#registry[id],
       bytes: canonical2.slice(),
-      provenance: provenance(this.#registry[id], hash)
+      provenance: provenance(this.#registry[id], hash3)
     };
   }
   resolve(id) {
     if (!isApprovedId(id))
       throw new RangeError(`Unsupported approved texture resource ID ${id}.`);
-    const hash = this.#hashById.get(id);
-    if (hash)
-      return this.#resolution(id, hash);
+    const hash3 = this.#hashById.get(id);
+    if (hash3)
+      return this.#resolution(id, hash3);
     const descriptor2 = this.#registry[id];
     if (descriptor2.delivery !== "embedded") {
       throw new ApprovedTextureResourceUnavailableError(id, "it is delivered at runtime; use resolveAsync() or load()");
@@ -17276,9 +17367,9 @@ class ApprovedTextureResourceCache {
   async resolveAsync(id) {
     if (!isApprovedId(id))
       throw new RangeError(`Unsupported approved texture resource ID ${id}.`);
-    const hash = this.#hashById.get(id);
-    if (hash)
-      return this.#resolution(id, hash);
+    const hash3 = this.#hashById.get(id);
+    if (hash3)
+      return this.#resolution(id, hash3);
     if (this.#registry[id].delivery === "embedded")
       return this.resolve(id);
     let pending = this.#pendingById.get(id);
@@ -17392,7 +17483,7 @@ function collectMaterialResourceProvenance(root) {
   });
   return [...records.values()].sort((a, b) => `${a.resourceId}:${a.usage}`.localeCompare(`${b.resourceId}:${b.usage}`));
 }
-var TEXTURE_RESOLVER_LIMITS_V1, ApprovedTextureResourceUnavailableError, EMBEDDED_RESOURCE_BASE64, isApprovedId = (value) => APPROVED_TEXTURE_RESOURCE_IDS.includes(value), bytesFromBase64 = (value) => new Uint8Array(Buffer.from(value, "base64")), sha256 = (bytes) => createHash3("sha256").update(bytes).digest("hex"), DEFAULT_APPROVED_TEXTURE_CACHE, materialTextures2 = (material) => {
+var TEXTURE_RESOLVER_LIMITS_V1, ApprovedTextureResourceUnavailableError, EMBEDDED_RESOURCE_BASE64, isApprovedId = (value) => APPROVED_TEXTURE_RESOURCE_IDS.includes(value), bytesFromBase64 = (value) => new Uint8Array(Buffer.from(value, "base64")), sha256 = (bytes) => createHash4("sha256").update(bytes).digest("hex"), DEFAULT_APPROVED_TEXTURE_CACHE, materialTextures2 = (material) => {
   const standard = material;
   const candidates = [
     standard.map,
@@ -17511,8 +17602,8 @@ async function getXatlas() {
       const xatlasMod = await import(xatlasSpecifier);
       const create = xatlasMod.default ?? xatlasMod;
       const ApiCtor = apiMod.Api(create);
-      return new Promise((resolve) => {
-        const xa = new ApiCtor(() => resolve(xa), null, null);
+      return new Promise((resolve2) => {
+        const xa = new ApiCtor(() => resolve2(xa), null, null);
       });
     })();
   }
@@ -17592,8 +17683,8 @@ function repairZeroNormals(geo) {
   for (let i = 0;i < normal.count; i++) {
     const x = normal.getX(i);
     const y = normal.getY(i);
-    const z2 = normal.getZ(i);
-    if (!Number.isFinite(x + y + z2) || Math.hypot(x, y, z2) < 0.000001)
+    const z3 = normal.getZ(i);
+    if (!Number.isFinite(x + y + z3) || Math.hypot(x, y, z3) < 0.000001)
       broken.add(i);
   }
   if (broken.size === 0)
@@ -17684,15 +17775,15 @@ function cylindricalProjectToUVs(geo) {
   for (let i = 0;i < pos.count; i++) {
     const x = pos.getX(i);
     const y = pos.getY(i);
-    const z2 = pos.getZ(i);
+    const z3 = pos.getZ(i);
     if (nrm && Math.abs(nrm.getY(i)) > 0.7) {
       uv[i * 2] = (x - bb.min.x) / spanX;
-      uv[i * 2 + 1] = (z2 - bb.min.z) / spanZ;
+      uv[i * 2 + 1] = (z3 - bb.min.z) / spanZ;
       continue;
     }
-    const a = Math.atan2(z2, x);
+    const a = Math.atan2(z3, x);
     uv[i * 2] = span > 0.000001 ? (a - minA) / span : 0.5;
-    uv[i * 2 + 1] = height > 0.000001 ? (y - minY) / height : Math.hypot(x, z2) / maxR;
+    uv[i * 2 + 1] = height > 0.000001 ? (y - minY) / height : Math.hypot(x, z3) / maxR;
   }
   geo.setAttribute("uv", new THREE25.BufferAttribute(uv, 2));
 }
@@ -19410,13 +19501,13 @@ var MATERIAL_BUDGET_PROFILES_V1, materialTextures3 = (material) => [
   material.getNormalTexture(),
   material.getOcclusionTexture(),
   material.getEmissiveTexture()
-], hasTexture = (material) => materialTextures3(material).some(Boolean), transformPoint = (matrix, x, y, z2) => {
-  const w = matrix[3] * x + matrix[7] * y + matrix[11] * z2 + matrix[15];
+], hasTexture = (material) => materialTextures3(material).some(Boolean), transformPoint = (matrix, x, y, z3) => {
+  const w = matrix[3] * x + matrix[7] * y + matrix[11] * z3 + matrix[15];
   const reciprocal = w === 0 ? 1 : 1 / w;
   return [
-    (matrix[0] * x + matrix[4] * y + matrix[8] * z2 + matrix[12]) * reciprocal,
-    (matrix[1] * x + matrix[5] * y + matrix[9] * z2 + matrix[13]) * reciprocal,
-    (matrix[2] * x + matrix[6] * y + matrix[10] * z2 + matrix[14]) * reciprocal
+    (matrix[0] * x + matrix[4] * y + matrix[8] * z3 + matrix[12]) * reciprocal,
+    (matrix[1] * x + matrix[5] * y + matrix[9] * z3 + matrix[13]) * reciprocal,
+    (matrix[2] * x + matrix[6] * y + matrix[10] * z3 + matrix[14]) * reciprocal
   ];
 }, accessorPoint = (accessor, index, matrix) => {
   const array = accessor.getArray();
@@ -20250,9 +20341,9 @@ var init_validation = __esm(() => {
 
 // src/kit.ts
 import { execFile } from "node:child_process";
-import { mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
+import { mkdtemp, readFile as readFile2, rm as rm2, writeFile as writeFile2 } from "node:fs/promises";
 import { tmpdir } from "node:os";
-import { join } from "node:path";
+import { join as join2 } from "node:path";
 import { promisify } from "node:util";
 import { KHRMaterialsVariants, KHRTextureBasisu } from "@gltf-transform/extensions";
 async function findKtxEncoder() {
@@ -20385,7 +20476,7 @@ async function encodeTexturesToKtx2(doc, encoder) {
   const textures = doc.getRoot().listTextures().filter(isPng);
   if (textures.length === 0)
     return { encoded: 0, before: 0, after: 0 };
-  const dir = await mkdtemp(join(tmpdir(), "kiln-ktx2-"));
+  const dir = await mkdtemp(join2(tmpdir(), "kiln-ktx2-"));
   const staged = [];
   let encoded = 0;
   let before = 0;
@@ -20395,9 +20486,9 @@ async function encodeTexturesToKtx2(doc, encoder) {
       const bytes = texture.getImage();
       if (!bytes)
         continue;
-      const src = join(dir, `t${index}.png`);
-      const dst = join(dir, `t${index}.ktx2`);
-      await writeFile(src, bytes);
+      const src = join2(dir, `t${index}.png`);
+      const dst = join2(dir, `t${index}.ktx2`);
+      await writeFile2(src, bytes);
       const srgb = doc.getRoot().listMaterials().some((material) => material.getBaseColorTexture() === texture || material.getEmissiveTexture() === texture);
       await run(encoder, [
         "create",
@@ -20409,13 +20500,13 @@ async function encodeTexturesToKtx2(doc, encoder) {
         src,
         dst
       ], { timeout: 120000 });
-      const out = await readFile(dst);
+      const out = await readFile2(dst);
       before += bytes.byteLength;
       after += out.byteLength;
       staged.push({ texture, original: bytes, encodedBytes: new Uint8Array(out) });
     }
   } finally {
-    await rm(dir, { recursive: true, force: true });
+    await rm2(dir, { recursive: true, force: true });
   }
   if (staged.length === 0)
     return { encoded: 0, before, after };
@@ -20490,7 +20581,7 @@ var init_kit = __esm(() => {
 });
 
 // src/texture-bake.ts
-import { createHash as createHash4 } from "node:crypto";
+import { createHash as createHash5 } from "node:crypto";
 import * as THREE29 from "three";
 function readPixels(texture) {
   const image = texture.image;
@@ -20593,8 +20684,8 @@ async function bakeSceneTextures(root, warnings) {
       height: raw.height,
       hasAlpha: hasTranslucentPixel(raw)
     };
-    const sha1 = createHash4("sha1").update(bytes).digest("hex");
-    const imageSha256 = `sha256:${createHash4("sha256").update(bytes).digest("hex")}`;
+    const sha1 = createHash5("sha1").update(bytes).digest("hex");
+    const imageSha256 = `sha256:${createHash5("sha256").update(bytes).digest("hex")}`;
     baked.push({
       schemaVersion: 1,
       texture: name,
@@ -20638,7 +20729,7 @@ function computeTangentBasis(geometry2) {
     const z1 = position.getZ(b) - position.getZ(a);
     const x2 = position.getX(c) - position.getX(a);
     const y2 = position.getY(c) - position.getY(a);
-    const z2 = position.getZ(c) - position.getZ(a);
+    const z22 = position.getZ(c) - position.getZ(a);
     const s1 = uv.getX(b) - uv.getX(a);
     const t1 = uv.getY(b) - uv.getY(a);
     const s2 = uv.getX(c) - uv.getX(a);
@@ -20649,10 +20740,10 @@ function computeTangentBasis(geometry2) {
     const r = 1 / det;
     const sdx = (t2 * x1 - t1 * x2) * r;
     const sdy = (t2 * y1 - t1 * y2) * r;
-    const sdz = (t2 * z1 - t1 * z2) * r;
+    const sdz = (t2 * z1 - t1 * z22) * r;
     const tdx = (s1 * x2 - s2 * x1) * r;
     const tdy = (s1 * y2 - s2 * y1) * r;
-    const tdz = (s1 * z2 - s2 * z1) * r;
+    const tdz = (s1 * z22 - s2 * z1) * r;
     for (const v of [a, b, c]) {
       const o = v * 3;
       tan1[o] = (tan1[o] ?? 0) + sdx;
@@ -20756,12 +20847,12 @@ function chainIdFor(descriptor2, byRole) {
   return current.role;
 }
 function colorFor(value) {
-  let hash = 2166136261;
+  let hash3 = 2166136261;
   for (let index = 0;index < value.length; index++) {
-    hash ^= value.charCodeAt(index);
-    hash = Math.imul(hash, 16777619);
+    hash3 ^= value.charCodeAt(index);
+    hash3 = Math.imul(hash3, 16777619);
   }
-  return CHAIN_COLORS[Math.abs(hash) % CHAIN_COLORS.length];
+  return CHAIN_COLORS[Math.abs(hash3) % CHAIN_COLORS.length];
 }
 function buildCharacterDiagnosticDescriptor(root, findings = []) {
   root.updateMatrixWorld(true);
@@ -20774,10 +20865,10 @@ function buildCharacterDiagnosticDescriptor(root, findings = []) {
   ].sort();
   const invalidPaths = new Set(invalidFindingNodePaths);
   const joints = evidence2.map((joint) => {
-    const relative = rootInverse2.clone().multiply(joint.node.matrixWorld);
-    const position = new THREE30.Vector3().setFromMatrixPosition(relative);
-    const forward = new THREE30.Vector3(...joint.descriptor.localForwardAxis).transformDirection(relative).multiplyScalar(0.2).add(position);
-    const bend2 = new THREE30.Vector3(...joint.descriptor.localBendAxis).transformDirection(relative).multiplyScalar(0.2).add(position);
+    const relative2 = rootInverse2.clone().multiply(joint.node.matrixWorld);
+    const position = new THREE30.Vector3().setFromMatrixPosition(relative2);
+    const forward = new THREE30.Vector3(...joint.descriptor.localForwardAxis).transformDirection(relative2).multiplyScalar(0.2).add(position);
+    const bend2 = new THREE30.Vector3(...joint.descriptor.localBendAxis).transformDirection(relative2).multiplyScalar(0.2).add(position);
     const chainId = chainIdFor(joint.descriptor, descriptorByRole);
     return {
       role: joint.descriptor.role,
@@ -20994,16 +21085,16 @@ function composeLocalMatrix(node) {
   }
   const x2 = q.x + q.x;
   const y2 = q.y + q.y;
-  const z2 = q.z + q.z;
+  const z22 = q.z + q.z;
   const xx = q.x * x2;
   const xy = q.x * y2;
-  const xz = q.x * z2;
+  const xz = q.x * z22;
   const yy = q.y * y2;
-  const yz = q.y * z2;
-  const zz = q.z * z2;
+  const yz = q.y * z22;
+  const zz = q.z * z22;
   const wx = q.w * x2;
   const wy = q.w * y2;
-  const wz = q.w * z2;
+  const wz = q.w * z22;
   return new Float64Array([
     (1 - (yy + zz)) * s.x,
     (xy + wz) * s.x,
@@ -21023,11 +21114,11 @@ function composeLocalMatrix(node) {
     1
   ]);
 }
-function transformPoint2(matrix, x, y, z2) {
+function transformPoint2(matrix, x, y, z3) {
   return [
-    matrix[0] * x + matrix[4] * y + matrix[8] * z2 + matrix[12],
-    matrix[1] * x + matrix[5] * y + matrix[9] * z2 + matrix[13],
-    matrix[2] * x + matrix[6] * y + matrix[10] * z2 + matrix[14]
+    matrix[0] * x + matrix[4] * y + matrix[8] * z3 + matrix[12],
+    matrix[1] * x + matrix[5] * y + matrix[9] * z3 + matrix[13],
+    matrix[2] * x + matrix[6] * y + matrix[10] * z3 + matrix[14]
   ];
 }
 function matchesRole(roles2, prefixes) {
@@ -21133,12 +21224,12 @@ function dot4(a, b) {
   return a[0] * b[0] + a[1] * b[1] + a[2] * b[2];
 }
 function stableColor(key) {
-  let hash = 2166136261;
+  let hash3 = 2166136261;
   for (let index = 0;index < key.length; index++) {
-    hash ^= key.charCodeAt(index);
-    hash = Math.imul(hash, 16777619);
+    hash3 ^= key.charCodeAt(index);
+    hash3 = Math.imul(hash3, 16777619);
   }
-  return [96 + (hash & 127), 96 + (hash >>> 8 & 127), 96 + (hash >>> 16 & 127)];
+  return [96 + (hash3 & 127), 96 + (hash3 >>> 8 & 127), 96 + (hash3 >>> 16 & 127)];
 }
 function projectScene(scene, camera, size) {
   const zAxis = normalize3(camera.dir);
@@ -22263,7 +22354,7 @@ async function renderGLBViaProcessLaunch(code, options = {}, controls = {}, laun
   };
   const resolvedLaunch = launch ?? defaultLaunch;
   const detached = resolvedLaunch.detached === true;
-  return await new Promise((resolve, reject) => {
+  return await new Promise((resolve2, reject) => {
     const spawnOptions = {
       env: resolvedLaunch.env,
       windowsHide: true,
@@ -22290,7 +22381,7 @@ async function renderGLBViaProcessLaunch(code, options = {}, controls = {}, laun
       if (error)
         reject(error);
       else
-        resolve(result);
+        resolve2(result);
     };
     const timer = setTimeout(() => {
       finish(new EvaluatorSubprocessError("DEADLINE_EXCEEDED", "Evaluator deadline exceeded."));
@@ -22539,7 +22630,7 @@ function terminateReadinessChild(child) {
   } catch {}
 }
 async function assertIsolationTransport(launch) {
-  return await new Promise((resolve, reject) => {
+  return await new Promise((resolve2, reject) => {
     const child = spawn2(launch.command, launch.args, {
       env: launch.env,
       windowsHide: true,
@@ -22599,7 +22690,7 @@ async function assertIsolationTransport(launch) {
         decodeEvaluatorIsolationTransport(JSON.parse(Buffer.concat(protocolChunks).toString("utf8")));
         settled = true;
         clearTimeout(timer);
-        resolve();
+        resolve2();
       } catch {
         fail("fd3-transport");
       }
@@ -22607,7 +22698,7 @@ async function assertIsolationTransport(launch) {
   });
 }
 async function runIsolationProbe(launch) {
-  return await new Promise((resolve, reject) => {
+  return await new Promise((resolve2, reject) => {
     const child = spawn2(launch.command, launch.args, {
       env: launch.env,
       windowsHide: true,
@@ -22657,7 +22748,7 @@ async function runIsolationProbe(launch) {
           return fail("loader-probe-boot");
         settled = true;
         clearTimeout(timer);
-        resolve(result);
+        resolve2(result);
       } catch {
         fail("loader-probe-boot");
       }
@@ -22850,11 +22941,11 @@ var exports_renderer_id = {};
 __export(exports_renderer_id, {
   CPU_RASTER_RENDERER_ID: () => CPU_RASTER_RENDERER_ID
 });
-import { readFileSync } from "node:fs";
+import { readFileSync as readFileSync2 } from "node:fs";
 function engineVersion() {
   for (const path of ["../package.json", "../../package.json"]) {
     try {
-      const raw = readFileSync(new URL(path, import.meta.url), "utf8");
+      const raw = readFileSync2(new URL(path, import.meta.url), "utf8");
       const pkg = JSON.parse(raw);
       if (pkg.name === "@kiln/engine" && typeof pkg.version === "string" && pkg.version) {
         return pkg.version;
@@ -22953,8 +23044,8 @@ function chassisBounds(root, inverse) {
       const matrix = inverse.clone().multiply(part.matrixWorld);
       for (const x of [box.min.x, box.max.x])
         for (const y of [box.min.y, box.max.y])
-          for (const z2 of [box.min.z, box.max.z]) {
-            bounds.expandByPoint(new THREE32.Vector3(x, y, z2).applyMatrix4(matrix));
+          for (const z3 of [box.min.z, box.max.z]) {
+            bounds.expandByPoint(new THREE32.Vector3(x, y, z3).applyMatrix4(matrix));
             found = true;
           }
     });
@@ -23372,7 +23463,7 @@ async function renderViewGrid(root, opts = {}) {
   enforceCapturePixels(views.length, size, cols, opts.captureLimits);
   if (opts.snapPalette?.length)
     snapSceneToPalette(root, opts.snapPalette);
-  const wantsZoom = resolved2.zooms.some((z2) => z2 !== undefined);
+  const wantsZoom = resolved2.zooms.some((z3) => z3 !== undefined);
   const sceneBounds = wantsZoom ? measureBounds(root) : undefined;
   const cache = opts.snapPalette?.length ? undefined : opts.captureCache;
   let reused = 0;
@@ -23426,8 +23517,8 @@ async function renderViewGrid(root, opts = {}) {
 }
 async function hashGlbViewInput(bytes) {
   const copy = Uint8Array.from(bytes);
-  const digest2 = new Uint8Array(await globalThis.crypto.subtle.digest("SHA-256", copy));
-  return `sha256:${[...digest2].map((value) => value.toString(16).padStart(2, "0")).join("")}`;
+  const digest3 = new Uint8Array(await globalThis.crypto.subtle.digest("SHA-256", copy));
+  return `sha256:${[...digest3].map((value) => value.toString(16).padStart(2, "0")).join("")}`;
 }
 async function renderGlbViewCell(bytes, view, options = {}) {
   const exactBytes = Uint8Array.from(bytes);
@@ -23923,7 +24014,7 @@ __export(exports_render, {
   bindBakedTextureProvenanceToFinalGlb: () => bindBakedTextureProvenanceToFinalGlb
 });
 import * as THREE34 from "three";
-import { createHash as createHash5 } from "node:crypto";
+import { createHash as createHash6 } from "node:crypto";
 import { Document, WebIO as WebIO3, getBounds } from "@gltf-transform/core";
 import {
   EXTMeshGPUInstancing as EXTMeshGPUInstancing3,
@@ -23935,7 +24026,7 @@ import {
   instance,
   palette,
   flatten,
-  join as join2,
+  join as join3,
   weld,
   prune,
   mergeDocuments
@@ -23962,8 +24053,8 @@ function ensureDefaultScene(doc) {
   return scene;
 }
 async function sha256Hex2(bytes) {
-  const digest2 = await globalThis.crypto.subtle.digest("SHA-256", new Uint8Array(bytes).buffer);
-  return [...new Uint8Array(digest2)].map((value) => value.toString(16).padStart(2, "0")).join("");
+  const digest3 = await globalThis.crypto.subtle.digest("SHA-256", new Uint8Array(bytes).buffer);
+  return [...new Uint8Array(digest3)].map((value) => value.toString(16).padStart(2, "0")).join("");
 }
 async function inspectGlbIntegration(bytes, opts = {}) {
   const doc = await engineIO().readBinary(bytes);
@@ -24436,7 +24527,7 @@ async function bindBakedTextureProvenanceToFinalGlb(baked, finalGlb) {
         ...entry,
         artifactGlbSha256,
         finalMime: mime,
-        finalImageSha256: `sha256:${createHash5("sha256").update(image).digest("hex")}`
+        finalImageSha256: `sha256:${createHash6("sha256").update(image).digest("hex")}`
       }
     ];
   });
@@ -24490,7 +24581,7 @@ async function consolidateMaterials(doc, mode) {
   const effective = mode === "full" && (animatedOrSkinned || semanticGraph) ? "palette" : mode;
   const steps = [palette({ min: PALETTE_MIN })];
   if (effective === "full") {
-    steps.push(flatten(), join2({ keepNamed: true }));
+    steps.push(flatten(), join3({ keepNamed: true }));
   }
   steps.push(weld(), prune({ keepLeaves: true, keepExtras: true, keepSolidTextures: true }));
   await doc.transform(...steps);
@@ -25193,7 +25284,7 @@ __export(exports_protocol, {
   DEFAULT_EVALUATOR_MAX_GLB_BYTES: () => DEFAULT_EVALUATOR_MAX_GLB_BYTES,
   DEFAULT_EVALUATOR_DEADLINE_MS: () => DEFAULT_EVALUATOR_DEADLINE_MS
 });
-import { createHash as createHash6 } from "node:crypto";
+import { createHash as createHash7 } from "node:crypto";
 function evaluatorOutcomeMessage(code) {
   return EVALUATOR_OUTCOME_MESSAGES[code];
 }
@@ -25403,7 +25494,7 @@ function decodeEvaluatorResultV1(json, maxGlbBytes, expectedRequestId) {
     fail("result");
   if (!isSha256(value.render.artifactGlbSha256))
     fail("result");
-  const actualHash = `sha256:${createHash6("sha256").update(glb).digest("hex")}`;
+  const actualHash = `sha256:${createHash7("sha256").update(glb).digest("hex")}`;
   if (actualHash !== value.render.artifactGlbSha256)
     fail("result");
   const diagnosticViews = value.render.diagnosticViews;
@@ -25555,8 +25646,8 @@ __export(exports_port, {
 async function sha256Bytes(bytes) {
   const input = new Uint8Array(bytes.byteLength);
   input.set(bytes);
-  const digest2 = new Uint8Array(await globalThis.crypto.subtle.digest("SHA-256", input));
-  return `sha256:${[...digest2].map((byte) => byte.toString(16).padStart(2, "0")).join("")}`;
+  const digest3 = new Uint8Array(await globalThis.crypto.subtle.digest("SHA-256", input));
+  return `sha256:${[...digest3].map((byte) => byte.toString(16).padStart(2, "0")).join("")}`;
 }
 async function captureViewPngsViaPort(port, glb, timeoutMs, viewDirs, size, cameras, limits) {
   let timer;
@@ -25696,7 +25787,7 @@ async function captureViewsViaPort(port, glb, timeoutMs = DEFAULT_VIEW_RENDER_TI
   const views = resolved2.views;
   const shape = { preset: resolved2.preset, cols: resolved2.cols, cells: views.length };
   let cameras;
-  if (resolved2.zooms.some((z3) => z3 !== undefined)) {
+  if (resolved2.zooms.some((z4) => z4 !== undefined)) {
     try {
       const { loadGlbReviewScene: loadGlbReviewScene2, measureBounds: measureBounds2, cameraFromBounds: cameraFromBounds2 } = await Promise.resolve().then(() => (init_views(), exports_views));
       const loaded = await loadGlbReviewScene2(Uint8Array.from(glb));
@@ -25959,14 +26050,331 @@ var init_measurement = __esm(() => {
   init_camera();
 });
 
+// src/assets-resources.ts
+var exports_assets_resources = {};
+__export(exports_assets_resources, {
+  readAssetResource: () => readAssetResource2,
+  assetMime: () => assetMime2,
+  assetLinks: () => assetLinks
+});
+function assetLinks(collection, manifest) {
+  return [...Object.keys(manifest.files), "manifest.json", "editable.zip"].map((name) => ({
+    type: "resource_link",
+    name,
+    uri: `kiln://assets/${collection}/${manifest.assetId}/${manifest.revisionId}/${name}`,
+    mimeType: assetMime2(name)
+  }));
+}
+function assetMime2(name) {
+  return name.endsWith(".glb") ? "model/gltf-binary" : name.endsWith(".png") ? "image/png" : name.endsWith(".zip") ? "application/zip" : name.endsWith(".json") ? "application/json" : "text/javascript";
+}
+async function readAssetResource2(library, uri) {
+  const match = /^kiln:\/\/assets\/([a-z][a-z0-9_-]{0,79})\/([a-z][a-z0-9_-]{0,79})\/([a-z][a-z0-9_-]{0,79})\/(asset\.glb|source\.kiln\.js|preview\.png|manifest\.json|editable\.zip)$/.exec(uri);
+  if (!match)
+    throw new Error("Unknown asset resource");
+  const collection = match[1];
+  const asset2 = match[2];
+  const revision = match[3];
+  const name = match[4];
+  const record5 = await library.read(collection, asset2, revision);
+  const bytes = name === "editable.zip" ? encodeAssetBundle([record5]) : name === "manifest.json" ? new TextEncoder().encode(JSON.stringify(record5.manifest, null, 2)) : record5.files[name];
+  if (!bytes)
+    throw new Error("Asset file unavailable");
+  return { bytes, mimeType: assetMime2(name), name };
+}
+var init_assets_resources = __esm(() => {
+  init_assets();
+});
+
+// src/asset-widget.ts
+var exports_asset_widget = {};
+__export(exports_asset_widget, {
+  readAssetWidgetHtml: () => readAssetWidgetHtml,
+  assetWidgetData: () => assetWidgetData
+});
+import { readFile as readFile3 } from "node:fs/promises";
+async function assetWidgetData(library, selector) {
+  const record5 = await library.read(selector.collection, selector.asset.assetId, selector.asset.revisionId);
+  if (Object.values(record5.files).reduce((sum, bytes) => sum + bytes.length, 0) > 16 * 1024 * 1024)
+    return {
+      kilnAsset: {
+        error: "This asset exceeds the 16 MiB chat preview limit. Open it with kiln view."
+      }
+    };
+  return {
+    kilnAsset: {
+      manifest: record5.manifest,
+      downloadUrls: selector.downloadUrls,
+      files: Object.fromEntries(Object.entries(record5.files).map(([name, bytes]) => [
+        name,
+        Buffer.from(bytes).toString("base64")
+      ]))
+    }
+  };
+}
+async function readAssetWidgetHtml() {
+  return readFile3(new URL("../dist/viewer/chat.html", import.meta.url), "utf8");
+}
+var init_asset_widget = () => {};
+
+// src/asset-widget.ts
+var exports_asset_widget2 = {};
+__export(exports_asset_widget2, {
+  readAssetWidgetHtml: () => readAssetWidgetHtml2,
+  assetWidgetData: () => assetWidgetData2
+});
+import { readFile as readFile8 } from "node:fs/promises";
+async function assetWidgetData2(library, selector) {
+  const record5 = await library.read(selector.collection, selector.asset.assetId, selector.asset.revisionId);
+  if (Object.values(record5.files).reduce((sum, bytes) => sum + bytes.length, 0) > 16 * 1024 * 1024)
+    return {
+      kilnAsset: {
+        error: "This asset exceeds the 16 MiB chat preview limit. Open it with kiln view."
+      }
+    };
+  return {
+    kilnAsset: {
+      manifest: record5.manifest,
+      downloadUrls: selector.downloadUrls,
+      files: Object.fromEntries(Object.entries(record5.files).map(([name, bytes]) => [
+        name,
+        Buffer.from(bytes).toString("base64")
+      ]))
+    }
+  };
+}
+async function readAssetWidgetHtml2() {
+  return readFile8(new URL("../dist/viewer/chat.html", import.meta.url), "utf8");
+}
+var init_asset_widget2 = () => {};
+
 // src/mcp-server.ts
-import { McpServer } from "@modelcontextprotocol/server";
+import { McpServer, ResourceTemplate } from "@modelcontextprotocol/server";
+
+// src/assets-node.ts
+init_assets();
+import { createHash, randomUUID } from "node:crypto";
+import { readFileSync } from "node:fs";
+import { lstat, mkdir, readFile, readdir, realpath, rename, rm, writeFile } from "node:fs/promises";
+import { dirname, join, relative, resolve, sep } from "node:path";
+var digest = (bytes) => `sha256:${createHash("sha256").update(bytes).digest("hex")}`;
+async function verifyAssetRecord(record) {
+  for (const [name, info] of Object.entries(record.manifest.files)) {
+    const bytes = record.files[name];
+    if (!bytes || bytes.length !== info.bytes || digest(bytes) !== info.sha256)
+      throw new Error(`Asset integrity failure: ${name}`);
+  }
+  validateRecordShape(record);
+}
+
+class FileAssetLibrary {
+  roots;
+  constructor(roots) {
+    if (!Object.keys(roots).length)
+      throw new Error("Configure at least one collection");
+    this.roots = Object.fromEntries(Object.entries(roots).map(([id, path]) => [assetIdSchema.parse(id), resolve(path)]));
+  }
+  collections() {
+    return Object.keys(this.roots).map((id) => ({ id, label: id }));
+  }
+  directory(collection) {
+    const root = this.roots[collection];
+    if (!root || !Object.hasOwn(this.roots, collection))
+      throw new Error("Unknown collection");
+    return root;
+  }
+  async path(collection, ...parts) {
+    const root = this.directory(collection);
+    await mkdir(root, { recursive: true });
+    const canonical = await realpath(root);
+    let path = root;
+    for (const part of parts) {
+      assetIdSchema.parse(part);
+      path = join(path, part);
+      try {
+        const entry = await lstat(path);
+        if (entry.isSymbolicLink())
+          throw new Error("Collection symlinks are not supported");
+        const rel = relative(canonical, await realpath(path));
+        if (rel === ".." || rel.startsWith(`..${sep}`))
+          throw new Error("Collection path escapes root");
+      } catch (error) {
+        if (error.code !== "ENOENT")
+          throw error;
+      }
+    }
+    return path;
+  }
+  async list(collection) {
+    const root = await this.path(collection);
+    const records = [];
+    for (const asset of await readdir(root, { withFileTypes: true })) {
+      if (!asset.isDirectory() || !assetIdSchema.safeParse(asset.name).success)
+        continue;
+      const revisions = await this.path(collection, asset.name, "revisions");
+      let entries;
+      try {
+        entries = await readdir(revisions, { withFileTypes: true });
+      } catch (error) {
+        if (error.code === "ENOENT")
+          continue;
+        throw error;
+      }
+      for (const revision of entries) {
+        if (!revision.isDirectory() || !revision.name.startsWith("r_"))
+          continue;
+        const dir = await this.path(collection, asset.name, "revisions", revision.name);
+        const manifest = assetManifestSchema.parse(JSON.parse(new TextDecoder().decode(await this.file(dir, "manifest.json", 1024 * 1024))));
+        if (manifest.assetId !== asset.name || manifest.revisionId !== revision.name)
+          throw new Error("Asset identity mismatch");
+        records.push(manifest);
+      }
+    }
+    return records.sort((a, b) => b.createdAt.localeCompare(a.createdAt) || a.revisionId.localeCompare(b.revisionId));
+  }
+  async file(dir, name, limit = ASSET_LIMIT) {
+    const path = join(dir, name);
+    const info = await lstat(path);
+    if (!info.isFile() || info.isSymbolicLink() || info.size > limit)
+      throw new Error("Invalid collection file");
+    return new Uint8Array(await readFile(path));
+  }
+  async read(collection, assetId, revisionId) {
+    const dir = await this.path(collection, assetId, "revisions", revisionId);
+    const manifest = assetManifestSchema.parse(JSON.parse(new TextDecoder().decode(await this.file(dir, "manifest.json", 1024 * 1024))));
+    if (manifest.assetId !== assetId || manifest.revisionId !== revisionId)
+      throw new Error("Asset identity mismatch");
+    const files = {};
+    for (const name of Object.keys(manifest.files)) {
+      if (!["asset.glb", "source.kiln.js", "preview.png"].includes(name))
+        throw new Error("Invalid collection filename");
+      files[name] = await this.file(dir, name);
+    }
+    const record = { manifest, files };
+    await verifyAssetRecord(record);
+    return record;
+  }
+  async save(collection, draft) {
+    const assetId = draft.assetId ?? `a_${randomUUID().replaceAll("-", "")}`;
+    if (draft.parentRevision)
+      await this.read(collection, assetId, draft.parentRevision);
+    if (draft.assetId && !draft.parentRevision && (await this.list(collection)).some((m) => m.assetId === assetId))
+      throw new Error("An existing asset requires parentRevision");
+    const files = { "asset.glb": Uint8Array.from(draft.glb) };
+    if (draft.code !== undefined)
+      files["source.kiln.js"] = new TextEncoder().encode(draft.code);
+    if (draft.preview)
+      files["preview.png"] = Uint8Array.from(draft.preview);
+    const manifest = assetManifestSchema.parse({
+      version: "kiln.asset.v1",
+      assetId,
+      revisionId: `r_${randomUUID().replaceAll("-", "")}`,
+      parentRevision: draft.parentRevision,
+      name: draft.name,
+      tags: draft.tags ?? [],
+      createdAt: new Date().toISOString(),
+      brief: draft.brief,
+      description: draft.description,
+      attribution: draft.attribution,
+      editable: draft.code !== undefined,
+      files: Object.fromEntries(Object.entries(files).map(([name, bytes]) => [
+        name,
+        { sha256: digest(bytes), bytes: bytes.length }
+      ])),
+      build: draft.build ? { ...draft.build, rebuild: draft.build.rebuild ?? "engine-required" } : undefined,
+      preview: draft.previewInfo
+    });
+    await this.import(collection, [{ manifest, files }]);
+    return manifest;
+  }
+  async import(collection, records) {
+    if (!records.length || records.length > 100)
+      throw new Error("Import requires 1..100 revisions");
+    for (const record of records)
+      await verifyAssetRecord(record);
+    for (const record of records) {
+      const { manifest, files } = record;
+      const dest = await this.path(collection, manifest.assetId, "revisions", manifest.revisionId);
+      const parent = dirname(dest);
+      await mkdir(parent, { recursive: true });
+      const stage = join(parent, `.write-${randomUUID()}`);
+      await mkdir(stage);
+      try {
+        for (const [name, bytes] of Object.entries(files))
+          await writeFile(join(stage, name), bytes, { flag: "wx" });
+        await writeFile(join(stage, "manifest.json"), `${JSON.stringify(manifest, null, 2)}
+`, {
+          flag: "wx"
+        });
+        try {
+          await rename(stage, dest);
+        } catch (error) {
+          const existing = await this.read(collection, manifest.assetId, manifest.revisionId).catch(() => {
+            return;
+          });
+          if (!existing || JSON.stringify(existing.manifest) !== JSON.stringify(manifest))
+            throw error;
+        }
+      } finally {
+        await rm(stage, { recursive: true, force: true });
+      }
+    }
+    return records.map((r) => r.manifest);
+  }
+}
+function collectionConfigPath(env = process.env) {
+  const workspace = env.KILN_PROGRAM_STORE ? dirname(dirname(resolve(env.KILN_PROGRAM_STORE))) : process.cwd();
+  return join(workspace, ".kiln", "collections.json");
+}
+function localAssetLibrary(env = process.env) {
+  if (env.KILN_COLLECTIONS) {
+    const value = JSON.parse(env.KILN_COLLECTIONS);
+    if (!value || typeof value !== "object" || Array.isArray(value) || Object.values(value).some((v) => typeof v !== "string" || !v))
+      throw new Error("KILN_COLLECTIONS must map collection names to directories");
+    return new FileAssetLibrary(value);
+  }
+  const config = collectionConfigPath(env);
+  try {
+    const text = readFileSync(config, "utf8");
+    if (!text.trim())
+      throw new Error("Collection configuration is empty");
+    return localAssetLibrary({ ...env, KILN_COLLECTIONS: text });
+  } catch (error) {
+    if (error.code !== "ENOENT")
+      throw error;
+  }
+  const workspace = dirname(dirname(config));
+  return new FileAssetLibrary({ project: join(workspace, "assets", "kiln") });
+}
+
+// src/assets-resources.ts
+init_assets();
+function assetMime(name) {
+  return name.endsWith(".glb") ? "model/gltf-binary" : name.endsWith(".png") ? "image/png" : name.endsWith(".zip") ? "application/zip" : name.endsWith(".json") ? "application/json" : "text/javascript";
+}
+async function readAssetResource(library, uri) {
+  const match = /^kiln:\/\/assets\/([a-z][a-z0-9_-]{0,79})\/([a-z][a-z0-9_-]{0,79})\/([a-z][a-z0-9_-]{0,79})\/(asset\.glb|source\.kiln\.js|preview\.png|manifest\.json|editable\.zip)$/.exec(uri);
+  if (!match)
+    throw new Error("Unknown asset resource");
+  const collection = match[1];
+  const asset = match[2];
+  const revision = match[3];
+  const name = match[4];
+  const record = await library.read(collection, asset, revision);
+  const bytes = name === "editable.zip" ? encodeAssetBundle([record]) : name === "manifest.json" ? new TextEncoder().encode(JSON.stringify(record.manifest, null, 2)) : record.files[name];
+  if (!bytes)
+    throw new Error("Asset file unavailable");
+  return { bytes, mimeType: assetMime(name), name };
+}
+
+// src/mcp-server.ts
 import { serveStdio } from "@modelcontextprotocol/server/stdio";
 import { AsyncLocalStorage } from "async_hooks";
 
 // src/tools/registry.ts
 init_capture_cache();
-import { z as z3 } from "zod";
+init_assets();
+import { z as z4 } from "zod";
 
 // src/program-store.ts
 var MAX_PROGRAM_BYTES = 1024 * 1024;
@@ -25992,8 +26400,8 @@ async function programReference(code) {
     throw new Error("Program exceeds the 1 MiB source limit.");
   if (new TextDecoder("utf-8", { ignoreBOM: true }).decode(bytes) !== code)
     throw new Error("Program must be valid Unicode.");
-  const hash = new Uint8Array(await crypto.subtle.digest("SHA-256", bytes));
-  return `sha256:${Array.from(hash, (b) => b.toString(16).padStart(2, "0")).join("")}`;
+  const hash2 = new Uint8Array(await crypto.subtle.digest("SHA-256", bytes));
+  return `sha256:${Array.from(hash2, (b) => b.toString(16).padStart(2, "0")).join("")}`;
 }
 
 class MemoryProgramStore {
@@ -26050,16 +26458,16 @@ class MemoryProgramStore {
 }
 
 // src/tools/programs.ts
-import { z } from "zod";
-var refInput = z.string().regex(programRefPattern).describe("Returned p_ handle or full sha256 ref.");
+import { z as z2 } from "zod";
+var refInput = z2.string().regex(programRefPattern).describe("Returned p_ handle or full sha256 ref.");
 function withProgramReferences(def, store) {
-  if (!(def.inputSchema instanceof z.ZodObject))
+  if (!(def.inputSchema instanceof z2.ZodObject))
     throw new Error(`${def.name} must have an object input schema.`);
   const inputSchema = def.inputSchema.extend({
-    code: z.string().optional().describe("New source. Supply code OR programRef."),
+    code: z2.string().optional().describe("New source. Supply code OR programRef."),
     programRef: refInput.optional(),
     ...def.name === "kiln_edit" ? {
-      includeCode: z.boolean().optional().describe("Return the full updated source. Defaults to false with programRef, true with code.")
+      includeCode: z2.boolean().optional().describe("Return the full updated source. Defaults to false with programRef, true with code.")
     } : {}
   }).refine((input) => input.code !== undefined !== (input.programRef !== undefined), {
     message: "Supply exactly one of code or programRef."
@@ -26100,11 +26508,11 @@ function withProgramReferences(def, store) {
   };
 }
 function createKilnSourceDef(store) {
-  const inputSchema = z.object({
+  const inputSchema = z2.object({
     programRef: refInput,
-    offset: z.number().int().min(0).default(0).describe("UTF-16 character offset; use nextOffset to continue."),
-    limit: z.number().int().min(1).max(16000).default(8000).describe("Maximum characters returned."),
-    query: z.string().min(1).max(1000).optional().describe("Find literal text at or after offset; return bounded surrounding source.")
+    offset: z2.number().int().min(0).default(0).describe("UTF-16 character offset; use nextOffset to continue."),
+    limit: z2.number().int().min(1).max(16000).default(8000).describe("Maximum characters returned."),
+    query: z2.string().min(1).max(1000).optional().describe("Find literal text at or after offset; return bounded surrounding source.")
   });
   return {
     name: "kiln_source",
@@ -26131,7 +26539,7 @@ function createKilnSourceDef(store) {
 }
 
 // src/tools/discovery.ts
-import { z as z2 } from "zod";
+import { z as z3 } from "zod";
 
 // src/geometry-catalog.ts
 var geometryPrimitives = [
@@ -27051,15 +27459,15 @@ function listPrimitives() {
 // src/tools/discovery.ts
 init_protocol();
 init_capture_limits();
-var inputSchema = z2.object({
-  names: z2.array(z2.string().trim().min(1).max(80)).min(1).max(6).optional().describe("Get up to six exact helper signatures together, in this order. Use without other selectors."),
-  category: z2.string().trim().min(1).max(80).optional().describe("Category from the overview."),
-  name: z2.string().trim().min(1).max(80).optional().describe("Exact helper name; returns its signature and example."),
-  query: z2.string().trim().min(1).max(200).optional().describe("Words to find in helper names, descriptions and examples."),
-  overview: z2.boolean().optional().describe("Compact names by category. Default when no search or category is supplied."),
-  capabilities: z2.boolean().optional().describe("Return only runtime, source, geometry export and camera capabilities."),
-  offset: z2.number().int().min(0).max(1e4).optional(),
-  limit: z2.number().int().min(1).max(12).optional().describe("Detailed results per page; default 6, maximum 12.")
+var inputSchema = z3.object({
+  names: z3.array(z3.string().trim().min(1).max(80)).min(1).max(6).optional().describe("Get up to six exact helper signatures together, in this order. Use without other selectors."),
+  category: z3.string().trim().min(1).max(80).optional().describe("Category from the overview."),
+  name: z3.string().trim().min(1).max(80).optional().describe("Exact helper name; returns its signature and example."),
+  query: z3.string().trim().min(1).max(200).optional().describe("Words to find in helper names, descriptions and examples."),
+  overview: z3.boolean().optional().describe("Compact names by category. Default when no search or category is supplied."),
+  capabilities: z3.boolean().optional().describe("Return only runtime, source, geometry export and camera capabilities."),
+  offset: z3.number().int().min(0).max(1e4).optional(),
+  limit: z3.number().int().min(1).max(12).optional().describe("Detailed results per page; default 6, maximum 12.")
 }).strict();
 function createKilnDiscoveryDef(context) {
   return {
@@ -27082,6 +27490,14 @@ function createKilnDiscoveryDef(context) {
           immutableRevisions: true,
           boundedRead: true,
           atomicEdit: true
+        },
+        assets: {
+          available: Boolean(context.assetLibrary),
+          collections: context.assetLibrary?.collections() ?? [],
+          save: "kiln_save persists exact GLB, source and provenance; draft renders do not populate collections",
+          resume: "kiln_assets action=restore imports a saved revision into the current program store",
+          downloads: "kiln_export returns GLB/source/ZIP resource links; client presentation varies",
+          viewer: "kiln_present opens a saved revision in supporting chat clients with 3D viewing and downloads; kiln view opens a local collection or standalone GLB/ZIP"
         },
         geometry: {
           attributes: ["position", "normal", "uv", "tangent"],
@@ -27202,7 +27618,7 @@ Note: ${entry.promptNotes}` : ""}`;
 
 // src/build-cache.ts
 init_protocol();
-import { createHash as createHash7 } from "node:crypto";
+import { createHash as createHash8 } from "node:crypto";
 import * as acorn2 from "acorn";
 import * as walk2 from "acorn-walk";
 function sourceHasAmbientInputs(code) {
@@ -27322,7 +27738,7 @@ function createCachedEvaluatorPort(evaluator, options) {
       } catch {
         return evaluator.render(code, renderOptions, controls);
       }
-      const key = `sha256:${createHash7("sha256").update(serialized).digest("hex")}`;
+      const key = `sha256:${createHash8("sha256").update(serialized).digest("hex")}`;
       const cached = await options.cache.get(key).catch(() => {
         return;
       });
@@ -27595,6 +28011,7 @@ function resolveViewRenderTimeoutMs(input) {
 
 // src/tools/registry.ts
 init_evidence_history();
+var KILN_ASSET_WIDGET_URI = "ui://kiln/asset-v3.html";
 function proceduralTextureMaterialContract(rendered, context) {
   const required = [...new Set(context.requiredProceduralTextureUsages ?? [])];
   if (required.length === 0)
@@ -27657,8 +28074,8 @@ function withViewEvidenceHistory(context) {
   return { ...context, viewEvidenceHistory: history };
 }
 async function sha256Glb(bytes) {
-  const digest2 = new Uint8Array(await globalThis.crypto.subtle.digest("SHA-256", Uint8Array.from(bytes)));
-  return `sha256:${[...digest2].map((byte) => byte.toString(16).padStart(2, "0")).join("")}`;
+  const digest3 = new Uint8Array(await globalThis.crypto.subtle.digest("SHA-256", Uint8Array.from(bytes)));
+  return `sha256:${[...digest3].map((byte) => byte.toString(16).padStart(2, "0")).join("")}`;
 }
 async function renderDerivativeCell(input, context) {
   let derivativeRoot = input.root;
@@ -27806,66 +28223,69 @@ function derivativeReviewFidelity(receipts) {
     ...reasonCodes.length ? { reasonCodes } : {}
   };
 }
-var listPrimitivesInput = z3.object({
-  category: z3.string().optional().describe("Optional category filter: geometry, material, structure, animation, utility, instancing, csg, arrays, mesh-ops, curves, uv, textures.")
+var listPrimitivesInput = z4.object({
+  category: z4.string().optional().describe("Optional category filter: geometry, material, structure, animation, utility, instancing, csg, arrays, mesh-ops, curves, uv, textures.")
 });
-var validateInput = z3.object({
-  code: z3.string().describe("Kiln source code (defines `meta` + `build()`, optional `animate()`).")
+var validateInput = z4.object({
+  code: z4.string().describe("Kiln source code (defines `meta` + `build()`, optional `animate()`).")
 });
-var renderInput = z3.object({
-  code: z3.string().describe("Kiln source code to execute and render to an in-memory GLB.")
+var renderInput = z4.object({
+  code: z4.string().describe("Kiln source code to execute and render to an in-memory GLB.")
 });
-var screenshotInput = z3.object({
-  code: z3.string().describe("Kiln source code to execute and render to a six-view image grid.")
+var screenshotInput = z4.object({
+  code: z4.string().describe("Kiln source code to execute and render to a six-view image grid.")
 });
-var legacyCaptureInput = z3.object({
-  preset: z3.enum(["1x1", "1x2", "2x1", "3x1", "2x2", "3x2", "3x3"]).optional().describe("Grid shape as COLSxROWS. Default 3x2. Choose fewer views for simple shapes, up to 3x3 for more angles."),
-  cells: z3.array(z3.object({
-    azimuthDeg: z3.number().describe("0 = front, 90 = right, 180 = back, 270 = left. Wraps."),
-    elevationDeg: z3.number().describe("0 = eye level, positive looks down, negative from below. Clamped to -89..89."),
-    zoom: z3.number().optional().describe("Padding multiplier around the asset bounds for this cell only. Omit for the default framing; below 1 crops in, above 1 pulls back."),
-    name: z3.string().optional().describe("Cell label. Auto-derived from the angles if omitted.")
+var legacyCaptureInput = z4.object({
+  preset: z4.enum(["1x1", "1x2", "2x1", "3x1", "2x2", "3x2", "3x3"]).optional().describe("Grid shape as COLSxROWS. Default 3x2. Choose fewer views for simple shapes, up to 3x3 for more angles."),
+  cells: z4.array(z4.object({
+    azimuthDeg: z4.number().describe("0 = front, 90 = right, 180 = back, 270 = left. Wraps."),
+    elevationDeg: z4.number().describe("0 = eye level, positive looks down, negative from below. Clamped to -89..89."),
+    zoom: z4.number().optional().describe("Padding multiplier around the asset bounds for this cell only. Omit for the default framing; below 1 crops in, above 1 pulls back."),
+    name: z4.string().optional().describe("Cell label. Auto-derived from the angles if omitted.")
   })).optional().describe("One camera per cell, in row-major order. Omit to use the preset default cameras. Must not exceed the preset capacity (max 9 overall).")
 }).optional().describe("Optional. Choose the contact-sheet shape and cameras. Omit it entirely for the standard six-view 3x2 grid, which is the right default for most assets.");
-var cameraVec3Input = z3.tuple([z3.number(), z3.number(), z3.number()]);
-var cameraShotInput = z3.object({
-  name: z3.string().optional(),
-  subject: z3.object({ path: z3.string().optional(), name: z3.string().optional() }).strict().refine((v) => v.path === undefined !== (v.name === undefined), {
+var cameraVec3Input = z4.tuple([z4.number(), z4.number(), z4.number()]);
+var cameraShotInput = z4.object({
+  name: z4.string().optional(),
+  subject: z4.object({ path: z4.string().optional(), name: z4.string().optional() }).strict().refine((v) => v.path === undefined !== (v.name === undefined), {
     message: "Choose subject path OR exact name."
   }).optional(),
-  visibility: z3.enum(["context", "isolate"]).optional(),
-  camera: z3.discriminatedUnion("type", [
-    z3.object({
-      type: z3.literal("orbit"),
-      azimuthDeg: z3.number().optional(),
-      elevationDeg: z3.number().optional(),
-      relativeTo: z3.enum(["world", "asset", "part"]).optional(),
-      padding: z3.number().positive().max(100).optional()
+  visibility: z4.enum(["context", "isolate"]).optional(),
+  camera: z4.discriminatedUnion("type", [
+    z4.object({
+      type: z4.literal("orbit"),
+      azimuthDeg: z4.number().optional(),
+      elevationDeg: z4.number().optional(),
+      relativeTo: z4.enum(["world", "asset", "part"]).optional(),
+      padding: z4.number().positive().max(100).optional()
     }).strict(),
-    z3.object({
-      type: z3.literal("explicit"),
-      projection: z3.enum(["orthographic", "perspective"]),
+    z4.object({
+      type: z4.literal("explicit"),
+      projection: z4.enum(["orthographic", "perspective"]),
       position: cameraVec3Input,
       target: cameraVec3Input.optional(),
-      relativeTo: z3.enum(["world", "asset", "part", "local"]).optional(),
-      frame: z3.object({ origin: cameraVec3Input.optional(), rotation: cameraVec3Input.optional() }).strict().optional(),
-      framing: z3.enum(["explicit", "bounds"]).optional(),
-      padding: z3.number().positive().max(100).optional(),
+      relativeTo: z4.enum(["world", "asset", "part", "local"]).optional(),
+      frame: z4.object({
+        origin: cameraVec3Input.optional(),
+        rotation: cameraVec3Input.optional()
+      }).strict().optional(),
+      framing: z4.enum(["explicit", "bounds"]).optional(),
+      padding: z4.number().positive().max(100).optional(),
       targetOffset: cameraVec3Input.optional(),
       up: cameraVec3Input.optional(),
-      halfHeight: z3.number().positive().optional(),
-      fovDeg: z3.number().positive().lt(180).optional(),
-      near: z3.number().positive().optional(),
-      far: z3.number().positive().optional()
+      halfHeight: z4.number().positive().optional(),
+      fovDeg: z4.number().positive().lt(180).optional(),
+      near: z4.number().positive().optional(),
+      far: z4.number().positive().optional()
     }).strict()
   ]).optional()
 }).strict();
-var advancedCaptureInput = z3.object({
-  version: z3.literal("kiln.capture.v1"),
-  shots: z3.array(cameraShotInput).min(1).max(9),
-  cols: z3.number().int().min(1).max(3).optional(),
-  size: z3.number().int().min(128).max(1024).optional(),
-  output: z3.enum(["grid", "separate"]).optional()
+var advancedCaptureInput = z4.object({
+  version: z4.literal("kiln.capture.v1"),
+  shots: z4.array(cameraShotInput).min(1).max(9),
+  cols: z4.number().int().min(1).max(3).optional(),
+  size: z4.number().int().min(128).max(1024).optional(),
+  output: z4.enum(["grid", "separate"]).optional()
 }).strict();
 function taggedCaptureError(issue) {
   const input = issue.input;
@@ -27878,26 +28298,28 @@ function taggedCaptureError(issue) {
   const details = issues.slice(0, 6).map((problem) => `${problem.path.join(".") || "capture"}: ${problem.message.slice(0, 240)}`);
   return `Invalid kiln.capture.v1: ${details.join("; ")}${issues.length > 6 ? "; additional issues omitted" : ""}`;
 }
-var captureInput = z3.union([
+var captureInput = z4.union([
   advancedCaptureInput,
-  z3.strictObject(legacyCaptureInput.unwrap().shape, { error: taggedCaptureError })
+  z4.strictObject(legacyCaptureInput.unwrap().shape, {
+    error: taggedCaptureError
+  })
 ], { error: taggedCaptureError }).optional().describe("Use legacy preset/cells for an orbit sheet, or version kiln.capture.v1 with 1..9 shots for exact part framing, local axes, perspective and separate images. Omit for six default views.");
 var renderViewsInput = renderInput.extend({ capture: captureInput });
 var renderViewsBufferInput = renderViewsInput.omit({ code: true });
-var screenshotAnimationInput = z3.object({
+var screenshotAnimationInput = z4.object({
   shot: cameraShotInput.optional(),
-  frames: z3.number().int().min(2).max(6).optional(),
-  frameTimes: z3.array(z3.number().min(0).max(1)).min(1).max(9).optional().describe("Ordered phase fractions 0..1; mutually exclusive with frames."),
-  framing: z3.enum(["locked", "follow"]).optional(),
-  code: z3.string().describe("Kiln source code to execute; must define animate() returning the named clip."),
-  clip: z3.string().describe('The animation clip to view, by name (e.g. "walk", "attack"). Must be one your animate() returns.'),
-  camera: z3.string().optional().describe("Camera angle: right (default — side profile, best for leg swing + knee bend direction), front " + "(reveals sideways/lateral motion), back, left, top, or three-quarter."),
-  perFrame: z3.boolean().optional().describe("Return the frames as separate high-res images instead of one composite grid. Default false.")
+  frames: z4.number().int().min(2).max(6).optional(),
+  frameTimes: z4.array(z4.number().min(0).max(1)).min(1).max(9).optional().describe("Ordered phase fractions 0..1; mutually exclusive with frames."),
+  framing: z4.enum(["locked", "follow"]).optional(),
+  code: z4.string().describe("Kiln source code to execute; must define animate() returning the named clip."),
+  clip: z4.string().describe('The animation clip to view, by name (e.g. "walk", "attack"). Must be one your animate() returns.'),
+  camera: z4.string().optional().describe("Camera angle: right (default — side profile, best for leg swing + knee bend direction), front " + "(reveals sideways/lateral motion), back, left, top, or three-quarter."),
+  perFrame: z4.boolean().optional().describe("Return the frames as separate high-res images instead of one composite grid. Default false.")
 });
-var viewInteriorInput = z3.object({
+var viewInteriorInput = z4.object({
   capture: advancedCaptureInput.optional(),
-  code: z3.string().describe("Kiln source code to execute and render with the roof hidden."),
-  nodeName: z3.string().optional().describe("Override: lift the roof by exact node name instead of by role. Matches that node and its " + "children. Normally OMIT it — Kiln finds the roof from its semantic role (anything built " + 'with createRoofPlanes/createGableRoof), falling back to historical "Roof" naming.')
+  code: z4.string().describe("Kiln source code to execute and render with the roof hidden."),
+  nodeName: z4.string().optional().describe("Override: lift the roof by exact node name instead of by role. Matches that node and its " + "children. Normally OMIT it — Kiln finds the roof from its semantic role (anything built " + 'with createRoofPlanes/createGableRoof), falling back to historical "Roof" naming.')
 });
 function runListPrimitives(input) {
   const all = listPrimitives();
@@ -27994,7 +28416,9 @@ async function runScreenshot(input, context) {
   try {
     const { renderGlbViewGrid: renderGlbViewGrid2 } = await Promise.resolve().then(() => (init_views(), exports_views));
     const { root, rendered } = await loadEvaluatedReviewScene(input.code, context);
-    const warnings = inspectSceneStructure(root, { category: trustedCategory(context) });
+    const warnings = inspectSceneStructure(root, {
+      category: trustedCategory(context)
+    });
     const grid = await renderGlbViewGrid2(rendered.glb);
     return {
       ok: true,
@@ -28103,13 +28527,15 @@ async function runRenderViews(input, context) {
     drawnBy ??= context.viewRenderPort ? { renderer: CPU_RASTER_RENDERER_ID2, degraded: false, neededPbr } : {
       renderer: CPU_RASTER_RENDERER_ID2,
       degraded: neededPbr,
-      ...neededPbr ? { degradedReason: "material-faithful view render port unavailable" } : {},
+      ...neededPbr ? {
+        degradedReason: "material-faithful view render port unavailable"
+      } : {},
       neededPbr
     };
     const hashInput = new Uint8Array(rendered.glb.byteLength);
     hashInput.set(rendered.glb);
-    const digest2 = new Uint8Array(await globalThis.crypto.subtle.digest("SHA-256", hashInput));
-    const inputGlbSha256 = `sha256:${[...digest2].map((byte) => byte.toString(16).padStart(2, "0")).join("")}`;
+    const digest3 = new Uint8Array(await globalThis.crypto.subtle.digest("SHA-256", hashInput));
+    const inputGlbSha256 = `sha256:${[...digest3].map((byte) => byte.toString(16).padStart(2, "0")).join("")}`;
     const viewFidelity = {
       version: "kiln.view-fidelity.v1",
       requested: "full-preferred",
@@ -28179,7 +28605,9 @@ async function runScreenshotAnimation(input, context) {
   try {
     const { renderClipAnimation: renderClipAnimation2 } = await Promise.resolve().then(() => (init_views(), exports_views));
     const { root, clips } = await loadEvaluatedReviewScene(input.code, context);
-    const warnings = inspectSceneStructure(root, { category: trustedCategory(context) });
+    const warnings = inspectSceneStructure(root, {
+      category: trustedCategory(context)
+    });
     const r = await renderClipAnimation2(root, clips, {
       clip: input.clip,
       ...input.shot ? { shot: input.shot } : {},
@@ -28241,7 +28669,10 @@ function screenshotAnimationMediaMulti(output) {
   if (!o || !Array.isArray(o.framesBase64) || o.framesBase64.length === 0)
     return;
   const { pngBase64: _png, framesBase64: _frames, ...json } = o;
-  return { pngs: o.framesBase64.map((b) => new Uint8Array(Buffer.from(b, "base64"))), json };
+  return {
+    pngs: o.framesBase64.map((b) => new Uint8Array(Buffer.from(b, "base64"))),
+    json
+  };
 }
 var KILN_SCREENSHOT_ANIMATION_DESCRIPTION = "SEE one animation clip move: renders the named clip as six frames sampled evenly from start to end (each labeled with its phase %) from one camera, as a 3x2 grid. Use this after animating ANY asset to " + "verify the MOTION — a static screenshot cannot show it — whether it is a character walking, a door or " + "chest lid swinging on its hinge, a wheel/gear/turret/windmill turning on its axle, a lever or hatch throwing, or a flag/frond/branch swaying. Read the side (right) view and confirm each moving part travels the way it should about its OWN real pivot, and that the static base stays put. For a character specifically: a walk swings the legs forward and back (not splayed sideways and not sliding the body sideways), knees bend backward at the joint (not forward like a bird), an attack swings down and FORWARD through the front (not behind the back), and a held weapon tracks the hand through the swing. args: clip (required, the clip name), camera (default right; also front/back/left/top/three-quarter), perFrame (optional, separate high-res frames). If unresolvedTracks comes back " + "non-empty the clip targets joints that do not exist (a name mismatch) and looks frozen — fix the " + "track names. Each frame is rendered from deterministic posed GLB bytes: GPU PBR when available, otherwise a GLB-native geometry-flat fallback. Read viewFidelity before judging materials; writes no files." + VIEW_EVIDENCE_GUIDANCE;
 function createKilnScreenshotAnimationDef(context = {}) {
@@ -28266,7 +28697,9 @@ async function runViewInterior(input, context) {
       ...nodeName2 ? { nodeName: nodeName2 } : {},
       renderDerivativeCell: (cell) => renderDerivativeCell(cell, context)
     });
-    const warnings = inspectSceneStructure(root, { category: trustedCategory(context) });
+    const warnings = inspectSceneStructure(root, {
+      category: trustedCategory(context)
+    });
     if (grid.roofsHidden === 0) {
       warnings.push(nodeName2 ? `No node named "${nodeName2}" was found, so the roof could not be lifted and the interior is still occluded. Check that name, or omit nodeName so the roof is found by its semantic role instead.` : 'No roof was found, so nothing could be lifted and the interior is still occluded. Build the roof with createRoofPlanes/createGableRoof (which tag it as a roof), or name the roof group "Roof".');
     }
@@ -28306,20 +28739,20 @@ function createKilnViewInteriorDef(context = {}) {
   };
 }
 var kilnViewInteriorDef = createKilnViewInteriorDef();
-var attachmentEndpointInput = z3.object({
-  subject: z3.object({ path: z3.string().optional(), name: z3.string().optional() }).strict(),
+var attachmentEndpointInput = z4.object({
+  subject: z4.object({ path: z4.string().optional(), name: z4.string().optional() }).strict(),
   point: cameraVec3Input.optional()
 }).strict();
-var inspectInput = z3.object({
-  measure: z3.object({ from: attachmentEndpointInput, to: attachmentEndpointInput }).strict().optional().describe("Straight-line distance between exact named node origins or subject-local points; asset units, not surface clearance."),
+var inspectInput = z4.object({
+  measure: z4.object({ from: attachmentEndpointInput, to: attachmentEndpointInput }).strict().optional().describe("Straight-line distance between exact named node origins or subject-local points; asset units, not surface clearance."),
   shot: cameraShotInput.optional().describe("Exact framed shot; omit legacy part/view/orbit fields when using this."),
-  code: z3.string().describe("Kiln source code to execute and inspect."),
-  part: z3.string().optional().describe("The part to frame, by node name from your program (case-insensitive; substring match as a fallback). Omit to frame the whole asset."),
-  view: z3.string().optional().describe("Camera angle: front, right, back, left, top, or three-quarter (default). Ignored when azimuthDeg or elevationDeg is given."),
-  azimuthDeg: z3.number().optional().describe("Orbit the camera around the asset: 0 = front, 90 = right, 180 = back, 270 = left. Wraps, " + "so 315 and -45 are the same. Use it to look between the named views — at a corner, a " + "seam, or whatever angle the last render left ambiguous."),
-  elevationDeg: z3.number().optional().describe("Orbit the camera up or down: 0 = eye level, positive looks down from above, negative from below. Clamped to -89..89. Combine with azimuthDeg for any three-quarter angle you want."),
-  zoom: z3.number().optional().describe("Padding multiplier around the part bounds, clamped to 1-4. Default 1.2; raise it to see more surrounding context."),
-  isolate: z3.boolean().optional().describe("Hide everything except the named part (and its descendants) so nothing can block the view. Use it when the part is buried inside or behind other geometry. Needs `part`; without " + "one it does nothing. Default false — surrounding geometry stays visible for context.")
+  code: z4.string().describe("Kiln source code to execute and inspect."),
+  part: z4.string().optional().describe("The part to frame, by node name from your program (case-insensitive; substring match as a fallback). Omit to frame the whole asset."),
+  view: z4.string().optional().describe("Camera angle: front, right, back, left, top, or three-quarter (default). Ignored when azimuthDeg or elevationDeg is given."),
+  azimuthDeg: z4.number().optional().describe("Orbit the camera around the asset: 0 = front, 90 = right, 180 = back, 270 = left. Wraps, " + "so 315 and -45 are the same. Use it to look between the named views — at a corner, a " + "seam, or whatever angle the last render left ambiguous."),
+  elevationDeg: z4.number().optional().describe("Orbit the camera up or down: 0 = eye level, positive looks down from above, negative from below. Clamped to -89..89. Combine with azimuthDeg for any three-quarter angle you want."),
+  zoom: z4.number().optional().describe("Padding multiplier around the part bounds, clamped to 1-4. Default 1.2; raise it to see more surrounding context."),
+  isolate: z4.boolean().optional().describe("Hide everything except the named part (and its descendants) so nothing can block the view. Use it when the part is buried inside or behind other geometry. Needs `part`; without " + "one it does nothing. Default false — surrounding geometry stays visible for context.")
 });
 var inspectBufferInput = inspectInput.omit({ code: true });
 async function runInspect(input, context) {
@@ -28396,7 +28829,10 @@ async function runInspect(input, context) {
       ...viewEvidence ? { viewEvidence } : {}
     };
   } catch (err) {
-    return { ok: false, error: err instanceof Error ? err.message : String(err) };
+    return {
+      ok: false,
+      error: err instanceof Error ? err.message : String(err)
+    };
   }
 }
 var KILN_INSPECT_DESCRIPTION = "ZOOM IN on one part: renders a single 512x512 close-up framed to the named part (the node name you gave createPart, matched case-insensitively with a substring fallback) and its descendants, " + "from one camera. Use it after kiln_render reveals a suspect region — a floating part, a bad " + "joint, a wrong proportion — to see fine detail one grid cell cannot show. args: part (omit to " + "frame the whole asset in one large view), view (front/right/back/left/top/three-quarter, default three-quarter), azimuthDeg + elevationDeg (orbit to ANY angle instead of a named view: azimuth 0 = front, 90 = right, 180 = back, 270 = left; elevation 0 = eye level, positive looks down, clamped to -89..89), zoom (padding multiplier around the part bounds, 1 = tight crop up to 4 = wide context, default 1.2), isolate (hide everything except that part, default false). Reach for the orbit angles when a named view puts the thing you need to judge edge-on or " + "behind something — the reply always tells you the azimuth/elevation it used, so you can step " + "from there. " + "If the part name does not resolve you get the list of available part names back — pick one and " + "retry. By default surrounding geometry stays visible for context and can occlude the part: either pick a different view, or set isolate:true to hide everything else and see the part unobstructed (use it for anything buried inside or behind other geometry). The view is rendered from deterministic derivative GLB bytes; GPU PBR is used only when it can preserve the requested framing, otherwise the GLB-native geometry-flat fallback reports why in viewFidelity. Writes no files." + VIEW_EVIDENCE_GUIDANCE;
@@ -28411,15 +28847,15 @@ function createKilnInspectDef(context = {}) {
   };
 }
 var kilnInspectDef = createKilnInspectDef();
-var editOperationInput = z3.object({
-  oldString: z3.string().describe("The exact text to replace, copied verbatim from the program (including whitespace and indentation, and with no line-number prefixes). Must be unique unless replaceAll is true."),
-  newString: z3.string().describe("The replacement text. Use an empty string to delete."),
-  replaceAll: z3.boolean().optional().describe("Replace every occurrence instead of failing when oldString matches more than once.")
+var editOperationInput = z4.object({
+  oldString: z4.string().describe("The exact text to replace, copied verbatim from the program (including whitespace and indentation, and with no line-number prefixes). Must be unique unless replaceAll is true."),
+  newString: z4.string().describe("The replacement text. Use an empty string to delete."),
+  replaceAll: z4.boolean().optional().describe("Replace every occurrence instead of failing when oldString matches more than once.")
 });
-var editInput = z3.object({
-  code: z3.string().describe("The Kiln program to patch. The full current source."),
-  edits: z3.array(editOperationInput).min(1).max(20).describe("Edits applied in order against the program. If any one fails to match, none are applied and the reply says which. Batch related changes into a single call."),
-  render: z3.boolean().optional().describe("Render the patched program and return the views (default true). false = patch only."),
+var editInput = z4.object({
+  code: z4.string().describe("The Kiln program to patch. The full current source."),
+  edits: z4.array(editOperationInput).min(1).max(20).describe("Edits applied in order against the program. If any one fails to match, none are applied and the reply says which. Batch related changes into a single call."),
+  render: z4.boolean().optional().describe("Render the patched program and return the views (default true). false = patch only."),
   capture: captureInput
 });
 async function runEdit(input, context) {
@@ -28573,7 +29009,10 @@ async function guardCaptureBudget(name, input, context, run2) {
     }
     return out;
   } catch (error) {
-    return { ok: false, error: error instanceof Error ? error.message : String(error) };
+    return {
+      ok: false,
+      error: error instanceof Error ? error.message : String(error)
+    };
   }
 }
 function withCaptureCache(context) {
@@ -28584,7 +29023,12 @@ function withCaptureCache(context) {
   return {
     ...context,
     captureCache: cache,
-    ...context.viewRenderPort && context.captureCacheIdentity ? { viewRenderPort: createCachedRenderPort(context.viewRenderPort, { cache, identity }) } : {}
+    ...context.viewRenderPort && context.captureCacheIdentity ? {
+      viewRenderPort: createCachedRenderPort(context.viewRenderPort, {
+        cache,
+        identity
+      })
+    } : {}
   };
 }
 function createKilnProgramToolRegistry(suppliedContext = {}) {
@@ -28601,12 +29045,241 @@ function createKilnProgramToolRegistry(suppliedContext = {}) {
       createKilnInspectDef(context),
       createKilnEditDef(context)
     ].map((def) => withProgramReferences(def, store)),
-    createKilnSourceDef(store)
+    createKilnSourceDef(store),
+    ...createKilnAssetDefs({ ...context, programStore: store })
+  ].map((def) => ({
+    ...def,
+    annotations: {
+      readOnlyHint: ["kiln_source", "kiln_list_primitives", "kiln_export", "kiln_present"].includes(def.name),
+      destructiveHint: false,
+      idempotentHint: def.name !== "kiln_save",
+      openWorldHint: false
+    }
+  }));
+}
+var assetSelector = {
+  collection: z4.string().regex(/^[a-z][a-z0-9_-]{0,79}$/).default("project"),
+  assetId: z4.string().regex(/^[a-z][a-z0-9_-]{0,79}$/),
+  revisionId: z4.string().regex(/^[a-z][a-z0-9_-]{0,79}$/)
+};
+function createKilnAssetDefs(context) {
+  const library = () => {
+    if (!context.assetLibrary)
+      throw new Error("No asset library configured. The local CLI/MCP host supplies workspace collections; embedded hosts must inject assetLibrary.");
+    return context.assetLibrary;
+  };
+  const links = async (collection, asset2) => ({
+    ok: true,
+    collection,
+    asset: {
+      assetId: asset2.assetId,
+      revisionId: asset2.revisionId,
+      parentRevision: asset2.parentRevision,
+      name: asset2.name,
+      tags: asset2.tags,
+      createdAt: asset2.createdAt,
+      editable: asset2.editable,
+      files: asset2.files,
+      build: asset2.build && {
+        engine: asset2.build.engine,
+        rebuild: asset2.build.rebuild,
+        warningCount: asset2.build.warnings.length,
+        warnings: asset2.build.warnings.slice(0, 3).map((warning) => warning.slice(0, 200))
+      }
+    },
+    resources: (await Promise.resolve().then(() => (init_assets_resources(), exports_assets_resources))).assetLinks(collection, asset2),
+    downloadUrls: await context.assetDownloadUrls?.(collection, asset2.assetId, asset2.revisionId)
+  });
+  const saveInput = z4.object({
+    collection: assetSelector.collection,
+    programRef: z4.string(),
+    name: z4.string().min(1).max(200),
+    assetId: assetSelector.assetId.optional(),
+    parentRevision: assetSelector.revisionId.optional(),
+    tags: z4.array(z4.string().max(80)).max(30).optional(),
+    brief: z4.string().max(8000).optional(),
+    description: z4.string().max(4000).optional(),
+    attribution: z4.object({
+      model: z4.string().max(200).optional(),
+      harness: z4.string().max(200).optional(),
+      author: z4.string().max(200).optional()
+    }).optional()
+  });
+  const assetsInput = z4.object({
+    action: z4.enum(["collections", "list", "get", "restore"]).default("list"),
+    collection: assetSelector.collection,
+    assetId: assetSelector.assetId.optional(),
+    revisionId: assetSelector.revisionId.optional(),
+    query: z4.string().max(200).optional(),
+    offset: z4.number().int().min(0).default(0),
+    limit: z4.number().int().min(1).max(50).default(20)
+  });
+  const exportInput = z4.object(assetSelector);
+  const importInput = z4.object({
+    ...assetSelector,
+    sourceCollection: assetSelector.collection
+  });
+  return [
+    {
+      name: "kiln_save",
+      description: "Save a completed source revision as a durable asset with its exact GLB, source, preview, and build record. Use programRef returned by render/edit. To revise an existing asset, supply its assetId and parentRevision; previous revisions remain intact. Returns downloadable resources. Draft renders do not populate collections.",
+      inputSchema: saveInput,
+      run: async (raw) => {
+        const input = saveInput.parse(raw);
+        const target = library();
+        const code = await context.programStore.get(input.programRef);
+        const rendered = await evaluateGeneratedSource(code, context);
+        let preview;
+        let previewInfo;
+        try {
+          const result = await runRenderViews({ code }, {
+            ...context,
+            evaluatorPort: { render: async () => rendered }
+          });
+          if (!result.ok || !result.pngBase64)
+            throw new Error(result.error ?? "Preview unavailable");
+          preview = Uint8Array.from(Buffer.from(result.pngBase64, "base64"));
+          previewInfo = { fidelity: result.viewFidelity };
+        } catch (error) {
+          previewInfo = {
+            error: error instanceof Error ? error.message : String(error)
+          };
+        }
+        const dependencies = rendered.materialResourceProvenance ?? [];
+        const asset2 = await target.save(input.collection, {
+          ...input,
+          code,
+          glb: rendered.glb,
+          preview,
+          previewInfo,
+          build: {
+            engine: context.localExecution?.runtimeIdentity ?? "source-development:unverified",
+            options: {
+              ...context.assetBuildOptions,
+              optimize: "off",
+              instance: context.assetBuildOptions?.instance ?? "unspecified-by-host",
+              geometryPolicy: context.geometryPolicy ?? "warn",
+              category: trustedCategory(context),
+              intent: context.intent
+            },
+            warnings: rendered.warnings,
+            integration: rendered.integrationManifest,
+            qa: rendered.meta.qaReport,
+            dependencies,
+            rebuild: dependencies.some((d) => d.delivery === "runtime") ? "external-dependencies-required" : "engine-required"
+          }
+        });
+        return links(input.collection, asset2);
+      }
+    },
+    {
+      name: "kiln_assets",
+      description: "Discover collections; list/search saved asset revisions; get a build record and downloads; or restore exact editable source into the current program store for kiln_source/kiln_edit. List is paginated. Binary-only imports cannot restore source.",
+      inputSchema: assetsInput,
+      run: async (raw) => {
+        const input = assetsInput.parse(raw);
+        const target = library();
+        if (input.action === "collections")
+          return { collections: target.collections() };
+        if (input.action === "list") {
+          const query = input.query?.toLowerCase();
+          const all = (await target.list(input.collection)).filter((a) => (!input.assetId || a.assetId === input.assetId) && (!query || `${a.name} ${a.tags.join(" ")}`.toLowerCase().includes(query)));
+          return {
+            collection: input.collection,
+            total: all.length,
+            nextOffset: input.offset + input.limit < all.length ? input.offset + input.limit : null,
+            assets: all.slice(input.offset, input.offset + input.limit).map((a) => ({
+              assetId: a.assetId,
+              revisionId: a.revisionId,
+              parentRevision: a.parentRevision,
+              name: a.name,
+              tags: a.tags,
+              editable: a.editable,
+              createdAt: a.createdAt
+            }))
+          };
+        }
+        if (!input.assetId || !input.revisionId)
+          throw new Error("get/restore requires assetId and revisionId");
+        const record5 = await target.read(input.collection, input.assetId, input.revisionId);
+        if (input.action === "get")
+          return links(input.collection, record5.manifest);
+        const code = record5.files["source.kiln.js"];
+        if (!code)
+          throw new Error("Source unavailable: this asset contains only a GLB");
+        return {
+          ...await links(input.collection, record5.manifest),
+          programRef: await retainProgram(context.programStore, new TextDecoder().decode(code))
+        };
+      }
+    },
+    {
+      name: "kiln_present",
+      description: "Show a saved asset in an interactive chat viewer with GLB, editable ZIP, and source download buttons. Call after saving or when the user wants to see or download an asset. Other hosts receive portable resource links.",
+      inputSchema: exportInput,
+      outputSchema: z4.object({
+        ok: z4.literal(true),
+        collection: z4.string(),
+        asset: assetManifestSchema.pick({
+          assetId: true,
+          revisionId: true,
+          parentRevision: true,
+          name: true,
+          tags: true,
+          createdAt: true,
+          editable: true,
+          files: true
+        }).extend({
+          build: z4.object({
+            engine: z4.string(),
+            rebuild: z4.enum(["engine-required", "external-dependencies-required"]),
+            warningCount: z4.number().int(),
+            warnings: z4.array(z4.string())
+          }).optional()
+        }),
+        resources: z4.array(z4.object({
+          type: z4.literal("resource_link"),
+          name: z4.string(),
+          uri: z4.string(),
+          mimeType: z4.string()
+        })),
+        downloadUrls: z4.record(z4.string(), z4.string()).optional()
+      }),
+      ui: {
+        resourceUri: KILN_ASSET_WIDGET_URI,
+        data: async (output) => (await Promise.resolve().then(() => (init_asset_widget(), exports_asset_widget))).assetWidgetData(library(), output)
+      },
+      run: async (raw) => {
+        const input = exportInput.parse(raw);
+        return links(input.collection, (await library().read(input.collection, input.assetId, input.revisionId)).manifest);
+      }
+    },
+    {
+      name: "kiln_export",
+      description: "Get downloadable GLB, source, manifest, and portable ZIP resource links for one exact saved revision. The ZIP contains source when available and does not require the original program store. Use the host resource reader/download UI; no binary bytes are placed in tool text.",
+      inputSchema: exportInput,
+      run: async (raw) => {
+        const input = exportInput.parse(raw);
+        return links(input.collection, (await library().read(input.collection, input.assetId, input.revisionId)).manifest);
+      }
+    },
+    {
+      name: "kiln_import",
+      description: "Copy a pinned asset revision between configured project/personal collections, preserving identity and provenance. Copies never track later edits automatically. For a GLB or downloaded ZIP on disk, use kiln import <file> --collection <name> in the CLI.",
+      inputSchema: importInput,
+      run: async (raw) => {
+        const input = importInput.parse(raw);
+        const target = library();
+        const record5 = await target.read(input.sourceCollection, input.assetId, input.revisionId);
+        await target.import(input.collection, [record5]);
+        return links(input.collection, record5.manifest);
+      }
+    }
   ];
 }
 
 // src/cli-render-mode.ts
-import { createHash as createHash8 } from "node:crypto";
+import { createHash as createHash9 } from "node:crypto";
 var DEFAULT_LOCAL_PORT_URL = "http://127.0.0.1:8000";
 var HEALTH_PROBE_TIMEOUT_MS = 1500;
 var HEALTH_PROBE_BUSY_TIMEOUT_MS = 8000;
@@ -28621,7 +29294,7 @@ function makeRemoteRenderPort(url, token) {
     const body = {
       glb_base64: Buffer.from(req.glb).toString("base64")
     };
-    const inputGlbSha256 = `sha256:${createHash8("sha256").update(req.glb).digest("hex")}`;
+    const inputGlbSha256 = `sha256:${createHash9("sha256").update(req.glb).digest("hex")}`;
     body["input_glb_sha256"] = inputGlbSha256;
     if (req.cameras) {
       body["cameras"] = req.cameras;
@@ -28738,138 +29411,10 @@ async function buildRenderPort(mode, portUrl) {
 }
 
 // src/program-store-node.ts
-import { link, lstat, mkdir, readFile as readFile2, readdir, stat, unlink, writeFile as writeFile2 } from "node:fs/promises";
-import { randomUUID } from "node:crypto";
-import { join as join3, resolve } from "node:path";
-class FileProgramStore {
-  directory;
-  constructor(directory) {
-    this.directory = directory;
-  }
-  async stats() {
-    let entries = 0;
-    let bytes = 0;
-    try {
-      for (const entry of await readdir(this.directory, { withFileTypes: true })) {
-        if (!entry.isFile() || !/^[a-f0-9]{64}\.js$/.test(entry.name))
-          continue;
-        try {
-          bytes += (await stat(join3(this.directory, entry.name))).size;
-          entries++;
-        } catch (error) {
-          if (error.code !== "ENOENT")
-            throw error;
-        }
-      }
-    } catch (error) {
-      if (error.code !== "ENOENT")
-        throw error;
-    }
-    return { entries, bytes, maxSourceBytes: MAX_PROGRAM_BYTES, eviction: "none" };
-  }
-  async get(ref) {
-    assertProgramRef(ref);
-    const canonical3 = ref.startsWith("p_") ? await this.readHandle(ref) : ref;
-    if (canonical3 === undefined)
-      throw this.notFound(ref);
-    const path = join3(this.directory, `${canonical3.slice(7)}.js`);
-    let code;
-    try {
-      if ((await stat(path)).size > MAX_PROGRAM_BYTES)
-        throw new Error("Stored program exceeds the 1 MiB source limit.");
-      code = await readFile2(path, "utf8");
-    } catch (error) {
-      if (error.code === "ENOENT")
-        throw this.notFound(ref);
-      throw error;
-    }
-    if (await programReference(code) !== canonical3)
-      throw new Error(`Program integrity check failed: ${ref}`);
-    return code;
-  }
-  notFound(ref) {
-    return new Error(`Program not found: ${ref}. Use the same KILN_PROGRAM_STORE or import the source again.`);
-  }
-  async readHandle(handle) {
-    const path = join3(this.directory, "refs", `${handle}.ref`);
-    try {
-      const info = await lstat(path);
-      if (!info.isFile() || info.size !== 71)
-        throw new Error(`Program handle integrity check failed: ${handle}`);
-      const canonical3 = await readFile2(path, "utf8");
-      if (!canonicalProgramRefPattern.test(canonical3) || !canonical3.slice(7).startsWith(handle.slice(2)))
-        throw new Error(`Program handle integrity check failed: ${handle}`);
-      return canonical3;
-    } catch (error) {
-      if (error.code === "ENOENT")
-        return;
-      throw error;
-    }
-  }
-  async shortRef(ref) {
-    await this.get(ref);
-    if (ref.startsWith("p_"))
-      return ref;
-    const directory = join3(this.directory, "refs");
-    await mkdir(directory, { recursive: true });
-    for (const handle of shortProgramRefCandidates(ref)) {
-      const owner = await this.readHandle(handle);
-      if (owner === ref)
-        return handle;
-      if (owner !== undefined)
-        continue;
-      const temporary = join3(directory, `.write-${randomUUID()}`);
-      await writeFile2(temporary, ref, { encoding: "utf8", flag: "wx", mode: 384 });
-      try {
-        try {
-          await link(temporary, join3(directory, `${handle}.ref`));
-          return handle;
-        } catch (error) {
-          if (error.code !== "EEXIST")
-            throw error;
-          if (await this.readHandle(handle) === ref)
-            return handle;
-        }
-      } finally {
-        await unlink(temporary);
-      }
-    }
-    throw new Error("Unable to register an immutable program handle.");
-  }
-  async put(code) {
-    const ref = await programReference(code);
-    await mkdir(this.directory, { recursive: true });
-    const target = join3(this.directory, `${ref.slice(7)}.js`);
-    const temporary = join3(this.directory, `.write-${randomUUID()}`);
-    await writeFile2(temporary, code, { encoding: "utf8", flag: "wx", mode: 384 });
-    try {
-      try {
-        await link(temporary, target);
-      } catch (error) {
-        if (error.code !== "EEXIST")
-          throw error;
-        await this.get(ref);
-      }
-    } finally {
-      await unlink(temporary);
-    }
-    return ref;
-  }
-}
-function localProgramStore() {
-  return new FileProgramStore(resolve(process.env["KILN_PROGRAM_STORE"] ?? ".kiln/programs"));
-}
-
-// src/local-runtime.ts
-init_subprocess();
-init_isolation();
-init_render();
-
-// src/program-store-node.ts
-import { link as link2, lstat as lstat2, mkdir as mkdir2, readFile as readFile3, readdir as readdir2, stat as stat2, unlink as unlink2, writeFile as writeFile3 } from "node:fs/promises";
+import { link, lstat as lstat2, mkdir as mkdir2, readFile as readFile4, readdir as readdir2, stat, unlink, writeFile as writeFile3 } from "node:fs/promises";
 import { randomUUID as randomUUID2 } from "node:crypto";
 import { join as join4, resolve as resolve2 } from "node:path";
-class FileProgramStore2 {
+class FileProgramStore {
   directory;
   constructor(directory) {
     this.directory = directory;
@@ -28882,7 +29427,7 @@ class FileProgramStore2 {
         if (!entry.isFile() || !/^[a-f0-9]{64}\.js$/.test(entry.name))
           continue;
         try {
-          bytes += (await stat2(join4(this.directory, entry.name))).size;
+          bytes += (await stat(join4(this.directory, entry.name))).size;
           entries++;
         } catch (error) {
           if (error.code !== "ENOENT")
@@ -28903,9 +29448,9 @@ class FileProgramStore2 {
     const path = join4(this.directory, `${canonical3.slice(7)}.js`);
     let code;
     try {
-      if ((await stat2(path)).size > MAX_PROGRAM_BYTES)
+      if ((await stat(path)).size > MAX_PROGRAM_BYTES)
         throw new Error("Stored program exceeds the 1 MiB source limit.");
-      code = await readFile3(path, "utf8");
+      code = await readFile4(path, "utf8");
     } catch (error) {
       if (error.code === "ENOENT")
         throw this.notFound(ref);
@@ -28924,7 +29469,7 @@ class FileProgramStore2 {
       const info = await lstat2(path);
       if (!info.isFile() || info.size !== 71)
         throw new Error(`Program handle integrity check failed: ${handle}`);
-      const canonical3 = await readFile3(path, "utf8");
+      const canonical3 = await readFile4(path, "utf8");
       if (!canonicalProgramRefPattern.test(canonical3) || !canonical3.slice(7).startsWith(handle.slice(2)))
         throw new Error(`Program handle integrity check failed: ${handle}`);
       return canonical3;
@@ -28950,7 +29495,135 @@ class FileProgramStore2 {
       await writeFile3(temporary, ref, { encoding: "utf8", flag: "wx", mode: 384 });
       try {
         try {
-          await link2(temporary, join4(directory, `${handle}.ref`));
+          await link(temporary, join4(directory, `${handle}.ref`));
+          return handle;
+        } catch (error) {
+          if (error.code !== "EEXIST")
+            throw error;
+          if (await this.readHandle(handle) === ref)
+            return handle;
+        }
+      } finally {
+        await unlink(temporary);
+      }
+    }
+    throw new Error("Unable to register an immutable program handle.");
+  }
+  async put(code) {
+    const ref = await programReference(code);
+    await mkdir2(this.directory, { recursive: true });
+    const target = join4(this.directory, `${ref.slice(7)}.js`);
+    const temporary = join4(this.directory, `.write-${randomUUID2()}`);
+    await writeFile3(temporary, code, { encoding: "utf8", flag: "wx", mode: 384 });
+    try {
+      try {
+        await link(temporary, target);
+      } catch (error) {
+        if (error.code !== "EEXIST")
+          throw error;
+        await this.get(ref);
+      }
+    } finally {
+      await unlink(temporary);
+    }
+    return ref;
+  }
+}
+function localProgramStore() {
+  return new FileProgramStore(resolve2(process.env["KILN_PROGRAM_STORE"] ?? ".kiln/programs"));
+}
+
+// src/local-runtime.ts
+init_subprocess();
+init_isolation();
+init_render();
+
+// src/program-store-node.ts
+import { link as link2, lstat as lstat3, mkdir as mkdir3, readFile as readFile5, readdir as readdir3, stat as stat2, unlink as unlink2, writeFile as writeFile4 } from "node:fs/promises";
+import { randomUUID as randomUUID3 } from "node:crypto";
+import { join as join5, resolve as resolve3 } from "node:path";
+class FileProgramStore2 {
+  directory;
+  constructor(directory) {
+    this.directory = directory;
+  }
+  async stats() {
+    let entries = 0;
+    let bytes = 0;
+    try {
+      for (const entry of await readdir3(this.directory, { withFileTypes: true })) {
+        if (!entry.isFile() || !/^[a-f0-9]{64}\.js$/.test(entry.name))
+          continue;
+        try {
+          bytes += (await stat2(join5(this.directory, entry.name))).size;
+          entries++;
+        } catch (error) {
+          if (error.code !== "ENOENT")
+            throw error;
+        }
+      }
+    } catch (error) {
+      if (error.code !== "ENOENT")
+        throw error;
+    }
+    return { entries, bytes, maxSourceBytes: MAX_PROGRAM_BYTES, eviction: "none" };
+  }
+  async get(ref) {
+    assertProgramRef(ref);
+    const canonical3 = ref.startsWith("p_") ? await this.readHandle(ref) : ref;
+    if (canonical3 === undefined)
+      throw this.notFound(ref);
+    const path = join5(this.directory, `${canonical3.slice(7)}.js`);
+    let code;
+    try {
+      if ((await stat2(path)).size > MAX_PROGRAM_BYTES)
+        throw new Error("Stored program exceeds the 1 MiB source limit.");
+      code = await readFile5(path, "utf8");
+    } catch (error) {
+      if (error.code === "ENOENT")
+        throw this.notFound(ref);
+      throw error;
+    }
+    if (await programReference(code) !== canonical3)
+      throw new Error(`Program integrity check failed: ${ref}`);
+    return code;
+  }
+  notFound(ref) {
+    return new Error(`Program not found: ${ref}. Use the same KILN_PROGRAM_STORE or import the source again.`);
+  }
+  async readHandle(handle) {
+    const path = join5(this.directory, "refs", `${handle}.ref`);
+    try {
+      const info = await lstat3(path);
+      if (!info.isFile() || info.size !== 71)
+        throw new Error(`Program handle integrity check failed: ${handle}`);
+      const canonical3 = await readFile5(path, "utf8");
+      if (!canonicalProgramRefPattern.test(canonical3) || !canonical3.slice(7).startsWith(handle.slice(2)))
+        throw new Error(`Program handle integrity check failed: ${handle}`);
+      return canonical3;
+    } catch (error) {
+      if (error.code === "ENOENT")
+        return;
+      throw error;
+    }
+  }
+  async shortRef(ref) {
+    await this.get(ref);
+    if (ref.startsWith("p_"))
+      return ref;
+    const directory = join5(this.directory, "refs");
+    await mkdir3(directory, { recursive: true });
+    for (const handle of shortProgramRefCandidates(ref)) {
+      const owner = await this.readHandle(handle);
+      if (owner === ref)
+        return handle;
+      if (owner !== undefined)
+        continue;
+      const temporary = join5(directory, `.write-${randomUUID3()}`);
+      await writeFile4(temporary, ref, { encoding: "utf8", flag: "wx", mode: 384 });
+      try {
+        try {
+          await link2(temporary, join5(directory, `${handle}.ref`));
           return handle;
         } catch (error) {
           if (error.code !== "EEXIST")
@@ -28966,10 +29639,10 @@ class FileProgramStore2 {
   }
   async put(code) {
     const ref = await programReference(code);
-    await mkdir2(this.directory, { recursive: true });
-    const target = join4(this.directory, `${ref.slice(7)}.js`);
-    const temporary = join4(this.directory, `.write-${randomUUID2()}`);
-    await writeFile3(temporary, code, { encoding: "utf8", flag: "wx", mode: 384 });
+    await mkdir3(this.directory, { recursive: true });
+    const target = join5(this.directory, `${ref.slice(7)}.js`);
+    const temporary = join5(this.directory, `.write-${randomUUID3()}`);
+    await writeFile4(temporary, code, { encoding: "utf8", flag: "wx", mode: 384 });
     try {
       try {
         await link2(temporary, target);
@@ -28987,35 +29660,35 @@ class FileProgramStore2 {
 
 // src/build-cache-node.ts
 init_protocol();
-import { createHash as createHash9, randomUUID as randomUUID3 } from "node:crypto";
+import { createHash as createHash10, randomUUID as randomUUID4 } from "node:crypto";
 import {
-  mkdir as mkdir3,
-  readFile as readFile4,
-  readdir as readdir3,
-  rename,
+  mkdir as mkdir4,
+  readFile as readFile6,
+  readdir as readdir4,
+  rename as rename2,
   stat as stat3,
   unlink as unlink3,
   utimes,
-  writeFile as writeFile4
+  writeFile as writeFile5
 } from "node:fs/promises";
-import { join as join5, resolve as resolve3 } from "node:path";
+import { join as join6, resolve as resolve4 } from "node:path";
 var keyPattern = /^sha256:[a-f0-9]{64}$/;
 var filePattern = /^[a-f0-9]{64}\.json$/;
-var digest2 = (text2) => createHash9("sha256").update(text2).digest("hex");
+var digest3 = (text2) => createHash10("sha256").update(text2).digest("hex");
 
 class FileBuildCache {
   maxBytes;
   directory;
   constructor(directory, maxBytes = 128 * 1024 * 1024) {
     this.maxBytes = maxBytes;
-    this.directory = resolve3(directory);
+    this.directory = resolve4(directory);
     if (!Number.isSafeInteger(maxBytes) || maxBytes < 0 || maxBytes > 1024 * 1024 * 1024)
       throw new Error("File build cache size must be 0..1 GiB.");
   }
   path(key) {
     if (!keyPattern.test(key))
       throw new Error("Invalid build cache key.");
-    return join5(this.directory, `${key.slice(7)}.json`);
+    return join6(this.directory, `${key.slice(7)}.json`);
   }
   async get(key) {
     const path = this.path(key);
@@ -29023,8 +29696,8 @@ class FileBuildCache {
       const entry = await stat3(path);
       if (entry.size > this.maxBytes || entry.size > 96 * 1024 * 1024)
         return;
-      const envelope = JSON.parse(await readFile4(path, "utf8"));
-      if (envelope.version !== 1 || envelope.key !== key || typeof envelope.payload !== "string" || envelope.checksum !== digest2(envelope.payload))
+      const envelope = JSON.parse(await readFile6(path, "utf8"));
+      if (envelope.version !== 1 || envelope.key !== key || typeof envelope.payload !== "string" || envelope.checksum !== digest3(envelope.payload))
         return;
       const decoded = decodeEvaluatorResultV1(envelope.payload, 64 * 1024 * 1024);
       if (!decoded.ok)
@@ -29039,14 +29712,14 @@ class FileBuildCache {
   async put(key, result) {
     const path = this.path(key);
     const payload = JSON.stringify(encodeRenderResultV1("cached-build", result));
-    const bytes = JSON.stringify({ version: 1, key, payload, checksum: digest2(payload) });
+    const bytes = JSON.stringify({ version: 1, key, payload, checksum: digest3(payload) });
     if (Buffer.byteLength(bytes) > Math.min(this.maxBytes, 96 * 1024 * 1024))
       return;
-    await mkdir3(this.directory, { recursive: true });
-    const temporary = join5(this.directory, `.write-${randomUUID3()}`);
-    await writeFile4(temporary, bytes, { encoding: "utf8", flag: "wx", mode: 384 });
+    await mkdir4(this.directory, { recursive: true });
+    const temporary = join6(this.directory, `.write-${randomUUID4()}`);
+    await writeFile5(temporary, bytes, { encoding: "utf8", flag: "wx", mode: 384 });
     try {
-      await rename(temporary, path);
+      await rename2(temporary, path);
     } finally {
       await unlink3(temporary).catch(() => {});
     }
@@ -29054,10 +29727,10 @@ class FileBuildCache {
   }
   async trim() {
     const entries = [];
-    for (const name of await readdir3(this.directory)) {
+    for (const name of await readdir4(this.directory)) {
       if (!filePattern.test(name))
         continue;
-      const path = join5(this.directory, name);
+      const path = join6(this.directory, name);
       try {
         const item = await stat3(path);
         entries.push({ path, size: item.size, used: item.mtimeMs });
@@ -29075,23 +29748,23 @@ class FileBuildCache {
 }
 
 // src/runtime-identity.ts
-import { createHash as createHash10 } from "node:crypto";
-import { readFile as readFile5, readdir as readdir4, realpath, stat as stat4 } from "node:fs/promises";
+import { createHash as createHash11 } from "node:crypto";
+import { readFile as readFile7, readdir as readdir5, realpath as realpath2, stat as stat4 } from "node:fs/promises";
 import { createRequire as createRequire2 } from "node:module";
-import { dirname, join as join6, relative } from "node:path";
-var digest3 = (bytes) => createHash10("sha256").update(bytes).digest("hex");
+import { dirname as dirname2, join as join7, relative as relative2 } from "node:path";
+var digest4 = (bytes) => createHash11("sha256").update(bytes).digest("hex");
 var compare = (a, b) => a < b ? -1 : a > b ? 1 : 0;
 async function installedRuntimeIdentity(root, limits = {}) {
   let bytes = 0;
   let files = 0;
   const maxBytes = limits.maxBytes ?? 512 * 1024 * 1024;
   const maxFiles = limits.maxFiles ?? 40000;
-  const manifest = async (directory) => JSON.parse(await readFile5(join6(directory, "package.json"), "utf8"));
+  const manifest = async (directory) => JSON.parse(await readFile7(join7(directory, "package.json"), "utf8"));
   let readers = 0;
   const waiting = [];
   const read = async (path) => {
     if (readers >= 24)
-      await new Promise((resolve4) => waiting.push(resolve4));
+      await new Promise((resolve5) => waiting.push(resolve5));
     else
       readers++;
     try {
@@ -29099,7 +29772,7 @@ async function installedRuntimeIdentity(root, limits = {}) {
       if (++files > maxFiles || bytes + info.size > maxBytes)
         throw new Error("Installed runtime fingerprint exceeds its scan budget.");
       bytes += info.size;
-      return await readFile5(path);
+      return await readFile7(path);
     } finally {
       const next = waiting.shift();
       if (next)
@@ -29112,17 +29785,17 @@ async function installedRuntimeIdentity(root, limits = {}) {
     const pkg = await manifest(root);
     if (pkg.name !== "@kiln/engine")
       throw new Error("Not a Kiln installation.");
-    const build = JSON.parse(await readFile5(join6(root, "dist", "build.json"), "utf8"));
+    const build = JSON.parse(await readFile7(join7(root, "dist", "build.json"), "utf8"));
     const worker = build.entries?.worker;
     if (build.schemaVersion !== 1 || worker?.file !== "evaluator-worker.mjs" || !/^sha256:[a-f0-9]{64}$/.test(worker.identity))
       throw new Error("No valid packaged worker identity.");
-    const workerHash = `sha256:${digest3(await read(join6(root, "dist", worker.file)))}`;
+    const workerHash = `sha256:${digest4(await read(join7(root, "dist", worker.file)))}`;
     if (worker.bundleHash !== workerHash)
       throw new Error("Packaged worker differs from its build manifest.");
     const records = [];
     const visited = new Map;
     async function resolvePackage(parent, name) {
-      const require2 = createRequire2(join6(parent, "package.json"));
+      const require2 = createRequire2(join7(parent, "package.json"));
       let found;
       try {
         found = require2.resolve(`${name}/package.json`);
@@ -29131,44 +29804,44 @@ async function installedRuntimeIdentity(root, limits = {}) {
           found = require2.resolve(name);
         } catch {
           for (const modules of require2.resolve.paths(name) ?? []) {
-            const candidate = join6(modules, name);
+            const candidate = join7(modules, name);
             try {
               if ((await manifest(candidate)).name === name)
-                return await realpath(candidate);
+                return await realpath2(candidate);
             } catch {}
           }
           throw new Error(`Cannot resolve installed dependency ${name}.`);
         }
       }
-      let directory = dirname(found);
+      let directory = dirname2(found);
       for (;; ) {
         try {
           if ((await manifest(directory)).name === name)
-            return await realpath(directory);
+            return await realpath2(directory);
         } catch {}
-        const next = dirname(directory);
+        const next = dirname2(directory);
         if (next === directory)
           throw new Error(`Cannot identify installed dependency ${name}.`);
         directory = next;
       }
     }
     async function tree(directory, base) {
-      const entries = (await readdir4(directory, { withFileTypes: true })).sort((a, b) => compare(a.name, b.name));
+      const entries = (await readdir5(directory, { withFileTypes: true })).sort((a, b) => compare(a.name, b.name));
       return (await Promise.all(entries.map(async (entry) => {
         if (entry.name === "node_modules" || entry.name === ".git")
           return [];
-        const path = join6(directory, entry.name);
+        const path = join7(directory, entry.name);
         if (entry.isSymbolicLink())
           throw new Error("Dependency contains an untracked internal symlink.");
         if (entry.isDirectory())
           return tree(path, base);
         if (entry.isFile())
-          return [[relative(base, path).replaceAll("\\", "/"), digest3(await read(path))]];
+          return [[relative2(base, path).replaceAll("\\", "/"), digest4(await read(path))]];
         throw new Error("Dependency contains a non-file runtime input.");
       }))).flat();
     }
     async function visit(directory, path) {
-      const canonical3 = await realpath(directory);
+      const canonical3 = await realpath2(directory);
       const previous = visited.get(canonical3);
       if (previous) {
         records.push([path, `same-package:${previous}`]);
@@ -29176,7 +29849,7 @@ async function installedRuntimeIdentity(root, limits = {}) {
       }
       visited.set(canonical3, path);
       const metadata = await manifest(canonical3);
-      records.push([path, digest3(JSON.stringify(await tree(canonical3, canonical3)))]);
+      records.push([path, digest4(JSON.stringify(await tree(canonical3, canonical3)))]);
       await dependencies(canonical3, metadata, path);
     }
     async function dependencies(directory, metadata, prefix) {
@@ -29216,14 +29889,14 @@ async function installedRuntimeIdentity(root, limits = {}) {
       },
       dependencies: records
     };
-    return { identity: `sha256:${digest3(JSON.stringify(inputs))}`, files, bytes };
+    return { identity: `sha256:${digest4(JSON.stringify(inputs))}`, files, bytes };
   } catch (error) {
     return { reason: error instanceof Error ? error.message : String(error), files, bytes };
   }
 }
 
 // src/local-runtime.ts
-import { dirname as dirname2, join as join7, resolve as resolve4 } from "node:path";
+import { dirname as dirname3, join as join8, resolve as resolve5 } from "node:path";
 import { fileURLToPath as fileURLToPath3 } from "node:url";
 var scope = 0;
 function integer2(env, name, fallback, min, max) {
@@ -29294,8 +29967,15 @@ function createLocalToolContext(base = {}, env = process.env) {
   return {
     ...base,
     geometryPolicy,
-    programStore: base.programStore ?? new FileProgramStore2(resolve4(env.KILN_PROGRAM_STORE ?? ".kiln/programs")),
+    programStore: base.programStore ?? new FileProgramStore2(resolve5(env.KILN_PROGRAM_STORE ?? ".kiln/programs")),
     evaluatorPort,
+    assetBuildOptions: {
+      optimize,
+      instance: instance2,
+      geometryPolicy,
+      qaMode: env.KILN_QA_MODE ?? "enforce",
+      evaluatorMode: mode
+    },
     buildCache: new MemoryBuildCache,
     evaluatorCacheIdentity: `kiln-local-${process.pid}-${++scope}:${JSON.stringify({ mode, optimize, instance: instance2, geometryPolicy, qa: env.KILN_QA_MODE, deadlineMs, heapMb })}`,
     localExecution
@@ -29339,7 +30019,7 @@ async function createPackagedLocalToolContext(base = {}, env = process.env, inst
   }
   const cacheBytes = integer2(env, "KILN_BUILD_CACHE_MB", 128, 0, 1024) * 1024 * 1024;
   const store = context.programStore;
-  const directory = resolve4(env.KILN_BUILD_CACHE_DIR ?? join7(store instanceof FileProgramStore2 ? dirname2(store.directory) : ".kiln", "cache", "builds"));
+  const directory = resolve5(env.KILN_BUILD_CACHE_DIR ?? join8(store instanceof FileProgramStore2 ? dirname3(store.directory) : ".kiln", "cache", "builds"));
   context.buildCache = new FileBuildCache(directory, cacheBytes);
   context.evaluatorCacheIdentity = `${identity.identity}:${JSON.stringify({
     execution: context.localExecution,
@@ -29395,10 +30075,59 @@ async function runTool(def, args) {
   const asText = def.text?.(output);
   if (asText !== undefined)
     return { content: [{ type: "text", text: asText }] };
-  return { content: [{ type: "text", text: JSON.stringify(output, null, 2) }] };
+  const resources = output?.resources ?? [];
+  const payload = resources.length ? { ...output, resources: undefined } : output;
+  return {
+    content: [{ type: "text", text: JSON.stringify(payload, null, 2) }, ...resources],
+    ...def.ui ? {
+      structuredContent: output,
+      _meta: await def.ui.data(output)
+    } : {}
+  };
 }
 function createKilnMcpServer(context = {}) {
-  const server = new McpServer({ name: MCP_SERVER_NAME, version: MCP_SERVER_VERSION });
+  const server = new McpServer({
+    name: MCP_SERVER_NAME,
+    version: MCP_SERVER_VERSION
+  });
+  server.registerResource("kiln-asset-viewer", KILN_ASSET_WIDGET_URI, {
+    description: "Interactive Kiln asset viewer and downloads",
+    mimeType: "text/html;profile=mcp-app"
+  }, async (uri) => ({
+    contents: [
+      {
+        uri: uri.href,
+        mimeType: "text/html;profile=mcp-app",
+        text: await (await Promise.resolve().then(() => (init_asset_widget2(), exports_asset_widget2))).readAssetWidgetHtml(),
+        _meta: {
+          ui: {
+            prefersBorder: true,
+            csp: { connectDomains: [], resourceDomains: [] }
+          },
+          "openai/widgetDescription": "Inspect the saved 3D asset and download its GLB or editable bundle.",
+          "openai/widgetPrefersBorder": true
+        }
+      }
+    ]
+  }));
+  if (context.assetLibrary) {
+    server.registerResource("asset-file", new ResourceTemplate("kiln://assets/{collection}/{asset}/{revision}/{file}", {
+      list: undefined
+    }), {
+      description: "Exact saved GLB, editable source, preview, manifest, or portable bundle."
+    }, async (uri) => {
+      const file = await readAssetResource(context.assetLibrary, uri.href);
+      return {
+        contents: [
+          {
+            uri: uri.href,
+            mimeType: file.mimeType,
+            ...file.name.endsWith(".json") || file.name.endsWith(".js") ? { text: new TextDecoder().decode(file.bytes) } : { blob: Buffer.from(file.bytes).toString("base64") }
+          }
+        ]
+      };
+    });
+  }
   const requests = new AsyncLocalStorage;
   const requestContext = {
     ...context,
@@ -29407,14 +30136,25 @@ function createKilnMcpServer(context = {}) {
       const signal = requests.getStore();
       return {
         ...configured,
-        ...signal ? { signal: configured.signal ? AbortSignal.any([signal, configured.signal]) : signal } : {}
+        ...signal ? {
+          signal: configured.signal ? AbortSignal.any([signal, configured.signal]) : signal
+        } : {}
       };
     }
   };
   for (const def of kilnMcpToolDefs(requestContext)) {
     server.registerTool(def.name, {
       description: def.description,
-      inputSchema: def.inputSchema
+      annotations: def.annotations,
+      ...def.ui ? {
+        _meta: {
+          ui: { resourceUri: def.ui.resourceUri },
+          "openai/outputTemplate": def.ui.resourceUri,
+          "openai/widgetAccessible": true
+        }
+      } : {},
+      inputSchema: def.inputSchema,
+      ...def.outputSchema ? { outputSchema: def.outputSchema } : {}
     }, async (args, request2) => {
       try {
         return await requests.run(request2.mcpReq.signal, () => runTool(def, args));
@@ -29422,7 +30162,10 @@ function createKilnMcpServer(context = {}) {
         return {
           isError: true,
           content: [
-            { type: "text", text: err instanceof Error ? err.message : String(err) }
+            {
+              type: "text",
+              text: err instanceof Error ? err.message : String(err)
+            }
           ]
         };
       }
@@ -29434,6 +30177,17 @@ if (__require.main == __require.module) {
   const mode = resolveRenderMode(process.env["KILN_RENDER"] ?? "auto");
   const context = await createPackagedLocalToolContext(await buildRenderPort(mode, process.env["KILN_RENDER_PORT_URL"]));
   context.programStore = localProgramStore();
+  context.assetLibrary = localAssetLibrary();
+  const deliveryBase = process.env["KILN_ASSET_DOWNLOAD_BASE_URL"];
+  if (deliveryBase) {
+    const base = new URL(deliveryBase);
+    if (base.protocol !== "https:" && !(base.protocol === "http:" && ["127.0.0.1", "localhost", "[::1]"].includes(base.hostname)))
+      throw new Error("Asset download base must use HTTPS or loopback HTTP");
+    context.assetDownloadUrls = async (collection, assetId, revisionId) => Object.fromEntries(["asset.glb", "editable.zip", "source.kiln.js", "preview.png", "manifest.json"].map((file) => [
+      file,
+      new URL(`files/${collection}/${assetId}/${revisionId}/${file}?download`, base.href.endsWith("/") ? base.href : `${base.href}/`).href
+    ]));
+  }
   console.error(`kiln MCP server on stdio (${mode})`);
   serveStdio(() => createKilnMcpServer(context));
 }

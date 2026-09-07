@@ -14,7 +14,7 @@ async function sources(directory, prefix = '') {
     if (item.name === '__tests__' || item.name.endsWith('.test.ts')) continue;
     const name = prefix ? `${prefix}/${item.name}` : item.name;
     if (item.isDirectory()) entries.push(...await sources(join(directory, item.name), name));
-    else if (/\.(?:ts|mjs)$/.test(item.name)) entries.push([name, sha(await readFile(join(directory, item.name)))]);
+    else if (/\.(?:ts|mjs|html|css)$/.test(item.name)) entries.push([name, sha(await readFile(join(directory, item.name)))]);
   }
   return entries;
 }

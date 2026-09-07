@@ -146,9 +146,10 @@ describe('always-on context cost', () => {
 
   it('the tool schemas stay within the context budget', async () => {
     const chars = schemaChars();
-    // A budget, not a target: several tools' worth of headroom before anyone
-    // has to think about it again.
-    expect(chars).toBeLessThan(24 * 1024);
+    // Collections add four explicit verbs without changing cached authoring schemas.
+    // Measured full public surface: ~28 KiB, up from ~24 KiB before collections.
+    // Keep the expanded surface bounded; this is context cost, not a coverage gate.
+    expect(chars).toBeLessThan(30 * 1024);
   });
 
   it('skill discovery stays within the context budget', async () => {

@@ -71,7 +71,9 @@ export function createConditionRegistry(condition: Condition, context: KilnToolC
     evaluatorCacheIdentity: undefined,
     evaluatorPort: { render: (code,options,controls) => { assertConditionSource(code,condition); return evaluator.render(code,options,controls); } },
   });
-  return registry.map((def) => {
+  // This frozen authoring experiment predates collections. Keep the same eight
+  // verbs in each condition so storage tools cannot change its measured context.
+  return registry.filter(def => !['kiln_save','kiln_assets','kiln_export','kiln_import','kiln_present'].includes(def.name)).map((def) => {
     if (def.name === 'kiln_list_primitives') return conditionDiscovery(def,condition);
     let schema = def.inputSchema;
     if (condition === 'A' && schema instanceof z.ZodObject) {

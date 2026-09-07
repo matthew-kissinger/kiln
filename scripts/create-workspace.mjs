@@ -64,6 +64,7 @@ Use the kiln_workspace MCP server configured in this project to author and refin
 - Use kiln_source with programRef and a literal query to read exact edit anchors. Follow nextOffset for more context.
 - Use kiln_edit with programRef and edits. It returns a new programRef and renders by default. Use that reference for later views and edits; do not resend the program.
 - Review the image and diff. Check viewFidelity before judging materials.
+- Save completed assets with kiln_save, browse configured collections with kiln_assets, and open node kiln.mjs view to inspect saved GLBs. Keep the exact asset and revision IDs for export or restore. Save refinements as child revisions rather than replacing their parent.
 - Save with node kiln.mjs source PROGRAM_REF --out revised.kiln.js. Export refuses to overwrite a file.
 - Export geometry with node kiln.mjs render PROGRAM_REF --out asset.glb --views sheet.png.
 
