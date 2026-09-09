@@ -8,26 +8,47 @@
     "sourceAccess": "See retained demo run; no stronger isolation claim is made.",
     "humanIntervention": "Owner supplied direction; model-authored exported source preserved byte-for-byte.",
     "reviewFidelity": "Authoring feedback and shaded demo previews where available. Not a destination-runtime acceptance claim.",
-    "poster": "Fresh shaded render of the exact gallery-built downloadable GLB. Camera-only offline capture; no geometry or material edits.",
+    "poster": "Gallery GPU render of the exact downloadable GLB. Source, artifact, image hashes and camera settings are recorded alongside the poster.",
     "evaluationGlbHash": "2c3d19a0a1f3842184828a28207106306984391cf836786eae41065808caf3d2",
     "posterReceipt": {
+      "captureIdentity": [
+        "kiln.capture-producer.v1",
+        "sha256:10f346ec6287c8d635dabe4668d72925080e6fe3d059dd7a9252f2694ce595c2",
+        "3b9e393f-d199-4f01-81c3-7a6e28f004a4",
+        "dawn-d3d12:nvidia-geforce-rtx-3070:D3D12 driver version 32.0.16.1074"
+      ],
       "sourceHash": "23d56283da476ff69c39397722ba17a78e4fc247bf4d60e384f5a4e2173ca79b",
       "artifactHash": "e16e1e065254ec4ef2292e54fbf5efd1d07e115bb7ae0cd77cceee5a3076566d",
-      "imageHash": "02ab84736ab7d05c6388cf03910eacf5c19170c5661e4dba77fb6823a94b5d2e",
-      "width": 1600,
-      "height": 1000,
-      "renderer": "ANGLE (NVIDIA, NVIDIA GeForce RTX 3070 (0x00002484) Direct3D11 vs_5_0 ps_5_0, D3D11)",
-      "captureMethod": "Kiln studio stage, owned headless Chrome, original GLB materials",
-      "cameraRecord": {
-        "index": 10,
-        "kind": "hero",
-        "theta": 0.6747409422235526,
-        "phi": 1.185083808592412,
-        "radius": 1.7816177552160268,
-        "fixedSeconds": null,
-        "wallTimeMs": 124.5
+      "imageHash": "915e43d4220cfd3709ba10c52e6d52f81b6adf22df716aaf066696ba7826712a",
+      "width": 1024,
+      "height": 1024,
+      "camera": {
+        "version": "kiln.camera.v1",
+        "projection": "orthographic",
+        "position": [
+          1.1959722419589407,
+          1.0906732325057942,
+          1.2426868284633488
+        ],
+        "target": [
+          -0.10232489716120219,
+          0.23450000006053595,
+          -0.05561031065679417
+        ],
+        "up": [
+          -0.29883623873011983,
+          0.9063077870366498,
+          -0.29883623873011983
+        ],
+        "aspect": 1,
+        "near": 1.012939229032381,
+        "far": 4.0388176870971435,
+        "halfHeight": 0.5969255960470871
       },
-      "geometryChanged": false
+      "rendererId": "dawn-d3d12:nvidia-geforce-rtx-3070:D3D12 driver version 32.0.16.1074",
+      "materialFaithful": true,
+      "lightingPresetId": "gallery-studio-v1",
+      "purpose": "Gallery poster generated from the exact downloadable GLB; separate from authoring feedback."
     }
   }
 }
