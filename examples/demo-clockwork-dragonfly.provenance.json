@@ -1,0 +1,33 @@
+{
+  "sourceHash": "824ce3887151b2a551a7c1bd09a09924f9cb46bd6dd43b2606e2d1a3b7fc0317",
+  "model": "Muse Spark 1.3",
+  "harness": "OpenCode",
+  "authoredDate": "2026-09-09",
+  "provenance": {
+    "attribution": "Recorded demo session; model credit supplied only where the retained run identifies it.",
+    "sourceAccess": "See retained demo run; no stronger isolation claim is made.",
+    "humanIntervention": "Owner supplied direction; model-authored exported source preserved byte-for-byte.",
+    "reviewFidelity": "Authoring feedback and shaded demo previews where available. Not a destination-runtime acceptance claim.",
+    "poster": "Fresh shaded render of the exact gallery-built downloadable GLB. Camera-only offline capture; no geometry or material edits.",
+    "evaluationGlbHash": "f7f62ac18f198d3cf724c95a6be383586046b8fbd2961289b7f9723391d8a049",
+    "posterReceipt": {
+      "sourceHash": "824ce3887151b2a551a7c1bd09a09924f9cb46bd6dd43b2606e2d1a3b7fc0317",
+      "artifactHash": "6b8a7efe196eb2513e65a6cb49909fb87670fec470c3a3a64222884c3a4d766b",
+      "imageHash": "1e32c14fccb86fa3a6f3239a076ea18984b42f47df1035d354fea91f3486209f",
+      "width": 1600,
+      "height": 1000,
+      "renderer": "ANGLE (NVIDIA, NVIDIA GeForce RTX 3070 (0x00002484) Direct3D11 vs_5_0 ps_5_0, D3D11)",
+      "captureMethod": "Kiln studio stage, owned headless Chrome, original GLB materials",
+      "cameraRecord": {
+        "index": 10,
+        "kind": "hero",
+        "theta": 0.6747409422235527,
+        "phi": 1.185083808592412,
+        "radius": 4.48102394457924,
+        "fixedSeconds": null,
+        "wallTimeMs": 310.09999999962747
+      },
+      "geometryChanged": false
+    }
+  }
+}

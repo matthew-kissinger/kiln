@@ -1,0 +1,33 @@
+{
+  "sourceHash": "93780997b03cd0e6f68308eddd7113fb2234c52ba079f45dda365d65b519e18e",
+  "model": "Not independently recorded",
+  "harness": "Recorded demo session",
+  "authoredDate": "2026-09-08",
+  "provenance": {
+    "attribution": "Recorded demo session; model credit supplied only where the retained run identifies it.",
+    "sourceAccess": "See retained demo run; no stronger isolation claim is made.",
+    "humanIntervention": "Owner supplied direction; model-authored exported source preserved byte-for-byte.",
+    "reviewFidelity": "Authoring feedback and shaded demo previews where available. Not a destination-runtime acceptance claim.",
+    "poster": "Fresh shaded render of the exact gallery-built downloadable GLB. Camera-only offline capture; no geometry or material edits.",
+    "evaluationGlbHash": "873091560f76bd8c5c0f4eaedc3998e3b7344ba35b466e7c96f005e1262952f1",
+    "posterReceipt": {
+      "sourceHash": "93780997b03cd0e6f68308eddd7113fb2234c52ba079f45dda365d65b519e18e",
+      "artifactHash": "5f3c3d042708179a00d856252be6bd5e4e4919de295a13b34119cae6b74b76f2",
+      "imageHash": "c175f4657c27cdce771e6ed65e9d746659f0d71c9bb99dafcba1ac28dafc8bd0",
+      "width": 1600,
+      "height": 1000,
+      "renderer": "ANGLE (NVIDIA, NVIDIA GeForce RTX 3070 (0x00002484) Direct3D11 vs_5_0 ps_5_0, D3D11)",
+      "captureMethod": "Kiln studio stage, owned headless Chrome, original GLB materials",
+      "cameraRecord": {
+        "index": 10,
+        "kind": "hero",
+        "theta": 0.6747409422235527,
+        "phi": 1.1850838085924118,
+        "radius": 39.82522887000571,
+        "fixedSeconds": null,
+        "wallTimeMs": 129.60000000149012
+      },
+      "geometryChanged": false
+    }
+  }
+}

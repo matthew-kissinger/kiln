@@ -1,0 +1,33 @@
+{
+  "sourceHash": "898b76ec27eaa205897387b832de35a72d323dd468bad84510563452ee74505f",
+  "model": "GPT-6 Astra",
+  "harness": "ChatGPT Work",
+  "authoredDate": "2026-09-08",
+  "provenance": {
+    "attribution": "Recorded demo session; model credit supplied only where the retained run identifies it.",
+    "sourceAccess": "See retained demo run; no stronger isolation claim is made.",
+    "humanIntervention": "Owner supplied direction; model-authored exported source preserved byte-for-byte.",
+    "reviewFidelity": "Authoring feedback and shaded demo previews where available. Not a destination-runtime acceptance claim.",
+    "poster": "Fresh shaded render of the exact gallery-built downloadable GLB. Camera-only offline capture; no geometry or material edits.",
+    "evaluationGlbHash": "98af4ec344d438d015d07b99bbab4abe389ff445ed45c1b24cd2a4300ff3fa74",
+    "posterReceipt": {
+      "sourceHash": "898b76ec27eaa205897387b832de35a72d323dd468bad84510563452ee74505f",
+      "artifactHash": "61166afc666fe8fd658c20f4918b8eefd7a76fc96883b61486f468936d0ef77b",
+      "imageHash": "cd61c55ac023c85730c7f072f5fbedd61090b9f051e43df0c74b446da96a86cc",
+      "width": 1600,
+      "height": 1000,
+      "renderer": "ANGLE (NVIDIA, NVIDIA GeForce RTX 3070 (0x00002484) Direct3D11 vs_5_0 ps_5_0, D3D11)",
+      "captureMethod": "Kiln studio stage, owned headless Chrome, original GLB materials",
+      "cameraRecord": {
+        "index": 10,
+        "kind": "hero",
+        "theta": 0.6747409422235526,
+        "phi": 1.185083808592412,
+        "radius": 217.14680757459587,
+        "fixedSeconds": null,
+        "wallTimeMs": 116.79999999888241
+      },
+      "geometryChanged": false
+    }
+  }
+}

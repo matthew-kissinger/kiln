@@ -4,13 +4,33 @@ import { REPO, asset } from './repo';
 import type { Specimen } from './types';
 
 const CURATED = [
-  'orbital-station',
-  'abyssal-surveyor',
-  'kestrel-rescue-craft',
+  'typewriter',
   'solar-sail-courier',
   'mechanical-peacock',
+  'kestrel-rescue-craft',
+  'anglerfish',
+  'kinetic-wave',
   'orrery',
-  'typewriter',
+  'orbital-station',
+  'deco-radio',
+  'cathedral',
+  'steam-locomotive',
+  'lighthouse',
+  'alpine-cable-terminal',
+  'research-vessel',
+  'sushi-store',
+  'windmill',
+  'tram',
+  'ribbon-tea-pavilion',
+  'demo-diesel-locomotive',
+  'demo-art-deco-conservatory',
+  'demo-floating-observatory',
+  'demo-deep-sea-station',
+  'demo-unfolding-dragonfly',
+  'demo-vintage-typewriter',
+  'demo-argent-aircraft-carrier',
+  'demo-noctilus-nuclear-submarine',
+  'demo-resolute-polar-fleet-flagship',
 ];
 const rank = (name: string) => (CURATED.includes(name) ? CURATED.indexOf(name) : CURATED.length);
 
