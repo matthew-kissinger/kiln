@@ -19,18 +19,27 @@ function build() {
     const rotZ = Math.atan(du) * (180 / Math.PI);
     const rotX = -Math.atan(dv) * (180 / Math.PI);
 
-    const postH = h - 0.04;
+    const plateThick = 0.015;
+    const plateOffset = 0.006;
+    const socketY = h - plateThick / 2 - plateOffset;
+    const capHeight = 0.025;
+    const capY = socketY - plateThick / 2 - capHeight / 2;
+    const postH = capY - capHeight / 2;
+
     createPart(`Post_${u}_${v}`, boxGeo(0.08, postH, 0.08), steel, { parent: root, position: [u, postH / 2, v] });
     createPart(`Foot_${u}_${v}`, boxGeo(0.23, 0.045, 0.23), steel, { parent: root, position: [u, 0.0225, v] });
-    createPart(`Cap_${u}_${v}`, cylinderGeo(0.06, 0.06, 0.03, 16), steel, { parent: root, position: [u, h - 0.025, v] });
-    const plateThick = 0.02;
+    createPart(`Cap_${u}_${v}`, cylinderGeo(0.055, 0.055, capHeight, 16), steel, {
+      parent: root,
+      position: [u, capY, v],
+      rotation: [rotX, 0, rotZ],
+    });
     createPart(
       u > 0 && v > 0 ? 'CornerSocket' : `Socket_${u}_${v}`,
-      boxGeo(0.22, plateThick, 0.22),
+      boxGeo(0.20, plateThick, 0.20),
       orange,
       {
         parent: root,
-        position: [u, h - plateThick / 2 - 0.015, v],
+        position: [u, socketY, v],
         rotation: [rotX, 0, rotZ],
       },
     );
