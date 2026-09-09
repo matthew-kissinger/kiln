@@ -1,0 +1,657 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<link rel="icon" href="data:,">
+<title>KILN — gallery scroll take (record me)</title>
+<style>
+  html, body { margin: 0; height: 100%; background: #0b0d12; overflow: hidden; }
+  #app { position: fixed; inset: 0; }
+  canvas { display: block; }
+  #video-header {
+    position: fixed; top: 44px; left: 64px; right: 64px;
+    display: flex; align-items: center; justify-content: space-between;
+    pointer-events: none; z-index: 10;
+  }
+  #video-header .logo {
+    display: flex; align-items: center; gap: 12px;
+    color: #f8fafc; font: 700 24px/1 system-ui, -apple-system, sans-serif;
+    letter-spacing: -0.02em;
+  }
+  #video-header .logo svg { display: block; }
+  #video-header .chapter {
+    color: #8b93a3; font: 600 13px/1 ui-monospace, SFMono-Regular, monospace;
+    letter-spacing: 0.12em; text-transform: uppercase;
+  }
+  .beat {
+    position: fixed; left: 64px; bottom: 64px;
+    text-align: left; color: #f8fafc;
+    pointer-events: none; z-index: 10;
+    opacity: 0;
+    will-change: opacity, transform;
+  }
+  .beat-title {
+    font: 700 clamp(32px, 3.8vw, 52px)/1.15 system-ui, -apple-system, BlinkMacSystemFont, sans-serif;
+    letter-spacing: -0.02em;
+    color: #f8fafc;
+    text-shadow: 0 4px 28px rgba(0,0,0,0.85);
+  }
+  .beat-sub {
+    font: 400 clamp(16px, 1.7vw, 22px)/1.4 system-ui, -apple-system, BlinkMacSystemFont, sans-serif;
+    color: #94a3b8;
+    margin-top: 10px;
+    letter-spacing: normal;
+    text-shadow: 0 2px 18px rgba(0,0,0,0.85);
+  }
+  #bar { position: fixed; left: 0; bottom: 0; height: 3px; width: 0%; background: #e8b64c; }
+  #hint { position: fixed; top: 14px; right: 18px; color: #8b93a3; font: 400 13px system-ui, sans-serif; }
+  #loading {
+    position: fixed; inset: 0; display: flex; align-items: center; justify-content: center;
+    color: #8b93a3; font: 400 15px system-ui, sans-serif;
+  }
+</style>
+</head>
+<body>
+<div id="app"></div>
+<div id="loading">loading 25 models…</div>
+<div id="video-header">
+  <div class="logo">
+    <svg width="28" height="28" viewBox="0 0 32 32" fill="none">
+      <path d="M16 5 27 11v10L16 27 5 21V11z" stroke="#e8823c" stroke-width="2.4" stroke-linejoin="round"/>
+      <path d="M16 5v22M5 11l11 6 11-6" stroke="#e8823c" stroke-width="1.6" stroke-linejoin="round" opacity="0.6"/>
+    </svg>
+    <span>kiln</span>
+  </div>
+  <div class="chapter">00 / SHOWCASE &middot; 25 ONE-SHOT AGENT ASSETS</div>
+</div>
+<div class="beat" id="b0">
+  <div class="beat-title">A text-to-3D engine for agents.</div>
+  <div class="beat-sub">All 25 assets built in one shot &middot; pure procedural code &middot; zero mesh sculpting</div>
+</div>
+<div class="beat" id="b1">
+  <div class="beat-title">Any model. Any harness.</div>
+  <div class="beat-sub">Claude, Gemini, GPT-6, DeepSeek &middot; Antigravity, OpenCode, Codex, CLI</div>
+</div>
+<div class="beat" id="b2">
+  <div class="beat-title">Token-efficient by design.</div>
+  <div class="beat-sub">Compact procedural code &middot; lightweight GLBs &middot; zero token bloat</div>
+</div>
+<div id="bar"></div>
+<div id="hint">≈52s take &middot; 25 one-shot assets &middot; click to restart</div>
+<script type="importmap">
+{ "imports": {
+  "three": "https://unpkg.com/three@0.160.0/build/three.module.js",
+  "three/addons/": "https://unpkg.com/three@0.160.0/examples/jsm/",
+  "troika-three-text": "https://esm.sh/troika-three-text@0.52.3?external=three"
+} }
+</script>
+<script type="module">
+import * as THREE from 'three';
+import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
+import { RoomEnvironment } from 'three/addons/environments/RoomEnvironment.js';
+
+let Text = null;
+try {
+  ({ Text } = await import('troika-three-text'));
+} catch (e) {
+  console.warn('troika unavailable, canvas fallback labels', e);
+}
+
+// Best assets first, a mix through the middle, sail closes the line (no hero
+// treatment — the take ends in the chat scene). yaw faces each asset's ideal
+// front to the dolly camera; buildings/symmetric pieces stay at 0.
+const MODELS = [
+  { file: 'mechanical-peacock.glb', title: 'Mechanical Peacock', by: 'Claude Opus 5 · Claude Code', yaw: -1.5708, lineMult: 0.72, dist: 4.6, fh: 0.6 },
+  { file: 'demo-resolute-polar-fleet-flagship.glb', title: 'Resolute Polar Fleet Flagship', by: 'Gemini 3.8 Flash · Antigravity', yaw: -1.5708, lineMult: 2.30, dist: 7.2, fh: 1.1 },
+  { file: 'demo-unfolding-dragonfly.glb', title: 'Unfolding Dragonfly', by: 'Gemini 3.8 Flash · Antigravity CLI', yaw: -1.5708, lineMult: 0.65, dist: 4.4, fh: 0.5 },
+  { file: 'cathedral.glb', title: 'Cathedral', by: 'Claude Opus 5 · Claude Code', yaw: 3.1416, lineMult: 2.35, dist: 7.6, fh: 2.2 },
+  { file: 'kinetic-wave.glb', title: 'Kinetic Wave', by: 'Gemini 3.8 Flash · Antigravity', yaw: 0, lineMult: 1.35, dist: 5.8, fh: 1.2 },
+  { file: 'demo-argent-aircraft-carrier.glb', title: 'Argent Aircraft Carrier', by: 'GPT-6 Astra · ChatGPT Work', yaw: -1.5708, lineMult: 2.65, dist: 8.0, fh: 1.2 },
+  { file: 'demo-umbra-submarine.glb', title: 'Umbra Submarine', by: 'GPT-6 Astra · ChatGPT Work', yaw: -1.5708, lineMult: 2.20, dist: 7.0, fh: 0.9 },
+  { file: 'orrery.glb', title: 'Orrery', by: 'Gemini 3.8 Flash · Antigravity CLI', yaw: 0, lineMult: 0.80, dist: 4.8, fh: 0.8 },
+  { file: 'lighthouse.glb', title: 'Lighthouse', by: 'Muse Spark 1.3 · OpenCode', yaw: 3.1416, lineMult: 2.15, dist: 7.2, fh: 2.0 },
+  { file: 'orbital-station.glb', title: 'Orbital Station', by: 'GPT-6 Astra · Codex', yaw: 3.1416, lineMult: 2.00, dist: 7.2, fh: 1.8 },
+  { file: 'demo-floating-observatory.glb', title: 'Floating Observatory', by: 'GPT-6 Astra · ChatGPT Work', yaw: 3.1416, lineMult: 2.00, dist: 6.8, fh: 1.6 },
+  { file: 'demo-art-deco-conservatory.glb', title: 'Art Deco Conservatory', by: 'Gemini 3.8 Flash · Antigravity CLI', yaw: 3.1416, lineMult: 1.95, dist: 6.6, fh: 1.5 },
+  { file: 'deco-radio.glb', title: 'Deco Radio', by: 'Gemini 3.8 Flash · Antigravity', yaw: 3.1416, lineMult: 0.65, dist: 3.8, fh: 0.6 },
+  { file: 'demo-vintage-typewriter.glb', title: 'Vintage Typewriter', by: 'Muse Spark 1.3 · OpenCode', yaw: 3.1416, lineMult: 0.60, dist: 3.6, fh: 0.5 },
+  { file: 'sushi-store.glb', title: 'Sushi Store', by: 'Claude Opus 5 · Claude Code', yaw: 3.1416, lineMult: 1.75, dist: 6.2, fh: 1.4 },
+  { file: 'ribbon-tea-pavilion.glb', title: 'Ribbon Tea Pavilion', by: 'Gemini 3.8 Flash · Antigravity', yaw: 3.1416, lineMult: 1.90, dist: 6.5, fh: 1.5 },
+  { file: 'windmill.glb', title: 'Windmill', by: 'DeepSeek V4 Flash · OpenCode', yaw: 3.1416, lineMult: 2.25, dist: 7.4, fh: 2.1 },
+  { file: 'anglerfish.glb', title: 'Anglerfish', by: 'Claude Opus 5 · Claude Code', yaw: -1.5708, lineMult: 0.88, dist: 4.8, fh: 0.8 },
+  { file: 'kestrel-rescue-craft.glb', title: 'Kestrel Rescue Craft', by: 'GPT-6 Astra · Codex', yaw: -1.5708, lineMult: 1.85, dist: 6.8, fh: 1.4 },
+  { file: 'research-vessel.glb', title: 'Research Vessel', by: 'GPT-6 Astra · Codex', yaw: -1.5708, lineMult: 2.05, dist: 7.2, fh: 1.3 },
+  { file: 'alpine-cable-terminal.glb', title: 'Alpine Cable Terminal', by: 'Gemini 3.8 Flash · Antigravity', yaw: 0, lineMult: 1.90, dist: 6.8, fh: 1.5 },
+  { file: 'demo-diesel-locomotive.glb', title: 'Diesel Locomotive', by: 'GPT-6 Astra · ChatGPT Work', yaw: -1.5708, lineMult: 2.30, dist: 7.4, fh: 1.2 },
+  { file: 'demo-deep-sea-station.glb', title: 'Deep Sea Station', by: 'Gemini 3.8 Flash · Antigravity CLI', yaw: 3.1416, lineMult: 2.00, dist: 7.0, fh: 1.6 },
+  { file: 'seed-vault.glb', title: 'Seed Vault', by: 'Gemini 3.8 Flash · Antigravity', yaw: -1.5708, lineMult: 1.90, dist: 6.6, fh: 1.4 },
+  { file: 'solar-sail-courier.glb', title: 'Solar Sail Courier', by: 'Gemini 3.8 Flash · Antigravity', yaw: -1.5708, lineMult: 2.00, dist: 7.5, fh: 1.8 },
+];
+const N = MODELS.length;
+const SLOT = 5.2;                 // line spacing (fits full actual size models)
+const lastX = (N - 1) * SLOT;
+const gridCx = lastX / 2;
+const GRID_COLS = 7, GRID_DX = 3.0, GRID_DZ = 2.6;
+const T_GRID = 3.5, T_FORM = 4.5, T_EACH = 1.7, T_END = 1.5;
+const T_SCROLL = T_GRID + T_FORM + N * T_EACH;
+const TAKE = T_SCROLL + T_END;
+
+const renderer = new THREE.WebGLRenderer({ antialias: true, preserveDrawingBuffer: true });
+renderer.setPixelRatio(Math.min(devicePixelRatio, 1.5));
+renderer.setSize(innerWidth, innerHeight);
+renderer.toneMapping = THREE.ACESFilmicToneMapping;
+renderer.toneMappingExposure = 1.15;
+document.getElementById('app').appendChild(renderer.domElement);
+
+const scene = new THREE.Scene();
+scene.background = new THREE.Color(0x060710);
+scene.fog = new THREE.Fog(0x060710, 40, 130);
+scene.environment = new THREE.PMREMGenerator(renderer).fromScene(new RoomEnvironment(), 0.04).texture;
+scene.add(new THREE.HemisphereLight(0xdfe8ff, 0x14161c, 0.85));
+const key = new THREE.DirectionalLight(0xfff2df, 2.3);
+key.position.set(-4, 7, 5);
+scene.add(key);
+const rim = new THREE.DirectionalLight(0x7fb4ff, 1.2);
+rim.position.set(6, 3, -6);
+scene.add(rim);
+
+// Vaporwave Retro Sun on the Horizon
+function makeVaporwaveSunTexture() {
+  const c = document.createElement('canvas');
+  c.width = 1024; c.height = 1024;
+  const ctx = c.getContext('2d');
+  const cx = 512, cy = 512, r = 460;
+  ctx.clearRect(0, 0, 1024, 1024);
+
+  const grad = ctx.createLinearGradient(cx, cy - r, cx, cy + r);
+  grad.addColorStop(0.0, '#fff44f');  // electric solar yellow
+  grad.addColorStop(0.3, '#ff7700');  // vibrant neon orange
+  grad.addColorStop(0.7, '#ff0066');  // hot magenta
+  grad.addColorStop(1.0, '#8b00ff');  // deep neon violet
+
+  ctx.fillStyle = grad;
+  ctx.beginPath();
+  ctx.arc(cx, cy, r, 0, Math.PI * 2);
+  ctx.fill();
+
+  // Horizontal blind slits across the bottom half
+  ctx.globalCompositeOperation = 'destination-out';
+  const numSlits = 9;
+  for (let i = 0; i < numSlits; i++) {
+    const frac = i / numSlits;
+    const y = cy + 40 + frac * (r - 70);
+    const slitH = 6 + frac * 22;
+    ctx.fillRect(cx - r - 20, y, (r + 20) * 2, slitH);
+  }
+  ctx.globalCompositeOperation = 'source-over';
+
+  ctx.strokeStyle = 'rgba(255, 130, 0, 0.7)';
+  ctx.lineWidth = 10;
+  ctx.beginPath();
+  ctx.arc(cx, cy, r + 4, 0, Math.PI * 2);
+  ctx.stroke();
+
+  const tex = new THREE.CanvasTexture(c);
+  tex.colorSpace = THREE.SRGBColorSpace;
+  return tex;
+}
+
+// Horizon Glow Backdrop
+function makeHorizonGlowTexture() {
+  const c = document.createElement('canvas');
+  c.width = 1024; c.height = 512;
+  const ctx = c.getContext('2d');
+  const grad = ctx.createLinearGradient(0, 0, 0, 512);
+  grad.addColorStop(0.0, 'rgba(6, 7, 16, 0.0)');
+  grad.addColorStop(0.5, 'rgba(6, 7, 16, 0.0)');
+  grad.addColorStop(0.72, 'rgba(255, 0, 110, 0.35)');
+  grad.addColorStop(0.85, 'rgba(255, 120, 0, 0.55)');
+  grad.addColorStop(0.93, 'rgba(0, 240, 255, 0.40)');
+  grad.addColorStop(1.0, 'rgba(6, 7, 16, 0.0)');
+  ctx.fillStyle = grad;
+  ctx.fillRect(0, 0, 1024, 512);
+  const tex = new THREE.CanvasTexture(c);
+  tex.colorSpace = THREE.SRGBColorSpace;
+  return tex;
+}
+
+// Sun Mesh
+const sunTex = makeVaporwaveSunTexture();
+const sun = new THREE.Mesh(
+  new THREE.PlaneGeometry(38, 38),
+  new THREE.MeshBasicMaterial({ map: sunTex, transparent: true, depthWrite: false }),
+);
+sun.position.set(gridCx + 22.0, 14.0, -48);
+scene.add(sun);
+
+// Horizon Glow Mesh
+const horizonTex = makeHorizonGlowTexture();
+const horizon = new THREE.Mesh(
+  new THREE.PlaneGeometry(420, 55),
+  new THREE.MeshBasicMaterial({ map: horizonTex, transparent: true, depthWrite: false, blending: THREE.AdditiveBlending }),
+);
+horizon.position.set(gridCx + 22.0, 14.0, -49);
+scene.add(horizon);
+
+// Glossy Retro Floor (catches neon highlights)
+const floor = new THREE.Mesh(
+  new THREE.PlaneGeometry(400, 200),
+  new THREE.MeshStandardMaterial({ color: 0x05060b, roughness: 0.35, metalness: 0.55 }),
+);
+floor.rotation.x = -Math.PI / 2;
+floor.position.set(gridCx, -0.01, 0);
+scene.add(floor);
+
+// 1. Minor electric cyan grid (1.5m spacing, EVERY line colored!)
+const minorGrid = new THREE.GridHelper(360, 240, 0x00f0ff, 0x0099cc);
+minorGrid.position.set(gridCx, 0.001, 0);
+minorGrid.material.transparent = true;
+minorGrid.material.opacity = 0.52;
+minorGrid.material.depthWrite = false;
+scene.add(minorGrid);
+
+// 2. Major Kiln neon orange grid (6m spacing, EVERY line glowing orange!)
+const majorGrid = new THREE.GridHelper(360, 60, 0xffaa00, 0xff5500);
+majorGrid.position.set(gridCx, 0.002, 0);
+majorGrid.material.transparent = true;
+majorGrid.material.opacity = 0.75;
+majorGrid.material.depthWrite = false;
+scene.add(majorGrid);
+
+// 3. Staging guide rails along the runway (Z = -2.2 and Z = +2.2)
+const railMat = new THREE.LineBasicMaterial({ color: 0xff7a00, transparent: true, opacity: 0.85, depthWrite: false });
+const railGeo1 = new THREE.BufferGeometry().setFromPoints([
+  new THREE.Vector3(-30, 0.003, -2.2),
+  new THREE.Vector3(lastX + 30, 0.003, -2.2),
+]);
+const railGeo2 = new THREE.BufferGeometry().setFromPoints([
+  new THREE.Vector3(-30, 0.003, 2.2),
+  new THREE.Vector3(lastX + 30, 0.003, 2.2),
+]);
+scene.add(new THREE.Line(railGeo1, railMat));
+scene.add(new THREE.Line(railGeo2, railMat));
+
+// 4. Center graduation ticks along runway in glowing cyan
+const tickMat = new THREE.LineBasicMaterial({ color: 0x00f0ff, transparent: true, opacity: 0.7, depthWrite: false });
+const tickPts = [];
+for (let x = -20; x <= lastX + 20; x += 1.5) {
+  tickPts.push(new THREE.Vector3(x, 0.003, -0.3), new THREE.Vector3(x, 0.003, 0.3));
+}
+const tickGeo = new THREE.BufferGeometry().setFromPoints(tickPts);
+scene.add(new THREE.LineSegments(tickGeo, tickMat));
+
+const camera = new THREE.PerspectiveCamera(40, innerWidth / innerHeight, 0.1, 120);
+addEventListener('resize', () => {
+  camera.aspect = innerWidth / innerHeight;
+  camera.updateProjectionMatrix();
+  renderer.setSize(innerWidth, innerHeight);
+});
+
+function makeFallbackLabel(title, by) {
+  const c = document.createElement('canvas');
+  c.width = 1024; c.height = 160;
+  const g = c.getContext('2d');
+  g.textAlign = 'center';
+  g.fillStyle = '#f2f4f8';
+  g.font = '600 64px system-ui, sans-serif';
+  g.shadowColor = 'rgba(0,0,0,.8)'; g.shadowBlur = 12;
+  g.fillText(title, 512, 70);
+  g.fillStyle = '#aeb6c4';
+  g.font = '400 40px system-ui, sans-serif';
+  g.fillText(by, 512, 125);
+  const tex = new THREE.CanvasTexture(c);
+  tex.colorSpace = THREE.SRGBColorSpace;
+  const m = new THREE.Mesh(
+    new THREE.PlaneGeometry(3.4, 0.53),
+    new THREE.MeshBasicMaterial({ map: tex, transparent: true, depthWrite: false }),
+  );
+  return m;
+}
+
+function makeReticleTexture() {
+  const c = document.createElement('canvas');
+  c.width = 512;
+  c.height = 512;
+  const ctx = c.getContext('2d');
+  const cx = 256, cy = 256;
+
+  ctx.clearRect(0, 0, 512, 512);
+
+  // Outer thin glowing circle
+  ctx.strokeStyle = 'rgba(232, 130, 60, 0.6)'; // Kiln orange
+  ctx.lineWidth = 2.5;
+  ctx.beginPath();
+  ctx.arc(cx, cy, 225, 0, Math.PI * 2);
+  ctx.stroke();
+
+  // Outer dashed tech ring
+  ctx.strokeStyle = 'rgba(56, 189, 248, 0.5)'; // cyan tech accent
+  ctx.lineWidth = 2;
+  ctx.setLineDash([8, 10]);
+  ctx.beginPath();
+  ctx.arc(cx, cy, 205, 0, Math.PI * 2);
+  ctx.stroke();
+  ctx.setLineDash([]);
+
+  // 4 quadrant ticks
+  ctx.strokeStyle = 'rgba(232, 130, 60, 0.85)';
+  ctx.lineWidth = 3;
+  ctx.beginPath(); ctx.moveTo(cx, cy - 238); ctx.lineTo(cx, cy - 212); ctx.stroke();
+  ctx.beginPath(); ctx.moveTo(cx, cy + 212); ctx.lineTo(cx, cy + 238); ctx.stroke();
+  ctx.beginPath(); ctx.moveTo(cx - 238, cy); ctx.lineTo(cx - 212, cy); ctx.stroke();
+  ctx.beginPath(); ctx.moveTo(cx + 212, cy); ctx.lineTo(cx + 238, cy); ctx.stroke();
+
+  // Diagonal tick marks at 45 deg
+  ctx.strokeStyle = 'rgba(148, 163, 184, 0.45)';
+  ctx.lineWidth = 1.5;
+  for (let a = Math.PI / 4; a < Math.PI * 2; a += Math.PI / 2) {
+    const x1 = cx + Math.cos(a) * 195;
+    const y1 = cy + Math.sin(a) * 195;
+    const x2 = cx + Math.cos(a) * 215;
+    const y2 = cy + Math.sin(a) * 215;
+    ctx.beginPath(); ctx.moveTo(x1, y1); ctx.lineTo(x2, y2); ctx.stroke();
+  }
+
+  // Inner ring
+  ctx.strokeStyle = 'rgba(232, 130, 60, 0.4)';
+  ctx.lineWidth = 1.5;
+  ctx.beginPath();
+  ctx.arc(cx, cy, 120, 0, Math.PI * 2);
+  ctx.stroke();
+
+  // Center subtle crosshair '+'
+  ctx.strokeStyle = 'rgba(248, 250, 252, 0.5)';
+  ctx.lineWidth = 1.5;
+  ctx.beginPath();
+  ctx.moveTo(cx - 16, cy); ctx.lineTo(cx + 16, cy);
+  ctx.moveTo(cx, cy - 16); ctx.lineTo(cx, cy + 16);
+  ctx.stroke();
+
+  // Subtle radial gradient soft glow in center
+  const grad = ctx.createRadialGradient(cx, cy, 0, cx, cy, 180);
+  grad.addColorStop(0, 'rgba(232, 130, 60, 0.10)');
+  grad.addColorStop(0.6, 'rgba(56, 189, 248, 0.04)');
+  grad.addColorStop(1, 'rgba(0, 0, 0, 0)');
+  ctx.fillStyle = grad;
+  ctx.beginPath();
+  ctx.arc(cx, cy, 180, 0, Math.PI * 2);
+  ctx.fill();
+
+  const tex = new THREE.CanvasTexture(c);
+  tex.colorSpace = THREE.SRGBColorSpace;
+  return tex;
+}
+
+const reticleTex = makeReticleTexture();
+const padGeo = new THREE.PlaneGeometry(2.6, 2.6);
+const padMat = new THREE.MeshBasicMaterial({
+  map: reticleTex,
+  transparent: true,
+  depthWrite: false,
+  opacity: 0.8,
+});
+
+const loader = new GLTFLoader();
+const items = [];
+for (let i = 0; i < N; i++) {
+  const { file, title, by, yaw, lineMult, dist: fixDist, fh: fixFh } = MODELS[i];
+  const gltf = await loader.loadAsync('models/' + file);
+  const obj = gltf.scene;
+  const rawBox = new THREE.Box3().setFromObject(obj);
+  const rawSize = rawBox.getSize(new THREE.Vector3());
+  // Normal uniform showcase scale in the stadium grid
+  const long = Math.max(rawSize.x, rawSize.z) > 2.2 * rawSize.y;
+  const gridScale = long ? 3.1 / Math.max(rawSize.x, rawSize.z) : 1.7 / Math.max(rawSize.y, 0.001);
+  const lineScale = gridScale * (lineMult ?? 1.0);
+
+  obj.scale.setScalar(gridScale);
+  obj.rotation.y = yaw; // ideal authored facing from the asset table
+  const bGrid = new THREE.Box3().setFromObject(obj);
+  const nativeMinY = bGrid.min.y / gridScale; // normalized floor origin
+  const restYGrid = -nativeMinY * gridScale;
+  const restYLine = -nativeMinY * lineScale;
+  const hGrid = bGrid.max.y - bGrid.min.y;
+  const hLine = hGrid * (lineMult ?? 1.0);
+
+  const row = Math.floor(i / GRID_COLS);
+  const col = i % GRID_COLS;
+  const stagger = (row % 2 === 1) ? GRID_DX * 0.5 - 0.75 : 0;
+  const gx = (col - (GRID_COLS - 1) / 2) * GRID_DX + stagger;
+  const gz = -(row - 1.5) * GRID_DZ; // Row 0 in front (facing camera)
+  const gy = restYGrid + row * 0.42; // stadium elevation so all 4 rows are visible
+  const gridPos = new THREE.Vector3(gx + gridCx, gy, gz);
+  const linePos = new THREE.Vector3(i * SLOT, restYLine, 0);
+  obj.position.copy(gridPos);
+  scene.add(obj);
+
+  // CAD construct reticle pad on floor
+  const pad = new THREE.Mesh(padGeo, padMat);
+  pad.rotation.x = -Math.PI / 2;
+  const gridPadPos = new THREE.Vector3(gridPos.x, 0.004, gridPos.z);
+  const linePadPos = new THREE.Vector3(linePos.x, 0.004, 0);
+  pad.position.copy(gridPadPos);
+  const gridPadScale = 1.0;
+  const linePadScale = THREE.MathUtils.clamp((lineMult ?? 1.0) * 0.88, 0.55, 2.3);
+  pad.scale.setScalar(gridPadScale);
+  scene.add(pad);
+
+  // Mixer for embedded clips (FanOpen, Deploy, Unfold…): play ONCE on
+  // approach and hold the final pose.
+  let mixer = null;
+  if (gltf.animations.length) {
+    mixer = new THREE.AnimationMixer(obj);
+    for (const clip of gltf.animations) {
+      const act = mixer.clipAction(clip);
+      act.setLoop(THREE.LoopOnce, 1);
+      act.clampWhenFinished = true;
+      act.play();
+    }
+    mixer.timeScale = 0;
+  }
+  let label;
+  if (Text) {
+    label = new Text();
+    label.text = `${title}\n${by}`;
+    label.fontSize = 0.14;
+    label.lineHeight = 1.25;
+    label.textAlign = 'center';
+    label.color = 0xf2f4f8;
+    label.anchorX = 'center';
+    label.anchorY = 'bottom';
+    label.outlineWidth = 0.012;
+    label.outlineColor = 0x000000;
+    label.sync();
+  } else {
+    label = makeFallbackLabel(title, by);
+  }
+  label.position.set(linePos.x, hLine + 0.35, 0);
+  label.visible = false; // toggled in scroll phase; troika rebuilds material, so no opacity fade
+  scene.add(label);
+
+  const dollyDist = fixDist ?? (6.2 * Math.sqrt(lineMult ?? 1.0));
+  const dollyFh = fixFh ?? THREE.MathUtils.clamp(hLine * 0.45, 0.5, 2.2);
+  items.push({
+    obj, pad,
+    gridPos, linePos,
+    gridPadPos, linePadPos,
+    gridScale, lineScale,
+    gridPadScale, linePadScale,
+    nativeMinY,
+    label, mixer,
+    hGrid, hLine,
+    dollyDist, dollyFh,
+    baseYaw: obj.rotation.y,
+    delay: i * 0.09,
+  });
+}
+window.__items = items;
+document.getElementById('loading').remove();
+// Pre-warm: compile every shader and build each label's SDF atlas up front,
+// so the recorded take has no first-sight hitches mid-scroll.
+renderer.compile(scene, camera);
+for (const it of items) { it.label.frustumCulled = false; it.label.visible = true; }
+renderer.render(scene, camera);
+for (const it of items) { it.label.frustumCulled = true; it.label.visible = false; }
+window.__camera = camera;
+window.__takeReady = true;
+
+// Opening: Dynamic 3/4 elevated perspective sweep across the 25 assets
+const gridCamStart = new THREE.Vector3(gridCx - 14.0, 11.5, 26.0);
+const gridCamTgtStart = new THREE.Vector3(gridCx + 2.5, 1.8, -1.0);
+const gridCamEnd = new THREE.Vector3(gridCx - 4.0, 8.5, 20.0);
+const gridCamTgtEnd = new THREE.Vector3(gridCx + 1.0, 1.2, 0.0);
+const lineStartPos = new THREE.Vector3(-2.6, items[0].dollyFh + 1.35, items[0].dollyDist);
+const lineStartTgt = new THREE.Vector3(0.9, items[0].dollyFh, 0);
+const smooth = (t) => { t = Math.min(Math.max(t, 0), 1); return t * t * (3 - 2 * t); };
+// Cinematic glide: constant mid velocity with eased ends (C1 continuous),
+// so the dolly never hurries and never snaps.
+function glide(u) {
+  const e = 0.09;
+  if (u < e) return (u * u) / (2 * e * (1 - e));
+  if (u > 1 - e) { const v = 1 - u; return 1 - (v * v) / (2 * e * (1 - e)); }
+  return (u - e / 2) / (1 - e);
+}
+
+// Sparse factual cards only: what it is, where it runs, what it costs.
+const beats = [
+  { el: document.getElementById('b0'), at: 8.5, until: 18.5 },
+  { el: document.getElementById('b1'), at: 22.5, until: 33.0 },
+  { el: document.getElementById('b2'), at: 37.0, until: 48.0 },
+];
+const bar = document.getElementById('bar');
+const hint = document.getElementById('hint');
+if (new URLSearchParams(location.search).has('step')) {
+  if (hint) hint.remove(); // deterministic capture: no record UI in frame
+  if (bar) bar.remove();
+} else {
+  if (hint) setTimeout(() => hint.remove(), 5000); // live preview only, not take UI
+}
+let t0 = performance.now();
+addEventListener('click', () => {
+  t0 = performance.now();
+});
+
+const clock = new THREE.Clock();
+// Park the camera on the 3/4 hero pose before frame 0 exists.
+camera.position.copy(gridCamStart);
+camera.lookAt(gridCamTgtStart);
+function renderTake(t, dt) {
+  window.__takeT = t;
+  const camX = new THREE.Vector3();
+  const camT = new THREE.Vector3();
+  if (t < T_GRID) {
+    // Opening: majestic 3/4 hero push-in and banking sweep across the 25 assets
+    const k = smooth(t / T_GRID);
+    camX.lerpVectors(gridCamStart, gridCamEnd, k);
+    camT.lerpVectors(gridCamTgtStart, gridCamTgtEnd, k);
+  } else if (t < T_GRID + T_FORM) {
+    const k = smooth((t - T_GRID) / T_FORM);
+    camX.lerpVectors(gridCamEnd, lineStartPos, k);
+    camT.lerpVectors(gridCamTgtEnd, lineStartTgt, k);
+  } else if (t < T_SCROLL) {
+    // Continuous dolly: one smooth global ease with dynamic per-asset framing
+    // and subtle cinematic breathing wave.
+    const total = N * T_EACH;
+    const st = t - T_GRID - T_FORM;
+    const sn = glide(st / total) * (N - 1);
+    const px = sn * SLOT;
+
+    // Smooth asset-by-asset camera distance and focus height
+    const i0 = Math.floor(sn);
+    const i1 = Math.min(i0 + 1, N - 1);
+    const alpha = smooth(sn - i0);
+    const curDist = THREE.MathUtils.lerp(items[i0].dollyDist, items[i1].dollyDist, alpha);
+    const curFh = THREE.MathUtils.lerp(items[i0].dollyFh, items[i1].dollyFh, alpha);
+
+    // Subtle cinematic breathing wave along the rail (starts at 0 to avoid handover snap)
+    const swayZ = Math.sin(sn * 0.35) * 0.22;
+    const swayY = Math.sin(sn * 0.25) * 0.10;
+
+    camX.set(px - 2.6, curFh + 1.35 + swayY, curDist + swayZ);
+    camT.set(px + 0.9, curFh, 0);
+  } else {
+    // Settle cleanly on the final solar sail asset:
+    const lastDist = items[N - 1].dollyDist;
+    const lastFh = items[N - 1].dollyFh;
+    camX.set(lastX - 2.6, lastFh + 1.35, lastDist);
+    camT.set(lastX + 0.9, lastFh, 0);
+  }
+  camera.position.copy(camX);
+  camera.lookAt(camT);
+
+  for (let i = 0; i < N; i++) {
+    const it = items[i];
+    if (t < T_GRID) {
+      it.obj.scale.setScalar(it.gridScale);
+      it.obj.position.copy(it.gridPos);
+      it.pad.scale.setScalar(it.gridPadScale);
+      it.pad.position.copy(it.gridPadPos);
+    } else if (t < T_GRID + T_FORM) {
+      const flightDuration = 2.2;
+      const startDelay = (i / (N - 1)) * 1.8;
+      const k = smooth((t - T_GRID - startDelay) / flightDuration);
+      const s = THREE.MathUtils.lerp(it.gridScale, it.lineScale, k);
+      it.obj.scale.setScalar(s);
+      it.pad.scale.setScalar(THREE.MathUtils.lerp(it.gridPadScale, it.linePadScale, k));
+
+      const px = THREE.MathUtils.lerp(it.gridPos.x, it.linePos.x, k);
+      const pz = THREE.MathUtils.lerp(it.gridPos.z, it.linePos.z, k);
+      const restYCur = -it.nativeMinY * s;
+      const py = THREE.MathUtils.lerp(it.gridPos.y, restYCur, k) + Math.sin(k * Math.PI) * 0.8;
+      it.obj.position.set(px, py, pz);
+      it.pad.position.lerpVectors(it.gridPadPos, it.linePadPos, k);
+    } else {
+      it.obj.scale.setScalar(it.lineScale);
+      it.obj.position.copy(it.linePos);
+      it.pad.scale.setScalar(it.linePadScale);
+      it.pad.position.copy(it.linePadPos);
+    }
+
+    const near = THREE.MathUtils.clamp(1 - Math.abs(camT.x - it.linePos.x) / (SLOT * 1.1), 0, 1);
+    if (it.mixer) {
+      it.mixer.timeScale += ((near > 0.25 ? 1 : 0) - it.mixer.timeScale) * Math.min(dt * 3, 1);
+      it.mixer.update(dt);
+    } else if (t > T_GRID + T_FORM) {
+      it.obj.rotation.y = it.baseYaw;
+    }
+    it.label.visible = t > T_GRID + T_FORM && t < T_SCROLL && near > 0.55;
+    it.label.position.set(it.linePos.x, it.hLine + 0.35, 0);
+  }
+  beats.forEach((b) => {
+    const fadeIn = THREE.MathUtils.clamp((t - b.at) / 0.6, 0, 1);
+    const fadeOut = THREE.MathUtils.clamp((b.until - t) / 0.6, 0, 1);
+    const op = Math.min(fadeIn, fadeOut);
+    b.el.style.opacity = op.toFixed(3);
+    b.el.style.transform = `translateY(${(1 - op) * 8}px)`;
+  });
+  if (bar) bar.style.width = (100 * t / TAKE) + '%';
+  renderer.render(scene, camera);
+}
+// Deterministic step mode (?step=1): the take advances exactly 1/30s per
+// __advance() call and renders one frame — capture every step and no frame
+// can drop, hitch, or stall. Live mode is untouched.
+const STEP = new URLSearchParams(location.search).has('step');
+let stepT = null;
+window.renderTake = renderTake;
+window.__advance = (dt = 1 / 60) => {
+  if (stepT === null) {
+    stepT = 0;
+  } else {
+    stepT = Math.min(stepT + dt, TAKE);
+  }
+  renderTake(stepT, dt);
+  return stepT;
+};
+window.__setT = (t, dt = 1 / 60) => {
+  stepT = t;
+  renderTake(stepT, dt);
+  return stepT;
+};
+if (!STEP) (function frame(now) {
+  requestAnimationFrame(frame);
+  const dt = Math.min(clock.getDelta(), 0.1);
+  renderTake(Math.min((now - t0) / 1000, TAKE), dt);
+})(performance.now());
+</script>
+</body>
+</html>
