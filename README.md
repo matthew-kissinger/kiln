@@ -13,13 +13,19 @@ Kiln runs locally. It includes an MCP server, a CLI, a TypeScript library, and s
 for authoring, editing, animation review, and scene composition. Your agent supplies
 the model; Kiln does not require a separate model API key for its tools.
 
-| Abyssal surveyor · GPT-6 Astra | Typewriter · Muse Spark 1.3 | Solar sail courier · Gemini 3.8 Flash |
-| --- | --- | --- |
-| [![Curved-hull survey submersible with an articulated sampling arm](examples/renders/abyssal-surveyor.png)](examples/abyssal-surveyor.kiln.js) | [![Mechanical typewriter](examples/renders/typewriter.png)](examples/typewriter.kiln.js) | [![Faceted gold solar sails supported by dark trussed spars](examples/renders/solar-sail-courier.png)](examples/solar-sail-courier.kiln.js) |
+<video src="assets/video/kiln-launch.mp4" poster="assets/video/kiln-launch-poster.png" controls="controls" width="100%">
+  <a href="assets/video/kiln-launch.mp4">Watch the Kiln launch video (2:44)</a>
+</video>
 
-| Mechanical peacock · Claude Opus 5 | Orbital station · GPT-6 Astra |
-| --- | --- |
-| [![Mechanical peacock with a jewel-coloured fan and brass frame](examples/renders/mechanical-peacock.png)](examples/mechanical-peacock.kiln.js) | [![Orbital station with a symmetric rear service hub, paired radiators and communications dishes](examples/renders/orbital-station.png)](examples/orbital-station.kiln.js) |
+![Kiln gallery grid 1](assets/gallery/gallery-grid-01.png)
+
+![Kiln gallery grid 2](assets/gallery/gallery-grid-02.png)
+
+![Kiln gallery grid 3](assets/gallery/gallery-grid-03.png)
+
+| Mechanical peacock · Claude Opus 5 | Unfolding dragonfly · GPT-6 Astra | Solar sail courier · Gemini 3.8 Flash |
+| --- | --- | --- |
+| [![Mechanical peacock with articulated jewel fan](assets/gallery/mechanical-peacock.gif)](examples/mechanical-peacock.kiln.js) | [![Clockwork dragonfly with unfolding wings and gears](assets/gallery/demo-unfolding-dragonfly.gif)](examples/demo-unfolding-dragonfly.kiln.js) | [![Solar sail courier deploying origami gold sails](assets/gallery/solar-sail-courier.gif)](examples/solar-sail-courier.kiln.js) |
 
 Mechanical peacock · Claude Opus 5. Maintainer-agent repairs connect the neck and
 correct the body shell's face direction; the [source revisions](site/examples/history/mechanical-peacock/history.json)
@@ -34,6 +40,7 @@ The [source revisions](site/examples/history/orbital-station/history.json) retai
 
 These are saved examples from different authoring runs, not a model ranking.
 [Credits, review conditions and build records](docs/example-provenance.md).
+
 
 Start with the [installation guide](docs/install.md) for a built package on macOS,
 Windows, or Linux. It uses Node.js and creates a project-local agent setup.
@@ -84,6 +91,9 @@ The workspace contains your brief, assets, and skills. The engine source and exa
 collection stay in the installation directory. See [clean-room setup](docs/clean-room.md)
 for the exact boundaries and headless use, or [installation](docs/install.md) for other
 harnesses and the plugin path.
+
+For Google models, see [Antigravity and Gemini setup](docs/google.md). Local coding
+agents use stdio directly; browser chat connections have different setup requirements.
 
 ## Revise an asset
 

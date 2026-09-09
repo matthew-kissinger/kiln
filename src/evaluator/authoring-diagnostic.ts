@@ -1,11 +1,14 @@
 /** Closed, engine-owned repair hints. Never serialize exception messages or stacks. */
-export type AuthoringDiagnostic = 'UNBOUND_VARIABLE' | 'GEAR_RADII_ORDER';
+export type AuthoringDiagnostic = 'UNBOUND_VARIABLE' | 'GEAR_RADII_ORDER' | 'ROUNDED_BOX_RADIUS';
 export const UNBOUND_VARIABLE_ADVICE =
   'Check variable spelling and scope: generated code used an undeclared variable. Read the current source and check declarations before retrying.';
 export const GEAR_RADII_ORDER_ADVICE =
   'gearGeo requires boreRadius < rootRadius < tipRadius; specify rootRadius when changing tipRadius. Omitted radii keep their absolute defaults.';
+export const ROUNDED_BOX_RADIUS_ADVICE =
+  'roundedBoxGeo: radius must be less than half the smallest dimension. Reduce radius or increase the smallest dimension; equality is invalid.';
 export function authoringDiagnosticAdvice(diagnostic: AuthoringDiagnostic | undefined): string {
   if (diagnostic === 'UNBOUND_VARIABLE') return UNBOUND_VARIABLE_ADVICE;
+  if (diagnostic === 'ROUNDED_BOX_RADIUS') return ROUNDED_BOX_RADIUS_ADVICE;
   return diagnostic === 'GEAR_RADII_ORDER' ? GEAR_RADII_ORDER_ADVICE : '';
 }
 export class AuthoringDiagnosticError extends Error {

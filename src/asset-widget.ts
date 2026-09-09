@@ -1,6 +1,7 @@
 /** MCP-only presentation payload; binary files never enter model-facing tool text. */
 import { readFile } from 'node:fs/promises';
 import type { AssetLibrary } from './assets';
+import { encodeWidgetFiles, WIDGET_TRANSFER_LIMIT } from './widget-transfer';
 
 export async function assetWidgetData(
   library: AssetLibrary,
@@ -15,7 +16,10 @@ export async function assetWidgetData(
     selector.asset.assetId,
     selector.asset.revisionId,
   );
-  if (Object.values(record.files).reduce((sum, bytes) => sum + bytes.length, 0) > 16 * 1024 * 1024)
+  if (
+    Object.values(record.files).reduce((sum, bytes) => sum + bytes.length, 0) >
+    WIDGET_TRANSFER_LIMIT
+  )
     return {
       kilnAsset: {
         error: 'This asset exceeds the 16 MiB chat preview limit. Open it with kiln view.',
@@ -25,12 +29,7 @@ export async function assetWidgetData(
     kilnAsset: {
       manifest: record.manifest,
       downloadUrls: selector.downloadUrls,
-      files: Object.fromEntries(
-        Object.entries(record.files).map(([name, bytes]) => [
-          name,
-          Buffer.from(bytes).toString('base64'),
-        ]),
-      ),
+      files: encodeWidgetFiles(record.files),
     },
   };
 }

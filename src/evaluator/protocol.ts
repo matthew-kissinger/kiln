@@ -399,7 +399,8 @@ export function decodeEvaluatorResultV1(
       value.error.diagnostic !== undefined &&
       (value.error.code !== 'EXECUTION_REJECTED' ||
         (value.error.diagnostic !== 'UNBOUND_VARIABLE' &&
-          value.error.diagnostic !== 'GEAR_RADII_ORDER'))
+          value.error.diagnostic !== 'GEAR_RADII_ORDER' &&
+          value.error.diagnostic !== 'ROUNDED_BOX_RADIUS'))
     )
       return fail('result');
     if (value.error.qa !== undefined) {

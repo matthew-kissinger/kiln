@@ -7,6 +7,7 @@ import { createKilnMcpServer } from './mcp-server';
 import { FileAssetLibrary } from './assets-node';
 import { MemoryProgramStore, retainProgram } from './program-store';
 import { createKilnProgramToolRegistry } from './tools/registry';
+import { decodeWidgetAsset } from './widget-transfer';
 
 test('MCP saves an editable revision, exposes exact downloadable bytes, and restores source in a new session', async () => {
   const root = await mkdtemp(join(tmpdir(), 'kiln-asset-tools-'));
@@ -55,12 +56,19 @@ test('MCP saves an editable revision, exposes exact downloadable bytes, and rest
     expect(JSON.stringify(present.content).length).toBeLessThan(6000);
     expect((present.structuredContent as { asset?: unknown })?.asset).toBeDefined();
     const widget = present._meta?.kilnAsset as {
-      files?: Record<string, string>;
+      files?: Record<string, string | { encoding: string; data: string }>;
       downloadUrls?: Record<string, string>;
     };
     expect(widget.downloadUrls?.['asset.glb']).toBe('https://example.com/asset.glb');
     expect(widget.files?.['asset.glb']).toBeDefined();
-    expect(JSON.stringify(present.content)).not.toContain(widget.files!['asset.glb']!);
+    const wireGlb = widget.files!['asset.glb']!;
+    expect(JSON.stringify(present.content)).not.toContain(
+      typeof wireGlb === 'string' ? wireGlb : wireGlb.data,
+    );
+    const decoded = await decodeWidgetAsset(widget);
+    expect(decoded.record).toEqual(
+      await assetLibrary.read('project', data.asset.assetId, data.asset.revisionId),
+    );
     const sourceLink = content.find((b) => b.uri?.endsWith('/source.kiln.js'))!;
     expect(sourceLink).toBeDefined();
     const source = await client.readResource({ uri: sourceLink.uri! });
