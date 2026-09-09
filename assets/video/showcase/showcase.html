@@ -1,0 +1,907 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=1920, initial-scale=1">
+<title>Kiln showcase record page (16s)</title>
+<style>
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  html, body { width: 1920px; height: 1080px; overflow: hidden; background: #141210;
+    font-family: Archivo, 'Segoe UI', system-ui, sans-serif; color: #f2ede4; }
+  .stage { position: relative; width: 1920px; height: 1080px; overflow: hidden; }
+  .brand { position: absolute; top: 44px; left: 64px; z-index: 5; }
+  .brand b { font-size: 44px; letter-spacing: 2px; }
+  .brand b span { color: #c8a24a; }
+  .brand small { display: block; font-size: 22px; color: #b9b2a4; letter-spacing: 6px; margin-top: 6px; }
+  .rail { position: absolute; top: 0; bottom: 0; width: 560px; overflow: hidden;
+    -webkit-mask-image: linear-gradient(#0000, #000 8%, #000 92%, #0000);
+    mask-image: linear-gradient(#0000, #000 8%, #000 92%, #0000); }
+  .rail.r0 { left: 120px; } .rail.r1 { left: 700px; } .rail.r2 { left: 1280px; }
+  .strip { display: flex; flex-direction: column; gap: 28px; padding-top: 40px;
+    will-change: transform; }
+  .card { background: #1e1b16; border: 1px solid #38322a; border-radius: 18px;
+    overflow: hidden; box-shadow: 0 18px 50px #0009; }
+  .thumb img { display: block; width: 100%; aspect-ratio: 1; object-fit: cover;
+    background: #747474; }
+  .cap { padding: 16px 20px 18px; }
+  .cap strong { display: block; font-size: 26px; }
+  .cap span { display: block; font-size: 19px; color: #b9b2a4; margin-top: 4px; }
+  .scrim { position: absolute; inset: auto 0 0 0; height: 460px; z-index: 4;
+    background: linear-gradient(#0000, #141210f2 62%); }
+  .beats { position: absolute; left: 0; right: 0; bottom: 64px; z-index: 5;
+    text-align: center; }
+  .beat { position: absolute; left: 0; right: 0; bottom: 0; opacity: 0; }
+  .beat h2 { font-size: 64px; letter-spacing: 1px; }
+  .beat h2 em { color: #c8a24a; font-style: normal; }
+  .beat p { font-size: 30px; color: #d8d2c4; margin-top: 14px; letter-spacing: 2px; }
+  .bar { position: absolute; left: 0; bottom: 0; height: 6px; width: 0; z-index: 6;
+    background: #c8a24a; }
+</style>
+</head>
+<body>
+<div class="stage">
+  <div class="brand"><b>Kiln<span>.</span></b><small>BUILT BY AGENTS</small></div>
+  <div class="rail r0"><div class="strip" data-speed="1.0">
+
+      <div class="card">
+        <div class="thumb"><img src="../../../site/public/thumbs/typewriter.webp" alt="" loading="eager"></div>
+        <div class="cap"><strong>Typewriter</strong><span>Muse Spark 1.3 · OpenCode</span></div>
+      </div>
+
+      <div class="card">
+        <div class="thumb"><img src="../../../site/public/thumbs/solar-sail-courier.webp" alt="" loading="eager"></div>
+        <div class="cap"><strong>Solar Sail Courier</strong><span>Gemini 3.8 Flash · Antigravity</span></div>
+      </div>
+
+      <div class="card">
+        <div class="thumb"><img src="../../../site/public/thumbs/mechanical-peacock.webp" alt="" loading="eager"></div>
+        <div class="cap"><strong>Mechanical Peacock</strong><span>Claude Opus 5 · Claude Code</span></div>
+      </div>
+
+      <div class="card">
+        <div class="thumb"><img src="../../../site/public/thumbs/kestrel-rescue-craft.webp" alt="" loading="eager"></div>
+        <div class="cap"><strong>Kestrel Rescue Craft</strong><span>GPT-6 Astra · Codex</span></div>
+      </div>
+
+      <div class="card">
+        <div class="thumb"><img src="../../../site/public/thumbs/anglerfish.webp" alt="" loading="eager"></div>
+        <div class="cap"><strong>Anglerfish</strong><span>Claude Opus 5 · Claude Code</span></div>
+      </div>
+
+      <div class="card">
+        <div class="thumb"><img src="../../../site/public/thumbs/kinetic-wave.webp" alt="" loading="eager"></div>
+        <div class="cap"><strong>Kinetic Wave</strong><span>Gemini 3.8 Flash · Antigravity</span></div>
+      </div>
+
+      <div class="card">
+        <div class="thumb"><img src="../../../site/public/thumbs/orrery.webp" alt="" loading="eager"></div>
+        <div class="cap"><strong>Orrery</strong><span>Gemini 3.8 Flash · Antigravity CLI</span></div>
+      </div>
+
+      <div class="card">
+        <div class="thumb"><img src="../../../site/public/thumbs/orbital-station.webp" alt="" loading="eager"></div>
+        <div class="cap"><strong>Orbital Station</strong><span>GPT-6 Astra · Codex</span></div>
+      </div>
+
+      <div class="card">
+        <div class="thumb"><img src="../../../site/public/thumbs/deco-radio.webp" alt="" loading="eager"></div>
+        <div class="cap"><strong>Deco Radio</strong><span>Gemini 3.8 Flash · Antigravity</span></div>
+      </div>
+
+      <div class="card">
+        <div class="thumb"><img src="../../../site/public/thumbs/cathedral.webp" alt="" loading="eager"></div>
+        <div class="cap"><strong>Cathedral</strong><span>Claude Opus 5 · Claude Code</span></div>
+      </div>
+
+      <div class="card">
+        <div class="thumb"><img src="../../../site/public/thumbs/steam-locomotive.webp" alt="" loading="eager"></div>
+        <div class="cap"><strong>Steam Locomotive</strong><span>Muse Spark 1.3 · OpenCode</span></div>
+      </div>
+
+      <div class="card">
+        <div class="thumb"><img src="../../../site/public/thumbs/lighthouse.webp" alt="" loading="eager"></div>
+        <div class="cap"><strong>Lighthouse</strong><span>Muse Spark 1.3 · OpenCode</span></div>
+      </div>
+
+      <div class="card">
+        <div class="thumb"><img src="../../../site/public/thumbs/alpine-cable-terminal.webp" alt="" loading="eager"></div>
+        <div class="cap"><strong>Alpine Cable Terminal</strong><span>Gemini 3.8 Flash · Antigravity</span></div>
+      </div>
+
+      <div class="card">
+        <div class="thumb"><img src="../../../site/public/thumbs/research-vessel.webp" alt="" loading="eager"></div>
+        <div class="cap"><strong>Research Vessel</strong><span>GPT-6 Astra · Codex</span></div>
+      </div>
+
+      <div class="card">
+        <div class="thumb"><img src="../../../site/public/thumbs/sushi-store.webp" alt="" loading="eager"></div>
+        <div class="cap"><strong>Sushi Store</strong><span>Claude Opus 5 · Claude Code</span></div>
+      </div>
+
+      <div class="card">
+        <div class="thumb"><img src="../../../site/public/thumbs/windmill.webp" alt="" loading="eager"></div>
+        <div class="cap"><strong>Windmill</strong><span>DeepSeek V4 Flash · OpenCode</span></div>
+      </div>
+
+      <div class="card">
+        <div class="thumb"><img src="../../../site/public/thumbs/tram.webp" alt="" loading="eager"></div>
+        <div class="cap"><strong>Tram</strong><span>Gemini 3.8 Flash · Antigravity CLI</span></div>
+      </div>
+
+      <div class="card">
+        <div class="thumb"><img src="../../../site/public/thumbs/ribbon-tea-pavilion.webp" alt="" loading="eager"></div>
+        <div class="cap"><strong>Ribbon Tea Pavilion</strong><span>Gemini 3.8 Flash · Antigravity</span></div>
+      </div>
+
+      <div class="card">
+        <div class="thumb"><img src="../../../site/public/thumbs/demo-diesel-locomotive.webp" alt="" loading="eager"></div>
+        <div class="cap"><strong>Demo Diesel Locomotive</strong><span>GPT-6 Astra · ChatGPT Work</span></div>
+      </div>
+
+      <div class="card">
+        <div class="thumb"><img src="../../../site/public/thumbs/demo-art-deco-conservatory.webp" alt="" loading="eager"></div>
+        <div class="cap"><strong>Demo Art Deco Conservatory</strong><span>Gemini 3.8 Flash · Antigravity CLI</span></div>
+      </div>
+
+      <div class="card">
+        <div class="thumb"><img src="../../../site/public/thumbs/demo-floating-observatory.webp" alt="" loading="eager"></div>
+        <div class="cap"><strong>Demo Floating Observatory</strong><span>GPT-6 Astra · ChatGPT Work</span></div>
+      </div>
+
+      <div class="card">
+        <div class="thumb"><img src="../../../site/public/thumbs/demo-deep-sea-station.webp" alt="" loading="eager"></div>
+        <div class="cap"><strong>Demo Deep Sea Station</strong><span>Gemini 3.8 Flash · Antigravity CLI</span></div>
+      </div>
+
+      <div class="card">
+        <div class="thumb"><img src="../../../site/public/thumbs/demo-unfolding-dragonfly.webp" alt="" loading="eager"></div>
+        <div class="cap"><strong>Demo Unfolding Dragonfly</strong><span>Gemini 3.8 Flash · Antigravity CLI</span></div>
+      </div>
+
+      <div class="card">
+        <div class="thumb"><img src="../../../site/public/thumbs/demo-vintage-typewriter.webp" alt="" loading="eager"></div>
+        <div class="cap"><strong>Demo Vintage Typewriter</strong><span>Muse Spark 1.3 · OpenCode</span></div>
+      </div>
+
+      <div class="card">
+        <div class="thumb"><img src="../../../site/public/thumbs/demo-argent-aircraft-carrier.webp" alt="" loading="eager"></div>
+        <div class="cap"><strong>Demo Argent Aircraft Carrier</strong><span>GPT-6 Astra · ChatGPT Work</span></div>
+      </div>
+
+      <div class="card">
+        <div class="thumb"><img src="../../../site/public/thumbs/demo-noctilus-nuclear-submarine.webp" alt="" loading="eager"></div>
+        <div class="cap"><strong>Demo Noctilus Nuclear Submarine</strong><span>GPT-6 Astra · ChatGPT Work</span></div>
+      </div>
+
+      <div class="card">
+        <div class="thumb"><img src="../../../site/public/thumbs/demo-resolute-polar-fleet-flagship.webp" alt="" loading="eager"></div>
+        <div class="cap"><strong>Demo Resolute Polar Fleet Flagship</strong><span>Not independently recorded · Recorded demo session</span></div>
+      </div>
+
+      <div class="card">
+        <div class="thumb"><img src="../../../site/public/thumbs/typewriter.webp" alt="" loading="eager"></div>
+        <div class="cap"><strong>Typewriter</strong><span>Muse Spark 1.3 · OpenCode</span></div>
+      </div>
+
+      <div class="card">
+        <div class="thumb"><img src="../../../site/public/thumbs/solar-sail-courier.webp" alt="" loading="eager"></div>
+        <div class="cap"><strong>Solar Sail Courier</strong><span>Gemini 3.8 Flash · Antigravity</span></div>
+      </div>
+
+      <div class="card">
+        <div class="thumb"><img src="../../../site/public/thumbs/mechanical-peacock.webp" alt="" loading="eager"></div>
+        <div class="cap"><strong>Mechanical Peacock</strong><span>Claude Opus 5 · Claude Code</span></div>
+      </div>
+
+      <div class="card">
+        <div class="thumb"><img src="../../../site/public/thumbs/kestrel-rescue-craft.webp" alt="" loading="eager"></div>
+        <div class="cap"><strong>Kestrel Rescue Craft</strong><span>GPT-6 Astra · Codex</span></div>
+      </div>
+
+      <div class="card">
+        <div class="thumb"><img src="../../../site/public/thumbs/anglerfish.webp" alt="" loading="eager"></div>
+        <div class="cap"><strong>Anglerfish</strong><span>Claude Opus 5 · Claude Code</span></div>
+      </div>
+
+      <div class="card">
+        <div class="thumb"><img src="../../../site/public/thumbs/kinetic-wave.webp" alt="" loading="eager"></div>
+        <div class="cap"><strong>Kinetic Wave</strong><span>Gemini 3.8 Flash · Antigravity</span></div>
+      </div>
+
+      <div class="card">
+        <div class="thumb"><img src="../../../site/public/thumbs/orrery.webp" alt="" loading="eager"></div>
+        <div class="cap"><strong>Orrery</strong><span>Gemini 3.8 Flash · Antigravity CLI</span></div>
+      </div>
+
+      <div class="card">
+        <div class="thumb"><img src="../../../site/public/thumbs/orbital-station.webp" alt="" loading="eager"></div>
+        <div class="cap"><strong>Orbital Station</strong><span>GPT-6 Astra · Codex</span></div>
+      </div>
+
+      <div class="card">
+        <div class="thumb"><img src="../../../site/public/thumbs/deco-radio.webp" alt="" loading="eager"></div>
+        <div class="cap"><strong>Deco Radio</strong><span>Gemini 3.8 Flash · Antigravity</span></div>
+      </div>
+
+      <div class="card">
+        <div class="thumb"><img src="../../../site/public/thumbs/cathedral.webp" alt="" loading="eager"></div>
+        <div class="cap"><strong>Cathedral</strong><span>Claude Opus 5 · Claude Code</span></div>
+      </div>
+
+      <div class="card">
+        <div class="thumb"><img src="../../../site/public/thumbs/steam-locomotive.webp" alt="" loading="eager"></div>
+        <div class="cap"><strong>Steam Locomotive</strong><span>Muse Spark 1.3 · OpenCode</span></div>
+      </div>
+
+      <div class="card">
+        <div class="thumb"><img src="../../../site/public/thumbs/lighthouse.webp" alt="" loading="eager"></div>
+        <div class="cap"><strong>Lighthouse</strong><span>Muse Spark 1.3 · OpenCode</span></div>
+      </div>
+
+      <div class="card">
+        <div class="thumb"><img src="../../../site/public/thumbs/alpine-cable-terminal.webp" alt="" loading="eager"></div>
+        <div class="cap"><strong>Alpine Cable Terminal</strong><span>Gemini 3.8 Flash · Antigravity</span></div>
+      </div>
+
+      <div class="card">
+        <div class="thumb"><img src="../../../site/public/thumbs/research-vessel.webp" alt="" loading="eager"></div>
+        <div class="cap"><strong>Research Vessel</strong><span>GPT-6 Astra · Codex</span></div>
+      </div>
+
+      <div class="card">
+        <div class="thumb"><img src="../../../site/public/thumbs/sushi-store.webp" alt="" loading="eager"></div>
+        <div class="cap"><strong>Sushi Store</strong><span>Claude Opus 5 · Claude Code</span></div>
+      </div>
+
+      <div class="card">
+        <div class="thumb"><img src="../../../site/public/thumbs/windmill.webp" alt="" loading="eager"></div>
+        <div class="cap"><strong>Windmill</strong><span>DeepSeek V4 Flash · OpenCode</span></div>
+      </div>
+
+      <div class="card">
+        <div class="thumb"><img src="../../../site/public/thumbs/tram.webp" alt="" loading="eager"></div>
+        <div class="cap"><strong>Tram</strong><span>Gemini 3.8 Flash · Antigravity CLI</span></div>
+      </div>
+
+      <div class="card">
+        <div class="thumb"><img src="../../../site/public/thumbs/ribbon-tea-pavilion.webp" alt="" loading="eager"></div>
+        <div class="cap"><strong>Ribbon Tea Pavilion</strong><span>Gemini 3.8 Flash · Antigravity</span></div>
+      </div>
+
+      <div class="card">
+        <div class="thumb"><img src="../../../site/public/thumbs/demo-diesel-locomotive.webp" alt="" loading="eager"></div>
+        <div class="cap"><strong>Demo Diesel Locomotive</strong><span>GPT-6 Astra · ChatGPT Work</span></div>
+      </div>
+
+      <div class="card">
+        <div class="thumb"><img src="../../../site/public/thumbs/demo-art-deco-conservatory.webp" alt="" loading="eager"></div>
+        <div class="cap"><strong>Demo Art Deco Conservatory</strong><span>Gemini 3.8 Flash · Antigravity CLI</span></div>
+      </div>
+
+      <div class="card">
+        <div class="thumb"><img src="../../../site/public/thumbs/demo-floating-observatory.webp" alt="" loading="eager"></div>
+        <div class="cap"><strong>Demo Floating Observatory</strong><span>GPT-6 Astra · ChatGPT Work</span></div>
+      </div>
+
+      <div class="card">
+        <div class="thumb"><img src="../../../site/public/thumbs/demo-deep-sea-station.webp" alt="" loading="eager"></div>
+        <div class="cap"><strong>Demo Deep Sea Station</strong><span>Gemini 3.8 Flash · Antigravity CLI</span></div>
+      </div>
+
+      <div class="card">
+        <div class="thumb"><img src="../../../site/public/thumbs/demo-unfolding-dragonfly.webp" alt="" loading="eager"></div>
+        <div class="cap"><strong>Demo Unfolding Dragonfly</strong><span>Gemini 3.8 Flash · Antigravity CLI</span></div>
+      </div>
+
+      <div class="card">
+        <div class="thumb"><img src="../../../site/public/thumbs/demo-vintage-typewriter.webp" alt="" loading="eager"></div>
+        <div class="cap"><strong>Demo Vintage Typewriter</strong><span>Muse Spark 1.3 · OpenCode</span></div>
+      </div>
+
+      <div class="card">
+        <div class="thumb"><img src="../../../site/public/thumbs/demo-argent-aircraft-carrier.webp" alt="" loading="eager"></div>
+        <div class="cap"><strong>Demo Argent Aircraft Carrier</strong><span>GPT-6 Astra · ChatGPT Work</span></div>
+      </div>
+
+      <div class="card">
+        <div class="thumb"><img src="../../../site/public/thumbs/demo-noctilus-nuclear-submarine.webp" alt="" loading="eager"></div>
+        <div class="cap"><strong>Demo Noctilus Nuclear Submarine</strong><span>GPT-6 Astra · ChatGPT Work</span></div>
+      </div>
+
+      <div class="card">
+        <div class="thumb"><img src="../../../site/public/thumbs/demo-resolute-polar-fleet-flagship.webp" alt="" loading="eager"></div>
+        <div class="cap"><strong>Demo Resolute Polar Fleet Flagship</strong><span>Not independently recorded · Recorded demo session</span></div>
+      </div>
+  </div></div>
+  <div class="rail r1"><div class="strip" data-speed="1.35">
+
+      <div class="card">
+        <div class="thumb"><img src="../../../site/public/thumbs/typewriter.webp" alt="" loading="eager"></div>
+        <div class="cap"><strong>Typewriter</strong><span>Muse Spark 1.3 · OpenCode</span></div>
+      </div>
+
+      <div class="card">
+        <div class="thumb"><img src="../../../site/public/thumbs/solar-sail-courier.webp" alt="" loading="eager"></div>
+        <div class="cap"><strong>Solar Sail Courier</strong><span>Gemini 3.8 Flash · Antigravity</span></div>
+      </div>
+
+      <div class="card">
+        <div class="thumb"><img src="../../../site/public/thumbs/mechanical-peacock.webp" alt="" loading="eager"></div>
+        <div class="cap"><strong>Mechanical Peacock</strong><span>Claude Opus 5 · Claude Code</span></div>
+      </div>
+
+      <div class="card">
+        <div class="thumb"><img src="../../../site/public/thumbs/kestrel-rescue-craft.webp" alt="" loading="eager"></div>
+        <div class="cap"><strong>Kestrel Rescue Craft</strong><span>GPT-6 Astra · Codex</span></div>
+      </div>
+
+      <div class="card">
+        <div class="thumb"><img src="../../../site/public/thumbs/anglerfish.webp" alt="" loading="eager"></div>
+        <div class="cap"><strong>Anglerfish</strong><span>Claude Opus 5 · Claude Code</span></div>
+      </div>
+
+      <div class="card">
+        <div class="thumb"><img src="../../../site/public/thumbs/kinetic-wave.webp" alt="" loading="eager"></div>
+        <div class="cap"><strong>Kinetic Wave</strong><span>Gemini 3.8 Flash · Antigravity</span></div>
+      </div>
+
+      <div class="card">
+        <div class="thumb"><img src="../../../site/public/thumbs/orrery.webp" alt="" loading="eager"></div>
+        <div class="cap"><strong>Orrery</strong><span>Gemini 3.8 Flash · Antigravity CLI</span></div>
+      </div>
+
+      <div class="card">
+        <div class="thumb"><img src="../../../site/public/thumbs/orbital-station.webp" alt="" loading="eager"></div>
+        <div class="cap"><strong>Orbital Station</strong><span>GPT-6 Astra · Codex</span></div>
+      </div>
+
+      <div class="card">
+        <div class="thumb"><img src="../../../site/public/thumbs/deco-radio.webp" alt="" loading="eager"></div>
+        <div class="cap"><strong>Deco Radio</strong><span>Gemini 3.8 Flash · Antigravity</span></div>
+      </div>
+
+      <div class="card">
+        <div class="thumb"><img src="../../../site/public/thumbs/cathedral.webp" alt="" loading="eager"></div>
+        <div class="cap"><strong>Cathedral</strong><span>Claude Opus 5 · Claude Code</span></div>
+      </div>
+
+      <div class="card">
+        <div class="thumb"><img src="../../../site/public/thumbs/steam-locomotive.webp" alt="" loading="eager"></div>
+        <div class="cap"><strong>Steam Locomotive</strong><span>Muse Spark 1.3 · OpenCode</span></div>
+      </div>
+
+      <div class="card">
+        <div class="thumb"><img src="../../../site/public/thumbs/lighthouse.webp" alt="" loading="eager"></div>
+        <div class="cap"><strong>Lighthouse</strong><span>Muse Spark 1.3 · OpenCode</span></div>
+      </div>
+
+      <div class="card">
+        <div class="thumb"><img src="../../../site/public/thumbs/alpine-cable-terminal.webp" alt="" loading="eager"></div>
+        <div class="cap"><strong>Alpine Cable Terminal</strong><span>Gemini 3.8 Flash · Antigravity</span></div>
+      </div>
+
+      <div class="card">
+        <div class="thumb"><img src="../../../site/public/thumbs/research-vessel.webp" alt="" loading="eager"></div>
+        <div class="cap"><strong>Research Vessel</strong><span>GPT-6 Astra · Codex</span></div>
+      </div>
+
+      <div class="card">
+        <div class="thumb"><img src="../../../site/public/thumbs/sushi-store.webp" alt="" loading="eager"></div>
+        <div class="cap"><strong>Sushi Store</strong><span>Claude Opus 5 · Claude Code</span></div>
+      </div>
+
+      <div class="card">
+        <div class="thumb"><img src="../../../site/public/thumbs/windmill.webp" alt="" loading="eager"></div>
+        <div class="cap"><strong>Windmill</strong><span>DeepSeek V4 Flash · OpenCode</span></div>
+      </div>
+
+      <div class="card">
+        <div class="thumb"><img src="../../../site/public/thumbs/tram.webp" alt="" loading="eager"></div>
+        <div class="cap"><strong>Tram</strong><span>Gemini 3.8 Flash · Antigravity CLI</span></div>
+      </div>
+
+      <div class="card">
+        <div class="thumb"><img src="../../../site/public/thumbs/ribbon-tea-pavilion.webp" alt="" loading="eager"></div>
+        <div class="cap"><strong>Ribbon Tea Pavilion</strong><span>Gemini 3.8 Flash · Antigravity</span></div>
+      </div>
+
+      <div class="card">
+        <div class="thumb"><img src="../../../site/public/thumbs/demo-diesel-locomotive.webp" alt="" loading="eager"></div>
+        <div class="cap"><strong>Demo Diesel Locomotive</strong><span>GPT-6 Astra · ChatGPT Work</span></div>
+      </div>
+
+      <div class="card">
+        <div class="thumb"><img src="../../../site/public/thumbs/demo-art-deco-conservatory.webp" alt="" loading="eager"></div>
+        <div class="cap"><strong>Demo Art Deco Conservatory</strong><span>Gemini 3.8 Flash · Antigravity CLI</span></div>
+      </div>
+
+      <div class="card">
+        <div class="thumb"><img src="../../../site/public/thumbs/demo-floating-observatory.webp" alt="" loading="eager"></div>
+        <div class="cap"><strong>Demo Floating Observatory</strong><span>GPT-6 Astra · ChatGPT Work</span></div>
+      </div>
+
+      <div class="card">
+        <div class="thumb"><img src="../../../site/public/thumbs/demo-deep-sea-station.webp" alt="" loading="eager"></div>
+        <div class="cap"><strong>Demo Deep Sea Station</strong><span>Gemini 3.8 Flash · Antigravity CLI</span></div>
+      </div>
+
+      <div class="card">
+        <div class="thumb"><img src="../../../site/public/thumbs/demo-unfolding-dragonfly.webp" alt="" loading="eager"></div>
+        <div class="cap"><strong>Demo Unfolding Dragonfly</strong><span>Gemini 3.8 Flash · Antigravity CLI</span></div>
+      </div>
+
+      <div class="card">
+        <div class="thumb"><img src="../../../site/public/thumbs/demo-vintage-typewriter.webp" alt="" loading="eager"></div>
+        <div class="cap"><strong>Demo Vintage Typewriter</strong><span>Muse Spark 1.3 · OpenCode</span></div>
+      </div>
+
+      <div class="card">
+        <div class="thumb"><img src="../../../site/public/thumbs/demo-argent-aircraft-carrier.webp" alt="" loading="eager"></div>
+        <div class="cap"><strong>Demo Argent Aircraft Carrier</strong><span>GPT-6 Astra · ChatGPT Work</span></div>
+      </div>
+
+      <div class="card">
+        <div class="thumb"><img src="../../../site/public/thumbs/demo-noctilus-nuclear-submarine.webp" alt="" loading="eager"></div>
+        <div class="cap"><strong>Demo Noctilus Nuclear Submarine</strong><span>GPT-6 Astra · ChatGPT Work</span></div>
+      </div>
+
+      <div class="card">
+        <div class="thumb"><img src="../../../site/public/thumbs/demo-resolute-polar-fleet-flagship.webp" alt="" loading="eager"></div>
+        <div class="cap"><strong>Demo Resolute Polar Fleet Flagship</strong><span>Not independently recorded · Recorded demo session</span></div>
+      </div>
+
+      <div class="card">
+        <div class="thumb"><img src="../../../site/public/thumbs/typewriter.webp" alt="" loading="eager"></div>
+        <div class="cap"><strong>Typewriter</strong><span>Muse Spark 1.3 · OpenCode</span></div>
+      </div>
+
+      <div class="card">
+        <div class="thumb"><img src="../../../site/public/thumbs/solar-sail-courier.webp" alt="" loading="eager"></div>
+        <div class="cap"><strong>Solar Sail Courier</strong><span>Gemini 3.8 Flash · Antigravity</span></div>
+      </div>
+
+      <div class="card">
+        <div class="thumb"><img src="../../../site/public/thumbs/mechanical-peacock.webp" alt="" loading="eager"></div>
+        <div class="cap"><strong>Mechanical Peacock</strong><span>Claude Opus 5 · Claude Code</span></div>
+      </div>
+
+      <div class="card">
+        <div class="thumb"><img src="../../../site/public/thumbs/kestrel-rescue-craft.webp" alt="" loading="eager"></div>
+        <div class="cap"><strong>Kestrel Rescue Craft</strong><span>GPT-6 Astra · Codex</span></div>
+      </div>
+
+      <div class="card">
+        <div class="thumb"><img src="../../../site/public/thumbs/anglerfish.webp" alt="" loading="eager"></div>
+        <div class="cap"><strong>Anglerfish</strong><span>Claude Opus 5 · Claude Code</span></div>
+      </div>
+
+      <div class="card">
+        <div class="thumb"><img src="../../../site/public/thumbs/kinetic-wave.webp" alt="" loading="eager"></div>
+        <div class="cap"><strong>Kinetic Wave</strong><span>Gemini 3.8 Flash · Antigravity</span></div>
+      </div>
+
+      <div class="card">
+        <div class="thumb"><img src="../../../site/public/thumbs/orrery.webp" alt="" loading="eager"></div>
+        <div class="cap"><strong>Orrery</strong><span>Gemini 3.8 Flash · Antigravity CLI</span></div>
+      </div>
+
+      <div class="card">
+        <div class="thumb"><img src="../../../site/public/thumbs/orbital-station.webp" alt="" loading="eager"></div>
+        <div class="cap"><strong>Orbital Station</strong><span>GPT-6 Astra · Codex</span></div>
+      </div>
+
+      <div class="card">
+        <div class="thumb"><img src="../../../site/public/thumbs/deco-radio.webp" alt="" loading="eager"></div>
+        <div class="cap"><strong>Deco Radio</strong><span>Gemini 3.8 Flash · Antigravity</span></div>
+      </div>
+
+      <div class="card">
+        <div class="thumb"><img src="../../../site/public/thumbs/cathedral.webp" alt="" loading="eager"></div>
+        <div class="cap"><strong>Cathedral</strong><span>Claude Opus 5 · Claude Code</span></div>
+      </div>
+
+      <div class="card">
+        <div class="thumb"><img src="../../../site/public/thumbs/steam-locomotive.webp" alt="" loading="eager"></div>
+        <div class="cap"><strong>Steam Locomotive</strong><span>Muse Spark 1.3 · OpenCode</span></div>
+      </div>
+
+      <div class="card">
+        <div class="thumb"><img src="../../../site/public/thumbs/lighthouse.webp" alt="" loading="eager"></div>
+        <div class="cap"><strong>Lighthouse</strong><span>Muse Spark 1.3 · OpenCode</span></div>
+      </div>
+
+      <div class="card">
+        <div class="thumb"><img src="../../../site/public/thumbs/alpine-cable-terminal.webp" alt="" loading="eager"></div>
+        <div class="cap"><strong>Alpine Cable Terminal</strong><span>Gemini 3.8 Flash · Antigravity</span></div>
+      </div>
+
+      <div class="card">
+        <div class="thumb"><img src="../../../site/public/thumbs/research-vessel.webp" alt="" loading="eager"></div>
+        <div class="cap"><strong>Research Vessel</strong><span>GPT-6 Astra · Codex</span></div>
+      </div>
+
+      <div class="card">
+        <div class="thumb"><img src="../../../site/public/thumbs/sushi-store.webp" alt="" loading="eager"></div>
+        <div class="cap"><strong>Sushi Store</strong><span>Claude Opus 5 · Claude Code</span></div>
+      </div>
+
+      <div class="card">
+        <div class="thumb"><img src="../../../site/public/thumbs/windmill.webp" alt="" loading="eager"></div>
+        <div class="cap"><strong>Windmill</strong><span>DeepSeek V4 Flash · OpenCode</span></div>
+      </div>
+
+      <div class="card">
+        <div class="thumb"><img src="../../../site/public/thumbs/tram.webp" alt="" loading="eager"></div>
+        <div class="cap"><strong>Tram</strong><span>Gemini 3.8 Flash · Antigravity CLI</span></div>
+      </div>
+
+      <div class="card">
+        <div class="thumb"><img src="../../../site/public/thumbs/ribbon-tea-pavilion.webp" alt="" loading="eager"></div>
+        <div class="cap"><strong>Ribbon Tea Pavilion</strong><span>Gemini 3.8 Flash · Antigravity</span></div>
+      </div>
+
+      <div class="card">
+        <div class="thumb"><img src="../../../site/public/thumbs/demo-diesel-locomotive.webp" alt="" loading="eager"></div>
+        <div class="cap"><strong>Demo Diesel Locomotive</strong><span>GPT-6 Astra · ChatGPT Work</span></div>
+      </div>
+
+      <div class="card">
+        <div class="thumb"><img src="../../../site/public/thumbs/demo-art-deco-conservatory.webp" alt="" loading="eager"></div>
+        <div class="cap"><strong>Demo Art Deco Conservatory</strong><span>Gemini 3.8 Flash · Antigravity CLI</span></div>
+      </div>
+
+      <div class="card">
+        <div class="thumb"><img src="../../../site/public/thumbs/demo-floating-observatory.webp" alt="" loading="eager"></div>
+        <div class="cap"><strong>Demo Floating Observatory</strong><span>GPT-6 Astra · ChatGPT Work</span></div>
+      </div>
+
+      <div class="card">
+        <div class="thumb"><img src="../../../site/public/thumbs/demo-deep-sea-station.webp" alt="" loading="eager"></div>
+        <div class="cap"><strong>Demo Deep Sea Station</strong><span>Gemini 3.8 Flash · Antigravity CLI</span></div>
+      </div>
+
+      <div class="card">
+        <div class="thumb"><img src="../../../site/public/thumbs/demo-unfolding-dragonfly.webp" alt="" loading="eager"></div>
+        <div class="cap"><strong>Demo Unfolding Dragonfly</strong><span>Gemini 3.8 Flash · Antigravity CLI</span></div>
+      </div>
+
+      <div class="card">
+        <div class="thumb"><img src="../../../site/public/thumbs/demo-vintage-typewriter.webp" alt="" loading="eager"></div>
+        <div class="cap"><strong>Demo Vintage Typewriter</strong><span>Muse Spark 1.3 · OpenCode</span></div>
+      </div>
+
+      <div class="card">
+        <div class="thumb"><img src="../../../site/public/thumbs/demo-argent-aircraft-carrier.webp" alt="" loading="eager"></div>
+        <div class="cap"><strong>Demo Argent Aircraft Carrier</strong><span>GPT-6 Astra · ChatGPT Work</span></div>
+      </div>
+
+      <div class="card">
+        <div class="thumb"><img src="../../../site/public/thumbs/demo-noctilus-nuclear-submarine.webp" alt="" loading="eager"></div>
+        <div class="cap"><strong>Demo Noctilus Nuclear Submarine</strong><span>GPT-6 Astra · ChatGPT Work</span></div>
+      </div>
+
+      <div class="card">
+        <div class="thumb"><img src="../../../site/public/thumbs/demo-resolute-polar-fleet-flagship.webp" alt="" loading="eager"></div>
+        <div class="cap"><strong>Demo Resolute Polar Fleet Flagship</strong><span>Not independently recorded · Recorded demo session</span></div>
+      </div>
+  </div></div>
+  <div class="rail r2"><div class="strip" data-speed="0.8">
+
+      <div class="card">
+        <div class="thumb"><img src="../../../site/public/thumbs/typewriter.webp" alt="" loading="eager"></div>
+        <div class="cap"><strong>Typewriter</strong><span>Muse Spark 1.3 · OpenCode</span></div>
+      </div>
+
+      <div class="card">
+        <div class="thumb"><img src="../../../site/public/thumbs/solar-sail-courier.webp" alt="" loading="eager"></div>
+        <div class="cap"><strong>Solar Sail Courier</strong><span>Gemini 3.8 Flash · Antigravity</span></div>
+      </div>
+
+      <div class="card">
+        <div class="thumb"><img src="../../../site/public/thumbs/mechanical-peacock.webp" alt="" loading="eager"></div>
+        <div class="cap"><strong>Mechanical Peacock</strong><span>Claude Opus 5 · Claude Code</span></div>
+      </div>
+
+      <div class="card">
+        <div class="thumb"><img src="../../../site/public/thumbs/kestrel-rescue-craft.webp" alt="" loading="eager"></div>
+        <div class="cap"><strong>Kestrel Rescue Craft</strong><span>GPT-6 Astra · Codex</span></div>
+      </div>
+
+      <div class="card">
+        <div class="thumb"><img src="../../../site/public/thumbs/anglerfish.webp" alt="" loading="eager"></div>
+        <div class="cap"><strong>Anglerfish</strong><span>Claude Opus 5 · Claude Code</span></div>
+      </div>
+
+      <div class="card">
+        <div class="thumb"><img src="../../../site/public/thumbs/kinetic-wave.webp" alt="" loading="eager"></div>
+        <div class="cap"><strong>Kinetic Wave</strong><span>Gemini 3.8 Flash · Antigravity</span></div>
+      </div>
+
+      <div class="card">
+        <div class="thumb"><img src="../../../site/public/thumbs/orrery.webp" alt="" loading="eager"></div>
+        <div class="cap"><strong>Orrery</strong><span>Gemini 3.8 Flash · Antigravity CLI</span></div>
+      </div>
+
+      <div class="card">
+        <div class="thumb"><img src="../../../site/public/thumbs/orbital-station.webp" alt="" loading="eager"></div>
+        <div class="cap"><strong>Orbital Station</strong><span>GPT-6 Astra · Codex</span></div>
+      </div>
+
+      <div class="card">
+        <div class="thumb"><img src="../../../site/public/thumbs/deco-radio.webp" alt="" loading="eager"></div>
+        <div class="cap"><strong>Deco Radio</strong><span>Gemini 3.8 Flash · Antigravity</span></div>
+      </div>
+
+      <div class="card">
+        <div class="thumb"><img src="../../../site/public/thumbs/cathedral.webp" alt="" loading="eager"></div>
+        <div class="cap"><strong>Cathedral</strong><span>Claude Opus 5 · Claude Code</span></div>
+      </div>
+
+      <div class="card">
+        <div class="thumb"><img src="../../../site/public/thumbs/steam-locomotive.webp" alt="" loading="eager"></div>
+        <div class="cap"><strong>Steam Locomotive</strong><span>Muse Spark 1.3 · OpenCode</span></div>
+      </div>
+
+      <div class="card">
+        <div class="thumb"><img src="../../../site/public/thumbs/lighthouse.webp" alt="" loading="eager"></div>
+        <div class="cap"><strong>Lighthouse</strong><span>Muse Spark 1.3 · OpenCode</span></div>
+      </div>
+
+      <div class="card">
+        <div class="thumb"><img src="../../../site/public/thumbs/alpine-cable-terminal.webp" alt="" loading="eager"></div>
+        <div class="cap"><strong>Alpine Cable Terminal</strong><span>Gemini 3.8 Flash · Antigravity</span></div>
+      </div>
+
+      <div class="card">
+        <div class="thumb"><img src="../../../site/public/thumbs/research-vessel.webp" alt="" loading="eager"></div>
+        <div class="cap"><strong>Research Vessel</strong><span>GPT-6 Astra · Codex</span></div>
+      </div>
+
+      <div class="card">
+        <div class="thumb"><img src="../../../site/public/thumbs/sushi-store.webp" alt="" loading="eager"></div>
+        <div class="cap"><strong>Sushi Store</strong><span>Claude Opus 5 · Claude Code</span></div>
+      </div>
+
+      <div class="card">
+        <div class="thumb"><img src="../../../site/public/thumbs/windmill.webp" alt="" loading="eager"></div>
+        <div class="cap"><strong>Windmill</strong><span>DeepSeek V4 Flash · OpenCode</span></div>
+      </div>
+
+      <div class="card">
+        <div class="thumb"><img src="../../../site/public/thumbs/tram.webp" alt="" loading="eager"></div>
+        <div class="cap"><strong>Tram</strong><span>Gemini 3.8 Flash · Antigravity CLI</span></div>
+      </div>
+
+      <div class="card">
+        <div class="thumb"><img src="../../../site/public/thumbs/ribbon-tea-pavilion.webp" alt="" loading="eager"></div>
+        <div class="cap"><strong>Ribbon Tea Pavilion</strong><span>Gemini 3.8 Flash · Antigravity</span></div>
+      </div>
+
+      <div class="card">
+        <div class="thumb"><img src="../../../site/public/thumbs/demo-diesel-locomotive.webp" alt="" loading="eager"></div>
+        <div class="cap"><strong>Demo Diesel Locomotive</strong><span>GPT-6 Astra · ChatGPT Work</span></div>
+      </div>
+
+      <div class="card">
+        <div class="thumb"><img src="../../../site/public/thumbs/demo-art-deco-conservatory.webp" alt="" loading="eager"></div>
+        <div class="cap"><strong>Demo Art Deco Conservatory</strong><span>Gemini 3.8 Flash · Antigravity CLI</span></div>
+      </div>
+
+      <div class="card">
+        <div class="thumb"><img src="../../../site/public/thumbs/demo-floating-observatory.webp" alt="" loading="eager"></div>
+        <div class="cap"><strong>Demo Floating Observatory</strong><span>GPT-6 Astra · ChatGPT Work</span></div>
+      </div>
+
+      <div class="card">
+        <div class="thumb"><img src="../../../site/public/thumbs/demo-deep-sea-station.webp" alt="" loading="eager"></div>
+        <div class="cap"><strong>Demo Deep Sea Station</strong><span>Gemini 3.8 Flash · Antigravity CLI</span></div>
+      </div>
+
+      <div class="card">
+        <div class="thumb"><img src="../../../site/public/thumbs/demo-unfolding-dragonfly.webp" alt="" loading="eager"></div>
+        <div class="cap"><strong>Demo Unfolding Dragonfly</strong><span>Gemini 3.8 Flash · Antigravity CLI</span></div>
+      </div>
+
+      <div class="card">
+        <div class="thumb"><img src="../../../site/public/thumbs/demo-vintage-typewriter.webp" alt="" loading="eager"></div>
+        <div class="cap"><strong>Demo Vintage Typewriter</strong><span>Muse Spark 1.3 · OpenCode</span></div>
+      </div>
+
+      <div class="card">
+        <div class="thumb"><img src="../../../site/public/thumbs/demo-argent-aircraft-carrier.webp" alt="" loading="eager"></div>
+        <div class="cap"><strong>Demo Argent Aircraft Carrier</strong><span>GPT-6 Astra · ChatGPT Work</span></div>
+      </div>
+
+      <div class="card">
+        <div class="thumb"><img src="../../../site/public/thumbs/demo-noctilus-nuclear-submarine.webp" alt="" loading="eager"></div>
+        <div class="cap"><strong>Demo Noctilus Nuclear Submarine</strong><span>GPT-6 Astra · ChatGPT Work</span></div>
+      </div>
+
+      <div class="card">
+        <div class="thumb"><img src="../../../site/public/thumbs/demo-resolute-polar-fleet-flagship.webp" alt="" loading="eager"></div>
+        <div class="cap"><strong>Demo Resolute Polar Fleet Flagship</strong><span>Not independently recorded · Recorded demo session</span></div>
+      </div>
+
+      <div class="card">
+        <div class="thumb"><img src="../../../site/public/thumbs/typewriter.webp" alt="" loading="eager"></div>
+        <div class="cap"><strong>Typewriter</strong><span>Muse Spark 1.3 · OpenCode</span></div>
+      </div>
+
+      <div class="card">
+        <div class="thumb"><img src="../../../site/public/thumbs/solar-sail-courier.webp" alt="" loading="eager"></div>
+        <div class="cap"><strong>Solar Sail Courier</strong><span>Gemini 3.8 Flash · Antigravity</span></div>
+      </div>
+
+      <div class="card">
+        <div class="thumb"><img src="../../../site/public/thumbs/mechanical-peacock.webp" alt="" loading="eager"></div>
+        <div class="cap"><strong>Mechanical Peacock</strong><span>Claude Opus 5 · Claude Code</span></div>
+      </div>
+
+      <div class="card">
+        <div class="thumb"><img src="../../../site/public/thumbs/kestrel-rescue-craft.webp" alt="" loading="eager"></div>
+        <div class="cap"><strong>Kestrel Rescue Craft</strong><span>GPT-6 Astra · Codex</span></div>
+      </div>
+
+      <div class="card">
+        <div class="thumb"><img src="../../../site/public/thumbs/anglerfish.webp" alt="" loading="eager"></div>
+        <div class="cap"><strong>Anglerfish</strong><span>Claude Opus 5 · Claude Code</span></div>
+      </div>
+
+      <div class="card">
+        <div class="thumb"><img src="../../../site/public/thumbs/kinetic-wave.webp" alt="" loading="eager"></div>
+        <div class="cap"><strong>Kinetic Wave</strong><span>Gemini 3.8 Flash · Antigravity</span></div>
+      </div>
+
+      <div class="card">
+        <div class="thumb"><img src="../../../site/public/thumbs/orrery.webp" alt="" loading="eager"></div>
+        <div class="cap"><strong>Orrery</strong><span>Gemini 3.8 Flash · Antigravity CLI</span></div>
+      </div>
+
+      <div class="card">
+        <div class="thumb"><img src="../../../site/public/thumbs/orbital-station.webp" alt="" loading="eager"></div>
+        <div class="cap"><strong>Orbital Station</strong><span>GPT-6 Astra · Codex</span></div>
+      </div>
+
+      <div class="card">
+        <div class="thumb"><img src="../../../site/public/thumbs/deco-radio.webp" alt="" loading="eager"></div>
+        <div class="cap"><strong>Deco Radio</strong><span>Gemini 3.8 Flash · Antigravity</span></div>
+      </div>
+
+      <div class="card">
+        <div class="thumb"><img src="../../../site/public/thumbs/cathedral.webp" alt="" loading="eager"></div>
+        <div class="cap"><strong>Cathedral</strong><span>Claude Opus 5 · Claude Code</span></div>
+      </div>
+
+      <div class="card">
+        <div class="thumb"><img src="../../../site/public/thumbs/steam-locomotive.webp" alt="" loading="eager"></div>
+        <div class="cap"><strong>Steam Locomotive</strong><span>Muse Spark 1.3 · OpenCode</span></div>
+      </div>
+
+      <div class="card">
+        <div class="thumb"><img src="../../../site/public/thumbs/lighthouse.webp" alt="" loading="eager"></div>
+        <div class="cap"><strong>Lighthouse</strong><span>Muse Spark 1.3 · OpenCode</span></div>
+      </div>
+
+      <div class="card">
+        <div class="thumb"><img src="../../../site/public/thumbs/alpine-cable-terminal.webp" alt="" loading="eager"></div>
+        <div class="cap"><strong>Alpine Cable Terminal</strong><span>Gemini 3.8 Flash · Antigravity</span></div>
+      </div>
+
+      <div class="card">
+        <div class="thumb"><img src="../../../site/public/thumbs/research-vessel.webp" alt="" loading="eager"></div>
+        <div class="cap"><strong>Research Vessel</strong><span>GPT-6 Astra · Codex</span></div>
+      </div>
+
+      <div class="card">
+        <div class="thumb"><img src="../../../site/public/thumbs/sushi-store.webp" alt="" loading="eager"></div>
+        <div class="cap"><strong>Sushi Store</strong><span>Claude Opus 5 · Claude Code</span></div>
+      </div>
+
+      <div class="card">
+        <div class="thumb"><img src="../../../site/public/thumbs/windmill.webp" alt="" loading="eager"></div>
+        <div class="cap"><strong>Windmill</strong><span>DeepSeek V4 Flash · OpenCode</span></div>
+      </div>
+
+      <div class="card">
+        <div class="thumb"><img src="../../../site/public/thumbs/tram.webp" alt="" loading="eager"></div>
+        <div class="cap"><strong>Tram</strong><span>Gemini 3.8 Flash · Antigravity CLI</span></div>
+      </div>
+
+      <div class="card">
+        <div class="thumb"><img src="../../../site/public/thumbs/ribbon-tea-pavilion.webp" alt="" loading="eager"></div>
+        <div class="cap"><strong>Ribbon Tea Pavilion</strong><span>Gemini 3.8 Flash · Antigravity</span></div>
+      </div>
+
+      <div class="card">
+        <div class="thumb"><img src="../../../site/public/thumbs/demo-diesel-locomotive.webp" alt="" loading="eager"></div>
+        <div class="cap"><strong>Demo Diesel Locomotive</strong><span>GPT-6 Astra · ChatGPT Work</span></div>
+      </div>
+
+      <div class="card">
+        <div class="thumb"><img src="../../../site/public/thumbs/demo-art-deco-conservatory.webp" alt="" loading="eager"></div>
+        <div class="cap"><strong>Demo Art Deco Conservatory</strong><span>Gemini 3.8 Flash · Antigravity CLI</span></div>
+      </div>
+
+      <div class="card">
+        <div class="thumb"><img src="../../../site/public/thumbs/demo-floating-observatory.webp" alt="" loading="eager"></div>
+        <div class="cap"><strong>Demo Floating Observatory</strong><span>GPT-6 Astra · ChatGPT Work</span></div>
+      </div>
+
+      <div class="card">
+        <div class="thumb"><img src="../../../site/public/thumbs/demo-deep-sea-station.webp" alt="" loading="eager"></div>
+        <div class="cap"><strong>Demo Deep Sea Station</strong><span>Gemini 3.8 Flash · Antigravity CLI</span></div>
+      </div>
+
+      <div class="card">
+        <div class="thumb"><img src="../../../site/public/thumbs/demo-unfolding-dragonfly.webp" alt="" loading="eager"></div>
+        <div class="cap"><strong>Demo Unfolding Dragonfly</strong><span>Gemini 3.8 Flash · Antigravity CLI</span></div>
+      </div>
+
+      <div class="card">
+        <div class="thumb"><img src="../../../site/public/thumbs/demo-vintage-typewriter.webp" alt="" loading="eager"></div>
+        <div class="cap"><strong>Demo Vintage Typewriter</strong><span>Muse Spark 1.3 · OpenCode</span></div>
+      </div>
+
+      <div class="card">
+        <div class="thumb"><img src="../../../site/public/thumbs/demo-argent-aircraft-carrier.webp" alt="" loading="eager"></div>
+        <div class="cap"><strong>Demo Argent Aircraft Carrier</strong><span>GPT-6 Astra · ChatGPT Work</span></div>
+      </div>
+
+      <div class="card">
+        <div class="thumb"><img src="../../../site/public/thumbs/demo-noctilus-nuclear-submarine.webp" alt="" loading="eager"></div>
+        <div class="cap"><strong>Demo Noctilus Nuclear Submarine</strong><span>GPT-6 Astra · ChatGPT Work</span></div>
+      </div>
+
+      <div class="card">
+        <div class="thumb"><img src="../../../site/public/thumbs/demo-resolute-polar-fleet-flagship.webp" alt="" loading="eager"></div>
+        <div class="cap"><strong>Demo Resolute Polar Fleet Flagship</strong><span>Not independently recorded · Recorded demo session</span></div>
+      </div>
+  </div></div>
+  <div class="scrim"></div>
+  <div class="beats">
+    <div class="beat" data-in="0.6" data-out="4.8">
+      <h2>80 assets. <em>Built by agents.</em></h2>
+      <p>7 HARNESSES · 8 MODELS</p>
+    </div>
+    <div class="beat" data-in="5.4" data-out="9.6">
+      <h2>Codex · Claude Code · OpenCode</h2>
+      <p>ANTIGRAVITY · CHATGPT · ANY CHAT UI</p>
+    </div>
+    <div class="beat" data-in="10.2" data-out="15.8">
+      <h2>Any model. Any harness. <em>Mostly one-shot.</em></h2>
+      <p>KILNSTUDIO.TOOLS</p>
+    </div>
+  </div>
+  <div class="bar" id="bar"></div>
+</div>
+<script>
+  // Seamless loop: each strip holds two copies of its half; wrap at one half.
+  const strips = [...document.querySelectorAll('.strip')].map((el, i) => {
+    const half = el.scrollHeight / 2;
+    // Fixed staggered starts: every reload plays the identical take.
+    return { el, half, speed: parseFloat(el.dataset.speed) * 34, y: -half * (i * 0.37 % 1) };
+  });
+  const beats = [...document.querySelectorAll('.beat')];
+  const bar = document.getElementById('bar');
+  const T0 = performance.now();
+  const fade = (t, a, b) => t < a ? 0 : t > b ? 0 : Math.min(1, (t - a) / 0.5, (b - t) / 0.5);
+  let last = T0;
+  function frame(now) {
+    const t = (now - T0) / 1000;
+    const dt = Math.min(0.1, (now - last) / 1000);
+    last = now;
+    for (const s of strips) {
+      s.y -= s.speed * dt;
+      if (s.y <= -s.half) s.y += s.half;
+      s.el.style.transform = 'translate3d(0,' + s.y.toFixed(1) + 'px,0)';
+    }
+    for (const b of beats) {
+      b.style.opacity = fade(t, parseFloat(b.dataset.in), parseFloat(b.dataset.out)).toFixed(3);
+    }
+    bar.style.width = Math.min(100, (t / 16) * 100).toFixed(2) + '%';
+    requestAnimationFrame(frame);
+  }
+  requestAnimationFrame(frame);
+</script>
+</body>
+</html>
