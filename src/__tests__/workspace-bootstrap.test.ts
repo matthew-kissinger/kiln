@@ -10,6 +10,34 @@ const setup = join(repo, 'scripts/create-workspace.mjs');
 const run = (args: string[], cwd: string) =>
   spawnSync('node', [setup, ...args], { cwd, encoding: 'utf8' });
 
+it('registers the existing local skill tree for OpenCode and preserves edits when repairing paths', async () => {
+  const root = await mkdtemp(join(tmpdir(), 'kiln-opencode-skills-'));
+  try {
+    const before = join(root, 'before');
+    const after = join(root, 'moved');
+    expect(run([before, '--harness', 'opencode', '--skills', 'compose'], root).status).toBe(0);
+    const config = JSON.parse(await readFile(join(before, 'opencode.json'), 'utf8'));
+    expect(config.skills?.paths).toEqual([join(before, 'skills')]);
+    const reference = join('skills', 'kiln-author-asset', 'references', 'program-contract.md');
+    expect(await readFile(join(before, reference), 'utf8')).toBe(
+      await readFile(join(repo, reference), 'utf8'),
+    );
+    expect((await readdir(join(before, 'skills'))).length).toBe(4);
+    const author = join('skills', 'kiln-author-asset', 'SKILL.md');
+    await writeFile(join(before, author), '# owner-edited skill');
+    await writeFile(join(before, reference), '# owner-edited reference');
+    await rename(before, after);
+    expect(run([after, '--repair'], root).status).toBe(0);
+    expect(JSON.parse(await readFile(join(after, 'opencode.json'), 'utf8')).skills.paths).toEqual([
+      join(after, 'skills'),
+    ]);
+    expect(await readFile(join(after, author), 'utf8')).toBe('# owner-edited skill');
+    expect(await readFile(join(after, reference), 'utf8')).toBe('# owner-edited reference');
+  } finally {
+    await rm(root, { recursive: true, force: true });
+  }
+}, 30000);
+
 it('defaults to core skills, supports optional skills, and refuses invalid setup before writing', async () => {
   const root = await mkdtemp(join(tmpdir(), 'kiln-bootstrap-'));
   try {

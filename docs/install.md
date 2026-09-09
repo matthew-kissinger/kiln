@@ -12,6 +12,34 @@ Windows, Linux, and hosted Apple Silicon/Intel Mac package checks pass; see the
 Mac installations are still welcome. CPU package setup and optional GPU support
 are separate checks.
 
+## Choose the simplest connection
+
+| Where you want to work | Setup path |
+| --- | --- |
+| Codex, Claude Code or OpenCode | Install Kiln, generate a project workspace, open your agent there. Local MCP needs no tunnel. |
+| Google Antigravity CLI or desktop | Generate an `agy` workspace. See the [Google setup guide](google.md) for verified CLI steps and desktop checks. |
+| ChatGPT in a browser | Follow the [private MCP tunnel guide](chatgpt.md). This is a separate developer setup. |
+| Gemini Spark in a browser | Remote MCP is required; Kiln's end-to-end Spark integration remains unverified. See [current status](google.md#gemini-spark-in-the-browser). |
+
+For agent-assisted installation, give your agent the repository URL and ask:
+
+> Set up Kiln in a new asset workspace for my current coding agent. Follow
+> docs/install.md and the generated START.md. Keep configuration and skills
+> project-local. Verify tool discovery and a small render before creating my asset.
+> Report missing login or setup failures without substituting another installation.
+
+## Release compatibility
+
+The downloadable `oss-2026-09-05` package (`kiln-engine-0.6.0.tgz`) exposes eight
+MCP tools: discovery, validation, rendering, animation/interior views, inspection,
+editing and source access. A fresh September 8 install verified discovery and a
+CPU-rendered PNG. That package predates `kiln_save`, `kiln_assets`, `kiln_export`,
+`kiln_present` and `kiln_import`; saved-asset examples require the newer checkout.
+
+Use the checkout installation below for that tool set until an updated package is
+released. A successful local build or unreleased fix does not update the GitHub
+release. Do not substitute an unverified npm registry package.
+
 ## Start on a Mac with a local package
 
 Install Node.js from the [official download page](https://nodejs.org/en/download).
@@ -134,6 +162,11 @@ mode. Name `kiln_workspace` in the brief, use the project skill copies, and pass
 absolute task-file paths. See [clean-room setup](clean-room.md) for evaluation controls and limitations.
 
 ## Verify the connection
+
+OpenCode workspaces register their local `skills/` directory using the supported
+`skills.paths` configuration. Run `opencode debug skill` from the workspace to
+inspect native discovery without a model request. Author, refine and QA entries
+should point into that workspace. See the [OpenCode configuration schema](https://opencode.ai/config.json).
 
 Ask the agent to read `AGENTS.md`, discover geometry helpers, render a small draft,
 read its source, edit it by `programRef`, and export the accepted revision. Check the

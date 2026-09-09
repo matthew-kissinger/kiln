@@ -102,7 +102,37 @@ export function annotateViewCell(
   size: number,
   view: { name: string; dir: readonly number[] },
 ): void {
-  const labelScale = Math.max(2, Math.round(size / 96));
-  stampLabel(rgb, size, size, labelScale, labelScale, view.name, labelScale);
+  const inset = Math.max(2, Math.round(size / 96));
+  const width = size - inset * 2;
+  // stampLabel's 3x5 font occupies (4*n + 1)*scale including its backdrop.
+  // Keep ordinary labels byte-for-byte identical; only fit overflowing names.
+  // Tiny injected port cells may not fit even one 7px row. Preserve their
+  // legacy clipped stamp instead of computing zero rows and losing annotation.
+  if (width < 7 || (4 * view.name.length + 1) * inset <= width) {
+    stampLabel(rgb, size, size, inset, inset, view.name, inset);
+  } else {
+    const minimumScale = size >= 128 ? 2 : 1;
+    const scale = Math.max(minimumScale, Math.floor(width / (4 * view.name.length + 1)));
+    const columns = Math.max(1, Math.floor((width / scale - 1) / 4));
+    const rows = Math.min(3, Math.floor((size - inset * 2) / (7 * scale)));
+    let remaining = view.name.toUpperCase();
+    for (let row = 0; row < rows && remaining; row++) {
+      let line = remaining;
+      if (remaining.length > columns) {
+        if (row === rows - 1) {
+          // Names are unbounded in the schema. Show an explicit continuation
+          // rather than clipping or letting the overlay consume the scene.
+          line = `${remaining.slice(0, Math.max(0, columns - 3)).trimEnd()}${'.'.repeat(Math.min(3, columns))}`;
+          remaining = '';
+        } else {
+          const space = remaining.lastIndexOf(' ', columns);
+          const end = space > 0 ? space : columns;
+          line = remaining.slice(0, end);
+          remaining = remaining.slice(end).trimStart();
+        }
+      } else remaining = '';
+      stampLabel(rgb, size, size, inset, inset + row * 7 * scale, line, scale);
+    }
+  }
   stampAxisGnomon(rgb, size, view.dir);
 }

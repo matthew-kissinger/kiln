@@ -48,6 +48,7 @@
 import type * as THREE from 'three';
 import type { CrossSection, JoinType, Manifold, Vec2 } from 'manifold-3d';
 import { getManifoldModule, manifoldToGeometry } from './solids';
+import { AuthoringDiagnosticError } from './evaluator/authoring-diagnostic';
 
 /** A closed 2D outline as `[x, y]` pairs — same convention as `lathe`. */
 export type Profile2D = Array<[number, number]>;
@@ -400,10 +401,7 @@ export async function roundedBoxGeo(
 
   const smallest = Math.min(width, height, depth);
   if (radius >= smallest / 2) {
-    throw new Error(
-      `roundedBoxGeo: radius ${radius} must be less than half the smallest dimension ` +
-        `(${smallest} / 2 = ${smallest / 2}). A larger radius has no box left to round.`,
-    );
+    throw new AuthoringDiagnosticError('ROUNDED_BOX_RADIUS');
   }
 
   const mod = await getManifoldModule();

@@ -597,7 +597,9 @@ export async function loadGlbReviewScene(bytes: Uint8Array): Promise<LoadedGlbRe
         }
         for (const [index, matrix] of matrices.entries()) {
           const mesh = new Mesh(geometry, threeMaterial);
-          const baseName = sourceMesh.getName() || source.getName() || 'Mesh';
+          // A deduplicated mesh resource can serve many distinctly named nodes.
+          // QA repair hints must identify this owning node, not the shared resource.
+          const baseName = source.getName() || sourceMesh.getName() || 'Mesh';
           mesh.name = `${baseName}:primitive-${primitiveIndex}${
             matrices.length === 1 ? '' : `:instance-${index}`
           }`;

@@ -6,6 +6,8 @@ var __require = /* @__PURE__ */ createRequire(import.meta.url);
 function authoringDiagnosticAdvice(diagnostic) {
   if (diagnostic === "UNBOUND_VARIABLE")
     return UNBOUND_VARIABLE_ADVICE;
+  if (diagnostic === "ROUNDED_BOX_RADIUS")
+    return ROUNDED_BOX_RADIUS_ADVICE;
   return diagnostic === "GEAR_RADII_ORDER" ? GEAR_RADII_ORDER_ADVICE : "";
 }
 function rethrowAuthoringError(error) {
@@ -14,7 +16,7 @@ function rethrowAuthoringError(error) {
   }
   throw error;
 }
-var UNBOUND_VARIABLE_ADVICE = "Check variable spelling and scope: generated code used an undeclared variable. Read the current source and check declarations before retrying.", GEAR_RADII_ORDER_ADVICE = "gearGeo requires boreRadius < rootRadius < tipRadius; specify rootRadius when changing tipRadius. Omitted radii keep their absolute defaults.", AuthoringDiagnosticError;
+var UNBOUND_VARIABLE_ADVICE = "Check variable spelling and scope: generated code used an undeclared variable. Read the current source and check declarations before retrying.", GEAR_RADII_ORDER_ADVICE = "gearGeo requires boreRadius < rootRadius < tipRadius; specify rootRadius when changing tipRadius. Omitted radii keep their absolute defaults.", ROUNDED_BOX_RADIUS_ADVICE = "roundedBoxGeo: radius must be less than half the smallest dimension. Reduce radius or increase the smallest dimension; equality is invalid.", AuthoringDiagnosticError;
 var init_authoring_diagnostic = __esm(() => {
   AuthoringDiagnosticError = class AuthoringDiagnosticError extends Error {
     diagnostic;
@@ -4727,7 +4729,7 @@ async function roundedBoxGeo(width, height, depth, radius, options = {}) {
   const { style = "round", segments = 12, smooth } = options;
   const smallest = Math.min(width, height, depth);
   if (radius >= smallest / 2) {
-    throw new Error(`roundedBoxGeo: radius ${radius} must be less than half the smallest dimension ` + `(${smallest} / 2 = ${smallest / 2}). A larger radius has no box left to round.`);
+    throw new AuthoringDiagnosticError("ROUNDED_BOX_RADIUS");
   }
   const mod = await getManifoldModule();
   const ManifoldCls = mod.Manifold;
@@ -4786,6 +4788,7 @@ function circleProfile(radius, segments = 24, center = [0, 0]) {
 var JOIN_FOR_STYLE;
 var init_profile = __esm(() => {
   init_solids();
+  init_authoring_diagnostic();
   JOIN_FOR_STYLE = {
     round: "Round",
     chamfer: "Square"
