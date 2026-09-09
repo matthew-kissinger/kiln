@@ -13,7 +13,7 @@ Kiln runs locally. It includes an MCP server, a CLI, a TypeScript library, and s
 for authoring, editing, animation review, and scene composition. Your agent supplies
 the model; Kiln does not require a separate model API key for its tools.
 
-https://github.com/user-attachments/assets/f77685a2-ebab-4274-b997-2518441e8dcb
+https://github.com/user-attachments/assets/375327bc-58bc-4344-bbb4-985d92c6f63a
 
 [![Kiln 27-asset collection](assets/gallery/gallery-grid-27.png)](https://kilnstudio.tools/#/gallery)
 
@@ -51,14 +51,6 @@ https://github.com/user-attachments/assets/f77685a2-ebab-4274-b997-2518441e8dcb
 | Mechanical peacock · Claude Opus 5 | Unfolding dragonfly · GPT-6 Astra | Solar sail courier · Gemini 3.8 Flash |
 | --- | --- | --- |
 | [![Mechanical peacock with articulated jewel fan](assets/gallery/mechanical-peacock.gif)](https://kilnstudio.tools/#/mechanical-peacock) | [![Clockwork dragonfly with unfolding wings and gears](assets/gallery/demo-unfolding-dragonfly.gif)](https://kilnstudio.tools/#/demo-unfolding-dragonfly) | [![Solar sail courier deploying origami gold sails](assets/gallery/solar-sail-courier.gif)](https://kilnstudio.tools/#/solar-sail-courier) |
-
-Mechanical peacock · Claude Opus 5. Maintainer-agent repairs connect the neck and
-correct the body shell's face direction; the [source revisions](site/examples/history/mechanical-peacock/history.json)
-record the original and repaired programs.
-
-Orbital station · Codex refinement following owner art direction: mirrored rear
-assemblies, a recessed service hatch, supported radiators and smoother material finish.
-The [source revisions](site/examples/history/orbital-station/history.json) retain the original.
 
 [Browse the interactive gallery](https://kilnstudio.tools/#/gallery)
 · [All examples and model credits](docs/examples.md)
