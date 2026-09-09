@@ -13,17 +13,44 @@ Kiln runs locally. It includes an MCP server, a CLI, a TypeScript library, and s
 for authoring, editing, animation review, and scene composition. Your agent supplies
 the model; Kiln does not require a separate model API key for its tools.
 
-https://github.com/user-attachments/assets/69bc8b31-9be0-4f71-8cc8-2cc72747ce75
+https://github.com/user-attachments/assets/f77685a2-ebab-4274-b997-2518441e8dcb
 
-![Kiln gallery grid 1](assets/gallery/gallery-grid-01.png)
+[![Kiln 27-asset collection](assets/gallery/gallery-grid-27.png)](https://kilnstudio.tools/#/gallery)
 
-![Kiln gallery grid 2](assets/gallery/gallery-grid-02.png)
-
-![Kiln gallery grid 3](assets/gallery/gallery-grid-03.png)
+<sub>Click the gallery banner above or select an asset below to explore in interactive 3D:</sub><br>
+<sub>
+<a href="https://kilnstudio.tools/#/typewriter">Typewriter</a> &middot;
+<a href="https://kilnstudio.tools/#/solar-sail-courier">Solar Sail Courier</a> &middot;
+<a href="https://kilnstudio.tools/#/mechanical-peacock">Mechanical Peacock</a> &middot;
+<a href="https://kilnstudio.tools/#/kestrel-rescue-craft">Kestrel Rescue</a> &middot;
+<a href="https://kilnstudio.tools/#/anglerfish">Anglerfish</a> &middot;
+<a href="https://kilnstudio.tools/#/kinetic-wave">Kinetic Wave</a> &middot;
+<a href="https://kilnstudio.tools/#/orrery">Orrery</a> &middot;
+<a href="https://kilnstudio.tools/#/orbital-station">Orbital Station</a> &middot;
+<a href="https://kilnstudio.tools/#/deco-radio">Deco Radio</a> &middot;
+<a href="https://kilnstudio.tools/#/cathedral">Cathedral</a> &middot;
+<a href="https://kilnstudio.tools/#/steam-locomotive">Steam Locomotive</a> &middot;
+<a href="https://kilnstudio.tools/#/lighthouse">Lighthouse</a> &middot;
+<a href="https://kilnstudio.tools/#/alpine-cable-terminal">Alpine Cable Terminal</a> &middot;
+<a href="https://kilnstudio.tools/#/research-vessel">Research Vessel</a> &middot;
+<a href="https://kilnstudio.tools/#/sushi-store">Sushi Store</a> &middot;
+<a href="https://kilnstudio.tools/#/windmill">Windmill</a> &middot;
+<a href="https://kilnstudio.tools/#/tram">Tram</a> &middot;
+<a href="https://kilnstudio.tools/#/ribbon-tea-pavilion">Ribbon Tea Pavilion</a> &middot;
+<a href="https://kilnstudio.tools/#/demo-diesel-locomotive">Diesel Locomotive</a> &middot;
+<a href="https://kilnstudio.tools/#/demo-art-deco-conservatory">Art Deco Conservatory</a> &middot;
+<a href="https://kilnstudio.tools/#/demo-floating-observatory">Floating Observatory</a> &middot;
+<a href="https://kilnstudio.tools/#/demo-deep-sea-station">Deep Sea Station</a> &middot;
+<a href="https://kilnstudio.tools/#/demo-unfolding-dragonfly">Unfolding Dragonfly</a> &middot;
+<a href="https://kilnstudio.tools/#/demo-vintage-typewriter">Vintage Typewriter</a> &middot;
+<a href="https://kilnstudio.tools/#/demo-argent-aircraft-carrier">Argent Carrier</a> &middot;
+<a href="https://kilnstudio.tools/#/demo-noctilus-nuclear-submarine">Noctilus Submarine</a> &middot;
+<a href="https://kilnstudio.tools/#/demo-resolute-polar-fleet-flagship">Resolute Flagship</a>
+</sub>
 
 | Mechanical peacock · Claude Opus 5 | Unfolding dragonfly · GPT-6 Astra | Solar sail courier · Gemini 3.8 Flash |
 | --- | --- | --- |
-| [![Mechanical peacock with articulated jewel fan](assets/gallery/mechanical-peacock.gif)](examples/mechanical-peacock.kiln.js) | [![Clockwork dragonfly with unfolding wings and gears](assets/gallery/demo-unfolding-dragonfly.gif)](examples/demo-unfolding-dragonfly.kiln.js) | [![Solar sail courier deploying origami gold sails](assets/gallery/solar-sail-courier.gif)](examples/solar-sail-courier.kiln.js) |
+| [![Mechanical peacock with articulated jewel fan](assets/gallery/mechanical-peacock.gif)](https://kilnstudio.tools/#/mechanical-peacock) | [![Clockwork dragonfly with unfolding wings and gears](assets/gallery/demo-unfolding-dragonfly.gif)](https://kilnstudio.tools/#/demo-unfolding-dragonfly) | [![Solar sail courier deploying origami gold sails](assets/gallery/solar-sail-courier.gif)](https://kilnstudio.tools/#/solar-sail-courier) |
 
 Mechanical peacock · Claude Opus 5. Maintainer-agent repairs connect the neck and
 correct the body shell's face direction; the [source revisions](site/examples/history/mechanical-peacock/history.json)
