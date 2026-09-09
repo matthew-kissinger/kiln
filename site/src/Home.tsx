@@ -43,16 +43,33 @@ export function Home({ specimens }: { specimens: Specimen[] }) {
   const [geometryTab, setGeometryTab] = useState('surface');
   const hero = specimens.find((s) => s.name === 'orbital-station');
   const featured = [
-    'abyssal-surveyor',
-    'kestrel-rescue-craft',
+    'typewriter',
     'solar-sail-courier',
     'mechanical-peacock',
-    'orrery',
-    'typewriter',
-    'nautilus-habitat',
-    'ribbon-tea-pavilion',
-    'polar-rover',
+    'kestrel-rescue-craft',
+    'anglerfish',
     'kinetic-wave',
+    'orrery',
+    'orbital-station',
+    'deco-radio',
+    'cathedral',
+    'steam-locomotive',
+    'lighthouse',
+    'alpine-cable-terminal',
+    'research-vessel',
+    'sushi-store',
+    'windmill',
+    'tram',
+    'ribbon-tea-pavilion',
+    'demo-diesel-locomotive',
+    'demo-art-deco-conservatory',
+    'demo-floating-observatory',
+    'demo-deep-sea-station',
+    'demo-unfolding-dragonfly',
+    'demo-vintage-typewriter',
+    'demo-argent-aircraft-carrier',
+    'demo-noctilus-nuclear-submarine',
+    'demo-resolute-polar-fleet-flagship',
   ].flatMap((name) => specimens.find((s) => s.name === name) ?? []);
   return (
     <main className="doc home">
@@ -109,12 +126,13 @@ export function Home({ specimens }: { specimens: Specimen[] }) {
           </div>
           <a href="#/gallery">Browse all {specimens.length} examples →</a>
         </div>
-        <div className="featured-assets editorial-grid">
+        <div className="featured-assets compact-grid">
           {featured.map((s, index) => (
             <a
-              className={`featured-asset ${index === 0 ? 'feature-lead' : index === 1 ? 'feature-wide' : 'feature-compact'}`}
+              className="featured-asset compact-card"
               key={s.name}
               href={`#/${s.name}`}
+              title={`${s.name.replaceAll('-', ' ')} — ${s.model} (${s.harness})`}
             >
               <div className="feature-image">
                 <img
@@ -124,11 +142,12 @@ export function Home({ specimens }: { specimens: Specimen[] }) {
                 />
               </div>
               <div className="feature-copy">
-                <span className="feature-number" aria-hidden="true">
-                  {String(index + 1).padStart(2, '0')}
-                </span>
-                <h3 className="feature-title">{s.name.replaceAll('-', ' ')}</h3>
-                <p className="feature-caption">{s.caption}</p>
+                <div className="feature-header">
+                  <span className="feature-number" aria-hidden="true">
+                    {String(index + 1).padStart(2, '0')}
+                  </span>
+                  <h3 className="feature-title">{s.name.replaceAll('-', ' ')}</h3>
+                </div>
                 <small className="feature-credit">
                   {s.model} · {s.harness}
                 </small>

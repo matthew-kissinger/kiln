@@ -13,9 +13,7 @@ Kiln runs locally. It includes an MCP server, a CLI, a TypeScript library, and s
 for authoring, editing, animation review, and scene composition. Your agent supplies
 the model; Kiln does not require a separate model API key for its tools.
 
-<video src="assets/video/kiln-launch.mp4" poster="assets/video/kiln-launch-poster.png" controls="controls" width="100%">
-  <a href="assets/video/kiln-launch.mp4">Watch the Kiln launch video (2:44)</a>
-</video>
+https://github.com/user-attachments/assets/69bc8b31-9be0-4f71-8cc8-2cc72747ce75
 
 ![Kiln gallery grid 1](assets/gallery/gallery-grid-01.png)
 

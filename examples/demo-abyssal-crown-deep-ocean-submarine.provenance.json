@@ -1,0 +1,33 @@
+{
+  "sourceHash": "d67f971a1d0fe3aa2e7f183bde88e0c5a7fbd455f05a41a654890c59e3186b6e",
+  "model": "Not independently recorded",
+  "harness": "Recorded demo session",
+  "authoredDate": "2026-09-08",
+  "provenance": {
+    "attribution": "Recorded demo session; model credit supplied only where the retained run identifies it.",
+    "sourceAccess": "See retained demo run; no stronger isolation claim is made.",
+    "humanIntervention": "Owner supplied direction; model-authored exported source preserved byte-for-byte.",
+    "reviewFidelity": "Authoring feedback and shaded demo previews where available. Not a destination-runtime acceptance claim.",
+    "poster": "Fresh shaded render of the exact gallery-built downloadable GLB. Camera-only offline capture; no geometry or material edits.",
+    "evaluationGlbHash": "0d1869292cd96ddf941e227f48c0495ef334a74d5cfc53602aed87e77a10ad7e",
+    "posterReceipt": {
+      "sourceHash": "d67f971a1d0fe3aa2e7f183bde88e0c5a7fbd455f05a41a654890c59e3186b6e",
+      "artifactHash": "f4e922442e3f5afb728563f57af24794c9377a1bc2c9092f24b37cd3d9a9704a",
+      "imageHash": "304dfc49cfa065ef04450af38ddac11e826b9c9194b4ebe2c0c8e47f2ff011ae",
+      "width": 1600,
+      "height": 1000,
+      "renderer": "ANGLE (NVIDIA, NVIDIA GeForce RTX 3070 (0x00002484) Direct3D11 vs_5_0 ps_5_0, D3D11)",
+      "captureMethod": "Kiln studio stage, owned headless Chrome, original GLB materials",
+      "cameraRecord": {
+        "index": 10,
+        "kind": "hero",
+        "theta": 0.6747409422235526,
+        "phi": 1.185083808592412,
+        "radius": 27.952303351682353,
+        "fixedSeconds": null,
+        "wallTimeMs": 118.89999999850988
+      },
+      "geometryChanged": false
+    }
+  }
+}

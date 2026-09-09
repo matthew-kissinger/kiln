@@ -104,6 +104,40 @@ const documentedAdvisories: Record<string, string[]> = {
     ...Array.from({ length: 12 }, (_, i) => `Mesh_StructuralRib_${i + 1}: ${sweepAdvisory}`),
     `Mesh_CentralSpine: ${sweepAdvisory}`,
   ],
+  'demo-argent-aircraft-carrier': [
+    'Mesh_SculptedHull',
+    'Mesh_RedLowerHull',
+    'Mesh_FlightDeckRim',
+    'Mesh_FlightDeck',
+    ...Array.from({ length: 7 }, (_, i) => `Mesh_DeckBracket_-1_${i}`),
+    ...Array.from({ length: 7 }, (_, i) => `Mesh_DeckBracket_1_${i}`),
+    'Mesh_IslandFoundation',
+    'Mesh_IslandMainTower',
+    'Mesh_IslandOrangeRecognitionBand',
+    'Mesh_NavigationBridge',
+    'Mesh_BridgeRoof',
+    ...Array.from({ length: 4 }, () => [
+      'Mesh_AerodynamicFuselage',
+      'Mesh_SweptWing-1',
+      'Mesh_Tailplane-1',
+      'Mesh_SweptWing1',
+      'Mesh_Tailplane1',
+    ]).flat(),
+  ].map((name) => `${name}: ${loftAdvisory}`),
+  'demo-floating-observatory': [
+    'Floating parts (no mesh overlap with any sibling, 2cm tol): Mesh_WaterfallSprayDroplet_3 — Fix: shift "Mesh_WaterfallSprayDroplet_3" by [0.000, 0.000, -0.024] toward "Mesh_ContinuousWaterCurtain", or call snapTo(part, hostPart) to do it automatically. | Mesh_WaterfallSprayDroplet_5 — Fix: shift "Mesh_WaterfallSprayDroplet_5" by [0.000, 0.000, -0.026] toward "Mesh_ContinuousWaterCurtain", or call snapTo(part, hostPart) to do it automatically. | Mesh_WaterfallSprayDroplet_9 — Fix: shift "Mesh_WaterfallSprayDroplet_9" by [0.000, 0.000, -0.046] toward "Mesh_ContinuousWaterCurtain", or call snapTo(part, hostPart) to do it automatically. | Mesh_WaterfallSprayDroplet_11 — Fix: shift "Mesh_WaterfallSprayDroplet_11" by [0.000, 0.000, -0.059] toward "Mesh_ContinuousWaterCurtain", or call snapTo(part, hostPart) to do it automatically.',
+  ],
+  'demo-noctilus-nuclear-submarine': [
+    ...[
+      'Streamlined_Sail',
+      'Sail_Crown',
+      'Port_Bow_Diving_Plane',
+      'Starboard_Bow_Diving_Plane',
+    ].map((n) => `Mesh_${n}: ${loftAdvisory}`),
+    ...Array.from({ length: 4 }, (_, i) => `Mesh_Cruciform_Stern_Plane_${i}: ${loftAdvisory}`),
+    ...Array.from({ length: 7 }, (_, i) => `Mesh_Swept_Brass_Blade_${i}: ${loftAdvisory}`),
+  ],
+  'demo-ocean-salvage-tug': [...['Hull', 'BootStripe'].map((n) => `Mesh_${n}: ${loftAdvisory}`)],
 };
 
 describe('examples', () => {
@@ -158,9 +192,10 @@ describe('hero gallery', () => {
       'fire-lookout-tower',
       'brass-tellurion',
       'victorian-greenhouse',
-      'demo-unfolding-dragonfly',
     ];
-    const publicNames = names.filter((name) => !excluded.includes(name));
+    const publicNames = names.filter(
+      (name) => !excluded.includes(name) && !name.startsWith('demo-'),
+    );
     expect([...(await heroes)].sort()).toEqual(publicNames);
     const count = /public gallery contains (\d+) selected examples/.exec(await readme);
     expect(count).not.toBeNull();
@@ -177,7 +212,19 @@ describe('hero gallery', () => {
     ];
     for (const archive of archives) expect(publicHeroes).not.toContain(archive);
     const expected = [...publicHeroes, ...archives].map((h) => `${h}.png`).sort();
-    const actual = (await readdir(RENDERS)).filter((f) => f.endsWith('.png')).sort();
+    const actual = (await readdir(RENDERS))
+      .filter((f) => f.endsWith('.png') && !f.startsWith('demo-'))
+      .sort();
+    expect(actual).toEqual(expected);
+  });
+
+  it('has a render for every curated demo addition', async () => {
+    const demos = names.filter((n) => n.startsWith('demo-'));
+    expect(demos.length).toBe(18);
+    const expected = demos.map((d) => `${d}.png`).sort();
+    const actual = (await readdir(RENDERS))
+      .filter((f) => f.startsWith('demo-') && f.endsWith('.png'))
+      .sort();
     expect(actual).toEqual(expected);
   });
 

@@ -1,0 +1,33 @@
+{
+  "sourceHash": "aeb05750d6b48e52dc56f9e068c41cb897bcaa5159380b60e52748ca22bd6e66",
+  "model": "Gemini 3.8 Flash",
+  "harness": "Antigravity CLI",
+  "authoredDate": "2026-09-09",
+  "provenance": {
+    "attribution": "Recorded demo session; model credit supplied only where the retained run identifies it.",
+    "sourceAccess": "See retained demo run; no stronger isolation claim is made.",
+    "humanIntervention": "Owner supplied direction; model-authored exported source preserved byte-for-byte.",
+    "reviewFidelity": "Authoring feedback and shaded demo previews where available. Not a destination-runtime acceptance claim.",
+    "poster": "Fresh shaded render of the exact gallery-built downloadable GLB. Camera-only offline capture; no geometry or material edits.",
+    "evaluationGlbHash": "247553ffcd8898d00f51bacf298bc3965bfbc8c90a9bca89f72ab8a1af920273",
+    "posterReceipt": {
+      "sourceHash": "aeb05750d6b48e52dc56f9e068c41cb897bcaa5159380b60e52748ca22bd6e66",
+      "artifactHash": "e097fe0ee7dc46727628e26c425a262d57980a0138528b840f8881486565e341",
+      "imageHash": "32c48e7d4a095a69df135d1822995644b662abcc0016a3ab338cd2c2ac3bdf11",
+      "width": 1600,
+      "height": 1000,
+      "renderer": "ANGLE (NVIDIA, NVIDIA GeForce RTX 3070 (0x00002484) Direct3D11 vs_5_0 ps_5_0, D3D11)",
+      "captureMethod": "Kiln studio stage, owned headless Chrome, original GLB materials",
+      "cameraRecord": {
+        "index": 10,
+        "kind": "hero",
+        "theta": 0.6747409422235527,
+        "phi": 1.185083808592412,
+        "radius": 8.035866351324646,
+        "fixedSeconds": null,
+        "wallTimeMs": 121.5
+      },
+      "geometryChanged": false
+    }
+  }
+}

@@ -1,5 +1,5 @@
 // Build GLBs, exact source copies and attribution records for the static site.
-import { mkdir, readFile, readdir, rm, writeFile } from 'node:fs/promises';
+import { cp, mkdir, readFile, readdir, rm, writeFile } from 'node:fs/promises';
 import { basename, dirname, join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
@@ -163,6 +163,9 @@ console.log(
 
 await buildEditDemo(REPO, OUT);
 await buildGeometryDemo(REPO, OUT);
+try {
+  await cp(join(REPO, 'assets', 'video'), join(OUT, 'video'), { recursive: true });
+} catch {}
 const finalInputs = await runtimeBuildIdentity(REPO);
 if (buildInputs.identity !== finalInputs.identity)
   throw new Error('Engine source changed during the site asset build. Rebuild from a stable tree.');

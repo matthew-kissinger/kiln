@@ -1,0 +1,33 @@
+{
+  "sourceHash": "6e1c9d1a85198c5e0f445e02caf4d46c01397c1ae61a66b8c72adcd64ead51c9",
+  "model": "Gemini 3.8 Flash",
+  "harness": "Antigravity CLI",
+  "authoredDate": "2026-09-09",
+  "provenance": {
+    "attribution": "Recorded demo session; model credit supplied only where the retained run identifies it.",
+    "sourceAccess": "See retained demo run; no stronger isolation claim is made.",
+    "humanIntervention": "Owner supplied direction; model-authored exported source preserved byte-for-byte.",
+    "reviewFidelity": "Authoring feedback and shaded demo previews where available. Not a destination-runtime acceptance claim.",
+    "poster": "Fresh shaded render of the exact gallery-built downloadable GLB. Camera-only offline capture; no geometry or material edits.",
+    "evaluationGlbHash": "38e8c865c06b4966fed90348b1da7ac59b2808b5427b7a39b0ba28d7faf94042",
+    "posterReceipt": {
+      "sourceHash": "6e1c9d1a85198c5e0f445e02caf4d46c01397c1ae61a66b8c72adcd64ead51c9",
+      "artifactHash": "8c534037a89f2b976d3341dfcab529148c3c7b0ca843e92dc72a72409e47ade0",
+      "imageHash": "b464b23bca50f37f1a550003ed95b45fe110b23d9547baa4103af45452dc2622",
+      "width": 1600,
+      "height": 1000,
+      "renderer": "ANGLE (NVIDIA, NVIDIA GeForce RTX 3070 (0x00002484) Direct3D11 vs_5_0 ps_5_0, D3D11)",
+      "captureMethod": "Kiln studio stage, owned headless Chrome, original GLB materials",
+      "cameraRecord": {
+        "index": 10,
+        "kind": "hero",
+        "theta": 0.6747409422235529,
+        "phi": 1.185083808592412,
+        "radius": 282.8421915775821,
+        "fixedSeconds": null,
+        "wallTimeMs": 122.59999999962747
+      },
+      "geometryChanged": false
+    }
+  }
+}
