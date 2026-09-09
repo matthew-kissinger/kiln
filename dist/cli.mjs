@@ -21,6 +21,8 @@ var __require = /* @__PURE__ */ createRequire(import.meta.url);
 function authoringDiagnosticAdvice(diagnostic) {
   if (diagnostic === "UNBOUND_VARIABLE")
     return UNBOUND_VARIABLE_ADVICE;
+  if (diagnostic === "ROUNDED_BOX_RADIUS")
+    return ROUNDED_BOX_RADIUS_ADVICE;
   return diagnostic === "GEAR_RADII_ORDER" ? GEAR_RADII_ORDER_ADVICE : "";
 }
 function rethrowAuthoringError(error) {
@@ -29,7 +31,7 @@ function rethrowAuthoringError(error) {
   }
   throw error;
 }
-var UNBOUND_VARIABLE_ADVICE = "Check variable spelling and scope: generated code used an undeclared variable. Read the current source and check declarations before retrying.", GEAR_RADII_ORDER_ADVICE = "gearGeo requires boreRadius < rootRadius < tipRadius; specify rootRadius when changing tipRadius. Omitted radii keep their absolute defaults.", AuthoringDiagnosticError;
+var UNBOUND_VARIABLE_ADVICE = "Check variable spelling and scope: generated code used an undeclared variable. Read the current source and check declarations before retrying.", GEAR_RADII_ORDER_ADVICE = "gearGeo requires boreRadius < rootRadius < tipRadius; specify rootRadius when changing tipRadius. Omitted radii keep their absolute defaults.", ROUNDED_BOX_RADIUS_ADVICE = "roundedBoxGeo: radius must be less than half the smallest dimension. Reduce radius or increase the smallest dimension; equality is invalid.", AuthoringDiagnosticError;
 var init_authoring_diagnostic = __esm(() => {
   AuthoringDiagnosticError = class AuthoringDiagnosticError extends Error {
     diagnostic;
@@ -12840,7 +12842,7 @@ async function roundedBoxGeo(width, height, depth, radius, options = {}) {
   const { style = "round", segments = 12, smooth } = options;
   const smallest = Math.min(width, height, depth);
   if (radius >= smallest / 2) {
-    throw new Error(`roundedBoxGeo: radius ${radius} must be less than half the smallest dimension ` + `(${smallest} / 2 = ${smallest / 2}). A larger radius has no box left to round.`);
+    throw new AuthoringDiagnosticError("ROUNDED_BOX_RADIUS");
   }
   const mod = await getManifoldModule();
   const ManifoldCls = mod.Manifold;
@@ -12899,6 +12901,7 @@ function circleProfile(radius, segments = 24, center = [0, 0]) {
 var JOIN_FOR_STYLE;
 var init_profile = __esm(() => {
   init_solids();
+  init_authoring_diagnostic();
   JOIN_FOR_STYLE = {
     round: "Round",
     chamfer: "Square"
@@ -20361,8 +20364,33 @@ function stampAxisGnomon(rgb2, size, viewDir) {
   }
 }
 function annotateViewCell(rgb2, size, view) {
-  const labelScale = Math.max(2, Math.round(size / 96));
-  stampLabel(rgb2, size, size, labelScale, labelScale, view.name, labelScale);
+  const inset = Math.max(2, Math.round(size / 96));
+  const width = size - inset * 2;
+  if (width < 7 || (4 * view.name.length + 1) * inset <= width) {
+    stampLabel(rgb2, size, size, inset, inset, view.name, inset);
+  } else {
+    const minimumScale = size >= 128 ? 2 : 1;
+    const scale2 = Math.max(minimumScale, Math.floor(width / (4 * view.name.length + 1)));
+    const columns = Math.max(1, Math.floor((width / scale2 - 1) / 4));
+    const rows = Math.min(3, Math.floor((size - inset * 2) / (7 * scale2)));
+    let remaining = view.name.toUpperCase();
+    for (let row = 0;row < rows && remaining; row++) {
+      let line = remaining;
+      if (remaining.length > columns) {
+        if (row === rows - 1) {
+          line = `${remaining.slice(0, Math.max(0, columns - 3)).trimEnd()}${".".repeat(Math.min(3, columns))}`;
+          remaining = "";
+        } else {
+          const space = remaining.lastIndexOf(" ", columns);
+          const end = space > 0 ? space : columns;
+          line = remaining.slice(0, end);
+          remaining = remaining.slice(end).trimStart();
+        }
+      } else
+        remaining = "";
+      stampLabel(rgb2, size, size, inset, inset + row * 7 * scale2, line, scale2);
+    }
+  }
   stampAxisGnomon(rgb2, size, view.dir);
 }
 var GNOMON_AXES;
@@ -22110,7 +22138,7 @@ async function loadGlbReviewScene(bytes) {
         }
         for (const [index, matrix] of matrices.entries()) {
           const mesh = new Mesh10(geometry2, threeMaterial);
-          const baseName = sourceMesh.getName() || source.getName() || "Mesh";
+          const baseName = source.getName() || sourceMesh.getName() || "Mesh";
           mesh.name = `${baseName}:primitive-${primitiveIndex}${matrices.length === 1 ? "" : `:instance-${index}`}`;
           mesh.matrixAutoUpdate = false;
           mesh.matrix.copy(matrix);
@@ -25176,7 +25204,7 @@ function decodeEvaluatorResultV1(json, maxGlbBytes, expectedRequestId) {
     if (!codes.includes(value.error.code) || typeof value.error.message !== "string" || value.error.message !== evaluatorOutcomeMessage(value.error.code)) {
       return fail("result");
     }
-    if (value.error.diagnostic !== undefined && (value.error.code !== "EXECUTION_REJECTED" || value.error.diagnostic !== "UNBOUND_VARIABLE" && value.error.diagnostic !== "GEAR_RADII_ORDER"))
+    if (value.error.diagnostic !== undefined && (value.error.code !== "EXECUTION_REJECTED" || value.error.diagnostic !== "UNBOUND_VARIABLE" && value.error.diagnostic !== "GEAR_RADII_ORDER" && value.error.diagnostic !== "ROUNDED_BOX_RADIUS"))
       return fail("result");
     if (value.error.qa !== undefined) {
       if (value.error.code !== "QA_BLOCKED" || !isRecord6(value.error.qa) || !hasExactKeys(value.error.qa, ["report", "stage", "gltfValidation"]) || !validQaReport(value.error.qa.report) || !["scene", "final-glb"].includes(String(value.error.qa.stage)) || value.error.qa.gltfValidation !== undefined && !validGltfValidation(value.error.qa.gltfValidation)) {
@@ -28290,6 +28318,35 @@ var init_assets_resources = __esm(() => {
   init_assets();
 });
 
+// src/widget-transfer.ts
+import { deflateSync as deflateSync2, inflateSync as inflateSync2 } from "three/addons/libs/fflate.module.js";
+function base64(bytes) {
+  let binary = "";
+  for (let index = 0;index < bytes.length; index += 8192)
+    binary += String.fromCharCode(...bytes.subarray(index, index + 8192));
+  return btoa(binary);
+}
+function encodeWidgetFiles(files) {
+  if (Object.values(files).reduce((total, bytes) => total + bytes.length, 0) > WIDGET_TRANSFER_LIMIT)
+    invalid("exceeds the decoded size limit");
+  return Object.fromEntries(Object.entries(files).map(([name, bytes]) => {
+    const plain = base64(bytes);
+    const compressed = base64(deflateSync2(bytes, { level: 6 }));
+    return [
+      name,
+      compressed.length + 64 < plain.length ? { encoding: "kiln.deflate-base64.v1", data: compressed } : plain
+    ];
+  }));
+}
+var WIDGET_TRANSFER_LIMIT, ENCODED_LIMIT, invalid = (detail) => {
+  throw new Error(`Asset transfer ${detail}. Present the saved asset again or open it in Kiln; the saved files are unchanged.`);
+};
+var init_widget_transfer = __esm(() => {
+  init_assets();
+  WIDGET_TRANSFER_LIMIT = 16 * 1024 * 1024;
+  ENCODED_LIMIT = Math.ceil(WIDGET_TRANSFER_LIMIT / 3) * 4;
+});
+
 // src/asset-widget.ts
 var exports_asset_widget = {};
 __export(exports_asset_widget, {
@@ -28299,7 +28356,7 @@ __export(exports_asset_widget, {
 import { readFile as readFile5 } from "node:fs/promises";
 async function assetWidgetData(library, selector) {
   const record5 = await library.read(selector.collection, selector.asset.assetId, selector.asset.revisionId);
-  if (Object.values(record5.files).reduce((sum, bytes) => sum + bytes.length, 0) > 16 * 1024 * 1024)
+  if (Object.values(record5.files).reduce((sum, bytes) => sum + bytes.length, 0) > WIDGET_TRANSFER_LIMIT)
     return {
       kilnAsset: {
         error: "This asset exceeds the 16 MiB chat preview limit. Open it with kiln view."
@@ -28309,17 +28366,16 @@ async function assetWidgetData(library, selector) {
     kilnAsset: {
       manifest: record5.manifest,
       downloadUrls: selector.downloadUrls,
-      files: Object.fromEntries(Object.entries(record5.files).map(([name, bytes]) => [
-        name,
-        Buffer.from(bytes).toString("base64")
-      ]))
+      files: encodeWidgetFiles(record5.files)
     }
   };
 }
 async function readAssetWidgetHtml() {
   return readFile5(new URL("../dist/viewer/chat.html", import.meta.url), "utf8");
 }
-var init_asset_widget = () => {};
+var init_asset_widget = __esm(() => {
+  init_widget_transfer();
+});
 
 // src/tools/registry.ts
 import { z as z4 } from "zod";
@@ -29455,7 +29511,7 @@ function createKilnAssetDefs(context) {
     }
   ];
 }
-var KILN_ASSET_WIDGET_URI = "ui://kiln/asset-v3.html", DEFAULT_INLOOP_VIEW_RENDER_TIMEOUT_MS = 6000, viewEvidenceHistoryByContext, VIEW_EVIDENCE_GUIDANCE = " viewEvidence.current describes ONLY this request. lastFaithful is older hash-only evidence for reference, not reused pixels and not current verification.", listPrimitivesInput, validateInput, renderInput, screenshotInput, legacyCaptureInput, cameraVec3Input, cameraShotInput, advancedCaptureInput, captureInput, renderViewsInput, renderViewsBufferInput, screenshotAnimationInput, viewInteriorInput, KILN_RENDER_VIEWS_DESCRIPTION, kilnRenderViewsDef, KILN_SCREENSHOT_ANIMATION_DESCRIPTION, kilnScreenshotAnimationDef, KILN_VIEW_INTERIOR_DESCRIPTION, kilnViewInteriorDef, attachmentEndpointInput, inspectInput, inspectBufferInput, KILN_INSPECT_DESCRIPTION, kilnInspectDef, editOperationInput, editInput, KILN_EDIT_DESCRIPTION = "Patch an EXISTING Kiln program with exact-string replacements and render the result in one call. This is the refine verb: use it to change an asset you already have rather than re-emitting the whole file, so every line you did not touch stays byte-for-byte identical and the reply carries a unified diff of what actually changed. Pass the full current source as `code` and one or more { oldString, newString } edits, copied verbatim from that source. Edits apply in order and the call is all-or-nothing: if any oldString does not match, or matches more than once without replaceAll, NOTHING is applied and the reply names the edit that failed -- fix it and call again. The patched program comes back as `code`; write it to your file to keep it. Renders by default, so you see the change immediately; pass render:false to patch without rendering. Writes no files.", kilnEditDef, kilnToolRegistry, localCacheScope = 0, assetSelector;
+var KILN_ASSET_WIDGET_URI = "ui://kiln/asset-v5.html", DEFAULT_INLOOP_VIEW_RENDER_TIMEOUT_MS = 6000, viewEvidenceHistoryByContext, VIEW_EVIDENCE_GUIDANCE = " viewEvidence.current describes ONLY this request. lastFaithful is older hash-only evidence for reference, not reused pixels and not current verification.", listPrimitivesInput, validateInput, renderInput, screenshotInput, legacyCaptureInput, cameraVec3Input, cameraShotInput, advancedCaptureInput, captureInput, renderViewsInput, renderViewsBufferInput, screenshotAnimationInput, viewInteriorInput, KILN_RENDER_VIEWS_DESCRIPTION, kilnRenderViewsDef, KILN_SCREENSHOT_ANIMATION_DESCRIPTION, kilnScreenshotAnimationDef, KILN_VIEW_INTERIOR_DESCRIPTION, kilnViewInteriorDef, attachmentEndpointInput, inspectInput, inspectBufferInput, KILN_INSPECT_DESCRIPTION, kilnInspectDef, editOperationInput, editInput, KILN_EDIT_DESCRIPTION = "Patch an EXISTING Kiln program with exact-string replacements and render the result in one call. This is the refine verb: use it to change an asset you already have rather than re-emitting the whole file, so every line you did not touch stays byte-for-byte identical and the reply carries a unified diff of what actually changed. Pass the full current source as `code` and one or more { oldString, newString } edits, copied verbatim from that source. Edits apply in order and the call is all-or-nothing: if any oldString does not match, or matches more than once without replaceAll, NOTHING is applied and the reply names the edit that failed -- fix it and call again. The patched program comes back as `code`; write it to your file to keep it. Renders by default, so you see the change immediately; pass render:false to patch without rendering. Writes no files.", kilnEditDef, kilnToolRegistry, localCacheScope = 0, assetSelector;
 var init_registry2 = __esm(() => {
   init_capture_cache();
   init_assets();

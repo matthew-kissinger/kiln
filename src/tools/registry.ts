@@ -51,7 +51,7 @@ import type { TextureUsage } from '../textures';
 // Tool definition contract
 // =============================================================================
 
-export const KILN_ASSET_WIDGET_URI = 'ui://kiln/asset-v3.html';
+export const KILN_ASSET_WIDGET_URI = 'ui://kiln/asset-v5.html';
 export interface KilnToolDef {
   outputSchema?: z.ZodType;
   /** Optional MCP App presentation; metadata is hidden from the language model. */

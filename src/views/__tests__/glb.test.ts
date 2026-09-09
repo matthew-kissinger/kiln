@@ -71,6 +71,48 @@ function triangleDocument(
 }
 
 describe('GLB-native geometry-flat view input', () => {
+  test('shared mesh resources retain owning node names in primitive QA repair hints', async () => {
+    const doc = triangleDocument();
+    const first = doc.getRoot().listNodes()[0]!.setName('ChainLink_A');
+    const sharedMesh = first.getMesh()!;
+    doc
+      .getRoot()
+      .getDefaultScene()!
+      .addChild(doc.createNode('ChainLink_B').setMesh(sharedMesh).setTranslation([2, 0, 0]));
+    const bytes = await io().writeBinary(doc);
+    const exported = await io().readBinary(bytes);
+    expect(exported.getRoot().listMeshes()).toHaveLength(1);
+    expect(
+      exported
+        .getRoot()
+        .listNodes()
+        .map((node) => node.getMesh()),
+    ).toEqual([exported.getRoot().listMeshes()[0]!, exported.getRoot().listMeshes()[0]!]);
+    const loaded = await loadGlbReviewScene(bytes);
+    expect(loaded.root.getObjectByName('ChainLink_A')!.children[0]!.name).toBe(
+      'ChainLink_A:primitive-0',
+    );
+    expect(loaded.root.getObjectByName('ChainLink_B')!.children[0]!.name).toBe(
+      'ChainLink_B:primitive-0',
+    );
+    expect(measureBounds(loaded.root)).toEqual({ min: [0, 0, 0], max: [3, 1, 0] });
+    const warnings = renderModule.inspectSceneStructure(loaded.root).join('\n');
+    expect(warnings).toContain(
+      'shift "ChainLink_A:primitive-0" by [1.000, 0.000, 0.000] toward "ChainLink_B:primitive-0"',
+    );
+    expect(warnings).toContain(
+      'shift "ChainLink_B:primitive-0" by [-1.000, 0.000, 0.000] toward "ChainLink_A:primitive-0"',
+    );
+    expect(warnings).not.toContain('TriangleMesh');
+  });
+
+  test('unnamed review nodes retain mesh-resource names as a fallback', async () => {
+    const doc = triangleDocument();
+    doc.getRoot().listNodes()[0]!.setName('');
+    const loaded = await loadGlbReviewScene(await io().writeBinary(doc));
+    expect(loaded.root.children[0]!.children[0]!.name).toBe('TriangleMesh:primitive-0');
+  });
+
   test('reads exact bytes without executeKilnCode and reports their SHA-256 identity', async () => {
     const bytes = await io().writeBinary(triangleDocument());
     const executeSpy = spyOn(renderModule, 'executeKilnCode');
@@ -121,6 +163,11 @@ describe('GLB-native geometry-flat view input', () => {
     const loaded = await loadGlbGeometryFlatScene(await io().writeBinary(doc));
     expect(loaded.instanceCount).toBe(2);
     expect(measureBounds(loaded.root)).toEqual({ min: [0, 0, 0], max: [11, 1, 0] });
+    const review = await loadGlbReviewScene(await io().writeBinary(doc));
+    expect(review.root.getObjectByName('Triangle')!.children.map((node) => node.name)).toEqual([
+      'Triangle:primitive-0:instance-0',
+      'Triangle:primitive-0:instance-1',
+    ]);
   });
 
   test('reports stable structured reasons for ignored PNG and KTX2 sampling', async () => {

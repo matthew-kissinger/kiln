@@ -2,6 +2,7 @@
 import { createAssetStage } from './scene';
 import { encodeAssetBundle, type AssetRecord } from '../assets';
 import { downloadChatFile, type ChatFileHost } from './chat-download';
+import { decodeWidgetAsset } from '../widget-transfer';
 
 declare global {
   interface Window {
@@ -15,6 +16,7 @@ let record: AssetRecord | undefined;
 let downloadUrls: Record<string, string> = {};
 let stage: ReturnType<typeof createAssetStage> | undefined;
 let sequence = 0;
+let presentationRevision = 0;
 const pending = new Map<number, { resolve(value: unknown): void; reject(error: Error): void }>();
 function request(method: string, params: unknown): Promise<unknown> {
   const id = ++sequence;
@@ -39,52 +41,64 @@ function request(method: string, params: unknown): Promise<unknown> {
 function notify(method: string, params: unknown = {}) {
   window.parent.postMessage({ jsonrpc: '2.0', method, params }, '*');
 }
-function decode(value: string) {
-  return Uint8Array.from(atob(value), (c) => c.charCodeAt(0));
-}
 function encode(bytes: Uint8Array) {
   let binary = '';
   for (let i = 0; i < bytes.length; i += 8192)
     binary += String.fromCharCode(...bytes.subarray(i, i + 8192));
   return btoa(binary);
 }
-async function show(result: {
-  isError?: boolean;
-  content?: { type: string; text?: string }[];
-  _meta?: {
-    kilnAsset?: {
-      error?: string;
-      manifest: AssetRecord['manifest'];
-      files: Record<string, string>;
-      downloadUrls?: Record<string, string>;
-    };
-  };
-}) {
+async function show(input: unknown) {
+  const revision = ++presentationRevision;
+  record = undefined;
+  for (const button of document.querySelectorAll<HTMLButtonElement>('button[data-download]'))
+    button.disabled = true;
+  try {
+    if (!input || typeof input !== 'object' || Array.isArray(input))
+      throw new Error('Asset transfer metadata is missing. Present the saved asset again.');
+    await showResult(input, revision);
+  } catch (error) {
+    if (revision !== presentationRevision) return;
+    status.textContent =
+      error instanceof Error
+        ? error.message
+        : 'Asset transfer failed. Present the saved asset again.';
+  }
+}
+async function showResult(
+  result: {
+    isError?: boolean;
+    content?: { type: string; text?: string }[];
+    _meta?: { kilnAsset?: unknown };
+  },
+  revision: number,
+) {
   if (result.isError) {
     status.textContent =
       result.content?.find((item) => item.type === 'text')?.text ??
       'This asset could not be opened.';
     return;
   }
-  const asset = result._meta?.kilnAsset;
-  if (!asset) return;
-  if (asset.error) {
-    status.textContent = asset.error;
+  let received: Awaited<ReturnType<typeof decodeWidgetAsset>>;
+  try {
+    received = await decodeWidgetAsset(result._meta?.kilnAsset);
+  } catch (error) {
+    if (revision !== presentationRevision) return;
+    status.textContent =
+      error instanceof Error
+        ? error.message
+        : 'Asset transfer failed. Present the saved asset again.';
     return;
   }
-  record = {
-    manifest: asset.manifest,
-    files: Object.fromEntries(
-      Object.entries(asset.files).map(([name, data]) => [name, decode(data)]),
-    ),
-  };
+  if (revision !== presentationRevision) return;
+  record = received.record;
   element('name').textContent = record.manifest.name;
-  downloadUrls = asset.downloadUrls ?? {};
+  downloadUrls = received.downloadUrls;
   element('revision').textContent =
     `${record.manifest.editable ? 'Editable source included' : 'GLB asset'} · ${record.manifest.revisionId.slice(0, 10)}`;
   try {
     stage ??= createAssetStage(element('stage'));
     const stats = await stage.load(record.files['asset.glb']!);
+    if (revision !== presentationRevision) return;
     if (stats) {
       element('stats').textContent =
         `${stats.triangles.toLocaleString()} triangles · ${stats.materials} materials · ${(record.files['asset.glb']!.length / 1024).toFixed(0)} KB`;
@@ -97,6 +111,7 @@ async function show(result: {
     }
     status.textContent = 'Drag to orbit · Scroll to zoom';
   } catch (error) {
+    if (revision !== presentationRevision) return;
     const preview = record.files['preview.png'];
     if (preview) {
       const image = new Image();
@@ -134,6 +149,7 @@ element<HTMLSelectElement>('clips').onchange = (event) =>
 for (const button of document.querySelectorAll<HTMLButtonElement>('button[data-download]')) {
   button.onclick = async () => {
     if (!record) return;
+    const downloadRevision = presentationRevision;
     const kind = button.dataset.download!;
     const filename =
       kind === 'bundle' ? 'editable.zip' : kind === 'source' ? 'source.kiln.js' : 'asset.glb';
@@ -161,6 +177,7 @@ for (const button of document.querySelectorAll<HTMLButtonElement>('button[data-d
         host,
         downloadUrls[filename],
       );
+      if (downloadRevision !== presentationRevision) return;
       if (result.downloadUrl) {
         const link = document.createElement('a');
         link.href = result.downloadUrl;
@@ -177,9 +194,10 @@ for (const button of document.querySelectorAll<HTMLButtonElement>('button[data-d
         status.replaceChildren('Download ready. ', link);
       } else status.textContent = 'Download requested.';
     } catch (error) {
-      status.textContent = `Download unavailable in this host: ${(error as Error).message}`;
+      if (downloadRevision === presentationRevision)
+        status.textContent = `Download unavailable in this host: ${(error as Error).message}`;
     } finally {
-      button.disabled = false;
+      button.disabled = !record || downloadRevision !== presentationRevision;
     }
   };
 }

@@ -4,6 +4,7 @@ import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
 import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
 import { RoomEnvironment } from 'three/addons/environments/RoomEnvironment.js';
 import { validateAssetGlb } from '../assets';
+import { frameAssetBounds } from './framing';
 
 /** The gallery's local studio lighting, orbit controls, and framing in a small standalone surface. */
 export function createAssetStage(container: HTMLElement) {
@@ -54,18 +55,25 @@ export function createAssetStage(container: HTMLElement) {
   const reset = () => {
     if (!root) return;
     const box = new THREE.Box3().setFromObject(root, true);
-    const center = box.getCenter(new THREE.Vector3());
-    const size = box.getSize(new THREE.Vector3());
-    const radius = Math.max(size.length() / 2, 0.01);
-    const fov = Math.min(
-      (camera.fov * Math.PI) / 180,
-      2 * Math.atan(Math.tan((camera.fov * Math.PI) / 360) * camera.aspect),
+    const components: THREE.Box3[] = [];
+    root.traverse((object) => {
+      if (
+        object instanceof THREE.Mesh ||
+        object instanceof THREE.Line ||
+        object instanceof THREE.Points
+      ) {
+        const bounds = new THREE.Box3().setFromObject(object, true);
+        if (!bounds.isEmpty()) components.push(bounds);
+      }
+    });
+    const { center, radius, distance, position } = frameAssetBounds(
+      box,
+      camera.aspect,
+      camera.fov,
+      components,
     );
-    const distance = (radius / Math.sin(fov / 2)) * 1.12;
     controls.target.copy(center);
-    camera.position
-      .copy(center)
-      .add(new THREE.Vector3(1, 0.65, 1.25).normalize().multiplyScalar(distance));
+    camera.position.copy(position);
     camera.near = Math.max(radius / 1000, 0.0001);
     camera.far = distance + radius * 100;
     controls.minDistance = radius * 0.1;

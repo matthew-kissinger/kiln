@@ -158,6 +158,7 @@ describe('hero gallery', () => {
       'fire-lookout-tower',
       'brass-tellurion',
       'victorian-greenhouse',
+      'demo-unfolding-dragonfly',
     ];
     const publicNames = names.filter((name) => !excluded.includes(name));
     expect([...(await heroes)].sort()).toEqual(publicNames);
