@@ -159,10 +159,10 @@ disruption instead of several.
 | 3.8 | Verify pack size, commit count, and that HEAD content matches the pre-rewrite checkout except for removed paths | Done in rehearsal; see the Phase 3 rehearsal record |
 | 3.9 | Run `bun run test` and `bun run lint` on the rewritten tree | Done in rehearsal; see the Phase 3 rehearsal record |
 | 3.10 | Clone from the local rewritten repository; record time and size | Done in rehearsal; see the Phase 3 rehearsal record |
-| 3.11 | Force-push. Requires explicit approval at this moment, per D5 | Pending |
-| 3.12 | Clone from GitHub; record the real-world time and size against the targets | Pending |
-| 3.13 | Confirm `ci.yml` and `pages.yml` are green on the new `main` | Pending |
-| 3.14 | Re-validate the plugin path end to end: marketplace add, install, `tools/list` returns 13, then uninstall and clear the cache. Mandatory because 3.6 changed how `dist/` reaches HEAD. This is the I3 and I7 gate | Pending |
+| 3.11 | Force-push. Requires explicit approval at this moment, per D5 | Done; see the Phase 3 execution record |
+| 3.12 | Clone from GitHub; record the real-world time and size against the targets | Done; see the Phase 3 execution record |
+| 3.13 | Confirm `ci.yml` and `pages.yml` are green on the new `main` | Done; see the Phase 3 execution record |
+| 3.14 | Re-validate the plugin path end to end: marketplace add, install, `tools/list` returns 13, then uninstall and clear the cache. Mandatory because 3.6 changed how `dist/` reaches HEAD. This is the I3 and I7 gate | Done; see the Phase 3 execution record |
 
 ## Phase 4 — Setup and error-legibility fixes
 
@@ -189,7 +189,7 @@ content-addressed ref and reused the build.
 
 | ID | Task | State |
 | --- | --- | --- |
-| 5.1 | Remove 2.3 GB of scratchpad test clones | Held until Phase 3 verifies |
+| 5.1 | Remove 2.3 GB of scratchpad test clones | Done; Phase 3 is verified, so the baseline comparison clones are no longer needed |
 | 5.2 | Remove the test plugin install and marketplace entry | Done; `claude plugin list` reports none and only `claude-plugins-official` remains |
 
 ## Rollback
@@ -478,3 +478,107 @@ recorded in.
 | --- | --- |
 | CI | success |
 | Gallery | success |
+
+### Phase 3 execution
+
+The rewrite was run against a fresh clone of `main` at `dd9d5f7`, not against the
+working repository, so that the working copy survived as a second pre-rewrite
+backup. The mirror at `~/kiln-backup-2026-09-10.git` was fast-forwarded to
+`dd9d5f7` first, since it had been taken at `5b903fb` and would otherwise have
+been missing the squash-merge of #63.
+
+New `main` is `fbc3da2`. Measured against the baseline table at the top of this
+document:
+
+| Measurement | Baseline | After |
+| --- | --- | --- |
+| Full clone from GitHub, wall clock | 79 s | 8.0 s |
+| Full clone from GitHub, on disk | 440 MB | 52 MB (18 MB `.git` + 34 MB checkout) |
+| `--filter=blob:none` clone | 36 s, 325 MB | 3.8 s, 48 MB |
+| Packed history | 226.06 MiB | 17.41 MiB |
+| Commits | 177 | 177 |
+| Removed-path objects reachable in a fresh clone | -- | 0 |
+
+Verification on the exact commit pushed: 1805 tests pass and 0 fail, `lint` exit
+0 with the unchanged 14 warnings and 11 infos, `typecheck` exit 0,
+`build:runtime` exit 0 leaving a clean tree with `dist/` still byte-identical to
+the pre-rewrite blobs, `verify:posters` 88 of 88, `fsck` clean, 119 files removed
+and none added.
+
+#### Two traps this phase produced
+
+**The tag was the whole rewrite.** `git push --force origin main` succeeded and
+looked complete, but a fresh clone still measured 57.24 MiB of packed history and
+still contained `examples/renders/*.png`. The cause was `refs/tags/oss-2026-09-05`,
+which still pointed at the original `d941f15` and so held every removed blob
+reachable. `filter-repo` had rewritten the tag correctly to `b2eff76` with zero
+removed-path files; the omission was pushing only `main`. Pushing
+`refs/tags/oss-2026-09-05 --force` took the clone from 92 MB to 52 MB. Anyone
+repeating this work should push every ref, and should measure a fresh clone rather
+than trusting the local pack size.
+
+**`du` with two arguments deduplicates.** `du -sh repo/.git repo` reports the
+`.git` size and then the checkout size, not the total, because the second figure
+excludes what the first already counted. That is how "35 MB" for a full clone
+reached `README.md` and `CHANGELOG.md` before being corrected to 52 MB. Sizes in
+this document are now measured one path at a time.
+
+#### Branch protection
+
+`main` carries `enforce_admins: true`, `allow_force_pushes: false`,
+`required_linear_history: true`, `required_conversation_resolution: true` and a
+strict required check on `typecheck . lint . test`, so the rewrite needed
+`allow_force_pushes` and `required_linear_history` relaxed for the duration of the
+push and nothing else. `required_linear_history` was the less obvious of the two:
+the history contains three genuine merge commits, which were grandfathered in
+under the existing rule and only became violations once a force-push presented
+them as new. Flattening them was rejected as destroying real history.
+
+The original configuration was read and saved to disk before any change and
+restored from that file, by a trap that runs whether the push succeeds or fails.
+It was then compared field by field against the saved original: no differences.
+
+#### Tasks 3.13 and 3.14
+
+`ci.yml` and `pages.yml` both succeeded on the rewritten `main` at `fbc3da2`.
+
+The run on `dd9d5f7`, the pre-rewrite squash merge, shows a `ci.yml` failure on
+`shipping proxy forwards actual PNGs while retaining source args/text and blocking
+excess calls`. The same job passes on `fbc3da2`, and the pull request checks for
+the same content had passed, so this is more of the suite flakiness already noted
+rather than a regression. Two distinct tests have now been seen to fail
+intermittently: this one and `CLI saves, exports, imports, and restores a revision
+across independent stores`. Worth a separate look; not part of this work.
+
+Task 3.14 installed the plugin from GitHub end to end and drove the server.
+
+| Check | Result |
+| --- | --- |
+| `claude plugin marketplace add` | 5.8 s |
+| `claude plugin install kiln@kiln` | 2.2 s; 189 packages installed automatically |
+| `~/.claude/plugins` after install (I3) | 502 MB, against 953 MB at baseline. Repository content is 82 MB of that, against 539 MB |
+| Installed `dist/mcp-server.mjs` vs the repository copy | byte-identical by sha256 |
+| `initialize` | protocol `2025-06-18`, `serverInfo` `kiln` 0.6.0 |
+| `tools/list` (I7) | 13 tools |
+| Cleanup | plugin uninstalled, marketplace removed, and the 448 MB orphaned `cache/kiln` that `uninstall` leaves behind deleted; `~/.claude/plugins` back to its 6.3 MB baseline |
+
+Two things this confirmed for Phase 4. Finding 4.4 is real and now independently
+verified: `initialize` returns `instructions: null`. Finding 4.5 needs rewording,
+because the plugin's own `.mcp.json` uses `${PLUGIN_ROOT}` and the command `node`,
+with no absolute path in it; the absolute-path problem belongs to the workspace
+file that `scripts/create-workspace.mjs` writes, not to the shipped manifest.
+
+## Phase 3 outcome
+
+| Target | Goal | Achieved |
+| --- | --- | --- |
+| Uncompressed history | ~29 MB | 17.41 MiB packed |
+| Full clone | -- | 8.0 s, 52 MB, from 79 s and 440 MB |
+| Blobless clone | -- | 3.8 s, 48 MB, from 36 s and 325 MB |
+| One plugin install | -- | 502 MB, from 953 MB |
+| Commits preserved | all | 177 of 177 |
+| Removed-path objects reachable in a fresh clone | 0 | 0 |
+
+Phases 0, 1, 2, 3 and 5 are complete. Phase 4 remains open and is now partly
+verified: 4.4 confirmed, 4.5 needs rewording, 4.6 partly refuted earlier. Phase 6
+is open and untouched.
