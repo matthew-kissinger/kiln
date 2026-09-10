@@ -121,20 +121,24 @@ intact; this is the reason the plan uploads rather than optimizes.
 
 | ID | Task | State |
 | --- | --- | --- |
-| 2.1 | Create the R2 bucket, per D2 | Pending |
-| 2.2 | Configure public access and the custom domain, including DNS | Pending |
-| 2.3 | Upload the 84 poster PNGs byte-for-byte, with no re-encode | Pending |
-| 2.4 | Upload the 4 GIFs | Pending |
-| 2.5 | Verify each uploaded object's sha256 equals the local file's | Pending |
-| 2.6 | Verify each poster's sha256 equals the `imageHash` in its provenance sidecar. This is the I1 gate | Pending |
-| 2.7 | Verify CDN URLs return 200 with correct `content-type` | Pending |
-| 2.8 | Repoint `docs/examples.md` at absolute CDN URLs | Pending |
-| 2.9 | Update `site/scripts/verify-assets.mjs` to fetch posters, preserving the hash check, with a local cache so CI does not depend on network availability | Pending |
-| 2.10 | Audit and update `site/scripts/build-example-poster.mjs`, which reads `examples/renders` | Pending |
-| 2.11 | Update the write targets in `scripts/hero-shots.ts` and `scripts/anim-gifs.ts`, per D4 | Pending |
-| 2.12 | Run `verify-assets.mjs` locally; it must pass | Pending |
-| 2.13 | Run `bun run test` and `bun run lint`; both must pass | Pending |
-| 2.14 | Push to a branch and confirm `pages.yml` passes, before any rewrite | Pending |
+| 2.1 | Create the R2 bucket, per D2 | Done |
+| 2.2 | Configure public access and the custom domain, including DNS | Done |
+| 2.3 | Upload the 84 poster PNGs byte-for-byte, with no re-encode | Done |
+| 2.4 | Upload the 4 GIFs | Done |
+| 2.5 | Verify each uploaded object's sha256 equals the local file's | Done |
+| 2.6 | Verify each poster's sha256 equals the `imageHash` in its provenance sidecar. This is the I1 gate | Done |
+| 2.7 | Verify CDN URLs return 200 with correct `content-type` | Done |
+| 2.8 | Repoint `docs/examples.md` at absolute CDN URLs | Done |
+| 2.9 | Update `site/scripts/verify-assets.mjs` to fetch posters, preserving the hash check, with a local cache so CI does not depend on network availability | Done |
+| 2.10 | Audit and update `site/scripts/build-example-poster.mjs`, which reads `examples/renders` | Done |
+| 2.11 | Update the write targets in `scripts/hero-shots.ts` and `scripts/anim-gifs.ts`, per D4 | Done |
+| 2.12 | Run `verify-assets.mjs` locally; it must pass | Blocked; see record |
+| 2.13 | Run `bun run test` and `bun run lint`; both must pass | Done |
+| 2.14 | Push to a branch and confirm `pages.yml` passes, before any rewrite | Blocked; see record |
+| 2.15 | Repoint `site/scripts/build-assets.mjs`, which reads posters through a `RENDERS` constant and scrapes poster hrefs out of `docs/examples.md`. Added during execution: a literal search for `examples/renders` did not find it | Done |
+| 2.16 | Extract the poster source into `site/scripts/posters.mjs` so the build and the verifier share one fetch-and-cache path. Added during execution | Done |
+| 2.17 | Add `scripts/upload-posters.mjs` to publish `.posters/` to the bucket, refusing any image whose hash disagrees with an existing receipt. Added during execution | Done |
+| 2.18 | Fix `src/__tests__/examples.test.ts`, whose GIF check matched a repository-relative `src=` attribute. Added during execution: this was a regression from task 2.8 | Done |
 
 ## Phase 3 — History rewrite
 
@@ -148,6 +152,7 @@ disruption instead of several.
 | 3.2 | Commit all Phase 1 and Phase 2 changes first, so the rewrite carries them | Pending |
 | 3.3 | Re-verify fork and PR counts immediately before proceeding | Pending |
 | 3.4 | Add `.gitignore` guards for the removed paths | Pending |
+| 3.4a | Update `src/__tests__/examples.test.ts`, which asserts every hero and demo PNG exists in `examples/renders` via `readdir`. Those assertions fail the moment the images leave the tree, so they must move to the receipts or the bucket. Added during execution | Pending |
 | 3.5 | Single `git filter-repo` pass removing `assets/video/`, `examples/renders/*.png` and `examples/renders/*.gif` | Pending |
 | 3.6 | Handle `dist/` separately. `filter-repo` removes a path from all history and cannot retain only the newest blob, so purge `dist/` entirely and re-add the current `dist/` in one fresh commit, leaving it stored once | Pending |
 | 3.7 | Verify `dist/mcp-server.mjs` at the new HEAD is byte-identical to the pre-rewrite file, then that `bun run build:runtime` still leaves the tree clean. This is the I2 gate | Pending |
@@ -249,3 +254,60 @@ in-repository file was never the artifact the README served and can be removed
 without touching the README. And the force-push blast radius is zero: no forks,
 no open pull requests, no open issues. The rewrite in Phase 3 disrupts nobody
 except clones already on disk.
+
+### Phase 1 results
+
+`--filter=blob:none` documented in `README.md` and `docs/install.md`, worded so
+it stays accurate after Phase 3 shrinks the history. Committed as `82c9805`.
+
+### Phase 2 results
+
+| Item | Recorded value |
+| --- | --- |
+| Decision D2 taken | bucket `kiln-assets`, domain `assets.kilnstudio.tools`, zone `f5e56d7197cf2a23bcdd6e0cbc93d79b` |
+| Decision D3 taken | `assets/gallery/` stays in the repository, so the README needs no network |
+| Decision D4 taken | all three writers emit to a gitignored `.posters/`; `scripts/upload-posters.mjs` publishes it |
+| Objects uploaded | 88 (84 PNG, 4 GIF), byte-for-byte, no re-encode |
+| Upload integrity (2.5) | 88/88 sha256 identical after download from R2 |
+| Receipt gate (2.6, I1) | 83/83 `posterReceipt.imageHash` values equal the stored object's sha256; 0 mismatches |
+| CDN serving (2.7) | 88/88 return HTTP 200 with correct `content-type` over `https://assets.kilnstudio.tools`, each byte-identical |
+| Doc rewrite (2.8) | 128 occurrences across 66 distinct posters; all 66 URLs return 200; the 68 `.kiln.js` program links left relative |
+| Caption parity | 62 captions scraped before and after the rewrite |
+| Lint (I6) | exit 0; 14 warnings, 11 infos, unchanged from baseline |
+| Typecheck | engine and site both exit 0 |
+| `tidal-observatory.png` | the one poster with no receipt: 84 PNGs, 83 receipts |
+
+Three things were missed by the original plan and are recorded as tasks 2.15 to
+2.18. `site/scripts/build-assets.mjs` reads posters through a `RENDERS`
+constant, so searching for the literal string `examples/renders` did not find
+it; it also scrapes poster `href`s out of `docs/examples.md` to build captions,
+which task 2.8 broke until the pattern was loosened. `src/__tests__/examples.test.ts`
+matched a repository-relative `src=` attribute for the GIF cells and failed for
+the same reason. Both now key on the file name instead of the path, so either
+form matches. The lesson worth keeping: `docs/examples.md` is machine-read in two
+places, not just rendered.
+
+#### Blocked, with cause
+
+**Task 2.12 and 2.14.** `site/scripts/build-assets.mjs` cannot complete on this
+machine, and this is pre-existing rather than caused by the migration. Verified
+by running it on an untouched clone of the baseline commit, where it fails
+identically. The failing check reports `sourceMatch: true`, `imageMatch: true`,
+`artifactMatch: false` on `abyssal-surveyor`: the poster bytes still match their
+receipt, but the GLB the engine produces here does not match the recorded
+`artifactHash`. GLB is not byte-reproducible across this environment and the GPU
+machine that recorded the receipts, most likely through baked texture encoding.
+Because `verify-assets.mjs` needs `site/public/assets/` and only `build-assets.mjs`
+generates it, neither can be run to completion locally.
+
+What was proven instead: the new fetch-and-cache path works against the live
+bucket, and the poster it retrieved was byte-identical to the attested file, so
+the migration's own behaviour is verified even though the surrounding build is
+not. Confirming 2.12 and 2.14 needs either CI or the GPU machine.
+
+**Pre-existing test failure.** The baseline clone also fails
+`CLI saves, exports, imports, and restores a revision across independent stores`.
+Unrelated to this work. Run counts also varied between 2 failures and 1 across
+identical invocations, so at least one test in the suite is flaky. After the
+task 2.18 fix, the working tree's only failure is that same pre-existing one,
+and `src/__tests__/examples.test.ts` passes 94/94 on its own.

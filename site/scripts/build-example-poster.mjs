@@ -76,7 +76,8 @@ if (process.argv.includes('--preview') || process.argv.includes('--background-pr
   console.log(JSON.stringify({ name, lightingPresetId, preview: true }));
   process.exit(0);
 }
-await writeFile(`examples/renders/${name}.png`, png);
+await mkdir('.posters', { recursive: true });
+await writeFile(`.posters/${name}.png`, png);
 await writeFile(`examples/renders/${name}.json`, JSON.stringify(receipt, null, 2) + '\n');
 await writeFile(`site/public/assets/${name}.poster.json`, JSON.stringify(receipt, null, 2) + '\n');
 await sharp(png)

@@ -1,5 +1,5 @@
 /**
- * Render one looping GIF per animated example into `examples/renders/`.
+ * Render one looping GIF per animated example into `.posters/`, for upload to R2.
  *
  * A still cannot show that Kiln's animation path works, and the claim that a
  * model can write `animate()` and then watch its own motion deserves better
@@ -41,7 +41,11 @@ import { measureBounds } from '../src/views/raster';
 const HERE = dirname(fileURLToPath(import.meta.url));
 const REPO = resolve(HERE, '..');
 const EXAMPLES = join(REPO, 'examples');
-const OUT_DIR = join(EXAMPLES, 'renders');
+// Gallery images are published from R2, not carried in git: they were 108 MB of
+// PNG that no tool reads, and every clone and plugin install paid for them. This
+// writes them to a gitignored directory; `bun scripts/upload-posters.mjs` pushes
+// them to the bucket that `site/scripts/verify-assets.mjs` reads.
+const OUT_DIR = join(REPO, '.posters');
 
 /**
  * Animated examples, with the clip each one is shown in.

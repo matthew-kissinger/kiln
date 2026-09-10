@@ -41,3 +41,13 @@ site/dist/
 # Local agent config (launch profiles, per-machine settings). The shipped
 # plugin manifest lives in .claude-plugin/, which is tracked.
 .claude/
+
+# Gallery posters are fetched from R2 by site/scripts/verify-assets.mjs and cached here.
+.poster-cache/
+
+# Gallery images are rendered here and published to R2 by scripts/upload-posters.mjs.
+.posters/
+
+# Local wrangler simulator state. `wrangler r2 object put` without --remote
+# writes uploads here instead of the bucket; none of it belongs in git.
+.wrangler/

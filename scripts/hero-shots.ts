@@ -1,5 +1,5 @@
 /**
- * Render one beauty shot per hero example into `examples/renders/`.
+ * Render one beauty shot per hero example into `.posters/`, for upload to R2.
  *
  * The README used to carry a single stitched contact-sheet collage. That was
  * the wrong artifact for two reasons: every asset got the same 380 px cell no
@@ -32,7 +32,11 @@ import { resolveEvaluatorPortV1 } from '../src/evaluator/protocol';
 const HERE = dirname(fileURLToPath(import.meta.url));
 const REPO = resolve(HERE, '..');
 const EXAMPLES = join(REPO, 'examples');
-const OUT_DIR = join(EXAMPLES, 'renders');
+// Gallery images are published from R2, not carried in git: they were 108 MB of
+// PNG that no tool reads, and every clone and plugin install paid for them. This
+// writes them to a gitignored directory; `bun scripts/upload-posters.mjs` pushes
+// them to the bucket that `site/scripts/verify-assets.mjs` reads.
+const OUT_DIR = join(REPO, '.posters');
 
 /**
  * The hero set, in the order the README presents them.

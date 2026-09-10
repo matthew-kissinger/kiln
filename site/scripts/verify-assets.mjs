@@ -2,10 +2,12 @@ import { createHash } from 'node:crypto';
 import { readFile } from 'node:fs/promises';
 import { resolve, dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { posterBytes } from './posters.mjs';
 import { verifyRecordedPoster } from './provenance.mjs';
 
 const root = resolve(dirname(fileURLToPath(import.meta.url)), '../public');
 const hash = (value) => createHash('sha256').update(value).digest('hex');
+
 const rows = JSON.parse(await readFile(join(root, 'assets/index.json'), 'utf8'));
 for (const row of rows) {
   for (const [file, digest] of [
@@ -37,7 +39,7 @@ for (const row of rows) {
     }
   }
   if (row.provenance?.posterReceipt) {
-    verifyRecordedPoster(row.provenance.posterReceipt, source, glb, await readFile(resolve(root, '../../examples/renders', `${row.name}.png`)));
+    verifyRecordedPoster(row.provenance.posterReceipt, source, glb, await posterBytes(row.name));
     const publicReceipt = JSON.parse(await readFile(join(root, 'assets', `${row.name}.poster.json`), 'utf8'));
     if (publicReceipt.artifactHash !== row.artifactHash || publicReceipt.sourceHash !== row.sourceHash) throw new Error(`Public poster record mismatch: ${row.name}`);
   }

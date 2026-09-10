@@ -262,7 +262,9 @@ describe('hero gallery', () => {
     expect(onDisk).toEqual(declared);
 
     const src = await readme;
-    const shown = [...src.matchAll(/src="examples\/renders\/([a-z0-9-]+)\.gif"/g)]
+    // Posters and GIFs are linked absolutely from R2 now, so key on the file
+    // name rather than a repository-relative path.
+    const shown = [...src.matchAll(/src="[^"]*renders\/([a-z0-9-]+)\.gif"/g)]
       .map((m) => m[1]!)
       .sort();
     expect(shown).toEqual(declared);
