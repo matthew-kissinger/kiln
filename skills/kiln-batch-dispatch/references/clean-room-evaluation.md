@@ -1,20 +1,8 @@
 # Clean-room evaluation
 
-With the Kiln package installed, create a fresh directory outside the engine checkout:
+Workspace creation, harness choice and verifying that the tools came up are covered by the `kiln-setup-workspace` skill; this file covers only what an evaluation adds on top. Create the workspace with `--skills batch` so this workflow is present in the candidate, and use a separate fresh workspace per candidate.
 
-```bash
-kiln-init /absolute/empty-workspace --harness opencode --skills batch
-```
-
-Supported harness names are `claude`, `codex`, `opencode`, `hermes`, and `agy`. Author, refine, and QA skills are installed by default; `--skills compose,batch` adds optional workflows. Read the generated project start instructions and run its local `node kiln.mjs` launcher.
-
-From an engine source checkout, the equivalent setup command is:
-
-```bash
-node scripts/create-workspace.mjs /absolute/empty-workspace --harness opencode --skills batch
-```
-
-The project contains its copied skills and their resources. Keep evaluation notes and output there; do not give the model the engine implementation or prior examples unless that is the comparison being tested.
+Keep evaluation notes and output in the workspace. Do not give the model the engine implementation or prior examples unless that is the comparison being tested.
 
 ## What isolation means
 

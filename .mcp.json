@@ -1,8 +1,9 @@
 {
   "mcpServers": {
     "kiln": {
+      "type": "stdio",
       "command": "node",
-      "args": ["${PLUGIN_ROOT}/dist/mcp-server.mjs"],
+      "args": ["${CLAUDE_PROJECT_DIR:-.}/dist/mcp-server.mjs"],
       "env": { "KILN_RENDER": "auto" }
     }
   }

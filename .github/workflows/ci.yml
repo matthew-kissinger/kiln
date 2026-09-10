@@ -41,6 +41,9 @@ jobs:
       - name: Check toolchain metadata
         run: bun run check:toolchain
 
+      - name: Check skills against the Agent Skills specification
+        run: bun run check:skills
+
       - name: Install
         run: bun install --frozen-lockfile
 

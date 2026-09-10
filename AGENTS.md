@@ -11,6 +11,18 @@ Read [README.md](./README.md) before changing exports or package contents. Runti
 `scripts/`. The package intentionally ships TypeScript source through the explicit `files` and
 `exports` lists in `package.json`.
 
+## Authoring an asset is a different task from changing the engine
+
+This guide covers changing the engine. Authoring an asset does not happen here: it happens in a
+separate workspace, because the authoring skills assume a live `kiln_workspace` server, and giving a
+model this implementation and the example collection alongside an asset brief changes what it
+produces.
+
+If the request is to make or refine an asset, read the `kiln-setup-workspace` skill and create a
+workspace first. It is registered for a bare clone at `.claude/skills/` and `.agents/skills/`, and
+the maintained copy is `skills/kiln-setup-workspace/`. Everything else in this file assumes you are
+working on the engine itself.
+
 ## The tool registry is the single source of truth
 
 `src/tools/registry.ts` owns tool names, descriptions, and schemas. Two skins consume it: the

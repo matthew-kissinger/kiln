@@ -9,6 +9,7 @@ import { localAssetLibrary } from './assets-node';
 import { readAssetResource, type AssetLink } from './assets-resources';
 import { serveStdio } from '@modelcontextprotocol/server/stdio';
 import { AsyncLocalStorage } from 'node:async_hooks';
+import { fileURLToPath } from 'node:url';
 
 import {
   createKilnProgramToolRegistry,
@@ -23,6 +24,45 @@ import { createPackagedLocalToolContext } from './local-runtime';
 /** Server identity reported in the MCP handshake. */
 export const MCP_SERVER_NAME = 'kiln';
 export const MCP_SERVER_VERSION = '0.6.0';
+
+/**
+ * Absolute path to the skills that ship beside this server. Both entry shapes
+ * resolve correctly: `dist/mcp-server.mjs` and `src/mcp-server.ts` each sit one
+ * level below the installation root, where `skills/` lives. URL arithmetic only,
+ * so nothing touches the filesystem at module load.
+ */
+const packagedSkillsDir = fileURLToPath(new URL('../skills', import.meta.url));
+
+/**
+ * The spec's optional `instructions` field, returned in the initialize result.
+ *
+ * This is the only orientation channel that survives every install shape. A
+ * user who configures the server by hand and opens an empty folder has no
+ * AGENTS.md, no CLAUDE.md and no registered skills -- but the skills do ship
+ * beside the server, so the useful thing to say is that they exist and where.
+ *
+ * Deliberately an index and a pointer rather than the skill bodies themselves.
+ * The bodies are about 2,700 tokens and would be paid at every session start by
+ * every client, which is exactly what the Agent Skills progressive-disclosure
+ * model exists to avoid: names and descriptions up front, bodies on activation.
+ */
+export const MCP_SERVER_INSTRUCTIONS = `Kiln turns JavaScript you write into GLB 3D assets and returns rendered views for review.
+
+Work by reference. Send a program once to kiln_validate or kiln_render; the result carries a programRef. Keep it exactly as returned, including a short p_ handle, and use it for every later view and edit. kiln_source with that ref and a literal query returns exact edit anchors, and kiln_edit with that ref plus edits returns a new ref and renders by default. Do not resend a whole program to change part of it.
+
+Call kiln_list_primitives before writing code to get exact helper signatures, with capabilities: true for the runtime, source, export and camera contract. Read viewFidelity in any render result before judging materials: a geometry-flat CPU image is evidence about shape, not about material.
+
+Detailed workflows ship beside this server as Agent Skills, one directory each under ${packagedSkillsDir}:
+- kiln-setup-workspace: create a managed workspace for authoring, and verify its tools came up
+- kiln-author-asset: write a new asset and export a GLB
+- kiln-refine-asset: change a saved asset through revisions
+- kiln-qa-asset: verify geometry, export fidelity, and behaviour in the destination project
+- kiln-compose-scene: arrange several existing GLB assets into a scene
+- kiln-batch-dispatch: run comparable trials across harnesses or models
+
+Read the one matching the task before authoring; each names its own reference files.
+
+Most harnesses register skills only from their own directories, so these may not appear as registered skills where you are. If the user wants them registered, offer to copy the relevant directories into .claude/skills/ or .agents/skills/ in their project. Ask before writing, and say that registration takes effect in a new session.`;
 
 /** One MCP content block. Mirrors the SDK's `CallToolResult['content']` element. */
 type ContentBlock =
@@ -115,10 +155,13 @@ export async function runTool(def: KilnToolDef, args: unknown): Promise<KilnTool
 
 /** Build the server, registering every def from the registry. */
 export function createKilnMcpServer(context: KilnToolContext = {}): McpServer {
-  const server = new McpServer({
-    name: MCP_SERVER_NAME,
-    version: MCP_SERVER_VERSION,
-  });
+  const server = new McpServer(
+    {
+      name: MCP_SERVER_NAME,
+      version: MCP_SERVER_VERSION,
+    },
+    { instructions: MCP_SERVER_INSTRUCTIONS },
+  );
   server.registerResource(
     'kiln-asset-viewer',
     KILN_ASSET_WIDGET_URI,

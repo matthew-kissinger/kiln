@@ -10,6 +10,8 @@ const installation = resolve(dirname(fileURLToPath(import.meta.url)), '..');
 const quote = JSON.stringify;
 const hash = (value) => createHash('sha256').update(value).digest('hex');
 const harnesses = ['claude', 'codex', 'opencode', 'hermes', 'agy'];
+/** Where each harness family actually looks for skills, relative to the workspace. */
+const skillRegistries = ['.claude/skills', '.agents/skills'];
 const core = ['kiln-author-asset', 'kiln-refine-asset', 'kiln-qa-asset'];
 const optional = { compose: 'kiln-compose-scene', batch: 'kiln-batch-dispatch' };
 const inside = (parent, child) => { const rel = relative(parent, child); return !rel || (!isAbsolute(rel) && rel !== '..' && !rel.startsWith(`..${sep}`)); };
@@ -48,7 +50,11 @@ function managedFiles(root, runtime, harness, nodeExecutable) {
   }
   if (harness === 'opencode') files['opencode.json'] = quote({ $schema: 'https://opencode.ai/config.json', skills: { paths: [join(root, 'skills')] }, mcp: { kiln_workspace: { type: 'local', command: [mcp.command, server], environment: mcp.env, enabled: true } } });
   if (harness === 'hermes') {
-    files['.hermes/config.yaml'] = quote({ mcp_servers: { kiln_workspace: mcp } });
+    // Hermes scans project-local skills only inside a git checkout (nearest
+    // ancestor with .git), and a workspace is deliberately not one. `external_dirs`
+    // is unconditional, so it is what actually registers them here. YAML is a
+    // superset of JSON, so the JSON form below is valid config.
+    files['.hermes/config.yaml'] = quote({ mcp_servers: { kiln_workspace: mcp }, skills: { external_dirs: [join(root, '.agents', 'skills')] } });
     files['hermes.mjs'] = `import { spawn } from 'node:child_process';\nimport { dirname, join } from 'node:path';\nimport { fileURLToPath } from 'node:url';\nconst root = dirname(fileURLToPath(import.meta.url));\nconst child = spawn('hermes', process.argv.slice(2), { cwd: root, stdio: 'inherit', windowsHide: true, env: { ...process.env, HERMES_HOME: join(root, '.hermes'), TERMINAL_CWD: root } });\nchild.on('error', (error) => { console.error(error.message); process.exitCode = 1; });\nchild.on('exit', (code) => { process.exitCode = code ?? 1; });\n`;
   }
   return { files, store, server };
@@ -58,7 +64,7 @@ const guide = `# Kiln asset workspace
 
 Use the kiln_workspace MCP server configured in this project to author and refine assets in this directory. Another server named kiln may use a different installation; do not substitute it silently. The engine is installed separately. Do not read its implementation or example collection to solve an asset task.
 
-- Read the relevant skill from this project's skills/ directory, not a global plugin copy. Use kiln_list_primitives on kiln_workspace for API signatures. If that server is unavailable, report the setup problem instead of using another installation.
+- This project's own skills are installed and registered for your harness; read the relevant one from here, never a global plugin copy. The maintained copies are in skills/, mirrored to .claude/skills/ and .agents/skills/ because harnesses scan different directories. Use kiln_list_primitives on kiln_workspace for API signatures. If that server is unavailable, report the setup problem instead of using another installation.
 - Import an existing file with node kiln.mjs source asset.kiln.js. It returns a programRef, normally a short immutable p_ handle. Copy it exactly; do not expand or shorten it.
 - For a new draft, pass code once to kiln_validate or kiln_render. Keep its programRef even if validation fails.
 - Use kiln_source with programRef and a literal query to read exact edit anchors. Follow nextOffset for more context.
@@ -151,10 +157,20 @@ export async function createWorkspace(directory, harness = 'claude', options = {
     await writeFile(join(stage, '.gitignore'), '.kiln/programs/\n.hermes/\n*.glb\n*.png\n');
     for (const name of ['AGENTS.md', 'CLAUDE.md']) await writeFile(join(stage, name), guide);
     for (const name of skills) await cp(join(runtime, 'skills', name), join(stage, 'skills', name), { recursive: true });
+    // Registration copies. No harness scans a bare `skills/`: Claude Code reads
+    // only `.claude/skills/`, while codex, opencode, hermes and agy read
+    // `.agents/skills/`. Without these the workspace has skill files that the
+    // agent can read only when told to, which is how it worked before. Copies
+    // rather than symlinks because those need developer mode or an
+    // administrator on Windows.
+    for (const registry of skillRegistries)
+      for (const name of skills)
+        await cp(join(runtime, 'skills', name), join(stage, registry, name), { recursive: true });
     manifest.skillHashes = await fileHashes(join(stage, 'skills'));
     await writeFile(join(stage, '.kiln/workspace.json'), quote(manifest));
-    const launch = harness === 'hermes' ? 'Run node hermes.mjs --ignore-rules. It uses a separate profile; authenticate in that profile or supply provider credentials through the environment.' : harness === 'agy' ? 'Run node agy.mjs from this directory. The launcher supplies the absolute project directory. For headless runs, use node agy.mjs --model MODEL --print \"Read AGENTS.md and the project skills. Use only kiln_workspace MCP tools. YOUR TASK.\". Print mode disables automatic slash-command/skill expansion to avoid automatic expansion of a global skill. Use absolute task-file paths in headless prompts and verify that tool calls use kiln_workspace; global configuration and authentication remain unchanged.' : `Open ${harness} in this directory.`;
-    await writeFile(join(stage, 'START.md'), `# Start making assets\n\n${launch} Accept the project/MCP trust prompts. Ask the agent to read AGENTS.md and create an asset. Kiln needs no separate model key.\n\nCore author/refine/QA skills are installed. Optional compose/batch skills are selected at setup with --skills compose,batch.\n\nKeep assets here and engine source outside. This separates task context, not operating-system permissions. User instructions and authentication can still apply.\n\nAfter relocating this workspace or the runtime, run node /current/kiln/scripts/create-workspace.mjs /absolute/workspace --repair. Repair updates generated runtime paths only and refuses edited configuration; it preserves skills, assets, and saved revisions.\n`);
+    const command = harness === 'hermes' ? 'node hermes.mjs --ignore-rules' : harness === 'agy' ? 'node agy.mjs' : harness;
+    const launch = harness === 'hermes' ? 'Hermes uses a separate profile; authenticate in that profile or supply provider credentials through the environment.' : harness === 'agy' ? 'The launcher supplies the absolute project directory. For headless runs, use node agy.mjs --model MODEL --print \"Read AGENTS.md and the project skills. Use only kiln_workspace MCP tools. YOUR TASK.\". Print mode disables automatic slash-command/skill expansion to avoid automatic expansion of a global skill. Use absolute task-file paths in headless prompts and verify that tool calls use kiln_workspace; global configuration and authentication remain unchanged.' : `This directory is configured for ${harness}.`;
+    await writeFile(join(stage, 'START.md'), `# Start making assets\n\n\`\`\`bash\ncd ${root}\n${command}\n\`\`\`\n\n${launch} Accept the project/MCP trust prompts. Ask the agent to read AGENTS.md and create an asset. Kiln needs no separate model key.\n\nCore author/refine/QA skills are installed and registered for this harness. Optional compose/batch skills are selected at setup with --skills compose,batch.\n\nKeep assets here and engine source outside. This separates task context, not operating-system permissions. User instructions and authentication can still apply.\n\nRun repair after anything that invalidates the generated absolute paths: moving this workspace, moving or reinstalling the runtime, or replacing the Node that setup recorded -- an nvm switch or uninstall does that, because the manifest pins the exact interpreter the preflight check validated.\n\n\`\`\`bash\nnode /current/kiln/scripts/create-workspace.mjs ${root} --repair\n\`\`\`\n\nRepair updates generated runtime paths only and refuses edited configuration; it preserves skills, assets, and saved revisions.\n`);
     if (exists) {
       // Windows cannot remove the caller's current directory, even when empty.
       // Move only staged entries and track them so a failed install rolls back.

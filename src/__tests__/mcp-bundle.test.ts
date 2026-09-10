@@ -128,6 +128,13 @@ describe('harness manifests', () => {
    *
    * A bare `mcp.json` is read by neither harness, which is why it no longer
    * exists.
+   *
+   * Root `.mcp.json` is a third case with a different job, asserted separately
+   * below. It is not a plugin manifest: Claude Code reads it as project-scoped
+   * configuration in a plain `git clone`, where no plugin variable is defined at
+   * all. It once carried `${PLUGIN_ROOT}`, which only Antigravity intends to
+   * expand, so a fresh clone opened onto a `kiln` server that could not start --
+   * no tools, on first contact, before the reader had done anything wrong.
    */
   const cases = [
     { file: '.claude-plugin/plugin.json', variable: 'CLAUDE_PLUGIN_ROOT' },
@@ -147,4 +154,25 @@ describe('harness manifests', () => {
       expect(kiln!.args).toEqual([`\${${variable}}/dist/mcp-server.mjs`]);
     });
   }
+
+  it('root .mcp.json resolves in a bare clone, with no plugin variable', async () => {
+    const raw = JSON.parse(await readFile(join(REPO, '.mcp.json'), 'utf8')) as {
+      mcpServers: Record<string, { command: string; args: string[] }>;
+    };
+    const kiln = raw.mcpServers['kiln'];
+    expect(kiln).toBeDefined();
+    expect(kiln!.command).toBe('node');
+    // Claude Code expands `${VAR:-default}` in project-scoped config, so the
+    // default is what makes this resolve when nothing sets the variable.
+    // biome-ignore lint/suspicious/noTemplateCurlyInString: the harness expands this, so the assertion must hold the literal text
+    expect(kiln!.args).toEqual(['${CLAUDE_PROJECT_DIR:-.}/dist/mcp-server.mjs']);
+    // The regression itself: no plugin-root variable belongs in this file,
+    // because no plugin context defines one when a clone is opened directly.
+    for (const arg of kiln!.args) {
+      // biome-ignore lint/suspicious/noTemplateCurlyInString: literal tokens, not interpolation
+      expect(arg).not.toContain('${PLUGIN_ROOT}');
+      // biome-ignore lint/suspicious/noTemplateCurlyInString: literal tokens, not interpolation
+      expect(arg).not.toContain('${CLAUDE_PLUGIN_ROOT}');
+    }
+  });
 });

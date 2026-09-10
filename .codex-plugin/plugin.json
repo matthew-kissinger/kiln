@@ -12,9 +12,26 @@
     "longDescription": "Author JavaScript, inspect camera views, and save GLBs with source revisions for later refinement.",
     "developerName": "Matthew Kissinger",
     "category": "Developer Tools",
-    "capabilities": ["Read", "Write"],
-    "defaultPrompt": ["Create a game prop and save its editable GLB bundle.", "Browse my collection and refine an existing asset."]
+    "capabilities": [
+      "Read",
+      "Write"
+    ],
+    "defaultPrompt": [
+      "Create a game prop and save its editable GLB bundle.",
+      "Browse my collection and refine an existing asset."
+    ]
   },
-  "mcpServers": "./.mcp.json",
+  "mcpServers": {
+    "kiln": {
+      "command": "node",
+      "args": [
+        "dist/mcp-server.mjs"
+      ],
+      "cwd": ".",
+      "env": {
+        "KILN_RENDER": "auto"
+      }
+    }
+  },
   "license": "MIT"
 }

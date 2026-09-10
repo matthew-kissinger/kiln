@@ -17,7 +17,7 @@ Local subprocess evaluation has deadlines and a sanitized environment; it is not
 
 Keep `skills/*/SKILL.md` and their adjacent `references/` directories as the maintained source. Skill descriptions provide discovery; instructions load on selection, and reference files provide modeling detail when needed. Avoid pasting the complete modeling catalog into every tool description or prompt.
 
-The repository now contains `.codex-plugin/plugin.json` and `.mcp.json` for local plugin hosts. Generated project workspaces continue to receive their own explicit skill copies. No global skills are installed.
+The repository contains `.codex-plugin/plugin.json` for local plugin hosts, carrying its MCP server inline with a plugin-root-relative `cwd`. Root `.mcp.json` is separate and serves a different case: a plain `git clone` opened directly in a harness, where no plugin variable is defined. Generated project workspaces continue to receive their own explicit skill copies. No global skills are installed.
 
 For ChatGPT, first register the connector and copy its technical `plugin_asdk_app...` ID from the connector page. Then build a separate package:
 
