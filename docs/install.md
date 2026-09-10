@@ -92,12 +92,18 @@ by the package smoke alongside the native image dependency.
 ## Install from the repository
 
 ```sh
-git clone https://github.com/matthew-kissinger/kiln
+git clone --filter=blob:none https://github.com/matthew-kissinger/kiln
 cd kiln
 bun install --frozen-lockfile
 bun run build:runtime
 node scripts/create-workspace.mjs ../my-assets --harness opencode
 ```
+
+`--filter=blob:none` checks out the current tree in full and leaves historical
+file contents on the server, so the clone transfers less and finishes sooner.
+Git fetches an old file version on demand the first time something asks for one,
+which needs network access. Use a plain `git clone` if you want the entire
+history available offline.
 
 Setup checks that the Node runtime, bundles, dependencies and selected skills are
 available before writing the workspace. It does not install an agent or sign in on
