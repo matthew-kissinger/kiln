@@ -70,11 +70,15 @@ real-world setup reports and GPU checks remain welcome from contributors.
 Install [Bun](https://bun.sh), then:
 
 ```sh
-git clone https://github.com/matthew-kissinger/kiln
+git clone --filter=blob:none https://github.com/matthew-kissinger/kiln
 cd kiln
 bun install --frozen-lockfile
 bun run kiln render examples/crate.kiln.js --out crate.glb --views sheet.png
 ```
+
+`--filter=blob:none` checks out the current tree in full and leaves historical
+file contents on the server, fetching them only if you ask for an old revision.
+A plain `git clone` also works and gives you the whole history up front.
 
 This writes a GLB and a six-view image of an existing program. It makes no model call.
 Rendering uses the CPU unless a compatible local GPU service is available.

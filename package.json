@@ -96,6 +96,7 @@
     "test:live": "KILN_SPIKE_LIVE=1 bun test",
     "test:package": "node scripts/test-plugin-package.mjs && node scripts/smoke-package.mjs",
     "lint": "biome check .",
+    "verify:posters": "bun scripts/verify-posters.mjs",
     "site:assets": "cd site && bun scripts/build-assets.mjs",
     "site:dev": "bun run --cwd site dev",
     "site:build": "bun run --cwd site build",

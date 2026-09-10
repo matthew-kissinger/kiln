@@ -53,6 +53,14 @@ jobs:
       - name: Install the engine
         run: bun install --frozen-lockfile
 
+      # Before the build, deliberately: the gallery images live in R2 now, and
+      # whether they are still served and still byte-identical to their receipts
+      # has nothing to do with whether the GLBs rebuild. Running it first means a
+      # broken bucket reports as a broken bucket rather than hiding behind a
+      # build failure.
+      - name: Verify the published gallery images
+        run: bun scripts/verify-posters.mjs
+
       - name: Install the site
         run: bun install --frozen-lockfile
         working-directory: site

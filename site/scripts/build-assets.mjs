@@ -5,6 +5,7 @@ import { fileURLToPath } from 'node:url';
 
 import sharp from 'sharp';
 import { createHash } from 'node:crypto';
+import { posterBytes, posterFile } from './posters.mjs';
 import { exampleProvenance, recordedExampleCredit, verifyRecordedPoster } from './provenance.mjs';
 import { buildEditDemo } from './build-edit-demo.mjs';
 import { buildGeometryDemo } from './build-geometry-demo.mjs';
@@ -19,7 +20,6 @@ import { resolveEvaluatorPortV1 } from '../../src/evaluator/protocol';
 const SITE = resolve(dirname(fileURLToPath(import.meta.url)), '..');
 const REPO = resolve(SITE, '..');
 const EXAMPLES = join(REPO, 'examples');
-const RENDERS = join(EXAMPLES, 'renders');
 const OUT = join(SITE, 'public', 'assets');
 const THUMBS = join(SITE, 'public', 'thumbs');
 const buildInputs = await runtimeBuildIdentity(REPO);
@@ -28,15 +28,14 @@ const buildInputs = await runtimeBuildIdentity(REPO);
 /** The one-line caption the README gives each asset, so both read alike. */
 function captions(readme) {
   const out = new Map();
-  const cell = /<a href="examples\/renders\/([a-z0-9-]+)\.png">.*?<br><sub>([^<]*)<\/sub>/gs;
+  // Posters are linked absolutely from R2 now, so key on the file name rather
+  // than a repository-relative path.
+  const cell = /<a href="[^"]*renders\/([a-z0-9-]+)\.png">.*?<br><sub>([^<]*)<\/sub>/gs;
   for (const m of readme.matchAll(cell)) if (!out.has(m[1])) out.set(m[1], m[2].trim());
   return out;
 }
 
-const readme = (await readFile(join(REPO, 'docs/examples.md'), 'utf8')).replaceAll(
-  '../examples/',
-  'examples/',
-);
+const readme = await readFile(join(REPO, 'docs/examples.md'), 'utf8');
 const caption = captions(readme);
 
 const names = (await readdir(EXAMPLES))
@@ -70,7 +69,7 @@ for (const name of names) {
       record.provenance.posterReceipt,
       src,
       r.glb,
-      await readFile(join(RENDERS, `${name}.png`)),
+      await posterBytes(name),
     );
   if (record?.provenance?.posterReceipt)
     await writeFile(
@@ -122,13 +121,13 @@ for (const name of names) {
   // The index shows the checked-in hero render and the stage shows the live
   // GLB, so the grid stays cheap: fifty 1000px PNGs is 3.6 MB of first paint,
   // and the same fifty at 560px of webp is a fifth of that.
-  await sharp(join(RENDERS, `${name}.png`))
+  await sharp(await posterFile(name))
     .resize(560, 560, { fit: 'inside' })
     .webp({ quality: 82 })
     .toFile(join(THUMBS, `${name}.webp`));
 
   if (['orbital-station', 'abyssal-surveyor'].includes(name)) {
-    let posterPath = join(RENDERS, `${name}.png`);
+    let posterPath = await posterFile(name);
     try {
       const record = JSON.parse(await readFile(join(SITE, `examples/${name}.poster.json`), 'utf8'));
       const image = await readFile(join(SITE, `examples/${name}.poster.png`));
