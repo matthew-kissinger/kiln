@@ -132,9 +132,9 @@ intact; this is the reason the plan uploads rather than optimizes.
 | 2.9 | Update `site/scripts/verify-assets.mjs` to fetch posters, preserving the hash check, with a local cache so CI does not depend on network availability | Done |
 | 2.10 | Audit and update `site/scripts/build-example-poster.mjs`, which reads `examples/renders` | Done |
 | 2.11 | Update the write targets in `scripts/hero-shots.ts` and `scripts/anim-gifs.ts`, per D4 | Done |
-| 2.12 | Run `verify-assets.mjs` locally; it must pass | Blocked; see record |
+| 2.12 | Run `verify-assets.mjs` locally; it must pass | Done; green on CI run against PR #63 |
 | 2.13 | Run `bun run test` and `bun run lint`; both must pass | Done |
-| 2.14 | Push to a branch and confirm `pages.yml` passes, before any rewrite | Blocked; see record |
+| 2.14 | Push to a branch and confirm `pages.yml` passes, before any rewrite | Done; green on CI run against PR #63 |
 | 2.15 | Repoint `site/scripts/build-assets.mjs`, which reads posters through a `RENDERS` constant and scrapes poster hrefs out of `docs/examples.md`. Added during execution: a literal search for `examples/renders` did not find it | Done |
 | 2.16 | Extract the poster source into `site/scripts/posters.mjs` so the build and the verifier share one fetch-and-cache path. Added during execution | Done |
 | 2.17 | Add `scripts/upload-posters.mjs` to publish `.posters/` to the bucket, refusing any image whose hash disagrees with an existing receipt. Added during execution | Done |
@@ -153,12 +153,12 @@ disruption instead of several.
 | 3.3 | Re-verify fork and PR counts immediately before proceeding | Done; 0 forks, 0 open pull requests, 0 open issues, 21 stars, unchanged from the Phase 0 reading |
 | 3.4 | Add `.gitignore` guards for the removed paths | Done; `examples/renders/*.png`, `examples/renders/*.gif` and `assets/video/` are ignored, inert while the files are still tracked and effective the moment 3.5 removes them |
 | 3.4a | Move the render-existence assertions off `readdir`. Added during execution; resolved by splitting the check across the two layers that can each honestly make it. See the Phase 3 record | Done |
-| 3.5 | Single `git filter-repo` pass removing `assets/video/`, `examples/renders/*.png` and `examples/renders/*.gif` | Pending |
-| 3.6 | Handle `dist/` separately. `filter-repo` removes a path from all history and cannot retain only the newest blob, so purge `dist/` entirely and re-add the current `dist/` in one fresh commit, leaving it stored once | Pending |
-| 3.7 | Verify `dist/mcp-server.mjs` at the new HEAD is byte-identical to the pre-rewrite file, then that `bun run build:runtime` still leaves the tree clean. This is the I2 gate | Pending |
-| 3.8 | Verify pack size, commit count, and that HEAD content matches the pre-rewrite checkout except for removed paths | Pending |
-| 3.9 | Run `bun run test` and `bun run lint` on the rewritten tree | Pending |
-| 3.10 | Clone from the local rewritten repository; record time and size | Pending |
+| 3.5 | Single `git filter-repo` pass removing `assets/video/`, `examples/renders/*.png` and `examples/renders/*.gif` | Done in rehearsal; see the Phase 3 rehearsal record |
+| 3.6 | Handle `dist/` separately. `filter-repo` removes a path from all history and cannot retain only the newest blob, so purge `dist/` entirely and re-add the current `dist/` in one fresh commit, leaving it stored once | Done in rehearsal; see the Phase 3 rehearsal record |
+| 3.7 | Verify `dist/mcp-server.mjs` at the new HEAD is byte-identical to the pre-rewrite file, then that `bun run build:runtime` still leaves the tree clean. This is the I2 gate | Done in rehearsal; see the Phase 3 rehearsal record |
+| 3.8 | Verify pack size, commit count, and that HEAD content matches the pre-rewrite checkout except for removed paths | Done in rehearsal; see the Phase 3 rehearsal record |
+| 3.9 | Run `bun run test` and `bun run lint` on the rewritten tree | Done in rehearsal; see the Phase 3 rehearsal record |
+| 3.10 | Clone from the local rewritten repository; record time and size | Done in rehearsal; see the Phase 3 rehearsal record |
 | 3.11 | Force-push. Requires explicit approval at this moment, per D5 | Pending |
 | 3.12 | Clone from GitHub; record the real-world time and size against the targets | Pending |
 | 3.13 | Confirm `ci.yml` and `pages.yml` are green on the new `main` | Pending |
@@ -424,3 +424,57 @@ architectures.
 | 6.2 | Decide the fix: make serialization deterministic across platforms, or make `artifactHash` cover geometry rather than serialized bytes | Pending |
 | 6.3 | Re-record the affected receipts once serialization is settled, deliberately and in one pass | Pending |
 | 6.4 | Unpin `pages.yml` from `windows-2022` and confirm the gallery builds on Ubuntu | Pending |
+
+### Phase 3 rehearsal
+
+The rewrite was executed in full on a throwaway clone before touching anything
+that can reach GitHub, because `git filter-repo` rewrites a repository in place
+and strips its remote. The clone used `--no-hardlinks` deliberately: a local
+clone hardlinks objects by default, and rewriting hardlinked objects can reach
+back into the source repository. The remote was then removed outright.
+
+Tasks 3.5 through 3.10 are validated by this rehearsal. 3.11 onward, which begins
+with the force-push, are not.
+
+| Measurement | Baseline | After rewrite |
+| --- | --- | --- |
+| Packed history | 226.06 MiB | 16.62 MiB |
+| `.git` on disk | 227 MB | 17 MB |
+| Objects in pack | 3206 | 3020 |
+| Commits | 180 | 180 |
+| Clone, wall clock (local transport) | 79 s from GitHub | 203 ms |
+| Clone, on disk | 440 MB | 35 MB (23 MB `.git` + 12 MB checkout) |
+
+One pass removed `assets/video/`, `examples/renders/*.png`,
+`examples/renders/*.gif` and `dist/`. All four are absent from every commit
+afterwards, verified by searching the whole rewritten history for additions
+rather than by inspecting HEAD. Every commit survived.
+
+| Verification | Result |
+| --- | --- |
+| Files in tree | 1262 before, 1143 after; exactly 119 removed (31 under `assets/video/`, 88 under `examples/renders/`) |
+| Unexpected additions | none |
+| `dist/` re-added (3.6) | all 10 files byte-identical to the pre-rewrite blobs, by sha256 |
+| `bun run build:runtime` (3.7, I2) | exit 0, working tree clean, `dist/` still byte-identical |
+| `bun run lint` (3.9, I6) | exit 0; 14 warnings, 11 infos, unchanged from baseline |
+| `bun run test` (3.9) | 1804 pass, 1 fail across 1807 tests in 206 files |
+
+The single failure is `CLI saves, exports, imports, and restores a revision
+across independent stores`, and it is pre-existing: the same test fails
+identically in the untouched working repository, with
+`SyntaxError: JSON Parse error: Unexpected EOF` at `src/asset-cli.test.ts:34`.
+It passes on CI's Ubuntu runner, so it is a local environment fault rather than a
+repository defect, and it is unrelated to this work.
+
+### CI results on PR #63
+
+Both workflows succeeded on the pull request, which resolves tasks 2.12 and
+2.14. The Gallery workflow is the meaningful one: it ran `build-assets.mjs`,
+`verify-assets.mjs` and the new `verify-posters.mjs` on `windows-2022`, so the
+R2 poster path is confirmed end to end in the environment the receipts were
+recorded in.
+
+| Workflow | Conclusion |
+| --- | --- |
+| CI | success |
+| Gallery | success |
