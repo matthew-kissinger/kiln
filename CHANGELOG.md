@@ -6,8 +6,9 @@ GitHub. The package is not published on the npm registry.
 ## Smaller clone; gallery images served from R2 — 2026-09-10
 
 - Gallery renders and launch video are no longer carried in git history. A clone
-  costs 35 MB on disk rather than 440 MB, and a plugin install no longer pays for
-  539 MB of repository content twice.
+  costs 52 MB and 8 seconds rather than 440 MB and 79 seconds, 48 MB with
+  `--filter=blob:none`, and a plugin install no longer pays for 539 MB of
+  repository content twice. Packed history went from 226.06 MiB to 17.41 MiB.
 - The 88 gallery images moved to Cloudflare R2 byte for byte and are served from
   `assets.kilnstudio.tools`. Nothing was re-encoded: all 83 poster receipts still
   verify against the stored objects, and `scripts/verify-posters.mjs` checks that
