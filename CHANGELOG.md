@@ -3,6 +3,29 @@
 Changes to `@kiln/engine`. Source and installable packages are distributed through
 GitHub. The package is not published on the npm registry.
 
+## Smaller clone; gallery images served from R2 — 2026-09-10
+
+- Gallery renders and launch video are no longer carried in git history. A clone
+  costs 35 MB on disk rather than 440 MB, and a plugin install no longer pays for
+  539 MB of repository content twice.
+- The 88 gallery images moved to Cloudflare R2 byte for byte and are served from
+  `assets.kilnstudio.tools`. Nothing was re-encoded: all 83 poster receipts still
+  verify against the stored objects, and `scripts/verify-posters.mjs` checks that
+  on every gallery build.
+- **This rewrote history.** All 177 commits survived and the tree is unchanged
+  apart from the removed images and video, but every commit hash changed. Clones
+  predating this cannot fast-forward; see the note in `README.md`. Links pinned to
+  an old commit SHA will stop resolving; links through `main` are unaffected.
+- The launch video was never what the README served -- that comes from GitHub's
+  asset CDN -- so the README is unaffected. `assets/gallery/` deliberately stays
+  in the repository, so the README grid needs no network.
+- Re-encoding the posters to shrink them was considered and rejected: image tokens
+  scale with pixel dimensions, not file size, so it would have saved no agent
+  context while voiding all 83 receipts.
+
+Full record, including everything rejected and why, in
+[docs/plans/repo-size-and-r2-migration-2026-09-10.md](docs/plans/repo-size-and-r2-migration-2026-09-10.md).
+
 ## Collections and chat viewing — 2026-09-06
 
 - Save assets into project or personal collections with immutable revisions,

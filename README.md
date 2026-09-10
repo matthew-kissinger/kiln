@@ -80,6 +80,14 @@ bun run kiln render examples/crate.kiln.js --out crate.glb --views sheet.png
 file contents on the server, fetching them only if you ask for an old revision.
 A plain `git clone` also works and gives you the whole history up front.
 
+History was rewritten on 2026-09-10 to drop 288 MB of gallery renders and launch
+video that no tool reads, taking a clone from 440 MB to 35 MB on disk. Every
+commit survived and the tree is unchanged apart from those files, but every
+commit hash changed, so a clone made before that date cannot fast-forward.
+Re-clone, or discard local history with `git fetch origin && git reset --hard
+origin/main`. The gallery images are served from `assets.kilnstudio.tools`; the
+83 poster receipts that attest their bytes stayed in `examples/renders/`.
+
 This writes a GLB and a six-view image of an existing program. It makes no model call.
 Rendering uses the CPU unless a compatible local GPU service is available.
 Use `--render cpu` to select the CPU explicitly.
