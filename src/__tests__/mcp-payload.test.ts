@@ -154,7 +154,11 @@ describe('always-on context cost', () => {
 
   it('skill discovery stays within the context budget', async () => {
     const { total, count } = await frontMatterChars();
-    expect(count).toBe(5);
+    // Six since kiln-setup-workspace was added: the authoring five plus the
+    // repo-side setup skill, which is the one an agent in a bare clone needs
+    // before any of the others apply. A hard count keeps adding a skill a
+    // deliberate act, because every one of these is paid at session start.
+    expect(count).toBe(6);
     // Front matter is a name and one sentence. Anything much past this is a
     // skill trying to teach from the index instead of from its body.
     expect(total).toBeLessThan(2048);

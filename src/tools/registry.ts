@@ -18,6 +18,7 @@ import { createCachedEvaluatorPort, MemoryBuildCache, type BuildCache } from '..
 import * as THREE from 'three';
 
 import { validate } from '../validation';
+import { evaluatorOutcomeMessage } from '../evaluator/protocol';
 import { inspectSceneStructure, renderSceneToGLB, type RenderResult } from '../render';
 import { listPrimitives, type PrimitiveSpec } from '../list-primitives';
 import type { AssetCategory, AssetIntentV1 } from '../contracts';
@@ -845,7 +846,20 @@ export interface KilnRenderMetrics {
   ok: boolean;
   tris?: number;
   meshes?: number;
+  /**
+   * Material slots on the re-imported review scene, which is one per mesh. The
+   * scene measured here has been round-tripped through GLB, so authored sharing
+   * no longer survives as object identity and this can never disagree with
+   * `meshes`. Kept for output-shape stability; judge material sprawl from
+   * `distinctMaterials`.
+   */
   materials?: number;
+  /**
+   * Distinct materials in the exported GLB, measured post-dedup. This is the
+   * number that actually falls when parts share a material, and the one the
+   * instanceability grade is driven by.
+   */
+  distinctMaterials?: number;
   bbox?: { min: number[]; max: number[]; size: number[] };
   /** Mesh touching the lowest world point — ground-contact attribution. When
    *  bbox.min[1] dips below 0, this names the buried part so the agent can
@@ -918,6 +932,27 @@ function collectSceneMetrics(root: THREE.Object3D): SceneMetrics {
  * Execute Kiln code, render it to an in-memory GLB, and report metrics.
  * Never writes files; never throws — failures come back as { ok:false, error }.
  */
+/**
+ * The evaluator's rejection message is deliberately opaque, because nothing
+ * from a sandboxed exception may cross that boundary -- not a message, not a
+ * stack, not an identifier. A syntax error is the one exception worth making,
+ * and it costs nothing: acorn parses host-side before any generated code runs,
+ * which is exactly why `kiln_validate` can already report its line and column.
+ * Repeating that parse here leaks nothing new and turns an unactionable
+ * rejection into a position, without a second round-trip through validate.
+ */
+function withSyntaxDetail(message: string, code: string): string {
+  if (!message.startsWith(evaluatorOutcomeMessage('EXECUTION_REJECTED'))) return message;
+  let syntax: string | undefined;
+  try {
+    syntax = validate(code).errors.find((error) => error.startsWith('Syntax error:'));
+  } catch {
+    // A diagnostic must never turn a handled failure into an unhandled one.
+    return message;
+  }
+  return syntax ? `${message} ${syntax}` : message;
+}
+
 async function runRender(
   input: z.infer<typeof renderInput>,
   context: KilnToolContext,
@@ -945,6 +980,9 @@ async function runRender(
       tris: rendered.tris,
       meshes: metrics.meshes,
       materials: metrics.materials,
+      ...(rendered.meta.instanceability
+        ? { distinctMaterials: rendered.meta.instanceability.metrics.uniqueMaterials }
+        : {}),
       bbox: metrics.bbox,
       lowestPart: metrics.lowestPart,
       ...(instanceability
@@ -961,7 +999,7 @@ async function runRender(
   } catch (err) {
     return {
       ok: false,
-      error: err instanceof Error ? err.message : String(err),
+      error: withSyntaxDetail(err instanceof Error ? err.message : String(err), input.code),
       warnings: [],
     };
   }
@@ -1015,7 +1053,7 @@ async function runScreenshot(
   } catch (err) {
     return {
       ok: false,
-      error: err instanceof Error ? err.message : String(err),
+      error: withSyntaxDetail(err instanceof Error ? err.message : String(err), input.code),
       warnings: [],
     };
   }
@@ -1044,7 +1082,20 @@ export interface KilnRenderViewsResult {
   ok: boolean;
   tris?: number;
   meshes?: number;
+  /**
+   * Material slots on the re-imported review scene, which is one per mesh. The
+   * scene measured here has been round-tripped through GLB, so authored sharing
+   * no longer survives as object identity and this can never disagree with
+   * `meshes`. Kept for output-shape stability; judge material sprawl from
+   * `distinctMaterials`.
+   */
   materials?: number;
+  /**
+   * Distinct materials in the exported GLB, measured post-dedup. This is the
+   * number that actually falls when parts share a material, and the one the
+   * instanceability grade is driven by.
+   */
+  distinctMaterials?: number;
   bbox?: { min: number[]; max: number[]; size: number[] };
   lowestPart?: { name: string; y: number };
   /** Post-dedup instanceability grade (informational): how cheap to render at scale. */
@@ -1111,6 +1162,9 @@ async function runRenderViews(
         tris: rendered.tris,
         meshes: metrics.meshes,
         materials: metrics.materials,
+        ...(rendered.meta.instanceability
+          ? { distinctMaterials: rendered.meta.instanceability.metrics.uniqueMaterials }
+          : {}),
         bbox: metrics.bbox,
         lowestPart: metrics.lowestPart,
         views: grid.views,
@@ -1261,6 +1315,9 @@ async function runRenderViews(
       tris: rendered.tris,
       meshes: metrics.meshes,
       materials: metrics.materials,
+      ...(rendered.meta.instanceability
+        ? { distinctMaterials: rendered.meta.instanceability.metrics.uniqueMaterials }
+        : {}),
       bbox: metrics.bbox,
       lowestPart: metrics.lowestPart,
       ...(rendered.meta.instanceability
@@ -1286,7 +1343,7 @@ async function runRenderViews(
   } catch (err) {
     return {
       ok: false,
-      error: err instanceof Error ? err.message : String(err),
+      error: withSyntaxDetail(err instanceof Error ? err.message : String(err), input.code),
       warnings: [],
     };
   }

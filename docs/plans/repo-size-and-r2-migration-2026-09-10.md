@@ -149,7 +149,7 @@ disruption instead of several.
 | ID | Task | State |
 | --- | --- | --- |
 | 3.1 | Install `git-filter-repo`. `pipx` and `pip3` are both absent on this machine, so it came from the distribution package instead: `pacman -S git-filter-repo`, version 2.47.0-3 | Done |
-| 3.2 | Commit all Phase 1 and Phase 2 changes first, so the rewrite carries them | Pending |
+| 3.2 | Commit all Phase 1 and Phase 2 changes first, so the rewrite carries them | Done; state was stale. The shipped rewrite demonstrably carries them -- corrected 2026-09-10 |
 | 3.3 | Re-verify fork and PR counts immediately before proceeding | Done; 0 forks, 0 open pull requests, 0 open issues, 21 stars, unchanged from the Phase 0 reading |
 | 3.4 | Add `.gitignore` guards for the removed paths | Done; `examples/renders/*.png`, `examples/renders/*.gif` and `assets/video/` are ignored, inert while the files are still tracked and effective the moment 3.5 removes them |
 | 3.4a | Move the render-existence assertions off `readdir`. Added during execution; resolved by splitting the check across the two layers that can each honestly make it. See the Phase 3 record | Done |
@@ -174,16 +174,16 @@ content-addressed ref and reused the build.
 
 | ID | Task | State |
 | --- | --- | --- |
-| 4.0 | Independently reproduce findings 4.5 to 4.9 before editing. They came from a delegated run and are not yet personally confirmed | Pending |
-| 4.1 | `--harness claude` writes skills to `./skills/`, so the harness registers none of them; they work only because `CLAUDE.md` instructs the agent to read them. Either install to `.claude/skills/` or correct `START.md`, which currently states they are installed | Pending |
-| 4.2 | `kiln_render` reports only "Generated asset execution was rejected." on a syntax error, while `kiln_validate` on the same source reports `Syntax error: Unexpected token (2:39)`. Surface the underlying message | Pending |
-| 4.3 | The same rejection for an unknown helper never names the identifier. Name it and point at `kiln_list_primitives` | Pending |
-| 4.4 | The MCP server sends an empty `instructions` field, so a client reading only `.mcp.json` gets 13 tools with no indication that `programRef` should be reused rather than re-sending source | Pending |
-| 4.5 | `.mcp.json` records an absolute `node` path, which breaks for `nvm` users after `nvm use`. `--repair` fixes it; `START.md` frames repair as relocation-only | Pending |
-| 4.6 | `scripts/create-workspace.mjs` exits 0 on a usage error and names `kiln-init`, which the caller did not invoke | Pending |
-| 4.7 | `START.md` offers no copy-pasteable first command | Pending |
-| 4.8 | Reconcile metric naming: top-level `materials: 8` against `qaReport` `materialCount: 2` and `drawCalls: 8` for one render | Pending |
-| 4.9 | Reconsider `kiln_validate` returning `valid: true` for a program using an undefined helper | Pending |
+| 4.0 | Independently reproduce findings 4.5 to 4.9 before editing. They came from a delegated run and are not yet personally confirmed | Done; all nine reproduced 2026-09-10 against `dist/mcp-server.mjs`. See "Phase 4 verification" |
+| 4.1 | `--harness claude` writes skills to `./skills/`, so the harness registers none of them; they work only because `CLAUDE.md` instructs the agent to read them | Confirmed, then superseded. The either/or in the original wording is wrong: `.claude/skills/` serves only Claude, while `.agents/skills/` serves codex, opencode, hermes and agy. Rescoped into Phase 7 |
+| 4.2 | `kiln_render` reports only "Generated asset execution was rejected." on a syntax error, while `kiln_validate` on the same source reports `Syntax error: Unexpected token (1:48)`. Surface the underlying message | Done; `runRenderViews` and `runScreenshot` now append the host-side acorn diagnostic. Verified: render reports `Syntax error: Unexpected token (1:48)`, matching validate. Safe because that parse precedes execution, so nothing crosses the evaluator boundary |
+| 4.3 | The same rejection for an unknown helper never names the identifier. Name it and point at `kiln_list_primitives` | Done, within the boundary. The advice now points at `kiln_list_primitives`; the identifier is still not named, because only the sandboxed exception carries it and this module's contract forbids that. 4.9 names it from the host-side parse instead |
+| 4.4 | The MCP server sends an empty `instructions` field, so a client reading only `.mcp.json` gets 13 tools with no indication that `programRef` should be reused rather than re-sending source | Done; `instructions` is 1,776 characters, about 354 tokens, verified delivered in the initialize result and guarded by `src/__tests__/mcp-instructions.test.ts` |
+| 4.5 | `.mcp.json` records an absolute `node` path, which breaks for `nvm` users after `nvm use`. `--repair` fixes it; `START.md` frames repair as relocation-only | Done; `START.md` now says repair is needed after a replaced Node as well as a move, and explains that the manifest pins the interpreter the preflight validated |
+| 4.6 | `scripts/create-workspace.mjs` exits 0 on a usage error and names `kiln-init`, which the caller did not invoke | Refuted and closed. Measured without a pipe: no args exits 1, `--bogus` exits 1, `--help` exits 0; `kiln-init` is a real `bin` entry. The original finding read `$?` from a piped command |
+| 4.7 | `START.md` offers no copy-pasteable first command | Done; a fenced `cd` plus launch command, and a second block for repair, both carrying the workspace's own absolute path |
+| 4.8 | Corrected: `qaReport` carries neither `materialCount` nor `drawCalls`. The real defect is that top-level `materials` always equals `meshes` -- it counts per-mesh material slots, not distinct materials | Done additively. Root cause proven and different from the hypothesis: the metric measures a scene re-imported from GLB. `distinctMaterials` now comes from the post-dedup GLB metrics at all three result sites. 20 parts sharing one material report `materials: 20, distinctMaterials: 1` |
+| 4.9 | Reconsider `kiln_validate` returning `valid: true` for a program using an undefined helper | Done as a warning. `validate` names the undeclared called identifier with its line, from the host-side parse. Zero false positives across all 86 example programs; local functions and arrow consts are not flagged. Promoting it to an error would change `valid` for source that parses, and is left as a contract decision |
 
 ## Phase 5 — Test-artifact cleanup
 
@@ -582,3 +582,445 @@ file that `scripts/create-workspace.mjs` writes, not to the shipped manifest.
 Phases 0, 1, 2, 3 and 5 are complete. Phase 4 remains open and is now partly
 verified: 4.4 confirmed, 4.5 needs rewording, 4.6 partly refuted earlier. Phase 6
 is open and untouched.
+
+## Phase 4 verification
+
+Run on 2026-09-10 against `dist/mcp-server.mjs` over stdio, after first reading
+`skills/kiln-author-asset/SKILL.md` and `references/program-contract.md` so the
+probe programs were contract-valid (`const meta` plus `function build()`, no
+imports, exports or TypeScript). Omitting that step is what invalidated the
+earlier delegated run.
+
+Two findings changed on measurement. 4.6 is refuted outright. 4.8 was described
+wrongly in the original table and is a different, worse defect than recorded.
+
+Engine health measured in passing, so it is on the record rather than assumed:
+server start 1.3 s; one-part render 913 ms; five parts 862 ms; twenty parts
+798 ms; an identical re-render 57 ms from cache. Render cost is flat in part
+count. An earlier impression that renders were slow was a probe script leaking
+uncleared `setTimeout` handles, not engine behaviour.
+
+Protocol negotiation is correct and current: the server echoes `2025-06-18` and
+`2025-11-25` when asked, and falls back to `2025-11-25` for anything newer,
+which is `LATEST_PROTOCOL_VERSION` in the pinned SDK 1.30.0. The `2026-01-26`
+literal in `src/viewer/chat-app.ts` is the MCP-UI `ui/initialize` protocol, a
+different protocol, and is not an inconsistency.
+
+## Phase 7 -- Cross-harness skills and clean-room loadout
+
+Opened 2026-09-10. Phase 4 task 4.1 was scoped as a Claude-only choice between
+`.claude/skills/` and a `START.md` correction. Reading each harness's own
+documentation shows that framing was wrong, and that the gap is a whole class of
+defect rather than one setting.
+
+### The documented harness matrix
+
+| Harness | Project-local skill paths | Instruction file |
+| --- | --- | --- |
+| claude (Claude Code) | `.claude/skills/` only | `CLAUDE.md` only; does not read `AGENTS.md` |
+| codex (OpenAI Codex) | `.agents/skills/`, scanned from cwd up to repo root | `AGENTS.md` |
+| opencode | `.opencode/skills/`, `.claude/skills/`, `.agents/skills/` | `AGENTS.md` |
+| hermes (NousResearch) | `.hermes/skills/`, `.agents/skills/` | -- |
+| agy (Google Antigravity) | `.agents/skills/` | `agents.md` |
+
+`.agents/skills/` serves four of the five; Claude Code is the sole holdout.
+
+An important nuance, checked against the specification rather than inferred:
+`.agents/skills/` is a **de-facto convention, not part of the standard.** Agent
+Skills became a formal open standard on 2025-12-18 with the specification at
+`agentskills.io/specification`, adopted across 20-plus platforms, but that
+specification deliberately defines only the skill *format* -- directory layout
+and `SKILL.md` frontmatter -- and says nothing about where agents should look for
+skills. Discovery is left entirely to implementations, which is exactly why the
+matrix above has five different answers and why no single directory can serve
+all of them.
+
+Two corrections to earlier belief. Codex does support skills, from December
+2025; the claim that it had no native concept was wrong. And `skills/` at the
+repository root is not a mistake -- it is the plugin convention, auto-discovered
+from a Claude Code plugin root and declared explicitly by
+`.codex-plugin/plugin.json`. The layout is correct for the path it was built for.
+
+### Three install paths, one of them served
+
+| Path | Tools | Skills |
+| --- | --- | --- |
+| Installed as a plugin | yes | yes -- Claude by auto-discovery, Codex by explicit field |
+| `git clone` plus an agent | **no, see 7.1** | no -- root `skills/` is not a discovery path outside plugin context |
+| `kiln-init` workspace | yes, all five harnesses | opencode only |
+| Ad-hoc: configure the server by hand, open an empty folder | yes | files exist in the install root but sit in no scanned directory |
+
+### Clean rooms invert the registration rule
+
+A generated workspace is a plain directory; `create-workspace.mjs` writes a
+`.gitignore` but never runs `git init`. Both opencode and hermes gate
+project-local skill discovery on being inside a git checkout, so convention
+directories alone cannot be relied on there. Explicit configuration therefore
+beats convention in a clean room, which reverses the first proposal drafted for
+this phase: opencode's `skills.paths` must be KEPT, not replaced. It is a real
+key, verified against the published `opencode.ai/config.json` schema
+("Additional paths to skill folders").
+
+### Repo-side and workspace-side skills are different audiences
+
+All five existing skills are workspace-side: they assume a live `kiln_workspace`
+server and a workspace to author in. Nothing is repo-side, and `AGENTS.md` never
+mentions workspaces, `kiln-init` or clean rooms -- it addresses engine
+contributors only. An agent in a bare clone has no way to learn that
+`scripts/create-workspace.mjs` exists.
+
+This also rules out an approach that was nearly adopted: committing all five
+authoring skills to a root `.claude/skills/`. That would register, for an agent
+sitting in the engine checkout, skills whose own guidance is to keep the engine
+checkout out of the agent's task context. Root registers the repo-side skill
+only.
+
+| ID | Task | State |
+| --- | --- | --- |
+| 7.11 | Add specification validation of the skill files to CI. The standard ships a reference validator (`skills-ref validate`); a local equivalent avoids a new dependency. Guards the format against drift now that it is a published standard with 20-plus implementations | Done; folded into `check:skills` rather than adding a dependency on the reference validator |
+| 7.1 | Root `.mcp.json` borrowed Antigravity's `${PLUGIN_ROOT}` while serving Claude Code project config and the Codex plugin, neither of which defines it, so a fresh clone opened onto a `kiln` server that could not start | Done. Root `.mcp.json` now uses `${CLAUDE_PROJECT_DIR:-.}`, the documented project-scoped idiom; the Codex manifest carries its server inline with a plugin-root-relative `cwd`, the documented alternative to a path. Both expansion branches verified to start the server; `mcp_config.json` untouched; a guard test asserts no plugin variable returns to this file |
+| 7.2 | Author a repo-side `kiln-setup-workspace` skill: choosing a harness, generating the clean room, verifying `kiln_workspace` came up, and what `--repair` does and does not touch | Done; `skills/kiln-setup-workspace/`, specification-validated |
+| 7.3 | Register 7.2 at the repository root in both `.claude/skills/` and `.agents/skills/`. Copies, not symlinks: symlinks need developer mode or admin on Windows and a `core.symlinks` checkout | Done; committed to `.claude/skills/` and `.agents/skills/`. `.gitignore` needed the `.claude/*` plus negation form, because git will not descend into a wholly excluded directory |
+| 7.4 | Add a root `CLAUDE.md` containing the documented `@AGENTS.md` import, and an "authoring assets versus contributing to the engine" section to `AGENTS.md` naming 7.2. A skill cannot make itself discoverable, so this is the bootstrap | Done; root `CLAUDE.md` carries the documented `@AGENTS.md` import, and `AGENTS.md` gained an authoring-versus-contributing section |
+| 7.5 | Workspace generator: copy the authoring skills into `.claude/skills/` and `.agents/skills/` instead of plain `skills/`, upgrading four harnesses from prose to native registration | Done; all five harnesses now receive `.claude/skills/` and `.agents/skills/` alongside the maintained `skills/` |
+| 7.6 | Keep opencode `skills.paths`; add the hermes equivalent to the generated `.hermes/config.yaml`. The key is reported as `skills.external_dirs` but that came from prose, not a schema -- verify before writing it | Done; opencode `skills.paths` kept, hermes `skills.external_dirs` added after confirming the key and that its project-local scan needs a git checkout |
+| 7.7 | Populate the MCP `instructions` field from the five skill descriptions, as the harness-independent floor. Same work as 4.4 | Done; 1,776 characters, about 354 tokens, verified delivered in the initialize result |
+| 7.8 | Add a `check:skills` gate asserting the registered copies are byte-identical to canonical `skills/`, mirroring `check:toolchain`, and wire it into CI. This is what makes copying safe rather than a drift hazard | Done; `scripts/check-skills.mjs`, wired into CI before install, negative-tested against three distinct failure modes |
+| 7.9 | Trim `skills/kiln-batch-dispatch/references/clean-room-evaluation.md` to evaluation scope once 7.2 owns setup, so two documents do not describe workspace creation | Done; trimmed 42 lines to 30, setup now owned by 7.2 |
+| 7.10 | DECIDED: no `git init`. Clean rooms stay plain directories and skill registration goes through explicit configuration (7.6), which is independent of git state. Closed | Done |
+
+### Clone readiness, measured
+
+Verified 2026-09-10 against the live remote at `9b0c610`, in a fresh clone
+rather than the working tree: clone 3.3 s for 52 MB; `bun install
+--frozen-lockfile` 0.59 s, exit 0; `check:toolchain`, `typecheck` and `lint` all
+exit 0 with the unchanged 14-warning baseline; `bun run test` 1805 pass, 0 fail,
+2 skip. `dist/` is committed, so no build step precedes first use. Both
+previously flaky tests passed here, so they are intermittent rather than broken.
+
+Phase 6 does not gate a cloning developer: there is no `build:assets` script in
+`package.json`, and the only consumer of the poster receipts is the Pages
+workflow, already pinned to `windows-2022`. It stays maintainer-only work.
+
+## Decisions taken 2026-09-10
+
+| Ref | Decision | Rationale |
+| --- | --- | --- |
+| 7.1 | Split the two uses of `.mcp.json` | A fresh clone must not open onto a failing MCP server. The Codex plugin gets its own file; root `.mcp.json` becomes correct for a bare clone |
+| 4.8 | Add a correct `distinctMaterials` alongside `materials` rather than changing `materials` | Additive. Nothing reading the existing key breaks, including the instanceability grade. Root cause is still to be proven before any edit |
+| 7.10 | No `git init` for generated workspaces | Explicit configuration already covers opencode and hermes, and it works regardless of git state. Preserves the documented meaning of a clean room |
+| Scope | This pass covers Phase 7, the Phase 4 error-legibility and docs tasks, and 4.8. Phase 6 and the two intermittent tests stay out | Phase 6 needs a Windows or GPU host to re-record receipts and gates no cloning developer |
+
+### The ad-hoc path, and why `instructions` is not optional
+
+Raised by the owner 2026-09-10: a user may never create a clean room at all.
+They may start the MCP server, configure it in their coding agent, and open a
+new empty folder. That path works today for tools and for storage --
+`KILN_PROGRAM_STORE ?? '.kiln/programs'` resolves against the working directory,
+so the store is created in the folder the agent opened, which is the correct
+behaviour and not incidental.
+
+A correction to an earlier statement in this section: that user is not missing
+the skill files. All thirteen ship in the npm tarball and `skills/` sits as a
+sibling of `dist/`, so the server can compute its own install root and name a
+real absolute directory at runtime. What is missing is *registration* -- the
+files are in a location no harness scans. The MCP `instructions` field is the
+only channel that can tell that user the files exist and where. Task 7.7 therefore carries the whole
+loadout for this path and must be substantive on its own -- an orientation to
+the tool surface and the `programRef` contract -- rather than a pointer to skill
+files that are not present.
+
+### 7.1 is lower risk than first assessed
+
+`scripts/package-plugin.mjs` deletes `manifest.mcpServers` when it builds the
+Codex connector, so the published artifact is skills-only and never reads root
+`.mcp.json`. The `"mcpServers": "./.mcp.json"` field in
+`.codex-plugin/plugin.json` is effectively vestigial for the distributed plugin.
+Root `.mcp.json` can be made correct for a bare clone without disturbing the
+Codex packaging path. The Codex `plugin.json` schema could not be confirmed from
+OpenAI's published documentation; the packaging script is the authority used here.
+
+### The skills format is a published standard, and ours conforms
+
+Validated 2026-09-10 against `agentskills.io/specification`, not against this
+repository's own conventions.
+
+Required frontmatter is `name` (max 64 characters, lowercase alphanumerics and
+single hyphens, no leading, trailing or consecutive hyphens, and it **must match
+the parent directory name**) and `description` (max 1024 characters, stating both
+what the skill does and when to use it). Optional: `license`, `compatibility`
+(max 500), `metadata` (string-to-string map), and the experimental
+`allowed-tools`. The specification also sets progressive-disclosure guidance:
+name and description are loaded for every skill at startup, so roughly 100
+tokens each; the body loads on activation and should stay under 5000 tokens and
+500 lines; `references/`, `scripts/` and `assets/` load on demand and file
+references should stay one level deep.
+
+All five skills pass every one of those checks:
+
+| Skill | Lines | Description chars | Body tokens (approx) |
+| --- | --- | --- | --- |
+| kiln-author-asset | 47 | 117 | 911 |
+| kiln-batch-dispatch | 21 | 225 | 338 |
+| kiln-compose-scene | 20 | 133 | 239 |
+| kiln-qa-asset | 28 | 182 | 421 |
+| kiln-refine-asset | 45 | 160 | 795 |
+
+Names match their directories, no non-specification frontmatter keys are
+present, and the existing `references/` layout is the specification's own
+recommended convention. The content layer needs no change; only registration
+does.
+
+### `${PLUGIN_ROOT}` is not a variable in either plugin system
+
+Checked against both vendors rather than assumed from this repository. Claude
+Code expands `${CLAUDE_PLUGIN_ROOT}`, which is the token the Claude plugin
+manifest already uses correctly. Codex exposes no equivalent at all: its
+plugin-provided MCP servers take a relative `cwd` that Codex resolves against
+the installed plugin root, and the gap is tracked upstream in openai/codex
+issues 22842 and 22105. Codex `plugin.json` accepts `mcpServers` as either a
+relative path or an inline object, and `skills` as a relative path that
+supplements rather than replaces default discovery.
+
+**Correction, from this repository's own tests rather than vendor docs.**
+`${PLUGIN_ROOT}` *is* a real variable: it is Antigravity's, and root
+`mcp_config.json` uses it deliberately. `src/__tests__/mcp-bundle.test.ts`
+records the measurement -- on `agy` 1.1.25 the file validates at the plugin root
+(`mcpServers: 1 processed`) but is not merged into the session, so the test
+asserts only that it names the node bundle and pointedly does not assert that
+the variable expands. That file is correct and must be left alone.
+
+The defect is narrower than first written: root `.mcp.json` borrowed
+Antigravity's variable while serving two consumers that never define it -- Claude
+Code reading project-scoped configuration in a plain clone, and the Codex plugin
+manifest. Task 7.1 fixes that file only.
+
+### 7.7 shape: an index and a pointer, not the skill bodies
+
+Decided 2026-09-10 on the owner's suggestion that `instructions` should tell the
+agent to add skills to its workspace rather than carry them inline. Agreed, for
+two measured reasons.
+
+Inlining the five bodies would cost roughly 2704 tokens (911, 338, 239, 421 and
+795), paid at every session start by every client for content that is needed in
+perhaps one conversation. That is exactly what the specification's progressive
+disclosure model exists to prevent: name and description at startup, body only
+on activation. And the pointer can be concrete rather than aspirational, because
+`skills/` ships as a sibling of `dist/`.
+
+`instructions` therefore carries three things, in roughly 350 to 450 tokens:
+the tool-surface orientation and the `programRef` contract, which the ad-hoc user
+has no other way to learn; the five names with a one-line trigger each and the
+absolute source path; and one line offering to copy them into the workspace's
+`.claude/skills/` or `.agents/skills/`.
+
+Two constraints on the wording. The copy must be framed as something the agent
+proposes, not performs unasked -- an MCP server prompting unrequested writes into
+a user's project is a side effect, and someone who wanted one render should not
+find new directories afterwards. And the text must say the copy takes effect
+from the next session, because most harnesses will not register newly written
+skills mid-session; without that, the agent copies files, observes no new
+skills, and may retry.
+
+Deferred, not adopted: exposing the skills as MCP resources. That idea has a
+name and a specification -- see "Skills over MCP" below -- and this plan should
+use it rather than describe the mechanism informally.
+
+## Skills over MCP, and remote skill discovery
+
+Raised by the owner 2026-09-10 as a half-remembered "new skill paradigm exposed
+through MCP". It is real, and it matters for how much of Phase 7 is worth
+building by hand.
+
+### SEP-2640, the Skills Extension
+
+Extension identifier `io.modelcontextprotocol/skills`. It serves Agent Skills
+over MCP on the existing Resources primitive under a `skill://` URI scheme, with
+`skills/list` returning lightweight discovery metadata and `skills/activate`
+returning the full bundle plus scoped tools, prompts, resources and nested
+skills. Scoped primitives stay out of the top-level lists until activation, so
+progressive disclosure moves into the protocol itself.
+
+Ratified, this would collapse most of Phase 7: no per-harness directories, no
+filesystem copies, no registration step, and the ad-hoc path served by the same
+mechanism as every other path.
+
+It is not ratified. The SEP is an open pull request, accepted by core
+maintainers and still under review in the Skills Over MCP working group at 45
+commits, and it still requires reference-implementation completion, conformance
+tests and specification documentation. It is absent from the 2026-07-28 release
+candidate, which shipped MCP Apps and Tasks as the official extensions. It is an
+optional extension rather than a core primitive. Host support is prototype-level
+across gemini-cli, fast-agent, goose, codex and Claude Code. The SDK pinned here
+is 1.30.0 at protocol 2025-11-25, well before any of it.
+
+Decision: do not build on it in this pass. Building against an in-review API with
+no conformance tests would mean rewriting when it lands. Task 7.7 is already the
+manual form of `skills/list` -- an index plus a pointer -- so when the extension
+ratifies the same five skills become `skill://` resources and nothing authored
+now is wasted.
+
+### `.well-known/skills/`, which is usable today
+
+Cloudflare's Agent Skills Discovery RFC applies RFC 8615 well-known URIs to
+skill distribution, and it is already adopted by Mintlify, Docus and Vercel's
+skills CLI. It is what opencode's `skills.urls` config key consumes. Because
+this project already publishes a site, serving the five skills at
+`/.well-known/skills/` would let any opencode user fetch them by URL with no
+clone and no install. It does not depend on SEP-2640.
+
+| ID | Task | State |
+| --- | --- | --- |
+| 7.12 | Watch SEP-2640 to ratification, then expose the skills as `skill://` resources and retire the hand-built per-harness registration where clients support the extension | Deferred by decision; not this pass |
+| 7.13 | Publish the skills at `/.well-known/skills/` on the existing site per the Cloudflare discovery RFC, giving opencode `skills.urls` users a zero-install path | Pending; optional, independent of the rest of Phase 7 |
+
+### 7.1 execution record
+
+Root `.mcp.json` now reads `${CLAUDE_PROJECT_DIR:-.}/dist/mcp-server.mjs`.
+Claude Code expands `${VAR}` and `${VAR:-default}` in `command`, `args` and
+`env`, sets `CLAUDE_PROJECT_DIR` to the project root, and supports no `cwd`
+field for stdio servers -- so the default form is what makes the file resolve
+when nothing defines the variable. Verified by expanding both branches and
+launching each: unset falls back to `./dist/mcp-server.mjs` and starts; set
+resolves absolute and starts. The previous value failed with MODULE_NOT_FOUND.
+
+`.codex-plugin/plugin.json` no longer points at that shared file. It carries the
+server inline -- the documented alternative to a path -- with `"cwd": "."`, which
+Codex resolves against the installed plugin root. `scripts/package-plugin.mjs`
+still deletes `mcpServers` for the published connector: re-run after the change,
+16 files, `connectorBound: true`, `mcpServers` absent, `skills` preserved.
+
+Guarded by a new case in `src/__tests__/mcp-bundle.test.ts` asserting the exact
+argument and that neither `${PLUGIN_ROOT}` nor `${CLAUDE_PLUGIN_ROOT}` appears in
+root `.mcp.json`. Related suites re-run green: mcp-bundle, workspace-node-path,
+workspace-bootstrap, workspace-setup and integration-manifest, 18 tests then 6.
+`docs/chatgpt.md` corrected; the harness table in `docs/install.md` needed no
+change because it describes the generated workspace, not repository root.
+
+## Execution record, 2026-09-10
+
+All nineteen sequenced tasks are complete. Full gate on the working tree:
+`check:toolchain`, `check:skills`, `typecheck` and `lint` all exit 0 with the
+unchanged 14-warning / 11-info baseline, `bun run test` reports **1810 pass, 0
+fail, 2 skip** across 207 files, up from 1805 by the five tests added here, and
+`build:runtime` is byte-identical across consecutive runs.
+
+### What the docs changed about the plan
+
+Four claims written earlier in this document were wrong and are corrected in
+place above. `${PLUGIN_ROOT}` is real -- it is Antigravity's, used deliberately
+by root `mcp_config.json`, which this work left untouched. Codex has supported
+skills since December 2025. Root `skills/` is the plugin convention and was
+never misplaced. And the "SDK pinned here" was `@modelcontextprotocol/sdk`
+1.30.0, a transitive optional peer of `@google/genai` and `@strands-agents/sdk`
+that nothing in this repository imports; the direct dependencies are
+`@modelcontextprotocol/server` and `client` at 2.0.0, both the latest published,
+whose own `LATEST_PROTOCOL_VERSION` is `2025-11-25`. There was nothing to update.
+
+The skill format is a published standard, and all six skills validate against
+it: names match their directories, descriptions sit inside 1024 characters,
+bodies stay under the 500-line and 5000-token guidance, and no non-specification
+frontmatter key is present. `.agents/skills/` is a de-facto convention rather
+than part of that standard, which is why the matrix has five answers.
+
+### 4.8 root cause, which was not the hypothesis
+
+The leading hypothesis in this document -- that `mergeDocuments` gave each part a
+distinctly named material copy that `dedup()` would not merge -- was wrong.
+`loadEvaluatedReviewScene` renders to GLB and then **re-imports** the scene
+(`loadGlbReviewScene(rendered.glb)`), and `collectSceneMetrics` measures that
+re-imported scene, where authored sharing no longer survives as object identity.
+That is why `materials` could never disagree with `meshes`.
+
+The correct figure already existed, post-dedup, in
+`rendered.meta.instanceability.metrics.uniqueMaterials`. `distinctMaterials` is
+surfaced from it at all three render result sites. Verified: 20 parts sharing one
+material now report `materials: 20, distinctMaterials: 1`; 20 distinct report 20
+and 20. `materials` is unchanged and documented for what it actually measures.
+
+### 4.2 and 4.3 are bounded by a security boundary, not by effort
+
+`src/evaluator/authoring-diagnostic.ts` exists to stop exception text crossing
+out of the isolated evaluator: "No captured identifier, path, message, or stack
+crosses the boundary." Naming the identifier in a render rejection, as 4.3 asked,
+would breach that deliberately. What was added instead is engine-owned text
+pointing at `kiln_list_primitives`, and a test above it already asserts that
+arbitrary exceptions keep the generic rejection.
+
+4.2 is safe for a different reason: acorn parses host-side, before any generated
+code runs, which is exactly why `kiln_validate` can already report a position.
+Repeating that parse in the rejection path leaks nothing new. `kiln_render`
+routes through `runRenderViews`, not `runRender`, so the diagnostic is applied at
+both raw-source catches and deliberately not at the `programRef` paths, whose
+source was validated when it was saved.
+
+4.9 is where the identifier can be named, because that check is host-side and
+pre-execution. It reports a warning rather than an error, and its declaration
+set over-approximates -- every binding anywhere in the program counts as in
+scope -- so a shadowed or conditionally declared name is never falsely flagged.
+Measured against all 86 example programs: **zero** false positives; the
+undefined helper is named with its line. Promoting it to an error would change
+`valid` for programs that parse, and is left as a deliberate contract decision.
+
+### Left open, with reasons
+
+Task 7.13 (`/.well-known/skills/`) is grouped with Phase 6 as maintainer-side:
+publishing it runs through `pages.yml`, which is pinned to `windows-2022`, so it
+cannot be verified from a Linux checkout. Task 7.12 (SEP-2640) stays deferred
+until the SEP ratifies.
+
+A third order-dependent test was found and is **pre-existing**, not a
+regression: `authoring-diagnostic.test.ts` "shipping registry exposes repair
+advice from its isolated evaluator" fails when that file runs alone, with
+"Evaluator worker failed.", and passes in a full run. The pristine clone at
+`9b0c610` fails identically. It does not affect users: driving the shipped
+server directly over stdio returns the full advice, `kiln_list_primitives`
+pointer included. Test hygiene, tracked with the other two flaky tests.
+
+Codex's published plugin sample does not enumerate `command`, `args`, `cwd` or
+`env` for an inline `mcpServers` entry, so the `"cwd": "."` written into
+`.codex-plugin/plugin.json` rests on two secondary sources rather than the
+specification. It degrades gracefully -- the argument is relative, so it still
+resolves if `cwd` is ignored but the server already starts at the plugin root --
+and `scripts/package-plugin.mjs` deletes `mcpServers` from the published
+connector regardless.
+
+## Phase 8 -- `kiln save` writes nothing under Bun
+
+Found 2026-09-10 while confirming CI readiness, by chasing the test recorded
+above as merely flaky. It is not flaky in the way it looked, and it is not a
+test problem.
+
+| Runtime and entry | `kiln save` stdout | Exit |
+| --- | --- | --- |
+| `node dist/cli.mjs` | 2,061 bytes of JSON | 0 |
+| `bun dist/cli.mjs` | **0 bytes** | 0 |
+| `bun src/cli.ts` | **0 bytes** | 0 |
+
+The trigger is Bun, not the TypeScript source, and the failure is silent: exit 0,
+empty stdout, empty stderr, no unhandled rejection reported. The program store
+*is* written -- the source is imported and a `p_` ref file appears -- so the
+command runs partway and then stops without a diagnostic. `--help` prints
+correctly under Bun, so the entry guard is fine; `isDirectCliEntry()` was checked
+directly and both sides of its comparison match.
+
+This explains `src/asset-cli.test.ts` completely. That test invokes
+`spawnSync(process.execPath, [resolve('src/cli.ts'), 'save', ...])`, and under
+`bun test` `process.execPath` is Bun, so `saved.stdout` is empty and
+`JSON.parse('')` throws at line 34 -- while line 33's `expect(saved.status).toBe(0)`
+passes, because the exit code really is 0. Measured 1 pass in 4 isolated runs on
+this tree and 1 in 3 on a pristine `9b0c610`, so it is pre-existing and roughly a
+coin flip; it passed in both full-suite runs here and failed once under
+`test:coverage`.
+
+End users are not affected: every shipped launcher and manifest invokes `node`
+-- the workspace manifest pins the interpreter the preflight validated, and the
+plugin manifests use bare `node`. Contributors are, because `AGENTS.md`
+documents Bun as the toolchain.
+
+| ID | Task | State |
+| --- | --- | --- |
+| 8.1 | Find where the `save` path exits early under Bun without a diagnostic. The store write succeeds, so the divergence is after program import; suspect the in-process evaluator or an output flush racing process exit | Pending |
+| 8.2 | Decide whether the CLI should refuse to exit 0 having produced no output at all, independent of the Bun cause. A silent success is the part that made this look like flakiness for so long | Pending |
+| 8.3 | Point `src/asset-cli.test.ts` at an interpreter that reflects how the CLI actually ships, or assert non-empty stdout before parsing so the failure names the real cause | Pending |
+| 8.4 | Re-check the other two intermittent tests against this finding; a shared `spawnSync` under Bun may explain more than one of them | Pending |

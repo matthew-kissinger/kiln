@@ -24,6 +24,7 @@
 
 import * as acorn from 'acorn';
 import * as walk from 'acorn-walk';
+import { listPrimitives } from './list-primitives';
 
 // =============================================================================
 // Types
@@ -339,8 +340,130 @@ export function validate(code: string, _opts: { category?: string } = {}): Valid
     });
   }
 
+  warnings.push(...unknownHelperWarnings(ast));
+
   return toResult(issues, warnings, analysis.estimatedTris);
 }
+
+/**
+ * Identifiers that are called but neither declared in the program nor exposed
+ * by the sandbox. Calling one throws the moment the program runs, so reporting
+ * it before execution is strictly better than discovering it from a render.
+ *
+ * This is also the only place the name can be reported at all. The isolated
+ * evaluator deliberately lets no identifier, message or stack cross its
+ * boundary, so `kiln_render` can say that some variable was undeclared but
+ * never which one. This parse happens host-side, before anything executes.
+ *
+ * Reported as a warning rather than an error, and the declaration set below
+ * deliberately over-approximates: every binding anywhere in the program counts
+ * as in scope, so a shadowed or conditionally declared name is never falsely
+ * flagged. The cost is that some genuinely unbound names go unreported, which
+ * is the safe direction for a check that would otherwise reject valid source.
+ */
+function unknownHelperWarnings(ast: acorn.Program): ValidationIssue[] {
+  const declared = new Set<string>();
+  const bind = (node: unknown): void => {
+    const target = node as { type?: string; [key: string]: unknown } | null;
+    if (!target?.type) return;
+    if (target.type === 'Identifier') declared.add(target['name'] as string);
+    else if (target.type === 'ObjectPattern')
+      for (const prop of target['properties'] as { value?: unknown; argument?: unknown }[])
+        bind(prop.value ?? prop.argument);
+    else if (target.type === 'ArrayPattern')
+      for (const el of target['elements'] as unknown[]) bind(el);
+    else if (target.type === 'AssignmentPattern') bind(target['left']);
+    else if (target.type === 'RestElement') bind(target['argument']);
+  };
+  const params = (node: unknown): void => {
+    const fn = node as { id?: { name?: string }; params?: unknown[] };
+    if (fn.id?.name) declared.add(fn.id.name);
+    for (const param of fn.params ?? []) bind(param);
+  };
+  walk.simple(ast, {
+    VariableDeclarator(node) {
+      bind((node as unknown as { id: unknown }).id);
+    },
+    FunctionDeclaration(node) {
+      params(node);
+    },
+    FunctionExpression(node) {
+      params(node);
+    },
+    ArrowFunctionExpression(node) {
+      params(node);
+    },
+    ClassDeclaration(node) {
+      params(node);
+    },
+    CatchClause(node) {
+      bind((node as unknown as { param: unknown }).param);
+    },
+  });
+
+  const seen = new Map<string, number | undefined>();
+  walk.simple(ast, {
+    CallExpression(node) {
+      const callee = (node as unknown as { callee?: { type?: string; name?: string } }).callee;
+      if (callee?.type !== 'Identifier' || !callee.name) return;
+      const name = callee.name;
+      if (declared.has(name) || SANDBOX_CALLABLES.has(name) || seen.has(name)) return;
+      seen.set(name, (node as unknown as { loc?: { start?: { line?: number } } }).loc?.start?.line);
+    },
+  });
+
+  return [...seen].map(([name, line]) => ({
+    code: 'UNKNOWN_HELPER',
+    message: `${name}() is not declared in this program and is not a Kiln sandbox global; the build will fail when it runs.`,
+    fixHint:
+      'Call kiln_list_primitives to confirm the helper name and signature, or declare the function in this program.',
+    ...(line === undefined ? {} : { line }),
+  }));
+}
+
+/**
+ * Everything a program may legitimately call by bare name: the sandbox catalog,
+ * which a bidirectional test keeps in step with `buildSandboxGlobals()`, plus
+ * the JavaScript built-ins the sandbox does not remove. The catalog is imported
+ * rather than the sandbox itself so this module's dependency graph stays free of
+ * three.js.
+ */
+const SANDBOX_CALLABLES: ReadonlySet<string> = new Set([
+  ...listPrimitives().map((primitive) => primitive.name),
+  'Array',
+  'BigInt',
+  'Boolean',
+  'Error',
+  'Float32Array',
+  'Float64Array',
+  'Int16Array',
+  'Int32Array',
+  'Int8Array',
+  'Map',
+  'Number',
+  'Object',
+  'Promise',
+  'Proxy',
+  'RangeError',
+  'Reflect',
+  'RegExp',
+  'Set',
+  'String',
+  'Symbol',
+  'TypeError',
+  'Uint16Array',
+  'Uint32Array',
+  'Uint8Array',
+  'WeakMap',
+  'WeakSet',
+  'decodeURIComponent',
+  'encodeURIComponent',
+  'isFinite',
+  'isNaN',
+  'parseFloat',
+  'parseInt',
+  'structuredClone',
+]);
 
 // Backward-compat alias.
 export const validateKilnCode = validate;

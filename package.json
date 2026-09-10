@@ -83,6 +83,7 @@
   "scripts": {
     "kiln": "bun src/cli.ts",
     "check:toolchain": "bun scripts/check-toolchain.mjs",
+    "check:skills": "node scripts/check-skills.mjs",
     "typecheck": "tsc --noEmit",
     "build": "tsc --noEmit",
     "build:mcp": "node scripts/build-runtime.mjs mcp",
