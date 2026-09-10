@@ -148,11 +148,11 @@ disruption instead of several.
 
 | ID | Task | State |
 | --- | --- | --- |
-| 3.1 | Install `git-filter-repo` with `pipx`; it is not currently present | Pending |
+| 3.1 | Install `git-filter-repo`. `pipx` and `pip3` are both absent on this machine, so it came from the distribution package instead: `pacman -S git-filter-repo`, version 2.47.0-3 | Done |
 | 3.2 | Commit all Phase 1 and Phase 2 changes first, so the rewrite carries them | Pending |
-| 3.3 | Re-verify fork and PR counts immediately before proceeding | Pending |
-| 3.4 | Add `.gitignore` guards for the removed paths | Pending |
-| 3.4a | Update `src/__tests__/examples.test.ts`, which asserts every hero and demo PNG exists in `examples/renders` via `readdir`. Those assertions fail the moment the images leave the tree, so they must move to the receipts or the bucket. Added during execution | Pending |
+| 3.3 | Re-verify fork and PR counts immediately before proceeding | Done; 0 forks, 0 open pull requests, 0 open issues, 21 stars, unchanged from the Phase 0 reading |
+| 3.4 | Add `.gitignore` guards for the removed paths | Done; `examples/renders/*.png`, `examples/renders/*.gif` and `assets/video/` are ignored, inert while the files are still tracked and effective the moment 3.5 removes them |
+| 3.4a | Move the render-existence assertions off `readdir`. Added during execution; resolved by splitting the check across the two layers that can each honestly make it. See the Phase 3 record | Done |
 | 3.5 | Single `git filter-repo` pass removing `assets/video/`, `examples/renders/*.png` and `examples/renders/*.gif` | Pending |
 | 3.6 | Handle `dist/` separately. `filter-repo` removes a path from all history and cannot retain only the newest blob, so purge `dist/` entirely and re-add the current `dist/` in one fresh commit, leaving it stored once | Pending |
 | 3.7 | Verify `dist/mcp-server.mjs` at the new HEAD is byte-identical to the pre-rewrite file, then that `bun run build:runtime` still leaves the tree clean. This is the I2 gate | Pending |
@@ -289,16 +289,37 @@ places, not just rendered.
 
 #### Blocked, with cause
 
-**Task 2.12 and 2.14.** `site/scripts/build-assets.mjs` cannot complete on this
-machine, and this is pre-existing rather than caused by the migration. Verified
-by running it on an untouched clone of the baseline commit, where it fails
-identically. The failing check reports `sourceMatch: true`, `imageMatch: true`,
-`artifactMatch: false` on `abyssal-surveyor`: the poster bytes still match their
-receipt, but the GLB the engine produces here does not match the recorded
-`artifactHash`. GLB is not byte-reproducible across this environment and the GPU
-machine that recorded the receipts, most likely through baked texture encoding.
-Because `verify-assets.mjs` needs `site/public/assets/` and only `build-assets.mjs`
-generates it, neither can be run to completion locally.
+**Task 2.12 and 2.14.** `site/scripts/build-assets.mjs` exits 1 on this machine,
+and this is pre-existing rather than caused by the migration. Verified by running
+it on an untouched clone of the baseline commit, where it fails identically.
+
+This entry previously described the failure as `artifactMatch: false` on
+`abyssal-surveyor` and attributed it to baked texture encoding. Both details were
+wrong and are corrected here. That JSON was a diagnostic written by hand while
+debugging, not output any script in this repository emits, and it should not have
+been recorded as though the tool reported it. The real error is
+`Recorded poster is stale; regenerate it from the current gallery GLB.`, thrown by
+`verifyRecordedPoster` in `site/scripts/provenance.mjs` from `build-assets.mjs:68`.
+The scope was also far larger than one asset. Measured directly by re-rendering
+every example on Linux and comparing all three recorded hashes:
+
+| Receipts checked | Mismatched | Which field |
+| --- | --- | --- |
+| 83 | 75 | `artifactHash` only |
+
+No `sourceHash` and no `imageHash` mismatched, on any asset. The poster bytes are
+therefore intact and the R2 migration is clean; what diverges is the serialized
+GLB. The meshes themselves are not diverging either: `src/__tests__/examples.test.ts`
+asserts the README triangle counts by executing every program, and it passes 94 of
+94 on Linux. Identical geometry with different serialized bytes on 75 of 83 assets
+points at float formatting or precision in GLB serialization, not at different
+models.
+
+`pages.yml` pins `runs-on: windows-2022` with a comment recording that poster
+receipts bind GLB bytes captured on Windows, which is how this has stayed
+invisible. It is a genuine cross-platform gap in the maintainer pipeline and is
+tracked as Phase 6. It does not affect the shipped tools, which do not verify
+against these receipts, and it does not block Phase 3.
 
 What was proven instead: the new fetch-and-cache path works against the live
 bucket, and the poster it retrieved was byte-identical to the attested file, so
@@ -330,3 +351,76 @@ the moment the images leave the tree. Phase 4 is deferred by the owner for a
 joint walk-through. Task 5.1 stays open deliberately: the pristine baseline clone
 in the scratchpad is the comparison set for Phase 3 verification and should
 outlive the rewrite.
+
+### Phase 3 progress
+
+Tasks 3.1, 3.3, 3.4 and 3.4a are complete. The rewrite itself, 3.5 onward, has
+not started.
+
+**Task 3.4a, and the standard it sets.** Three assertions in
+`src/__tests__/examples.test.ts` proved that every hero, archive and demo had a
+render, and one proved every README GIF existed, all four by reading
+`examples/renders/`. None of them can survive the images leaving the tree. Two
+replacements were considered and rejected. A generated manifest listing what had
+been uploaded would assert only that an upload once happened, and would pass
+while the bucket returned 404 -- a test that cannot fail when the thing it guards
+is broken, which is worse than no test because it stops anyone looking. Folding
+the check into `site/scripts/verify-assets.mjs` fails for a different reason:
+that script reads `site/public/assets/index.json`, so it cannot run until the
+entire gallery build has succeeded, and it iterates gallery rows rather than the
+poster set, so it cannot see the animations or the archive entries at all.
+
+What shipped instead splits the check by what each layer can observe.
+
+| Layer | Asserts | Why it can be true there |
+| --- | --- | --- |
+| `src/__tests__/examples.test.ts` | heroes, archives and demos each have a poster receipt; the `GIFS` list, the README cells and the example programs agree | The 83 receipts stayed in the tree, so this remains a real local check and still catches a hero added without a render |
+| `scripts/verify-posters.mjs` | every published image is served and, where attested, byte-identical to its receipt | Over HTTP against the bucket, the only place the published bytes exist |
+
+The GIF assertion lost its third leg outright: animations are assembled from
+frames and were never attested individually, so nothing local can speak to
+whether one exists. That leg moved to the new script rather than being replaced
+with a comparison of the declared list against itself.
+
+The new script is deliberately standalone and deliberately runs *before*
+`build-assets.mjs` in `pages.yml`. Whether the bucket still serves the attested
+bytes has nothing to do with whether the GLBs rebuild, and running it first means
+a broken bucket reports as a broken bucket instead of hiding behind a build
+failure. It is wired into `pages.yml` and exposed as `bun run verify:posters`;
+without that wiring this restructure would have been a downgrade, since the check
+would have left `bun run test` and then never run again.
+
+| Check | Result |
+| --- | --- |
+| `bun run verify:posters` | 88 images served; 83 byte-identical to their receipts; 5 present but unattested (`tidal-observatory.png` and the four GIFs) |
+| `src/__tests__/examples.test.ts` | 94 pass, 0 fail, 647 assertions |
+| `bun run lint` | exit 0; 14 warnings, 11 infos, unchanged from baseline |
+
+**The blocker was re-measured, not assumed.** Chasing the Windows pin in
+`pages.yml` led to re-running the build rather than trusting the earlier note, and
+the earlier note was wrong in three ways: wrong error string, wrong failing
+script, and wrong scope by a factor of seventy-five. The corrected finding is
+recorded under Phase 2 above and is now tracked as Phase 6. CI remains the
+correct place to settle 2.12 and 2.14, but only because CI runs Windows, which is
+the workaround rather than the fix.
+
+## Phase 6 -- GLB serialization is not byte-reproducible across platforms
+
+Opened on 2026-09-10 from the measurement above, at the owner's clarification
+that the project should work from Windows, macOS and Linux alike. It is
+pre-existing, orthogonal to Phases 0 to 5, and deliberately not bundled into the
+history rewrite.
+
+Today a contributor on macOS or Linux cannot run `bun scripts/build-assets.mjs`
+or `site/scripts/verify-assets.mjs` to completion, because 75 of 83 poster
+receipts bind GLB bytes that only a Windows host reproduces. The shipped MCP
+tools and CLI are unaffected: nothing an end user runs verifies against these
+receipts, and `ci.yml` already exercises the engine on Ubuntu and both macOS
+architectures.
+
+| ID | Task | State |
+| --- | --- | --- |
+| 6.1 | Establish whether the divergence is float formatting, buffer padding, or accessor min/max precision, by diffing one small asset's GLB JSON chunk between a Linux and a Windows render | Pending |
+| 6.2 | Decide the fix: make serialization deterministic across platforms, or make `artifactHash` cover geometry rather than serialized bytes | Pending |
+| 6.3 | Re-record the affected receipts once serialization is settled, deliberately and in one pass | Pending |
+| 6.4 | Unpin `pages.yml` from `windows-2022` and confirm the gallery builds on Ubuntu | Pending |

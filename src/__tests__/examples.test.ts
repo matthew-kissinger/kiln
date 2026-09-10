@@ -202,7 +202,7 @@ describe('hero gallery', () => {
     expect(Number(count![1])).toBe(publicNames.length);
   });
 
-  it('has a render for every public hero and only the explicitly retained archive', async () => {
+  it('has a poster receipt for every public hero and only the explicitly retained archive', async () => {
     const publicHeroes = await heroes;
     const archives = [
       'tidal-observatory',
@@ -211,19 +211,28 @@ describe('hero gallery', () => {
       'victorian-greenhouse',
     ];
     for (const archive of archives) expect(publicHeroes).not.toContain(archive);
-    const expected = [...publicHeroes, ...archives].map((h) => `${h}.png`).sort();
+    // The images are served from R2 and no longer sit in the tree, so this keys
+    // on the poster receipts that stayed behind: one per attested render, and the
+    // only leg of this check a local test can honestly make. `tidal-observatory`
+    // is an archive entry predating the receipts and is the single exception.
+    // That the published bytes exist and still match is checked by
+    // `scripts/verify-posters.mjs`, the only layer that can see them.
+    const expected = [...publicHeroes, ...archives]
+      .filter((h) => h !== 'tidal-observatory')
+      .map((h) => `${h}.json`)
+      .sort();
     const actual = (await readdir(RENDERS))
-      .filter((f) => f.endsWith('.png') && !f.startsWith('demo-'))
+      .filter((f) => f.endsWith('.json') && !f.startsWith('demo-'))
       .sort();
     expect(actual).toEqual(expected);
   });
 
-  it('has a render for every curated demo addition', async () => {
+  it('has a poster receipt for every curated demo addition', async () => {
     const demos = names.filter((n) => n.startsWith('demo-'));
     expect(demos.length).toBe(18);
-    const expected = demos.map((d) => `${d}.png`).sort();
+    const expected = demos.map((d) => `${d}.json`).sort();
     const actual = (await readdir(RENDERS))
-      .filter((f) => f.startsWith('demo-') && f.endsWith('.png'))
+      .filter((f) => f.startsWith('demo-') && f.endsWith('.json'))
       .sort();
     expect(actual).toEqual(expected);
   });
@@ -255,12 +264,11 @@ describe('hero gallery', () => {
     if (!block) throw new Error('could not find the GIFS list in scripts/anim-gifs.ts');
     const declared = [...block[1]!.matchAll(/name: '([^']+)'/g)].map((m) => m[1]!).sort();
 
-    const onDisk = (await readdir(RENDERS))
-      .filter((f) => f.endsWith('.gif'))
-      .map((f) => f.replace(/\.gif$/, ''))
-      .sort();
-    expect(onDisk).toEqual(declared);
-
+    // No third leg here. GIFs are assembled from frames and were never attested
+    // individually, so once they moved to R2 nothing local can say whether one
+    // exists; `scripts/verify-posters.mjs` checks that over HTTP instead. What is
+    // still worth guarding locally is that the script, the README and the
+    // programs agree, which is where the typos actually happen.
     const src = await readme;
     // Posters and GIFs are linked absolutely from R2 now, so key on the file
     // name rather than a repository-relative path.

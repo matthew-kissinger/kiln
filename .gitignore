@@ -51,3 +51,14 @@ site/dist/
 # Local wrangler simulator state. `wrangler r2 object put` without --remote
 # writes uploads here instead of the bucket; none of it belongs in git.
 .wrangler/
+
+# Removed from history on 2026-09-10 and served from R2 instead; see
+# docs/plans/repo-size-and-r2-migration-2026-09-10.md. The 83 JSON receipts in
+# examples/renders/ stay tracked -- they are the provenance record. The images
+# they attest do not, because 117 MB of history bought nothing the tools need.
+examples/renders/*.png
+examples/renders/*.gif
+
+# Social-media masters. Archived at ~/kiln-media-archive/ and referenced by no
+# file in the repository; the README video is served by GitHub's asset CDN.
+assets/video/
