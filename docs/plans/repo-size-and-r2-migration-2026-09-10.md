@@ -189,7 +189,7 @@ content-addressed ref and reused the build.
 
 | ID | Task | State |
 | --- | --- | --- |
-| 5.1 | Remove 2.3 GB of scratchpad test clones | Pending |
+| 5.1 | Remove 2.3 GB of scratchpad test clones | Held until Phase 3 verifies |
 | 5.2 | Remove the test plugin install and marketplace entry | Done; `claude plugin list` reports none and only `claude-plugins-official` remains |
 
 ## Rollback
@@ -311,3 +311,22 @@ Unrelated to this work. Run counts also varied between 2 failures and 1 across
 identical invocations, so at least one test in the suite is flaky. After the
 task 2.18 fix, the working tree's only failure is that same pre-existing one,
 and `src/__tests__/examples.test.ts` passes 94/94 on its own.
+
+#### One trap worth naming
+
+`wrangler r2 object put` defaults to a **local** simulator and needs `--remote`
+to reach the bucket. It reports `Upload complete` either way. The first upload in
+this work went nowhere real, and the simulator wrote 1.8 MB of sqlite state and a
+copy of the image into `.wrangler/`, which was then briefly committed before
+being caught and removed. `.wrangler/` is now in `.gitignore`. Anyone repeating
+this work should confirm `Resource location: remote` in the output.
+
+### Remaining work
+
+Phase 3 is untouched and is the only irreversible phase. It gained task 3.4a
+during Phase 2: `src/__tests__/examples.test.ts` asserts through `readdir` that
+every hero and demo PNG exists in `examples/renders`, and those assertions fail
+the moment the images leave the tree. Phase 4 is deferred by the owner for a
+joint walk-through. Task 5.1 stays open deliberately: the pristine baseline clone
+in the scratchpad is the comparison set for Phase 3 verification and should
+outlive the rewrite.
