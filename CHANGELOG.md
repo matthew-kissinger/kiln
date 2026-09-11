@@ -34,9 +34,17 @@ GitHub. The package is not published on the npm registry.
   first example.
 - `site/scripts` has had tests since posters were attested and no workflow ran
   them. `pages.yml` now does.
-- New `scripts/glb-chunk-hashes.mjs` splits a GLB by chunk, so the still-open
-  Linux/Windows divergence can be diagnosed as JSON (canonicalizable) or BIN
-  (float math, not canonicalizable) instead of guessed at.
+- **The gallery no longer builds on Windows.** `pages.yml` is `ubuntu-latest`,
+  which closes Phase 6.
+- New `scripts/glb-chunk-hashes.mjs` splits a GLB by chunk, and it answered the
+  question Phase 6 opened with. Measured on 8 examples across both platforms at
+  one commit: the JSON chunk diverges in **all 8**, the BIN chunk in **2 of 8**,
+  and totals move by 4, 8 and 264 bytes — digit counts changing, which a
+  formatting difference cannot do, because ECMAScript specifies number-to-string
+  exactly. So the divergence is the float values themselves, most likely the
+  transcendentals, which IEEE-754 does not bit-specify. That means no canonical
+  serialization could ever have fixed it, and narrowing the receipt was the only
+  option that works.
 
 ## The renderer starts itself, and now ships — 2026-09-11
 

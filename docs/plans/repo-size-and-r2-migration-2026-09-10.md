@@ -420,10 +420,10 @@ architectures.
 
 | ID | Task | State |
 | --- | --- | --- |
-| 6.1 | Establish whether the divergence is float formatting, buffer padding, or accessor min/max precision, by diffing one small asset's GLB JSON chunk between a Linux and a Windows render | **REOPENED 2026-09-11 at the maintainer's call, and now instrumented.** It was closed as needing a Windows host that bought nothing; the `asset.generator` finding changed that, by showing a JSON-chunk cause can be canonicalized away entirely. `scripts/glb-chunk-hashes.mjs` splits a GLB by chunk so the two platforms can be diffed, the Linux side is recorded below, and a temporary step in `pages.yml` takes the Windows side. JSON-only means a canonical form fixes it; BIN means float math and nothing canonicalizes it |
+| 6.1 | Establish whether the divergence is float formatting, buffer padding, or accessor min/max precision, by diffing one small asset's GLB JSON chunk between a Linux and a Windows render | **ANSWERED 2026-09-11**, and it is none of the three: the float values themselves differ. Measured on 8 examples across both platforms at one commit -- JSON diverges in all 8, BIN in 2 of 8, and totals move by 4, 8 and 264 bytes, so digit counts change and formatting cannot be the cause. See the section below. `scripts/glb-chunk-hashes.mjs` is kept as the instrument |
 | 6.2 | Decide the fix: make serialization deterministic across platforms, or make `artifactHash` cover geometry rather than serialized bytes | **Decided and done 2026-09-11**, and the dependency half turned out to be one line. See the section below: the whole of the 4.5.0 change was `asset.generator`, the serializer writing its own version number into every artifact. `src/render.ts` now pins it, measured byte-identical across 4.4.1 and 4.5.0 on **all 86 examples**, and the exact pin moves to 4.5.0 deliberately. The poster receipt stops asserting `artifactHash` and asserts `sourceHash` plus `imageHash`, which is what it could always honestly claim. The platform half is NOT fixed -- 6.1 reopened to measure it |
 | 6.3 | Re-record the affected receipts once serialization is settled, deliberately and in one pass CLOSED 2026-09-11. The 83 gallery images are display assets; the maintainer's call. Their receipts were the only consumer of byte-identical cross-platform serialization, so the Windows host this needed now buys nothing. `artifactHash` remains a real identity claim and 9.3 may share a root cause -- reopen from there if it does, not from the posters |
-| 6.4 | Unpin `pages.yml` from `windows-2022` and confirm the gallery builds on Ubuntu | **Unblocked and demonstrated 2026-09-11**, held for one PR only so the 6.1 diagnostic can run on the Windows runner. Measured on this branch: `bun run site:assets` then `site/scripts/verify-assets.mjs` complete on Linux -- 80 source/GLB pairs, posters, both edit-demo revisions and the geometry example all verified. Before the 6.2 narrowing the first example failed |
+| 6.4 | Unpin `pages.yml` from `windows-2022` and confirm the gallery builds on Ubuntu | **Done 2026-09-11.** `runs-on: ubuntu-latest`. Demonstrated locally first -- `bun run site:assets` then `site/scripts/verify-assets.mjs` complete on Linux, verifying 80 source/GLB pairs, posters, both edit-demo revisions and the geometry example; before the 6.2 narrowing the first example failed. **Phase 6 closes.** The cross-platform divergence itself is not fixed and, per 6.1, is not fixable by canonicalization -- what changed is that nothing asserts byte-identity across platforms any more |
 
 
 ### The 4.5.0 byte change was one metadata string
@@ -469,20 +469,51 @@ formatting -- `Math.sin` and friends are not bit-specified across libm
 implementations, and a 1-ULP difference would land in the BIN chunk, where no
 canonicalization reaches it. 6.1 now measures this rather than assuming it.
 
-Linux baseline, `bun scripts/glb-chunk-hashes.mjs`:
+### 6.1, measured: it is float math, and no canonical form fixes it
 
-```
-platform=linux arch=x64
-name                  total     artifact          json              bin
-abyssal-surveyor        636488  b89826f3e8849a37  4b303d8b9168f015  20f853940f53fa63
-arcade-cabinet         1237440  be56e73282db887e  edb33d34ea88e060  60535f3ffa2e8fb0
-brass-tellurion         662816  abfa348df8d1259a  63265829ef1e40d7  1eb3657ba0a92215
-carousel                191024  80e3eeca90c8815f  b2ad15301dd3991e  d732add1afb19ede
-cathedral              2259464  10c29defbe6414fe  c6d78fcece474e5e  7fcff19cbcf60121
-penny-farthing          823584  8dfd623f91ae67a1  b4cf052e877b7188  8e8121fe01d65344
-robot-arm              1255776  842c97ea242a39d4  64b52b1a12b815d1  5bc38b9adc4ae97c
-windmill                419064  9a3657f7fb50d363  b535934657185046  edc25118eefa75ac
-```
+Both platforms, same commit, `bun scripts/glb-chunk-hashes.mjs`. Linux from a
+local run; Windows from a temporary step in the gallery job on `windows-2022`.
+Both reported `node=v26.3.0`, so this is not a runtime version difference.
+
+| example | JSON chunk | BIN chunk | total, Linux -> Windows |
+| --- | --- | --- | --- |
+| abyssal-surveyor | differs | **same** | 636488 -> 636488 |
+| arcade-cabinet | differs | **differs** | 1237440 -> 1237176 |
+| brass-tellurion | differs | **same** | 662816 -> 662820 |
+| carousel | differs | **same** | 191024 -> 191024 |
+| cathedral | differs | **differs** | 2259464 -> 2259464 |
+| penny-farthing | differs | **same** | 823584 -> 823584 |
+| robot-arm | differs | **same** | 1255776 -> 1255768 |
+| windmill | differs | **same** | 419064 -> 419056 |
+
+The question 6.1 asked was float formatting, buffer padding, or accessor min/max
+precision. The answer is none of those three: it is the float values themselves.
+
+Two readings carry it. The JSON chunk diverges in **every** example, and the
+totals move by 4, 8 and 264 bytes -- string LENGTHS changing, which a formatting
+difference cannot do, because ECMAScript specifies `Number` to string exactly.
+Different digit counts mean different numbers. And the BIN chunk diverges in 2 of
+8, at unchanged total size in `cathedral`, so that is differing values rather
+than differing layout.
+
+So the divergence is computation, not serialization, and it reaches both chunks:
+the JSON through computed node transforms and accessor bounds, the BIN through
+vertex data where a generator used an operation that came out differently. The
+remaining suspect is the transcendentals -- `Math.sin`, `Math.cos`, `Math.pow`
+are not bit-specified by IEEE-754 and each platform's libm is free to land on a
+different last bit.
+
+**This retroactively decides 6.2 the right way.** The alternative 6.2 offered was
+"make serialization deterministic across platforms", and that was never
+achievable: no canonical form reaches a value that was computed differently. The
+narrowing was the only option that could work. A future content hash would have
+to quantize geometry before digesting it, not canonicalize its encoding.
+
+That `cathedral` and `arcade-cabinet` are the two with BIN divergence is worth a
+follow-up: both bake procedural textures, whose PNG bytes also live in the BIN
+chunk, so the differing bytes may be image encoding rather than vertex data.
+`penny-farthing` and `robot-arm` also bake textures and matched, so that is a
+lead rather than a conclusion.
 
 ### What a poster receipt asserts now
 
@@ -959,7 +990,7 @@ clone and no install. It does not depend on SEP-2640.
 | ID | Task | State |
 | --- | --- | --- |
 | 7.12 | Watch SEP-2640 to ratification, then expose the skills as `skill://` resources and retire the hand-built per-harness registration where clients support the extension | Deferred by decision; not this pass |
-| 7.13 | Publish the skills at `/.well-known/skills/` on the existing site per the Cloudflare discovery RFC, giving opencode `skills.urls` users a zero-install path | Pending; optional, independent of the rest of Phase 7 |
+| 7.13 | Publish the skills at `/.well-known/agent-skills/index.json` on the existing site per the Cloudflare discovery RFC, giving opencode `skills.urls` users a zero-install path | Pending, and the path above is a correction: the RFC moved to `/.well-known/agent-skills/index.json` at v0.2.0, not the `/.well-known/skills/` this row recorded. Each entry needs `name`, `type`, `description`, `url` and a `sha256:` digest of the artifact's raw bytes. Five of six skills carry `references/`, so they need `type: archive` rather than `skill-md` -- and the archives must be built deterministically (fixed mtime, sorted entries) or the published digest changes on every build |
 
 ### 7.1 execution record
 
@@ -1051,10 +1082,12 @@ undefined helper is named with its line. Promoting it to an error would change
 
 ### Left open, with reasons
 
-Task 7.13 (`/.well-known/skills/`) is grouped with Phase 6 as maintainer-side:
-publishing it runs through `pages.yml`, which is pinned to `windows-2022`, so it
-cannot be verified from a Linux checkout. Task 7.12 (SEP-2640) stays deferred
-until the SEP ratifies.
+Task 7.13 (`/.well-known/agent-skills/`) was grouped with Phase 6 as
+maintainer-side: publishing it ran through `pages.yml`, which was pinned to
+`windows-2022`, so it could not be verified from a Linux checkout. **That
+grouping is resolved as of 2026-09-11**: 6.4 unpinned the runner, so 7.13 is now
+verifiable anywhere. Task 7.12 (SEP-2640) stays deferred until the SEP
+ratifies.
 
 A third order-dependent test was found and is **pre-existing**, not a
 regression: `authoring-diagnostic.test.ts` "shipping registry exposes repair

@@ -39,9 +39,13 @@ env:
 jobs:
   build:
     name: build the gallery
-    # Poster receipts bind exact GLB bytes captured on Windows. Platform math
-    # can change the last digit of serialized rotations without changing meshes.
-    runs-on: windows-2022
+    # Was pinned to windows-2022 because poster receipts asserted exact GLB bytes
+    # captured there, and platform float math genuinely does change them --
+    # measured, and in both the JSON and BIN chunks, so no canonical form fixes
+    # it (ledger 6.1). What changed is that a receipt no longer claims it: it
+    # asserts the source and the image, which are platform-stable, and records
+    # the artifact hash as provenance rather than as an assertion (6.2).
+    runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
 
@@ -52,14 +56,6 @@ jobs:
 
       - name: Install the engine
         run: bun install --frozen-lockfile
-
-      # TEMPORARY, ledger 6.1. This is the second half of a cross-platform diff:
-      # the Linux side is recorded in the PR, and this step supplies the Windows
-      # side. It answers whether the divergence lives in the JSON chunk, which a
-      # canonical form can absorb, or in the BIN chunk, which is float math and
-      # cannot be canonicalized. Remove once the measurement is recorded.
-      - name: Diagnose GLB chunk divergence (temporary, 6.1)
-        run: bun scripts/glb-chunk-hashes.mjs
 
       # Before the build, deliberately: the gallery images live in R2 now, and
       # whether they are still served and still byte-identical to their receipts
