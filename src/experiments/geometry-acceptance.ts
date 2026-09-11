@@ -1,5 +1,6 @@
 /** Bounded offline acceptance probes, not public geometry APIs. */
 import * as THREE from 'three';
+import { isDirectEntry } from '../direct-entry';
 import { meshGeo, parametricSurface, geometryDiagnostics } from '../geometry';
 import { getManifoldModule, manifoldToGeometry } from '../solids';
 import { implicitSurface } from '../implicit';
@@ -269,4 +270,9 @@ async function run(id: string) {
     for (const m of owned) m.delete();
   }
 }
-if (import.meta.main) await run(process.argv[2]!);
+// `import.meta.main` is Bun's, and this file ships in the package. Under plain
+// `node` it is `undefined`, so the guard was always false and running this
+// script with node did nothing at all, silently. That is the same defect as 10.1
+// with its sign flipped: there, bundling made the guard always TRUE and started
+// a server nobody asked for.
+if (isDirectEntry(import.meta.url)) await run(process.argv[2]!);
