@@ -279,11 +279,11 @@ function harnessIdToAgentModelId(id) {
   return null;
 }
 export {
-  toCachedSystemPrompt,
-  resolveOpenRouterReasoning,
-  resolveKilnAgentModel,
-  modelConsumesSystemPromptCachePoints,
-  makeOpenRouterModel,
+  harnessIdToAgentModelId,
   makeKilnModel,
-  harnessIdToAgentModelId
+  makeOpenRouterModel,
+  modelConsumesSystemPromptCachePoints,
+  resolveKilnAgentModel,
+  resolveOpenRouterReasoning,
+  toCachedSystemPrompt
 };

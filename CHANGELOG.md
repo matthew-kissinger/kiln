@@ -3,6 +3,26 @@
 Changes to `@kiln/engine`. Source and installable packages are distributed through
 GitHub. The package is not published on the npm registry.
 
+## Toolchain moved to Bun 1.4.2, and the MCP bundle stopped starting itself — 2026-09-11
+
+- Development toolchain pins move to Bun 1.4.2, Node 22.23.2 and npm 12.0.2.
+  Bun 1.4 also fixes the early-exit behaviour above at its source: the pre-fix
+  CLI, which produced empty output in 6 of 8 concurrent runs on 1.3.14, produced
+  full output in 16 of 16 on 1.4.2. The `withProcessAlive` guard stays -- it
+  holds for anyone still on 1.3.x, and nothing in the runtime contract promises
+  otherwise. The offline suite runs about 18% faster.
+- **`dist/mcp-server.mjs` started a stdio server when merely imported, and had
+  done so for as long as the bundle has existed.** The source guarded its entry
+  block with `import.meta.main`, a Bun property that no Bun release lowers
+  correctly for a `--target=node` bundle. Every lowering emits
+  `__require.main == __require.module`; under Node ESM both sides are
+  `undefined`, so the guard was always true. Bun 1.4 then stopped emitting the
+  `__require` helper that line still references, which turned the same
+  expression into a `ReferenceError` before the server could speak -- loud where
+  it had been silent, and how this was finally caught. Both entries now decide
+  from `process.argv[1]` through a shared `isDirectEntry`, which needs no
+  lowering and means the same thing on both runtimes.
+
 ## `kiln` commands no longer exit 0 in silence under Bun — 2026-09-11
 
 - Under Bun, a CLI command could exit 0 having written nothing at all: no output,

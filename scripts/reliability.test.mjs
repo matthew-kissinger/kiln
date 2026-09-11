@@ -18,8 +18,8 @@ describe('repository reliability contracts', () => {
   test('package metadata declares the CI-supported runtimes', async () => {
     const pkg = await readJson('package.json');
 
-    expect(pkg.packageManager).toBe('bun@1.3.14');
-    expect(pkg.engines).toEqual({ bun: '1.3.14', node: '22.23.1', npm: '12.0.1' });
+    expect(pkg.packageManager).toBe('bun@1.4.2');
+    expect(pkg.engines).toEqual({ bun: '1.4.2', node: '22.23.2', npm: '12.0.2' });
   });
 
   test('the toolchain checker verifies package and workflow metadata', async () => {
@@ -31,7 +31,7 @@ describe('repository reliability contracts', () => {
 
     expect(pkg.scripts['check:toolchain']).toBe('bun scripts/check-toolchain.mjs');
     expect(result.status, result.stderr || result.stdout).toBe(0);
-    expect(result.stdout.trim()).toBe('Toolchain metadata: Bun 1.3.14, Node 22.23.1, npm 12.0.1');
+    expect(result.stdout.trim()).toBe('Toolchain metadata: Bun 1.4.2, Node 22.23.2, npm 12.0.2');
   });
 
   test('coverage is measured, ratcheted, and retained by CI', async () => {

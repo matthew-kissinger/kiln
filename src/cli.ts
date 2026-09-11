@@ -5,13 +5,12 @@
  * shares one evaluation through the program-aware registry.
  */
 import { open, readFile, writeFile } from 'node:fs/promises';
-import { realpathSync } from 'node:fs';
 import { resolve as resolvePath } from 'node:path';
 
 import { prepareDestination } from './cli-output';
+import { isDirectEntry } from './direct-entry';
 import { createPackagedLocalToolContext } from './local-runtime';
 import { createKilnProgramToolRegistry, type KilnToolContext } from './tools/registry';
-import { fileURLToPath } from 'node:url';
 import { resolveRenderMode, buildRenderPort, describeDrawnBy } from './cli-render-mode';
 import type { RenderMode } from './cli-render-mode';
 import { localProgramStore } from './program-store-node';
@@ -396,19 +395,7 @@ async function runMain(argv: readonly string[]): Promise<number> {
   }
 }
 
-function isDirectCliEntry(): boolean {
-  if (!process.argv[1]) return false;
-  try {
-    // npm's Unix bin is a symlink; compare the actual files on both sides.
-    return (
-      realpathSync(resolvePath(process.argv[1])) === realpathSync(fileURLToPath(import.meta.url))
-    );
-  } catch {
-    return false;
-  }
-}
-
-if (isDirectCliEntry()) {
+if (isDirectEntry(import.meta.url)) {
   main(process.argv.slice(2))
     .then((code) => {
       process.exitCode = code;
