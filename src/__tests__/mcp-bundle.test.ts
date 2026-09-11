@@ -23,9 +23,10 @@ import { spawnSync } from 'node:child_process';
 import { Client } from '@modelcontextprotocol/client';
 import { StdioClientTransport } from '@modelcontextprotocol/client/stdio';
 import { createHash } from 'node:crypto';
-import { readFile } from 'node:fs/promises';
+import { mkdir, readFile, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
-import { join, resolve } from 'node:path';
+import { dirname, join, resolve } from 'node:path';
+import { pathToFileURL } from 'node:url';
 
 import { describe, expect, it } from 'bun:test';
 
@@ -104,6 +105,41 @@ describe('mcp server bundle', () => {
 
     expect(names).toEqual(expected);
   }, 70_000);
+
+  /**
+   * Importing the bundle must not start a server.
+   *
+   * `import.meta.main` is a Bun property, and no Bun release has lowered it to
+   * something Node evaluates correctly. Both lowerings seen so far emit
+   * `__require.main == __require.module`: under Node ESM both sides are
+   * `undefined`, so the guard is always true and the entry block runs on a plain
+   * `import` -- a stdio server attaches itself to a process that only wanted to
+   * read the module. Bun 1.4 then stopped emitting the `__require` helper it
+   * still references, turning the same line into a hard `ReferenceError` at
+   * startup. The fix is not to chase the lowering: decide directly, from
+   * `process.argv[1]`, the way `src/cli.ts` already does.
+   */
+  it('stays inert when imported rather than launched', async () => {
+    const probe = join(REPO, 'tmp', `mcp-import-probe-${process.pid}.mjs`);
+    await mkdir(dirname(probe), { recursive: true });
+    await writeFile(
+      probe,
+      `await import(${JSON.stringify(pathToFileURL(BUNDLE).href)});\n` +
+        `process.stdout.write('IMPORTED_ONLY');\n`,
+    );
+    try {
+      const run = spawnSync('node', [probe], {
+        cwd: REPO,
+        encoding: 'utf8',
+        timeout: 30_000,
+        env: { ...process.env, KILN_RENDER: 'cpu' },
+      });
+      expect(run.stderr).toBe('');
+      expect(run.stdout).toBe('IMPORTED_ONLY');
+    } finally {
+      await rm(probe, { force: true });
+    }
+  }, 40_000);
 });
 
 describe('harness manifests', () => {

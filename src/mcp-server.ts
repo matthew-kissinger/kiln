@@ -19,6 +19,7 @@ import {
 } from './tools/registry';
 import { buildRenderPort, resolveRenderMode } from './cli-render-mode';
 import { localProgramStore } from './program-store-node';
+import { isDirectEntry } from './direct-entry';
 import { createPackagedLocalToolContext } from './local-runtime';
 
 /** Server identity reported in the MCP handshake. */
@@ -277,7 +278,7 @@ export function createKilnMcpServer(context: KilnToolContext = {}): McpServer {
   return server;
 }
 
-if (import.meta.main) {
+if (isDirectEntry(import.meta.url)) {
   const mode = resolveRenderMode(process.env['KILN_RENDER'] ?? 'auto');
   // Resolved once, before the first connection: probing a render service per
   // connection would put a network round trip in front of every client attach.

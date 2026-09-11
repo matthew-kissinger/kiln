@@ -1056,6 +1056,49 @@ in 6 concurrent runs to 6 of 6 passing.
 | 8.3 | Point `src/asset-cli.test.ts` at an interpreter that reflects how the CLI actually ships, or assert non-empty stdout before parsing so the failure names the real cause | Done -- asserts non-empty stdout before `JSON.parse`. Left on Bun deliberately: Bun is the documented toolchain, so the test should keep exercising the runtime that exposed this |
 | 8.4 | Re-check the other two intermittent tests against this finding | Done, and the hypothesis does not hold. `shipping proxy forwards actual PNGs ...` in `scripts/evaluation/observe-shipping.test.mjs` passed 8 of 8 under the same concurrency that reproduced the `save` failure on demand, and its entry is event-driven with a live child-process handle rather than an awaited `main()`, so it cannot reach this state. That test's intermittency is still unexplained; it is not this defect |
 
+## Phase 10 -- Toolchain currency, and what the bump uncovered
+
+Taken 2026-09-11. Bun 1.3.14 -> 1.4.2, Node 22.23.1 -> 22.23.2, npm 12.0.1 ->
+12.0.2. Deliberately its own pass with nothing else in it, because every gate in
+this repository runs on Bun and a regression needed exactly one suspect. That
+discipline paid for itself immediately: the bump surfaced a shipped defect that
+had been present since the bundle was introduced.
+
+Bun 1.4 also fixes Phase 8 at its source. Running the *pre-fix* CLI from
+`origin/main` against both runtimes: 2 of 8 concurrent runs produced output on
+1.3.14, 8 of 8 on 1.4.2, and 16 of 16 on a longer trial. `withProcessAlive`
+stays anyway -- it holds for anyone still on 1.3.x, and no runtime contract
+promises the behaviour. The offline suite runs about 18% faster (133 s against
+163 s).
+
+### 10.1 -- `dist/mcp-server.mjs` started a server when merely imported
+
+`src/mcp-server.ts` guarded its entry block with `import.meta.main`. That is a
+Bun property, and no Bun release lowers it correctly for a `--target=node`
+bundle. Both lowerings observed emit `__require.main == __require.module`; under
+Node ESM both sides are `undefined`, so the guard was **always true**. Verified
+directly against the committed 1.3.14 bundle: importing it printed
+`kiln MCP server on stdio (auto)` and left a live stdio server attached to a
+process that only wanted to read the module.
+
+Bun 1.4 then stopped emitting the `__require` helper the line still references,
+so the same expression became a `ReferenceError` at startup -- loud where it had
+been silent, which is the only reason this was caught at all. The bundle is what
+every harness launches, so a bundle built on 1.4 without this fix would not have
+started at all.
+
+Both entries now share `isDirectEntry` in `src/direct-entry.ts`, deciding from
+`process.argv[1]` rather than from whatever the bundler makes of
+`import.meta.main`. `src/cli.ts` already did this correctly through a private
+`isDirectCliEntry`; the two are now one function, and `mcp-bundle.test.ts` has
+the inertness guard `cli-entry.test.ts` always had.
+
+| ID | Task | State |
+| --- | --- | --- |
+| 10.1 | `import.meta.main` does not survive bundling to Node; the MCP entry block ran on import and became a `ReferenceError` under Bun 1.4 | Done 2026-09-11 -- shared `isDirectEntry`, guarded by a new inertness test |
+| 10.2 | Re-record the coverage baseline measured under Bun 1.4.2 | Done 2026-09-11 |
+| 10.3 | Consider whether other Bun-only globals reach a `--target=node` bundle. `import.meta.main` was the one that mattered; nothing else is asserted | Pending; audit, no known defect |
+
 ## Phase 9 -- Review surfaces that misreport a correct asset
 
 Found 2026-09-10 into 2026-09-11 by a blind clone-and-author run: an agent given

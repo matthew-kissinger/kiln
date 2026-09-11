@@ -5,8 +5,8 @@ const filesOnly = process.argv.includes('--files-only');
 const packageJson = JSON.parse(await readFile(new URL('../package.json', import.meta.url), 'utf8'));
 const workflow = await readFile(new URL('../.github/workflows/ci.yml', import.meta.url), 'utf8');
 
-const expectedPackageManager = 'bun@1.3.14';
-const expectedEngines = { bun: '1.3.14', node: '22.23.1', npm: '12.0.1' };
+const expectedPackageManager = 'bun@1.4.2';
+const expectedEngines = { bun: '1.4.2', node: '22.23.2', npm: '12.0.2' };
 const errors = [];
 
 if (packageJson.packageManager !== expectedPackageManager) {
@@ -21,14 +21,14 @@ if (packageJson.engines?.node !== expectedEngines.node) {
 if (packageJson.engines?.npm !== expectedEngines.npm) {
   errors.push(`engines.npm must be ${expectedEngines.npm}`);
 }
-if (!/^\s*bun-version:\s*1\.3\.14\s*$/mu.test(workflow)) {
-  errors.push('CI bun-version must be 1.3.14');
+if (!/^\s*bun-version:\s*1\.4\.2\s*$/mu.test(workflow)) {
+  errors.push('CI bun-version must be 1.4.2');
 }
-if (!/^\s*node-version:\s*22\.23\.1\s*$/mu.test(workflow)) {
-  errors.push('CI node-version must be 22.23.1');
+if (!/^\s*node-version:\s*22\.23\.2\s*$/mu.test(workflow)) {
+  errors.push('CI node-version must be 22.23.2');
 }
-if (!workflow.includes('npm install --global npm@12.0.1')) {
-  errors.push('CI npm version must be 12.0.1');
+if (!workflow.includes('npm install --global npm@12.0.2')) {
+  errors.push('CI npm version must be 12.0.2');
 }
 if (!workflow.includes('run: bun run check:toolchain')) {
   errors.push('CI must run the toolchain metadata check');
@@ -42,8 +42,8 @@ if (!filesOnly && process.versions.bun !== expectedEngines.bun) {
 if (!filesOnly) {
   const revision = spawnSync('bun', ['--revision'], { encoding: 'utf8', shell: false });
   const value = String(revision.stdout || revision.stderr || '').trim();
-  if (revision.status !== 0 || !/^1\.3\.14\+[0-9a-f]+$/i.test(value)) {
-    errors.push(`runtime Bun must be stable 1.3.14 (found ${value || 'missing'})`);
+  if (revision.status !== 0 || !/^1\.4\.2\+[0-9a-f]+$/i.test(value)) {
+    errors.push(`runtime Bun must be stable 1.4.2 (found ${value || 'missing'})`);
   }
 }
 
