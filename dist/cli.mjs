@@ -17,6 +17,15 @@ var __export = (target, all) => {
 var __esm = (fn, res) => () => (fn && (res = fn(fn = 0)), res);
 var __require = /* @__PURE__ */ createRequire(import.meta.url);
 
+// src/cli-output.ts
+import { mkdir } from "node:fs/promises";
+import { dirname } from "node:path";
+async function prepareDestination(path) {
+  await mkdir(dirname(path), { recursive: true });
+  return path;
+}
+var init_cli_output = () => {};
+
 // src/evaluator/authoring-diagnostic.ts
 function authoringDiagnosticAdvice(diagnostic) {
   if (diagnostic === "UNBOUND_VARIABLE")
@@ -26681,7 +26690,7 @@ var init_program_store = __esm(() => {
 });
 
 // src/program-store-node.ts
-import { link, lstat, mkdir, readFile as readFile2, readdir, stat, unlink, writeFile as writeFile2 } from "node:fs/promises";
+import { link, lstat, mkdir as mkdir2, readFile as readFile2, readdir, stat, unlink, writeFile as writeFile2 } from "node:fs/promises";
 import { randomUUID } from "node:crypto";
 import { join as join3, resolve } from "node:path";
 
@@ -26755,7 +26764,7 @@ class FileProgramStore {
     if (ref.startsWith("p_"))
       return ref;
     const directory = join3(this.directory, "refs");
-    await mkdir(directory, { recursive: true });
+    await mkdir2(directory, { recursive: true });
     for (const handle of shortProgramRefCandidates(ref)) {
       const owner = await this.readHandle(handle);
       if (owner === ref)
@@ -26782,7 +26791,7 @@ class FileProgramStore {
   }
   async put(code) {
     const ref = await programReference(code);
-    await mkdir(this.directory, { recursive: true });
+    await mkdir2(this.directory, { recursive: true });
     const target = join3(this.directory, `${ref.slice(7)}.js`);
     const temporary = join3(this.directory, `.write-${randomUUID()}`);
     await writeFile2(temporary, code, { encoding: "utf8", flag: "wx", mode: 384 });
@@ -26974,7 +26983,7 @@ var init_build_cache = __esm(() => {
 // src/build-cache-node.ts
 import { createHash as createHash8, randomUUID as randomUUID2 } from "node:crypto";
 import {
-  mkdir as mkdir2,
+  mkdir as mkdir3,
   readFile as readFile3,
   readdir as readdir2,
   rename,
@@ -27024,7 +27033,7 @@ class FileBuildCache {
     const bytes = JSON.stringify({ version: 1, key, payload, checksum: digest2(payload) });
     if (Buffer.byteLength(bytes) > Math.min(this.maxBytes, 96 * 1024 * 1024))
       return;
-    await mkdir2(this.directory, { recursive: true });
+    await mkdir3(this.directory, { recursive: true });
     const temporary = join4(this.directory, `.write-${randomUUID2()}`);
     await writeFile3(temporary, bytes, { encoding: "utf8", flag: "wx", mode: 384 });
     try {
@@ -27066,7 +27075,7 @@ var init_build_cache_node = __esm(() => {
 import { createHash as createHash9 } from "node:crypto";
 import { readFile as readFile4, readdir as readdir3, realpath, stat as stat3 } from "node:fs/promises";
 import { createRequire as createRequire2 } from "node:module";
-import { dirname, join as join5, relative } from "node:path";
+import { dirname as dirname2, join as join5, relative } from "node:path";
 async function installedRuntimeIdentity(root, limits = {}) {
   let bytes = 0;
   let files = 0;
@@ -27126,13 +27135,13 @@ async function installedRuntimeIdentity(root, limits = {}) {
           throw new Error(`Cannot resolve installed dependency ${name}.`);
         }
       }
-      let directory = dirname(found);
+      let directory = dirname2(found);
       for (;; ) {
         try {
           if ((await manifest(directory)).name === name)
             return await realpath(directory);
         } catch {}
-        const next = dirname(directory);
+        const next = dirname2(directory);
         if (next === directory)
           throw new Error(`Cannot identify installed dependency ${name}.`);
         directory = next;
@@ -27211,7 +27220,7 @@ var digest3 = (bytes) => createHash9("sha256").update(bytes).digest("hex"), comp
 var init_runtime_identity = () => {};
 
 // src/local-runtime.ts
-import { dirname as dirname2, join as join6, resolve as resolve3 } from "node:path";
+import { dirname as dirname3, join as join6, resolve as resolve3 } from "node:path";
 import { fileURLToPath as fileURLToPath3 } from "node:url";
 function integer2(env, name, fallback, min, max) {
   const value = env[name] === undefined ? fallback : Number(env[name]);
@@ -27333,7 +27342,7 @@ async function createPackagedLocalToolContext(base = {}, env = process.env, inst
   }
   const cacheBytes = integer2(env, "KILN_BUILD_CACHE_MB", 128, 0, 1024) * 1024 * 1024;
   const store = context.programStore;
-  const directory = resolve3(env.KILN_BUILD_CACHE_DIR ?? join6(store instanceof FileProgramStore ? dirname2(store.directory) : ".kiln", "cache", "builds"));
+  const directory = resolve3(env.KILN_BUILD_CACHE_DIR ?? join6(store instanceof FileProgramStore ? dirname3(store.directory) : ".kiln", "cache", "builds"));
   context.buildCache = new FileBuildCache(directory, cacheBytes);
   context.evaluatorCacheIdentity = `${identity.identity}:${JSON.stringify({
     execution: context.localExecution,
@@ -29953,8 +29962,8 @@ __export(exports_assets_node, {
 });
 import { createHash as createHash11, randomUUID as randomUUID3 } from "node:crypto";
 import { readFileSync as readFileSync2 } from "node:fs";
-import { lstat as lstat2, mkdir as mkdir3, readFile as readFile6, readdir as readdir4, realpath as realpath2, rename as rename2, rm as rm2, writeFile as writeFile4 } from "node:fs/promises";
-import { dirname as dirname3, join as join7, relative as relative2, resolve as resolve4, sep } from "node:path";
+import { lstat as lstat2, mkdir as mkdir4, readFile as readFile6, readdir as readdir4, realpath as realpath2, rename as rename2, rm as rm2, writeFile as writeFile4 } from "node:fs/promises";
+import { dirname as dirname4, join as join7, relative as relative2, resolve as resolve4, sep } from "node:path";
 async function verifyAssetRecord(record5) {
   for (const [name, info] of Object.entries(record5.manifest.files)) {
     const bytes = record5.files[name];
@@ -29982,7 +29991,7 @@ class FileAssetLibrary {
   }
   async path(collection, ...parts) {
     const root = this.directory(collection);
-    await mkdir3(root, { recursive: true });
+    await mkdir4(root, { recursive: true });
     const canonical3 = await realpath2(root);
     let path = root;
     for (const part of parts) {
@@ -30092,10 +30101,10 @@ class FileAssetLibrary {
     for (const record5 of records) {
       const { manifest, files } = record5;
       const dest = await this.path(collection, manifest.assetId, "revisions", manifest.revisionId);
-      const parent = dirname3(dest);
-      await mkdir3(parent, { recursive: true });
+      const parent = dirname4(dest);
+      await mkdir4(parent, { recursive: true });
       const stage = join7(parent, `.write-${randomUUID3()}`);
-      await mkdir3(stage);
+      await mkdir4(stage);
       try {
         for (const [name, bytes] of Object.entries(files))
           await writeFile4(join7(stage, name), bytes, { flag: "wx" });
@@ -30120,7 +30129,7 @@ class FileAssetLibrary {
   }
 }
 function collectionConfigPath(env = process.env) {
-  const workspace = env.KILN_PROGRAM_STORE ? dirname3(dirname3(resolve4(env.KILN_PROGRAM_STORE))) : process.cwd();
+  const workspace = env.KILN_PROGRAM_STORE ? dirname4(dirname4(resolve4(env.KILN_PROGRAM_STORE))) : process.cwd();
   return join7(workspace, ".kiln", "collections.json");
 }
 function localAssetLibrary(env = process.env) {
@@ -30140,7 +30149,7 @@ function localAssetLibrary(env = process.env) {
     if (error.code !== "ENOENT")
       throw error;
   }
-  const workspace = dirname3(dirname3(config));
+  const workspace = dirname4(dirname4(config));
   return new FileAssetLibrary({ project: join7(workspace, "assets", "kiln") });
 }
 var digest4 = (bytes) => `sha256:${createHash11("sha256").update(bytes).digest("hex")}`;
@@ -30151,10 +30160,10 @@ var init_assets_node = __esm(() => {
 // src/asset-viewer.ts
 import { createServer } from "node:http";
 import { readFile as readFile7 } from "node:fs/promises";
-import { dirname as dirname4, join as join8 } from "node:path";
+import { dirname as dirname5, join as join8 } from "node:path";
 import { fileURLToPath as fileURLToPath4 } from "node:url";
 async function startAssetViewer(library, options = {}) {
-  const staticDirectory = options.staticDirectory ?? (import.meta.url.endsWith(".ts") ? join8(dirname4(fileURLToPath4(import.meta.url)), "..", "dist", "viewer") : join8(dirname4(fileURLToPath4(import.meta.url)), "viewer"));
+  const staticDirectory = options.staticDirectory ?? (import.meta.url.endsWith(".ts") ? join8(dirname5(fileURLToPath4(import.meta.url)), "..", "dist", "viewer") : join8(dirname5(fileURLToPath4(import.meta.url)), "viewer"));
   const server = createServer(async (req, res) => {
     res.setHeader("X-Content-Type-Options", "nosniff");
     res.setHeader("Referrer-Policy", "no-referrer");
@@ -30247,8 +30256,8 @@ __export(exports_asset_cli, {
   assetMain: () => assetMain,
   ASSET_USAGE: () => ASSET_USAGE
 });
-import { readFile as readFile8, writeFile as writeFile5, stat as stat4, mkdir as mkdir4, rename as rename3 } from "node:fs/promises";
-import { basename, resolve as resolve5, dirname as dirname5 } from "node:path";
+import { readFile as readFile8, writeFile as writeFile5, stat as stat4, mkdir as mkdir5, rename as rename3 } from "node:fs/promises";
+import { basename, resolve as resolve5, dirname as dirname6 } from "node:path";
 import { randomUUID as randomUUID4 } from "node:crypto";
 async function assetMain(argv) {
   const command = argv[0];
@@ -30310,7 +30319,7 @@ async function assetMain(argv) {
         throw new Error("Collection name already points to another directory");
       roots[name] = resolve5(directory);
       const path = collectionConfigPath();
-      await mkdir4(dirname5(path), { recursive: true });
+      await mkdir5(dirname6(path), { recursive: true });
       const temporary = `${path}.${randomUUID4()}.tmp`;
       await writeFile5(temporary, JSON.stringify(roots, null, 2), { flag: "wx" });
       await rename3(temporary, path);
@@ -30366,7 +30375,7 @@ async function assetMain(argv) {
       const bytes = format === "bundle" ? encodeAssetBundle([record5]) : record5.files[format === "glb" ? "asset.glb" : "source.kiln.js"];
       if (!bytes)
         throw new Error("Source unavailable");
-      await writeFile5(resolve5(flags.out), bytes, { flag: "wx" });
+      await writeFile5(await prepareDestination(resolve5(flags.out)), bytes, { flag: "wx" });
       console.log(`Saved ${resolve5(flags.out)}`);
     }
   } else if (command === "import") {
@@ -30418,12 +30427,14 @@ var init_asset_cli = __esm(() => {
   init_program_store_node();
   init_program_store();
   init_registry2();
+  init_cli_output();
   init_local_runtime();
   init_cli_render_mode();
   init_asset_viewer();
 });
 
 // src/cli.ts
+init_cli_output();
 init_local_runtime();
 init_registry2();
 init_cli_render_mode();
@@ -30569,7 +30580,7 @@ async function emit(code, args, context) {
     console.log(`  build ${result.buildCache.hit ? "reused" : "created"} ${result.buildCache.key}`);
   const out = args.out ?? (args.views ? undefined : "out.glb");
   if (out) {
-    await writeFile6(resolvePath(out), result.glb);
+    await writeFile6(await prepareDestination(resolvePath(out)), result.glb);
     console.log(`  ${out}  ${result.tris} tris  ${(result.glb.length / 1024).toFixed(1)} KB`);
   } else {
     console.log(`  ${result.tris} tris  ${(result.glb.length / 1024).toFixed(1)} KB`);
@@ -30601,7 +30612,7 @@ async function emit(code, args, context) {
     const media = def.media?.(output);
     if (!media)
       throw new Error("kiln_render returned no image");
-    await writeFile6(resolvePath(args.views), media.png);
+    await writeFile6(await prepareDestination(resolvePath(args.views)), media.png);
     console.log(`  ${args.views}  (${describeDrawnBy(output, context)})`);
   }
 }
@@ -30661,7 +30672,7 @@ async function cmdGenerate(args) {
   const outPath = args.out ?? "out.glb";
   await emit(run2.code, { ...args, out: outPath }, context);
   const source = outPath.replace(/\.glb$/i, ".kiln.js");
-  await writeFile6(resolvePath(source), run2.code, "utf8");
+  await writeFile6(await prepareDestination(resolvePath(source)), run2.code, "utf8");
   console.log(`  ${source}  (the program — edit and re-render it)`);
   return 0;
 }
@@ -30673,7 +30684,10 @@ async function cmdSource(args) {
   if (input.startsWith("sha256:") || programRefPattern.test(input)) {
     const code = await store.get(input);
     if (args.out) {
-      await writeFile6(resolvePath(args.out), code, { encoding: "utf8", flag: "wx" });
+      await writeFile6(await prepareDestination(resolvePath(args.out)), code, {
+        encoding: "utf8",
+        flag: "wx"
+      });
       console.log(`Saved ${input} to ${args.out}`);
     } else
       process.stdout.write(code);
@@ -30684,7 +30698,20 @@ async function cmdSource(args) {
   }
   return 0;
 }
-async function main(argv) {
+async function withProcessAlive(run2) {
+  const held = setInterval(() => {
+    return;
+  }, 1 << 30);
+  try {
+    return await run2();
+  } finally {
+    clearInterval(held);
+  }
+}
+function main(argv) {
+  return withProcessAlive(() => runMain(argv));
+}
+async function runMain(argv) {
   if (["save", "collections", "assets", "asset", "export", "import", "view"].includes(argv[0] ?? "")) {
     try {
       return await (await Promise.resolve().then(() => (init_asset_cli(), exports_asset_cli))).assetMain(argv);
@@ -30747,6 +30774,7 @@ if (isDirectCliEntry()) {
   });
 }
 export {
+  withProcessAlive,
   parseArgs,
   main
 };

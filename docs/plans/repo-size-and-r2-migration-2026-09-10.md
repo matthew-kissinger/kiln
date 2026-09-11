@@ -1018,12 +1018,43 @@ End users are not affected: every shipped launcher and manifest invokes `node`
 plugin manifests use bare `node`. Contributors are, because `AGENTS.md`
 documents Bun as the toolchain.
 
+### Root cause, found 2026-09-11
+
+Neither suspect in 8.1 was right. The `save` path does not exit early and does not
+fail: it never finishes. Under contention the command is still running when Bun's
+event loop goes idle, `beforeExit` fires, and the process exits 0 having written
+nothing. A preload that traced `process.exitCode` inside the child settled it --
+every failing run reached `exit` with `exitCode` still `undefined`, so the `.then`
+on `main()` had never run, while the one passing run in the same batch showed
+`exitCode=0`. Adding a single `setInterval` in a preload, changing nothing else,
+turned 8 silent failures into 8 full 2,062-byte successes that simply took longer.
+
+What Bun is failing to count is still open. `process.getActiveResourcesInfo()`
+returns `[]` throughout, but that says nothing either way -- Bun implements it as a
+stub that always returns `[]` (oven-sh/bun#24538), so it is not evidence. `sharp`
+was the obvious suspect, being the one native dependency on this path, and it is
+innocent: a pending `sharp` operation holds Bun open exactly as it holds Node
+open, checked directly. Identifying the primitive is worth a bounded look, because
+it would say whether other hosts are exposed; it does not gate the fix, which is
+correct whatever the primitive turns out to be.
+
+So this is not a `save` bug, an evaluator bug, or a flush race. It is the CLI
+entry contract. Every entry -- `isDirectCliEntry`, the generated workspace
+`kiln.mjs` launcher, `assetMain` through `main` -- awaits `main()` and then sets
+`process.exitCode`, which assumes the runtime keeps the process alive while that
+promise is pending. Node does in practice; Bun does not. The fix wraps `main`
+itself in `withProcessAlive`, a ref'd far-future timer cleared in a `finally`, so
+it costs no wakeups and covers every call site rather than one. Measured on the
+same 8-way concurrent repro that produced 7-of-8 silent failures before: 8 of 8
+full output after. The load-sensitive `src/asset-cli.test.ts` went from 3 failures
+in 6 concurrent runs to 6 of 6 passing.
+
 | ID | Task | State |
 | --- | --- | --- |
-| 8.1 | Find where the `save` path exits early under Bun without a diagnostic. The store write succeeds, so the divergence is after program import; suspect the in-process evaluator or an output flush racing process exit | Pending |
-| 8.2 | Decide whether the CLI should refuse to exit 0 having produced no output at all, independent of the Bun cause. A silent success is the part that made this look like flakiness for so long | Pending |
-| 8.3 | Point `src/asset-cli.test.ts` at an interpreter that reflects how the CLI actually ships, or assert non-empty stdout before parsing so the failure names the real cause | Pending |
-| 8.4 | Re-check the other two intermittent tests against this finding; a shared `spawnSync` under Bun may explain more than one of them | Pending |
+| 8.1 | Find where the `save` path exits early under Bun without a diagnostic | Done -- it does not exit early; `main()` never settles and Bun exits the idle loop at 0. Fixed by `withProcessAlive` in `src/cli.ts` |
+| 8.2 | Decide whether the CLI should refuse to exit 0 having produced no output at all, independent of the Bun cause | DECIDED: no. The silent-success shape is now structurally unreachable from this cause, and a blanket "no stdout means nonzero" rule would be a guess layered over a fixed defect -- it would have to assume every command is obliged to print, which is a contract the CLI has never stated. The guard belongs in the test that reads the output, not in the command that produces it. Closed |
+| 8.3 | Point `src/asset-cli.test.ts` at an interpreter that reflects how the CLI actually ships, or assert non-empty stdout before parsing so the failure names the real cause | Done -- asserts non-empty stdout before `JSON.parse`. Left on Bun deliberately: Bun is the documented toolchain, so the test should keep exercising the runtime that exposed this |
+| 8.4 | Re-check the other two intermittent tests against this finding | Done, and the hypothesis does not hold. `shipping proxy forwards actual PNGs ...` in `scripts/evaluation/observe-shipping.test.mjs` passed 8 of 8 under the same concurrency that reproduced the `save` failure on demand, and its entry is event-driven with a live child-process handle rather than an awaited `main()`, so it cannot reach this state. That test's intermittency is still unexplained; it is not this defect |
 
 ## Phase 9 -- Review surfaces that misreport a correct asset
 
@@ -1056,6 +1087,6 @@ independently verified; 9.2 is the one that looks like the same bug class as 9.1
 | 9.3 | `viewFidelity.exactArtifact` reported `false` on every render, including ones where the run independently hashed `inputGlbSha256` equal to both the exported GLB and the saved `asset.glb`. Either the flag means something narrower than its name, or it is wrong. Pending; whichever it is, a model cannot use a fidelity flag whose false value carries no meaning |
 | 9.4 | `kiln_screenshot_animation` requires a `clip` name and `frameTimes` normalized to 0..1, and neither is stated in the author skill or the camera recipes. The run guessed the clip name from its own `createClip` call and hit a validation error on seconds-valued frame times. Pending; a documentation gap, not a defect |
 | 9.5 | `arrayRadial` count semantics are not inferable from the signature plus the example: whether the source mesh survives as the copy at index 0 had to be deduced from a mesh count. Pending; documentation |
-| 9.6 | CLI `--out` does not create parent directories, failing with a bare `ENOENT` *after* the build succeeded and printed a `programRef`. Invisible from the README, whose example writes into the cwd. Pending; decide between `mkdir -p` and an error that names the directory |
+| 9.6 | CLI `--out` does not create parent directories, failing with a bare `ENOENT` *after* the build succeeded and printed a `programRef`. Invisible from the README, whose example writes into the cwd | Done 2026-09-11 -- `prepareDestination` in `src/cli-output.ts`, applied at every CLI destination: `render --out`, `render --views`, `generate`, `source <ref> --out` and `export --out`. Guarded by `src/__tests__/cli-out-directories.test.ts` |
 | 9.7 | The MCP server resolves the render service once before its first connection, so a service started afterwards is invisible until the session restarts, while the CLI picks it up on the next call. Re-probe lazily when a render needs PBR and no port is attached, with a short negative cache -- the probe's `absent` path is a refused localhost connection. Pending; collapses the guidance to "start it whenever" and deletes the restart caveat from the workspace guide and the setup skill. Not folded into the Phase 7 documentation commit because `captureViewsViaPort` owns the deadline and degrade policy and the change deserves its own TDD |
 | 9.8 | Narrow the generated per-harness configuration to suppress user-level skills and MCP servers where each harness supports it. The blind run inherited roughly twenty unrelated skills and four unrelated servers. This is the only option that reduces inherited context rather than reporting it, and it needs vendor documentation per harness first: configuration that validates and silently does nothing is the `${PLUGIN_ROOT}` failure class. Pending |

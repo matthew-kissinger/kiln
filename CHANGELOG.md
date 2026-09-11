@@ -3,6 +3,23 @@
 Changes to `@kiln/engine`. Source and installable packages are distributed through
 GitHub. The package is not published on the npm registry.
 
+## `kiln` commands no longer exit 0 in silence under Bun — 2026-09-11
+
+- Under Bun, a CLI command could exit 0 having written nothing at all: no output,
+  no error, no rejection. `kiln save` did it reproducibly under load. The command
+  was not failing, it was still running -- Bun does not register the in-flight work
+  as an active resource, so the event loop went idle and the process exited before
+  `main()` settled. Every entry point was exposed, the generated workspace
+  `kiln.mjs` launcher included, because all of them await `main()` and then set
+  `process.exitCode`. `main` now holds the process open for its own duration.
+  Node was unaffected in practice, but the guard is runtime-agnostic.
+- Every CLI destination now creates the directories leading to it. `--out` and
+  `--views` failed with a bare `ENOENT` on a missing parent, and failed *after*
+  the build had run and printed a `programRef` -- a successful render followed by
+  an error naming a path but not the directory as the thing to fix. Covers
+  `render --out`, `render --views`, `generate`, `source <ref> --out` and
+  `export --out`.
+
 ## Usable from a bare clone by any harness; isolate honored on GPU — 2026-09-10
 
 - A bare clone is now usable by claude, codex, opencode, hermes and agy. The root
