@@ -3,6 +3,41 @@
 Changes to `@kiln/engine`. Source and installable packages are distributed through
 GitHub. The package is not published on the npm registry.
 
+## Artifact identity stops tracking the serializer's version — 2026-09-11
+
+- **`asset.generator` is now a stable `"Kiln"`.** It defaulted to the serializer's
+  own version string, so `glTF-Transform v4.4.1` sat inside every artifact's
+  bytes and therefore inside `artifactHash`. Taking 4.5.0 moved all 83 recorded
+  hashes and failed the gallery build — and the *entire* difference between the
+  two GLBs was that one string. Identical BIN chunk, identical accessor min/max,
+  identical semantic digest. With the generator pinned, **all 86 examples are
+  byte-identical across 4.4.1 and 4.5.0**, including the ones using `palette()`,
+  which 4.5.0 changed. A dependency's version number is provenance about the
+  tool, not identity of the asset.
+- `@gltf-transform/*` moves to an exact **4.5.0**. Still exact, deliberately —
+  the version-string cause is gone but other serialization changes are not
+  impossible, and a serializer bump should stay a measured decision.
+- **A poster receipt no longer asserts `artifactHash`.** It asserts `sourceHash`
+  and `imageHash` — this image was rendered from this source — which is what it
+  could always honestly claim. Asserting the container's bytes claimed something
+  glTF never promised: that rebuilding a source on another platform reproduces
+  it byte for byte. The hash stays in the record as provenance, naming the bytes
+  the poster was rendered from on the machine that recorded it, and the prose in
+  all 83 records no longer calls the poster a render of "the exact downloadable
+  GLB".
+- Within-run integrity checks are untouched and still hash bytes: the gallery
+  index against the files built beside it, the build receipt against the index,
+  and both demo receipts against their own run's GLBs.
+- **The gallery now builds on Linux.** `bun run site:assets` followed by
+  `site/scripts/verify-assets.mjs` completes — 80 source/GLB pairs, posters, both
+  edit-demo revisions and the geometry example. Before this it failed on the
+  first example.
+- `site/scripts` has had tests since posters were attested and no workflow ran
+  them. `pages.yml` now does.
+- New `scripts/glb-chunk-hashes.mjs` splits a GLB by chunk, so the still-open
+  Linux/Windows divergence can be diagnosed as JSON (canonicalizable) or BIN
+  (float math, not canonicalizable) instead of guessed at.
+
 ## The renderer starts itself, and now ships — 2026-09-11
 
 - The MCP server **starts the GPU render service on demand**. Installing it

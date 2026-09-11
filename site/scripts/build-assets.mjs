@@ -65,12 +65,7 @@ for (const name of names) {
   const credit = recordedExampleCredit(src, record);
   const r = await evaluator.render(src);
   if (record?.provenance?.posterReceipt)
-    verifyRecordedPoster(
-      record.provenance.posterReceipt,
-      src,
-      r.glb,
-      await posterBytes(name),
-    );
+    verifyRecordedPoster(record.provenance.posterReceipt, src, await posterBytes(name));
   if (record?.provenance?.posterReceipt)
     await writeFile(
       join(OUT, `${name}.poster.json`),

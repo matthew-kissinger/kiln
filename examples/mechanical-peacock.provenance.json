@@ -12,7 +12,7 @@
     "reviewFidelity": "Actual GPU side, fan-motion and neutral square poster images inspected. Stylized decorative prop, not an engineering model. FanOpen inspected at 0%, 50% and 100%; continuous clearance and physical drive behavior are not certified. Some thin feather edges and partial eye bezels retain the original stylization. Engine retains SWEEP_TIGHT_TURN and SWEEP_SELF_INTERSECTION_UNCHECKED warnings; recorded in the example checks.",
     "evaluationPackageHash": "19add77366f489f078ca50f58d6d0bcb4c4d3e86a18df4bc8da387285ab90822",
     "evaluationGlbHash": "c15346728ab09544762d2fae70d8dfa1edec48f903635dba32b2485843b2ca11",
-    "poster": "Neutral gallery GPU render of the exact current gallery GLB; source, artifact, image and camera hashes recorded.",
+    "poster": "Neutral gallery GPU render of this exact source; source, artifact, image and camera hashes recorded, the artifact hash naming the bytes the image was rendered from.",
     "posterReceipt": {
       "captureIdentity": [
         "kiln.capture-producer.v1",

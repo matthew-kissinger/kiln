@@ -12,7 +12,7 @@
     "reviewFidelity": "Actual GPU images inspected independently. A stylized kinetic sculpture; mechanical clearance has not been certified.",
     "evaluationPackageHash": "0d457e8f8763730079da013abfa6662aadc02843f090fcae594c0f711399d16c",
     "evaluationGlbHash": "be25ec9e081de0b493cb41a598e06640f34ce0606efcff69ddb933732643a3dc",
-    "poster": "Gallery GPU render of the exact downloadable GLB. The separate poster receipt records image, camera and renderer.",
+    "poster": "Gallery GPU render of this exact source. The separate poster receipt records image, camera, renderer, and the artifact hash of the GLB bytes the image was rendered from.",
     "posterReceipt": {
       "captureIdentity": [
         "kiln.capture-producer.v1",

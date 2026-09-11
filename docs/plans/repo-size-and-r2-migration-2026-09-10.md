@@ -420,10 +420,97 @@ architectures.
 
 | ID | Task | State |
 | --- | --- | --- |
-| 6.1 | Establish whether the divergence is float formatting, buffer padding, or accessor min/max precision, by diffing one small asset's GLB JSON chunk between a Linux and a Windows render CLOSED 2026-09-11. The 83 gallery images are display assets; the maintainer's call. Their receipts were the only consumer of byte-identical cross-platform serialization, so the Windows host this needed now buys nothing. `artifactHash` remains a real identity claim and 9.3 may share a root cause -- reopen from there if it does, not from the posters |
-| 6.2 | Decide the fix: make serialization deterministic across platforms, or make `artifactHash` cover geometry rather than serialized bytes | REOPENED 2026-09-11, hours after being closed, and by the predicted route. `@gltf-transform` 4.5.0 changes the bytes of every exported GLB: all 83 `artifactHash` values move and the Windows gallery build fails on a stale poster. Bisected to that package alone -- main plus 4.5.0 reproduces the bumped hash exactly, while `sharp` 0.35.4 and `manifold-3d` 3.5.3 leave it untouched. So the exposure is not really cross-platform drift: it is that `artifactHash` is a hash of bytes produced by a dependency free to change them under a caret. Pinned to 4.4.1 as a stopgap. The real decision stands |
+| 6.1 | Establish whether the divergence is float formatting, buffer padding, or accessor min/max precision, by diffing one small asset's GLB JSON chunk between a Linux and a Windows render | **REOPENED 2026-09-11 at the maintainer's call, and now instrumented.** It was closed as needing a Windows host that bought nothing; the `asset.generator` finding changed that, by showing a JSON-chunk cause can be canonicalized away entirely. `scripts/glb-chunk-hashes.mjs` splits a GLB by chunk so the two platforms can be diffed, the Linux side is recorded below, and a temporary step in `pages.yml` takes the Windows side. JSON-only means a canonical form fixes it; BIN means float math and nothing canonicalizes it |
+| 6.2 | Decide the fix: make serialization deterministic across platforms, or make `artifactHash` cover geometry rather than serialized bytes | **Decided and done 2026-09-11**, and the dependency half turned out to be one line. See the section below: the whole of the 4.5.0 change was `asset.generator`, the serializer writing its own version number into every artifact. `src/render.ts` now pins it, measured byte-identical across 4.4.1 and 4.5.0 on **all 86 examples**, and the exact pin moves to 4.5.0 deliberately. The poster receipt stops asserting `artifactHash` and asserts `sourceHash` plus `imageHash`, which is what it could always honestly claim. The platform half is NOT fixed -- 6.1 reopened to measure it |
 | 6.3 | Re-record the affected receipts once serialization is settled, deliberately and in one pass CLOSED 2026-09-11. The 83 gallery images are display assets; the maintainer's call. Their receipts were the only consumer of byte-identical cross-platform serialization, so the Windows host this needed now buys nothing. `artifactHash` remains a real identity claim and 9.3 may share a root cause -- reopen from there if it does, not from the posters |
-| 6.4 | Unpin `pages.yml` from `windows-2022` and confirm the gallery builds on Ubuntu | Kept, and now the whole of Phase 6. The Windows pin is a cost paid on every gallery run, independent of receipts |
+| 6.4 | Unpin `pages.yml` from `windows-2022` and confirm the gallery builds on Ubuntu | **Unblocked and demonstrated 2026-09-11**, held for one PR only so the 6.1 diagnostic can run on the Windows runner. Measured on this branch: `bun run site:assets` then `site/scripts/verify-assets.mjs` complete on Linux -- 80 source/GLB pairs, posters, both edit-demo revisions and the geometry example all verified. Before the 6.2 narrowing the first example failed |
+
+
+### The 4.5.0 byte change was one metadata string
+
+Measured 2026-09-11, after the bump had been bisected to `@gltf-transform` and
+pinned. Splitting the same example's GLB into its declared chunks under both
+versions:
+
+| | 4.4.1 | 4.5.0 |
+| --- | --- | --- |
+| total bytes | 636,504 | 636,504 |
+| BIN chunk (all geometry) | `20f853940f53fa63` | `20f853940f53fa63` |
+| JSON chunk | `67d790a88a96a6a0` | `74be8b9c487ae8b3` |
+| `artifactHash` | `300ece4cd5de6dbc` | `9c4aeac1804c9107` |
+
+Diffing the parsed JSON gives exactly one line:
+
+```
+"generator": "glTF-Transform v4.4.1"  ->  "glTF-Transform v4.5.0"
+```
+
+That is the entire change. Not geometry, not materials, not animations, not even
+accessor min/max -- the BIN chunk is bit-identical and so is a semantic digest
+over nodes, meshes, materials and animations. All 83 receipts moved and the
+gallery build broke because the serializer writes its own version number into the
+file it serializes.
+
+`@gltf-transform/core/src/io/writer.ts` is
+`asset: { generator: \`glTF-Transform ${VERSION}\`, ...root.getAsset() }`. The
+spread comes after, so a caller's own value wins, and Kiln never set one. One
+line at the single `new Document()` site fixes it. Verified on the full corpus:
+with the generator pinned, **all 86 examples are byte-identical across 4.4.1 and
+4.5.0** -- including the ones using `palette()`, which 4.5.0 changed.
+
+A dependency's version number is provenance about the tool, not identity of the
+asset. Kiln's own version deliberately stays out of the bytes too: it belongs in
+the provenance record, where changing it does not move artifact hashes.
+
+**What this does not fix.** The Linux/Windows divergence is a separate cause. The
+Windows gallery job passes, so Windows reproduces the recorded hashes and Linux
+is the side that diverges. The remaining suspect is float math rather than
+formatting -- `Math.sin` and friends are not bit-specified across libm
+implementations, and a 1-ULP difference would land in the BIN chunk, where no
+canonicalization reaches it. 6.1 now measures this rather than assuming it.
+
+Linux baseline, `bun scripts/glb-chunk-hashes.mjs`:
+
+```
+platform=linux arch=x64
+name                  total     artifact          json              bin
+abyssal-surveyor        636488  b89826f3e8849a37  4b303d8b9168f015  20f853940f53fa63
+arcade-cabinet         1237440  be56e73282db887e  edb33d34ea88e060  60535f3ffa2e8fb0
+brass-tellurion         662816  abfa348df8d1259a  63265829ef1e40d7  1eb3657ba0a92215
+carousel                191024  80e3eeca90c8815f  b2ad15301dd3991e  d732add1afb19ede
+cathedral              2259464  10c29defbe6414fe  c6d78fcece474e5e  7fcff19cbcf60121
+penny-farthing          823584  8dfd623f91ae67a1  b4cf052e877b7188  8e8121fe01d65344
+robot-arm              1255776  842c97ea242a39d4  64b52b1a12b815d1  5bc38b9adc4ae97c
+windmill                419064  9a3657f7fb50d363  b535934657185046  edc25118eefa75ac
+```
+
+### What a poster receipt asserts now
+
+`verifyRecordedPoster` asserted `sourceHash`, `artifactHash` and `imageHash`. That
+middle assertion is the single line that pinned the gallery to `windows-2022`,
+and it claimed something glTF never promised: that rebuilding a source anywhere
+reproduces the container byte for byte. It now asserts source and image, and
+`artifactHash` stays in the record as provenance -- the bytes the poster was
+rendered from, on the machine that recorded it.
+
+Two consequences worth stating. `verify-assets.mjs` compared the published
+`<name>.poster.json` to the run's own `artifactHash` one line later, which
+re-imposed the same claim and is gone. And the prose in all 83 records said the
+poster was a render of "the exact downloadable GLB", which the narrowing makes an
+over-claim; three distinct strings covered all 83 and each now says the poster is
+a render of that exact *source*, with the artifact hash naming the bytes the
+image came from. Rewriting the prose rather than leaving it is the same standard
+Phase 9 applied to `exactArtifact`: a receipt that over-claims is worse than one
+that claims less.
+
+The within-run integrity checks are untouched and still hash bytes, correctly:
+the index against the files built beside it, the build receipt against the index,
+and both demo receipts against their own run's GLBs. Those compare artifacts to
+themselves within one build and cannot diverge by platform.
+
+`site/scripts` has had tests since posters were attested and **no workflow ran
+them**, so a change to this verification could have shipped green. `pages.yml`
+now runs them.
 
 ### Phase 3 rehearsal
 

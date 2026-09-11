@@ -22471,6 +22471,7 @@ async function renderSceneToGLB(root, opts = {}) {
     warnings.push(`${blocked.message} — block suppressed by ${qaSuppressedBy}`);
   }
   const doc = new Document;
+  doc.getRoot().getAsset().generator = "Kiln";
   const buf = doc.createBuffer();
   const matCache = new Map;
   const meshCache = new Map;

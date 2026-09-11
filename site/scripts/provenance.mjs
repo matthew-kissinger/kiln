@@ -51,13 +51,26 @@ export function exampleProvenance(source) {
   };
 }
 
-/** Exact-poster claims apply only to this generated source, GLB and PNG trio. */
-export function verifyRecordedPoster(record, source, artifact, image) {
+/**
+ * A recorded poster claims this image was rendered from this source. Both halves
+ * are asserted here; the receipt's `artifactHash` deliberately is NOT.
+ *
+ * It used to be, and that single assertion is what pinned the gallery build to
+ * `windows-2022`. A GLB's bytes are not a property of the asset: they carry the
+ * serializer's own choices, and rebuilding the same source elsewhere reproduces
+ * the geometry exactly while the container can differ. Two causes were found.
+ * `asset.generator` wrote the serializer's version number into every artifact,
+ * which `src/render.ts` now pins to a stable string -- that one is fixed at the
+ * source, and with it pinned all 86 examples are byte-identical across
+ * `@gltf-transform` 4.4.1 and 4.5.0. The Linux/Windows divergence is a separate
+ * cause and is not fixed, which is why this is a narrowing and not a re-record.
+ *
+ * So `artifactHash` in a receipt names the bytes the poster was rendered FROM, on
+ * the machine that recorded it, and stays in the record as provenance. Asserting
+ * it against a rebuild claimed something the format never promised.
+ */
+export function verifyRecordedPoster(record, source, image) {
   const hash = (bytes) => createHash('sha256').update(bytes).digest('hex');
-  if (
-    record.sourceHash !== hash(source) ||
-    record.artifactHash !== hash(artifact) ||
-    record.imageHash !== hash(image)
-  )
-    throw new Error('Recorded poster is stale; regenerate it from the current gallery GLB.');
+  if (record.sourceHash !== hash(source) || record.imageHash !== hash(image))
+    throw new Error('Recorded poster is stale; regenerate it from the current gallery source.');
 }

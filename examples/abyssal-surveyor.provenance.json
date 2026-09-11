@@ -10,7 +10,7 @@
     "startingExample": "None supplied.",
     "humanIntervention": "Maintainer supplied the brief and independently verified exports and images. Model repaired arm attachment and rear skid supports by reference; no hand-edited source geometry.",
     "reviewFidelity": "GPU whole, detail and animated-arm views delivered and reviewed. Coherent curved hull and attached mechanism; hidden clearance and engineering function not verified. The run reached its 15-minute limit while copying an image after valid source/GLB exports; final notes were unfinished.",
-    "poster": "Gallery GPU render of the exact downloadable GLB. Source, artifact, image hashes and camera settings are recorded alongside the poster.",
+    "poster": "Gallery GPU render of this exact source. Source, artifact, image hashes and camera settings are recorded alongside the poster; the artifact hash names the GLB bytes the image was rendered from, which the downloadable rebuild reproduces byte for byte only on the platform that recorded it.",
     "evaluationPackageHash": "1d3bf676c9439ab9507e797118b263f2b6f6ce70a8db1c4e6b48c1be022bb806",
     "evaluationGlbHash": "0886b918c9d5a3d0d36b003668c8a199bda6380352c04992192fe76e57e98a7c",
     "posterReceipt": {

@@ -53,6 +53,14 @@ jobs:
       - name: Install the engine
         run: bun install --frozen-lockfile
 
+      # TEMPORARY, ledger 6.1. This is the second half of a cross-platform diff:
+      # the Linux side is recorded in the PR, and this step supplies the Windows
+      # side. It answers whether the divergence lives in the JSON chunk, which a
+      # canonical form can absorb, or in the BIN chunk, which is float math and
+      # cannot be canonicalized. Remove once the measurement is recorded.
+      - name: Diagnose GLB chunk divergence (temporary, 6.1)
+        run: bun scripts/glb-chunk-hashes.mjs
+
       # Before the build, deliberately: the gallery images live in R2 now, and
       # whether they are still served and still byte-identical to their receipts
       # has nothing to do with whether the GLBs rebuild. Running it first means a
@@ -67,6 +75,13 @@ jobs:
 
       - name: Typecheck the site
         run: bunx tsc --noEmit
+        working-directory: site
+
+      # `site/scripts` has had tests since posters were attested and no workflow
+      # ran them, so a change to the provenance verification could ship green.
+      # They are the only automated check on what a poster receipt asserts.
+      - name: Test the site scripts
+        run: bun test scripts
         working-directory: site
 
       # Fifty programs through the evaluator, writing GLBs, thumbnails and the
