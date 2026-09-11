@@ -3,6 +3,27 @@
 Changes to `@kiln/engine`. Source and installable packages are distributed through
 GitHub. The package is not published on the npm registry.
 
+## The GPU material check runs for the first time — 2026-09-11
+
+- `render-service/test/material-conformance.mjs` is the only automated evidence
+  that the GPU path applies textures at all, and it had never passed. It replaces
+  `globalThis.fetch` with a thrower to prove an embedded fixture never crosses a
+  network boundary — but `blob:` is an **in-memory** object URL, and three's
+  `GLTFLoader` mints one per embedded image that `ImageBitmapLoader` reads back
+  through `fetch`. The guard blocked the only path a texture has into the
+  renderer, so the file measured an untextured render and asserted against it:
+  `lumaSpread: 0` on the albedo checker, with the real cause printed as a loader
+  warning nobody read. `blob:` is now exempt, and the guard self-checks that an
+  `https:` fetch still throws.
+- Its normal-map threshold was `>= 3` and had **never been evaluated**, because
+  the albedo assertion above it always failed first. Recalibrated to `>= 1` from
+  measurement. The small number is the tone curve rather than a weak response:
+  that panel sits at mean luma ~242 of 255 under the fixture's own exposure of
+  1.38, past the ACES shoulder. Measured 1.51 at exposure 1.38 and 2.61 at 0.9
+  with nothing else changed — which is also the proof that the map applies. An
+  absent normal map reads near zero, the way the albedo checker read exactly 0.
+- All six channels now verify: albedo, normal, shared ORM, AO, emissive, alpha.
+
 ## Artifact identity stops tracking the serializer's version — 2026-09-11
 
 - **`asset.generator` is now a stable `"Kiln"`.** It defaulted to the serializer's
