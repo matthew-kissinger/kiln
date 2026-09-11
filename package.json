@@ -104,29 +104,29 @@
     "smoke:harness": "node scripts/harness-smoke.mjs"
   },
   "dependencies": {
-    "@gltf-transform/core": "^4.4.1",
-    "@gltf-transform/extensions": "^4.4.1",
-    "@gltf-transform/functions": "^4.4.1",
+    "@gltf-transform/core": "4.4.1",
+    "@gltf-transform/extensions": "4.4.1",
+    "@gltf-transform/functions": "4.4.1",
     "@modelcontextprotocol/client": "^2.0.0",
     "@modelcontextprotocol/server": "^2.0.0",
     "@openrouter/ai-sdk-provider": "^2.10.0",
-    "@types/three": "^0.185.1",
-    "acorn": "^8.17.0",
+    "@types/three": "^0.185.4",
+    "acorn": "^8.18.0",
     "acorn-walk": "^8.3.5",
     "gltf-validator": "2.0.0-dev.3.10",
-    "manifold-3d": "^3.5.1",
-    "sharp": "^0.35.3",
+    "manifold-3d": "^3.5.3",
+    "sharp": "^0.35.4",
     "three": "0.185.1",
     "three-subdivide": "^1.1.5",
     "xatlasjs": "^0.2.0",
-    "zod": "^4.4.3"
+    "zod": "^4.6.2"
   },
   "peerDependencies": {
     "@ai-sdk/provider": "^3.0.0",
     "@strands-agents/sdk": "^1.4.0"
   },
   "overrides": {
-    "sharp": "^0.35.3"
+    "sharp": "^0.35.4"
   },
   "peerDependenciesMeta": {
     "@ai-sdk/provider": {
@@ -138,11 +138,11 @@
   },
   "devDependencies": {
     "@ai-sdk/provider": "^3.0.14",
-    "@anthropic-ai/sdk": "^0.110.0",
+    "@anthropic-ai/sdk": "^0.125.0",
     "@aws-sdk/client-bedrock-runtime": "^3.1083.0",
-    "@biomejs/biome": "^2.5.3",
-    "@google/genai": "^2.17.1",
-    "@strands-agents/sdk": "1.13.0",
+    "@biomejs/biome": "^2.5.13",
+    "@google/genai": "^2.22.0",
+    "@strands-agents/sdk": "1.17.0",
     "@types/bun": "^1.4.2",
     "ai": "^6.0.222",
     "openai": "^6.46.0",

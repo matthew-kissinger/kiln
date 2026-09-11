@@ -29,13 +29,12 @@ describe('H6.5 generated-source policy', () => {
     expect(policyCodes(wrap(expression))).toContain('UNSAFE_GLOBAL_ACCESS');
   });
 
-  test.each([
-    "this['pro' + 'cess']",
-    "globalThis['fe' + 'tch']",
-    'globalThis[`WebSocket`]',
-  ])('rejects computed ambient-global access: %s', (expression) => {
-    expect(policyCodes(wrap(`void ${expression};`))).toContain('UNSAFE_GLOBAL_ACCESS');
-  });
+  test.each(["this['pro' + 'cess']", "globalThis['fe' + 'tch']", 'globalThis[`WebSocket`]'])(
+    'rejects computed ambient-global access: %s',
+    (expression) => {
+      expect(policyCodes(wrap(`void ${expression};`))).toContain('UNSAFE_GLOBAL_ACCESS');
+    },
+  );
 
   test('rejects dynamic import without echoing its specifier', async () => {
     const source = wrap("return import('node:fs');");
@@ -79,12 +78,12 @@ describe('H6.5 generated-source policy', () => {
     expect(policyCodes(wrap(`${expression};`))).toContain('UNSAFE_THREE_CONSTRUCTOR');
   });
 
-  test.each([
-    'const T = THREE; new T.DataTexture();',
-    'let T; T = THREE; new T.ShaderMaterial();',
-  ])('rejects aliasing the THREE namespace: %s', (expression) => {
-    expect(policyCodes(wrap(expression))).toContain('UNSAFE_THREE_ALIAS');
-  });
+  test.each(['const T = THREE; new T.DataTexture();', 'let T; T = THREE; new T.ShaderMaterial();'])(
+    'rejects aliasing the THREE namespace: %s',
+    (expression) => {
+      expect(policyCodes(wrap(expression))).toContain('UNSAFE_THREE_ALIAS');
+    },
+  );
 
   test('rejects non-static computed THREE access while preserving direct safe constructors', () => {
     expect(
