@@ -5,12 +5,19 @@ GitHub. The package is not published on the npm registry.
 
 ## Dependency refresh — 2026-09-11
 
-- Patch and minor bumps with no API surface change: `@gltf-transform/*` 4.5.0,
-  `@types/three` 0.185.4, `acorn` 8.18.0, `manifold-3d` 3.5.3, `sharp` 0.35.4,
-  `zod` 4.6.2, `@anthropic-ai/sdk` 0.125.0, `@biomejs/biome` 2.5.13,
-  `@google/genai` 2.22.0, `@strands-agents/sdk` 1.17.0. `biome.json` follows
-  Biome's own version, which the linter checks and which is what actually failed
-  the gate; one test file picks up the new formatter's line fitting.
+- Patch and minor bumps with no API surface change: `@types/three` 0.185.4,
+  `acorn` 8.18.0, `manifold-3d` 3.5.3, `sharp` 0.35.4, `zod` 4.6.2,
+  `@anthropic-ai/sdk` 0.125.0, `@biomejs/biome` 2.5.13, `@google/genai` 2.22.0,
+  `@strands-agents/sdk` 1.17.0. `biome.json` follows Biome's own version, which
+  the linter checks and which is what actually failed the gate; one test file
+  picks up the new formatter's line fitting.
+- **`@gltf-transform/*` is now pinned to exactly 4.4.1**, joining `three` and
+  `gltf-validator`. 4.5.0 changes the bytes of every exported GLB: all 83
+  recorded `artifactHash` values move, and the gallery build fails on a stale
+  poster. A caret range on the library that serializes the artifact means the
+  artifact's identity can change on an unrelated install, which is not a
+  property this project can have. Taking 4.5.0 is a deliberate act with receipts
+  re-recorded in the same pass, not a refresh.
 - `three` stays at 0.185.1. `@types/three` has no 0.186.x published, and r186
   renames `Source` to `TextureSource` and makes
   `BufferGeometryUtils.toTrianglesDrawMode()` mutate in place rather than clone.
