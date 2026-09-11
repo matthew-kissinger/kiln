@@ -17,10 +17,32 @@ CPU views show silhouette, orientation, proportion, and contact. They do not rep
 out, headless three.js `WebGPURenderer` on Dawn. No browser and no X server.
 
 ```bash
-cd render-service && npm install && npm start
+cd render-service && npm install
 ```
 
-The service listens on port 8000, where `auto` looks by default. If the server sets `RENDER_SERVICE_TOKEN`, set the matching `KILN_RENDER_TOKEN` in the client environment; a health check can succeed while unauthenticated render requests return 401. For a remote service, supply `--render-port URL`. See the service README for deployment and authentication options.
+That install is the only manual step. Once it has run, the MCP server starts the service itself on the
+first view that needs PBR shading, reuses it for the rest of the session, and stops it on the way out.
+There is no order to get right: a session that never renders a material never starts a renderer, and
+nothing has to be restarted to pick one up.
+
+Start it by hand instead when you want it to outlive any one session — a batch of dispatched agents
+sharing one GPU is the usual reason:
+
+```bash
+cd render-service && npm start
+```
+
+Either way the service listens on port 8000, where `auto` looks by default, and the first process to
+claim the port wins: a service already listening is joined rather than replaced, and a session that
+merely found one does not stop it on exit. Set `KILN_RENDER_SERVICE_PORT` to move it. A hand-started
+service binds every interface, which is what a container deployment needs; one started on your behalf
+binds loopback only, because that choice is not ours to make for you.
+
+If the server sets `RENDER_SERVICE_TOKEN`, set the matching `KILN_RENDER_TOKEN` in the client environment; a health check can succeed while unauthenticated render requests return 401. For a remote service, supply `--render-port URL` or set `KILN_RENDER_PORT_URL` — either short-circuits every local path above, so a hosted GPU stays one flag. See the service README for deployment and authentication options.
+
+The CLI is deliberately not on the on-demand path. A one-shot `kiln render` should not pay a GPU
+process's startup to draw one sheet, so it uses a service that is already listening and otherwise
+returns CPU views.
 
 In `auto` mode, an unavailable service falls back to CPU views. Read `degraded` and `degradeReason` before drawing conclusions about materials. Structural QA does not use image pixels.
 

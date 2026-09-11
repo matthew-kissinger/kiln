@@ -1131,5 +1131,125 @@ independently verified; 9.2 is the one that looks like the same bug class as 9.1
 | 9.4 | `kiln_screenshot_animation` requires a `clip` name and `frameTimes` normalized to 0..1, and neither is stated in the author skill or the camera recipes. The run guessed the clip name from its own `createClip` call and hit a validation error on seconds-valued frame times. **Done 2026-09-11.** The program contract now states that `clip` is required and matched by name, that `frameTimes` is 1..9 strictly increasing phases in 0..1 rather than seconds, and that a frozen-looking clip means `unresolvedTracks` -- a joint-name mismatch |
 | 9.5 | `arrayRadial` count semantics are not inferable from the signature plus the example: whether the source mesh survives as the copy at index 0 had to be deduced from a mesh count. **Done 2026-09-11.** Both array helpers now say it outright: `count` is the TOTAL including the source, which survives as copy 0, so the call returns count-1 new instances |
 | 9.6 | CLI `--out` does not create parent directories, failing with a bare `ENOENT` *after* the build succeeded and printed a `programRef`. Invisible from the README, whose example writes into the cwd | Done 2026-09-11 -- `prepareDestination` in `src/cli-output.ts`, applied at every CLI destination: `render --out`, `render --views`, `generate`, `source <ref> --out` and `export --out`. Guarded by `src/__tests__/cli-out-directories.test.ts` |
-| 9.7 | The MCP server resolves the render service once before its first connection, so a service started afterwards is invisible until the session restarts, while the CLI picks it up on the next call. Re-probe lazily when a render needs PBR and no port is attached, with a short negative cache -- the probe's `absent` path is a refused localhost connection. Pending; collapses the guidance to "start it whenever" and deletes the restart caveat from the workspace guide and the setup skill. Not folded into the Phase 7 documentation commit because `captureViewsViaPort` owns the deadline and degrade policy and the change deserves its own TDD |
+| 9.7 | The MCP server resolves the render service once before its first connection, so a service started afterwards is invisible until the session restarts, while the CLI picks it up on the next call. **Done 2026-09-11, and by a wider route than a lazy re-probe: see Phase 11.** Re-probing would have cured the symptom while leaving the user two processes to sequence. The server now starts the service itself, so there is nothing to have started first and nothing to restart |
 | 9.8 | Narrow the generated per-harness configuration to suppress user-level skills and MCP servers where each harness supports it. The blind run inherited roughly twenty unrelated skills and four unrelated servers. This is the only option that reduces inherited context rather than reporting it, and it needs vendor documentation per harness first: configuration that validates and silently does nothing is the `${PLUGIN_ROOT}` failure class. Pending |
+
+## Phase 11 -- The renderer moves to where the users are
+
+Taken 2026-09-11. The render service was built for a hosted deployment: Graviton
+instances running the engine, a RunPod GPU running the renderer, one HTTP hop
+between them. That deployment is gone, and the people running this now are
+running both halves on one laptop through an MCP server their coding harness
+starts for them. The socket between the two is still right -- headless WebGPU
+needs Node loader hooks Bun does not run, so the renderer cannot live in
+process -- but everything around it still assumed an operator who starts
+services in a known order.
+
+Two things followed from that, and they are the whole phase.
+
+### 11.1 -- The renderer is started on demand, not found or not at all
+
+`buildRenderPort` gained an opt-in `autoSpawn`, which the MCP server passes and
+the CLI deliberately does not: a one-shot `kiln render` should not pay a GPU
+process's startup to draw one sheet, whereas a session amortizes it over
+everything that follows.
+
+Three properties carry the design.
+
+**It attaches only where a renderer could actually run.** `localRenderServiceState`
+answers from the filesystem alone -- no socket, no process, no GPU query -- and
+`auto` attaches nothing unless it says `ready`. This is not an optimization. The
+absence of `context.viewRenderPort` is exactly what `describeDrawnBy` reads to
+call a CPU render ordinary rather than a degrade, so a hopeful port on a machine
+with no renderer would make every ordinary render on every CPU-only machine
+report itself as an incident. That is the Phase 9 defect class, and it would have
+been worse than 9.7.
+
+**It joins before it starts, and stops only what it started.** The shared port is
+the documented 8000 rather than an ephemeral one, so a batch of dispatched agents
+converges on one renderer instead of holding a GPU context each; the spawn also
+re-probes if the child loses the port race. `stopLocalRenderService` kills
+`child`, which stays undefined on the join path -- so the second agent to exit
+cannot pull the renderer out from under the others, which would have shown up as
+flat-white materials and no error anywhere.
+
+**It adds no second deadline.** The lazy port awaits the start rather than failing
+fast and warming in the background, because `captureViewsViaPort` already owns a
+deadline for one in-loop call and already degrades to the CPU rasterizer when it
+expires. A start that outruns it costs one CPU view and the next render has the
+GPU. A second budget here would be the duplicated degrade policy AGENTS.md
+forbids. A start that FAILS is cached as failed: a renderer that could not start
+will not start for the next view, and a spawn per render would stall the loop.
+
+`KILN_RENDER_PORT_URL` and `--render-port` short-circuit ahead of all of it, so
+the hosted path this replaced is still exactly one flag.
+
+**Measured end to end on the shipped bundle**, driven over stdio by a real MCP
+client with nothing listening on 8000: first `kiln_render` returned in 5.4 s with
+`materialFaithful: true` from `dawn-vulkan:nvidia-geforce-gtx-1660-ti` -- start,
+GPU init, build and render, inside the 20 s in-loop deadline, so the first render
+was material-faithful rather than the CPU view the design allows for. Second
+render 1.7 s on the same service. The service was gone after the client
+disconnected, and the server's stderr held one line. That last part is not
+incidental: stdout is the MCP transport and the service greets its own boot on
+stdout, so the child is spawned `stdio: ['ignore','ignore','pipe']`. One
+`listening on :8000` line in that stream is a protocol error for every tool call
+after it.
+
+### 11.2 -- `render-service/` now ships
+
+The MCP `instructions` string tells every model that material-faithful views come
+from a renderer that "ships as render-service/ in this installation". That
+sentence was false for anyone who installed from npm: the directory was in no
+`files` entry, so a plugin user could not start a GPU renderer at all. Its source
+now ships (15 files, 104 KB; tests and the Dockerfile stay out), while the ~94 MB
+of native dependencies remain a deliberate opt-in install. `smoke-package.mjs`
+asserts it both in the tarball and in a real installation, and walks the exact
+`new URL('../render-service', import.meta.url)` arithmetic the bundle resolves
+rather than trusting three paths to sit where the server will look.
+
+`webgpu` moved 0.4.0 -> 0.6.0 in the same pass and was smoked on hardware: 36/36
+unit tests, display conformance passed, end-to-end smoke ALL PASS.
+
+Two failures found while doing it, **both pre-existing and both confirmed against
+0.4.0 before being called that**:
+
+- The smoke's health check pinned `lightingPresetIds` to exactly
+  `['neutral-studio-v1']`, so adding `gallery-studio-v1` turned it red and left it
+  red. Fixed to assert membership plus capability backing. A smoke that always
+  reports one failure is a smoke nobody reads.
+- `material-conformance.mjs` fails its albedo check with `lumaSpread: 0`, its
+  textures failing to load as `blob:nodedata:` URLs. Not a general texture defect:
+  a real textured example rendered through the on-demand path came back correctly
+  textured. Harness-specific and open.
+
+### A note on binding
+
+`server.listen(PORT)` bound every interface. For a service the user starts that
+is their call and the container deployment needs it, so the default is unchanged;
+`HOST` is now honoured and the on-demand start passes `127.0.0.1`. Choosing to
+put a renderer on somebody's LAN is not a choice to make on their behalf.
+
+| ID | Task | State |
+| --- | --- | --- |
+| 11.1 | Start the packaged render service on demand from the MCP server, join one already listening, stop only what was started | Done 2026-09-11; closes 9.7 |
+| 11.2 | Ship `render-service/` in the package so the `instructions` claim is true, and move `webgpu` to 0.6.0 | Done 2026-09-11, smoked on hardware |
+| 11.3 | `material-conformance.mjs` cannot load `blob:nodedata:` textures, so its albedo/normal/ORM checks assert against an untextured render. Pre-existing on 0.4.0; real assets texture correctly | Open |
+| 11.4 | Give the CLI the same on-demand start behind an explicit flag. Deliberately excluded: a one-shot render should not pay a GPU startup, and `auto` must stay instant on a CPU-only machine | Not planned; revisit if asked |
+
+### 6.4 is not independent of 6.2
+
+Attempted and stopped, 2026-09-11. Unpinning `pages.yml` from `windows-2022`
+cannot be done without first deciding 6.2, and the ledger was wrong to separate
+them. All 83 provenance records carry a `posterReceipt`, and
+`verifyRecordedPoster` asserts `artifactHash` against a GLB rebuilt on the
+runner. Measured rather than assumed: `abyssal-surveyor` records
+`eb18c8e8ec9b1c6f...` and rebuilds on Linux as `300ece4cd5de6dbc...`, so the
+first example fails and so would the other 82. The Windows pin is not an
+incidental choice of runner -- it IS the workaround for `artifactHash` hashing
+bytes that serialization is free to change. Removing it means either re-recording
+83 receipts on Linux, which only moves the pin, or changing what a poster receipt
+asserts, which is 6.2. The maintainer's call on 6.1/6.3 -- that the gallery images
+are display assets -- points at narrowing the receipt to `sourceHash` and
+`imageHash`, the two claims that are platform-stable and that the gallery
+actually makes. That remains a decision, not a task.

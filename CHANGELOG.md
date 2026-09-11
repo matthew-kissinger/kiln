@@ -3,6 +3,39 @@
 Changes to `@kiln/engine`. Source and installable packages are distributed through
 GitHub. The package is not published on the npm registry.
 
+## The renderer starts itself, and now ships — 2026-09-11
+
+- The MCP server **starts the GPU render service on demand**. Installing it
+  (`cd render-service && npm install`) is the whole setup: there is no longer a
+  second process to start first, and nothing to restart to pick one up. The
+  first view that needs PBR shading starts the renderer, the rest of the session
+  reuses it, and it stops when the server does. Measured end to end on the
+  shipped bundle with nothing listening: the first `kiln_render` came back
+  material-faithful from the GPU in 5.4 s, the second in 1.7 s.
+  - A service already listening is **joined, not replaced**, and a session that
+    merely found one does not stop it on the way out -- so one GPU shared by a
+    batch of dispatched agents keeps working, and the agent that finishes first
+    cannot pull the renderer out from under the others.
+  - A machine that did not install the renderer is **unchanged**, deliberately
+    and at the level of the attached port rather than the rendered result: the
+    absence of a render port is what makes an ordinary CPU view read as ordinary
+    instead of as a degrade.
+  - `KILN_RENDER_PORT_URL` and `--render-port` short-circuit all of it, so a
+    hosted or remote GPU is still exactly one flag. `KILN_RENDER_SERVICE_PORT`
+    moves the local one off 8000.
+  - The CLI is deliberately not on this path: a one-shot `kiln render` should not
+    pay a GPU process's startup to draw one sheet.
+- **`render-service/` now ships in the package.** The MCP server told every model
+  that a GPU renderer "ships as render-service/ in this installation"; that was
+  false for anyone installing from npm, because the directory was in no `files`
+  entry. Its source travels with the package now (104 KB) while its ~94 MB of
+  native dependencies stay an explicit opt-in install.
+- `webgpu` 0.4.0 -> 0.6.0, smoked on hardware: 36/36 service unit tests, display
+  conformance passed, end-to-end smoke all pass.
+- A service started **for** you binds loopback; one you start yourself still binds
+  every interface, which is what a container deployment needs. `HOST` is now
+  honoured either way.
+
 ## Review surfaces say what they mean — 2026-09-11
 
 - `viewFidelity.exactArtifact` was a hard-coded `false` literal at every

@@ -36,13 +36,13 @@ Antigravity and Hermes get a generated launcher because each needs arguments or 
 
 Setup asks for render mode `auto`: a GPU service when one answers on port 8000, CPU views otherwise. CPU views are honest about silhouette, proportion and contact and say nothing about colour, metalness or roughness, so without the service no render can confirm a material.
 
-Offer to start it before launching the harness. It lives in the engine installation rather than the workspace, and it is a separate package with a native dependency, so its install is its own step and is not covered by installing the engine.
+Offer to run its install. It lives in the engine installation rather than the workspace, and it is a separate package with a native dependency, so its install is its own step and is not covered by installing the engine.
 
 ```bash
-cd render-service && npm install && npm start
+cd render-service && npm install
 ```
 
-Leave it running in its own terminal. The CLI picks up a service started at any time on its next call, while an MCP session resolves the service once at startup -- so starting it first is what gets in-loop renders material-faithful without a restart. If the machine has no usable GPU, report that and continue on CPU views; it is a limit to state, not a setup failure.
+That is the whole setup. Once installed, the MCP server starts the service on the first view that needs PBR shading and stops it when the session ends, so there is no terminal to leave running and no ordering to get right. Add `npm start` only when the service should outlive a single session, such as one GPU shared by a batch of dispatched agents. If the machine has no usable GPU, report that and continue on CPU views; it is a limit to state, not a setup failure.
 
 ## Verify the loadout before authoring
 

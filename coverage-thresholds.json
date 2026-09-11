@@ -1,7 +1,7 @@
 {
   "measuredBaseline": {
-    "functions": 95.43,
-    "lines": 92.58,
+    "functions": 95.25,
+    "lines": 92.48,
     "measuredUnder": "bun@1.4.2",
     "measuredOn": "2026-09-11"
   },

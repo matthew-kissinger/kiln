@@ -26136,7 +26136,7 @@ async function readAssetResource(library, uri) {
 // src/mcp-server.ts
 import { serveStdio } from "@modelcontextprotocol/server/stdio";
 import { AsyncLocalStorage } from "async_hooks";
-import { fileURLToPath as fileURLToPath5 } from "url";
+import { fileURLToPath as fileURLToPath6 } from "url";
 
 // src/tools/registry.ts
 init_capture_cache();
@@ -28167,7 +28167,112 @@ function createKilnAssetDefs(context) {
 
 // src/cli-render-mode.ts
 import { createHash as createHash8 } from "node:crypto";
-var DEFAULT_LOCAL_PORT_URL = "http://127.0.0.1:8000";
+
+// src/render-service-host.ts
+import { spawn as spawn2 } from "node:child_process";
+import { existsSync as existsSync2 } from "node:fs";
+import { fileURLToPath as fileURLToPath3 } from "node:url";
+import { join as join3 } from "node:path";
+var DEFAULT_LOCAL_RENDER_SERVICE_PORT = 8000;
+function localRenderServicePort() {
+  const raw = Number(process.env["KILN_RENDER_SERVICE_PORT"]);
+  return Number.isInteger(raw) && raw > 0 && raw < 65536 ? raw : DEFAULT_LOCAL_RENDER_SERVICE_PORT;
+}
+function localRenderServiceUrl() {
+  return `http://127.0.0.1:${localRenderServicePort()}`;
+}
+var STARTUP_BUDGET_MS = Number(process.env["KILN_RENDER_SERVICE_STARTUP_MS"] ?? 60000);
+var STARTUP_POLL_MS = 250;
+function renderServiceDir() {
+  const override = process.env["KILN_RENDER_SERVICE_DIR"];
+  if (override)
+    return override;
+  return fileURLToPath3(new URL("../render-service", import.meta.url));
+}
+function localRenderServiceState(dir = renderServiceDir()) {
+  if (!existsSync2(join3(dir, "src/server.mjs")) || !existsSync2(join3(dir, "package.json")))
+    return "not-packaged";
+  if (!existsSync2(join3(dir, "node_modules/webgpu")) || !existsSync2(join3(dir, "node_modules/three")))
+    return "dependencies-missing";
+  return "ready";
+}
+function explainRenderServiceState(state, dir) {
+  return state === "dependencies-missing" ? `the GPU render service is present but not installed; run \`npm install\` in ${dir}` : `this installation does not ship ${dir}`;
+}
+async function healthy(url, timeoutMs) {
+  try {
+    const res = await fetch(new URL("/health", url), { signal: AbortSignal.timeout(timeoutMs) });
+    if (!res.ok)
+      return false;
+    return (await res.json()).ok === true;
+  } catch {
+    return false;
+  }
+}
+function nodeBinary() {
+  const override = process.env["KILN_RENDER_SERVICE_NODE"];
+  if (override)
+    return override;
+  return process.versions.bun ? "node" : process.execPath;
+}
+var child;
+var teardownRegistered = false;
+function stopLocalRenderService() {
+  const running = child;
+  child = undefined;
+  if (!running || running.killed || running.exitCode !== null)
+    return;
+  running.kill();
+}
+function registerTeardown() {
+  if (teardownRegistered)
+    return;
+  teardownRegistered = true;
+  process.once("exit", stopLocalRenderService);
+  for (const signal of ["SIGINT", "SIGTERM"])
+    process.once(signal, () => {
+      stopLocalRenderService();
+    });
+}
+async function startLocalRenderService(dir = renderServiceDir()) {
+  const url = localRenderServiceUrl();
+  if (await healthy(url, 1500))
+    return url;
+  const state = localRenderServiceState(dir);
+  if (state !== "ready")
+    throw new Error(explainRenderServiceState(state, dir));
+  registerTeardown();
+  let stderr = "";
+  child = spawn2(nodeBinary(), ["--import", join3(dir, "src/register-hooks.mjs"), join3(dir, "src/server.mjs")], {
+    cwd: dir,
+    env: {
+      ...process.env,
+      PORT: String(localRenderServicePort()),
+      HOST: "127.0.0.1"
+    },
+    stdio: ["ignore", "ignore", "pipe"]
+  });
+  child.stderr?.on("data", (chunk) => {
+    stderr = `${stderr}${chunk.toString()}`.slice(-2000);
+  });
+  const deadline = Date.now() + STARTUP_BUDGET_MS;
+  while (Date.now() < deadline) {
+    if (await healthy(url, 1000))
+      return url;
+    if (child.exitCode !== null || child.signalCode !== null) {
+      if (await healthy(url, 1500))
+        return url;
+      child = undefined;
+      throw new Error(`render service exited during startup${stderr.trim() ? `: ${stderr.trim().split(`
+`).slice(-3).join(" ")}` : ""}`);
+    }
+    await new Promise((done) => setTimeout(done, STARTUP_POLL_MS));
+  }
+  stopLocalRenderService();
+  throw new Error(`render service did not answer within ${STARTUP_BUDGET_MS}ms`);
+}
+
+// src/cli-render-mode.ts
 var HEALTH_PROBE_TIMEOUT_MS = 1500;
 var HEALTH_PROBE_BUSY_TIMEOUT_MS = 8000;
 var CLI_VIEW_RENDER_TIMEOUT_MS = 20000;
@@ -28220,6 +28325,15 @@ function makeRemoteRenderPort(url, token) {
     };
   };
 }
+function makeLazyRenderPort(start, token) {
+  let resolving;
+  return async (req) => {
+    resolving ??= start().then((url) => makeRemoteRenderPort(url, token), (err) => {
+      throw new Error(`render service could not start: ${err instanceof Error ? err.message : String(err)}`);
+    });
+    return (await resolving)(req);
+  };
+}
 async function probeCaptureIdentity(url) {
   try {
     const response = await fetch(new URL("/health", url), {
@@ -28268,12 +28382,23 @@ async function probeRenderService(url) {
   return second.kind === "ok" ? second.rendererId : undefined;
 }
 var selected = new WeakMap;
-async function buildRenderPort(mode, portUrl) {
+async function buildRenderPort(mode, portUrl, options) {
   const context = mode === "gpu" ? { viewRenderRequired: true } : {};
   const attach = (url, label) => {
     context.viewRenderPort = makeRemoteRenderPort(url, process.env["KILN_RENDER_TOKEN"]);
     context.viewRenderTimeoutMs = CLI_VIEW_RENDER_TIMEOUT_MS;
     context.captureCacheIdentity = () => probeCaptureIdentity(url);
+    selected.set(context, label);
+    return context;
+  };
+  const attachLazy = (start, label) => {
+    let url;
+    context.viewRenderPort = makeLazyRenderPort(async () => {
+      url = await start();
+      return url;
+    }, process.env["KILN_RENDER_TOKEN"]);
+    context.viewRenderTimeoutMs = CLI_VIEW_RENDER_TIMEOUT_MS;
+    context.captureCacheIdentity = () => url ? probeCaptureIdentity(url) : undefined;
     selected.set(context, label);
     return context;
   };
@@ -28286,12 +28411,24 @@ async function buildRenderPort(mode, portUrl) {
   const envUrl = process.env["KILN_RENDER_PORT_URL"];
   if (envUrl)
     return attach(envUrl, `GPU service (${envUrl})`);
-  const rendererId = await probeRenderService(DEFAULT_LOCAL_PORT_URL);
+  const localUrl = localRenderServiceUrl();
+  const rendererId = await probeRenderService(localUrl);
   if (rendererId)
-    return attach(DEFAULT_LOCAL_PORT_URL, `GPU service (${rendererId})`);
+    return attach(localUrl, `GPU service (${rendererId})`);
+  if (options?.autoSpawn) {
+    const dir = options.serviceDir ?? renderServiceDir();
+    const state = options.start ? "ready" : localRenderServiceState(dir);
+    if (state === "ready") {
+      const start = options.start ?? (() => startLocalRenderService(dir));
+      return attachLazy(start, "GPU service (started on demand)");
+    }
+    if (mode === "gpu")
+      throw new Error(`no GPU render service is reachable, and ${explainRenderServiceState(state, dir)}.
+` + "Set --render-port or KILN_RENDER_PORT_URL to point at one elsewhere, or use " + "--render auto to fall back to the CPU rasterizer.");
+  }
   if (mode === "gpu") {
     throw new Error(`no GPU render service is reachable.
-` + `Looked at ${DEFAULT_LOCAL_PORT_URL}; set --render-port or KILN_RENDER_PORT_URL to ` + "point somewhere else, or use --render auto to fall back to the CPU rasterizer.");
+` + `Looked at ${localUrl}; set --render-port or KILN_RENDER_PORT_URL to ` + "point somewhere else, or use --render auto to fall back to the CPU rasterizer.");
   }
   selected.set(context, "cpu raster (no GPU service found)");
   return context;
@@ -28300,7 +28437,7 @@ async function buildRenderPort(mode, portUrl) {
 // src/program-store-node.ts
 import { link, lstat as lstat2, mkdir as mkdir2, readFile as readFile2, readdir as readdir2, stat, unlink, writeFile as writeFile2 } from "node:fs/promises";
 import { randomUUID as randomUUID2 } from "node:crypto";
-import { join as join3, resolve as resolve2 } from "node:path";
+import { join as join4, resolve as resolve2 } from "node:path";
 class FileProgramStore {
   directory;
   constructor(directory) {
@@ -28314,7 +28451,7 @@ class FileProgramStore {
         if (!entry.isFile() || !/^[a-f0-9]{64}\.js$/.test(entry.name))
           continue;
         try {
-          bytes += (await stat(join3(this.directory, entry.name))).size;
+          bytes += (await stat(join4(this.directory, entry.name))).size;
           entries++;
         } catch (error) {
           if (error.code !== "ENOENT")
@@ -28332,7 +28469,7 @@ class FileProgramStore {
     const canonical = ref.startsWith("p_") ? await this.readHandle(ref) : ref;
     if (canonical === undefined)
       throw this.notFound(ref);
-    const path = join3(this.directory, `${canonical.slice(7)}.js`);
+    const path = join4(this.directory, `${canonical.slice(7)}.js`);
     let code;
     try {
       if ((await stat(path)).size > MAX_PROGRAM_BYTES)
@@ -28351,7 +28488,7 @@ class FileProgramStore {
     return new Error(`Program not found: ${ref}. Use the same KILN_PROGRAM_STORE or import the source again.`);
   }
   async readHandle(handle) {
-    const path = join3(this.directory, "refs", `${handle}.ref`);
+    const path = join4(this.directory, "refs", `${handle}.ref`);
     try {
       const info = await lstat2(path);
       if (!info.isFile() || info.size !== 71)
@@ -28370,7 +28507,7 @@ class FileProgramStore {
     await this.get(ref);
     if (ref.startsWith("p_"))
       return ref;
-    const directory = join3(this.directory, "refs");
+    const directory = join4(this.directory, "refs");
     await mkdir2(directory, { recursive: true });
     for (const handle of shortProgramRefCandidates(ref)) {
       const owner = await this.readHandle(handle);
@@ -28378,11 +28515,11 @@ class FileProgramStore {
         return handle;
       if (owner !== undefined)
         continue;
-      const temporary = join3(directory, `.write-${randomUUID2()}`);
+      const temporary = join4(directory, `.write-${randomUUID2()}`);
       await writeFile2(temporary, ref, { encoding: "utf8", flag: "wx", mode: 384 });
       try {
         try {
-          await link(temporary, join3(directory, `${handle}.ref`));
+          await link(temporary, join4(directory, `${handle}.ref`));
           return handle;
         } catch (error) {
           if (error.code !== "EEXIST")
@@ -28399,8 +28536,8 @@ class FileProgramStore {
   async put(code) {
     const ref = await programReference(code);
     await mkdir2(this.directory, { recursive: true });
-    const target = join3(this.directory, `${ref.slice(7)}.js`);
-    const temporary = join3(this.directory, `.write-${randomUUID2()}`);
+    const target = join4(this.directory, `${ref.slice(7)}.js`);
+    const temporary = join4(this.directory, `.write-${randomUUID2()}`);
     await writeFile2(temporary, code, { encoding: "utf8", flag: "wx", mode: 384 });
     try {
       try {
@@ -28423,12 +28560,12 @@ function localProgramStore() {
 // src/direct-entry.ts
 import { realpathSync } from "node:fs";
 import { resolve as resolve3 } from "node:path";
-import { fileURLToPath as fileURLToPath3 } from "node:url";
+import { fileURLToPath as fileURLToPath4 } from "node:url";
 function isDirectEntry(moduleUrl) {
   if (!process.argv[1])
     return false;
   try {
-    return realpathSync(resolve3(process.argv[1])) === realpathSync(fileURLToPath3(moduleUrl));
+    return realpathSync(resolve3(process.argv[1])) === realpathSync(fileURLToPath4(moduleUrl));
   } catch {
     return false;
   }
@@ -28442,7 +28579,7 @@ init_render();
 // src/program-store-node.ts
 import { link as link2, lstat as lstat3, mkdir as mkdir3, readFile as readFile3, readdir as readdir3, stat as stat2, unlink as unlink2, writeFile as writeFile3 } from "node:fs/promises";
 import { randomUUID as randomUUID3 } from "node:crypto";
-import { join as join4, resolve as resolve4 } from "node:path";
+import { join as join5, resolve as resolve4 } from "node:path";
 class FileProgramStore2 {
   directory;
   constructor(directory) {
@@ -28456,7 +28593,7 @@ class FileProgramStore2 {
         if (!entry.isFile() || !/^[a-f0-9]{64}\.js$/.test(entry.name))
           continue;
         try {
-          bytes += (await stat2(join4(this.directory, entry.name))).size;
+          bytes += (await stat2(join5(this.directory, entry.name))).size;
           entries++;
         } catch (error) {
           if (error.code !== "ENOENT")
@@ -28474,7 +28611,7 @@ class FileProgramStore2 {
     const canonical = ref.startsWith("p_") ? await this.readHandle(ref) : ref;
     if (canonical === undefined)
       throw this.notFound(ref);
-    const path = join4(this.directory, `${canonical.slice(7)}.js`);
+    const path = join5(this.directory, `${canonical.slice(7)}.js`);
     let code;
     try {
       if ((await stat2(path)).size > MAX_PROGRAM_BYTES)
@@ -28493,7 +28630,7 @@ class FileProgramStore2 {
     return new Error(`Program not found: ${ref}. Use the same KILN_PROGRAM_STORE or import the source again.`);
   }
   async readHandle(handle) {
-    const path = join4(this.directory, "refs", `${handle}.ref`);
+    const path = join5(this.directory, "refs", `${handle}.ref`);
     try {
       const info = await lstat3(path);
       if (!info.isFile() || info.size !== 71)
@@ -28512,7 +28649,7 @@ class FileProgramStore2 {
     await this.get(ref);
     if (ref.startsWith("p_"))
       return ref;
-    const directory = join4(this.directory, "refs");
+    const directory = join5(this.directory, "refs");
     await mkdir3(directory, { recursive: true });
     for (const handle of shortProgramRefCandidates(ref)) {
       const owner = await this.readHandle(handle);
@@ -28520,11 +28657,11 @@ class FileProgramStore2 {
         return handle;
       if (owner !== undefined)
         continue;
-      const temporary = join4(directory, `.write-${randomUUID3()}`);
+      const temporary = join5(directory, `.write-${randomUUID3()}`);
       await writeFile3(temporary, ref, { encoding: "utf8", flag: "wx", mode: 384 });
       try {
         try {
-          await link2(temporary, join4(directory, `${handle}.ref`));
+          await link2(temporary, join5(directory, `${handle}.ref`));
           return handle;
         } catch (error) {
           if (error.code !== "EEXIST")
@@ -28541,8 +28678,8 @@ class FileProgramStore2 {
   async put(code) {
     const ref = await programReference(code);
     await mkdir3(this.directory, { recursive: true });
-    const target = join4(this.directory, `${ref.slice(7)}.js`);
-    const temporary = join4(this.directory, `.write-${randomUUID3()}`);
+    const target = join5(this.directory, `${ref.slice(7)}.js`);
+    const temporary = join5(this.directory, `.write-${randomUUID3()}`);
     await writeFile3(temporary, code, { encoding: "utf8", flag: "wx", mode: 384 });
     try {
       try {
@@ -28572,7 +28709,7 @@ import {
   utimes,
   writeFile as writeFile4
 } from "node:fs/promises";
-import { join as join5, resolve as resolve5 } from "node:path";
+import { join as join6, resolve as resolve5 } from "node:path";
 var keyPattern = /^sha256:[a-f0-9]{64}$/;
 var filePattern = /^[a-f0-9]{64}\.json$/;
 var digest3 = (text) => createHash9("sha256").update(text).digest("hex");
@@ -28589,7 +28726,7 @@ class FileBuildCache {
   path(key) {
     if (!keyPattern.test(key))
       throw new Error("Invalid build cache key.");
-    return join5(this.directory, `${key.slice(7)}.json`);
+    return join6(this.directory, `${key.slice(7)}.json`);
   }
   async get(key) {
     const path = this.path(key);
@@ -28617,7 +28754,7 @@ class FileBuildCache {
     if (Buffer.byteLength(bytes) > Math.min(this.maxBytes, 96 * 1024 * 1024))
       return;
     await mkdir4(this.directory, { recursive: true });
-    const temporary = join5(this.directory, `.write-${randomUUID4()}`);
+    const temporary = join6(this.directory, `.write-${randomUUID4()}`);
     await writeFile4(temporary, bytes, { encoding: "utf8", flag: "wx", mode: 384 });
     try {
       await rename2(temporary, path);
@@ -28631,7 +28768,7 @@ class FileBuildCache {
     for (const name of await readdir4(this.directory)) {
       if (!filePattern.test(name))
         continue;
-      const path = join5(this.directory, name);
+      const path = join6(this.directory, name);
       try {
         const item = await stat3(path);
         entries.push({ path, size: item.size, used: item.mtimeMs });
@@ -28652,7 +28789,7 @@ class FileBuildCache {
 import { createHash as createHash10 } from "node:crypto";
 import { readFile as readFile5, readdir as readdir5, realpath as realpath2, stat as stat4 } from "node:fs/promises";
 import { createRequire } from "node:module";
-import { dirname as dirname2, join as join6, relative as relative2 } from "node:path";
+import { dirname as dirname2, join as join7, relative as relative2 } from "node:path";
 var digest4 = (bytes) => createHash10("sha256").update(bytes).digest("hex");
 var compare = (a, b) => a < b ? -1 : a > b ? 1 : 0;
 async function installedRuntimeIdentity(root, limits = {}) {
@@ -28660,7 +28797,7 @@ async function installedRuntimeIdentity(root, limits = {}) {
   let files = 0;
   const maxBytes = limits.maxBytes ?? 512 * 1024 * 1024;
   const maxFiles = limits.maxFiles ?? 40000;
-  const manifest = async (directory) => JSON.parse(await readFile5(join6(directory, "package.json"), "utf8"));
+  const manifest = async (directory) => JSON.parse(await readFile5(join7(directory, "package.json"), "utf8"));
   let readers = 0;
   const waiting = [];
   const read = async (path) => {
@@ -28686,17 +28823,17 @@ async function installedRuntimeIdentity(root, limits = {}) {
     const pkg = await manifest(root);
     if (pkg.name !== "@kiln/engine")
       throw new Error("Not a Kiln installation.");
-    const build = JSON.parse(await readFile5(join6(root, "dist", "build.json"), "utf8"));
+    const build = JSON.parse(await readFile5(join7(root, "dist", "build.json"), "utf8"));
     const worker = build.entries?.worker;
     if (build.schemaVersion !== 1 || worker?.file !== "evaluator-worker.mjs" || !/^sha256:[a-f0-9]{64}$/.test(worker.identity))
       throw new Error("No valid packaged worker identity.");
-    const workerHash = `sha256:${digest4(await read(join6(root, "dist", worker.file)))}`;
+    const workerHash = `sha256:${digest4(await read(join7(root, "dist", worker.file)))}`;
     if (worker.bundleHash !== workerHash)
       throw new Error("Packaged worker differs from its build manifest.");
     const records = [];
     const visited = new Map;
     async function resolvePackage(parent, name) {
-      const require2 = createRequire(join6(parent, "package.json"));
+      const require2 = createRequire(join7(parent, "package.json"));
       let found;
       try {
         found = require2.resolve(`${name}/package.json`);
@@ -28705,7 +28842,7 @@ async function installedRuntimeIdentity(root, limits = {}) {
           found = require2.resolve(name);
         } catch {
           for (const modules of require2.resolve.paths(name) ?? []) {
-            const candidate = join6(modules, name);
+            const candidate = join7(modules, name);
             try {
               if ((await manifest(candidate)).name === name)
                 return await realpath2(candidate);
@@ -28731,7 +28868,7 @@ async function installedRuntimeIdentity(root, limits = {}) {
       return (await Promise.all(entries.map(async (entry) => {
         if (entry.name === "node_modules" || entry.name === ".git")
           return [];
-        const path = join6(directory, entry.name);
+        const path = join7(directory, entry.name);
         if (entry.isSymbolicLink())
           throw new Error("Dependency contains an untracked internal symlink.");
         if (entry.isDirectory())
@@ -28797,8 +28934,8 @@ async function installedRuntimeIdentity(root, limits = {}) {
 }
 
 // src/local-runtime.ts
-import { dirname as dirname3, join as join7, resolve as resolve6 } from "node:path";
-import { fileURLToPath as fileURLToPath4 } from "node:url";
+import { dirname as dirname3, join as join8, resolve as resolve6 } from "node:path";
+import { fileURLToPath as fileURLToPath5 } from "node:url";
 var scope = 0;
 function integer2(env, name, fallback, min, max) {
   const value = env[name] === undefined ? fallback : Number(env[name]);
@@ -28882,7 +29019,7 @@ function createLocalToolContext(base = {}, env = process.env) {
     localExecution
   };
 }
-async function createPackagedLocalToolContext(base = {}, env = process.env, installationRoot = fileURLToPath4(new URL("../", import.meta.url))) {
+async function createPackagedLocalToolContext(base = {}, env = process.env, installationRoot = fileURLToPath5(new URL("../", import.meta.url))) {
   const context = createLocalToolContext(base, env);
   const managed = () => {
     const identity = context.evaluatorCacheIdentity;
@@ -28920,7 +29057,7 @@ async function createPackagedLocalToolContext(base = {}, env = process.env, inst
   }
   const cacheBytes = integer2(env, "KILN_BUILD_CACHE_MB", 128, 0, 1024) * 1024 * 1024;
   const store = context.programStore;
-  const directory = resolve6(env.KILN_BUILD_CACHE_DIR ?? join7(store instanceof FileProgramStore2 ? dirname3(store.directory) : ".kiln", "cache", "builds"));
+  const directory = resolve6(env.KILN_BUILD_CACHE_DIR ?? join8(store instanceof FileProgramStore2 ? dirname3(store.directory) : ".kiln", "cache", "builds"));
   context.buildCache = new FileBuildCache(directory, cacheBytes);
   context.evaluatorCacheIdentity = `${identity.identity}:${JSON.stringify({
     execution: context.localExecution,
@@ -28942,12 +29079,12 @@ async function createPackagedLocalToolContext(base = {}, env = process.env, inst
 // src/mcp-server.ts
 var MCP_SERVER_NAME = "kiln";
 var MCP_SERVER_VERSION = "0.6.0";
-var packagedSkillsDir = fileURLToPath5(new URL("../skills", import.meta.url));
+var packagedSkillsDir = fileURLToPath6(new URL("../skills", import.meta.url));
 var MCP_SERVER_INSTRUCTIONS = `Kiln turns JavaScript you write into GLB 3D assets and returns rendered views for review.
 
 Work by reference. Send a program once to kiln_validate or kiln_render; the result carries a programRef. Keep it exactly as returned, including a short p_ handle, and use it for every later view and edit. kiln_source with that ref and a literal query returns exact edit anchors, and kiln_edit with that ref plus edits returns a new ref and renders by default. Do not resend a whole program to change part of it.
 
-Call kiln_list_primitives before writing code to get exact helper signatures, with capabilities: true for the runtime, source, export and camera contract. Read viewFidelity in any render result before judging materials: a geometry-flat CPU image is evidence about shape, not about material. When materialFaithful is false and the task concerns appearance, say so rather than concluding from a CPU view: material-faithful views come from the GPU render service that ships as render-service/ in this installation, which has its own npm install and is resolved once at server startup.
+Call kiln_list_primitives before writing code to get exact helper signatures, with capabilities: true for the runtime, source, export and camera contract. Read viewFidelity in any render result before judging materials: a geometry-flat CPU image is evidence about shape, not about material. When materialFaithful is false and the task concerns appearance, say so rather than concluding from a CPU view: material-faithful views come from the GPU render service that ships as render-service/ in this installation. It has its own npm install; once installed it is started on demand by the first view that needs it, so there is no order to get right and no session to restart.
 
 Detailed workflows ship beside this server as Agent Skills, one directory each under ${packagedSkillsDir}:
 - kiln-setup-workspace: create a managed workspace for authoring, and verify its tools came up
@@ -29094,7 +29231,7 @@ function createKilnMcpServer(context = {}) {
 }
 if (isDirectEntry(import.meta.url)) {
   const mode = resolveRenderMode(process.env["KILN_RENDER"] ?? "auto");
-  const context = await createPackagedLocalToolContext(await buildRenderPort(mode, process.env["KILN_RENDER_PORT_URL"]));
+  const context = await createPackagedLocalToolContext(await buildRenderPort(mode, process.env["KILN_RENDER_PORT_URL"], { autoSpawn: true }));
   context.programStore = localProgramStore();
   context.assetLibrary = localAssetLibrary();
   const deliveryBase = process.env["KILN_ASSET_DOWNLOAD_BASE_URL"];

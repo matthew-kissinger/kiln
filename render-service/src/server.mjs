@@ -43,6 +43,11 @@ import {
 
 const PROCESS_STARTED_AT = performance.now();
 const PORT = Number(process.env.PORT ?? 8000);
+// Unset binds every interface, which is what a container deployment needs and is
+// the long-standing default here. A service started FOR the user -- by the MCP
+// server's on-demand start -- passes 127.0.0.1 instead, because choosing on
+// somebody's behalf to put a renderer on their LAN is not ours to choose.
+const HOST = process.env.HOST || undefined;
 const TOKEN = process.env.RENDER_SERVICE_TOKEN ?? '';
 
 const MAX_BODY = 96 * 1024 * 1024; // 64MB base64 ≈ 48MB GLB, plus JSON overhead
@@ -272,4 +277,4 @@ const server = createServer(async (req, res) => {
   }
 });
 
-server.listen(PORT, () => console.log(`kiln-render-service listening on :${PORT}`));
+server.listen(PORT, HOST, () => console.log(`kiln-render-service listening on ${HOST ?? '*'}:${PORT}`));

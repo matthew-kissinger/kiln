@@ -11,24 +11,27 @@ import { createHash } from 'node:crypto';
  * explicitly asked for a guarantee and would rather know than get a quiet downgrade.
  *
  * There is no GPU dependency to install. Both local and remote GPU are the same HTTP
- * render service, so this package installs and runs identically on a machine with no
- * GPU at all — which is why `auto` is a safe default.
+ * render service — there is no in-process GPU adapter to import, because headless
+ * WebGPU needs Node loader hooks that Bun does not run — so this package installs
+ * and runs identically on a machine with no GPU at all, which is why `auto` is a
+ * safe default. One code path, and a GPU on another machine works exactly like one
+ * on this one.
+ *
+ * Where `auto` LOOKS for a local one, and where {@link RenderPortOptions.autoSpawn}
+ * would start one, both resolve through `localRenderServiceUrl` so the two can never
+ * disagree about where it lives.
  */
 import type { PbrRenderPort, PbrRenderResult } from './composer/render-port';
+import {
+  explainRenderServiceState,
+  localRenderServiceState,
+  localRenderServiceUrl,
+  renderServiceDir,
+  startLocalRenderService,
+} from './render-service-host';
 import type { KilnToolContext } from './tools/registry';
 
 export type RenderMode = 'auto' | 'cpu' | 'gpu';
-
-/**
- * Where `auto` looks for a GPU renderer when no URL was given.
- *
- * Local and remote GPU are the same thing here: an HTTP service that takes GLB
- * bytes and returns PNG views. There is no in-process GPU adapter to import —
- * headless WebGPU needs Node loader hooks that Bun does not run, so the renderer
- * lives behind a socket in both cases. That is a simplification, not a limitation:
- * one code path, and a GPU on another machine works exactly like one on this one.
- */
-const DEFAULT_LOCAL_PORT_URL = 'http://127.0.0.1:8000';
 
 /** Health probe budget. Short: `auto` must not stall a CPU-only machine. */
 const HEALTH_PROBE_TIMEOUT_MS = 1_500;
@@ -121,6 +124,37 @@ export function makeRemoteRenderPort(url: string, token?: string): PbrRenderPort
         : {}),
       ...(json.beauty ? { beautyPng: new Uint8Array(Buffer.from(json.beauty, 'base64')) } : {}),
     };
+  };
+}
+
+/**
+ * A port that gets a renderer listening on its first call, then behaves exactly
+ * like {@link makeRemoteRenderPort} for the rest of the session.
+ *
+ * It deliberately AWAITS the start rather than failing fast and warming in the
+ * background. `captureViewsViaPort` already owns a deadline for one in-loop call
+ * and degrades to the CPU rasterizer when it expires, so a slow start is already
+ * handled by the policy that handles a slow render -- and adding a second budget
+ * here would be the duplicated degrade policy AGENTS.md forbids. A start that
+ * outruns the in-loop deadline costs one CPU view; the service keeps warming and
+ * the next render gets it.
+ *
+ * A start that FAILS is cached as failed. A renderer that could not start will
+ * not start for the next view either, and re-attempting a spawn per render would
+ * stall the loop this exists to serve.
+ */
+export function makeLazyRenderPort(start: () => Promise<string>, token?: string): PbrRenderPort {
+  let resolving: Promise<PbrRenderPort> | undefined;
+  return async (req) => {
+    resolving ??= start().then(
+      (url) => makeRemoteRenderPort(url, token),
+      (err: unknown) => {
+        throw new Error(
+          `render service could not start: ${err instanceof Error ? err.message : String(err)}`,
+        );
+      },
+    );
+    return (await resolving)(req);
   };
 }
 
@@ -253,6 +287,27 @@ interface ViewFidelityLike {
   degradeReason?: string;
 }
 
+/** Host policy for {@link buildRenderPort}. Every field is opt-in. */
+export interface RenderPortOptions {
+  /**
+   * Start the render service that ships with this installation when no renderer
+   * is already listening. Off by default, and deliberately so: a one-shot CLI
+   * invocation should not pay a GPU process's startup to draw one sheet, whereas
+   * a long-lived MCP server amortizes it across a whole session.
+   *
+   * Attaching happens ONLY where a renderer could actually run. On a machine that
+   * did not install one, `viewRenderPort` stays absent and the session is
+   * byte-identical to one built without this option -- which is what keeps
+   * `describeDrawnBy` reporting an ordinary CPU render as ordinary rather than as
+   * a degrade.
+   */
+  autoSpawn?: boolean;
+  /** Injection seam for tests: how a service gets started. */
+  start?: () => Promise<string>;
+  /** Injection seam for tests: where the packaged render service lives. */
+  serviceDir?: string;
+}
+
 /**
  * Resolve the requested mode into a tool context. An absent `viewRenderPort` means
  * the CPU rasterizer — byte-identical to the behavior before ports existed.
@@ -260,12 +315,26 @@ interface ViewFidelityLike {
 export async function buildRenderPort(
   mode: RenderMode,
   portUrl: string | undefined,
+  options?: RenderPortOptions,
 ): Promise<KilnToolContext> {
   const context: KilnToolContext = mode === 'gpu' ? { viewRenderRequired: true } : {};
   const attach = (url: string, label: string): KilnToolContext => {
     context.viewRenderPort = makeRemoteRenderPort(url, process.env['KILN_RENDER_TOKEN']);
     context.viewRenderTimeoutMs = CLI_VIEW_RENDER_TIMEOUT_MS;
     context.captureCacheIdentity = () => probeCaptureIdentity(url);
+    selected.set(context, label);
+    return context;
+  };
+  const attachLazy = (start: () => Promise<string>, label: string): KilnToolContext => {
+    let url: string | undefined;
+    context.viewRenderPort = makeLazyRenderPort(async () => {
+      url = await start();
+      return url;
+    }, process.env['KILN_RENDER_TOKEN']);
+    context.viewRenderTimeoutMs = CLI_VIEW_RENDER_TIMEOUT_MS;
+    // Nothing to attest until a producer exists. `undefined` bypasses cell reuse,
+    // which is the correct reading of "no renderer has drawn anything yet".
+    context.captureCacheIdentity = () => (url ? probeCaptureIdentity(url) : undefined);
     selected.set(context, label);
     return context;
   };
@@ -283,13 +352,32 @@ export async function buildRenderPort(
   const envUrl = process.env['KILN_RENDER_PORT_URL'];
   if (envUrl) return attach(envUrl, `GPU service (${envUrl})`);
 
-  const rendererId = await probeRenderService(DEFAULT_LOCAL_PORT_URL);
-  if (rendererId) return attach(DEFAULT_LOCAL_PORT_URL, `GPU service (${rendererId})`);
+  const localUrl = localRenderServiceUrl();
+  const rendererId = await probeRenderService(localUrl);
+  if (rendererId) return attach(localUrl, `GPU service (${rendererId})`);
+
+  // Nothing is listening. If this installation can start one, hand back a port
+  // that will -- lazily, so a session that never renders a material never pays
+  // for a GPU process, and so the start is not in front of the first connection.
+  if (options?.autoSpawn) {
+    const dir = options.serviceDir ?? renderServiceDir();
+    const state = options.start ? 'ready' : localRenderServiceState(dir);
+    if (state === 'ready') {
+      const start = options.start ?? (() => startLocalRenderService(dir));
+      return attachLazy(start, 'GPU service (started on demand)');
+    }
+    if (mode === 'gpu')
+      throw new Error(
+        `no GPU render service is reachable, and ${explainRenderServiceState(state, dir)}.\n` +
+          'Set --render-port or KILN_RENDER_PORT_URL to point at one elsewhere, or use ' +
+          '--render auto to fall back to the CPU rasterizer.',
+      );
+  }
 
   if (mode === 'gpu') {
     throw new Error(
       'no GPU render service is reachable.\n' +
-        `Looked at ${DEFAULT_LOCAL_PORT_URL}; set --render-port or KILN_RENDER_PORT_URL to ` +
+        `Looked at ${localUrl}; set --render-port or KILN_RENDER_PORT_URL to ` +
         'point somewhere else, or use --render auto to fall back to the CPU rasterizer.',
     );
   }
