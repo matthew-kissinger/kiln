@@ -420,10 +420,128 @@ architectures.
 
 | ID | Task | State |
 | --- | --- | --- |
-| 6.1 | Establish whether the divergence is float formatting, buffer padding, or accessor min/max precision, by diffing one small asset's GLB JSON chunk between a Linux and a Windows render CLOSED 2026-09-11. The 83 gallery images are display assets; the maintainer's call. Their receipts were the only consumer of byte-identical cross-platform serialization, so the Windows host this needed now buys nothing. `artifactHash` remains a real identity claim and 9.3 may share a root cause -- reopen from there if it does, not from the posters |
-| 6.2 | Decide the fix: make serialization deterministic across platforms, or make `artifactHash` cover geometry rather than serialized bytes | REOPENED 2026-09-11, hours after being closed, and by the predicted route. `@gltf-transform` 4.5.0 changes the bytes of every exported GLB: all 83 `artifactHash` values move and the Windows gallery build fails on a stale poster. Bisected to that package alone -- main plus 4.5.0 reproduces the bumped hash exactly, while `sharp` 0.35.4 and `manifold-3d` 3.5.3 leave it untouched. So the exposure is not really cross-platform drift: it is that `artifactHash` is a hash of bytes produced by a dependency free to change them under a caret. Pinned to 4.4.1 as a stopgap. The real decision stands |
+| 6.1 | Establish whether the divergence is float formatting, buffer padding, or accessor min/max precision, by diffing one small asset's GLB JSON chunk between a Linux and a Windows render | **ANSWERED 2026-09-11**, and it is none of the three: the float values themselves differ. Measured on 8 examples across both platforms at one commit -- JSON diverges in all 8, BIN in 2 of 8, and totals move by 4, 8 and 264 bytes, so digit counts change and formatting cannot be the cause. See the section below. `scripts/glb-chunk-hashes.mjs` is kept as the instrument |
+| 6.2 | Decide the fix: make serialization deterministic across platforms, or make `artifactHash` cover geometry rather than serialized bytes | **Decided and done 2026-09-11**, and the dependency half turned out to be one line. See the section below: the whole of the 4.5.0 change was `asset.generator`, the serializer writing its own version number into every artifact. `src/render.ts` now pins it, measured byte-identical across 4.4.1 and 4.5.0 on **all 86 examples**, and the exact pin moves to 4.5.0 deliberately. The poster receipt stops asserting `artifactHash` and asserts `sourceHash` plus `imageHash`, which is what it could always honestly claim. The platform half is NOT fixed -- 6.1 reopened to measure it |
 | 6.3 | Re-record the affected receipts once serialization is settled, deliberately and in one pass CLOSED 2026-09-11. The 83 gallery images are display assets; the maintainer's call. Their receipts were the only consumer of byte-identical cross-platform serialization, so the Windows host this needed now buys nothing. `artifactHash` remains a real identity claim and 9.3 may share a root cause -- reopen from there if it does, not from the posters |
-| 6.4 | Unpin `pages.yml` from `windows-2022` and confirm the gallery builds on Ubuntu | Kept, and now the whole of Phase 6. The Windows pin is a cost paid on every gallery run, independent of receipts |
+| 6.4 | Unpin `pages.yml` from `windows-2022` and confirm the gallery builds on Ubuntu | **Done 2026-09-11.** `runs-on: ubuntu-latest`. Demonstrated locally first -- `bun run site:assets` then `site/scripts/verify-assets.mjs` complete on Linux, verifying 80 source/GLB pairs, posters, both edit-demo revisions and the geometry example; before the 6.2 narrowing the first example failed. **Phase 6 closes.** The cross-platform divergence itself is not fixed and, per 6.1, is not fixable by canonicalization -- what changed is that nothing asserts byte-identity across platforms any more |
+
+
+### The 4.5.0 byte change was one metadata string
+
+Measured 2026-09-11, after the bump had been bisected to `@gltf-transform` and
+pinned. Splitting the same example's GLB into its declared chunks under both
+versions:
+
+| | 4.4.1 | 4.5.0 |
+| --- | --- | --- |
+| total bytes | 636,504 | 636,504 |
+| BIN chunk (all geometry) | `20f853940f53fa63` | `20f853940f53fa63` |
+| JSON chunk | `67d790a88a96a6a0` | `74be8b9c487ae8b3` |
+| `artifactHash` | `300ece4cd5de6dbc` | `9c4aeac1804c9107` |
+
+Diffing the parsed JSON gives exactly one line:
+
+```
+"generator": "glTF-Transform v4.4.1"  ->  "glTF-Transform v4.5.0"
+```
+
+That is the entire change. Not geometry, not materials, not animations, not even
+accessor min/max -- the BIN chunk is bit-identical and so is a semantic digest
+over nodes, meshes, materials and animations. All 83 receipts moved and the
+gallery build broke because the serializer writes its own version number into the
+file it serializes.
+
+`@gltf-transform/core/src/io/writer.ts` is
+`asset: { generator: \`glTF-Transform ${VERSION}\`, ...root.getAsset() }`. The
+spread comes after, so a caller's own value wins, and Kiln never set one. One
+line at the single `new Document()` site fixes it. Verified on the full corpus:
+with the generator pinned, **all 86 examples are byte-identical across 4.4.1 and
+4.5.0** -- including the ones using `palette()`, which 4.5.0 changed.
+
+A dependency's version number is provenance about the tool, not identity of the
+asset. Kiln's own version deliberately stays out of the bytes too: it belongs in
+the provenance record, where changing it does not move artifact hashes.
+
+**What this does not fix.** The Linux/Windows divergence is a separate cause. The
+Windows gallery job passes, so Windows reproduces the recorded hashes and Linux
+is the side that diverges. The remaining suspect is float math rather than
+formatting -- `Math.sin` and friends are not bit-specified across libm
+implementations, and a 1-ULP difference would land in the BIN chunk, where no
+canonicalization reaches it. 6.1 now measures this rather than assuming it.
+
+### 6.1, measured: it is float math, and no canonical form fixes it
+
+Both platforms, same commit, `bun scripts/glb-chunk-hashes.mjs`. Linux from a
+local run; Windows from a temporary step in the gallery job on `windows-2022`.
+Both reported `node=v26.3.0`, so this is not a runtime version difference.
+
+| example | JSON chunk | BIN chunk | total, Linux -> Windows |
+| --- | --- | --- | --- |
+| abyssal-surveyor | differs | **same** | 636488 -> 636488 |
+| arcade-cabinet | differs | **differs** | 1237440 -> 1237176 |
+| brass-tellurion | differs | **same** | 662816 -> 662820 |
+| carousel | differs | **same** | 191024 -> 191024 |
+| cathedral | differs | **differs** | 2259464 -> 2259464 |
+| penny-farthing | differs | **same** | 823584 -> 823584 |
+| robot-arm | differs | **same** | 1255776 -> 1255768 |
+| windmill | differs | **same** | 419064 -> 419056 |
+
+The question 6.1 asked was float formatting, buffer padding, or accessor min/max
+precision. The answer is none of those three: it is the float values themselves.
+
+Two readings carry it. The JSON chunk diverges in **every** example, and the
+totals move by 4, 8 and 264 bytes -- string LENGTHS changing, which a formatting
+difference cannot do, because ECMAScript specifies `Number` to string exactly.
+Different digit counts mean different numbers. And the BIN chunk diverges in 2 of
+8, at unchanged total size in `cathedral`, so that is differing values rather
+than differing layout.
+
+So the divergence is computation, not serialization, and it reaches both chunks:
+the JSON through computed node transforms and accessor bounds, the BIN through
+vertex data where a generator used an operation that came out differently. The
+remaining suspect is the transcendentals -- `Math.sin`, `Math.cos`, `Math.pow`
+are not bit-specified by IEEE-754 and each platform's libm is free to land on a
+different last bit.
+
+**This retroactively decides 6.2 the right way.** The alternative 6.2 offered was
+"make serialization deterministic across platforms", and that was never
+achievable: no canonical form reaches a value that was computed differently. The
+narrowing was the only option that could work. A future content hash would have
+to quantize geometry before digesting it, not canonicalize its encoding.
+
+That `cathedral` and `arcade-cabinet` are the two with BIN divergence is worth a
+follow-up: both bake procedural textures, whose PNG bytes also live in the BIN
+chunk, so the differing bytes may be image encoding rather than vertex data.
+`penny-farthing` and `robot-arm` also bake textures and matched, so that is a
+lead rather than a conclusion.
+
+### What a poster receipt asserts now
+
+`verifyRecordedPoster` asserted `sourceHash`, `artifactHash` and `imageHash`. That
+middle assertion is the single line that pinned the gallery to `windows-2022`,
+and it claimed something glTF never promised: that rebuilding a source anywhere
+reproduces the container byte for byte. It now asserts source and image, and
+`artifactHash` stays in the record as provenance -- the bytes the poster was
+rendered from, on the machine that recorded it.
+
+Two consequences worth stating. `verify-assets.mjs` compared the published
+`<name>.poster.json` to the run's own `artifactHash` one line later, which
+re-imposed the same claim and is gone. And the prose in all 83 records said the
+poster was a render of "the exact downloadable GLB", which the narrowing makes an
+over-claim; three distinct strings covered all 83 and each now says the poster is
+a render of that exact *source*, with the artifact hash naming the bytes the
+image came from. Rewriting the prose rather than leaving it is the same standard
+Phase 9 applied to `exactArtifact`: a receipt that over-claims is worse than one
+that claims less.
+
+The within-run integrity checks are untouched and still hash bytes, correctly:
+the index against the files built beside it, the build receipt against the index,
+and both demo receipts against their own run's GLBs. Those compare artifacts to
+themselves within one build and cannot diverge by platform.
+
+`site/scripts` has had tests since posters were attested and **no workflow ran
+them**, so a change to this verification could have shipped green. `pages.yml`
+now runs them.
 
 ### Phase 3 rehearsal
 
@@ -872,7 +990,7 @@ clone and no install. It does not depend on SEP-2640.
 | ID | Task | State |
 | --- | --- | --- |
 | 7.12 | Watch SEP-2640 to ratification, then expose the skills as `skill://` resources and retire the hand-built per-harness registration where clients support the extension | Deferred by decision; not this pass |
-| 7.13 | Publish the skills at `/.well-known/skills/` on the existing site per the Cloudflare discovery RFC, giving opencode `skills.urls` users a zero-install path | Pending; optional, independent of the rest of Phase 7 |
+| 7.13 | Publish the skills at `/.well-known/agent-skills/index.json` on the existing site per the Cloudflare discovery RFC, giving opencode `skills.urls` users a zero-install path | Pending, and the path above is a correction: the RFC moved to `/.well-known/agent-skills/index.json` at v0.2.0, not the `/.well-known/skills/` this row recorded. Each entry needs `name`, `type`, `description`, `url` and a `sha256:` digest of the artifact's raw bytes. Five of six skills carry `references/`, so they need `type: archive` rather than `skill-md` -- and the archives must be built deterministically (fixed mtime, sorted entries) or the published digest changes on every build |
 
 ### 7.1 execution record
 
@@ -964,10 +1082,12 @@ undefined helper is named with its line. Promoting it to an error would change
 
 ### Left open, with reasons
 
-Task 7.13 (`/.well-known/skills/`) is grouped with Phase 6 as maintainer-side:
-publishing it runs through `pages.yml`, which is pinned to `windows-2022`, so it
-cannot be verified from a Linux checkout. Task 7.12 (SEP-2640) stays deferred
-until the SEP ratifies.
+Task 7.13 (`/.well-known/agent-skills/`) was grouped with Phase 6 as
+maintainer-side: publishing it ran through `pages.yml`, which was pinned to
+`windows-2022`, so it could not be verified from a Linux checkout. **That
+grouping is resolved as of 2026-09-11**: 6.4 unpinned the runner, so 7.13 is now
+verifiable anywhere. Task 7.12 (SEP-2640) stays deferred until the SEP
+ratifies.
 
 A third order-dependent test was found and is **pre-existing**, not a
 regression: `authoring-diagnostic.test.ts` "shipping registry exposes repair

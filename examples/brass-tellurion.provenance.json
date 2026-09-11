@@ -12,7 +12,7 @@
     "reviewFidelity": "Actual GPU images inspected independently. Stylized continents and illustrative gears; not a functioning astronomical mechanism.",
     "evaluationPackageHash": "0d457e8f8763730079da013abfa6662aadc02843f090fcae594c0f711399d16c",
     "evaluationGlbHash": "e9f1e4c144721f76fce895aedaa728b4a55b65c1987b5d6cb1a4854725f567b2",
-    "poster": "Gallery GPU render of the exact downloadable GLB. The separate poster receipt records image, camera and renderer.",
+    "poster": "Gallery GPU render of this exact source. The separate poster receipt records image, camera, renderer, and the artifact hash of the GLB bytes the image was rendered from.",
     "posterReceipt": {
       "captureIdentity": [
         "kiln.capture-producer.v1",

@@ -10,7 +10,7 @@
     "startingExample": "None supplied.",
     "humanIntervention": "Maintainer supplied the task and independently verified exports. Model changed serviceOffset0.20 to0.35 by reference; every other source byte unchanged.",
     "reviewFidelity": "Whole, attachment and animation GPU images delivered. Roof is an open sheet without thickness; dark underside obscures small fittings. Hidden intersections are not verified. Tool/export journey completed but the final harness stream reported interruption after its summary.",
-    "poster": "Gallery GPU render of the exact downloadable GLB. Source, artifact, image hashes and camera settings are recorded alongside the poster.",
+    "poster": "Gallery GPU render of this exact source. Source, artifact, image hashes and camera settings are recorded alongside the poster; the artifact hash names the GLB bytes the image was rendered from, which the downloadable rebuild reproduces byte for byte only on the platform that recorded it.",
     "evaluationPackageHash": "614b1c9ea2adf55bd7b4c1b058c0b7c7f4dd24f76f8a2d22267c6fb2221281ef",
     "evaluationGlbHash": "392ab403413b9ce8e4616df05cb37d6260d70078d4c0d8a2c5903af64be9c310",
     "posterReceipt": {

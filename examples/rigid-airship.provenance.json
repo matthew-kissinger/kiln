@@ -9,7 +9,7 @@
     "startingExample": "None supplied, according to source header",
     "humanIntervention": "Header declares no hand-authored source; other intervention not recorded",
     "reviewFidelity": "Six-view review declared; renderer fidelity not recorded",
-    "poster": "Gallery GPU render of the exact downloadable GLB. Source, artifact, image hashes and camera settings are recorded alongside the poster.",
+    "poster": "Gallery GPU render of this exact source. Source, artifact, image hashes and camera settings are recorded alongside the poster; the artifact hash names the GLB bytes the image was rendered from, which the downloadable rebuild reproduces byte for byte only on the platform that recorded it.",
     "posterReceipt": {
       "captureIdentity": [
         "kiln.capture-producer.v1",

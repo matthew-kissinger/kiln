@@ -12,7 +12,7 @@
     "reviewFidelity": "Maintainer inspected the actual GPU export. Whole and detail review and two refinement passes are recorded by the authoring run. Unchecked surface self-intersections remain a limitation; destination-runtime behavior has not been tested.",
     "evaluationPackageHash": "0d457e8f8763730079da013abfa6662aadc02843f090fcae594c0f711399d16c",
     "evaluationGlbHash": "a31ad3a6189606cb448a6c116f960ab23c3828700bf44820ee0ece43d3c2e908",
-    "poster": "Gallery GPU render of the exact downloadable GLB. Source, artifact, image hashes and camera settings are recorded alongside the poster.",
+    "poster": "Gallery GPU render of this exact source. Source, artifact, image hashes and camera settings are recorded alongside the poster; the artifact hash names the GLB bytes the image was rendered from, which the downloadable rebuild reproduces byte for byte only on the platform that recorded it.",
     "posterReceipt": {
       "captureIdentity": [
         "kiln.capture-producer.v1",

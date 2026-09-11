@@ -1397,6 +1397,16 @@ export async function renderSceneToGLB(
   }
 
   const doc = new Document();
+  // `asset.generator` defaults to the serializer's own version string, which put
+  // `glTF-Transform v4.4.1` inside every artifact's bytes -- and therefore inside
+  // `artifactHash`. Taking 4.5.0 moved all 83 recorded hashes and failed the
+  // gallery build, and the ENTIRE difference between the two GLBs was that one
+  // string: identical BIN chunk, identical accessor min/max, identical everything
+  // else. A dependency's version number is provenance about the tool, not identity
+  // of the asset, and it has no business in a hash that claims to name the asset.
+  // Kiln's own version deliberately stays out too: it belongs in the provenance
+  // record, where changing it does not move artifact bytes.
+  doc.getRoot().getAsset().generator = 'Kiln';
   const buf = doc.createBuffer();
   const matCache = new Map<THREE.Material, GtMaterial>();
   const meshCache = new Map<string, GtMesh>();

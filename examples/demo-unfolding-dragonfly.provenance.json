@@ -8,7 +8,7 @@
     "sourceAccess": "See retained demo run; no stronger isolation claim is made.",
     "humanIntervention": "Owner supplied direction; model-authored exported source preserved byte-for-byte.",
     "reviewFidelity": "Authoring feedback and shaded demo previews where available. Not a destination-runtime acceptance claim.",
-    "poster": "Gallery GPU render of the exact downloadable GLB. Source, artifact, image hashes and camera settings are recorded alongside the poster.",
+    "poster": "Gallery GPU render of this exact source. Source, artifact, image hashes and camera settings are recorded alongside the poster; the artifact hash names the GLB bytes the image was rendered from, which the downloadable rebuild reproduces byte for byte only on the platform that recorded it.",
     "evaluationGlbHash": "4fc612c3d0278fe0d76789377781cc2b5562e5c49a01c03a9e4c2bab9d9e11d7",
     "posterReceipt": {
       "captureIdentity": [

@@ -10,7 +10,7 @@
     "startingExample": "The earlier Muse optical instrument, source f21fc9f7ab93dfe56720232007668ba95fc541d6071454a7ba12289c5a519df0.",
     "humanIntervention": "Maintainer supplied a creative refinement brief and reviewed returned images; no hand-edited geometry. Model redesigned the instrument and repaired a bore gap by reference.",
     "reviewFidelity": "GPU whole, part-relative, axial-opening and locked-motion views were delivered. Independent review found coherent geometry, bright brass highlights and smeared lens reflections. No engineering or optical-performance validation.",
-    "poster": "Gallery GPU render of the exact downloadable GLB. Source, artifact, image hashes and camera settings are recorded alongside the poster.",
+    "poster": "Gallery GPU render of this exact source. Source, artifact, image hashes and camera settings are recorded alongside the poster; the artifact hash names the GLB bytes the image was rendered from, which the downloadable rebuild reproduces byte for byte only on the platform that recorded it.",
     "evaluationPackageHash": "1d3bf676c9439ab9507e797118b263f2b6f6ce70a8db1c4e6b48c1be022bb806",
     "evaluationGlbHash": "1c5def38ea152a30d5afee13c958eeed05858c7057e9048a0379fd515a820aa4",
     "posterReceipt": {

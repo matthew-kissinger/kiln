@@ -34,16 +34,19 @@ test('recorded gallery credit is bound to exact source bytes', async () => {
   expect(() => recordedExampleCredit(code + ' ', record)).toThrow('source');
 });
 
-test('recorded exact poster refuses a changed source, artifact or image', async () => {
+test('recorded poster refuses a changed source or image, and ignores the artifact bytes', async () => {
   const { verifyRecordedPoster } = await import('./provenance.mjs');
   const { createHash } = await import('node:crypto');
   const hash = (x: string) => createHash('sha256').update(x).digest('hex');
   const r = { sourceHash: hash('source'), artifactHash: hash('glb'), imageHash: hash('png') };
-  expect(() => verifyRecordedPoster(r, 'source', 'glb', 'png')).not.toThrow();
+  expect(() => verifyRecordedPoster(r, 'source', 'png')).not.toThrow();
   for (const bytes of [
-    ['changed', 'glb', 'png'],
-    ['source', 'changed', 'png'],
-    ['source', 'glb', 'changed'],
+    ['changed', 'png'],
+    ['source', 'changed'],
   ])
     expect(() => verifyRecordedPoster(r, ...bytes)).toThrow('poster');
+  // The point of the narrowing: a receipt whose recorded GLB bytes no longer
+  // match anything this runner produces is still a valid receipt. Asserting them
+  // is what pinned the gallery build to one operating system.
+  expect(() => verifyRecordedPoster({ ...r, artifactHash: hash('other bytes') }, 'source', 'png')).not.toThrow();
 });

@@ -26,7 +26,6 @@ for (const row of rows) {
   await readFile(join(root, row.thumb));
   if (row.poster) await readFile(join(root, row.poster));
   const source = await readFile(join(root, row.source));
-  const glb = await readFile(join(root, row.file));
   if (row.history) {
     if (row.history.revisions.filter((revision) => revision.current && revision.sourceHash === row.sourceHash).length !== 1)
       throw new Error(`History has no unique displayed source: ${row.name}`);
@@ -39,11 +38,15 @@ for (const row of rows) {
     }
   }
   if (row.provenance?.posterReceipt) {
-    verifyRecordedPoster(row.provenance.posterReceipt, source, glb, await posterBytes(row.name));
+    verifyRecordedPoster(row.provenance.posterReceipt, source, await posterBytes(row.name));
     const publicReceipt = JSON.parse(await readFile(join(root, 'assets', `${row.name}.poster.json`), 'utf8'));
-    if (publicReceipt.artifactHash !== row.artifactHash || publicReceipt.sourceHash !== row.sourceHash) throw new Error(`Public poster record mismatch: ${row.name}`);
+    // `sourceHash` only. The published record is a verbatim copy of the recorded
+    // receipt, so comparing its `artifactHash` to this run's `row.artifactHash`
+    // was the same cross-platform byte claim `verifyRecordedPoster` just dropped,
+    // re-imposed one line later.
+    if (publicReceipt.sourceHash !== row.sourceHash) throw new Error(`Public poster record mismatch: ${row.name}`);
   }
-  if (row.heroPoster) verifyRecordedPoster(row.heroPoster, source, glb, await readFile(resolve(root, '../examples', `${row.name}.poster.png`)));
+  if (row.heroPoster) verifyRecordedPoster(row.heroPoster, source, await readFile(resolve(root, '../examples', `${row.name}.poster.png`)));
 }
 const build = JSON.parse(await readFile(join(root, 'assets/build.json'), 'utf8'));
 if (build.indexHash !== hash(await readFile(join(root, 'assets/index.json')))) throw new Error('Gallery index differs from its build receipt');

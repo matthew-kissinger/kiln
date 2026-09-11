@@ -12,7 +12,7 @@
     "reviewFidelity": "Actual GPU images inspected independently. A restrained architectural study; structural engineering was not verified.",
     "evaluationPackageHash": "0d457e8f8763730079da013abfa6662aadc02843f090fcae594c0f711399d16c",
     "evaluationGlbHash": "70ba9966671238d98a97bf1a220e470024422ca9f86ca26a635a9636dcef533d",
-    "poster": "Gallery GPU render of the exact downloadable GLB. The separate poster receipt records image, camera and renderer.",
+    "poster": "Gallery GPU render of this exact source. The separate poster receipt records image, camera, renderer, and the artifact hash of the GLB bytes the image was rendered from.",
     "posterReceipt": {
       "captureIdentity": [
         "kiln.capture-producer.v1",
