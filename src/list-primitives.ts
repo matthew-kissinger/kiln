@@ -790,7 +790,7 @@ const PRIMITIVES: PrimitiveSpec[] = [
     returns: 'THREE.Object3D[]',
     category: 'arrays',
     description:
-      'Places N copies of `source` along a constant offset vector. Copies share geometry + material via createInstance.',
+      '`count` is the TOTAL, source included: the source stays where it is as copy 0 and the call returns count-1 new instances, so count 10 gives 10 posts, not 11. Copies share geometry + material via createInstance.',
     example:
       "const post = createPart('Post0', cylinderGeo(0.05,0.05,1.5,6), wood, { position: [0,0.75,0], parent: root });\narrayLinear('Post', post, 10, [0.5, 0, 0], root);",
   },
@@ -800,7 +800,7 @@ const PRIMITIVES: PrimitiveSpec[] = [
     returns: 'THREE.Object3D[]',
     category: 'arrays',
     description:
-      "Places N copies of `source` around the given axis. Source's local rotation is oriented outward. Perfect for gear teeth, radial bolts, circle of columns.",
+      "`count` is the TOTAL, source included: the source stays at its angle as copy 0 and the call returns count-1 new instances, so count 8 gives 8 bolts evenly spaced, not 9. Each copy's local rotation is oriented outward. Perfect for gear teeth, radial bolts, circle of columns.",
     example:
       "const bolt = createPart('Bolt0', cylinderGeo(0.02,0.02,0.1,6), steel, { position: [1,0,0], parent: root });\narrayRadial('Bolt', bolt, 8, 'y', root);",
   },

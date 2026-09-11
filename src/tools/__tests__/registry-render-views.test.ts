@@ -23,6 +23,21 @@ function build() {
 const PNG_SIGNATURE = Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]);
 
 describe('kilnRenderViewsDef (unified kiln_render)', () => {
+  /**
+   * `exactArtifact` is false on every result this surface can produce, because
+   * every one of them renders an in-loop build rather than persisted bytes. A
+   * flag that is always false carries no information, and worse, invites the
+   * wrong reading -- a model can take it for "these bytes differ from what I
+   * would export" when the bytes are frequently identical. The value stays
+   * false; the reason is what makes it usable.
+   */
+  test('says why exactArtifact is false instead of leaving it bare', async () => {
+    const result = (await kilnRenderViewsDef.run({ code: BOX_CODE })) as KilnRenderViewsResult;
+    expect(result.ok).toBe(true);
+    expect(result.viewFidelity?.exactArtifact).toBe(false);
+    expect(result.viewFidelity?.reasonCodes).toContain('IN_LOOP_BUILD_NOT_PERSISTED');
+  }, 30000);
+
   test('is named kiln_render and is NOT part of the four-tool registry baseline', () => {
     expect(kilnRenderViewsDef.name).toBe('kiln_render');
     expect(kilnRenderViewsDef.media).toBe(screenshotMedia);

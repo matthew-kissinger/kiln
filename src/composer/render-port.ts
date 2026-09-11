@@ -151,7 +151,15 @@ export type ViewFidelityReasonCode =
   | 'GLB_FLAT_PARSE_FAILED'
   | 'GLB_FLAT_NO_SCENE'
   | 'GLB_FLAT_NO_RENDERABLE_GEOMETRY'
-  | 'GLB_FLAT_INVALID_INSTANCING';
+  | 'GLB_FLAT_INVALID_INSTANCING'
+  /**
+   * The view is of a build made inside the loop, not of persisted artifact
+   * bytes. It is why `exactArtifact` is false, and it is not a degradation:
+   * the pixels can be fully material-faithful and the bytes can be identical
+   * to what an export would produce. Without it a permanently-false flag reads
+   * as a warning about the bytes, which is the opposite of the truth.
+   */
+  | 'IN_LOOP_BUILD_NOT_PERSISTED';
 
 /**
  * Truthful, model-visible provenance for a rendered view.

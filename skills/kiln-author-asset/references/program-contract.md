@@ -19,6 +19,8 @@ function build() {
 
 Optional `animate(root)` returns an array of `THREE.AnimationClip`. Follow catalog keyframe signatures: rotation tracks use a `rotation` field, position tracks use `position`. Grounded and moving parts need meaningful named pivots.
 
+To review that motion, `kiln_screenshot_animation` needs the clip **by name** -- `clip` is required, and a name that matches nothing comes back as an error listing the clips that do exist. `frameTimes` is optional and is expressed as **phases in 0..1**, not seconds: 1 to 9 strictly increasing values, scaled by the clip's own duration. Omit it and six frames are sampled evenly from start to end. A track whose target name binds to no node surfaces in `unresolvedTracks`, which is what a clip that renders frozen actually means -- a joint-name mismatch, not a broken clip.
+
 ## Frames and ownership
 
 - Asset coordinates: metres; +X forward, +Y up, +Z right.

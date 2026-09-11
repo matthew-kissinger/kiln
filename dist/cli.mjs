@@ -18652,7 +18652,7 @@ const rock = await hull('Rock', ...rockChunks);`
       signature: "arrayLinear(namePrefix, source, count, offset: [x,y,z], parent?)",
       returns: "THREE.Object3D[]",
       category: "arrays",
-      description: "Places N copies of `source` along a constant offset vector. Copies share geometry + material via createInstance.",
+      description: "`count` is the TOTAL, source included: the source stays where it is as copy 0 and the call returns count-1 new instances, so count 10 gives 10 posts, not 11. Copies share geometry + material via createInstance.",
       example: `const post = createPart('Post0', cylinderGeo(0.05,0.05,1.5,6), wood, { position: [0,0.75,0], parent: root });
 arrayLinear('Post', post, 10, [0.5, 0, 0], root);`
     },
@@ -18661,7 +18661,7 @@ arrayLinear('Post', post, 10, [0.5, 0, 0], root);`
       signature: "arrayRadial(namePrefix, source, count, axis?: 'x'|'y'|'z', parent?)",
       returns: "THREE.Object3D[]",
       category: "arrays",
-      description: "Places N copies of `source` around the given axis. Source's local rotation is oriented outward. Perfect for gear teeth, radial bolts, circle of columns.",
+      description: "`count` is the TOTAL, source included: the source stays at its angle as copy 0 and the call returns count-1 new instances, so count 8 gives 8 bolts evenly spaced, not 9. Each copy's local rotation is oriented outward. Perfect for gear teeth, radial bolts, circle of columns.",
       example: `const bolt = createPart('Bolt0', cylinderGeo(0.02,0.02,0.1,6), steel, { position: [1,0,0], parent: root });
 arrayRadial('Bolt', bolt, 8, 'y', root);`
     },
@@ -27622,7 +27622,8 @@ async function runRenderViews(input, context) {
           exactArtifact: false,
           rendererId: [...new Set(receipts.map((r) => r.rendererId))].join(", "),
           inputGlbSha256: await sha256Glb(Uint8Array.from(rendered.glb)),
-          degraded: !materialFaithful
+          degraded: !materialFaithful,
+          reasonCodes: ["IN_LOOP_BUILD_NOT_PERSISTED"]
         },
         warnings: [...structuralWarnings, ...rendered.warnings]
       };
@@ -27684,7 +27685,8 @@ async function runRenderViews(input, context) {
       rendererId: drawnBy.renderer,
       inputGlbSha256,
       degraded: drawnBy.degraded,
-      ...drawnBy.degradedReason ? { degradeReason: drawnBy.degradedReason } : {}
+      ...drawnBy.degradedReason ? { degradeReason: drawnBy.degradedReason } : {},
+      reasonCodes: ["IN_LOOP_BUILD_NOT_PERSISTED"]
     };
     const viewEvidence = context.viewEvidenceHistory?.record("kiln_render", viewFidelity);
     try {
