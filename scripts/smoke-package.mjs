@@ -86,6 +86,11 @@ try {
     assert(pack.files.some((entry) => entry.path === 'scripts/create-workspace.mjs'));
     assert(pack.files.some((entry) => entry.path === 'plugin.json'));
     assert(pack.files.some((entry) => entry.path === '.claude-plugin/plugin.json'));
+    // The MCP server tells every model that a GPU renderer "ships as render-service/
+    // in this installation". That sentence was false for anyone installing from npm
+    // until this line existed, and the on-demand start has nothing to start without it.
+    assert(pack.files.some((entry) => entry.path === 'render-service/src/server.mjs'));
+    assert(!pack.files.some((entry) => entry.path.startsWith('render-service/test/')));
     assert(!pack.files.some((entry) => entry.path.includes('__tests__') || entry.path.endsWith('.test.ts')));
   }
   receipt.tarballSha256 = sha(await readFile(receipt.tarball));
@@ -96,8 +101,15 @@ try {
   const runtime = join(install, 'node_modules/@kiln/engine');
   const pkg = JSON.parse(await readFile(join(runtime, 'package.json'), 'utf8'));
   receipt.engineVersion = pkg.version;
-  for (const required of ['dist/cli.mjs', 'dist/mcp-server.mjs', 'dist/evaluator-worker.mjs', 'scripts/create-workspace.mjs', 'plugin.json', '.claude-plugin/plugin.json'])
+  for (const required of ['dist/cli.mjs', 'dist/mcp-server.mjs', 'dist/evaluator-worker.mjs', 'scripts/create-workspace.mjs', 'plugin.json', '.claude-plugin/plugin.json', 'render-service/src/server.mjs', 'render-service/src/register-hooks.mjs', 'render-service/package.json'])
     assert((await stat(join(runtime, required))).isFile(), `Missing installed package file: ${required}`);
+  // `renderServiceDir()` is `new URL('../render-service', import.meta.url)` from the
+  // bundle. Walk that exact arithmetic against the real installation rather than
+  // trusting that the three paths above happen to sit where the server will look.
+  assert(
+    (await stat(fileURLToPath(new URL('../render-service/src/server.mjs', pathToFileURL(join(runtime, 'dist/mcp-server.mjs')))))).isFile(),
+    'render-service is not where the MCP bundle resolves it',
+  );
   receipt.bundleHashes = { cli: sha(await readFile(join(runtime, 'dist/cli.mjs'))), mcp: sha(await readFile(join(runtime, 'dist/mcp-server.mjs'))) };
   assert((await readFile(join(runtime, 'dist/cli.mjs'), 'utf8')).startsWith('#!/usr/bin/env node'));
   assert.match(await command([join(runtime, 'dist/cli.mjs'), '--help'], root), /kiln render/, 'Direct Node CLI must print help');

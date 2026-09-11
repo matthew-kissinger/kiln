@@ -28524,6 +28524,109 @@ var init_registry2 = __esm(() => {
   };
 });
 
+// src/render-service-host.ts
+import { spawn as spawn2 } from "node:child_process";
+import { existsSync as existsSync2 } from "node:fs";
+import { fileURLToPath as fileURLToPath5 } from "node:url";
+import { join as join6 } from "node:path";
+function localRenderServicePort() {
+  const raw = Number(process.env["KILN_RENDER_SERVICE_PORT"]);
+  return Number.isInteger(raw) && raw > 0 && raw < 65536 ? raw : DEFAULT_LOCAL_RENDER_SERVICE_PORT;
+}
+function localRenderServiceUrl() {
+  return `http://127.0.0.1:${localRenderServicePort()}`;
+}
+function renderServiceDir() {
+  const override = process.env["KILN_RENDER_SERVICE_DIR"];
+  if (override)
+    return override;
+  return fileURLToPath5(new URL("../render-service", import.meta.url));
+}
+function localRenderServiceState(dir = renderServiceDir()) {
+  if (!existsSync2(join6(dir, "src/server.mjs")) || !existsSync2(join6(dir, "package.json")))
+    return "not-packaged";
+  if (!existsSync2(join6(dir, "node_modules/webgpu")) || !existsSync2(join6(dir, "node_modules/three")))
+    return "dependencies-missing";
+  return "ready";
+}
+function explainRenderServiceState(state, dir) {
+  return state === "dependencies-missing" ? `the GPU render service is present but not installed; run \`npm install\` in ${dir}` : `this installation does not ship ${dir}`;
+}
+async function healthy(url, timeoutMs) {
+  try {
+    const res = await fetch(new URL("/health", url), { signal: AbortSignal.timeout(timeoutMs) });
+    if (!res.ok)
+      return false;
+    return (await res.json()).ok === true;
+  } catch {
+    return false;
+  }
+}
+function nodeBinary() {
+  const override = process.env["KILN_RENDER_SERVICE_NODE"];
+  if (override)
+    return override;
+  return process.versions.bun ? "node" : process.execPath;
+}
+function stopLocalRenderService() {
+  const running = child;
+  child = undefined;
+  if (!running || running.killed || running.exitCode !== null)
+    return;
+  running.kill();
+}
+function registerTeardown() {
+  if (teardownRegistered)
+    return;
+  teardownRegistered = true;
+  process.once("exit", stopLocalRenderService);
+  for (const signal of ["SIGINT", "SIGTERM"])
+    process.once(signal, () => {
+      stopLocalRenderService();
+    });
+}
+async function startLocalRenderService(dir = renderServiceDir()) {
+  const url = localRenderServiceUrl();
+  if (await healthy(url, 1500))
+    return url;
+  const state = localRenderServiceState(dir);
+  if (state !== "ready")
+    throw new Error(explainRenderServiceState(state, dir));
+  registerTeardown();
+  let stderr = "";
+  child = spawn2(nodeBinary(), ["--import", join6(dir, "src/register-hooks.mjs"), join6(dir, "src/server.mjs")], {
+    cwd: dir,
+    env: {
+      ...process.env,
+      PORT: String(localRenderServicePort()),
+      HOST: "127.0.0.1"
+    },
+    stdio: ["ignore", "ignore", "pipe"]
+  });
+  child.stderr?.on("data", (chunk) => {
+    stderr = `${stderr}${chunk.toString()}`.slice(-2000);
+  });
+  const deadline = Date.now() + STARTUP_BUDGET_MS;
+  while (Date.now() < deadline) {
+    if (await healthy(url, 1000))
+      return url;
+    if (child.exitCode !== null || child.signalCode !== null) {
+      if (await healthy(url, 1500))
+        return url;
+      child = undefined;
+      throw new Error(`render service exited during startup${stderr.trim() ? `: ${stderr.trim().split(`
+`).slice(-3).join(" ")}` : ""}`);
+    }
+    await new Promise((done) => setTimeout(done, STARTUP_POLL_MS));
+  }
+  stopLocalRenderService();
+  throw new Error(`render service did not answer within ${STARTUP_BUDGET_MS}ms`);
+}
+var DEFAULT_LOCAL_RENDER_SERVICE_PORT = 8000, STARTUP_BUDGET_MS, STARTUP_POLL_MS = 250, child, teardownRegistered = false;
+var init_render_service_host = __esm(() => {
+  STARTUP_BUDGET_MS = Number(process.env["KILN_RENDER_SERVICE_STARTUP_MS"] ?? 60000);
+});
+
 // src/cli-render-mode.ts
 import { createHash as createHash9 } from "node:crypto";
 function resolveRenderMode(value) {
@@ -28573,6 +28676,15 @@ function makeRemoteRenderPort(url, token) {
       ...json.views ? { viewsPng: json.views.map((b64) => new Uint8Array(Buffer.from(b64, "base64"))) } : {},
       ...json.beauty ? { beautyPng: new Uint8Array(Buffer.from(json.beauty, "base64")) } : {}
     };
+  };
+}
+function makeLazyRenderPort(start, token) {
+  let resolving;
+  return async (req) => {
+    resolving ??= start().then((url) => makeRemoteRenderPort(url, token), (err) => {
+      throw new Error(`render service could not start: ${err instanceof Error ? err.message : String(err)}`);
+    });
+    return (await resolving)(req);
   };
 }
 async function probeCaptureIdentity(url) {
@@ -28639,12 +28751,23 @@ function describeDrawnBy(output, context) {
   }
   return "cpu raster (GPU configured; scene needs no PBR shading)";
 }
-async function buildRenderPort(mode, portUrl) {
+async function buildRenderPort(mode, portUrl, options) {
   const context = mode === "gpu" ? { viewRenderRequired: true } : {};
   const attach = (url, label) => {
     context.viewRenderPort = makeRemoteRenderPort(url, process.env["KILN_RENDER_TOKEN"]);
     context.viewRenderTimeoutMs = CLI_VIEW_RENDER_TIMEOUT_MS;
     context.captureCacheIdentity = () => probeCaptureIdentity(url);
+    selected.set(context, label);
+    return context;
+  };
+  const attachLazy = (start, label) => {
+    let url;
+    context.viewRenderPort = makeLazyRenderPort(async () => {
+      url = await start();
+      return url;
+    }, process.env["KILN_RENDER_TOKEN"]);
+    context.viewRenderTimeoutMs = CLI_VIEW_RENDER_TIMEOUT_MS;
+    context.captureCacheIdentity = () => url ? probeCaptureIdentity(url) : undefined;
     selected.set(context, label);
     return context;
   };
@@ -28657,18 +28780,31 @@ async function buildRenderPort(mode, portUrl) {
   const envUrl = process.env["KILN_RENDER_PORT_URL"];
   if (envUrl)
     return attach(envUrl, `GPU service (${envUrl})`);
-  const rendererId = await probeRenderService(DEFAULT_LOCAL_PORT_URL);
+  const localUrl = localRenderServiceUrl();
+  const rendererId = await probeRenderService(localUrl);
   if (rendererId)
-    return attach(DEFAULT_LOCAL_PORT_URL, `GPU service (${rendererId})`);
+    return attach(localUrl, `GPU service (${rendererId})`);
+  if (options?.autoSpawn) {
+    const dir = options.serviceDir ?? renderServiceDir();
+    const state = options.start ? "ready" : localRenderServiceState(dir);
+    if (state === "ready") {
+      const start = options.start ?? (() => startLocalRenderService(dir));
+      return attachLazy(start, "GPU service (started on demand)");
+    }
+    if (mode === "gpu")
+      throw new Error(`no GPU render service is reachable, and ${explainRenderServiceState(state, dir)}.
+` + "Set --render-port or KILN_RENDER_PORT_URL to point at one elsewhere, or use " + "--render auto to fall back to the CPU rasterizer.");
+  }
   if (mode === "gpu") {
     throw new Error(`no GPU render service is reachable.
-` + `Looked at ${DEFAULT_LOCAL_PORT_URL}; set --render-port or KILN_RENDER_PORT_URL to ` + "point somewhere else, or use --render auto to fall back to the CPU rasterizer.");
+` + `Looked at ${localUrl}; set --render-port or KILN_RENDER_PORT_URL to ` + "point somewhere else, or use --render auto to fall back to the CPU rasterizer.");
   }
   selected.set(context, "cpu raster (no GPU service found)");
   return context;
 }
-var DEFAULT_LOCAL_PORT_URL = "http://127.0.0.1:8000", HEALTH_PROBE_TIMEOUT_MS = 1500, HEALTH_PROBE_BUSY_TIMEOUT_MS = 8000, CLI_VIEW_RENDER_TIMEOUT_MS = 20000, selected;
+var HEALTH_PROBE_TIMEOUT_MS = 1500, HEALTH_PROBE_BUSY_TIMEOUT_MS = 8000, CLI_VIEW_RENDER_TIMEOUT_MS = 20000, selected;
 var init_cli_render_mode = __esm(() => {
+  init_render_service_host();
   selected = new WeakMap;
 });
 
@@ -28676,7 +28812,7 @@ var init_cli_render_mode = __esm(() => {
 import { createHash as createHash10, randomUUID as randomUUID3 } from "node:crypto";
 import { readFileSync as readFileSync2 } from "node:fs";
 import { lstat as lstat2, mkdir as mkdir4, readFile as readFile4, readdir as readdir4, realpath as realpath2, rename as rename2, rm, writeFile as writeFile3 } from "node:fs/promises";
-import { dirname as dirname4, join as join6, relative as relative2, resolve as resolve5, sep } from "node:path";
+import { dirname as dirname4, join as join7, relative as relative2, resolve as resolve5, sep } from "node:path";
 async function verifyAssetRecord(record) {
   for (const [name, info] of Object.entries(record.manifest.files)) {
     const bytes = record.files[name];
@@ -28709,7 +28845,7 @@ class FileAssetLibrary {
     let path = root;
     for (const part of parts) {
       assetIdSchema.parse(part);
-      path = join6(path, part);
+      path = join7(path, part);
       try {
         const entry = await lstat2(path);
         if (entry.isSymbolicLink())
@@ -28752,7 +28888,7 @@ class FileAssetLibrary {
     return records.sort((a, b) => b.createdAt.localeCompare(a.createdAt) || a.revisionId.localeCompare(b.revisionId));
   }
   async file(dir, name, limit = ASSET_LIMIT) {
-    const path = join6(dir, name);
+    const path = join7(dir, name);
     const info = await lstat2(path);
     if (!info.isFile() || info.isSymbolicLink() || info.size > limit)
       throw new Error("Invalid collection file");
@@ -28816,12 +28952,12 @@ class FileAssetLibrary {
       const dest = await this.path(collection, manifest.assetId, "revisions", manifest.revisionId);
       const parent = dirname4(dest);
       await mkdir4(parent, { recursive: true });
-      const stage = join6(parent, `.write-${randomUUID3()}`);
+      const stage = join7(parent, `.write-${randomUUID3()}`);
       await mkdir4(stage);
       try {
         for (const [name, bytes] of Object.entries(files))
-          await writeFile3(join6(stage, name), bytes, { flag: "wx" });
-        await writeFile3(join6(stage, "manifest.json"), `${JSON.stringify(manifest, null, 2)}
+          await writeFile3(join7(stage, name), bytes, { flag: "wx" });
+        await writeFile3(join7(stage, "manifest.json"), `${JSON.stringify(manifest, null, 2)}
 `, {
           flag: "wx"
         });
@@ -28843,7 +28979,7 @@ class FileAssetLibrary {
 }
 function collectionConfigPath(env = process.env) {
   const workspace = env.KILN_PROGRAM_STORE ? dirname4(dirname4(resolve5(env.KILN_PROGRAM_STORE))) : process.cwd();
-  return join6(workspace, ".kiln", "collections.json");
+  return join7(workspace, ".kiln", "collections.json");
 }
 function localAssetLibrary(env = process.env) {
   if (env.KILN_COLLECTIONS) {
@@ -28863,7 +28999,7 @@ function localAssetLibrary(env = process.env) {
       throw error;
   }
   const workspace = dirname4(dirname4(config));
-  return new FileAssetLibrary({ project: join6(workspace, "assets", "kiln") });
+  return new FileAssetLibrary({ project: join7(workspace, "assets", "kiln") });
 }
 var digest4 = (bytes) => `sha256:${createHash10("sha256").update(bytes).digest("hex")}`;
 var init_assets_node = __esm(() => {
@@ -28873,10 +29009,10 @@ var init_assets_node = __esm(() => {
 // src/asset-viewer.ts
 import { createServer } from "node:http";
 import { readFile as readFile5 } from "node:fs/promises";
-import { dirname as dirname5, join as join7 } from "node:path";
-import { fileURLToPath as fileURLToPath5 } from "node:url";
+import { dirname as dirname5, join as join8 } from "node:path";
+import { fileURLToPath as fileURLToPath6 } from "node:url";
 async function startAssetViewer(library, options = {}) {
-  const staticDirectory = options.staticDirectory ?? (import.meta.url.endsWith(".ts") ? join7(dirname5(fileURLToPath5(import.meta.url)), "..", "dist", "viewer") : join7(dirname5(fileURLToPath5(import.meta.url)), "viewer"));
+  const staticDirectory = options.staticDirectory ?? (import.meta.url.endsWith(".ts") ? join8(dirname5(fileURLToPath6(import.meta.url)), "..", "dist", "viewer") : join8(dirname5(fileURLToPath6(import.meta.url)), "viewer"));
   const server = createServer(async (req, res) => {
     res.setHeader("X-Content-Type-Options", "nosniff");
     res.setHeader("Referrer-Policy", "no-referrer");
@@ -28937,7 +29073,7 @@ async function startAssetViewer(library, options = {}) {
         return;
       }
       res.setHeader("Content-Security-Policy", "default-src 'self'; script-src 'self'; style-src 'self'; img-src 'self' blob: data:; connect-src 'self' blob: data:; worker-src 'self' blob:; object-src 'none'; base-uri 'none'; frame-ancestors 'none'");
-      return send(await readFile5(join7(staticDirectory, file[0])), file[1]);
+      return send(await readFile5(join8(staticDirectory, file[0])), file[1]);
     } catch (error) {
       res.statusCode = 400;
       send(JSON.stringify({ error: error instanceof Error ? error.message : "Asset unavailable" }));

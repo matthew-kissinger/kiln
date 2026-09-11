@@ -53,7 +53,12 @@ check(
     health.capabilities.includes('render.targets.rectangular-v1') &&
     health.capabilities.includes('render.outputs.sha256-v1') &&
     Array.isArray(health.lightingPresetIds) &&
-    JSON.stringify(health.lightingPresetIds) === JSON.stringify(['neutral-studio-v1']) &&
+    // Membership, not equality. Pinning the whole list meant that adding
+    // gallery-studio-v1 turned this check red and left it red -- a smoke that
+    // always reports one failure is a smoke nobody reads. What actually matters
+    // is that every advertised preset is backed by a declared capability.
+    health.lightingPresetIds.includes('neutral-studio-v1') &&
+    health.lightingPresetIds.every((id) => health.capabilities.includes(`render.profile.${id}`)) &&
     typeof health.backend === 'string' && health.backend.length > 0 &&
     health.presentationProfile === 'neutral-studio-v1' &&
     health.authRequired === true,

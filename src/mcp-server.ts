@@ -51,7 +51,7 @@ export const MCP_SERVER_INSTRUCTIONS = `Kiln turns JavaScript you write into GLB
 
 Work by reference. Send a program once to kiln_validate or kiln_render; the result carries a programRef. Keep it exactly as returned, including a short p_ handle, and use it for every later view and edit. kiln_source with that ref and a literal query returns exact edit anchors, and kiln_edit with that ref plus edits returns a new ref and renders by default. Do not resend a whole program to change part of it.
 
-Call kiln_list_primitives before writing code to get exact helper signatures, with capabilities: true for the runtime, source, export and camera contract. Read viewFidelity in any render result before judging materials: a geometry-flat CPU image is evidence about shape, not about material. When materialFaithful is false and the task concerns appearance, say so rather than concluding from a CPU view: material-faithful views come from the GPU render service that ships as render-service/ in this installation, which has its own npm install and is resolved once at server startup.
+Call kiln_list_primitives before writing code to get exact helper signatures, with capabilities: true for the runtime, source, export and camera contract. Read viewFidelity in any render result before judging materials: a geometry-flat CPU image is evidence about shape, not about material. When materialFaithful is false and the task concerns appearance, say so rather than concluding from a CPU view: material-faithful views come from the GPU render service that ships as render-service/ in this installation. It has its own npm install; once installed it is started on demand by the first view that needs it, so there is no order to get right and no session to restart.
 
 Detailed workflows ship beside this server as Agent Skills, one directory each under ${packagedSkillsDir}:
 - kiln-setup-workspace: create a managed workspace for authoring, and verify its tools came up
@@ -280,10 +280,13 @@ export function createKilnMcpServer(context: KilnToolContext = {}): McpServer {
 
 if (isDirectEntry(import.meta.url)) {
   const mode = resolveRenderMode(process.env['KILN_RENDER'] ?? 'auto');
-  // Resolved once, before the first connection: probing a render service per
-  // connection would put a network round trip in front of every client attach.
+  // One probe before the first connection, so no client attach waits on a network
+  // round trip -- but NOT a decision that lasts the session. `autoSpawn` hands
+  // back a port that starts the packaged renderer on the first view that needs
+  // one, which is the only ordering a user can actually achieve: the harness owns
+  // this process's lifecycle, so "start the renderer first" was never theirs to do.
   const context = await createPackagedLocalToolContext(
-    await buildRenderPort(mode, process.env['KILN_RENDER_PORT_URL']),
+    await buildRenderPort(mode, process.env['KILN_RENDER_PORT_URL'], { autoSpawn: true }),
   );
   context.programStore = localProgramStore();
   context.assetLibrary = localAssetLibrary();
