@@ -182,3 +182,29 @@ it('adds a new managed launcher during repair but refuses an existing user file'
     await rm(root, { recursive: true, force: true });
   }
 }, 30000);
+
+it('steers the session to the loop, the render service and its own inherited context', async () => {
+  const root = await mkdtemp(join(tmpdir(), 'kiln-guide-'));
+  try {
+    const task = join(root, 'w');
+    expect(run([task, '--harness', 'claude'], root).status).toBe(0);
+    const guide = await readFile(join(task, 'AGENTS.md'), 'utf8');
+    // Both surfaces are legitimate, so the guide has to name the two things that
+    // actually differ rather than express a preference: where the image lands, and
+    // that the CPU fallback is not material evidence.
+    expect(guide).toContain('read the PNG back');
+    expect(guide).toContain('materialFaithful');
+    expect(guide).toContain('render-service');
+    // `--repair` regenerates only the managedFiles set, never this guide, so an
+    // absolute engine path baked in here would rot silently the first time the
+    // installation moved. The manifest is the indirection that repair does keep.
+    expect(guide).toContain('.kiln/workspace.json');
+    expect(guide).not.toContain(repo);
+    // Inherited user-level skills and servers are the measured context leak; the
+    // workspace cannot prevent them, so it must at least ask for them to be reported.
+    expect(guide).toContain('user-level configuration');
+    expect(await readFile(join(task, 'CLAUDE.md'), 'utf8')).toBe(guide);
+  } finally {
+    await rm(root, { recursive: true, force: true });
+  }
+}, 30000);

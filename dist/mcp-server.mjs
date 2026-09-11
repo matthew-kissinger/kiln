@@ -28260,6 +28260,24 @@ async function renderDerivativeCell(input, context) {
       mesh.material = Array.isArray(mesh.material) ? mesh.material.map(prepare) : prepare(mesh.material);
     });
   }
+  let hasHidden = false;
+  derivativeRoot.traverse((node) => {
+    const mesh = node;
+    if (mesh.isMesh && mesh.visible === false)
+      hasHidden = true;
+  });
+  if (hasHidden) {
+    if (derivativeRoot === input.root)
+      derivativeRoot = derivativeRoot.clone(true);
+    const drop = [];
+    derivativeRoot.traverse((node) => {
+      const mesh = node;
+      if (mesh.isMesh && mesh.visible === false)
+        drop.push(node);
+    });
+    for (const node of drop)
+      node.removeFromParent();
+  }
   const rendered = await renderSceneToGLB(derivativeRoot, {
     derivative: true,
     ...trustedCategory(context) ? { category: trustedCategory(context) } : {},
@@ -30227,7 +30245,7 @@ var MCP_SERVER_INSTRUCTIONS = `Kiln turns JavaScript you write into GLB 3D asset
 
 Work by reference. Send a program once to kiln_validate or kiln_render; the result carries a programRef. Keep it exactly as returned, including a short p_ handle, and use it for every later view and edit. kiln_source with that ref and a literal query returns exact edit anchors, and kiln_edit with that ref plus edits returns a new ref and renders by default. Do not resend a whole program to change part of it.
 
-Call kiln_list_primitives before writing code to get exact helper signatures, with capabilities: true for the runtime, source, export and camera contract. Read viewFidelity in any render result before judging materials: a geometry-flat CPU image is evidence about shape, not about material.
+Call kiln_list_primitives before writing code to get exact helper signatures, with capabilities: true for the runtime, source, export and camera contract. Read viewFidelity in any render result before judging materials: a geometry-flat CPU image is evidence about shape, not about material. When materialFaithful is false and the task concerns appearance, say so rather than concluding from a CPU view: material-faithful views come from the GPU render service that ships as render-service/ in this installation, which has its own npm install and is resolved once at server startup.
 
 Detailed workflows ship beside this server as Agent Skills, one directory each under ${packagedSkillsDir}:
 - kiln-setup-workspace: create a managed workspace for authoring, and verify its tools came up

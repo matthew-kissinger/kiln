@@ -1024,3 +1024,38 @@ documents Bun as the toolchain.
 | 8.2 | Decide whether the CLI should refuse to exit 0 having produced no output at all, independent of the Bun cause. A silent success is the part that made this look like flakiness for so long | Pending |
 | 8.3 | Point `src/asset-cli.test.ts` at an interpreter that reflects how the CLI actually ships, or assert non-empty stdout before parsing so the failure names the real cause | Pending |
 | 8.4 | Re-check the other two intermittent tests against this finding; a shared `spawnSync` under Bun may explain more than one of them | Pending |
+
+## Phase 9 -- Review surfaces that misreport a correct asset
+
+Found 2026-09-10 into 2026-09-11 by a blind clone-and-author run: an agent given
+no context beyond the repository itself, asked to clone it, set it up, and make
+two assets, then to report what confused it. It followed the intended document
+chain (`README.md`, engine `AGENTS.md`, `kiln-setup-workspace`, the workspace
+`START.md` and `AGENTS.md`, the author skill and its references), never authored
+in the checkout, never opened `src/`, `examples/` or `docs/`, mixed the MCP and
+CLI surfaces without confusion, carried `programRef` lineage through anchored
+edits three and four refs deep, and reported its inherited session loadout
+unprompted -- including a rival `kiln-setup-workspace` registered from another
+installation's plugin cache, which it declined in favour of the clone's copy.
+Phase 7's guide and audit work is therefore validated end to end for the CLI
+path. What the run could not exercise is the in-loop MCP surface, because only a
+harness session started inside the workspace registers `kiln_workspace`.
+
+The findings below share a shape worth naming: the asset was correct every time,
+and the surface used to *review* it was what lied. That is the most expensive
+class of defect here, because the review step is the whole loop's evidence, and a
+model has no independent way to catch it.
+
+9.1 is fixed. Everything else is recorded from the run's report and is not yet
+independently verified; 9.2 is the one that looks like the same bug class as 9.1.
+
+| Task | Detail |
+| --- | --- |
+| 9.1 | `visibility: 'isolate'` and legacy `isolate: true` were silently ignored whenever a GPU service was attached. Both hide by clearing `mesh.visible`; `views/raster.ts` culls on it, but glTF has no per-mesh visibility and Kiln writes its own GLB rather than three's `GLTFExporter`, whose `onlyVisible` defaults true. `kiln_inspect` asserted "nothing in this image occludes it" about images where everything still did. **Done 2026-09-11**: `renderDerivativeCell` prunes hidden meshes from a copy. Escaped because the only prior test framed a single-mesh scene, where isolation cannot change the image |
+| 9.2 | `kiln_screenshot_animation` renders the entire asset rotating where the clip drives one joint. The run parsed the exported GLB's JSON chunk and found the `Spin` animation holds exactly one channel, targeting the spindle node, and that the node's subtree excludes the bench and seat that were visibly turning. Camera receipts were byte-identical across frames, so it is not a framing artefact. Pending; verify before trusting the report, then look for the 9.1 pattern -- a review path that re-poses or re-serializes more than the clip does |
+| 9.3 | `viewFidelity.exactArtifact` reported `false` on every render, including ones where the run independently hashed `inputGlbSha256` equal to both the exported GLB and the saved `asset.glb`. Either the flag means something narrower than its name, or it is wrong. Pending; whichever it is, a model cannot use a fidelity flag whose false value carries no meaning |
+| 9.4 | `kiln_screenshot_animation` requires a `clip` name and `frameTimes` normalized to 0..1, and neither is stated in the author skill or the camera recipes. The run guessed the clip name from its own `createClip` call and hit a validation error on seconds-valued frame times. Pending; a documentation gap, not a defect |
+| 9.5 | `arrayRadial` count semantics are not inferable from the signature plus the example: whether the source mesh survives as the copy at index 0 had to be deduced from a mesh count. Pending; documentation |
+| 9.6 | CLI `--out` does not create parent directories, failing with a bare `ENOENT` *after* the build succeeded and printed a `programRef`. Invisible from the README, whose example writes into the cwd. Pending; decide between `mkdir -p` and an error that names the directory |
+| 9.7 | The MCP server resolves the render service once before its first connection, so a service started afterwards is invisible until the session restarts, while the CLI picks it up on the next call. Re-probe lazily when a render needs PBR and no port is attached, with a short negative cache -- the probe's `absent` path is a refused localhost connection. Pending; collapses the guidance to "start it whenever" and deletes the restart caveat from the workspace guide and the setup skill. Not folded into the Phase 7 documentation commit because `captureViewsViaPort` owns the deadline and degrade policy and the change deserves its own TDD |
+| 9.8 | Narrow the generated per-harness configuration to suppress user-level skills and MCP servers where each harness supports it. The blind run inherited roughly twenty unrelated skills and four unrelated servers. This is the only option that reduces inherited context rather than reporting it, and it needs vendor documentation per harness first: configuration that validates and silently does nothing is the `${PLUGIN_ROOT}` failure class. Pending |
