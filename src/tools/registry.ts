@@ -1210,6 +1210,7 @@ async function runRenderViews(
           rendererId: [...new Set(receipts.map((r) => r.rendererId))].join(', '),
           inputGlbSha256: await sha256Glb(Uint8Array.from(rendered.glb)),
           degraded: !materialFaithful,
+          reasonCodes: ['IN_LOOP_BUILD_NOT_PERSISTED'],
         },
         warnings: [...structuralWarnings, ...rendered.warnings],
       };
@@ -1307,11 +1308,14 @@ async function runRenderViews(
       requested: 'full-preferred',
       delivered: materialFaithful ? 'full-material' : 'geometry-flat',
       materialFaithful,
+      // False here is structural, not a warning about the bytes: this surface
+      // always renders an in-loop build. Say so, or the flag reads as a defect.
       exactArtifact: false,
       rendererId: drawnBy.renderer,
       inputGlbSha256,
       degraded: drawnBy.degraded,
       ...(drawnBy.degradedReason ? { degradeReason: drawnBy.degradedReason } : {}),
+      reasonCodes: ['IN_LOOP_BUILD_NOT_PERSISTED'],
     };
     const viewEvidence = context.viewEvidenceHistory?.record('kiln_render', viewFidelity);
 

@@ -8,6 +8,7 @@ import { describe, expect, test } from 'bun:test';
 
 import { executeKilnCode } from '../../render';
 import { renderClipAnimation, planFrameTimes, prepareClip, findClip } from '../index';
+import { poseSceneAtTime } from '../pose';
 
 // A minimal biped whose legs swing forward/back (rotation about Z) on a 1s walk.
 const WALKER = `
@@ -56,6 +57,27 @@ test('planFrameTimes samples endpoints inclusively', () => {
   expect(planFrameTimes(2, 6).at(-1)).toBe(2);
   expect(planFrameTimes(0, 6)).toEqual([0, 0, 0, 0, 0, 0]); // a static "clip"
 });
+
+// One joint, two parts: the clip drives the turret only, and the base must not
+// follow it. Reported as `kiln_screenshot_animation` rotating the whole asset --
+// it does not, and this fixture is what says so for good.
+const TURRET = `
+const meta = { name: 'turret', category: 'prop' };
+function build() {
+  const root = createRoot('Root');
+  createPart('Base', boxGeo(1, 0.3, 1), gameMaterial('#555555'), { parent: root });
+  const yaw = createPivot('Turret', [0, 0.3, 0], root);
+  createPart('Barrel', boxGeo(0.2, 0.2, 1.2), gameMaterial('#aa3333'), { parent: yaw, position: [0, 0, 0.6] });
+  return root;
+}
+function animate(root) {
+  return [createClip('Spin', 1, [
+    rotationTrack('Joint_Turret', [
+      { time: 0, rotation: [0, 0, 0] }, { time: 1, rotation: [0, 180, 0] },
+    ]),
+  ])];
+}
+`;
 
 describe('renderClipAnimation', () => {
   test('renders a 6-frame grid for a named clip with correct metadata', async () => {
@@ -111,6 +133,46 @@ describe('renderClipAnimation', () => {
     expect(findClip(clips, 'WALK')?.name).toBe('walk');
     expect(findClip(clips, 'wal')?.name).toBe('walk');
     expect(findClip(clips, 'nope')).toBeUndefined();
+  });
+
+  /**
+   * A single-channel clip must move that joint's subtree and nothing else.
+   *
+   * `poseSceneAtTime` resolves each track by node name against a map built from
+   * a full traversal, first match winning, so a mis-resolution would silently
+   * drive an ancestor and take the whole asset with it -- the shape of a report
+   * that `kiln_screenshot_animation` rotates everything. Measured on world
+   * matrices rather than pixels: an image cannot distinguish a turret sweeping
+   * from a scene spinning, which is exactly why the report was plausible.
+   */
+  test('a one-joint clip moves that joint alone, not the whole asset', async () => {
+    const { root, clips } = await executeKilnCode(TURRET);
+    const prepared = prepareClip(root, findClip(clips, 'Spin')!);
+    expect(prepared.tracks).toHaveLength(1);
+    expect(prepared.unresolved).toHaveLength(0);
+
+    const worldOf = (name: string) => {
+      let found: { matrixWorld: { elements: number[] } } | undefined;
+      (root as { traverse(cb: (o: { name?: string }) => void): void }).traverse((node) => {
+        if (node.name === name && !found) found = node as never;
+      });
+      (root as { updateMatrixWorld(force: boolean): void }).updateMatrixWorld(true);
+      const e = found!.matrixWorld.elements;
+      return [e[12]!, e[13]!, e[14]!].map((n) => Number(n.toFixed(4)));
+    };
+
+    const barrel: number[][] = [];
+    for (const phase of [0, 0.5, 1]) {
+      poseSceneAtTime(root as never, prepared, phase * prepared.duration);
+      expect(worldOf('Mesh_Base')).toEqual([0, 0, 0]);
+      barrel.push(worldOf('Mesh_Barrel'));
+    }
+    // A 180-degree yaw about the pivot: +Z to +X to -Z, at constant height.
+    expect(barrel).toEqual([
+      [0, 0.3, 0.6],
+      [0.6, 0.3, 0],
+      [0, 0.3, -0.6],
+    ]);
   });
 
   test('prepareClip parses tracks + derives duration', async () => {

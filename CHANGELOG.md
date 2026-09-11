@@ -3,6 +3,29 @@
 Changes to `@kiln/engine`. Source and installable packages are distributed through
 GitHub. The package is not published on the npm registry.
 
+## Review surfaces say what they mean — 2026-09-11
+
+- `viewFidelity.exactArtifact` was a hard-coded `false` literal at every
+  `kiln_render` site, never computed. A flag that is always false carries no
+  information, and this one invited the opposite of the truth: a model could
+  read it as "these bytes differ from what I would export" when the bytes are
+  frequently identical. The value is still false -- this surface only ever
+  renders an in-loop build -- but it now carries the reason code
+  `IN_LOOP_BUILD_NOT_PERSISTED`, so the false value is readable rather than
+  ominous.
+- `kiln_screenshot_animation` was reported to rotate a whole asset where the
+  clip drives one joint. **It does not.** Measured on world matrices rather than
+  pixels: a one-channel clip moves the joint's subtree through a clean
+  180-degree yaw while the un-animated sibling holds the origin at every phase.
+  An image cannot tell a turret sweeping from a scene spinning, which is why the
+  report was plausible; a regression test now stands where the doubt was.
+- `arrayLinear` and `arrayRadial` say outright that `count` is the total
+  including the source, which survives as copy 0 -- so `count: 8` gives eight
+  bolts, not nine. The program contract states that
+  `kiln_screenshot_animation` requires `clip` by name, that `frameTimes` is
+  phases in 0..1 rather than seconds, and that a clip that renders frozen means
+  a joint-name mismatch surfaced in `unresolvedTracks`.
+
 ## Dependency refresh — 2026-09-11
 
 - Patch and minor bumps with no API surface change: `@types/three` 0.185.4,
