@@ -3,6 +3,23 @@
 Changes to `@kiln/engine`. Source and installable packages are distributed through
 GitHub. The package is not published on the npm registry.
 
+## Bun-only APIs cannot reach a Node bundle unnoticed — 2026-09-11
+
+- Audited the shipped bundles for the defect class behind the MCP server's
+  `import.meta.main` bug. The bundles were clean of all nine patterns checked —
+  but the audit found the identifier still live in
+  `src/experiments/geometry-acceptance.ts`, which **ships** (`files` carries
+  `src/**/*.ts`). Unbundled under plain `node`, `import.meta.main` is `undefined`,
+  so that guard was always *false* and running the script with node did nothing
+  at all, silently. The same defect as the MCP one with its sign flipped: there,
+  bundling made the guard always *true* and started a server nobody asked for.
+  Both now use `isDirectEntry`, which decides from `process.argv[1]`.
+- A new guard asserts both halves — no Bun-only API in any committed bundle, and
+  no `import.meta.main` deciding an entry point in shipped source. It was
+  verified by injecting a defect into each and watching it fail, rather than
+  trusted for passing green: the whole reason this class survived is that nothing
+  was looking.
+
 ## The GPU material check runs for the first time — 2026-09-11
 
 - `render-service/test/material-conformance.mjs` is the only automated evidence

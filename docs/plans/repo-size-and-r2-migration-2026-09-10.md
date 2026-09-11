@@ -1217,7 +1217,7 @@ the inertness guard `cli-entry.test.ts` always had.
 | --- | --- | --- |
 | 10.1 | `import.meta.main` does not survive bundling to Node; the MCP entry block ran on import and became a `ReferenceError` under Bun 1.4 | Done 2026-09-11 -- shared `isDirectEntry`, guarded by a new inertness test |
 | 10.2 | Re-record the coverage baseline measured under Bun 1.4.2 | Done 2026-09-11 |
-| 10.3 | Consider whether other Bun-only globals reach a `--target=node` bundle. `import.meta.main` was the one that mattered; nothing else is asserted | Pending; audit, no known defect |
+| 10.3 | Consider whether other Bun-only globals reach a `--target=node` bundle. `import.meta.main` was the one that mattered; nothing else is asserted | **Done 2026-09-11.** Audited, and it found one live instance -- `src/experiments/geometry-acceptance.ts` still guarded its entry with `import.meta.main`. That file **ships** (`files` carries `src/**/*.ts`), and unbundled under plain `node` the identifier is `undefined`, so the guard was always FALSE and running the script with node did nothing at all, silently. The same defect as 10.1 with its sign flipped: there, bundling made the guard always TRUE and started a server nobody asked for. Now `isDirectEntry`. The bundles themselves were already clean of all nine patterns checked. `src/__tests__/bun-only-globals.test.ts` now asserts both halves, and was verified to fail on an injected defect in each rather than trusted for passing |
 
 ## Phase 9 -- Review surfaces that misreport a correct asset
 
