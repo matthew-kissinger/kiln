@@ -62,21 +62,35 @@ function managedFiles(root, runtime, harness, nodeExecutable) {
 
 const guide = `# Kiln asset workspace
 
-Use the kiln_workspace MCP server configured in this project to author and refine assets in this directory. Another server named kiln may use a different installation; do not substitute it silently. The engine is installed separately. Do not read its implementation or example collection to solve an asset task.
+Author and refine assets in this directory. The engine is installed separately. Do not read its implementation or example collection to solve an asset task.
 
-- This project's own skills are installed and registered for your harness; read the relevant one from here, never a global plugin copy. The maintained copies are in skills/, mirrored to .claude/skills/ and .agents/skills/ because harnesses scan different directories. Use kiln_list_primitives on kiln_workspace for API signatures. If that server is unavailable, report the setup problem instead of using another installation.
-- Import an existing file with node kiln.mjs source asset.kiln.js. It returns a programRef, normally a short immutable p_ handle. Copy it exactly; do not expand or shorten it.
-- For a new draft, pass code once to kiln_validate or kiln_render. Keep its programRef even if validation fails.
-- Use kiln_source with programRef and a literal query to read exact edit anchors. Follow nextOffset for more context.
-- Use kiln_edit with programRef and edits. It returns a new programRef and renders by default. Use that reference for later views and edits; do not resend the program.
-- Review the image and diff. Check viewFidelity before judging materials.
-- Save completed assets with kiln_save, browse configured collections with kiln_assets, and open node kiln.mjs view to inspect saved GLBs. Keep the exact asset and revision IDs for export or restore. Save refinements as child revisions rather than replacing their parent.
-- Save with node kiln.mjs source PROGRAM_REF --out revised.kiln.js. Export refuses to overwrite a file.
-- Export geometry with node kiln.mjs render PROGRAM_REF --out asset.glb --views sheet.png.
+Two surfaces drive the same engine and share .kiln/programs, so either is fine and you can mix them freely. The kiln_workspace MCP server returns each render as an image in your context. The node kiln.mjs CLI writes renders to disk, so read the PNG back before judging anything visual. A server named kiln may be a different installation; do not substitute it silently, and report the setup problem instead.
 
-Replace PROGRAM_REF above with the exact returned reference. Full sha256 references remain valid.
+Read the skill for your task from skills/ in this directory, never a global plugin copy. The maintained copies are there, mirrored into .claude/skills/ and .agents/skills/ because harnesses scan different directories. Use kiln_list_primitives for API signatures.
 
-The CLI and MCP share .kiln/programs. Keep that directory while working. Source files are portable; references resolve only in a store containing their source.
+## The loop
+
+1. Draft. Pass code once to kiln_render or kiln_validate, or import a file with node kiln.mjs source asset.kiln.js. Either returns a programRef, normally a short immutable p_ handle. Keep it even when validation fails. Copy it exactly; never construct, expand or shorten one, and do not retransmit the program.
+2. Render. kiln_render, or node kiln.mjs render PROGRAM_REF --views sheet.png.
+3. Review. Look at the image. Check viewFidelity before judging materials: a CPU view is honest about silhouette, proportion and contact, and says nothing about colour, metalness or roughness.
+4. Edit. Read exact anchors with kiln_source and a literal query, following nextOffset for more context, then call kiln_edit with programRef and edits. Each edit returns a new programRef; use that one from then on. Rewriting the whole file through the CLI works, but it loses the anchored diff and the revision lineage.
+5. Save. kiln_save, or node kiln.mjs save. Keep the exact asset and revision IDs. Save refinements as child revisions rather than replacing their parent. Browse collections with kiln_assets and inspect saved GLBs with node kiln.mjs view.
+
+Export at any point. Source is node kiln.mjs source PROGRAM_REF --out revised.kiln.js; geometry is node kiln.mjs render PROGRAM_REF --out asset.glb --views sheet.png. Export refuses to overwrite a file. Replace PROGRAM_REF with the exact returned reference; full sha256 references also remain valid.
+
+## Material-faithful views
+
+This workspace asks for render mode auto: a GPU service when one answers on port 8000, CPU views otherwise. Without that service every render reports viewFidelity.materialFaithful false, and nothing rendered here can confirm a material.
+
+To start it, read runtime from .kiln/workspace.json and run npm install && npm start in render-service/ under that path. It is a separate package with a native dependency, so the install is its own step and can take a while. Start it at any time; the CLI picks it up on the next call. If MCP renders still report CPU afterwards, restart this session, because the MCP server resolves the service once at startup.
+
+For a task about appearance, say so rather than silently accepting CPU views.
+
+## Keep this context clean
+
+Skills and MCP servers from user-level configuration still load here: a workspace separates task context, not operating-system permissions. When you verify the server, report anything registered that is unrelated to this task so the user can decide whether to narrow it.
+
+Keep .kiln/programs while working. Source files are portable; references resolve only in a store containing their source.
 `;
 
 async function readManifest(root) {
@@ -170,7 +184,7 @@ export async function createWorkspace(directory, harness = 'claude', options = {
     await writeFile(join(stage, '.kiln/workspace.json'), quote(manifest));
     const command = harness === 'hermes' ? 'node hermes.mjs --ignore-rules' : harness === 'agy' ? 'node agy.mjs' : harness;
     const launch = harness === 'hermes' ? 'Hermes uses a separate profile; authenticate in that profile or supply provider credentials through the environment.' : harness === 'agy' ? 'The launcher supplies the absolute project directory. For headless runs, use node agy.mjs --model MODEL --print \"Read AGENTS.md and the project skills. Use only kiln_workspace MCP tools. YOUR TASK.\". Print mode disables automatic slash-command/skill expansion to avoid automatic expansion of a global skill. Use absolute task-file paths in headless prompts and verify that tool calls use kiln_workspace; global configuration and authentication remain unchanged.' : `This directory is configured for ${harness}.`;
-    await writeFile(join(stage, 'START.md'), `# Start making assets\n\n\`\`\`bash\ncd ${root}\n${command}\n\`\`\`\n\n${launch} Accept the project/MCP trust prompts. Ask the agent to read AGENTS.md and create an asset. Kiln needs no separate model key.\n\nCore author/refine/QA skills are installed and registered for this harness. Optional compose/batch skills are selected at setup with --skills compose,batch.\n\nKeep assets here and engine source outside. This separates task context, not operating-system permissions. User instructions and authentication can still apply.\n\nRun repair after anything that invalidates the generated absolute paths: moving this workspace, moving or reinstalling the runtime, or replacing the Node that setup recorded -- an nvm switch or uninstall does that, because the manifest pins the exact interpreter the preflight check validated.\n\n\`\`\`bash\nnode /current/kiln/scripts/create-workspace.mjs ${root} --repair\n\`\`\`\n\nRepair updates generated runtime paths only and refuses edited configuration; it preserves skills, assets, and saved revisions.\n`);
+    await writeFile(join(stage, 'START.md'), `# Start making assets\n\n\`\`\`bash\ncd ${root}\n${command}\n\`\`\`\n\n${launch} Accept the project/MCP trust prompts. Ask the agent to read AGENTS.md and create an asset. Kiln needs no separate model key.\n\nCore author/refine/QA skills are installed and registered for this harness. Optional compose/batch skills are selected at setup with --skills compose,batch.\n\nKeep assets here and engine source outside. This separates task context, not operating-system permissions. User instructions and authentication can still apply.\n\nRun repair after anything that invalidates the generated absolute paths: moving this workspace, moving or reinstalling the runtime, or replacing the Node that setup recorded -- an nvm switch or uninstall does that, because the manifest pins the exact interpreter the preflight check validated.\n\n\`\`\`bash\nnode ${join(runtime, 'scripts/create-workspace.mjs')} ${root} --repair\n\`\`\`\n\nThat path is where the installation was at setup. If the installation itself moved, run the same command from its current location; \`runtime\` in .kiln/workspace.json records where this workspace last expected it.\n\nRepair updates generated runtime paths only and refuses edited configuration; it preserves skills, assets, and saved revisions.\n`);
     if (exists) {
       // Windows cannot remove the caller's current directory, even when empty.
       // Move only staged entries and track them so a failed install rolls back.

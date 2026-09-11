@@ -28661,6 +28661,24 @@ async function renderDerivativeCell(input, context) {
       mesh.material = Array.isArray(mesh.material) ? mesh.material.map(prepare) : prepare(mesh.material);
     });
   }
+  let hasHidden = false;
+  derivativeRoot.traverse((node) => {
+    const mesh = node;
+    if (mesh.isMesh && mesh.visible === false)
+      hasHidden = true;
+  });
+  if (hasHidden) {
+    if (derivativeRoot === input.root)
+      derivativeRoot = derivativeRoot.clone(true);
+    const drop = [];
+    derivativeRoot.traverse((node) => {
+      const mesh = node;
+      if (mesh.isMesh && mesh.visible === false)
+        drop.push(node);
+    });
+    for (const node of drop)
+      node.removeFromParent();
+  }
   const rendered = await renderSceneToGLB(derivativeRoot, {
     derivative: true,
     ...trustedCategory(context) ? { category: trustedCategory(context) } : {},

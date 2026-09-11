@@ -3,6 +3,35 @@
 Changes to `@kiln/engine`. Source and installable packages are distributed through
 GitHub. The package is not published on the npm registry.
 
+## Usable from a bare clone by any harness; isolate honored on GPU — 2026-09-10
+
+- A bare clone is now usable by claude, codex, opencode, hermes and agy. The root
+  `.mcp.json` pointed at `${PLUGIN_ROOT}`, which only Antigravity defines, so the
+  server failed to start with MODULE_NOT_FOUND in every other host; it now uses
+  `${CLAUDE_PROJECT_DIR:-.}`, which resolves whether or not the variable is set.
+  `CLAUDE.md` imports `AGENTS.md` rather than duplicating it, and the
+  `kiln-setup-workspace` skill is registered at `.claude/skills/` and
+  `.agents/skills/` so a clone opened for an asset task is told to build a
+  workspace instead of authoring in the engine checkout.
+- `visibility: 'isolate'` and the legacy `isolate: true` were silently ignored
+  whenever a GPU service was attached. Both hide geometry by clearing
+  `mesh.visible`; the CPU rasterizer culls on that flag, but glTF carries no
+  per-mesh visibility, so the derivative GLB shipped the hidden meshes and the
+  service drew them. `kiln_inspect` was reporting "nothing in this image occludes
+  it" about images where everything still did. The derivative serialization now
+  prunes hidden meshes from a copy, leaving the caller's scene untouched. The
+  only previous test framed a single-mesh scene, where isolation cannot change
+  the image.
+- The generated workspace guide is organised around the authoring loop rather
+  than a flat tool list, and presents the MCP server and `node kiln.mjs` as equal
+  surfaces that may be mixed, naming the two things that actually differ: where
+  the rendered image lands, and that a CPU view is not material evidence. It also
+  names the GPU render service, resolving the engine path through
+  `.kiln/workspace.json` so `--repair` keeps it accurate, and asks the session to
+  report skills and MCP servers it inherited from user-level configuration.
+- `START.md` printed a literal `/current/kiln/` in its repair command; it now
+  prints the recorded installation path plus how to recover if that moved.
+
 ## Smaller clone; gallery images served from R2 — 2026-09-10
 
 - Gallery renders and launch video are no longer carried in git history. A clone

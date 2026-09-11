@@ -33,6 +33,8 @@ describe('MCP server instructions', () => {
     expect(MCP_SERVER_INSTRUCTIONS).toContain('programRef');
     expect(MCP_SERVER_INSTRUCTIONS).toContain('viewFidelity');
     expect(MCP_SERVER_INSTRUCTIONS).toContain('kiln_list_primitives');
+    // The only channel a hand-wired directory has: no workspace guide exists there.
+    expect(MCP_SERVER_INSTRUCTIONS).toContain('render-service/');
   });
 
   it('offers registration without instructing an unrequested write', () => {

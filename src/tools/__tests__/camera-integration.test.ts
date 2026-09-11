@@ -164,3 +164,116 @@ test('inspect exposes subject frames and measures exact part-local anchors', asy
   expect(out.measurement).toMatchObject({ distance: 2, units: 'asset units', frame: 'world' });
   expect(out.subjectFrame.worldMatrix).toHaveLength(16);
 });
+
+/** Count meshes in the JSON chunk of a GLB, without decoding buffers. */
+function glbMeshCount(glb: Uint8Array): number {
+  const view = new DataView(glb.buffer, glb.byteOffset, glb.byteLength);
+  const jsonLength = view.getUint32(12, true);
+  const json = JSON.parse(new TextDecoder().decode(glb.subarray(20, 20 + jsonLength)));
+  return (json.meshes ?? []).length;
+}
+
+test('isolate hides surrounding geometry on the GPU path, not only the CPU rasterizer', async () => {
+  // Two meshes far enough apart that context framing keeps both in view, so the
+  // only thing that can remove one from the GPU request is isolation itself.
+  const twoPart =
+    "const meta={name:'pair',category:'prop'};function build(){const r=createRoot('Root');" +
+    "createPart('Near',boxGeo(1,1,1),gameMaterial('#888888'),{parent:r});" +
+    "createPart('Far',boxGeo(1,1,1),gameMaterial('#333333'),{parent:r,position:[3,0,0]});return r;}";
+  const requests: PbrRenderRequest[] = [];
+  const defs = createKilnProgramToolRegistry({
+    viewRenderPort: async (req) => {
+      requests.push(req);
+      return {
+        ok: true,
+        rendererId: 'gpu:test',
+        cameras: req.cameras,
+        width: req.width,
+        height: req.height,
+        viewsPng: (req.cameras ?? [null]).map(() =>
+          encodePng(new Uint8Array(256 * 256 * 3), 256, 256),
+        ),
+        derivativeFidelity: {
+          materialFaithful: true,
+          inputGlbSha256: `sha256:${createHash('sha256').update(req.glb).digest('hex')}`,
+        },
+      };
+    },
+  });
+  const render = defs.find((d) => d.name === 'kiln_render')!;
+  const shot = (visibility: 'context' | 'isolate') => ({
+    subject: { name: 'Mesh_Near' },
+    visibility,
+    camera: {
+      type: 'explicit' as const,
+      projection: 'perspective' as const,
+      position: [6, 4, 6],
+      target: [0, 0, 0],
+    },
+  });
+  const run = async (visibility: 'context' | 'isolate') => {
+    requests.length = 0;
+    const out = (await render.run({
+      code: twoPart,
+      capture: { version: 'kiln.capture.v1', shots: [shot(visibility)], size: 256 },
+    })) as Record<string, unknown>;
+    expect(out.ok).toBe(true);
+    expect(requests).toHaveLength(1);
+    return glbMeshCount(requests[0]!.glb);
+  };
+  // Isolation is per shot, so one isolate shot must not strip geometry from a
+  // later context shot in the same capture. Both mechanisms mutate shared
+  // `.visible` state, which is what makes the ordering worth pinning.
+  requests.length = 0;
+  const mixed = (await render.run({
+    code: twoPart,
+    capture: {
+      version: 'kiln.capture.v1',
+      shots: [shot('isolate'), shot('context')],
+      size: 256,
+      output: 'separate',
+    },
+  })) as Record<string, unknown>;
+  expect(mixed.ok).toBe(true);
+  expect(requests.map((r) => glbMeshCount(r.glb))).toEqual([1, 2]);
+  expect(await run('context')).toBe(2);
+  // The CPU rasterizer culls on `mesh.visible` (views/raster.ts), but a GLB has no
+  // per-mesh visibility, so an unfiltered serialization makes isolate a silent
+  // no-op on exactly the material-faithful path it is most useful on.
+  expect(await run('isolate')).toBe(1);
+});
+
+test('legacy kiln_inspect isolate keeps its occlusion promise on the GPU path', async () => {
+  const twoPart =
+    "const meta={name:'pair',category:'prop'};function build(){const r=createRoot('Root');" +
+    "createPart('Near',boxGeo(1,1,1),gameMaterial('#888888'),{parent:r});" +
+    "createPart('Far',boxGeo(1,1,1),gameMaterial('#333333'),{parent:r,position:[3,0,0]});return r;}";
+  const requests: PbrRenderRequest[] = [];
+  const defs = createKilnProgramToolRegistry({
+    viewRenderPort: async (req) => {
+      requests.push(req);
+      return {
+        ok: true,
+        rendererId: 'gpu:test',
+        cameras: req.cameras,
+        width: req.width,
+        height: req.height,
+        viewsPng: (req.cameras ?? [null]).map(() =>
+          encodePng(new Uint8Array(512 * 512 * 3), 512, 512),
+        ),
+        derivativeFidelity: {
+          materialFaithful: true,
+          inputGlbSha256: `sha256:${createHash('sha256').update(req.glb).digest('hex')}`,
+        },
+      };
+    },
+  });
+  const inspect = defs.find((d) => d.name === 'kiln_inspect')!;
+  const seen = await inspect.run({ code: twoPart, part: 'Near', isolate: true });
+  expect((seen as Record<string, unknown>).ok).toBe(true);
+  // The result text promises "nothing in this image occludes it". Before the
+  // derivative GLB was filtered that sentence was false whenever a GPU service
+  // was attached, which is the one case where the close-up is worth taking.
+  expect(requests).toHaveLength(1);
+  expect(glbMeshCount(requests[0]!.glb)).toBe(1);
+});
