@@ -31,6 +31,11 @@ test('CLI saves, exports, imports, and restores a revision across independent st
       'cpu',
     ]);
     expect(saved.status).toBe(0);
+    // Name the failure. A `save` that exits 0 with empty stdout is the silent
+    // early-exit this suite mistook for flakiness for weeks; assert the output
+    // exists before parsing, so a regression reports the command rather than a
+    // JSON syntax error several frames away from the cause.
+    expect(saved.stdout.length).toBeGreaterThan(0);
     const asset = JSON.parse(saved.stdout).asset;
     const file = join(root, 'crate.zip');
     expect(run('first', ['export', asset.assetId, asset.revisionId, '--out', file]).status).toBe(0);

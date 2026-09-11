@@ -54,3 +54,46 @@ it('executes a Node CLI symlink once and stays inert when imported', async () =>
     await rm(directory, { recursive: true, force: true });
   }
 }, 20000);
+
+it('holds the process open until a command settles, instead of exiting 0 in silence', async () => {
+  // A CLI entry that awaits `main()` and then sets `process.exitCode` assumes the
+  // runtime keeps the process alive while that promise is pending. It does not.
+  // When the in-flight work is not registered as an active resource the loop goes
+  // idle, `beforeExit` fires, and the process exits 0 having written nothing --
+  // the exact shape of the `kiln save` failure that read as a flaky test. Drive
+  // the boundary with a promise that never settles and owns no handle: unheld,
+  // that process exits immediately; held, it cannot.
+  const base = resolve(import.meta.dir, '../../tmp');
+  await mkdir(base, { recursive: true });
+  const directory = await mkdtemp(join(base, 'cli-alive-'));
+  try {
+    // Import the module under test by URL so the child runs the shipped entry.
+    const cli = pathToFileURL(resolve(import.meta.dir, '../cli.ts')).href;
+    const script = join(directory, 'held.mjs');
+    await writeFile(
+      script,
+      `const { withProcessAlive } = await import(${JSON.stringify(cli)});\n` +
+        `process.on('exit', () => process.stdout.write('EXITED'));\n` +
+        `await withProcessAlive(() => new Promise(() => {}));\n`,
+    );
+    const child = Bun.spawn([process.execPath, script], { stdout: 'pipe', stderr: 'pipe' });
+    const exited = await Promise.race([
+      child.exited.then(() => 'exited' as const),
+      new Promise<'alive'>((done) => setTimeout(() => done('alive'), 1500)),
+    ]);
+    child.kill();
+    expect(exited).toBe('alive');
+
+    const settles = join(directory, 'settles.mjs');
+    await writeFile(
+      settles,
+      `const { withProcessAlive } = await import(${JSON.stringify(cli)});\n` +
+        `process.stdout.write(await withProcessAlive(async () => 'DONE'));\n`,
+    );
+    const clean = Bun.spawnSync([process.execPath, settles], { stdout: 'pipe', stderr: 'pipe' });
+    expect(clean.exitCode).toBe(0);
+    expect(clean.stdout.toString()).toBe('DONE');
+  } finally {
+    await rm(directory, { recursive: true, force: true });
+  }
+}, 20000);

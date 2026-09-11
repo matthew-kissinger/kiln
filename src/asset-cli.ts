@@ -6,6 +6,7 @@ import { ASSET_LIMIT, assetIdSchema, decodeAssetBundle, encodeAssetBundle } from
 import { localProgramStore } from './program-store-node';
 import { programRefPattern, retainProgram } from './program-store';
 import { createKilnProgramToolRegistry } from './tools/registry';
+import { prepareDestination } from './cli-output';
 import { createPackagedLocalToolContext } from './local-runtime';
 import { buildRenderPort, resolveRenderMode } from './cli-render-mode';
 import { startAssetViewer } from './asset-viewer';
@@ -156,7 +157,7 @@ export async function assetMain(argv: readonly string[]): Promise<number> {
           ? encodeAssetBundle([record])
           : record.files[format === 'glb' ? 'asset.glb' : 'source.kiln.js'];
       if (!bytes) throw new Error('Source unavailable');
-      await writeFile(resolve(flags.out), bytes, { flag: 'wx' });
+      await writeFile(await prepareDestination(resolve(flags.out)), bytes, { flag: 'wx' });
       console.log(`Saved ${resolve(flags.out)}`);
     }
   } else if (command === 'import') {

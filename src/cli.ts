@@ -8,6 +8,7 @@ import { open, readFile, writeFile } from 'node:fs/promises';
 import { realpathSync } from 'node:fs';
 import { resolve as resolvePath } from 'node:path';
 
+import { prepareDestination } from './cli-output';
 import { createPackagedLocalToolContext } from './local-runtime';
 import { createKilnProgramToolRegistry, type KilnToolContext } from './tools/registry';
 import { fileURLToPath } from 'node:url';
@@ -174,7 +175,7 @@ async function emit(code: string, args: Args, context: KilnToolContext): Promise
   // `--views sheet.png` alone should not litter the working directory.
   const out = args.out ?? (args.views ? undefined : 'out.glb');
   if (out) {
-    await writeFile(resolvePath(out), result.glb);
+    await writeFile(await prepareDestination(resolvePath(out)), result.glb);
     console.log(`  ${out}  ${result.tris} tris  ${(result.glb.length / 1024).toFixed(1)} KB`);
   } else {
     console.log(`  ${result.tris} tris  ${(result.glb.length / 1024).toFixed(1)} KB`);
@@ -208,7 +209,7 @@ async function emit(code: string, args: Args, context: KilnToolContext): Promise
     }
     const media = def.media?.(output);
     if (!media) throw new Error('kiln_render returned no image');
-    await writeFile(resolvePath(args.views), media.png);
+    await writeFile(await prepareDestination(resolvePath(args.views)), media.png);
     // Report what actually drew the pixels, not what was configured. The engine
     // routes to the port only when the scene needs PBR shading, so a GPU that was
     // available and correctly skipped must not be reported as if it had drawn.
@@ -294,7 +295,7 @@ async function cmdGenerate(args: Args): Promise<number> {
   await emit(run.code, { ...args, out: outPath }, context);
 
   const source = outPath.replace(/\.glb$/i, '.kiln.js');
-  await writeFile(resolvePath(source), run.code, 'utf8');
+  await writeFile(await prepareDestination(resolvePath(source)), run.code, 'utf8');
   console.log(`  ${source}  (the program — edit and re-render it)`);
   return 0;
 }
@@ -307,7 +308,10 @@ async function cmdSource(args: Args): Promise<number> {
   if (input.startsWith('sha256:') || programRefPattern.test(input)) {
     const code = await store.get(input);
     if (args.out) {
-      await writeFile(resolvePath(args.out), code, { encoding: 'utf8', flag: 'wx' });
+      await writeFile(await prepareDestination(resolvePath(args.out)), code, {
+        encoding: 'utf8',
+        flag: 'wx',
+      });
       console.log(`Saved ${input} to ${args.out}`);
     } else process.stdout.write(code);
   } else {
@@ -318,7 +322,33 @@ async function cmdSource(args: Args): Promise<number> {
   return 0;
 }
 
-export async function main(argv: readonly string[]): Promise<number> {
+/**
+ * Hold the process open until `run()` settles.
+ *
+ * Every CLI entry awaits `main()` and then sets `process.exitCode`, which assumes
+ * the runtime keeps the process alive while that promise is pending. It does not.
+ * The loop can go idle while the command is still running: `beforeExit` fires and
+ * the process exits 0 having written nothing. Bun reaches that state under load --
+ * concurrent `kiln save` runs exit 0 with empty stdout, no stderr and no
+ * rejection, which is why it read as a flaky test rather than a broken command. A
+ * ref'd timer far in the future costs no wakeups and closes the hole for every
+ * runtime and every entry, the generated workspace launcher included, because it
+ * wraps `main` itself rather than one call site.
+ */
+export async function withProcessAlive<T>(run: () => Promise<T>): Promise<T> {
+  const held = setInterval(() => undefined, 1 << 30);
+  try {
+    return await run();
+  } finally {
+    clearInterval(held);
+  }
+}
+
+export function main(argv: readonly string[]): Promise<number> {
+  return withProcessAlive(() => runMain(argv));
+}
+
+async function runMain(argv: readonly string[]): Promise<number> {
   if (
     ['save', 'collections', 'assets', 'asset', 'export', 'import', 'view'].includes(argv[0] ?? '')
   ) {
