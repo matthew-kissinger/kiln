@@ -29,12 +29,28 @@ if (process.argv[2] === '--child') {
       ['original', 'candidate-a', 'candidate-b'].map((code) => store.put(code)),
     );
     await aliases.compareAndSet('bridge', null, refs[0]!);
+    // A child was killed here once on a Windows runner, reported as `Worker failed:` with
+    // an empty stderr, which said nothing about why. The timings below exist because that
+    // message could not distinguish a slow child from a dead one -- and the distinction
+    // turned out to matter: the failing test took 123ms, so nothing was slow at all. The
+    // cause was the lock's error handling, fixed in `isLockContention`.
+    //
+    // Kept anyway, because the per-child comparison is what made that readable. All eight
+    // over the guard means the host is contended; one FAILED beside seven fast children
+    // means a worker died, which points at the code rather than the runner. The receipt
+    // also carries the slowest child on success, so a run at 60ms and a run at 9,000ms
+    // stop looking identical while both pass.
+    const spawnedAt = performance.now();
     const children = Array.from({ length: 8 }, (_, i) => {
       const child = Bun.spawn(
         [process.execPath, import.meta.path, '--child', directory, refs[0]!, refs[1 + (i % 2)]!],
         { stdout: 'pipe', stderr: 'pipe' },
       );
-      const timer = setTimeout(() => child.kill(), 10000);
+      let killedAfterMs: number | undefined;
+      const timer = setTimeout(() => {
+        killedAfterMs = Math.round(performance.now() - spawnedAt);
+        child.kill();
+      }, 10000);
       return (async () => {
         try {
           const [code, stdout, stderr] = await Promise.all([
@@ -42,14 +58,38 @@ if (process.argv[2] === '--child') {
             new Response(child.stdout).text(),
             new Response(child.stderr).text(),
           ]);
-          if (code !== 0) throw new Error(`Worker failed: ${stderr}`);
-          return JSON.parse(stdout) as { status: string };
+          const elapsedMs = Math.round(performance.now() - spawnedAt);
+          if (code !== 0) {
+            const how =
+              killedAfterMs === undefined
+                ? `exited ${code} after ${elapsedMs}ms`
+                : `killed by the hang guard after ${killedAfterMs}ms`;
+            throw new Error(`Worker ${i} ${how}: ${stderr.trim() || '(no stderr)'}`);
+          }
+          return { ...(JSON.parse(stdout) as { status: string }), elapsedMs };
         } finally {
           clearTimeout(timer);
         }
       })();
     });
-    const results = await Promise.all(children);
+    const settled = await Promise.allSettled(children);
+    // Every child's timing, including the healthy ones, because "one slow among seven
+    // fast" and "all eight slow" are different diagnoses and only the comparison shows
+    // which. Reported on the failure path, where it is the whole point.
+    const failures = settled.filter((r) => r.status === 'rejected');
+    if (failures.length > 0) {
+      const timings = settled
+        .map((r, i) => (r.status === 'fulfilled' ? `${i}:${r.value.elapsedMs}ms` : `${i}:FAILED`))
+        .join(' ');
+      throw new Error(
+        `${failures.length} of 8 workers failed [${timings}]\n` +
+          failures.map((r) => `  ${(r.reason as Error).message}`).join('\n'),
+      );
+    }
+    const results = settled.map(
+      (r) => (r as PromiseFulfilledResult<{ status: string; elapsedMs: number }>).value,
+    );
+    const slowestMs = Math.max(...results.map((r) => r.elapsedMs));
     const updated = results.filter((result) => result.status === 'updated').length;
     if (updated !== 1) throw new Error(`Expected one winner, received ${updated}`);
     const finalRef = await aliases.resolve('bridge');
@@ -65,6 +105,9 @@ if (process.argv[2] === '--child') {
     const receipt = {
       experiment: 'R0 project-local alias compare-and-set',
       processes: 8,
+      // Headroom against the 10s hang guard, recorded on success too: a receipt showing
+      // 90ms and one showing 9000ms both pass, and only this number tells them apart.
+      slowestWorkerMs: slowestMs,
       updated,
       rejected: 7,
       rejectionKinds: [

@@ -1,9 +1,9 @@
-import { expect, it } from 'bun:test';
+import { describe, expect, it } from 'bun:test';
 import { mkdtemp, mkdir, rm, writeFile } from 'node:fs/promises';
 import { join } from 'node:path';
 import { tmpdir } from 'node:os';
 import { FileProgramStore } from '../program-store-node';
-import { ExperimentalProgramAliases } from '../experiments/program-aliases';
+import { ExperimentalProgramAliases, isLockContention } from '../experiments/program-aliases';
 
 it('requires explicit CAS, preserves immutable source, and rejects collisions and corrupt aliases', async () => {
   const directory = await mkdtemp(join(tmpdir(), 'kiln-alias-test-'));
@@ -35,6 +35,52 @@ it('requires explicit CAS, preserves immutable source, and rejects collisions an
   }
 });
 
+// The Windows red on 2026-09-12 failed in 123ms, which is what rules out every timing
+// explanation: both hang guards are seconds away. A worker died, fast, and the only way
+// `compareAndSet` does that is the `throw error` beside the lock -- reached whenever
+// `mkdir` reports contention with a code other than `EEXIST`.
+//
+// Windows has exactly that case. Directory deletion is not synchronous there, so a
+// directory whose last handle has not closed sits in pending-delete, and `mkdir` on that
+// name answers `EPERM` or `EACCES`. Every release runs `rmdir` in a `finally`, so with
+// eight processes contending, one landing in that window is ordinary contention.
+//
+// Asserted on the predicate rather than through a real Windows filesystem, because the
+// decision is what was wrong and a Linux host can check every branch of it. The platform
+// is a parameter for the same reason.
+describe('lock contention is recognised per platform', () => {
+  const err = (code: string) => Object.assign(new Error(code), { code });
+
+  it('treats EEXIST as contention everywhere', () => {
+    expect(isLockContention(err('EEXIST'), 'linux')).toBe(true);
+    expect(isLockContention(err('EEXIST'), 'win32')).toBe(true);
+    expect(isLockContention(err('EEXIST'), 'darwin')).toBe(true);
+  });
+
+  // The regression itself: these are what a pending-delete directory reports.
+  it('treats EPERM and EACCES as contention on Windows', () => {
+    expect(isLockContention(err('EPERM'), 'win32')).toBe(true);
+    expect(isLockContention(err('EACCES'), 'win32')).toBe(true);
+  });
+
+  // And does not swallow them elsewhere, where they mean the parent is not writable.
+  // Widening this to every platform would turn a real permission fault into "busy".
+  it('does not treat EPERM or EACCES as contention on POSIX', () => {
+    for (const platform of ['linux', 'darwin']) {
+      expect(isLockContention(err('EPERM'), platform)).toBe(false);
+      expect(isLockContention(err('EACCES'), platform)).toBe(false);
+    }
+  });
+
+  it('never swallows an unrelated failure', () => {
+    for (const code of ['ENOSPC', 'EROFS', 'ENAMETOOLONG', 'EMFILE']) {
+      expect(isLockContention(err(code), 'win32')).toBe(false);
+      expect(isLockContention(err(code), 'linux')).toBe(false);
+    }
+    expect(isLockContention(new Error('no code at all'), 'win32')).toBe(false);
+  });
+});
+
 it('rejects lost updates from eight independent processes', async () => {
   const child = Bun.spawn(
     [
@@ -53,13 +99,20 @@ it('rejects lost updates from eight independent processes', async () => {
     ]);
     expect(error).toBe('');
     expect(code).toBe(0);
-    expect(JSON.parse(output)).toMatchObject({
+    const receipt = JSON.parse(output);
+    expect(receipt).toMatchObject({
       processes: 8,
       updated: 1,
       rejected: 7,
       immutableReferencesResolved: 3,
       originalSourcePreserved: true,
     });
+    // Presence, not a bound. This is a wall-clock figure on whatever host is running, so
+    // asserting a ceiling here would be the flake this field exists to diagnose. What
+    // matters is that a passing receipt records its own headroom against the 10s guard --
+    // ~60ms on an idle Linux host, and the number that would have shown how close the
+    // 2026-09-12 Windows run came before it went red.
+    expect(typeof receipt.slowestWorkerMs).toBe('number');
   } finally {
     clearTimeout(timer);
   }

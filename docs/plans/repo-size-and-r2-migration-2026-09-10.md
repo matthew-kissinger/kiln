@@ -2090,6 +2090,8 @@ re-measured since the day it was written.
 | 15.5 | Linux and Windows package receipts had no reproducible source | **Done 2026-09-12.** Four receipts from one CI run; the check extracted. See below |
 | 15.6 | `webgpu` 0.6.0 to 0.6.1 in `render-service/` | **Deferred 2026-09-12, and the reason is its publish date.** Gated on the owner's GPU smoke. See below |
 | 15.7 | `--receipt` resolved against `root`, not the working directory | **Done 2026-09-12.** Found by assembling the release. See below |
+| 15.8 | `v0.7.0` released | **Done 2026-09-12.** Tag `v0.7.0` at `44b4bc8`; four receipts and `SHA256SUMS.txt` from one CI run, each verified against the published tarball |
+| 15.9 | The Windows failure was a real bug in the alias lock, not a flake | **Found and fixed 2026-09-12.** `mkdir` contention on Windows reports `EPERM`/`EACCES`, which was rethrown. See below |
 
 ### 15.1 -- the tag is the whole rewrite, on the clone side too
 
@@ -2373,3 +2375,71 @@ Worth pairing with 15.3, which was the same shape in a different medium: there a
 assertion read the whole file when it needed to read one block, and the prose in the same
 commit kept it green. Here a fixture collapsed two directories that had to stay apart.
 Both times the assertion was true and measured nothing.
+
+
+### 15.8 -- what 0.7.0 attests to
+
+Tag `v0.7.0` at `44b4bc8`, published with `kiln-engine-0.7.0.tgz`, four platform receipts
+and `SHA256SUMS.txt`. The property worth naming is that all five assets come from **one**
+CI run: the tarball is the artifact that run built, and each receipt is that same run's
+smoke on its own platform. Before publication every receipt was verified against the
+published file -- four platforms, one `tarballSha256`,
+`cf3491064ed139898977bbcb6cfeccd430444c3a492dc834e9d1e51793202b17`, and all four agreeing
+`engineVersion: 0.7.0`.
+
+That chain is what 15.4 and 15.5 were for, and it only closed because 15.7's bug was
+caught by a script that refused rather than warned. A release assembled by hand would
+have had no step at which four receipts and one tarball were required to agree.
+
+### 15.9 -- the number that was in the log the whole time
+
+`rejects lost updates from eight independent processes` went red once on a Windows runner,
+on a pull request whose diff could not reach it. The first reading here was that it was a
+timing flake, with two candidate causes -- runner startup contention or a stall in
+`rename`/`rmdir` -- and a note that neither could be told apart from a Linux host. **That
+was wrong, and the datum refuting it was already captured:**
+
+```
+(fail) rejects lost updates from eight independent processes [123.61ms]
+```
+
+123ms. Both hang guards are 10 and 15 seconds away. Nothing was slow, nothing was killed,
+and every explanation resting on elapsed time was dead on arrival. Ten green `main` runs
+and a green rerun made "flake" the comfortable conclusion, and the duration beside the
+failure was the thing that should have been read first.
+
+A worker died fast, and `compareAndSet` has exactly one way to do that: the `throw error`
+beside its lock, reached whenever `mkdir` reports contention with a code other than
+`EEXIST`.
+
+**Windows has exactly that case.** Directory deletion there is not synchronous: a directory
+whose last handle has not closed sits in a pending-delete state, and `mkdir` on that name
+fails with `EPERM` or `EACCES` rather than `EEXIST`. Every release in this file runs
+`rmdir(lock)` inside a `finally`, so with eight processes contending on one lock, a
+process arriving in that window is ordinary contention -- and the code rethrew it, exiting
+the worker non-zero with a stack trace the parent reported as `Worker failed:` and an
+empty stderr.
+
+Two changes, and the second matters as much as the first:
+
+- `isLockContention` recognises `EPERM` and `EACCES` **on Windows only**. Widening it to
+  every platform is the over-fix: on POSIX those codes from `mkdir` mean the parent
+  directory is not writable, and swallowing them would report a real permission fault as
+  "busy". Both mistakes are pinned -- reverting to `EEXIST`-only fails the Windows case,
+  over-widening fails the POSIX guard.
+- Lock release can no longer decide what the call throws. `rmdir` has no `force`, and on
+  Windows it can fail while a scanner holds the directory; inside a `finally` that would
+  replace a precise `Alias conflict` with an unrelated errno, or turn a successful write
+  into a failure. Cleanup failures are swallowed now, and a lingering lock degrades to
+  "busy" because `isLockContention` treats it that way.
+
+Verified on Linux, because the decision was the defect and a predicate taking `platform`
+as a parameter has every branch reachable from anywhere. That is the general point: this
+looked like it needed a Windows host, and it needed the error-code decision extracted far
+enough to test.
+
+**The lesson is the diagnosis, not the fix.** "Intermittent on one platform, green on
+rerun, ten green runs behind it" is a description that fits both a flake and a real race,
+and the reflex was to treat the frequency as the diagnosis. The distinguishing evidence
+cost nothing to read. This sits alongside 15.3 and 15.7: there an assertion was true and
+measured nothing; here an explanation was plausible and measured nothing.

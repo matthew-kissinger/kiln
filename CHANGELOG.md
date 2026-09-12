@@ -3,6 +3,33 @@
 Changes to `@kiln/engine`. Source and installable packages are distributed through
 GitHub. The package is not published on the npm registry.
 
+## The Windows failure was a real bug in the alias lock — 2026-09-12
+
+- `rejects lost updates from eight independent processes` went red once on a Windows
+  runner. The first read of it here was wrong, and the number that refutes it was in the
+  log all along: **the test failed in 123 ms**, while both hang guards are 10 and 15
+  seconds away. Nothing was slow. A worker died, fast.
+- The only way `compareAndSet` does that is the `throw error` beside its lock, reached
+  whenever `mkdir` reports contention with a code other than `EEXIST`. **Windows has
+  exactly that case**: directory deletion is not synchronous, so a directory whose last
+  handle has not closed sits in pending-delete, where `mkdir` on that name answers `EPERM`
+  or `EACCES`. Every release runs `rmdir` in a `finally`, so with eight processes
+  contending, one landing in that window is ordinary contention — and it was rethrown.
+- `isLockContention` now recognises those two codes **on Windows only**. Widening it to
+  every platform would be the over-fix: on POSIX, `EPERM`/`EACCES` from `mkdir` means the
+  parent directory is not writable, and swallowing that would report a permission fault as
+  "busy". Both mistakes are pinned by tests — reverting to `EEXIST`-only fails the Windows
+  case, over-widening fails the POSIX guard.
+- Lock release stopped being able to decide the call's outcome. `rmdir` has no `force`, and
+  on Windows it can fail while a scanner holds the directory — which inside a `finally`
+  would replace a precise `Alias conflict` with an unrelated errno, or turn a successful
+  write into a failure. Cleanup failures are now swallowed, and a lingering lock degrades
+  to "busy" rather than corrupting anything.
+- Asserted on the decision rather than through a real Windows filesystem, so a Linux host
+  checks every branch and the platform is a parameter. The worker timings added alongside
+  are what made the failure legible in the first place, and they stay: one `FAILED` beside
+  seven fast children points at the code, where all eight slow points at the host.
+
 ## `--receipt` was relative to the wrong directory — 2026-09-12
 
 - `scripts/verify-package-receipt.mjs` resolved `--receipt` against `--root` rather than the
