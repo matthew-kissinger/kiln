@@ -1261,7 +1261,7 @@ independently verified; 9.2 is the one that looks like the same bug class as 9.1
 | 9.5 | `arrayRadial` count semantics are not inferable from the signature plus the example: whether the source mesh survives as the copy at index 0 had to be deduced from a mesh count. **Done 2026-09-11.** Both array helpers now say it outright: `count` is the TOTAL including the source, which survives as copy 0, so the call returns count-1 new instances |
 | 9.6 | CLI `--out` does not create parent directories, failing with a bare `ENOENT` *after* the build succeeded and printed a `programRef`. Invisible from the README, whose example writes into the cwd | Done 2026-09-11 -- `prepareDestination` in `src/cli-output.ts`, applied at every CLI destination: `render --out`, `render --views`, `generate`, `source <ref> --out` and `export --out`. Guarded by `src/__tests__/cli-out-directories.test.ts` |
 | 9.7 | The MCP server resolves the render service once before its first connection, so a service started afterwards is invisible until the session restarts, while the CLI picks it up on the next call. **Done 2026-09-11, and by a wider route than a lazy re-probe: see Phase 11.** Re-probing would have cured the symptom while leaving the user two processes to sequence. The server now starts the service itself, so there is nothing to have started first and nothing to restart |
-| 9.8 | Narrow the generated per-harness configuration to suppress user-level skills and MCP servers where each harness supports it. The blind run inherited roughly twenty unrelated skills and four unrelated servers. This is the only option that reduces inherited context rather than reporting it, and it needs vendor documentation per harness first: configuration that validates and silently does nothing is the `${PLUGIN_ROOT}` failure class. Pending |
+| 9.8 | Narrow the generated per-harness configuration to suppress user-level skills and MCP servers where each harness supports it | **ANSWERED 2026-09-11: not implementable as written, and the reason is structural rather than effort.** Every documented suppression mechanism across all five harnesses is name-based, and the generator runs before it can know which unrelated skills and servers a given user has installed -- it has no names to write. The two name-agnostic candidates each fail the row's own test. See the section below; the vendor evidence is recorded there so this does not have to be researched again |
 
 ## Phase 11 -- The renderer moves to where the users are
 
@@ -1405,3 +1405,53 @@ no MCP server, so a client that loads them has the workflows and none of the too
 they describe -- `kiln_workspace` is absent and no call resolves. `docs/install.md`
 says so where it offers the URL. SEP-2640 (7.12) is the mechanism that would carry
 both, and it is still unratified.
+
+### 9.8, and why a generator cannot narrow a loadout
+
+Researched against vendor documentation on 2026-09-11, which is what the row said
+it needed. The answer is that the task is not doable as specified, and the reason
+is worth recording precisely so it is not attempted again on a hunch.
+
+| Harness | Suppress user MCP servers from project config | Suppress or bound user skills from project config |
+| --- | --- | --- |
+| claude | `deniedMcpServers` (by name, URL or command), `disabledMcpjsonServers`, both settable in any settings file | `skillOverrides`, keys are skill NAMES, values `on` / `name-only` / `user-invocable-only` / `off`; any settings file. Plugin skills are explicitly exempt. Name-agnostic: `disableBundledSkills`, `skillListingMaxDescChars`, `skillListingBudgetFraction` |
+| codex | project `.codex/config.toml` (trusted projects only), and `codex mcp disable <server> --scope project` | Nothing documented |
+| opencode | project config MERGES with global rather than replacing it; nothing documented to suppress | **Nothing.** Global skills load from `~/.config/opencode/skills`, `~/.claude/skills` and `~/.agents/skills` unconditionally. `permission.skill.*` and `tools.skill` exist but govern invocation |
+| hermes | `mcp_servers:` in `config.yaml`; skills in `~/.hermes/skills/` plus `external_dirs` | Nothing documented |
+| agy | workspace `.agents/mcp_config.json` exists | Nothing documented |
+
+**The structural blocker.** Every mechanism above that actually suppresses is
+keyed by NAME. `deniedMcpServers` takes names, `skillOverrides` takes skill names,
+`codex mcp disable` takes a server name. `scripts/create-workspace.mjs` runs
+before any of that is knowable: it cannot enumerate what a stranger has in
+`~/.claude/skills` on a machine it has not seen. There is no documented
+"project skills only" or "ignore user scope" flag in any of the five.
+
+**Both name-agnostic candidates fail their own test.** `skillListingMaxDescChars`
+and `skillListingBudgetFraction` are real, are settable in a project file, and
+would bound the cost of whatever is inherited without naming anyone -- but their
+defaults and units are **not documented**. The skills page states only that the
+combined description text is truncated at 1,536 characters. Writing a key whose
+semantics cannot be verified is exactly the `${PLUGIN_ROOT}` failure class this
+row was written to avoid. And OpenCode's `permission.skill.*` deny glob is fully
+documented, but it blocks INVOCATION rather than loading, so it does not reduce
+inherited context -- which is the entire point of 9.8 -- while it would stop a
+user invoking their own skills inside their own workspace.
+
+**One confirmation that the feared class is real, not hypothetical.**
+`google-antigravity/antigravity-cli` issue 60: project-local
+`.antigravitycli/mcp_config.json` is discovered at startup and its `mcpServers`
+field is **silently ignored**, with only the HOME-level config loading servers.
+Configuration that validates and does nothing, in the exact shape this row
+predicted. CLI toggles landed in v1.1.16, which are again name-based.
+
+**What would unblock it**, in order of how much it would buy: documented defaults
+and units for the two Claude listing-budget keys, which would let a generated
+workspace bound inherited context without naming anything; or a name-agnostic
+project-scope switch in any harness; or SEP-2640 (7.12), under which a host
+advertises its own skills as resources and the question of what else is registered
+stops mattering as much.
+
+Until one of those exists, reporting the inherited loadout -- which the setup skill
+already does, and which the blind run did unprompted -- is the whole of what can
+be done. That is a weaker outcome than the row wanted and it is the honest one.
