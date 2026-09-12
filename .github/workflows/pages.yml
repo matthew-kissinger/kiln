@@ -104,10 +104,19 @@ jobs:
 
       - uses: actions/configure-pages@45bfe0192ca1faeb007ade9deae92b16b8254a0d # v6.0.0
         if: github.event_name != 'pull_request'
+      # `include-hidden-files` is required, not optional. v5 of this action archives
+      # with `--exclude=.[^/]*` unless it is set, which silently strips EVERY
+      # hidden path. The well-known skills index is at `.well-known/`, so the first
+      # deployment built it correctly, vite copied it correctly, and the upload
+      # deleted it: 465 entries in the artifact and not one of them a dotfile,
+      # while the same build locally produced all seven. Nothing reproducible on a
+      # workstation would have found this, because the exclusion is in the action
+      # rather than in the build.
       - uses: actions/upload-pages-artifact@fc324d3547104276b827a68afc52ff2a11cc49c9 # v5.0.0
         if: github.event_name != 'pull_request'
         with:
           path: site/dist
+          include-hidden-files: true
 
   deploy:
     name: deploy to Pages

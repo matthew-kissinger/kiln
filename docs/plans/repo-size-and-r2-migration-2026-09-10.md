@@ -1455,3 +1455,37 @@ stops mattering as much.
 Until one of those exists, reporting the inherited loadout -- which the setup skill
 already does, and which the blind run did unprompted -- is the whole of what can
 be done. That is a weaker outcome than the row wanted and it is the honest one.
+
+### 7.13's first deployment served a 404, and the build was not at fault
+
+Worth recording because the diagnosis ran the wrong way round for a while, and
+because the cause is the failure class this document keeps naming.
+
+The index was generated in CI -- the step logged all six skills with digests
+byte-identical to a local build, which incidentally proved the archives
+deterministic across machines as well as across runs. `vite build` copied
+`public/` to `dist/` as it does locally. And
+`https://kilnstudio.tools/.well-known/agent-skills/index.json` returned 404.
+
+Downloading the Pages artifact settled it: 465 entries, `assets/`, `thumbs/`,
+`build/` and the loose files, and **not one dot-entry**. So the files never
+reached the deployment, which ruled out Pages' serving layer and Jekyll, the two
+usual suspects. Reproducing CI's exact step order locally produced all seven
+files, which ruled out the build.
+
+The cause is in the action. `actions/upload-pages-artifact` v5 archives with:
+
+```
+--exclude=.git --exclude=.github ${{ inputs.include-hidden-files != 'true' && '--exclude=.[^/]*' || '' }} .
+```
+
+`--exclude=.[^/]*` strips **every** hidden path unless `include-hidden-files` is
+set. A well-known URI is by definition under a dotted directory, so the default
+silently deletes exactly what RFC 8615 requires. Nothing on a workstation could
+have reproduced it: the exclusion lives in the upload, not the build.
+
+Two things generalize. Reading the pinned action's own `action.yml` at its pinned
+SHA answered in one request what several rounds of deduction had not -- the
+dependency was right there and pinned, so there was nothing to guess about. And
+`.well-known` is the only dot-entry in `site/dist`, so the flag was verified to
+add exactly that and nothing else before being set.
