@@ -92,6 +92,12 @@ describe('repository reliability contracts', () => {
     expect(bunfig).toContain('coverageReporter = ["text", "lcov"]');
     expect(bunfig).not.toContain('coverageThreshold =');
     expect(bunfig).toContain('coveragePathIgnorePatterns = [');
+    // The ratchet is a contract about the shipped engine, measured over `src/`
+    // alone. Without this line four files under `scripts/` are instrumented
+    // because tests import them, and reflowing two dense ones moved the engine's
+    // coverage by 0.35 points -- a formatting change in repo-only code moving a
+    // number the repository treats as policy.
+    expect(bunfig).toContain('"scripts/**",');
     // The enforced ratchets are policy: they must not move without someone
     // noticing, so they stay literal here. The measured baseline is an
     // observation, and it legitimately moves whenever code lands — so it is
@@ -100,7 +106,11 @@ describe('repository reliability contracts', () => {
     // drift, and the copy in the test is the one that turns a stale sentence
     // into a red build with no idea which of the three is right.
     expect(Object.keys(thresholds).sort()).toEqual(['measuredBaseline', 'thresholds']);
-    expect(thresholds.thresholds).toEqual({ functions: 94, lines: 92 });
+    expect(thresholds.thresholds).toEqual({ functions: 94, lines: 92.1 });
+    // Narrowing the scope handed back 44 lines of slack that no new test earned.
+    // `lines` moves 92 -> 92.1 to hold the margin 13.3 chose rather than pocket
+    // it; tightening beyond that is a separate decision with its own friction.
+    expect(thresholds.measuredBaseline.measuredOver).toBe('src/');
     const { functions, lines } = thresholds.measuredBaseline;
     expect(functions).toBeGreaterThanOrEqual(thresholds.thresholds.functions);
     expect(lines).toBeGreaterThanOrEqual(thresholds.thresholds.lines);

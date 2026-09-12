@@ -55,6 +55,14 @@ if (
 if (typeof baseline?.functions !== 'number' || typeof baseline?.lines !== 'number') {
   throw new Error('coverage thresholds must record the measuredBaseline they were ratcheted from');
 }
+// And what it was measured OVER. A percentage without its scope is as ambiguous
+// as a threshold without a baseline, and that ambiguity is not theoretical: this
+// gate measured `src` plus four incidentally-imported files under `scripts/` for
+// months, which was enough for reformatting a repo-only script to move the
+// engine's contract -- and enough to make the cause hard to find afterwards.
+if (typeof baseline?.measuredOver !== 'string' || baseline.measuredOver.length === 0) {
+  throw new Error('coverage measuredBaseline must record what it was measuredOver');
+}
 for (const metric of ['functions', 'lines']) {
   if (thresholds[metric] > baseline[metric]) {
     throw new Error(
@@ -80,7 +88,9 @@ const summary = `${report('functions', 'functions')}, ${report('lines', 'lines')
 // Printed on the way past, not only on failure: the recorded baseline is the number
 // the next ratchet decision is made against, and a log that shows it beside the
 // current measurement makes a stale record visible without a second run.
-const measuredWhere = [baseline.measuredUnder, baseline.measuredOn].filter(Boolean).join(', ');
+const measuredWhere = [`over ${baseline.measuredOver}`, baseline.measuredUnder, baseline.measuredOn]
+  .filter(Boolean)
+  .join(', ');
 const provenance = [
   `Recorded baseline: functions ${baseline.functions.toFixed(2)}%, lines ${baseline.lines.toFixed(2)}%`,
   measuredWhere ? ` (${measuredWhere})` : '',

@@ -1,12 +1,13 @@
 {
   "measuredBaseline": {
-    "functions": 95.27,
-    "lines": 92.49,
+    "functions": 95.39,
+    "lines": 92.59,
+    "measuredOver": "src/",
     "measuredUnder": "bun@1.4.2",
     "measuredOn": "2026-09-12"
   },
   "thresholds": {
     "functions": 94,
-    "lines": 92
+    "lines": 92.1
   }
 }

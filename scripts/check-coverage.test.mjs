@@ -10,7 +10,10 @@ import { fileURLToPath } from 'node:url';
 const checker = fileURLToPath(new URL('./check-coverage.mjs', import.meta.url));
 
 /** Two functions and two lines, half of each covered: a flat 50% in both metrics. */
-async function fixture(thresholds, measuredBaseline = { functions: 100, lines: 100 }) {
+async function fixture(
+  thresholds,
+  measuredBaseline = { functions: 100, lines: 100, measuredOver: 'src/' },
+) {
   const directory = await mkdtemp(join(tmpdir(), 'kiln-coverage-'));
   await writeFile(
     join(directory, 'lcov.info'),
@@ -54,7 +57,7 @@ test('aggregate coverage checker accepts coverage at the ratchet', async () => {
     expect(result.status, result.stderr || result.stdout).toBe(0);
     expect(result.stdout.trim().split('\n')).toEqual([
       'Coverage gate passed: functions 50.00% (minimum 50.00%, 0 functions of slack), lines 50.00% (minimum 50.00%, 0 lines of slack)',
-      'Recorded baseline: functions 100.00%, lines 100.00%',
+      'Recorded baseline: functions 100.00%, lines 100.00% (over src/)',
     ]);
   } finally {
     await rm(directory, { recursive: true, force: true });
@@ -94,7 +97,10 @@ test('a shortfall is reported in whole functions and lines, not only in percent'
 // above anything ever measured fails in whatever change runs next, and reads there
 // as that change's regression.
 test('a threshold above the recorded measured baseline is rejected as self-contradictory', async () => {
-  const directory = await fixture({ functions: 50, lines: 50 }, { functions: 49, lines: 100 });
+  const directory = await fixture(
+    { functions: 50, lines: 50 },
+    { functions: 49, lines: 100, measuredOver: 'src/' },
+  );
   try {
     const result = run(directory);
 
@@ -119,6 +125,23 @@ test('a thresholds file that records no measured baseline is rejected', async ()
 
     expect(result.status).not.toBe(0);
     expect(result.stderr).toContain('must record the measuredBaseline they were ratcheted from');
+  } finally {
+    await rm(directory, { recursive: true, force: true });
+  }
+});
+
+// A percentage without its scope is as ambiguous as a threshold without a
+// baseline. This gate measured `src` plus four incidentally-imported files under
+// `scripts/` for months: enough for reformatting a repo-only script to move the
+// engine's contract by 0.35 points, and enough to make the cause hard to find
+// once it had. The scope is part of the record now, so it cannot go unstated.
+test('a measured baseline that does not say what it measured is rejected', async () => {
+  const directory = await fixture({ functions: 50, lines: 50 }, { functions: 100, lines: 100 });
+  try {
+    const result = run(directory);
+
+    expect(result.status).not.toBe(0);
+    expect(result.stderr).toContain('must record what it was measuredOver');
   } finally {
     await rm(directory, { recursive: true, force: true });
   }
