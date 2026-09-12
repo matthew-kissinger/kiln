@@ -31,8 +31,15 @@ GitHub. The package is not published on the npm registry.
   and the only shadowing on that surface is drei's `ContactShadows` — its own depth pass to
   a texture, which never consults `shadowMap.type`. Between the two paths, r186's PCFSoft
   removal changes nothing anyone can see in this repository.
-- Worth knowing while reading this: `render-service` runs in **no** CI workflow. Its 37
-  tests and its GPU conformance runs are manual only.
+- **`render-service` is in CI now**, which it never was. Thirty-seven tests guarding a
+  shipped subsystem ran on nobody's machine but a maintainer's — including, until this
+  commit, the change above it. It is a separate npm project with a native dependency,
+  which is presumably the reason; but the tests do not need it. All 37 are pure: framing
+  arithmetic, PNG readback packing, cache identity, contract and preset validation, and
+  not one acquires a device. So the job installs with `--ignore-scripts`, skipping the
+  `webgpu` package's Dawn build. Verified against exactly that install with no binding
+  built: 37 pass, 0 fail. The GPU smoke and the two conformance runs stay manual, because
+  those genuinely need a device.
 
 ## The lint baseline is zero, and stays zero — 2026-09-12
 

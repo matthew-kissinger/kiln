@@ -139,6 +139,38 @@ jobs:
           node -p "'node ' + process.version"
           node -e "console.log('sharp versions:', JSON.stringify(require('sharp').versions))"
 
+  render-service-checks:
+    name: render service tests
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    # `render-service/` shipped with 37 tests that ran in no workflow. It is a separate
+    # npm project with a native dependency, which is presumably why -- but the tests do
+    # not need it. All 37 are pure: framing arithmetic, PNG readback packing, cache
+    # identity, contract and preset validation. Not one acquires a device.
+    #
+    # So `--ignore-scripts`, which skips the `webgpu` package's native Dawn build and
+    # leaves the package directory in place for the one module that only resolves its
+    # path. Verified by running the suite against exactly this install, with no binding
+    # built: 37 pass, 0 fail. The GPU smoke and the two conformance runs stay manual,
+    # because those genuinely need a device.
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
+        with:
+          node-version: 22.23.2
+
+      - name: Setup npm
+        run: npm install --global npm@12.0.2
+
+      - name: Install the render service
+        run: npm ci --ignore-scripts
+        working-directory: render-service
+
+      - name: Test the render service
+        run: npm test
+        working-directory: render-service
+
   package-candidate:
     name: build portable Node package
     runs-on: ubuntu-22.04
