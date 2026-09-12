@@ -2,11 +2,11 @@
   "schemaVersion": 1,
   "entries": {
     "mcp": {
-      "identity": "sha256:3dce05fe9f707ffb931dc9dca46b8e4020fdd1eb4a292c8a919fe3715de0b3ec",
+      "identity": "sha256:e53c0753be29db98a9df2495ef6f67d106ed39cc36f792a254d9b50029420bf5",
       "engineVersion": "0.6.0",
       "toolchain": "bun@1.4.2",
       "sourceHash": "e78c388ec8e3eb3b197a458d3219254e739a85669c0e869aa34ebd296129b8a0",
-      "dependencyHash": "3f2fcf55da59ef80ea5d8ac0e258f5517e1b084c1608a78e7d534aa25bcba611",
+      "dependencyHash": "c6746ae661afc9576bbfaa323ee13af6531644626dc5baeed8d49a06773922d2",
       "dependencies": {
         "@gltf-transform/core": "4.5.0",
         "@gltf-transform/extensions": "4.5.0",
@@ -21,7 +21,7 @@
         "manifold-3d": "^3.5.3",
         "sharp": "^0.35.4",
         "three": "0.186.0",
-        "three-subdivide": "^1.1.5",
+        "three-subdivide": "1.1.5",
         "xatlasjs": "^0.2.0",
         "zod": "^4.6.2"
       },
@@ -30,11 +30,11 @@
       "bundleHash": "sha256:bb502af9a18150fe0d204c5acc8318b689e322f903bb37af5484b793f69fdc2b"
     },
     "cli": {
-      "identity": "sha256:3dce05fe9f707ffb931dc9dca46b8e4020fdd1eb4a292c8a919fe3715de0b3ec",
+      "identity": "sha256:e53c0753be29db98a9df2495ef6f67d106ed39cc36f792a254d9b50029420bf5",
       "engineVersion": "0.6.0",
       "toolchain": "bun@1.4.2",
       "sourceHash": "e78c388ec8e3eb3b197a458d3219254e739a85669c0e869aa34ebd296129b8a0",
-      "dependencyHash": "3f2fcf55da59ef80ea5d8ac0e258f5517e1b084c1608a78e7d534aa25bcba611",
+      "dependencyHash": "c6746ae661afc9576bbfaa323ee13af6531644626dc5baeed8d49a06773922d2",
       "dependencies": {
         "@gltf-transform/core": "4.5.0",
         "@gltf-transform/extensions": "4.5.0",
@@ -49,7 +49,7 @@
         "manifold-3d": "^3.5.3",
         "sharp": "^0.35.4",
         "three": "0.186.0",
-        "three-subdivide": "^1.1.5",
+        "three-subdivide": "1.1.5",
         "xatlasjs": "^0.2.0",
         "zod": "^4.6.2"
       },
@@ -58,11 +58,11 @@
       "bundleHash": "sha256:50befd6901deeed13a85257a9f5839cd80416aad4c8c512c1dbc9fdd7d68c73a"
     },
     "worker": {
-      "identity": "sha256:3dce05fe9f707ffb931dc9dca46b8e4020fdd1eb4a292c8a919fe3715de0b3ec",
+      "identity": "sha256:e53c0753be29db98a9df2495ef6f67d106ed39cc36f792a254d9b50029420bf5",
       "engineVersion": "0.6.0",
       "toolchain": "bun@1.4.2",
       "sourceHash": "e78c388ec8e3eb3b197a458d3219254e739a85669c0e869aa34ebd296129b8a0",
-      "dependencyHash": "3f2fcf55da59ef80ea5d8ac0e258f5517e1b084c1608a78e7d534aa25bcba611",
+      "dependencyHash": "c6746ae661afc9576bbfaa323ee13af6531644626dc5baeed8d49a06773922d2",
       "dependencies": {
         "@gltf-transform/core": "4.5.0",
         "@gltf-transform/extensions": "4.5.0",
@@ -77,7 +77,7 @@
         "manifold-3d": "^3.5.3",
         "sharp": "^0.35.4",
         "three": "0.186.0",
-        "three-subdivide": "^1.1.5",
+        "three-subdivide": "1.1.5",
         "xatlasjs": "^0.2.0",
         "zod": "^4.6.2"
       },
@@ -86,11 +86,11 @@
       "bundleHash": "sha256:f2ec9893425aad50bb2717d0a4a3889c118421b211dda0062b7299812593d92c"
     },
     "agent-run": {
-      "identity": "sha256:3dce05fe9f707ffb931dc9dca46b8e4020fdd1eb4a292c8a919fe3715de0b3ec",
+      "identity": "sha256:e53c0753be29db98a9df2495ef6f67d106ed39cc36f792a254d9b50029420bf5",
       "engineVersion": "0.6.0",
       "toolchain": "bun@1.4.2",
       "sourceHash": "e78c388ec8e3eb3b197a458d3219254e739a85669c0e869aa34ebd296129b8a0",
-      "dependencyHash": "3f2fcf55da59ef80ea5d8ac0e258f5517e1b084c1608a78e7d534aa25bcba611",
+      "dependencyHash": "c6746ae661afc9576bbfaa323ee13af6531644626dc5baeed8d49a06773922d2",
       "dependencies": {
         "@gltf-transform/core": "4.5.0",
         "@gltf-transform/extensions": "4.5.0",
@@ -105,7 +105,7 @@
         "manifold-3d": "^3.5.3",
         "sharp": "^0.35.4",
         "three": "0.186.0",
-        "three-subdivide": "^1.1.5",
+        "three-subdivide": "1.1.5",
         "xatlasjs": "^0.2.0",
         "zod": "^4.6.2"
       },
@@ -114,11 +114,11 @@
       "bundleHash": "sha256:fd52e9c43720b0017dd3d6c290e92d485a86e6c5a2d1dba50cb72215d6bf696c"
     },
     "agent-providers": {
-      "identity": "sha256:3dce05fe9f707ffb931dc9dca46b8e4020fdd1eb4a292c8a919fe3715de0b3ec",
+      "identity": "sha256:e53c0753be29db98a9df2495ef6f67d106ed39cc36f792a254d9b50029420bf5",
       "engineVersion": "0.6.0",
       "toolchain": "bun@1.4.2",
       "sourceHash": "e78c388ec8e3eb3b197a458d3219254e739a85669c0e869aa34ebd296129b8a0",
-      "dependencyHash": "3f2fcf55da59ef80ea5d8ac0e258f5517e1b084c1608a78e7d534aa25bcba611",
+      "dependencyHash": "c6746ae661afc9576bbfaa323ee13af6531644626dc5baeed8d49a06773922d2",
       "dependencies": {
         "@gltf-transform/core": "4.5.0",
         "@gltf-transform/extensions": "4.5.0",
@@ -133,7 +133,7 @@
         "manifold-3d": "^3.5.3",
         "sharp": "^0.35.4",
         "three": "0.186.0",
-        "three-subdivide": "^1.1.5",
+        "three-subdivide": "1.1.5",
         "xatlasjs": "^0.2.0",
         "zod": "^4.6.2"
       },

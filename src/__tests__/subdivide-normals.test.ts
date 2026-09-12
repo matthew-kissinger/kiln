@@ -1,6 +1,6 @@
 import { describe, expect, test } from 'bun:test';
 import type * as THREE from 'three';
-import { LoopSubdivision } from 'three-subdivide';
+import { LoopSubdivision } from 'three-subdivide/build/index.module.js';
 
 import { mergeVertices, subdivide } from '../ops';
 import { boxGeo, sphereGeo } from '../primitives';

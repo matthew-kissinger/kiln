@@ -3,6 +3,27 @@
 Changes to `@kiln/engine`. Source and installable packages are distributed through
 GitHub. The package is not published on the npm registry.
 
+## Finishing the CommonJS removal the r186 bump started — 2026-09-12
+
+- The previous entry's fix was incomplete, and looked complete.
+  `src/ops.ts` moved to the ESM build, but `src/__tests__/subdivide-normals.test.ts`
+  still imported the bare specifier — so the CommonJS build kept loading and kept
+  emitting `THREE_CJS_DEPRECATED`, while the production import read as corrected.
+  The whole suite now reports **zero** occurrences of that warning.
+- `three-subdivide` is pinned **exactly** rather than by caret. The deep path
+  `three-subdivide/build/index.module.js` is legal precisely because the package
+  declares no `exports` map; a minor release that added one would make the path
+  unresolvable, and a caret range would have taken that release silently.
+- `src/__tests__/three-subdivide-esm.test.ts` guards the whole tree rather than one
+  file, which is the lesson from the partial fix: it walks every `.ts` under `src/`,
+  asserts the ESM build has no `require(` call, and asserts the pin is exact.
+  Verified by injecting the bare specifier into `src/ops.ts` and confirming the guard
+  fails *and names the offending file*, rather than by observing a pass.
+- Timing, since it reads as urgent and is not: three deprecated the CommonJS build in
+  r186 and has not announced a removal release. Its own precedent — `build/three.js`
+  deprecated at r150, removed at r160 — suggests roughly ten releases of runway. The
+  reason to fix it now is the warning users see today, not the removal.
+
 ## three.js r186, and the CommonJS load it exposed — 2026-09-11
 
 - `three` and `@types/three` to 0.186.0 in both the engine and `render-service`.
