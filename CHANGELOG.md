@@ -3,6 +3,47 @@
 Changes to `@kiln/engine`. Source and installable packages are distributed through
 GitHub. The package is not published on the npm registry.
 
+## Skill bytes are canonical, and the SEP-2640 record is corrected — 2026-09-12
+
+- Re-read SEP-2640 from the spec text on its PR branch and the working group's own
+  repository, rather than from a page about it. Three things this project had recorded
+  were wrong.
+- **The design changed, and not cosmetically.** The extension defines `skills/list`,
+  `skills/get`, and an optional `resources/directory/read`. **`skills/activate` is
+  gone**, and with it the bundle, the scoped tools revealed on activation, and
+  progressive disclosure inside the protocol. The SEP now "defines only the transport
+  binding" and delegates the format and disclosure model to the Agent Skills
+  specification.
+- **The status heuristic was backwards.** The note here said "read the labels, not the
+  prose", after a summary twice reported the SEP as Final. The SEP document's own
+  `Status:` field *does* read Final; the pull request's label still reads `draft`, and
+  under the SEP process the document is the status of record. The note pointed at the
+  weaker signal.
+- **"Nothing to build against" is no longer true.** The spec depends on nothing beyond
+  base Resources, capability declaration rides SEP-2133, and the pinned
+  `@modelcontextprotocol/sdk@1.30.0` already carries `extensions` in
+  `ServerCapabilitiesSchema` while `setRequestHandler` takes any schema. Conformance
+  tests merged 2026-09-11.
+- 7.12 still waits, for a different and checkable reason: **nothing public consumes it.**
+  The TypeScript SDK's convenience wrappers PR is closed unmerged, every public host is a
+  prototype in one contributor's forks, Claude Code's is internal and not public, and the
+  GitHub MCP server prototype is closed. Shipping it now adds a third transport no host
+  can call. **Re-check the TypeScript SDK, not the SEP's status.**
+- The re-read found one real gap. `skills/list` publishes a per-file `digest` and `size`
+  over raw bytes, and this project already publishes sha256 digests of skill artifacts at
+  `/.well-known/agent-skills/index.json` — but `skills/**` was `-text` in
+  `.gitattributes` and carried the same accidental line-ending mix found in
+  `render-service/src`: five files fully CRLF, two mixed, seven LF. It went unnoticed
+  because the frontmatter parser is tolerant of both. Tolerant parsing is right;
+  publishing a digest over whichever ending an editor happened to write is not.
+- Normalized to LF across `skills/` and both registry copies, and `check:skills` now
+  rejects CRLF in any skill file. Verified by reintroducing one — and then by `git
+  checkout` restoring the pre-normalization bytes and the gate firing on that too, which
+  is the regression path that actually happens.
+- Two pieces of the eventual work are already in place: the digest derivation extends
+  7.13's rather than being invented, and `check:skills` has enforced the SEP's
+  name-equals-directory rule since Phase 7.
+
 ## The published tool reference is correct again — 2026-09-12
 
 - `docs/tools.md` is generated from the tool registry, and `docs/` is in the package's
