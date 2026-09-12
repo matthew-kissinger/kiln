@@ -74,7 +74,9 @@ async function validate(label, dir, name) {
   const declared = fields.get('name');
   const description = fields.get('description');
   if (declared !== name) {
-    errors.push(`${label}: name is ${declared ?? '(absent)'} but must match the directory, ${name}`);
+    errors.push(
+      `${label}: name is ${declared ?? '(absent)'} but must match the directory, ${name}`,
+    );
   }
   if (!/^[a-z0-9]+(-[a-z0-9]+)*$/u.test(name) || name.length > 64) {
     errors.push(`${label}: name must be 1-64 lowercase alphanumerics with single hyphens`);
@@ -84,7 +86,8 @@ async function validate(label, dir, name) {
     errors.push(`${label}: description is ${description.length} characters, over the 1024 maximum`);
   }
   for (const key of fields.keys()) {
-    if (!SPEC_KEYS.has(key)) errors.push(`${label}: ${key} is not an Agent Skills frontmatter field`);
+    if (!SPEC_KEYS.has(key))
+      errors.push(`${label}: ${key} is not an Agent Skills frontmatter field`);
   }
   const lines = text.split(/\r?\n/u).length;
   if (lines > 500) errors.push(`${label}: SKILL.md is ${lines} lines, over the recommended 500`);
@@ -113,7 +116,9 @@ for (const registry of REGISTRIES) {
     .sort();
   const expected = [...REGISTERED].sort();
   if (present.join(',') !== expected.join(',')) {
-    errors.push(`${registry}/ holds [${present.join(', ')}] but must hold exactly [${expected.join(', ')}]`);
+    errors.push(
+      `${registry}/ holds [${present.join(', ')}] but must hold exactly [${expected.join(', ')}]`,
+    );
   }
   for (const name of expected) {
     if (!present.includes(name)) continue;

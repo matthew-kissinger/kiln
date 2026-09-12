@@ -64,7 +64,6 @@ const byProvider = new Map();
 for (const m of models) {
   const slash = m.indexOf('/');
   const provider = slash > 0 ? m.slice(0, slash) : 'opencode';
-  const id = slash > 0 ? m.slice(slash + 1) : m;
   if (!byProvider.has(provider)) byProvider.set(provider, capabilities(provider));
 }
 
@@ -77,13 +76,18 @@ for (const m of models) {
   const caps = byProvider.get(provider)?.get(id);
   if (!caps) unknown.push(m);
   else if (caps.attachment !== true) blind.push(m);
-  const state = !caps ? 'not listed by this provider' : caps.attachment === true ? 'sees images' : 'TEXT ONLY';
+  const state = !caps
+    ? 'not listed by this provider'
+    : caps.attachment === true
+      ? 'sees images'
+      : 'TEXT ONLY';
   console.log(`  ${m.padEnd(44)} ${state}`);
 }
 
 if (blind.length || unknown.length) {
   console.error('');
-  if (blind.length) console.error(`refusing to dispatch ${blind.length} text-only model(s): ${blind.join(', ')}`);
+  if (blind.length)
+    console.error(`refusing to dispatch ${blind.length} text-only model(s): ${blind.join(', ')}`);
   if (unknown.length) console.error(`could not verify: ${unknown.join(', ')}`);
   process.exit(1);
 }

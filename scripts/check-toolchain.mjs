@@ -98,8 +98,16 @@ for (const name of manifests) {
   }
 }
 const guidance = [
-  ['AGENTS.md', [`Bun \`${expectedEngines.bun}\`; Node \`${expectedEngines.node}\`; npm \`${expectedEngines.npm}\``]],
-  ['CONTRIBUTING.md', [`${expectedEngines.bun}, Node ${expectedEngines.node} and npm ${expectedEngines.npm}`]],
+  [
+    'AGENTS.md',
+    [
+      `Bun \`${expectedEngines.bun}\`; Node \`${expectedEngines.node}\`; npm \`${expectedEngines.npm}\``,
+    ],
+  ],
+  [
+    'CONTRIBUTING.md',
+    [`${expectedEngines.bun}, Node ${expectedEngines.node} and npm ${expectedEngines.npm}`],
+  ],
   ['README.md', [`Node.js ${expectedEngines.node}`]],
   ['docs/google.md', [`Bun ${expectedEngines.bun} and Node ${expectedEngines.node}`]],
   [
@@ -114,17 +122,21 @@ const guidance = [
 for (const [name, phrases] of guidance) {
   const body = await readFile(at(name), 'utf8');
   for (const phrase of phrases) {
-    if (!body.includes(phrase)) errors.push(`${name} must state the supported toolchain: ${phrase}`);
+    if (!body.includes(phrase))
+      errors.push(`${name} must state the supported toolchain: ${phrase}`);
   }
 }
 if (!workflow.includes('run: bun run check:toolchain')) {
   errors.push('CI must run the toolchain metadata check');
 }
 for (const ref of workflow.matchAll(/uses:\s*([^\s#]+)/g)) {
-  if (!ref[1].startsWith('./') && !/@[0-9a-f]{40}$/i.test(ref[1])) errors.push(`CI Action ref must use an immutable commit SHA: ${ref[1]}`);
+  if (!ref[1].startsWith('./') && !/@[0-9a-f]{40}$/i.test(ref[1]))
+    errors.push(`CI Action ref must use an immutable commit SHA: ${ref[1]}`);
 }
 if (!filesOnly && process.versions.bun !== expectedEngines.bun) {
-  errors.push(`runtime Bun must be ${expectedEngines.bun} (found ${process.versions.bun ?? 'Node'})`);
+  errors.push(
+    `runtime Bun must be ${expectedEngines.bun} (found ${process.versions.bun ?? 'Node'})`,
+  );
 }
 if (!filesOnly) {
   const revision = spawnSync('bun', ['--revision'], { encoding: 'utf8', shell: false });
@@ -139,4 +151,6 @@ if (errors.length > 0) {
   process.exit(1);
 }
 
-console.log(`Toolchain metadata: Bun ${expectedEngines.bun}, Node ${expectedEngines.node}, npm ${expectedEngines.npm}`);
+console.log(
+  `Toolchain metadata: Bun ${expectedEngines.bun}, Node ${expectedEngines.node}, npm ${expectedEngines.npm}`,
+);

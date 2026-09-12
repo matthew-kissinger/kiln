@@ -60,7 +60,10 @@ describe('repository reliability contracts', () => {
     // finding, and a rule quietly lowered to keep a build green is indistinguishable from
     // a rule nobody wanted.
     const biome = JSON.parse(await readText('biome.json'));
-    const severities = Object.assign({}, ...Object.values(biome.linter.rules).filter((group) => typeof group === 'object'));
+    const severities = Object.assign(
+      {},
+      ...Object.values(biome.linter.rules).filter((group) => typeof group === 'object'),
+    );
     for (const rule of [
       'useTemplate',
       'useOptionalChain',
@@ -72,6 +75,16 @@ describe('repository reliability contracts', () => {
     ]) {
       expect(severities[rule], `${rule} must stay at error`).toBe('error');
     }
+    // The gates have to be inside the lint surface. `scripts/` sat outside
+    // `files.includes` while `test:coverage` measured it, so every check in this
+    // directory -- including the file you are reading -- was coverage-counted and
+    // never linted. Found by adding a file here and watching `biome check` on its
+    // own path report "No files were processed". The surface is the gates and their
+    // tests; the one-off tools beside them are a separate decision, recorded in
+    // ledger 14.4 with what taking them costs.
+    expect(biome.files.includes).toContain('scripts/check-*.mjs');
+    expect(biome.files.includes).toContain('scripts/**/*.test.mjs');
+
     // Views must be byte-reproducible: a runner that happens to reach a GPU render
     // service must not be able to change what the golden-image tests compare.
     expect(pkg.scripts['test']).toContain('KILN_RENDER=cpu');
@@ -91,10 +104,14 @@ describe('repository reliability contracts', () => {
     const { functions, lines } = thresholds.measuredBaseline;
     expect(functions).toBeGreaterThanOrEqual(thresholds.thresholds.functions);
     expect(lines).toBeGreaterThanOrEqual(thresholds.thresholds.lines);
-    expect(readme).toContain("docs/architecture.md");
-    expect(await readText('docs/architecture.md')).toContain('Threshold decreases require an explicit measured rationale.');
+    expect(readme).toContain('docs/architecture.md');
+    expect(await readText('docs/architecture.md')).toContain(
+      'Threshold decreases require an explicit measured rationale.',
+    );
     expect(workflow).toContain('run: bun run test:coverage');
-    expect(workflow).toContain('uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02');
+    expect(workflow).toContain(
+      'uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02',
+    );
     expect(workflow).toContain('path: coverage/lcov.info');
   });
 
