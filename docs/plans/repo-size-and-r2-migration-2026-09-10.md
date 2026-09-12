@@ -2085,7 +2085,7 @@ re-measured since the day it was written.
 | --- | --- | --- |
 | 15.1 | The README's remedy for converting a pre-rewrite clone does not work | **Done 2026-09-12.** See below |
 | 15.2 | Three CI jobs report on every PR and block nothing | **Done 2026-09-12.** Both halves. See below |
-| 15.3 | The documented offline gate does not run render-service's 37 tests, or `check:skills` | Queued |
+| 15.3 | The documented offline gate does not run render-service's 37 tests, or `check:skills` | **Done 2026-09-12.** See below |
 | 15.4 | `version` has been `0.6.0` for 21 shipped changes, and the tarball is named from it | Queued; owner chose to bump per shipped change |
 
 ### 15.1 -- the tag is the whole rewrite, on the clone side too
@@ -2181,3 +2181,39 @@ carries no path filter, which is exactly why all six of its contexts can be requ
 The rule, so nobody completes the set later: unconditional workflow, required;
 conditional workflow, unrequired. `deploy to Pages` is a third case and needs nothing,
 since it reports `skipping` rather than staying absent.
+
+
+### 15.2, confirmed by its own pull request
+
+Worth adding because the claim stopped being a deduction. `build the gallery` is
+**absent** from PR #99's checks entirely -- that PR touched `CHANGELOG.md`, this file
+and `reliability.test.mjs`, none of which match `pages.yml`'s path filter. Had the
+context been required to "complete the set", PR #99 could not have merged. The rule is
+not a precaution against something that might happen; it is a description of what did.
+
+### 15.3 -- the gate that was documented and the gate that was run
+
+`bun run test` is `bun test src scripts`. It never reached `render-service/`, whose 37
+tests ran only in the CI job 13.7 added -- so a contributor editing that subsystem got
+no local signal at all and learned about a break from a red pull request. `check:skills`
+was the same mismatch pointing the other way: a step in CI's `checks` job that the
+documented gate never named. Neither was broken. Both were invisible from the
+instructions.
+
+The subsystem genuinely cannot fold into `bun test src scripts` -- separate npm project,
+own lockfile, native dependency -- so it gets its own script. What makes that cheap is
+already recorded in the CI job's comment: all 37 tests are pure, none acquires a device,
+and `--ignore-scripts` skips the Dawn build. Nothing had to change but the wiring.
+
+The test asserts the general defect instead of the instance: every `bun run` command
+`AGENTS.md` names must exist as a script, in both directions. **Reading the fenced gate
+block rather than the whole file is what makes it discriminate**, and that was found by
+trying to break it rather than by reasoning. The first version checked "named anywhere in
+`AGENTS.md`" and stayed green when the gate line was deleted -- because the explanatory
+prose that the same commit added mentions the same command. An assertion written against
+a file is only as narrow as the region it reads.
+
+That is three for three in this phase: every fix wired the check into `bun test` rather
+than adding a CI job, for the reason Phase 14 gave -- a job is the thing somebody forgets
+to add. 15.2 is the exception that proves it, since half of it could only ever be a
+GitHub setting, and the repository half is what makes that half's absence loud.

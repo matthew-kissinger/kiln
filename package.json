@@ -100,6 +100,7 @@
     "test:coverage": "KILN_SPIKE_LIVE=0 KILN_RENDER=cpu bun test src scripts --coverage && bun scripts/check-coverage.mjs",
     "test:live": "KILN_SPIKE_LIVE=1 bun test",
     "test:package": "node scripts/test-plugin-package.mjs && node scripts/smoke-package.mjs",
+    "test:render-service": "npm --prefix render-service test",
     "lint": "biome check --error-on-warnings .",
     "verify:posters": "bun scripts/verify-posters.mjs",
     "site:assets": "cd site && bun scripts/build-assets.mjs",

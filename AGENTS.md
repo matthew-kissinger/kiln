@@ -75,9 +75,11 @@ latest for a release gate.
 ```bash
 bun install --frozen-lockfile
 bun run check:toolchain
+bun run check:skills
 bun run typecheck
 bun run lint
 bun run test
+bun run test:render-service
 bun run test:coverage
 ```
 
@@ -86,6 +88,13 @@ test`. Full offline gate: also run `bun run test:coverage`; it emits text plus `
 and enforces the checked-in line/function ratchet in `bunfig.toml`. Raise thresholds when practical;
 do not lower them without an explicit measured rationale. Live model tests are opt-in only via
 `bun run test:live` and may spend money.
+
+`bun run test` is `bun test src scripts`, so it does **not** reach `render-service/`, which is a
+separate npm project. `bun run test:render-service` does; it needs `npm --prefix render-service ci
+--ignore-scripts` once. All 37 of those tests are pure -- framing arithmetic, PNG readback packing,
+cache identity, contract and preset validation -- so none of them needs a GPU or the native Dawn
+build, which is why `--ignore-scripts` is enough. Run it whenever you change `render-service/`; CI
+requires it.
 
 Tests and CI pin `KILN_RENDER=cpu`. The coverage ratchet must not vary by whether the runner has a
 GPU. It is measured over `src/` alone -- the shipped engine -- so nothing you change under

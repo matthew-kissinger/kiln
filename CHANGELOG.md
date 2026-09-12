@@ -3,6 +3,30 @@
 Changes to `@kiln/engine`. Source and installable packages are distributed through
 GitHub. The package is not published on the npm registry.
 
+## The documented offline gate did not run two of the repository's checks — 2026-09-12
+
+- `bun run test` is `bun test src scripts`, so it never reached `render-service/`. Its 37
+  tests ran only in CI, in the job 13.7 added — so a contributor editing that subsystem
+  got **no local signal at all** and found out from a red pull request. `check:skills`
+  was the same shape in the other direction: a step in CI's `checks` job that the
+  documented gate never named.
+- The subsystem cannot fold into `bun test src scripts`: it is a separate npm project
+  with its own lockfile and a native dependency. It gets `bun run test:render-service`
+  instead, which needs `npm --prefix render-service ci --ignore-scripts` once. All 37
+  tests are pure — framing arithmetic, PNG readback packing, cache identity, contract and
+  preset validation — so none needs a GPU or the Dawn build, which is the CI job's own
+  recorded reason `--ignore-scripts` suffices.
+- Both are now in the gate in `AGENTS.md` and `CONTRIBUTING.md`, and a test asserts the
+  general defect rather than the instance: **every `bun run` command the agent guide
+  names must exist as a script**, and the two that were missing must appear in the gate
+  block itself.
+- Reading the fenced block rather than the whole file is what makes that discriminate.
+  The first version checked "named anywhere in `AGENTS.md`" and stayed green when the
+  line was deleted from the gate — because the prose underneath mentions the same
+  command. Verified three ways after narrowing: a guide naming a script that does not
+  exist, the line dropped from the block, and the script removed from `package.json` all
+  fail.
+
 ## Three CI jobs reported and blocked nothing — 2026-09-12
 
 - `build portable Node package` and both `Node package · macOS` jobs run on every push
