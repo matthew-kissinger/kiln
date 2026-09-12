@@ -3,6 +3,27 @@
 Changes to `@kiln/engine`. Source and installable packages are distributed through
 GitHub. The package is not published on the npm registry.
 
+## 0.7.0 — the version moves with what ships — 2026-09-12
+
+- `version` sat at `0.6.0` from the OSS release through **21 shipped changes**, while CI
+  named every tarball from it. Two people could hold `kiln-engine-0.6.0.tgz` and have
+  materially different software — across a three.js major, a history rewrite and a `dist/`
+  re-add. It moves per shipped change now: patch for a fix, minor for changed or added
+  capability, which is the normal case pre-1.0.
+- **0.7.0 rather than a patch.** What accumulated is behaviour: three.js r186, the
+  CommonJS removal it exposed, 128 lines of previously understated tool schema in
+  `docs/tools.md`, and a `shadows.type` contract that now selects a filter from
+  `basic`/`pcf`/`vsm` instead of naming one that no longer exists.
+- A bump has to be rebuilt, because `runtimeBuildIdentity` hashes the version into each
+  entry's `identity` in `dist/build.json` — the value a build receipt cites. A test now
+  asserts `package.json` and every `dist/build.json` entry agree.
+- **Nothing caught that drift before, and this was verified rather than assumed.** With
+  the version at 0.7.0 and `dist/` still recording 0.6.0, the full suite passed — 1860
+  tests, zero failures. `mcp-bundle.test.ts` rebuilds `dist/mcp-server.mjs` and compares
+  bytes, but the version is read from `package.json` at runtime rather than inlined, so
+  the bytes are identical and the stale record is invisible to it. Confirmed by the
+  rebuild: `dist/build.json` was the only file that changed.
+
 ## The documented offline gate did not run two of the repository's checks — 2026-09-12
 
 - `bun run test` is `bun test src scripts`, so it never reached `render-service/`. Its 37

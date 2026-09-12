@@ -39,6 +39,20 @@ nothing outside that list, which is how `scripts/` went unlinted while the cover
 run measured it. Note that `biome` prints at most 20 diagnostics by default, so a
 count read off the output is a floor.
 
+### Version
+
+`version` in `package.json` moves with every change that ships. It sat at `0.6.0`
+through 21 shipped changes while CI named every tarball from it, so two people could
+hold `kiln-engine-0.6.0.tgz` and have materially different software. Patch for a fix,
+minor for changed or added capability; this package is pre-1.0 and unpublished, so a
+minor is the normal case.
+
+Bumping it means rebuilding: `runtimeBuildIdentity` hashes the version into each
+entry's `identity` in `dist/build.json`, which is the value a build receipt cites. Run
+`bun run build:runtime` and commit `dist/`. A test asserts the two agree -- nothing else
+does, because the version is read from `package.json` at runtime rather than inlined, so
+the bundle bytes are identical either way and a byte comparison cannot see the drift.
+
 For behavior changes, first add a focused failing test, then make the smallest fix
 and run the relevant checks. Keep the coverage thresholds. Ordinary tests use CPU
 rendering and make no model calls. Live provider tests are optional and can spend
