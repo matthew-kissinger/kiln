@@ -73,9 +73,11 @@ jobs:
         run: bunx tsc --noEmit
         working-directory: site
 
-      # `site/scripts` has had tests since posters were attested and no workflow
-      # ran them, so a change to the provenance verification could ship green.
-      # They are the only automated check on what a poster receipt asserts.
+      # Not closing a gap: `bun run test` is `bun test src scripts`, and bun treats
+      # those as SUBSTRING filters on paths, so `site/scripts` already matched and
+      # CI already ran these. Kept because that coverage is incidental -- spelling
+      # the script `bun test ./src ./scripts` would silently drop it -- and because
+      # these are the only automated check on what a poster receipt asserts.
       - name: Test the site scripts
         run: bun test scripts
         working-directory: site
@@ -84,6 +86,12 @@ jobs:
       # index the page reads. Roughly a minute of CPU.
       - name: Build the assets
         run: bun scripts/build-assets.mjs
+        working-directory: site
+
+      # Derived from `skills/`, and published with a sha256 per artifact, so it has
+      # to be generated in the same run that serves it rather than committed.
+      - name: Build the well-known skills index
+        run: bun scripts/build-skills-discovery.mjs
         working-directory: site
 
       - name: Build the site
