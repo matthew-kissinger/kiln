@@ -78,10 +78,14 @@ jobs:
     # attempts passed, and a later full gate ran 1,709 tests clean. A required check that
     # fails at random is worse than no check, so this reports rather than blocks.
     #
-    # It is worth running now because the fault was last seen on Bun 1.3.14 and sharp
+    # It was worth running because the fault was last seen on Bun 1.3.14 and sharp
     # 0.35.3, and both have since moved -- Bun 1.4 in particular fixed several test
-    # isolation leaks. So this may already be fixed, and nothing has retested it.
-    # Promote to blocking once it has been green across a run of consecutive builds.
+    # isolation leaks. The first run answered it: 1,831 pass / 0 fail in 124s, the
+    # same counts as Linux, with no GLib fault. So the September 5 failure does not
+    # reproduce on the current toolchain. That is ONE green run against a fault that
+    # already passed two of three attempts once, which is why this still reports
+    # rather than blocks -- promote it once it has been green across consecutive
+    # builds, which is evidence one run cannot supply.
     #
     # `test` rather than `test:coverage`: the original crash was under coverage, but the
     # ratchet in bunfig.toml is measured on Linux, so a coverage run here would entangle
@@ -115,11 +119,17 @@ jobs:
       - name: Unit tests
         run: bun run test
 
+      # Diagnostic only, and deliberately failure-tolerant: it exists so that IF the
+      # GLib fault returns, the libvips/GLib versions arrive attached to that run
+      # rather than needing a second investigation to reconstruct. It must never be
+      # the reason this job reports red. `sharp.versions` rather than the package
+      # manifest, because sharp's `exports` map does not expose ./package.json.
       - name: Report the native dependency inventory
         if: ${{ always() }}
+        continue-on-error: true
         run: |
           node -p "'node ' + process.version"
-          node -e "const s=require('sharp'); console.log('sharp', require('sharp/package.json').version); console.log(JSON.stringify(s.versions))"
+          node -e "console.log('sharp versions:', JSON.stringify(require('sharp').versions))"
 
   package-candidate:
     name: build portable Node package
