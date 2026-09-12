@@ -3,6 +3,23 @@
 Changes to `@kiln/engine`. Source and installable packages are distributed through
 GitHub. The package is not published on the npm registry.
 
+## The guide was pinning a toolchain the gate rejects — 2026-09-11
+
+- `AGENTS.md`, `CONTRIBUTING.md`, `README.md`, `docs/google.md` and
+  `docs/install.md` still named Bun 1.3.14, Node 22.23.1 and npm 12.0.1 after the
+  bump to 1.4.2/22.23.2/12.0.2. `AGENTS.md` is the guide every harness reads, so
+  the first command a new contributor ran installed a Bun that
+  `bun run check:toolchain` — the next command in the same list — then rejected.
+- `scripts/check-toolchain.mjs` now asserts those five documents state the
+  supported triple, and that `pages.yml` pins the same Bun as `ci.yml`. The gate
+  had enforced `package.json` and `ci.yml` and nothing else, so both the prose and
+  the second workflow could drift silently; `pages.yml` was correct today only
+  because it was set by hand in the same change. Verified by injecting each of the
+  three defects and confirming a non-zero exit, rather than by observing a pass.
+- Dated receipts under `docs/evaluation/` are deliberately excluded from the
+  check. They record the toolchain a run actually used, and rewriting one to match
+  a new pin would falsify it.
+
 ## Skills are fetchable by URL — 2026-09-11
 
 - The six skills are published at

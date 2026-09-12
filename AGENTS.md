@@ -69,7 +69,7 @@ Preserve that distinction and the provider usage fields when changing model rout
 
 ## Toolchain and validation
 
-Supported toolchain: Bun `1.3.14`; Node `22.23.1`; npm `12.0.1`. Do not use a Bun canary or implicit
+Supported toolchain: Bun `1.4.2`; Node `22.23.2`; npm `12.0.2`. Do not use a Bun canary or implicit
 latest for a release gate.
 
 ```bash
