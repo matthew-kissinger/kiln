@@ -13,33 +13,121 @@ import { writeFile } from 'node:fs/promises';
 import { fileURLToPath } from 'node:url';
 import sharp from 'sharp';
 
-const OUTPUT = fileURLToPath(new URL('../src/material-texture-library.generated.ts', import.meta.url));
+const OUTPUT = fileURLToPath(
+  new URL('../src/material-texture-library.generated.ts', import.meta.url),
+);
 const USER_AGENT = 'KilnTextureCuration/1.0 (matthew-kissinger/kiln)';
 const TARGET_SIZE = 128;
 
 const FAMILIES = [
-  { slug: 'bark-brown-01', asset: 'bark_brown_01', label: 'Brown furrowed bark', recipes: ['kiln.material.bark.v1', 'kiln.material.wood.v1'] },
-  { slug: 'weathered-planks', asset: 'brown_planks_03', label: 'Weathered brown planks', recipes: ['kiln.material.wood.v1'] },
-  { slug: 'rough-concrete', asset: 'rough_concrete', label: 'Rough concrete', recipes: ['kiln.material.stone.v1'] },
-  { slug: 'denim', asset: 'denim_fabric', label: 'Blue denim weave', recipes: ['kiln.material.cloth.v1'] },
-  { slug: 'rusted-metal', asset: 'rust_coarse_01', label: 'Coarse rusted metal', recipes: ['kiln.material.painted-metal.v1'] },
-  { slug: 'rock-face', asset: 'rock_face_03', label: 'Layered rock face', recipes: ['kiln.material.stone.v1'] },
-  { slug: 'dry-soil', asset: 'brown_mud_dry', label: 'Dry compacted soil', recipes: ['kiln.material.stone.v1'] },
-  { slug: 'brick-wall', asset: 'brick_wall_005', label: 'Weathered brick wall', recipes: ['kiln.material.stone.v1'] },
-  { slug: 'brown-leather', asset: 'brown_leather', label: 'Brown grained leather', recipes: ['kiln.material.skin.v1', 'kiln.material.cloth.v1'] },
-  { slug: 'forest-leaves', asset: 'forest_leaves_03', label: 'Forest leaf litter', recipes: ['kiln.material.leaf.v1'] },
-  { slug: 'rubber-tiles', asset: 'rubber_tiles', label: 'Studded rubber tiles', recipes: ['kiln.material.rubber.v1'] },
-  { slug: 'metal-plate', asset: 'metal_plate', label: 'Riveted steel plate', recipes: ['kiln.material.painted-metal.v1'] },
-  { slug: 'clay-roof-tiles', asset: 'clay_roof_tiles', label: 'Clay roof tiles', recipes: ['kiln.material.stone.v1'] },
-  { slug: 'cobblestone-floor', asset: 'cobblestone_floor_01', label: 'Cobblestone paving', recipes: ['kiln.material.stone.v1'] },
-  { slug: 'oak-veneer', asset: 'oak_veneer_01', label: 'Finished oak veneer', recipes: ['kiln.material.wood.v1'] },
-  { slug: 'polished-marble', asset: 'marble_01', label: 'Polished marble', recipes: ['kiln.material.stone.v1'] },
+  {
+    slug: 'bark-brown-01',
+    asset: 'bark_brown_01',
+    label: 'Brown furrowed bark',
+    recipes: ['kiln.material.bark.v1', 'kiln.material.wood.v1'],
+  },
+  {
+    slug: 'weathered-planks',
+    asset: 'brown_planks_03',
+    label: 'Weathered brown planks',
+    recipes: ['kiln.material.wood.v1'],
+  },
+  {
+    slug: 'rough-concrete',
+    asset: 'rough_concrete',
+    label: 'Rough concrete',
+    recipes: ['kiln.material.stone.v1'],
+  },
+  {
+    slug: 'denim',
+    asset: 'denim_fabric',
+    label: 'Blue denim weave',
+    recipes: ['kiln.material.cloth.v1'],
+  },
+  {
+    slug: 'rusted-metal',
+    asset: 'rust_coarse_01',
+    label: 'Coarse rusted metal',
+    recipes: ['kiln.material.painted-metal.v1'],
+  },
+  {
+    slug: 'rock-face',
+    asset: 'rock_face_03',
+    label: 'Layered rock face',
+    recipes: ['kiln.material.stone.v1'],
+  },
+  {
+    slug: 'dry-soil',
+    asset: 'brown_mud_dry',
+    label: 'Dry compacted soil',
+    recipes: ['kiln.material.stone.v1'],
+  },
+  {
+    slug: 'brick-wall',
+    asset: 'brick_wall_005',
+    label: 'Weathered brick wall',
+    recipes: ['kiln.material.stone.v1'],
+  },
+  {
+    slug: 'brown-leather',
+    asset: 'brown_leather',
+    label: 'Brown grained leather',
+    recipes: ['kiln.material.skin.v1', 'kiln.material.cloth.v1'],
+  },
+  {
+    slug: 'forest-leaves',
+    asset: 'forest_leaves_03',
+    label: 'Forest leaf litter',
+    recipes: ['kiln.material.leaf.v1'],
+  },
+  {
+    slug: 'rubber-tiles',
+    asset: 'rubber_tiles',
+    label: 'Studded rubber tiles',
+    recipes: ['kiln.material.rubber.v1'],
+  },
+  {
+    slug: 'metal-plate',
+    asset: 'metal_plate',
+    label: 'Riveted steel plate',
+    recipes: ['kiln.material.painted-metal.v1'],
+  },
+  {
+    slug: 'clay-roof-tiles',
+    asset: 'clay_roof_tiles',
+    label: 'Clay roof tiles',
+    recipes: ['kiln.material.stone.v1'],
+  },
+  {
+    slug: 'cobblestone-floor',
+    asset: 'cobblestone_floor_01',
+    label: 'Cobblestone paving',
+    recipes: ['kiln.material.stone.v1'],
+  },
+  {
+    slug: 'oak-veneer',
+    asset: 'oak_veneer_01',
+    label: 'Finished oak veneer',
+    recipes: ['kiln.material.wood.v1'],
+  },
+  {
+    slug: 'polished-marble',
+    asset: 'marble_01',
+    label: 'Polished marble',
+    recipes: ['kiln.material.stone.v1'],
+  },
 ];
 
 const MAPS = [
   { key: 'Diffuse', suffix: 'albedo', usage: 'albedo', colorSpace: 'srgb', slot: 'baseColor' },
   { key: 'nor_gl', suffix: 'normal', usage: 'normal', colorSpace: 'linear', slot: 'normal' },
-  { key: 'arm', suffix: 'arm', usage: 'metallicRoughness', colorSpace: 'linear', slot: 'metallicRoughness' },
+  {
+    key: 'arm',
+    suffix: 'arm',
+    usage: 'metallicRoughness',
+    colorSpace: 'linear',
+    slot: 'metallicRoughness',
+  },
 ];
 
 const hash = (algorithm, bytes) => createHash(algorithm).update(bytes).digest('hex');
@@ -78,7 +166,13 @@ for (const family of FAMILIES) {
     }
     const derived = await sharp(original)
       .resize(TARGET_SIZE, TARGET_SIZE, { fit: 'fill', kernel: sharp.kernel.lanczos3 })
-      .png({ compressionLevel: 9, adaptiveFiltering: true, palette: map.suffix !== 'normal', colours: 256, quality: 90 })
+      .png({
+        compressionLevel: 9,
+        adaptiveFiltering: true,
+        palette: map.suffix !== 'normal',
+        colours: 256,
+        quality: 90,
+      })
       .toBuffer();
     records.push({
       ...family,
@@ -93,7 +187,9 @@ for (const family of FAMILIES) {
 }
 
 const ids = records.map((record) => `  ${quote(record.id)},`).join('\n');
-const descriptors = records.map((record) => `  ${quote(record.id)}: Object.freeze({
+const descriptors = records
+  .map(
+    (record) => `  ${quote(record.id)}: Object.freeze({
     schemaVersion: 1,
     id: ${quote(record.id)},
     version: 1,
@@ -112,15 +208,25 @@ const descriptors = records.map((record) => `  ${quote(record.id)}: Object.freez
     }),
     allowedSlots: Object.freeze([${quote(record.slot)}] as const),
     recipeIds: Object.freeze(${JSON.stringify(record.recipes)} as const),
-  }),`).join('\n');
-const payloads = records.map((record) => `  ${quote(record.id)}:
-      ${wrappedBase64(record.bytes)},`).join('\n');
-const provenance = records.map((record) => `  ${quote(record.id)}: Object.freeze({
+  }),`,
+  )
+  .join('\n');
+const payloads = records
+  .map(
+    (record) => `  ${quote(record.id)}:
+      ${wrappedBase64(record.bytes)},`,
+  )
+  .join('\n');
+const provenance = records
+  .map(
+    (record) => `  ${quote(record.id)}: Object.freeze({
     sourceAsset: ${quote(record.asset)},
     sourceUrl: ${quote(record.sourceUrl)},
     sourceMd5: ${quote(record.sourceMd5)},
     transform: ${quote(`sharp ${TARGET_SIZE}x${TARGET_SIZE} Lanczos3 PNG`)},
-  }),`).join('\n');
+  }),`,
+  )
+  .join('\n');
 const total = records.reduce((sum, record) => sum + record.bytes.byteLength, 0);
 
 const generated = `/**
@@ -151,4 +257,11 @@ ${provenance}
 
 await writeFile(OUTPUT, generated, 'utf8');
 execFileSync('bun', ['x', 'biome', 'format', '--write', OUTPUT], { stdio: 'inherit' });
-console.log(JSON.stringify({ output: OUTPUT, families: FAMILIES.length, resources: records.length, embeddedBytes: total }));
+console.log(
+  JSON.stringify({
+    output: OUTPUT,
+    families: FAMILIES.length,
+    resources: records.length,
+    embeddedBytes: total,
+  }),
+);

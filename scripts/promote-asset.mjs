@@ -96,7 +96,8 @@ function promote(name) {
   });
   const out = `${r.stdout ?? ''}${r.stderr ?? ''}`;
   const tris = /(\d+) tris/.exec(out)?.[1];
-  if (r.status !== 0 || !tris) return { name, ok: false, why: `render failed: ${out.trim().slice(-200)}` };
+  if (r.status !== 0 || !tris)
+    return { name, ok: false, why: `render failed: ${out.trim().slice(-200)}` };
 
   return {
     name,

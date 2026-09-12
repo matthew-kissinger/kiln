@@ -92,7 +92,13 @@ export function readAuthorship(source: string): Authorship {
   // No header means the program was written against this repository rather than
   // dispatched into a clean directory, which so far has always meant Claude.
   if (!m) {
-    return { model: null, display: 'Claude Opus 5', claude: true, harness: 'Claude Code', cleanRoom };
+    return {
+      model: null,
+      display: 'Claude Opus 5',
+      claude: true,
+      harness: 'Claude Code',
+      cleanRoom,
+    };
   }
   const model = m[1]!.trim();
   // The bracketed id when there is one, otherwise whatever stands after `via`.
@@ -100,7 +106,8 @@ export function readAuthorship(source: string): Authorship {
   // reader would say it, so it passes through untouched.
   const id = (m[3] ?? m[4]!).trim();
   const harness = HARNESS_DISPLAY[id.toLowerCase()] ?? m[2]?.trim() ?? id;
-  if (CLAUDE.test(model)) return { model, display: 'Claude Opus 5', claude: true, harness, cleanRoom };
+  if (CLAUDE.test(model))
+    return { model, display: 'Claude Opus 5', claude: true, harness, cleanRoom };
   return {
     model,
     display: MODEL_DISPLAY.find(([re]) => re.test(model))?.[1] ?? null,

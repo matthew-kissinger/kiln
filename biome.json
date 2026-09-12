@@ -6,8 +6,8 @@
       "src/**/*.ts",
       "site/src/**/*.{ts,tsx}",
       "site/*.ts",
-      "scripts/check-*.mjs",
-      "scripts/**/*.test.mjs",
+      "scripts/**/*.mjs",
+      "scripts/**/*.ts",
       "render-service/src/**/*.mjs",
       "render-service/test/**/*.mjs"
     ],

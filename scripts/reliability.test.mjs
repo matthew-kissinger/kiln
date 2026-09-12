@@ -82,8 +82,8 @@ describe('repository reliability contracts', () => {
     // own path report "No files were processed". The surface is the gates and their
     // tests; the one-off tools beside them are a separate decision, recorded in
     // ledger 14.4 with what taking them costs.
-    expect(biome.files.includes).toContain('scripts/check-*.mjs');
-    expect(biome.files.includes).toContain('scripts/**/*.test.mjs');
+    expect(biome.files.includes).toContain('scripts/**/*.mjs');
+    expect(biome.files.includes).toContain('scripts/**/*.ts');
     // render-service joined the surface once its sources stopped being CRLF. It is
     // a shipped subsystem with 37 tests in CI, so it belongs here; what kept it out
     // was a `.gitattributes` `-text` line freezing an inconsistent line-ending mix.

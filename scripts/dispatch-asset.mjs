@@ -31,7 +31,15 @@ import { HARNESSES, REPO, makeSandbox, parseDuration, run } from './harness.mjs'
  * script runs before anything is built and cannot import the TypeScript source.
  * `src/__tests__/dispatch-categories.test.ts` fails if the two ever drift.
  */
-const ASSET_CATEGORIES = ['prop', 'character', 'vfx', 'environment', 'architecture', 'vegetation', 'vehicle'];
+const ASSET_CATEGORIES = [
+  'prop',
+  'character',
+  'vfx',
+  'environment',
+  'architecture',
+  'vegetation',
+  'vehicle',
+];
 
 /**
  * Extra guidance appended to the brief, and EXPERIMENTAL -- read the entry for
@@ -53,15 +61,19 @@ const ASSET_CATEGORIES = ['prop', 'character', 'vfx', 'environment', 'architectu
  * drop first.
  */
 const CATEGORY_BRIEF = {
-  architecture: 'This is ARCHITECTURE. Get the mass and the storey rhythm right before any ornament: floor heights consistent, openings on a grid, a roof that meets its walls with a real eave rather than hovering. Repeated elements (bays, columns, windows) should be generated in a loop from one set of numbers so they stay aligned.',
-  character: 'This is a CHARACTER. Proportion beats detail: block the silhouette to a believable height first, then subdivide. Build it symmetric about the +X forward axis, standing on Y=0, in a neutral stance with limbs slightly away from the body so nothing interpenetrates.',
-  vegetation: 'This is VEGETATION. Nothing on a plant is straight or evenly spaced. Drive branching from a small recursive rule with varied angle and length rather than placing limbs by hand, taper every stem toward its tip, and let the crown be an irregular volume rather than a sphere.',
-  vehicle: 'This is a VEHICLE. It has to look like it works: wheels or tracks touching Y=0 and equally spaced, a cabin sized for whoever drives it, and a clear front. Build it along +X forward so it points the way the frame says it points.',
-  environment: 'This is an ENVIRONMENT piece. It will be placed among others, so keep the footprint honest and the origin sensible, and make the parts that meet the ground actually meet it.',
+  architecture:
+    'This is ARCHITECTURE. Get the mass and the storey rhythm right before any ornament: floor heights consistent, openings on a grid, a roof that meets its walls with a real eave rather than hovering. Repeated elements (bays, columns, windows) should be generated in a loop from one set of numbers so they stay aligned.',
+  character:
+    'This is a CHARACTER. Proportion beats detail: block the silhouette to a believable height first, then subdivide. Build it symmetric about the +X forward axis, standing on Y=0, in a neutral stance with limbs slightly away from the body so nothing interpenetrates.',
+  vegetation:
+    'This is VEGETATION. Nothing on a plant is straight or evenly spaced. Drive branching from a small recursive rule with varied angle and length rather than placing limbs by hand, taper every stem toward its tip, and let the crown be an irregular volume rather than a sphere.',
+  vehicle:
+    'This is a VEHICLE. It has to look like it works: wheels or tracks touching Y=0 and equally spaced, a cabin sized for whoever drives it, and a clear front. Build it along +X forward so it points the way the frame says it points.',
+  environment:
+    'This is an ENVIRONMENT piece. It will be placed among others, so keep the footprint honest and the origin sensible, and make the parts that meet the ground actually meet it.',
   vfx: 'This is a VFX asset. It reads as motion and light rather than as an object: build it from layered, mostly emissive or transparent shells, keep the triangle count low, and make sure it looks right from every angle because a viewer will orbit it.',
   prop: '',
 };
-
 
 function parseArgs(argv) {
   const opts = {
@@ -129,7 +141,7 @@ function composePrompt({ name, subject, file, tris, animate, category }) {
   const motion = animate
     ? [
         '- THIS ASSET MUST MOVE. Hang every moving part off a pivot: pass',
-        "  `pivot: [x, y, z]` to createPart and name the part `Joint_<Thing>`, then",
+        '  `pivot: [x, y, z]` to createPart and name the part `Joint_<Thing>`, then',
         '  parent the geometry that turns with it to that joint.',
         '- Export `function animate()` returning',
         "  [createClip(name, duration, [rotationTrack('Joint_X', keys), ...])].",
@@ -167,7 +179,11 @@ function composePrompt({ name, subject, file, tris, animate, category }) {
   ].join('\n');
 }
 
-const toPascal = (s) => s.split(/[-_\s]+/).map((w) => w[0].toUpperCase() + w.slice(1)).join('');
+const toPascal = (s) =>
+  s
+    .split(/[-_\s]+/)
+    .map((w) => w[0].toUpperCase() + w.slice(1))
+    .join('');
 
 /**
  * Record the author in the file itself.
@@ -216,8 +232,7 @@ function stampAuthor(file, model, harness, { cleanRoom = true, interrupted = fal
 // `session limit` is Claude Code's wording and matches none of the others, so a
 // batch that hit one used to report three flat failures in a row and give up
 // instead of falling back or waiting out the window.
-const RATE_LIMITED =
-  /RESOURCE_EXHAUSTED|429|rate.?limit|quota|exhausted|(session|usage) limit/i;
+const RATE_LIMITED = /RESOURCE_EXHAUSTED|429|rate.?limit|quota|exhausted|(session|usage) limit/i;
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 
 /**
@@ -268,19 +283,29 @@ async function main() {
     // Built from the table rather than typed out: the list drifted once
     // already, and omitted the harness that had written six of the gallery.
     const names = Object.keys(HARNESSES).join('|');
-    console.error(`usage: dispatch-asset.mjs [--harness ${names}] [--model M] [--category ${ASSET_CATEGORIES.join('|')}] --name <slug> "<subject>"`);
+    console.error(
+      `usage: dispatch-asset.mjs [--harness ${names}] [--model M] [--category ${ASSET_CATEGORIES.join('|')}] --name <slug> "<subject>"`,
+    );
     process.exit(2);
   }
-  opts.name ??= opts.subject.toLowerCase().replaceAll(/[^a-z0-9]+/g, '-').slice(0, 40);
+  opts.name ??= opts.subject
+    .toLowerCase()
+    .replaceAll(/[^a-z0-9]+/g, '-')
+    .slice(0, 40);
 
-  const models = [opts.model ?? harness.defaultModel, ...(opts.model ? [] : harness.fallbackModels)];
+  const models = [
+    opts.model ?? harness.defaultModel,
+    ...(opts.model ? [] : harness.fallbackModels),
+  ];
   // Checked before anything is created on disk. A harness with no default model
   // (Codex, whose entitlements this repository cannot know) must be told one:
   // this path stamps the author into the program and writes it into the
   // gallery's provenance note, and an asset whose author cannot be named is one
   // that already shipped once reading "Authored by: null".
   if (models[0] == null) {
-    console.error(`--model is required for the ${opts.harness} harness: it has no default, and the author has to be recorded`);
+    console.error(
+      `--model is required for the ${opts.harness} harness: it has no default, and the author has to be recorded`,
+    );
     process.exit(2);
   }
 
@@ -312,12 +337,16 @@ async function main() {
       }
       process.stdout.write(`[${opts.name}] ${opts.harness} / ${model} ... `);
       const started = Date.now();
-      result = await run(harness.bin, harness.argv({ model, prompt, timeout: opts.timeout, logFile, sandbox }), {
-        logFile,
-        cwd: sandbox,
-        timeoutMs: parseDuration(opts.timeout),
-        env: harness.env?.({ model }) ?? null,
-      });
+      result = await run(
+        harness.bin,
+        harness.argv({ model, prompt, timeout: opts.timeout, logFile, sandbox }),
+        {
+          logFile,
+          cwd: sandbox,
+          timeoutMs: parseDuration(opts.timeout),
+          env: harness.env?.({ model }) ?? null,
+        },
+      );
       const secs = ((Date.now() - started) / 1000).toFixed(0);
       if (result.code === 0 && existsSync(sandboxFile)) {
         console.log(`wrote ${opts.name}.kiln.js in ${secs}s`);
@@ -356,7 +385,9 @@ async function main() {
       break outer;
     }
     if (Date.now() >= deadline) break;
-    console.log(`[${opts.name}] all models rate limited; waiting 10 min (giving up at ${new Date(deadline).toLocaleTimeString()})`);
+    console.log(
+      `[${opts.name}] all models rate limited; waiting 10 min (giving up at ${new Date(deadline).toLocaleTimeString()})`,
+    );
     await sleep(10 * 60_000);
   }
   writeFileSync(join(opts.outDir, `${opts.name}.log`), result?.out ?? '');
@@ -379,24 +410,28 @@ async function main() {
   // this" is not something you can reconstruct later from the file itself.
   writeFileSync(
     join(opts.outDir, `${opts.name}.result.json`),
-    `${JSON.stringify({
-      name: opts.name,
-      subject: opts.subject,
-      harness: opts.harness,
-      model: authoredBy,
-      // Recorded rather than assumed: the gallery's provenance note is written
-      // from this field, and assets predating the sandbox must not inherit a
-      // claim about isolation they never had.
-      cleanRoom: true,
-      // Set when a provider limit ended the session with a program already
-      // written. `promote-asset.mjs` reads it, because an asset whose authoring
-      // loop was cut short must not carry a header claiming the loop ran.
-      interrupted,
-      at: new Date().toISOString(),
-      tris: /(\d+) tris/.exec(check.out)?.[1] ?? null,
-      bounds: /bounds\s+(.+)/.exec(check.out)?.[1]?.trim() ?? null,
-      rendered: check.code === 0,
-    }, null, 2)}
+    `${JSON.stringify(
+      {
+        name: opts.name,
+        subject: opts.subject,
+        harness: opts.harness,
+        model: authoredBy,
+        // Recorded rather than assumed: the gallery's provenance note is written
+        // from this field, and assets predating the sandbox must not inherit a
+        // claim about isolation they never had.
+        cleanRoom: true,
+        // Set when a provider limit ended the session with a program already
+        // written. `promote-asset.mjs` reads it, because an asset whose authoring
+        // loop was cut short must not carry a header claiming the loop ran.
+        interrupted,
+        at: new Date().toISOString(),
+        tris: /(\d+) tris/.exec(check.out)?.[1] ?? null,
+        bounds: /bounds\s+(.+)/.exec(check.out)?.[1]?.trim() ?? null,
+        rendered: check.code === 0,
+      },
+      null,
+      2,
+    )}
 `,
   );
   process.exit(check.code === 0 ? 0 : 1);

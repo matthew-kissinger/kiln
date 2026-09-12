@@ -15,8 +15,18 @@ const record = () => ({
   currentSourceHash: hash(current),
   brief: { kind: 'summary', text: 'Make a workbench with a lower shelf.' },
   revisions: [
-    { title: 'First draft', description: 'Initial shelf position.', file: 'initial.kiln.js', sourceHash: hash(initial) },
-    { title: 'Raised shelf', description: 'Only the shelf height changed.', file: 'current.kiln.js', sourceHash: hash(current) },
+    {
+      title: 'First draft',
+      description: 'Initial shelf position.',
+      file: 'initial.kiln.js',
+      sourceHash: hash(initial),
+    },
+    {
+      title: 'Raised shelf',
+      description: 'Only the shelf height changed.',
+      file: 'current.kiln.js',
+      sourceHash: hash(current),
+    },
   ],
 });
 
@@ -42,25 +52,39 @@ describe('published example history', () => {
     const { input, output } = await fixture('valid', value);
     const result = await buildExampleHistory('workbench', current, input, output);
     expect(result?.brief).toEqual(value.brief);
-    expect(result?.revisions.map((entry: { current: boolean }) => entry.current)).toEqual([true, false]);
+    expect(result?.revisions.map((entry: { current: boolean }) => entry.current)).toEqual([
+      true,
+      false,
+    ]);
     expect(result?.revisions[1].source).toBe('assets/history/workbench/initial.kiln.js');
     expect(await readFile(join(output, 'history/workbench/initial.kiln.js'), 'utf8')).toBe(initial);
     expect(await readFile(join(output, 'history/workbench/current.kiln.js'), 'utf8')).toBe(current);
   });
 
   test('missing historical records stay unknown', async () => {
-    expect(await buildExampleHistory('workbench', current, join(workspace, 'missing'), join(workspace, 'unused'))).toBeUndefined();
+    expect(
+      await buildExampleHistory(
+        'workbench',
+        current,
+        join(workspace, 'missing'),
+        join(workspace, 'unused'),
+      ),
+    ).toBeUndefined();
   });
 
   test('rejects attribution for a different displayed source', async () => {
     const { input, output } = await fixture('stale-current');
-    await expect(buildExampleHistory('workbench', 'changed source', input, output)).rejects.toThrow('displayed source');
+    await expect(buildExampleHistory('workbench', 'changed source', input, output)).rejects.toThrow(
+      'displayed source',
+    );
   });
 
   test('rejects changed snapshot bytes before publishing any history files', async () => {
     const { input, output } = await fixture('stale-revision');
     await writeFile(join(input, 'current.kiln.js'), 'changed source');
-    await expect(buildExampleHistory('workbench', current, input, output)).rejects.toThrow('snapshot hash');
+    await expect(buildExampleHistory('workbench', current, input, output)).rejects.toThrow(
+      'snapshot hash',
+    );
     await expect(readFile(join(output, 'history/workbench/initial.kiln.js'))).rejects.toThrow();
   });
 
@@ -68,13 +92,17 @@ describe('published example history', () => {
     const value = record();
     value.revisions[0]!.file = '../private.kiln.js';
     const { input, output } = await fixture('unsafe', value);
-    await expect(buildExampleHistory('workbench', current, input, output)).rejects.toThrow('snapshot filename');
+    await expect(buildExampleHistory('workbench', current, input, output)).rejects.toThrow(
+      'snapshot filename',
+    );
   });
 
   test('requires the displayed revision to be represented', async () => {
     const value = record();
     value.revisions.pop();
     const { input, output } = await fixture('no-current', value);
-    await expect(buildExampleHistory('workbench', current, input, output)).rejects.toThrow('displayed revision');
+    await expect(buildExampleHistory('workbench', current, input, output)).rejects.toThrow(
+      'displayed revision',
+    );
   });
 });

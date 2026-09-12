@@ -3,6 +3,31 @@
 Changes to `@kiln/engine`. Source and installable packages are distributed through
 GitHub. The package is not published on the npm registry.
 
+## Every directory that holds code is linted now — 2026-09-12
+
+- 14.4 left the one-off tools in `scripts/` out and priced the alternative at 26 lint
+  findings, a 1,530-line reflow, and 162 lines of coverage slack. After the ratchet got
+  a scope the third term is **zero** — `scripts/**` is not instrumented at all — so what
+  was left was a diff, and it is taken. **480 files where 442 were.**
+- Thirty-four format findings and thirty-two real ones, over `.mjs` and `.ts` alike; the
+  `.ts` files under `scripts/` had never been linted either, since the pattern was
+  `src/**/*.ts`.
+- Twenty-five `useTemplate`, seventeen of them one idiom: `JSON.stringify(…) + '\n'`,
+  the receipt-file shape, across eleven files. A shared helper is the obvious DRY move
+  and is deliberately not taken — `package-plugin.mjs` ships in the package `files`
+  list, so importing one means shipping another file for a cosmetic win.
+- Three findings were not cosmetic. **Two `any` in the pilot evaluation host**: one read
+  as `previous.config` / `previous?.deadline`, now typed; one feeding a budget estimator
+  through optional chains, now a declared `PilotToolInput` that names exactly the fields
+  the image-cell budget depends on — documentation the estimator did not have. A loop's
+  update step hiding in its condition in `smoke-package.mjs`. And **a literal ESC byte**
+  in `harness.mjs`'s ANSI stripper, invisible in every diff and editor, now `\u001B`.
+- Also surfaced, and deliberately left for its own change: `docs/tools.md` is stale and
+  its `docs:tools --check` drift checker runs in no workflow and no test. The cause is
+  the `zod` 4.4.3 → 4.6.2 bump — `z.toJSONSchema` now emits `items: false`, `minItems`
+  and `maxItems` for fixed-length tuples — so the published tool reference has
+  understated every tuple schema since. Ledger 14.8.
+
 ## render-service joins the lint surface — 2026-09-12
 
 - It was left out because `render-service/src/**` is `-text` in `.gitattributes` and the
