@@ -122,7 +122,7 @@
     "manifold-3d": "^3.5.3",
     "sharp": "^0.35.4",
     "three": "0.186.0",
-    "three-subdivide": "^1.1.5",
+    "three-subdivide": "1.1.5",
     "xatlasjs": "^0.2.0",
     "zod": "^4.6.2"
   },
