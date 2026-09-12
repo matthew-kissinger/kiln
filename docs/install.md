@@ -174,6 +174,27 @@ OpenCode workspaces register their local `skills/` directory using the supported
 inspect native discovery without a model request. Author, refine and QA entries
 should point into that workspace. See the [OpenCode configuration schema](https://opencode.ai/config.json).
 
+### Fetching the skills by URL instead
+
+The same skills are published at a well-known URI, so a client that reads
+[Cloudflare's Agent Skills Discovery RFC](https://github.com/cloudflare/agent-skills-discovery-rfc)
+can load them with no clone and no workspace. OpenCode's `skills.urls` consumes it:
+
+```
+https://kilnstudio.tools/.well-known/agent-skills/index.json
+```
+
+Each entry names an artifact and the sha256 of its raw bytes, so a client can
+verify what it fetched. The index is generated from `skills/` in the same run that
+serves it -- a committed copy would publish digests that go stale the moment a
+skill changes.
+
+This path carries the skills and nothing else. It does not configure an MCP server,
+so `kiln_workspace` is still absent and no tool call will resolve; the skills will
+describe a tool surface that is not there. Use it to read the workflows, or
+alongside a server you configured yourself, not as a substitute for
+`kiln-setup-workspace`.
+
 Ask the agent to read `AGENTS.md`, discover geometry helpers, render a small draft,
 read its source, edit it by `programRef`, and export the accepted revision. Check the
 actual tools and files, not only the agent's final message. CPU rendering needs no

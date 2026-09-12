@@ -539,9 +539,18 @@ the index against the files built beside it, the build receipt against the index
 and both demo receipts against their own run's GLBs. Those compare artifacts to
 themselves within one build and cannot diverge by platform.
 
-`site/scripts` has had tests since posters were attested and **no workflow ran
-them**, so a change to this verification could have shipped green. `pages.yml`
-now runs them.
+`pages.yml` now runs `site/scripts`'s tests explicitly.
+
+**Correction, 2026-09-11.** The commit that added that step said those tests had
+never run in any workflow. That is wrong, and measured rather than argued: `bun
+run test` is `bun test src scripts`, bun treats positional arguments as substring
+filters on paths, and `site/scripts` matches `scripts`. Both files were already in
+the 210-file suite -- `bun test provenance.test` from the repository root finds
+and runs all four of its tests. CI was covering them.
+
+The step stays for a different and smaller reason than the one first given: that
+coverage is incidental, and spelling the script `bun test ./src ./scripts` would
+drop it without a word.
 
 ### Phase 3 rehearsal
 
@@ -990,7 +999,7 @@ clone and no install. It does not depend on SEP-2640.
 | ID | Task | State |
 | --- | --- | --- |
 | 7.12 | Watch SEP-2640 to ratification, then expose the skills as `skill://` resources and retire the hand-built per-harness registration where clients support the extension | Deferred by decision; not this pass |
-| 7.13 | Publish the skills at `/.well-known/agent-skills/index.json` on the existing site per the Cloudflare discovery RFC, giving opencode `skills.urls` users a zero-install path | Pending, and the path above is a correction: the RFC moved to `/.well-known/agent-skills/index.json` at v0.2.0, not the `/.well-known/skills/` this row recorded. Each entry needs `name`, `type`, `description`, `url` and a `sha256:` digest of the artifact's raw bytes. Five of six skills carry `references/`, so they need `type: archive` rather than `skill-md` -- and the archives must be built deterministically (fixed mtime, sorted entries) or the published digest changes on every build |
+| 7.13 | Publish the skills at `/.well-known/agent-skills/index.json` on the existing site per the Cloudflare discovery RFC, giving opencode `skills.urls` users a zero-install path | **Done 2026-09-11.** The path is a correction to what this row recorded: the RFC is at `/.well-known/agent-skills/index.json` as of v0.2.0, not `/.well-known/skills/`. `site/scripts/build-skills-discovery.mjs` derives the index from `skills/` -- one `skill-md` entry, five `archive` entries for the skills carrying `references/`, each with a sha256 of the artifact's raw bytes. Verified: the apex is this repo's Pages deployment at an origin root, which a well-known URI requires; Vite copies the dot-directory into `dist/`; real `tar` extracts the archives with `SKILL.md` at the root and the contents byte-identical to `skills/`; and two builds publish identical digests. Gitignored and built in CI, because a committed copy would publish digests that go stale |
 
 ### 7.1 execution record
 
@@ -1374,3 +1383,25 @@ asserts, which is 6.2. The maintainer's call on 6.1/6.3 -- that the gallery imag
 are display assets -- points at narrowing the receipt to `sourceHash` and
 `imageHash`, the two claims that are platform-stable and that the gallery
 actually makes. That remains a decision, not a task.
+
+### 7.13, and why the archive is hand-rolled
+
+The digest is published, so determinism is not a nicety here: an archive whose
+bytes move on every build publishes a digest that is wrong the moment it is
+written, and a client that verifies would reject every skill. Neither the system
+`tar` nor a convenience library gives that by default -- both record real mtimes,
+uids and gids. So `build-skills-discovery.mjs` writes POSIX ustar headers itself
+with every non-content field pinned: mode 0644, uid and gid 0, mtime 0, empty
+uname and gname, entries in sorted order. `node:zlib`'s gzip was measured
+deterministic already, writing a zero MTIME and a fixed OS byte.
+
+`skills-discovery.test.ts` asserts the pinned header fields directly rather than
+only comparing two builds, and was verified to fail on an injected mtime. Two
+builds agreeing proves nothing on its own: it is exactly what a tar with a
+coarse-grained clock does when both builds land in the same second.
+
+One limitation worth stating rather than discovering. This path carries skills and
+no MCP server, so a client that loads them has the workflows and none of the tools
+they describe -- `kiln_workspace` is absent and no call resolves. `docs/install.md`
+says so where it offers the URL. SEP-2640 (7.12) is the mechanism that would carry
+both, and it is still unratified.

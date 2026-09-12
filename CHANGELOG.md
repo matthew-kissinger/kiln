@@ -3,6 +3,28 @@
 Changes to `@kiln/engine`. Source and installable packages are distributed through
 GitHub. The package is not published on the npm registry.
 
+## Skills are fetchable by URL — 2026-09-11
+
+- The six skills are published at
+  `https://kilnstudio.tools/.well-known/agent-skills/index.json`, per
+  [Cloudflare's Agent Skills Discovery RFC](https://github.com/cloudflare/agent-skills-discovery-rfc)
+  v0.2.0 — which is what OpenCode's `skills.urls` consumes. One `skill-md` entry
+  and five archives for the skills carrying `references/`, each with a sha256 of
+  the artifact's raw bytes so a client can verify what it fetched.
+- The archives are built by hand as POSIX ustar with every non-content field
+  pinned — mode 0644, uid/gid 0, mtime 0, sorted entries — because the digest is
+  *published*. Neither the system `tar` nor a convenience library gives that by
+  default, and an archive whose bytes move on every build publishes a digest that
+  is wrong the moment it is written. The test asserts those header fields
+  directly rather than only comparing two builds, since two builds agreeing is
+  also what a tar with a coarse clock does inside one second.
+- Verified end to end: real `tar` extracts the archives with `SKILL.md` at the
+  root and contents byte-identical to `skills/`, and Vite copies the
+  dot-directory into the published output.
+- **This path carries skills and no MCP server**, so a client that loads them has
+  the workflows and none of the tools they describe. `docs/install.md` says so
+  where it offers the URL.
+
 ## Bun-only APIs cannot reach a Node bundle unnoticed — 2026-09-11
 
 - Audited the shipped bundles for the defect class behind the MCP server's
@@ -70,8 +92,13 @@ GitHub. The package is not published on the npm registry.
   `site/scripts/verify-assets.mjs` completes — 80 source/GLB pairs, posters, both
   edit-demo revisions and the geometry example. Before this it failed on the
   first example.
-- `site/scripts` has had tests since posters were attested and no workflow ran
-  them. `pages.yml` now does.
+- `pages.yml` now runs `site/scripts`'s tests explicitly. **Correction:** this
+  entry first said those tests had never run in any workflow. They had. `bun run
+  test` is `bun test src scripts`, bun treats those as substring filters on
+  paths, and `site/scripts` matches `scripts` — so both files were already in the
+  suite CI runs. The step stays for a smaller reason: that coverage is
+  incidental, and spelling the script `bun test ./src ./scripts` would drop it
+  silently.
 - **The gallery no longer builds on Windows.** `pages.yml` is `ubuntu-latest`,
   which closes Phase 6.
 - New `scripts/glb-chunk-hashes.mjs` splits a GLB by chunk, and it answered the
