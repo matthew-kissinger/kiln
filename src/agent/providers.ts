@@ -207,7 +207,7 @@ export interface MakeKilnModelOptions {
 
 const trimmedEnv = (k: string): string | undefined => {
   const v = process.env[k];
-  return v && v.trim() ? v.trim() : undefined;
+  return v?.trim() ? v.trim() : undefined;
 };
 
 const META_MODEL_API_BASE_URL = 'https://api.meta.ai/v1';

@@ -38,8 +38,7 @@ export function inspectGeometryExport(
       warnings.push(message);
     };
     const position = geometry.getAttribute('position');
-    if (!position || position.itemSize !== 3)
-      throw new TypeError(`${name}: position requires xyz vertices.`);
+    if (position?.itemSize !== 3) throw new TypeError(`${name}: position requires xyz vertices.`);
     for (const [key, attribute] of Object.entries(geometry.attributes)) {
       const expected = EXPORTED_GEOMETRY_ATTRIBUTES[key];
       if (expected === undefined) {

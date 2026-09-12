@@ -1672,12 +1672,15 @@ export function buildSandboxGlobals(
   // CSG ops remain lazy at their own call sites, so importing the wrapper here
   // is safe for Node ESM builds and still avoids manifold WASM init unless used.
 
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const wrap = <F extends (...args: any[]) => any>(name: string, fn: F): F => {
+  const wrap = <F extends (...args: never[]) => unknown>(name: string, fn: F): F => {
     if (!usage) return fn;
     const wrapped = (...args: Parameters<F>): ReturnType<F> => {
       usage[name] = (usage[name] ?? 0) + 1;
-      return fn(...args);
+      // `fn` IS an F, so this genuinely returns `ReturnType<F>`; tsc resolves the call
+      // through F's constraint and sees only `unknown`. The assertion states what holds
+      // by construction, and is narrower than typing the bound as `any`, which would
+      // silence the whole expression instead of this one step.
+      return fn(...args) as ReturnType<F>;
     };
     return wrapped as F;
   };
@@ -1719,8 +1722,10 @@ export function buildSandboxGlobals(
       ],
     };
   };
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const cacheGeo = <F extends (...args: any[]) => THREE.BufferGeometry>(name: string, fn: F): F => {
+  const cacheGeo = <F extends (...args: never[]) => THREE.BufferGeometry>(
+    name: string,
+    fn: F,
+  ): F => {
     const memoFn = (...args: Parameters<F>): THREE.BufferGeometry => {
       let key: string;
       try {
@@ -1745,8 +1750,7 @@ export function buildSandboxGlobals(
   // Compose: usage tracking (outer) + memoisation (inner). A cache hit
   // still ticks the usage counter so the telemetry reflects what the
   // agent wrote, not what was recomputed.
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const wrapGeo = <F extends (...args: any[]) => THREE.BufferGeometry>(name: string, fn: F): F =>
+  const wrapGeo = <F extends (...args: never[]) => THREE.BufferGeometry>(name: string, fn: F): F =>
     wrap(name, cacheGeo(name, fn));
 
   const loadApprovedTexture = (...args: unknown[]): Promise<THREE.DataTexture> => {

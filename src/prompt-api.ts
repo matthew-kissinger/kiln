@@ -58,7 +58,7 @@ function wrapComment(text: string, indent: string): string[] {
   const lines: string[] = [];
   let line = '';
   for (const w of words) {
-    if (line && (indent + '// ' + line + ' ' + w).length > WRAP) {
+    if (line && `${indent}// ${line} ${w}`.length > WRAP) {
       lines.push(`${indent}// ${line}`);
       line = w;
     } else {

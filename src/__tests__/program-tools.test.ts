@@ -111,7 +111,7 @@ describe('program references', () => {
 
   it('pages source without loss and bounds search results', async () => {
     const store = new MemoryProgramStore();
-    const source = 'α'.repeat(20000) + '\nneedle\n' + 'z'.repeat(20000);
+    const source = `${'α'.repeat(20000)}\nneedle\n${'z'.repeat(20000)}`;
     const ref = await store.put(source);
     const tool = createKilnProgramToolRegistry({ programStore: store }).find(
       (d) => d.name === 'kiln_source',

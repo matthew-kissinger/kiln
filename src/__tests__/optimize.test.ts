@@ -18,7 +18,6 @@ import {
   createInstance,
   createPivot,
   boxGeo,
-  cylinderGeo,
   gameMaterial,
   glassMaterial,
 } from '../primitives';
@@ -130,10 +129,12 @@ describe('optimize=full (static-only; auto-degrade on animation)', () => {
         parent: hub,
       });
     }
+    // Identity, then a quarter turn about Y: (0, sin 45deg, 0, cos 45deg). `Math.SQRT1_2`
+    // rather than 0.7071 -- exact, and it says which angle this is.
     const track = new THREE.QuaternionKeyframeTrack(
       'Joint_Spin.quaternion',
       [0, 1],
-      [0, 0, 0, 1, 0, 0.7071, 0, 0.7071],
+      [0, 0, 0, 1, 0, Math.SQRT1_2, 0, Math.SQRT1_2],
     );
     const clip = new THREE.AnimationClip('spin', 1, [track]);
 

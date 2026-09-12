@@ -8281,7 +8281,7 @@ function inspectGeometryExport(root, policy = "warn") {
       warnings.push(message);
     };
     const position = geometry.getAttribute("position");
-    if (!position || position.itemSize !== 3)
+    if (position?.itemSize !== 3)
       throw new TypeError(`${name}: position requires xyz vertices.`);
     for (const [key, attribute] of Object.entries(geometry.attributes)) {
       const expected = EXPORTED_GEOMETRY_ATTRIBUTES[key];
@@ -20671,7 +20671,7 @@ function estimateGeometryTris(name, args) {
     return null;
   }
   function asObjNum(node, prop) {
-    if (!node || node.type !== "ObjectExpression")
+    if (node?.type !== "ObjectExpression")
       return null;
     for (const p of node.properties) {
       if (p.type === "Property" && !p.computed && (p.key.type === "Identifier" && p.key.name === prop || p.key.type === "Literal" && p.key.value === prop)) {
@@ -21374,7 +21374,7 @@ function loopMultiplier(ancestors) {
     if (node.type !== "ForStatement")
       continue;
     const f = node;
-    if (!f.test || f.test.type !== "BinaryExpression")
+    if (f.test?.type !== "BinaryExpression")
       continue;
     const { operator, right } = f.test;
     if (operator !== "<" && operator !== "<=")
@@ -24384,24 +24384,24 @@ function bridgeGeometry(doc, buf, geometry, material, meshName) {
   const prim = doc.createPrimitive().setMaterial(Array.isArray(material) ? material[0] : material);
   const posAttr = geometry.getAttribute("position");
   if (posAttr) {
-    prim.setAttribute("POSITION", doc.createAccessor(meshName + "_pos").setArray(geometryAttributeValues(posAttr)).setType(TYPE_VEC3).setBuffer(buf));
+    prim.setAttribute("POSITION", doc.createAccessor(`${meshName}_pos`).setArray(geometryAttributeValues(posAttr)).setType(TYPE_VEC3).setBuffer(buf));
   }
   const normAttr = geometry.getAttribute("normal");
   if (normAttr) {
-    prim.setAttribute("NORMAL", doc.createAccessor(meshName + "_norm").setArray(geometryAttributeValues(normAttr)).setType(TYPE_VEC3).setBuffer(buf));
+    prim.setAttribute("NORMAL", doc.createAccessor(`${meshName}_norm`).setArray(geometryAttributeValues(normAttr)).setType(TYPE_VEC3).setBuffer(buf));
   }
   const uvAttr = geometry.getAttribute("uv");
   if (uvAttr) {
-    prim.setAttribute("TEXCOORD_0", doc.createAccessor(meshName + "_uv").setArray(geometryAttributeValues(uvAttr)).setType(TYPE_VEC2).setBuffer(buf));
+    prim.setAttribute("TEXCOORD_0", doc.createAccessor(`${meshName}_uv`).setArray(geometryAttributeValues(uvAttr)).setType(TYPE_VEC2).setBuffer(buf));
   }
   const tangentAttr = geometry.getAttribute("tangent");
   if (tangentAttr?.itemSize === 4) {
-    prim.setAttribute("TANGENT", doc.createAccessor(meshName + "_tangent").setArray(geometryAttributeValues(tangentAttr)).setType(TYPE_VEC4).setBuffer(buf));
+    prim.setAttribute("TANGENT", doc.createAccessor(`${meshName}_tangent`).setArray(geometryAttributeValues(tangentAttr)).setType(TYPE_VEC4).setBuffer(buf));
   }
   const indexAttr = geometry.getIndex();
   if (indexAttr) {
     const IndexArray = posAttr && posAttr.count > 65535 ? Uint32Array : Uint16Array;
-    prim.setIndices(doc.createAccessor(meshName + "_idx").setArray(new IndexArray(indexAttr.array)).setType(TYPE_SCALAR).setBuffer(buf));
+    prim.setIndices(doc.createAccessor(`${meshName}_idx`).setArray(new IndexArray(indexAttr.array)).setType(TYPE_SCALAR).setBuffer(buf));
   }
   const mesh = doc.createMesh(meshName);
   if (!Array.isArray(material))
@@ -24417,7 +24417,7 @@ function bridgeGeometry(doc, buf, geometry, material, meshName) {
     for (const semantic of prim.listSemantics())
       part.setAttribute(semantic, prim.getAttribute(semantic));
     const IndexArray = posAttr.count > 65535 ? Uint32Array : Uint16Array;
-    part.setIndices(doc.createAccessor(meshName + "_group_indices").setArray(new IndexArray(indexValues.slice(group.start, group.start + group.count))).setType(TYPE_SCALAR).setBuffer(buf));
+    part.setIndices(doc.createAccessor(`${meshName}_group_indices`).setArray(new IndexArray(indexValues.slice(group.start, group.start + group.count))).setType(TYPE_SCALAR).setBuffer(buf));
     mesh.addPrimitive(part);
     covered += group.count;
   }
@@ -24536,8 +24536,8 @@ function bridgeAnimations(doc, buf, clips, nodeMap, warnings) {
         warnings.push(`Unsupported animation property "${property}" on "${nodeName}" - skipped`);
         continue;
       }
-      const inputAcc = doc.createAccessor(clip.name + "_" + nodeName + "_input").setArray(new Float32Array(track.times)).setType(TYPE_SCALAR).setBuffer(buf);
-      const outputAcc = doc.createAccessor(clip.name + "_" + nodeName + "_output").setArray(new Float32Array(track.values)).setType(valueType).setBuffer(buf);
+      const inputAcc = doc.createAccessor(`${clip.name}_${nodeName}_input`).setArray(new Float32Array(track.times)).setType(TYPE_SCALAR).setBuffer(buf);
+      const outputAcc = doc.createAccessor(`${clip.name}_${nodeName}_output`).setArray(new Float32Array(track.values)).setType(valueType).setBuffer(buf);
       const sampler = doc.createAnimationSampler().setInput(inputAcc).setOutput(outputAcc).setInterpolation("LINEAR");
       const channel = doc.createAnimationChannel().setTargetNode(targetNode).setTargetPath(targetPath).setSampler(sampler);
       anim.addSampler(sampler);
@@ -24884,7 +24884,7 @@ function collectMeshStats(root) {
     const idx = geo.getIndex();
     const tri = idx ? idx.count / 3 : (geo.getAttribute("position")?.count ?? 0) / 3;
     const box = new THREE34.Box3().setFromObject(obj);
-    if (!isFinite(box.min.x) || !isFinite(box.max.x)) {
+    if (!Number.isFinite(box.min.x) || !Number.isFinite(box.max.x)) {
       return;
     }
     const center = new THREE34.Vector3;
@@ -24977,7 +24977,7 @@ function inspectSceneStructure(root, opts = {}) {
         }
       }
       const fix = nearest && nearestGap ? ` Fix: shift "${a.name}" by [${nearestGap.x.toFixed(3)}, ${nearestGap.y.toFixed(3)}, ${nearestGap.z.toFixed(3)}] toward "${nearest.name}", or call snapTo(part, hostPart) to do it automatically.` : "";
-      floaters.push(`${a.name}${fix ? " —" + fix : ""}`);
+      floaters.push(`${a.name}${fix ? ` —${fix}` : ""}`);
     }
     if (floaters.length > 0) {
       warnings.push(`Floating parts (no mesh overlap with any sibling, 2cm tol): ${floaters.join(" | ")}`);
@@ -25472,7 +25472,7 @@ function wrapComment(text, indent) {
   const lines = [];
   let line = "";
   for (const w of words) {
-    if (line && (indent + "// " + line + " " + w).length > WRAP) {
+    if (line && `${indent}// ${line} ${w}`.length > WRAP) {
       lines.push(`${indent}// ${line}`);
       line = w;
     } else {

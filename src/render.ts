@@ -572,7 +572,7 @@ function bridgeGeometry(
     prim.setAttribute(
       'POSITION',
       doc
-        .createAccessor(meshName + '_pos')
+        .createAccessor(`${meshName}_pos`)
         .setArray(geometryAttributeValues(posAttr))
         .setType(TYPE_VEC3)
         .setBuffer(buf),
@@ -584,7 +584,7 @@ function bridgeGeometry(
     prim.setAttribute(
       'NORMAL',
       doc
-        .createAccessor(meshName + '_norm')
+        .createAccessor(`${meshName}_norm`)
         .setArray(geometryAttributeValues(normAttr))
         .setType(TYPE_VEC3)
         .setBuffer(buf),
@@ -596,7 +596,7 @@ function bridgeGeometry(
     prim.setAttribute(
       'TEXCOORD_0',
       doc
-        .createAccessor(meshName + '_uv')
+        .createAccessor(`${meshName}_uv`)
         .setArray(geometryAttributeValues(uvAttr))
         .setType(TYPE_VEC2)
         .setBuffer(buf),
@@ -608,7 +608,7 @@ function bridgeGeometry(
     prim.setAttribute(
       'TANGENT',
       doc
-        .createAccessor(meshName + '_tangent')
+        .createAccessor(`${meshName}_tangent`)
         .setArray(geometryAttributeValues(tangentAttr))
         .setType(TYPE_VEC4)
         .setBuffer(buf),
@@ -623,7 +623,7 @@ function bridgeGeometry(
     const IndexArray = posAttr && posAttr.count > 65535 ? Uint32Array : Uint16Array;
     prim.setIndices(
       doc
-        .createAccessor(meshName + '_idx')
+        .createAccessor(`${meshName}_idx`)
         .setArray(new IndexArray(indexAttr.array))
         .setType(TYPE_SCALAR)
         .setBuffer(buf),
@@ -658,7 +658,7 @@ function bridgeGeometry(
     const IndexArray = posAttr!.count > 65535 ? Uint32Array : Uint16Array;
     part.setIndices(
       doc
-        .createAccessor(meshName + '_group_indices')
+        .createAccessor(`${meshName}_group_indices`)
         .setArray(new IndexArray(indexValues.slice(group.start, group.start + group.count)))
         .setType(TYPE_SCALAR)
         .setBuffer(buf),
@@ -832,13 +832,13 @@ function bridgeAnimations(
       }
 
       const inputAcc = doc
-        .createAccessor(clip.name + '_' + nodeName + '_input')
+        .createAccessor(`${clip.name}_${nodeName}_input`)
         .setArray(new Float32Array(track.times))
         .setType(TYPE_SCALAR)
         .setBuffer(buf);
 
       const outputAcc = doc
-        .createAccessor(clip.name + '_' + nodeName + '_output')
+        .createAccessor(`${clip.name}_${nodeName}_output`)
         .setArray(new Float32Array(track.values))
         .setType(valueType)
         .setBuffer(buf);
@@ -2197,7 +2197,7 @@ function collectMeshStats(root: THREE.Object3D): MeshStats[] {
     const tri = idx ? idx.count / 3 : (geo.getAttribute('position')?.count ?? 0) / 3;
 
     const box = new THREE.Box3().setFromObject(obj);
-    if (!isFinite(box.min.x) || !isFinite(box.max.x)) {
+    if (!Number.isFinite(box.min.x) || !Number.isFinite(box.max.x)) {
       return;
     }
     const center = new THREE.Vector3();
@@ -2334,7 +2334,7 @@ export function inspectSceneStructure(
         nearest && nearestGap
           ? ` Fix: shift "${a.name}" by [${nearestGap.x.toFixed(3)}, ${nearestGap.y.toFixed(3)}, ${nearestGap.z.toFixed(3)}] toward "${nearest.name}", or call snapTo(part, hostPart) to do it automatically.`
           : '';
-      floaters.push(`${a.name}${fix ? ' —' + fix : ''}`);
+      floaters.push(`${a.name}${fix ? ` —${fix}` : ''}`);
     }
     if (floaters.length > 0) {
       warnings.push(
