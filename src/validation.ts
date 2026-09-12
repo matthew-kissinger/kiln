@@ -96,7 +96,7 @@ function estimateGeometryTris(name: string, args: readonly acorn.Expression[]): 
 
   /** Numeric property off an options-object literal arg (e.g. gearGeo({ teeth: 16 })). */
   function asObjNum(node: acorn.Expression | undefined, prop: string): number | null {
-    if (!node || node.type !== 'ObjectExpression') return null;
+    if (node?.type !== 'ObjectExpression') return null;
     for (const p of node.properties) {
       if (
         p.type === 'Property' &&
@@ -1132,7 +1132,7 @@ function loopMultiplier(ancestors: readonly acorn.Node[]): number {
   for (const node of ancestors) {
     if (node.type !== 'ForStatement') continue;
     const f = node as acorn.ForStatement;
-    if (!f.test || f.test.type !== 'BinaryExpression') continue;
+    if (f.test?.type !== 'BinaryExpression') continue;
     const { operator, right } = f.test;
     if (operator !== '<' && operator !== '<=') continue;
     if (right.type !== 'Literal' || typeof right.value !== 'number') continue;

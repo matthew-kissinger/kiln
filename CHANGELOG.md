@@ -3,6 +3,37 @@
 Changes to `@kiln/engine`. Source and installable packages are distributed through
 GitHub. The package is not published on the npm registry.
 
+## The lint baseline is zero, and stays zero — 2026-09-12
+
+- `bun run lint` reported **14 warnings and 11 infos** and exited 0. All 25 are fixed;
+  the tree now reports nothing. The point is not tidiness: a baseline everyone agrees to
+  ignore is a baseline the twenty-sixth finding arrives invisible against.
+- Two of them were not style. `isFinite` in the render inspector is the coercing global,
+  where `Number.isFinite` is not — identical on a `Box3` component, taken because the next
+  caller to pass something looser is the one the coercion silently accepts. And
+  `ids.forEach((id, i) => index.set(id, i))` in the Bradley-Terry fit returned the map
+  from a callback whose contract discards it; the index is built from its pairs instead.
+- Three `any` bounds in `buildSandboxGlobals` carried
+  `// eslint-disable-next-line @typescript-eslint/no-explicit-any`. This repository lints
+  with Biome and has no ESLint config, so those suppressed nothing while reading as
+  reviewed-and-accepted. Rather than translate them, the `any` is gone: `never[]` is the
+  correct bound for "any parameter list" and `unknown` for "any return", with one narrow
+  assertion where tsc resolves a call through the constraint and can only see `unknown`.
+- The quaternion fixture's `0.7071` is now `Math.SQRT1_2` — exact, and it says which angle
+  a quarter turn about Y actually is.
+- **Warnings now fail.** `lint` runs with `--error-on-warnings`, and because that flag
+  does not reach Biome's info severity — where `useTemplate` and several others sit by
+  default — the seven rules this cleanup touched carry an explicit `error` in
+  `biome.json`. Each of the seven was verified by reintroducing its defect and confirming
+  the gate fails and names the rule.
+- The `useIterableCallbackReturn: "warn"` downgrade is gone with the finding it was
+  written around. A test asserts the seven severities and the `lint` script itself: a rule
+  lowered to keep a build green is indistinguishable from a rule nobody wanted, and that
+  has happened here before.
+- `CONTRIBUTING.md` says the contract plainly — the tree reports nothing, so any
+  diagnostic a change produces belongs to that change, to fix or to suppress with a
+  `biome-ignore` comment that says why.
+
 ## The gates stop reporting and start blocking — 2026-09-12
 
 - **The Windows job blocks.** It landed reporting-only on purpose, because the fault it

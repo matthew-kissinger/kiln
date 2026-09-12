@@ -83,8 +83,9 @@ export function fitBradleyTerry(
   }
   const ids = [...idSet].sort(); // sort -> deterministic indexing
   const n = ids.length;
-  const index = new Map<string, number>();
-  ids.forEach((id, i) => index.set(id, i));
+  // Built from the pairs rather than filled by forEach: `Map#set` returns the map, so
+  // the one-expression arrow returned a value the callback's contract discards.
+  const index = new Map<string, number>(ids.map((id, i): [string, number] => [id, i]));
 
   // Pairwise comparison counts and per-item win/game tallies.
   // pairCount[i][j] = number of comparisons between i and j (symmetric).

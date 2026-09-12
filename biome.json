@@ -22,9 +22,15 @@
     "enabled": true,
     "rules": {
       "preset": "recommended",
-      "style": { "noNonNullAssertion": "off" },
-      "complexity": { "useLiteralKeys": "off" },
-      "suspicious": { "useIterableCallbackReturn": "warn" }
+      "style": { "noNonNullAssertion": "off", "useTemplate": "error" },
+      "complexity": { "useLiteralKeys": "off", "useOptionalChain": "error" },
+      "correctness": { "noUnusedImports": "error" },
+      "suspicious": {
+        "noApproximativeNumericConstant": "error",
+        "noExplicitAny": "error",
+        "noGlobalIsFinite": "error",
+        "useIterableCallbackReturn": "error"
+      }
     }
   },
   "assist": { "enabled": false }

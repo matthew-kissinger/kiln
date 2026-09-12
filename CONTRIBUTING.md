@@ -19,6 +19,10 @@ bun run test
 bun run test:coverage
 ```
 
+`lint` reports **nothing** on a clean tree, and a warning fails it. There is no
+tolerated baseline to compare against, so any diagnostic your change produces is
+yours -- either fix it, or suppress it with a `biome-ignore` comment that says why.
+
 For behavior changes, first add a focused failing test, then make the smallest fix
 and run the relevant checks. Keep the coverage thresholds. Ordinary tests use CPU
 rendering and make no model calls. Live provider tests are optional and can spend

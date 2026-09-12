@@ -125,7 +125,7 @@ function makeOpenRouterModel(opts) {
 }
 var trimmedEnv = (k) => {
   const v = process.env[k];
-  return v && v.trim() ? v.trim() : undefined;
+  return v?.trim() ? v.trim() : undefined;
 };
 var META_MODEL_API_BASE_URL = "https://api.meta.ai/v1";
 function metaApiKey(opts) {

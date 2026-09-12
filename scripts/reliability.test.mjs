@@ -49,6 +49,29 @@ describe('repository reliability contracts', () => {
     expect(pkg.scripts['test:coverage']).toBe(
       'KILN_SPIKE_LIVE=0 KILN_RENDER=cpu bun test src scripts --coverage && bun scripts/check-coverage.mjs',
     );
+    // A warning baseline is a number kept in prose that everyone agrees to ignore, and
+    // the twenty-sixth finding arrives invisible. The tree reports nothing, so the flag
+    // that makes a warning fatal is part of the contract rather than a preference.
+    expect(pkg.scripts['lint']).toBe('biome check --error-on-warnings .');
+    // `--error-on-warnings` does not cover Biome's info severity, which is where several
+    // of these sit by default, so the rules this repository has actually cleaned carry an
+    // explicit `error`. Asserted rather than trusted because the downgrade has happened
+    // here before: `useIterableCallbackReturn` was pinned to `warn` around a single
+    // finding, and a rule quietly lowered to keep a build green is indistinguishable from
+    // a rule nobody wanted.
+    const biome = JSON.parse(await readText('biome.json'));
+    const severities = Object.assign({}, ...Object.values(biome.linter.rules).filter((group) => typeof group === 'object'));
+    for (const rule of [
+      'useTemplate',
+      'useOptionalChain',
+      'noUnusedImports',
+      'noApproximativeNumericConstant',
+      'noExplicitAny',
+      'noGlobalIsFinite',
+      'useIterableCallbackReturn',
+    ]) {
+      expect(severities[rule], `${rule} must stay at error`).toBe('error');
+    }
     // Views must be byte-reproducible: a runner that happens to reach a GPU render
     // service must not be able to change what the golden-image tests compare.
     expect(pkg.scripts['test']).toContain('KILN_RENDER=cpu');
