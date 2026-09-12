@@ -174,6 +174,8 @@ describe('repository reliability contracts', () => {
     // required. Conditional workflow, unrequired; unconditional workflow, required.
     const REQUIRED_CHECKS = [
       'build portable Node package',
+      'Node package \u00b7 Linux',
+      'Node package \u00b7 Windows',
       'Node package \u00b7 macOS arm64',
       'Node package \u00b7 macOS x64',
       'render service tests',

@@ -1,0 +1,115 @@
+/**
+ * Check one platform's package-smoke receipt against what the release claims.
+ *
+ * This lived as a ~400 character `node -e` one-liner inside the macOS job, which was
+ * tolerable at one platform and is not at four: the expected platform differs per job,
+ * so triplicating it means three chances to assert `darwin` on a Linux runner and have
+ * the receipt pass anyway. A receipt that cannot fail is not evidence.
+ *
+ * The expected Node and npm versions are read from `engines` rather than written here,
+ * so `check-toolchain.mjs` stays the single source for them. `engineVersion` is checked
+ * against `package.json` for the same reason a release attaches these files at all --
+ * a receipt that does not name the version it exercised cannot be matched to a tarball.
+ *
+ * Usage:
+ *   node scripts/verify-package-receipt.mjs --platform linux --arch x64
+ *   node scripts/verify-package-receipt.mjs --platform win32 --arch x64 --receipt r.json
+ */
+import { createHash } from 'node:crypto';
+import { readFile } from 'node:fs/promises';
+import { dirname, isAbsolute, join, resolve } from 'node:path';
+import { fileURLToPath } from 'node:url';
+
+/** Checks the smoke run must report, named individually so a silent drop is a failure. */
+const REQUIRED_CHECKS = [
+  'packaged-node-worker',
+  'source-reference-edit-images',
+  'server-restart-persistence',
+  'exact-source-export',
+];
+
+const PLATFORMS = new Set(['darwin', 'linux', 'win32']);
+
+function option(argv, name) {
+  const at = argv.indexOf(`--${name}`);
+  return at === -1 ? undefined : argv[at + 1];
+}
+
+export function receiptProblems(receipt, { platform, arch, manifest }) {
+  const problems = [];
+  const mustBe = (actual, wanted, label) => {
+    if (actual !== wanted) problems.push(`${label}: expected ${wanted}, receipt says ${actual}`);
+  };
+
+  mustBe(receipt.status, 'passed', 'status');
+  mustBe(receipt.platform, platform, 'platform');
+  mustBe(receipt.arch, arch, 'arch');
+  // `engines.node` is bare; the receipt records what `node --version` prints.
+  mustBe(receipt.node, `v${manifest.engines.node}`, 'node');
+  mustBe(receipt.npm, manifest.engines.npm, 'npm');
+  mustBe(receipt.engineVersion, manifest.version, 'engineVersion');
+
+  for (const check of REQUIRED_CHECKS) {
+    if (!receipt.checks?.includes(check)) problems.push(`missing check: ${check}`);
+  }
+  return problems;
+}
+
+export async function verifyReceipt(argv, root) {
+  const platform = option(argv, 'platform');
+  const arch = option(argv, 'arch');
+  if (!PLATFORMS.has(platform)) {
+    throw new Error(`--platform must be one of ${[...PLATFORMS].join(', ')}; got ${platform}`);
+  }
+  if (!arch) throw new Error('--arch is required');
+
+  const receiptPath = option(argv, 'receipt') ?? 'package-smoke.json';
+  const resolved = isAbsolute(receiptPath) ? receiptPath : join(root, receiptPath);
+  const receipt = JSON.parse(await readFile(resolved, 'utf8'));
+  const manifest = JSON.parse(await readFile(join(root, 'package.json'), 'utf8'));
+
+  const problems = receiptProblems(receipt, { platform, arch, manifest });
+
+  // Hashed last: it is the only check that reads a second file, and a receipt naming a
+  // tarball that is gone should say so rather than crash before the cheap checks run.
+  //
+  // `--tarball` overrides the path the receipt recorded, which is what makes this usable
+  // twice. In the job, the receipt names a tarball sitting right there and the default is
+  // right. At release-assembly time the receipts are downloaded artifacts whose recorded
+  // absolute paths belong to a runner that no longer exists -- but their `tarballSha256`
+  // is exactly what has to be checked against the file about to be published.
+  const tarball = option(argv, 'tarball') ?? receipt.tarball;
+  if (typeof receipt.tarballSha256 !== 'string' || receipt.tarballSha256.length === 0) {
+    problems.push('tarballSha256: missing');
+  } else {
+    try {
+      const actual = createHash('sha256')
+        .update(await readFile(tarball))
+        .digest('hex');
+      if (actual !== receipt.tarballSha256) {
+        problems.push(
+          `tarballSha256: ${tarball} hashes to ${actual}, receipt says ${receipt.tarballSha256}`,
+        );
+      }
+    } catch (error) {
+      problems.push(`tarball: ${tarball} unreadable (${error.code ?? error.message})`);
+    }
+  }
+  return problems;
+}
+
+const direct =
+  process.argv[1] && resolve(process.argv[1]) === resolve(fileURLToPath(import.meta.url));
+
+if (direct) {
+  const root =
+    option(process.argv, 'root') ?? resolve(dirname(fileURLToPath(import.meta.url)), '..');
+  const problems = await verifyReceipt(process.argv, root);
+  if (problems.length > 0) {
+    console.error(`Package receipt rejected:\n  ${problems.join('\n  ')}`);
+    process.exit(1);
+  }
+  console.log(
+    `Package receipt accepted: ${option(process.argv, 'platform')} ${option(process.argv, 'arch')}`,
+  );
+}

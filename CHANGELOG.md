@@ -3,6 +3,37 @@
 Changes to `@kiln/engine`. Source and installable packages are distributed through
 GitHub. The package is not published on the npm registry.
 
+## All four platform receipts come from CI now — 2026-09-12
+
+- The 2026-09-05 release attached `linux-package.json` and `windows-package.json`, but
+  `test:package` ran only in the macOS job — so two of the four platforms a release
+  attests to had **no reproducible source** and were produced by hand. `linux-package`
+  and `windows-package` jobs close that; CI now emits the tarball and all four receipts
+  from one run.
+- The receipt check left the workflow. It was a ~400-character `node -e` one-liner inside
+  the macOS job, which is tolerable at one platform and not at four: the expected platform
+  differs per job, so copying it is three chances to assert `darwin` on a Linux runner and
+  have the receipt pass anyway. **A receipt that cannot fail is not evidence.** It is now
+  `scripts/verify-package-receipt.mjs`, one line in each of the four jobs.
+- Extracting it bought two things beyond deduplication. Expected Node and npm versions
+  come from `engines` rather than being written a second time, so `check-toolchain.mjs`
+  stays the single source; and because the receipt records `engineVersion`, each platform
+  receipt is now checked against `package.json` — so a release's receipts are tied to its
+  version rather than merely sitting beside it.
+- `--tarball` overrides the path the receipt recorded, which is what makes one verifier
+  serve both uses. In the job the receipt names a tarball sitting right there. At
+  release-assembly time the receipts are downloaded artifacts whose absolute paths belong
+  to a runner that no longer exists — but their `tarballSha256` is exactly what must be
+  checked against the file about to be published.
+- Verified against a real receipt rather than only fixtures: the Linux smoke was run on a
+  Linux host first (16 checks, `engineVersion 0.7.0`), then that receipt was accepted,
+  **rejected when asked to assert `darwin`** — the precise bug copying the one-liner would
+  have caused — and rejected again after one byte was appended to the tarball, naming both
+  hashes.
+- `REQUIRED_CHECKS` goes to eight, and the gate added two changes ago is what forced that
+  edit: adding a job without deciding whether it gates a merge fails the suite. First time
+  one of this phase's gates caught the next change instead of a past one.
+
 ## 0.7.0 — the version moves with what ships — 2026-09-12
 
 - `version` sat at `0.6.0` from the OSS release through **21 shipped changes**, while CI

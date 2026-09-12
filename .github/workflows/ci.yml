@@ -234,15 +234,92 @@ jobs:
           test "$#" -eq 1
           npm run --silent test:package -- --tarball "$1" | tee package-smoke.json
       - name: Verify the retained smoke receipt
-        env:
-          EXPECTED_ARCH: ${{ matrix.arch }}
-        run: >-
-          node -e "const fs=require('node:fs'),assert=require('node:assert/strict'),crypto=require('node:crypto');const r=JSON.parse(fs.readFileSync('package-smoke.json','utf8'));assert.equal(r.status,'passed');assert.equal(r.platform,'darwin');assert.equal(r.arch,process.env.EXPECTED_ARCH);assert.equal(r.node,'v22.23.2');assert.equal(r.npm,'12.0.2');assert.equal(r.tarballSha256,crypto.createHash('sha256').update(fs.readFileSync(r.tarball)).digest('hex'));for(const check of ['packaged-node-worker','source-reference-edit-images','server-restart-persistence','exact-source-export'])assert(r.checks.includes(check));"
+        run: node scripts/verify-package-receipt.mjs --platform darwin --arch ${{ matrix.arch }}
       - name: Retain macOS package receipt
         if: always()
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
         with:
           name: macos-package-${{ matrix.arch }}
+          path: package-smoke.json
+          if-no-files-found: warn
+          retention-days: 14
+
+  # Linux and Windows package receipts existed in the 2026-09-05 release and were made by
+  # hand: `test:package` ran only in the macOS job, so two of the four platforms a release
+  # attests to had no reproducible source. These two jobs close that, and deliberately
+  # mirror `macos-package` step for step rather than sharing a composite action -- the
+  # differences that matter (host assertion, receipt platform, artifact name) are exactly
+  # the ones a shared action would hide behind inputs.
+  linux-package:
+    name: Node package · Linux
+    needs: package-candidate
+    timeout-minutes: 20
+    runs-on: ubuntu-22.04
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+      # Consumers install only Node/npm. Bun builds the tarball in the separate producer job.
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
+        with:
+          node-version: 22.23.2
+      - run: npm install --global npm@12.0.2
+      - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4.3.0
+        with:
+          name: node-package-candidate
+          path: candidate
+      - name: Verify native host
+        run: node -e "if(process.platform!=='linux')process.exit(1);console.log(process.platform,process.arch,process.version)"
+      - name: Install and exercise the end-user distribution
+        shell: bash
+        run: |
+          set -euo pipefail
+          set -- "$PWD"/candidate/*.tgz
+          test "$#" -eq 1
+          npm run --silent test:package -- --tarball "$1" | tee package-smoke.json
+      - name: Verify the retained smoke receipt
+        run: node scripts/verify-package-receipt.mjs --platform linux --arch x64
+      - name: Retain Linux package receipt
+        if: always()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: linux-package
+          path: package-smoke.json
+          if-no-files-found: warn
+          retention-days: 14
+
+  windows-package:
+    name: Node package · Windows
+    needs: package-candidate
+    timeout-minutes: 30
+    runs-on: windows-2022
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
+        with:
+          node-version: 22.23.2
+      - run: npm install --global npm@12.0.2
+      - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4.3.0
+        with:
+          name: node-package-candidate
+          path: candidate
+      - name: Verify native host
+        run: node -e "if(process.platform!=='win32')process.exit(1);console.log(process.platform,process.arch,process.version)"
+      # bash, not pwsh: the glob expansion and the single-tarball assertion below are the
+      # same on every platform, and Windows runners ship Git bash. 13.4's Windows reds
+      # were real defects, so this job gets the same 30-minute bound that one does.
+      - name: Install and exercise the end-user distribution
+        shell: bash
+        run: |
+          set -euo pipefail
+          set -- "$PWD"/candidate/*.tgz
+          test "$#" -eq 1
+          npm run --silent test:package -- --tarball "$1" | tee package-smoke.json
+      - name: Verify the retained smoke receipt
+        run: node scripts/verify-package-receipt.mjs --platform win32 --arch x64
+      - name: Retain Windows package receipt
+        if: always()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: windows-package
           path: package-smoke.json
           if-no-files-found: warn
           retention-days: 14
