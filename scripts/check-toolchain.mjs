@@ -1,10 +1,21 @@
 import { spawnSync } from 'node:child_process';
 import { readFile } from 'node:fs/promises';
+import { resolve } from 'node:path';
+import { pathToFileURL } from 'node:url';
 
 const filesOnly = process.argv.includes('--files-only');
-const packageJson = JSON.parse(await readFile(new URL('../package.json', import.meta.url), 'utf8'));
-const workflow = await readFile(new URL('../.github/workflows/ci.yml', import.meta.url), 'utf8');
-const pages = await readFile(new URL('../.github/workflows/pages.yml', import.meta.url), 'utf8');
+// The tree to inspect, so the gate's own test can run it against a staged copy with
+// one value mutated. Defaults to this repository, which is every real invocation.
+// Every rule below reads through `at()` -- a rule that reaches for `import.meta.url`
+// directly would silently pass against the real repo no matter what the test staged.
+const rootFlag = process.argv.find((argument) => argument.startsWith('--root='));
+const root = rootFlag
+  ? pathToFileURL(`${resolve(rootFlag.slice('--root='.length))}/`)
+  : new URL('../', import.meta.url);
+const at = (name) => new URL(name, root);
+const packageJson = JSON.parse(await readFile(at('package.json'), 'utf8'));
+const workflow = await readFile(at('.github/workflows/ci.yml'), 'utf8');
+const pages = await readFile(at('.github/workflows/pages.yml'), 'utf8');
 
 const expectedPackageManager = 'bun@1.4.2';
 const expectedEngines = { bun: '1.4.2', node: '22.23.2', npm: '12.0.2' };
@@ -48,18 +59,34 @@ if (!new RegExp(`^\\s*bun-version:\\s*${expectedEngines.bun}\\s*$`, 'mu').test(p
 // the engine and the service and missed the site, which is why this is a gate and
 // not a note: the same class of drift had already been caught in the prose that
 // morning, by a person, hours earlier.
-const threeManifests = ['package.json', 'render-service/package.json', 'site/package.json'];
+const manifests = ['package.json', 'render-service/package.json', 'site/package.json'];
 const threePins = new Map();
-for (const name of threeManifests) {
-  const manifest = JSON.parse(await readFile(new URL(`../${name}`, import.meta.url), 'utf8'));
+/** Leading range operator off a pin, so `^19.3.0` and `19.3.0` compare the same. */
+const release = (range) => String(range).replace(/^[\^~><=\s]+/u, '');
+/** The release line a pin belongs to: `0.186.0` -> `0.186`, `19.3.0` -> `19.3`. */
+const line = (range) => release(range).split('.').slice(0, 2).join('.');
+/** `@types/react-dom` -> `react-dom`, `@types/a__b` -> `@a/b` (the DefinitelyTyped rule). */
+const runtimeOf = (types) => {
+  const stem = types.slice('@types/'.length);
+  return stem.includes('__') ? `@${stem.replace('__', '/')}` : stem;
+};
+for (const name of manifests) {
+  const manifest = JSON.parse(await readFile(at(name), 'utf8'));
   const deps = { ...manifest.dependencies, ...manifest.devDependencies };
   if (deps.three !== undefined) threePins.set(name, deps.three);
-  // `@types/three` tracks three's minor. A caret range is fine; a DIFFERENT minor is
-  // the bug, because the types then describe a release the runtime is not running.
-  if (deps['@types/three'] !== undefined) {
-    const wanted = String(deps.three ?? threePins.get('package.json') ?? '').split('.').slice(0, 2).join('.');
-    if (wanted && !String(deps['@types/three']).replace(/^[\^~]/u, '').startsWith(`${wanted}.`)) {
-      errors.push(`${name}: @types/three ${deps['@types/three']} does not track three ${wanted}.x`);
+  // Types track their runtime's release line. A caret range is fine; a DIFFERENT line
+  // is the bug, because the types then describe a release the runtime is not running:
+  // new API is invisible to tsc and removed API still typechecks. Stated once, over
+  // every `@types/*` in the tree, rather than per package -- the rule was written for
+  // `@types/three` and holds identically for `@types/react`, which the site compiles
+  // its @react-three/fiber JSX against. A types package whose runtime this manifest
+  // does not pin is skipped: there is nothing here to be out of step with.
+  for (const types of Object.keys(deps).filter((key) => key.startsWith('@types/'))) {
+    const runtime = runtimeOf(types);
+    if (deps[runtime] === undefined) continue;
+    const wanted = line(deps[runtime]);
+    if (wanted && !release(deps[types]).startsWith(`${wanted}.`)) {
+      errors.push(`${name}: ${types} ${deps[types]} does not track ${runtime} ${wanted}.x`);
     }
   }
 }
@@ -85,7 +112,7 @@ const guidance = [
   ],
 ];
 for (const [name, phrases] of guidance) {
-  const body = await readFile(new URL(`../${name}`, import.meta.url), 'utf8');
+  const body = await readFile(at(name), 'utf8');
   for (const phrase of phrases) {
     if (!body.includes(phrase)) errors.push(`${name} must state the supported toolchain: ${phrase}`);
   }
