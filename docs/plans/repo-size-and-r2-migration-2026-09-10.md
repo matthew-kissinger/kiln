@@ -2092,6 +2092,7 @@ re-measured since the day it was written.
 | 15.7 | `--receipt` resolved against `root`, not the working directory | **Done 2026-09-12.** Found by assembling the release. See below |
 | 15.8 | `v0.7.0` released | **Done 2026-09-12.** Tag `v0.7.0` at `44b4bc8`; four receipts and `SHA256SUMS.txt` from one CI run, each verified against the published tarball |
 | 15.9 | The Windows failure was a real bug in the alias lock, not a flake | **Found and fixed 2026-09-12.** `mkdir` contention on Windows reports `EPERM`/`EACCES`, which was rethrown. See below |
+| 15.10 | Post-release polish: is the repository actually pickup-ready? | **Done 2026-09-12.** Measured rather than asserted; two stale docs and one comprehension trap found. See below |
 
 ### 15.1 -- the tag is the whole rewrite, on the clone side too
 
@@ -2443,3 +2444,55 @@ rerun, ten green runs behind it" is a description that fits both a flake and a r
 and the reflex was to treat the frequency as the diagnosis. The distinguishing evidence
 cost nothing to read. This sits alongside 15.3 and 15.7: there an assertion was true and
 measured nothing; here an explanation was plausible and measured nothing.
+
+
+### 15.10 -- measuring "easy to pick up" instead of claiming it
+
+The new-developer path was run rather than reviewed, in a fresh `--filter=blob:none` clone:
+
+| Step, exactly as the README gives it | Time |
+| --- | --- |
+| `git clone --filter=blob:none ...` | 4 s |
+| `bun install --frozen-lockfile` | 26 s |
+| `bun run kiln render examples/crate.kiln.js --out crate.glb --views sheet.png` | 1 s |
+
+About half a minute from nothing to a 324-triangle GLB and a rendered sheet. The
+contributor path was run in that same clone, including the step 15.3 had documented but
+never tested from scratch: `npm --prefix render-service ci --ignore-scripts` in 2 s, then
+`bun run test:render-service` at 37 pass. `check:toolchain`, `check:skills`, `typecheck`
+and `lint` all clean on first run.
+
+Three things were wrong, and all three were doc rot rather than code:
+
+**`docs/install.md` was directing readers away from the release.** Its "Release
+compatibility" section named `kiln-engine-0.6.0.tgz`, an eight-tool surface, and five
+tools the package lacked, closing with "use the checkout installation below **until an
+updated package is released**" -- the exact condition 15.8 had just changed. Checked by
+driving the published tarball's own MCP server over stdio rather than reasoning from the
+registry: 13 tools, including all five named as absent.
+
+The section was fragile because it restated facts that live in gated files. `docs/tools.md`
+is already generated from the registry and drift-checked (14.8), so prose repeating it is a
+second copy that nothing verifies. It now links the latest release and the tool reference,
+and a test enforces that: install guidance may not hard-code a tarball version and must
+point at `releases/latest` and `tools.md`. Scoped to the docs that tell a reader how to
+*obtain* the package -- `CONTRIBUTING.md` keeps its `kiln-engine-0.6.0.tgz`, where the
+filename is the evidence for why the version policy exists. Explaining a past artifact is
+not directing a download, and the first draft of the gate did not make that distinction and
+failed on it.
+
+**`docs/migration.md`** still said the package version was held at `0.6.0` "until release
+review".
+
+**The two tool registries were a comprehension trap**, and this one came from a question
+rather than a grep. `AGENTS.md` said two skins consume `registry.ts`, which reads as one
+shared list; in fact `kilnToolRegistry` is the in-process loop's four tools and
+`createKilnProgramToolRegistry` is the MCP surface's thirteen. The honest answer about the
+one differing name is that **`kiln_screenshot` is merged, not missing**: in-process,
+`kiln_render` returns metrics only and `kiln_screenshot` carries the six-view grid, so a
+cheap structural check need not pay for an image; on MCP, `kiln_render` holds
+`media: screenshotMedia` and returns metrics, part paths and images together, defaulting to
+six views when `capture` is omitted. A separate screenshot tool there would be a second way
+to ask for the same grid. The parity test pins the absence, and the first version of this
+note cited that test as if it were the reason -- a test records a decision, it does not
+explain it.

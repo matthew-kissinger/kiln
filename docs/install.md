@@ -30,15 +30,21 @@ For agent-assisted installation, give your agent the repository URL and ask:
 
 ## Release compatibility
 
-The downloadable `oss-2026-09-05` package (`kiln-engine-0.6.0.tgz`) exposes eight
-MCP tools: discovery, validation, rendering, animation/interior views, inspection,
-editing and source access. A fresh September 8 install verified discovery and a
-CPU-rendered PNG. That package predates `kiln_save`, `kiln_assets`, `kiln_export`,
-`kiln_present` and `kiln_import`; saved-asset examples require the newer checkout.
+Install the [latest release](https://github.com/matthew-kissinger/kiln/releases/latest).
+It carries the full tool set, including `kiln_save`, `kiln_assets`, `kiln_export`,
+`kiln_present` and `kiln_import` -- the five that the earlier `oss-2026-09-05` package
+predated, which is why that one needed a checkout instead. The
+[generated tool reference](tools.md) is the list the release actually advertises; a test
+fails if the two drift apart, so it does not need repeating here.
 
-Use the checkout installation below for that tool set until an updated package is
-released. A successful local build or unreleased fix does not update the GitHub
-release. Do not substitute an unverified npm registry package.
+Every release attaches a per-platform package receipt (Linux, Windows, macOS arm64,
+macOS x64) and `SHA256SUMS.txt`. Each receipt records the sha256 of the tarball beside
+it and is checked against that exact file before publication, so you can verify what you
+downloaded rather than trusting the filename.
+
+A successful local build or an unreleased fix does not update the GitHub release: a
+checkout can be ahead of it. Do not substitute an unverified npm registry package -- this
+package is distributed through GitHub and is deliberately not published to npm.
 
 ## Start on a Mac with a local package
 

@@ -277,6 +277,33 @@ describe('repository reliability contracts', () => {
     }
   });
 
+  // `docs/install.md` spent a release cycle telling readers to use a checkout "until an
+  // updated package is released", naming `kiln-engine-0.6.0.tgz` and an eight-tool surface.
+  // All three facts were true when written and none survived the next release: the
+  // published package advertises thirteen tools and carries the five that section says it
+  // lacks. The doc was fragile because it restated facts that live in gated files.
+  //
+  // So the rule is about duplication, not about the number: a guide may link to the tool
+  // reference and the releases page, and may not hard-code a tarball version that has to
+  // be remembered. CHANGELOG.md is exempt -- naming exact versions is what it is for.
+  test('install guidance does not hard-code a release tarball version', async () => {
+    // Scoped to the docs that tell a reader how to OBTAIN the package. `CONTRIBUTING.md`
+    // names `kiln-engine-0.6.0.tgz` on purpose and keeps it: there, the filename is the
+    // evidence for why the version policy exists -- two people held that exact name and
+    // had different software. Explaining a past artifact is not directing a download.
+    const guides = ['README.md', 'docs/install.md', 'docs/migration.md'];
+    for (const guide of guides) {
+      const text = await readText(guide);
+      const pinned = [...text.matchAll(/kiln-engine-(\d+\.\d+\.\d+)\.tgz/gu)].map(([, v]) => v);
+      // A guide that names one is asserting something it cannot keep true.
+      expect({ guide, pinned }).toEqual({ guide, pinned: [] });
+    }
+    // And the replacement has to actually point somewhere that is kept current.
+    const install = await readText('docs/install.md');
+    expect(install).toContain('releases/latest');
+    expect(install).toContain('tools.md');
+  });
+
   test('standalone agent context stays concise and names the safety-critical paths', async () => {
     const agents = await readText('AGENTS.md');
 
