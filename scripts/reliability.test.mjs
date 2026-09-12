@@ -219,6 +219,39 @@ describe('repository reliability contracts', () => {
     expect(readme).toContain('git gc --prune=now');
   });
 
+  // The documented offline gate ran neither `check:skills` nor render-service's 37
+  // tests. CI ran both -- the first as a step in `checks`, the second as its own job
+  // added by 13.7 -- so a contributor editing `render-service/` got no local signal at
+  // all and found out from a red pull request. The subsystem cannot fold into
+  // `bun test src scripts`: it is a separate npm project with its own lockfile and a
+  // native dependency, so it gets its own script instead.
+  //
+  // The general defect is a documented command that does not exist, or exists and is
+  // never named. Both directions are checked here rather than the one that prompted it.
+  test('every command the agent guide tells you to run exists', async () => {
+    const agents = await readText('AGENTS.md');
+    const scripts = (await readJson('package.json')).scripts ?? {};
+
+    const named = [...agents.matchAll(/`?bun run ([\w:-]+)/gu)].map(([, name]) => name);
+    expect(named.length).toBeGreaterThan(0);
+    for (const name of new Set(named)) expect(Object.keys(scripts)).toContain(name);
+
+    // The other direction, and it has to read the gate BLOCK rather than the whole
+    // file: the prose below the block names these scripts too, so "mentioned in
+    // AGENTS.md" stays true after someone deletes the line that actually tells you to
+    // run them. Checking the fenced block was the difference between this assertion
+    // discriminating and not -- deleting the line passed until it was narrowed.
+    const gate = agents.match(/```(?:sh|bash)?\n(bun install --frozen-lockfile\n[\s\S]*?)```/u);
+    expect(gate).not.toBeNull();
+    const gated = [...gate[1].matchAll(/^bun run ([\w:-]+)$/gmu)].map(([, name]) => name);
+    expect(gated).toContain('check:skills');
+    expect(gated).toContain('test:render-service');
+    expect(gated).toContain('test:coverage');
+    // `bun test src scripts` cannot reach render-service; the script is what does.
+    expect(scripts['test:render-service']).toContain('render-service');
+    expect(scripts.test).not.toContain('render-service');
+  });
+
   test('standalone agent context stays concise and names the safety-critical paths', async () => {
     const agents = await readText('AGENTS.md');
 

@@ -13,11 +13,20 @@ Read [AGENTS.md](AGENTS.md) and the [README](README.md). Contributor checks use 
 ```sh
 bun install --frozen-lockfile
 bun run check:toolchain
+bun run check:skills
 bun run typecheck
 bun run lint
 bun run test
+bun run test:render-service
 bun run test:coverage
 ```
+
+`bun run test` is `bun test src scripts`, so it never reaches `render-service/` -- a
+separate npm project with its own lockfile and a native dependency.
+`bun run test:render-service` does, after `npm --prefix render-service ci
+--ignore-scripts` once. All 37 of those tests are pure, so none of them needs a GPU or
+the Dawn build; CI requires the job, and before this the only way to find a break in it
+was a red pull request.
 
 `lint` reports **nothing** on a clean tree, and a warning fails it. There is no
 tolerated baseline to compare against, so any diagnostic your change produces is
