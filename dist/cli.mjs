@@ -11620,7 +11620,7 @@ var init_gears = __esm(() => {
 
 // src/ops.ts
 import * as THREE17 from "three";
-import { LoopSubdivision } from "three-subdivide";
+import { LoopSubdivision } from "three-subdivide/build/index.module.js";
 import { mergeVertices as threeMergeVertices } from "three/examples/jsm/utils/BufferGeometryUtils.js";
 function arrayLinear(namePrefix, source, count, offset, parent) {
   const out = [];

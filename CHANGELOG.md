@@ -3,6 +3,39 @@
 Changes to `@kiln/engine`. Source and installable packages are distributed through
 GitHub. The package is not published on the npm registry.
 
+## three.js r186, and the CommonJS load it exposed — 2026-09-11
+
+- `three` and `@types/three` to 0.186.0 in both the engine and `render-service`.
+  The types were the blocker and they shipped; r186's three named breaking changes
+  — `Source` → `TextureSource`, `toTrianglesDrawMode()` mutating in place,
+  `Object3D.dispose()` needing `super.dispose()` — touch nothing here, checked
+  before the bump rather than discovered by it.
+- **`three-subdivide` was pulling three in through the deprecated CommonJS build.**
+  It has no `exports` map, so a bare specifier resolves to `main`, which is a UMD
+  bundle doing `require("three")`. r186 did not create this; it made it audible, by
+  emitting `THREE_CJS_DEPRECATED` on stderr — which every `kiln` CLI invocation
+  would then have printed. Fixed by importing the ESM build the package already
+  ships, `three-subdivide/build/index.module.js`, which has zero `require(` calls.
+  `three-subdivide@1.1.5` is the latest release, so there is no upstream fix to
+  wait for, and three has announced the CJS build's removal.
+- Worth recording because it is tempting and wrong: this does **not** fix a
+  dual-THREE instance hazard. `src/primitives.ts` documents one, and it was
+  measured here rather than assumed — geometry from both the CJS and the ESM build
+  satisfies `instanceof THREE.BufferGeometry`. The `isBufferGeometry` flag tests
+  stay, because they are correct defensively regardless.
+- **The GPU service was requesting a shadow filter that no longer exists.** r186
+  removed the `PCFSoftShadowMap` implementation while keeping the constant; three
+  warns and substitutes `PCFShadowMap`. `render-service` now names the filter it
+  actually gets. Material conformance returns numbers identical in every region
+  before and after, which is the proof the substitution was already happening.
+- Verified on hardware, not only offline: 1,831 pass / 0 fail, typecheck clean,
+  lint at the unchanged 14/11 baseline, and `material-conformance` `PASS` on
+  `dawn-vulkan` across all six channels. One number to watch —
+  `normalHalfLumaDelta` moved 1.51 → 1.2 against a threshold of 1, consistent with
+  r186's diffuse energy-conservation change. It passes with less margin than 11.5
+  measured, which is an argument for that row's follow-up rather than for a new
+  threshold.
+
 ## The guide was pinning a toolchain the gate rejects — 2026-09-11
 
 - `AGENTS.md`, `CONTRIBUTING.md`, `README.md`, `docs/google.md` and
