@@ -13,11 +13,19 @@ try {
   assert.equal(manifest.name, 'kiln-chatgpt');
   const mapping = JSON.parse(await readFile(join(result.directory, '.app.json')));
   assert.equal(mapping.apps.kiln.id, 'plugin_asdk_app_test');
-  assert.match(await readFile(join(result.directory, 'skills/kiln-author-asset/references/program-contract.md'), 'utf8'), /build/);
+  assert.match(
+    await readFile(
+      join(result.directory, 'skills/kiln-author-asset/references/program-contract.md'),
+      'utf8',
+    ),
+    /build/,
+  );
   await assert.rejects(packagePlugin(result.directory, 'plugin_asdk_app_test'), /exist/i);
   await assert.rejects(packagePlugin(join(root, 'invalid'), 'https://example.com'), /connector ID/);
   assert.ok(result.files > 5);
-  console.error('Plugin packaging passed: complete skill references, exact connector binding, no overwrite.');
+  console.error(
+    'Plugin packaging passed: complete skill references, exact connector binding, no overwrite.',
+  );
 } finally {
   await rm(root, { recursive: true, force: true });
 }

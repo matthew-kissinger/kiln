@@ -87,19 +87,30 @@ async function smoke(name, harness, opts) {
   // but a report that names the model you requested is telling you your own
   // input back, and this script exists to stop doing that.
   const ran = harness.actualModel?.(r.out) ?? null;
-  const used = ran && ran !== String(model ?? '').split('/').pop() ? `${ran} (asked for ${model})` : model;
+  const used =
+    ran &&
+    ran !==
+      String(model ?? '')
+        .split('/')
+        .pop()
+      ? `${ran} (asked for ${model})`
+      : model;
 
   if (!existsSync(file)) {
     // The distinction that matters for a wiring bug: a child that never saw the
     // tools usually says so in as many words, and that reads very differently
     // from a model that tried and produced nothing.
-    const said = /no such tool|not available|don't have|do not have|unable to|no tools/i.test(r.out);
+    const said = /no such tool|not available|don't have|do not have|unable to|no tools/i.test(
+      r.out,
+    );
     return {
       name,
       model: used,
       secs,
       ok: false,
-      why: said ? 'agent reported the Kiln tools were unavailable' : `no program written (exit ${r.code})`,
+      why: said
+        ? 'agent reported the Kiln tools were unavailable'
+        : `no program written (exit ${r.code})`,
       out: r.out,
     };
   }
@@ -141,12 +152,21 @@ async function main() {
     process.stdout.write(`${name.padEnd(9)} running...`);
     const r = await smoke(name, harness, opts);
     results.push(r);
-    console.log(`\r${name.padEnd(9)} ${r.ok ? 'ok  ' : 'FAIL'} ${`${r.secs}s`.padStart(5)}  ${r.model ?? '(configured default)'}  ${r.why}`);
+    console.log(
+      `\r${name.padEnd(9)} ${r.ok ? 'ok  ' : 'FAIL'} ${`${r.secs}s`.padStart(5)}  ${r.model ?? '(configured default)'}  ${r.why}`,
+    );
     // On a failure the sandbox is the only copy of the evidence -- the brief the
     // child was given, its log, and whatever it did or did not write. It stays
     // on disk; `makeSandbox` clears it at the start of the next run anyway.
     if (!r.ok) {
-      console.log(r.out.trim().split('\n').slice(-12).map((l) => `           ${l}`).join('\n'));
+      console.log(
+        r.out
+          .trim()
+          .split('\n')
+          .slice(-12)
+          .map((l) => `           ${l}`)
+          .join('\n'),
+      );
       console.log(`           sandbox: ${join(tmpdir(), 'kiln-dispatch', `smoke-${name}`)}`);
     }
   }
@@ -156,7 +176,9 @@ async function main() {
     console.log('\nno harness CLIs installed; nothing was verified');
     process.exit(2);
   }
-  console.log(`\n${results.length - failed.length}/${results.length} harnesses reached the Kiln tools`);
+  console.log(
+    `\n${results.length - failed.length}/${results.length} harnesses reached the Kiln tools`,
+  );
   process.exit(failed.length === 0 ? 0 : 1);
 }
 

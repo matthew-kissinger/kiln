@@ -33,7 +33,13 @@ const BASE = process.env.KILN_POSTER_BASE ?? 'https://assets.kilnstudio.tools/re
 const sha = (bytes) => createHash('sha256').update(bytes).digest('hex');
 
 /** Images published without a receipt, named individually so the gap is visible. */
-const UNATTESTED = ['tidal-observatory.png', 'carousel.gif', 'orrery.gif', 'radio-telescope.gif', 'robot-arm.gif'];
+const UNATTESTED = [
+  'tidal-observatory.png',
+  'carousel.gif',
+  'orrery.gif',
+  'radio-telescope.gif',
+  'robot-arm.gif',
+];
 
 const entries = await readdir(RECEIPTS);
 const attested = entries.filter((f) => f.endsWith('.json')).sort();
@@ -65,14 +71,18 @@ for (const file of [...attested.map((f) => f.replace(/\.json$/, '.png')), ...UNA
     failures.push(`${file}: served as ${type || 'no content-type'}`);
 
   if (UNATTESTED.includes(file)) continue;
-  const receipt = JSON.parse(await readFile(join(RECEIPTS, file.replace(/\.png$/, '.json')), 'utf8'));
+  const receipt = JSON.parse(
+    await readFile(join(RECEIPTS, file.replace(/\.png$/, '.json')), 'utf8'),
+  );
   if (!receipt.imageHash) {
     failures.push(`${file}: receipt records no imageHash`);
     continue;
   }
   const digest = sha(bytes);
   if (digest !== receipt.imageHash) {
-    failures.push(`${file}: published bytes differ from the receipt.\n  receipt: ${receipt.imageHash}\n  served:  ${digest}`);
+    failures.push(
+      `${file}: published bytes differ from the receipt.\n  receipt: ${receipt.imageHash}\n  served:  ${digest}`,
+    );
     continue;
   }
   hashed += 1;

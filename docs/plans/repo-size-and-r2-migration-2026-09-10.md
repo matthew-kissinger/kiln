@@ -1679,6 +1679,7 @@ the installed tree.
 | 14.1 | Re-ground 7.12 / SEP-2640 against an authoritative source | **Done 2026-09-12.** Deferred still, for a stronger reason. See below |
 | 14.2 | Establish what actually blocks the `ai` 7 family, and gate it | **Done 2026-09-12.** `@strands-agents/sdk@1.17.0` is latest, declares peer `@ai-sdk/provider: ^3.0.0`, and its `VercelModel` is typed on `LanguageModelV3` in 21 places. `@openrouter/ai-sdk-provider@3.0.0` requires `ai: ^7.0.0`; `ai@7.0.99` depends on `@ai-sdk/provider@4.0.14`. The family cannot be taken until Strands ships a release accepting the v4 spec -- no budget changes that. `scripts/peer-ranges.test.mjs` now fails on a peer range the version beside it does not meet, verified by patching the installed `@openrouter/ai-sdk-provider` manifest to peer `ai: ^7.0.0` and watching it report `installed 6.0.282` |
 | 14.3 | Assert the prompt-cache breakpoint on the wire, offline | **Done 2026-09-12.** Both native transports captured in `src/agent/providers.test.ts`, both differential. See below |
+| 14.7 | The rest of `scripts/` under the formatter, now that 14.5 made it free | **Done 2026-09-12.** 480 files where 442 were; every directory holding code is in the surface. Turned up two findings nothing else would have: two `any` in the evaluation host, and a stale generated doc -- see 14.8 |
 | 14.6 | `render-service/` into the lint surface, which needed its line endings settled first | **Done 2026-09-12.** 442 files where 416 were. See below |
 | 14.5 | Give the coverage ratchet a scope, so repo-only code cannot move the engine's contract | **Done 2026-09-12.** Measured over `src/` alone; baseline re-measured at 95.39% functions / 92.59% lines; `lines` raised 92 to 92.1 so the narrowing does not quietly hand back slack. See below |
 | 14.4 | Bring the repository's own gates under the lint gate, which they were never under | **Done 2026-09-12** for the gates and their tests: 416 files checked where 405 were, and the tree reports nothing. The one-off tools beside them are measured and deliberately left, below |
@@ -1890,3 +1891,56 @@ it was outside every lint gate this repository has.
 `reliability.test.mjs` pins both include patterns and asserts the `-text` line stays
 gone, since the next edit to a CRLF-era file is what would reintroduce the mix.
 render-service's own 37 tests pass on the normalized sources.
+
+### 14.7 -- the objection to the rest of `scripts/` was the coverage cost, and 14.5 removed it
+
+14.4 left the one-off tools out and priced the alternative at 26 lint findings, a
+1,530-line reflow, and 162 lines of coverage slack. After 14.5 the third term is
+**zero** -- `scripts/**` is not instrumented at all -- so what remained was a diff
+and a taste question, and the owner's call was to take it.
+
+Thirty-four format findings and thirty-two real ones, over `.mjs` and `.ts` alike
+(the `.ts` files under `scripts/` had never been linted either, since the pattern
+was `src/**/*.ts`). The reflow is +1,993 lines, on repo-only code with tests.
+
+Twenty-five were `useTemplate`, and seventeen of those were one idiom:
+`JSON.stringify(...) + '\n'`, the receipt-file shape, repeated across eleven files.
+Rewritten by walking back from each `) + '\n'` with a depth counter rather than
+matching the argument, because those calls contain nested parens, objects and their
+own string literals -- a regex over them misses the multi-line ones or stops at the
+wrong paren. A shared helper is the obvious DRY move and is deliberately not taken:
+`package-plugin.mjs` is in the package's `files` list, so importing one would mean
+shipping another file for a cosmetic win.
+
+Three findings were not cosmetic:
+
+- **Two `any` in `scripts/evaluation/server.ts`**, the pilot evaluation host.
+  `let previous: any` is read as `previous.config`, `previous?.deadline` and for
+  truthiness, so it is now `{ config?: unknown; deadline?: number } | undefined`.
+  And `args as Record<string, any>` fed a budget estimator that reaches through
+  optional chains -- `Record<string, unknown>` does not typecheck there, which is
+  presumably why it was `any`. It is now a declared `PilotToolInput` naming exactly
+  the fields the image-cell budget depends on, which is documentation the estimator
+  did not have.
+- **`noAssignInExpressions` in `smoke-package.mjs`**: a loop's update step inside its
+  condition, now a `for` header where a reader looks for it.
+- **The literal ESC byte in `harness.mjs`'s ANSI stripper**, invisible in every diff
+  and editor, now `\u001B` with the rule suppressed on the adjacent line -- matching
+  ESC is the point of that expression, not an accident.
+
+### 14.8 -- `docs/tools.md` is stale, and its drift checker runs nowhere
+
+Found by the lint pass touching `generate-tool-reference.ts`.
+`bun run docs:tools --check` exists, reports drift, exits non-zero -- and appears in
+no workflow and no test. The same shape as 13.7, where a shipped subsystem's 37
+tests ran on nobody's machine.
+
+It is drifting now, and the cause is 13.2: `zod` 4.4.3 to 4.6.2 changed
+`z.toJSONSchema` to emit `"items": false`, `"minItems"` and `"maxItems"` for
+fixed-length tuples, so the published tool reference has understated every tuple
+schema since that bump. Verified to predate this phase by stashing the rewrite and
+re-running the check.
+
+Not folded into 14.7: regenerating a shipped document and wiring its gate is its own
+change with its own reasoning, and burying it in a formatting pass is how a doc
+artifact changes without anyone reading why.

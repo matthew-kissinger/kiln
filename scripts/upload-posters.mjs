@@ -27,14 +27,17 @@ const sha = (bytes) => createHash('sha256').update(bytes).digest('hex');
 
 const wrangler = (args) => {
   const run = spawnSync('wrangler', args, { encoding: 'utf8', windowsHide: true });
-  if (run.status !== 0) throw new Error(`wrangler ${args[0]} ${args[1]} failed:\n${run.stderr || run.stdout}`);
+  if (run.status !== 0)
+    throw new Error(`wrangler ${args[0]} ${args[1]} failed:\n${run.stderr || run.stdout}`);
   return run.stdout;
 };
 
 /** A receipt exists only for attested posters; GIFs and previews have none. */
 async function recordedImageHash(name) {
   try {
-    const side = JSON.parse(await readFile(join(REPO, 'examples', `${name}.provenance.json`), 'utf8'));
+    const side = JSON.parse(
+      await readFile(join(REPO, 'examples', `${name}.provenance.json`), 'utf8'),
+    );
     return side.provenance?.posterReceipt?.imageHash ?? null;
   } catch {
     return null;
@@ -43,9 +46,13 @@ async function recordedImageHash(name) {
 
 let files;
 try {
-  files = (await readdir(SOURCE)).filter((f) => Object.keys(TYPES).some((e) => f.endsWith(e))).sort();
+  files = (await readdir(SOURCE))
+    .filter((f) => Object.keys(TYPES).some((e) => f.endsWith(e)))
+    .sort();
 } catch {
-  console.log(`Nothing to publish: ${SOURCE} does not exist. Render first with scripts/hero-shots.ts or scripts/anim-gifs.ts.`);
+  console.log(
+    `Nothing to publish: ${SOURCE} does not exist. Render first with scripts/hero-shots.ts or scripts/anim-gifs.ts.`,
+  );
   process.exit(0);
 }
 if (files.length === 0) {
@@ -70,13 +77,24 @@ try {
       );
 
     const key = `${BUCKET}/${PREFIX}/${file}`;
-    wrangler(['r2', 'object', 'put', key, '--file', join(SOURCE, file), '--content-type', TYPES[extension], '--remote']);
+    wrangler([
+      'r2',
+      'object',
+      'put',
+      key,
+      '--file',
+      join(SOURCE, file),
+      '--content-type',
+      TYPES[extension],
+      '--remote',
+    ]);
 
     // Read it back rather than trusting the upload: these bytes are the artifact.
     const roundTrip = join(staging, file);
     wrangler(['r2', 'object', 'get', key, '--remote', '--file', roundTrip]);
     const stored = sha(await readFile(roundTrip));
-    if (stored !== digest) throw new Error(`${file} changed in transit.\n  local:  ${digest}\n  stored: ${stored}`);
+    if (stored !== digest)
+      throw new Error(`${file} changed in transit.\n  local:  ${digest}\n  stored: ${stored}`);
 
     published += 1;
     console.log(`${file} ${digest}${recorded ? ' (matches receipt)' : ''}`);
@@ -84,4 +102,6 @@ try {
 } finally {
   await rm(staging, { recursive: true, force: true });
 }
-console.log(`Published ${published} image${published === 1 ? '' : 's'} to ${BUCKET}/${PREFIX}, each verified byte-for-byte after upload.`);
+console.log(
+  `Published ${published} image${published === 1 ? '' : 's'} to ${BUCKET}/${PREFIX}, each verified byte-for-byte after upload.`,
+);

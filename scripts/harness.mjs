@@ -47,7 +47,10 @@ function declaredOutputLimit(model) {
 }
 
 /** Colour codes are noise when you are trying to read a model name out of a log. */
-const stripAnsi = (s) => String(s).replaceAll(/\[[0-9;]*m|\[0m/g, '');
+// The rule is for control characters that arrived by accident. Stripping ANSI
+// means matching ESC, so here it is the point of the expression.
+// biome-ignore lint/suspicious/noControlCharactersInRegex: matching ESC is deliberate
+const stripAnsi = (s) => String(s).replaceAll(/\u001B\[[0-9;]*m|\[0m/gu, '');
 
 // One entry per harness. `argv` is a function so a harness that needs the
 // prompt attached to a flag (agy) and one that takes it positionally (claude,
@@ -59,10 +62,14 @@ export const HARNESSES = {
     // --print takes its prompt ATTACHED. Passed separately, Go's flag package
     // reads the next flag as the prompt and silently ignores what you typed.
     argv: ({ model, prompt, timeout, logFile, sandbox }) => [
-      '--model', model,
-      '--print-timeout', timeout,
-      '--add-dir', sandbox,
-      '--log-file', logFile,
+      '--model',
+      model,
+      '--print-timeout',
+      timeout,
+      '--add-dir',
+      sandbox,
+      '--log-file',
+      logFile,
       `--print=${prompt}`,
     ],
     // agy prints "Agent execution terminated due to error." to stdout and puts
@@ -92,11 +99,16 @@ export const HARNESSES = {
     // belt-and-braces copy other harnesses can read. Both server names appear
     // because the tool prefix depends on how Kiln was installed.
     argv: ({ model, prompt, sandbox }) => [
-      '-p', prompt,
-      '--model', model,
-      '--permission-mode', 'acceptEdits',
-      '--allowedTools', 'mcp__plugin_kiln_kiln mcp__kiln Read Write Edit Glob Grep',
-      '--add-dir', sandbox,
+      '-p',
+      prompt,
+      '--model',
+      model,
+      '--permission-mode',
+      'acceptEdits',
+      '--allowedTools',
+      'mcp__plugin_kiln_kiln mcp__kiln Read Write Edit Glob Grep',
+      '--add-dir',
+      sandbox,
     ],
     fallbackModels: [],
   },
@@ -110,7 +122,12 @@ export const HARNESSES = {
   // exact contamination `makeSandbox` exists to prevent.
   codex: {
     bin: 'codex',
-    probe: (model) => ['exec', ...modelFlag(model), '--skip-git-repo-check', 'reply with the single word OK'],
+    probe: (model) => [
+      'exec',
+      ...modelFlag(model),
+      '--skip-git-repo-check',
+      'reply with the single word OK',
+    ],
     // No default model, deliberately. Codex rejects a model its account is not
     // entitled to -- `gpt-5.1-codex` came back "not supported when using Codex
     // with a ChatGPT account" -- and which ids an account can reach is not
@@ -135,7 +152,8 @@ export const HARNESSES = {
       ...modelFlag(model),
       '--approve-for-me',
       '--skip-git-repo-check',
-      '--cd', sandbox,
+      '--cd',
+      sandbox,
       prompt,
     ],
     fallbackModels: [],
@@ -206,7 +224,6 @@ export const HARNESSES = {
   },
 };
 
-
 // Windows: resolve the executable ourselves rather than asking for a shell.
 // `shell: true` concatenates argv into one command line, and the prompt is
 // multi-line -- so with a shell the child sees a mangled command and exits 2
@@ -232,7 +249,10 @@ export function resolveBin(bin) {
   if (process.platform !== 'win32') return { cmd: bin, shell: false };
   if (!binCache.has(bin)) {
     const r = spawnSync('where', [bin], { encoding: 'utf8', shell: true });
-    const lines = (r.stdout ?? '').split('\n').map((l) => l.trim()).filter(Boolean);
+    const lines = (r.stdout ?? '')
+      .split('\n')
+      .map((l) => l.trim())
+      .filter(Boolean);
     const exe = lines.find((l) => l.toLowerCase().endsWith('.exe'));
     const shim = lines.find((l) => /\.(cmd|bat)$/i.test(l));
     binCache.set(bin, exe ? { cmd: exe, shell: false } : { cmd: shim ?? bin, shell: true });
@@ -248,7 +268,8 @@ export function resolveBin(bin) {
  * containing a space -- a prompt, a Windows path under `Program Files` -- is
  * split at the space by the shell.
  */
-export const quoteArg = (a) => (/[\s"^&|<>]/.test(a) ? `"${String(a).replaceAll('"', '""')}"` : String(a));
+export const quoteArg = (a) =>
+  /[\s"^&|<>]/.test(a) ? `"${String(a).replaceAll('"', '""')}"` : String(a);
 
 /** '25m' / '90s' / '3600' -> milliseconds. */
 export function parseDuration(v) {
@@ -298,7 +319,11 @@ export function killTree(child) {
  * output and no error. This kills it and reports the timeout as a normal failure
  * so the caller can move to the next model.
  */
-export function run(bin, args, { cwd = REPO, capture = true, logFile = null, timeoutMs = null, env = null } = {}) {
+export function run(
+  bin,
+  args,
+  { cwd = REPO, capture = true, logFile = null, timeoutMs = null, env = null } = {},
+) {
   if (logFile) rmSync(logFile, { force: true });
   return new Promise((res) => {
     const resolved = resolveBin(bin);
@@ -321,12 +346,22 @@ export function run(bin, args, { cwd = REPO, capture = true, logFile = null, tim
     const detached = process.platform !== 'win32';
     const childEnv = env ? { ...process.env, ...env } : process.env;
     const child = resolved.shell
-      ? spawn(quoteArg(resolved.cmd), args.map(quoteArg), { cwd, shell: true, stdio, detached, env: childEnv })
+      ? spawn(quoteArg(resolved.cmd), args.map(quoteArg), {
+          cwd,
+          shell: true,
+          stdio,
+          detached,
+          env: childEnv,
+        })
       : spawn(resolved.cmd, args, { cwd, shell: false, stdio, detached, env: childEnv });
     let out = '';
     if (capture) {
-      child.stdout.on('data', (d) => { out += d; });
-      child.stderr.on('data', (d) => { out += d; });
+      child.stdout.on('data', (d) => {
+        out += d;
+      });
+      child.stderr.on('data', (d) => {
+        out += d;
+      });
     }
     let settled = false;
     let grace = null;
@@ -338,7 +373,9 @@ export function run(bin, args, { cwd = REPO, capture = true, logFile = null, tim
       // Fold the harness's own log into the captured output, so the caller
       // sees the real cause rather than the one-line summary on stdout.
       if (logFile && existsSync(logFile)) {
-        try { out += readFileSync(logFile, 'utf8'); } catch {}
+        try {
+          out += readFileSync(logFile, 'utf8');
+        } catch {}
       }
       res({ code, out });
     };
@@ -404,7 +441,8 @@ export function makeSandbox(name) {
   rmSync(sandbox, { recursive: true, force: true });
   mkdirSync(sandbox, { recursive: true });
   const skillsSrc = join(REPO, 'skills');
-  if (existsSync(skillsSrc)) cpSync(skillsSrc, join(sandbox, '.claude', 'skills'), { recursive: true });
+  if (existsSync(skillsSrc))
+    cpSync(skillsSrc, join(sandbox, '.claude', 'skills'), { recursive: true });
 
   // Pre-approve the tools the brief asks the child to use.
   //
@@ -423,15 +461,7 @@ export function makeSandbox(name) {
   // write its program. Nothing here grants the child the shell.
   const settings = {
     permissions: {
-      allow: [
-        'mcp__kiln',
-        'mcp__plugin_kiln_kiln',
-        'Read',
-        'Write',
-        'Edit',
-        'Glob',
-        'Grep',
-      ],
+      allow: ['mcp__kiln', 'mcp__plugin_kiln_kiln', 'Read', 'Write', 'Edit', 'Glob', 'Grep'],
     },
   };
   mkdirSync(join(sandbox, '.claude'), { recursive: true });

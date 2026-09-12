@@ -17,14 +17,43 @@ import { assessProgramGrade } from '../src/agent/grade-refine';
 import { createAssetIntentV1, type AssetCategory } from '../src/contracts';
 
 const PROMPTS: Array<{ key: string; category: AssetCategory; prompt: string }> = [
-  { key: 'chest', category: 'prop', prompt: 'a weathered pirate treasure chest with iron bands, lid slightly open, gold coins spilling out' },
+  {
+    key: 'chest',
+    category: 'prop',
+    prompt:
+      'a weathered pirate treasure chest with iron bands, lid slightly open, gold coins spilling out',
+  },
   { key: 'wrxwagon', category: 'vehicle', prompt: 'a 2002 Subaru WRX wagon with a spoiler' },
-  { key: 'ranger', category: 'character', prompt: 'a hooded desert ranger with a walking staff, satchel, and layered cloth wraps' },
-  { key: 'lighthouse', category: 'architecture', prompt: 'a small cliffside lighthouse with a spiral exterior stair and a glowing lantern room' },
-  { key: 'archway', category: 'environment', prompt: 'an ancient mossy stone archway wrapped in flowering vines, cracked but standing' },
-  { key: 'stall', category: 'prop', prompt: 'a wooden market stall with a striped awning and crates of vegetables' },
-  { key: 'well', category: 'prop', prompt: 'a round stone well with a wooden crank, rope, and hanging bucket' },
-  { key: 'lamp', category: 'prop', prompt: 'a cast-iron street lamp with a hexagonal glass lantern head' },
+  {
+    key: 'ranger',
+    category: 'character',
+    prompt: 'a hooded desert ranger with a walking staff, satchel, and layered cloth wraps',
+  },
+  {
+    key: 'lighthouse',
+    category: 'architecture',
+    prompt: 'a small cliffside lighthouse with a spiral exterior stair and a glowing lantern room',
+  },
+  {
+    key: 'archway',
+    category: 'environment',
+    prompt: 'an ancient mossy stone archway wrapped in flowering vines, cracked but standing',
+  },
+  {
+    key: 'stall',
+    category: 'prop',
+    prompt: 'a wooden market stall with a striped awning and crates of vegetables',
+  },
+  {
+    key: 'well',
+    category: 'prop',
+    prompt: 'a round stone well with a wooden crank, rope, and hanging bucket',
+  },
+  {
+    key: 'lamp',
+    category: 'prop',
+    prompt: 'a cast-iron street lamp with a hexagonal glass lantern head',
+  },
 ];
 
 type Arm = 'default' | 'high';
@@ -129,7 +158,9 @@ async function main(): Promise<void> {
   await Promise.all(Array.from({ length: Math.max(1, conc) }, worker));
 
   console.log('\n## H-43 thinking A/B — gemini-3.5-flash, unified surface, n=8/arm\n');
-  console.log('| arm | key | ok | grade | tris | mats | steps | latency s | in tok | out tok | note |');
+  console.log(
+    '| arm | key | ok | grade | tris | mats | steps | latency s | in tok | out tok | note |',
+  );
   console.log('|---|---|---|---|---|---|---|---|---|---|---|');
   for (const r of rows.sort((a, b) => a.key.localeCompare(b.key) || a.arm.localeCompare(b.arm))) {
     console.log(
@@ -137,7 +168,9 @@ async function main(): Promise<void> {
     );
   }
 
-  console.log('\n| arm | ok | grades | steps p50 | latency p50 s | latency p95 s | out-tok p50 | out-tok total |');
+  console.log(
+    '\n| arm | ok | grades | steps p50 | latency p50 s | latency p95 s | out-tok p50 | out-tok total |',
+  );
   console.log('|---|---|---|---|---|---|---|---|');
   for (const arm of ARMS) {
     const a = rows.filter((r) => r.arm === arm);
