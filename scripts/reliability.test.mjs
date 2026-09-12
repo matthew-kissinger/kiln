@@ -64,7 +64,7 @@ describe('repository reliability contracts', () => {
     // drift, and the copy in the test is the one that turns a stale sentence
     // into a red build with no idea which of the three is right.
     expect(Object.keys(thresholds).sort()).toEqual(['measuredBaseline', 'thresholds']);
-    expect(thresholds.thresholds).toEqual({ functions: 92, lines: 91 });
+    expect(thresholds.thresholds).toEqual({ functions: 94, lines: 92 });
     const { functions, lines } = thresholds.measuredBaseline;
     expect(functions).toBeGreaterThanOrEqual(thresholds.thresholds.functions);
     expect(lines).toBeGreaterThanOrEqual(thresholds.thresholds.lines);
@@ -73,6 +73,28 @@ describe('repository reliability contracts', () => {
     expect(workflow).toContain('run: bun run test:coverage');
     expect(workflow).toContain('uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02');
     expect(workflow).toContain('path: coverage/lcov.info');
+  });
+
+  // The Windows gate spent a day reporting rather than blocking, on purpose, while an
+  // intermittent native fault was ruled out. Demoting it again is a decision, not a
+  // detail, so it cannot happen by dropping one line back into the file unnoticed.
+  //
+  // This asserts the repository's half. The other half is a GitHub setting: the job's
+  // check context has to be listed in main's branch protection, or a red Windows run
+  // fails the workflow and still permits the merge.
+  test('every CI job blocks; none of them merely reports', async () => {
+    const workflow = await readText('.github/workflows/ci.yml');
+
+    expect(workflow).toContain('typecheck \u00b7 lint \u00b7 test (Windows)');
+    // Indentation is the distinction, and it is the whole point. At job level -- four
+    // spaces, a sibling of `runs-on` -- `continue-on-error` demotes an entire gate to a
+    // report. At step level it excuses one command. There must be none of the first.
+    expect(workflow.match(/^ {4}continue-on-error:/gmu)).toBeNull();
+    // The one at step level is the native dependency inventory: it exists so that IF
+    // the GLib fault returns, the libvips and GLib versions arrive attached to that run.
+    // It must never be why Windows reports red, so it is failure-tolerant by design.
+    expect(workflow.match(/^ {8}continue-on-error:/gmu)).toHaveLength(1);
+    expect(workflow).toContain('Report the native dependency inventory');
   });
 
   test('standalone agent context stays concise and names the safety-critical paths', async () => {

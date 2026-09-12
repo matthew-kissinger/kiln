@@ -3,6 +3,36 @@
 Changes to `@kiln/engine`. Source and installable packages are distributed through
 GitHub. The package is not published on the npm registry.
 
+## The gates stop reporting and start blocking — 2026-09-12
+
+- **The Windows job blocks.** It landed reporting-only on purpose, because the fault it
+  was added to rule out — a native GLib `g_system_thread_free` / invalid `CloseHandle`
+  inside libvips/sharp under Bun's threading — was intermittent, and a required check
+  that fails at random is worse than no check. Its whole history is now nine runs: seven
+  green, two red, and not one recurrence. Both reds were new code from the session that
+  added the job — a `require('sharp/package.json')` that sharp's `exports` map blocks,
+  and a `new URL('..', import.meta.url).pathname` that yields `/D:/a/kiln/src/` — and
+  neither is reachable from a POSIX host. The failures were true, which is the argument
+  for blocking rather than against it.
+- Blocking means a hang is a blocked merge rather than a slow report, so the job now has
+  a 30-minute bound. The suite runs there in about two minutes.
+- A test asserts no CI job carries `continue-on-error` at job level, so this cannot be
+  demoted by one line slipping back in. The single step-level exception is the native
+  dependency inventory, which exists to attach libvips and GLib versions to a run if the
+  fault ever returns and must never be why Windows reports red. Indentation is the
+  distinction and the test reads it as such.
+- **The coverage ratchet moves to 94% functions / 92% lines**, from 92/91. Measured
+  95.27% and 92.49% on this tree, which leaves 42 functions and 224 lines of room.
+- That "42 functions" is the other half of the change: the gate now reports its margin
+  in the unit a person can act on. A percentage says whether the gate passed; turning it
+  into work needs LCOV totals that are not in front of whoever tripped it. Slack rounds
+  down and a shortfall rounds up, so neither reads as more comfortable than it is.
+- The gate also refuses a threshold set above the baseline it records. That is the one
+  mistake the coverage comparison cannot catch by itself: a threshold above anything
+  ever measured fails in whatever change happens to run next, and reads there as that
+  change's regression. A thresholds file with no recorded baseline is refused for the
+  same reason — a ratchet is raised to a number somebody measured.
+
 ## Dependencies current in range, and the toolchain gate gets its own test — 2026-09-12
 
 - In-range refresh, deliberately kept apart from the deferred majors: `ai` 6.0.222 →

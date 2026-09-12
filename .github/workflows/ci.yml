@@ -71,26 +71,34 @@ jobs:
   windows-checks:
     name: typecheck · lint · test (Windows)
     runs-on: windows-2022
-    # Not blocking yet, deliberately. A retained Windows coverage run aborted on entry
-    # to `examples.test.ts` with a native GLib fault --
-    # `g_system_thread_free: The handle is invalid during CloseHandle` -- inside
-    # libvips/sharp under Bun's threading. It is INTERMITTENT: two of three reproduction
-    # attempts passed, and a later full gate ran 1,709 tests clean. A required check that
-    # fails at random is worse than no check, so this reports rather than blocks.
+    # Blocking as of 2026-09-12, on accumulated evidence rather than on one clean run.
     #
-    # It was worth running because the fault was last seen on Bun 1.3.14 and sharp
-    # 0.35.3, and both have since moved -- Bun 1.4 in particular fixed several test
-    # isolation leaks. The first run answered it: 1,831 pass / 0 fail in 124s, the
-    # same counts as Linux, with no GLib fault. So the September 5 failure does not
-    # reproduce on the current toolchain. That is ONE green run against a fault that
-    # already passed two of three attempts once, which is why this still reports
-    # rather than blocks -- promote it once it has been green across consecutive
-    # builds, which is evidence one run cannot supply.
+    # It landed reporting-only because a retained Windows coverage run had aborted on
+    # entry to `examples.test.ts` with a native GLib fault --
+    # `g_system_thread_free: The handle is invalid during CloseHandle` -- inside
+    # libvips/sharp under Bun's threading, and that fault was INTERMITTENT: two of three
+    # reproduction attempts passed. A required check that fails at random is worse than
+    # no check at all. The promotion criterion written here was consecutive green
+    # builds, which a single run cannot supply.
+    #
+    # The whole history of this job is nine runs: seven green, two red, and not one
+    # recurrence of the fault. Four of the greens are consecutive and two of those are
+    # on main. Both reds were new code from the session that added the job -- a
+    # `require('sharp/package.json')` that sharp's `exports` map blocks, and a
+    # `new URL('..', import.meta.url).pathname` that yields `/D:/a/kiln/src/` and makes
+    # every fs call ENOENT. Neither is reachable from a POSIX host. That is the argument
+    # for promoting it: the failures were true, and a check that only reports is a check
+    # whose findings arrive after the merge.
     #
     # `test` rather than `test:coverage`: the original crash was under coverage, but the
-    # ratchet in bunfig.toml is measured on Linux, so a coverage run here would entangle
-    # a platform question with a threshold question and fail for the wrong reason.
-    continue-on-error: true
+    # ratchet in coverage-thresholds.json is measured on Linux, so a coverage run here
+    # would entangle a platform question with a threshold question and fail for the
+    # wrong reason.
+    #
+    # Blocking also means a hang is a blocked merge rather than a slow report, so the
+    # job gets a bound. The suite runs in about two minutes here; thirty minutes is room
+    # for a cold runner, not for a deadlock.
+    timeout-minutes: 30
     steps:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
 
