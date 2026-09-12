@@ -3,6 +3,39 @@
 Changes to `@kiln/engine`. Source and installable packages are distributed through
 GitHub. The package is not published on the npm registry.
 
+## Dependencies current in range, and the toolchain gate gets its own test — 2026-09-12
+
+- In-range refresh, deliberately kept apart from the deferred majors: `ai` 6.0.222 →
+  6.0.282, `openai` 6.46.0 → 6.49.0, `@ai-sdk/provider` 3.0.14 → 3.0.16,
+  `@aws-sdk/client-bedrock-runtime` 3.1083.0 → 3.1131.0, and in `site/` react and
+  react-dom 19.2.8 → 19.3.0 with their types, plus vite 8.2.2 → 8.3.0.
+- The `ai` 7 / `@ai-sdk/provider` 4 / `@openrouter/ai-sdk-provider` 3 family stays
+  where it was. Only `test:live` exercises those paths and it spends money, and the
+  deliberate prompt-cache transport asymmetry is exactly what a provider major breaks
+  without a test noticing. Nothing enforces that decision in prose and nothing needs
+  to: the caret ranges cannot resolve to a new major, so the boundary is structural.
+- The `@types/three` parity rule added yesterday now reads as what it always was — a
+  rule about types, not about three. Every `@types/*` whose runtime package the same
+  manifest pins must sit on that runtime's release line. That is what brought
+  `@types/react` and `@types/react-dom` along with react 19.3: the site compiles its
+  `@react-three/fiber` JSX against those types, and types a release line behind make
+  new API invisible to `tsc` while removed API still typechecks.
+- **`check-toolchain.mjs` now has a test.** It had grown three times, each extension
+  verified by injecting the defect by hand, once, at the time — the right check made in
+  the wrong place, because nothing stopped a later edit from leaving a rule that could
+  no longer fail. A vacuous gate is worse than no gate, since it is believed. The gate
+  takes an optional `--root`, and each case stages a real copy of the repository's own
+  files, mutates exactly one value, and asserts the gate names it: stale engine pin,
+  prose that installs the wrong Bun, three drifting in either the site or the render
+  service, types off their runtime's line, an Action pinned to a mutable tag, and a
+  Pages workflow left behind. Staging the real files rather than a synthetic fixture is
+  the point: a rule whose phrasing drifts out of step with the document it reads fails
+  the baseline case immediately.
+- A mutation that changes nothing fails the test. A search string that no longer
+  appears injects no defect, the gate correctly reports a clean tree, and the case goes
+  green having checked nothing — the exact rot the file exists to prevent, so it is
+  caught rather than trusted.
+
 ## The r186 bump missed the site, and now a gate catches that — 2026-09-12
 
 - `site/` was still on three 0.185.1 while the engine and `render-service` moved to
