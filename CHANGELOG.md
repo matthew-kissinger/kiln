@@ -24,6 +24,13 @@ GitHub. The package is not published on the npm registry.
 - **This path carries skills and no MCP server**, so a client that loads them has
   the workflows and none of the tools they describe. `docs/install.md` says so
   where it offers the URL.
+- **Follow-up:** the first deployment served a 404, and neither the build nor
+  Pages was at fault. `actions/upload-pages-artifact` v5 archives with
+  `--exclude=.[^/]*` unless `include-hidden-files` is set, so it strips *every*
+  hidden path — and a well-known URI is under a dotted directory by definition.
+  The artifact had 465 entries and not one dot-entry, while the same build
+  locally produced all seven files. Fixed by setting the flag, verified to add
+  exactly `.well-known` and nothing else.
 
 ## Bun-only APIs cannot reach a Node bundle unnoticed — 2026-09-11
 
