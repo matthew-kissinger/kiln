@@ -68,6 +68,69 @@ jobs:
           if-no-files-found: error
           retention-days: 14
 
+  windows-checks:
+    name: typecheck · lint · test (Windows)
+    runs-on: windows-2022
+    # Not blocking yet, deliberately. A retained Windows coverage run aborted on entry
+    # to `examples.test.ts` with a native GLib fault --
+    # `g_system_thread_free: The handle is invalid during CloseHandle` -- inside
+    # libvips/sharp under Bun's threading. It is INTERMITTENT: two of three reproduction
+    # attempts passed, and a later full gate ran 1,709 tests clean. A required check that
+    # fails at random is worse than no check, so this reports rather than blocks.
+    #
+    # It was worth running because the fault was last seen on Bun 1.3.14 and sharp
+    # 0.35.3, and both have since moved -- Bun 1.4 in particular fixed several test
+    # isolation leaks. The first run answered it: 1,831 pass / 0 fail in 124s, the
+    # same counts as Linux, with no GLib fault. So the September 5 failure does not
+    # reproduce on the current toolchain. That is ONE green run against a fault that
+    # already passed two of three attempts once, which is why this still reports
+    # rather than blocks -- promote it once it has been green across consecutive
+    # builds, which is evidence one run cannot supply.
+    #
+    # `test` rather than `test:coverage`: the original crash was under coverage, but the
+    # ratchet in bunfig.toml is measured on Linux, so a coverage run here would entangle
+    # a platform question with a threshold question and fail for the wrong reason.
+    continue-on-error: true
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+
+      - name: Setup Bun
+        uses: oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6 # v2
+        with:
+          bun-version: 1.4.2
+
+      - name: Setup Node
+        uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
+        with:
+          node-version: 22.23.2
+
+      - name: Check toolchain metadata
+        run: bun run check:toolchain
+
+      - name: Install
+        run: bun install --frozen-lockfile
+
+      - name: Typecheck
+        run: bun run typecheck
+
+      - name: Lint (Biome)
+        run: bun run lint
+
+      - name: Unit tests
+        run: bun run test
+
+      # Diagnostic only, and deliberately failure-tolerant: it exists so that IF the
+      # GLib fault returns, the libvips/GLib versions arrive attached to that run
+      # rather than needing a second investigation to reconstruct. It must never be
+      # the reason this job reports red. `sharp.versions` rather than the package
+      # manifest, because sharp's `exports` map does not expose ./package.json.
+      - name: Report the native dependency inventory
+        if: ${{ always() }}
+        continue-on-error: true
+        run: |
+          node -p "'node ' + process.version"
+          node -e "console.log('sharp versions:', JSON.stringify(require('sharp').versions))"
+
   package-candidate:
     name: build portable Node package
     runs-on: ubuntu-22.04
