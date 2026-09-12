@@ -1575,9 +1575,67 @@ than for more care.
 | 13.3 | Raise the coverage ratchet from 92/91 to 94/92. Measured 95.27% functions / 92.49% lines, so this keeps roughly 1.3 and 0.5 points for normal churn | **Done 2026-09-12.** In absolute terms that is 42 functions and 224 lines of room, which is what the gate now prints -- a percentage says whether it passed, and turning that into work needs LCOV totals the person who tripped it does not have. The gate also refuses a threshold set above the baseline it records, and refuses a thresholds file that records no baseline: a threshold above anything ever measured fails in whatever change runs next and reads there as that change's regression |
 | 13.4 | Promote the Windows job from `continue-on-error` to blocking | **Done 2026-09-12, both halves.** Nine runs with the job: seven green, two red, no recurrence of the GLib fault, and four consecutive greens including two on main. Both reds were this session's own new code and both were real Windows-only defects, which is the argument for blocking. Given a 30-minute bound, since a blocking job that hangs is a blocked merge. A test now rejects `continue-on-error` at job level so this cannot be demoted by one line. main's branch protection now requires three contexts rather than one -- `typecheck . lint . test`, `typecheck . lint . test (Windows)` and `render service tests` (13.7) -- added after the jobs had each reported on main, since a required context that never reports blocks every PR instead of guarding them. `strict` stays on, so a branch must be current with main to merge |
 | 13.5 | Clear the one substantive lint finding: an unused import in `src/__tests__/optimize.test.ts`. Everything else in the 14/11 baseline is `useTemplate` and `useOptionalChain` style | **Done 2026-09-12, wider than written.** The 14/11 split was not all style: `isFinite` in the render inspector was the coercing global, `forEach` in the Bradley-Terry fit returned a value its callback discards, and three `any` bounds in `buildSandboxGlobals` were guarded by `eslint-disable` comments in a repository that lints with Biome and has no ESLint config -- suppressing nothing while reading as accepted. All 25 findings are fixed and the tree reports zero. `lint` now runs `--error-on-warnings`, and since that does not reach Biome's info severity the seven rules involved carry an explicit `error`; each was verified by reintroducing its defect. A baseline kept in prose is one the next finding arrives invisible against, which is why this went past the single unused import |
-| 13.6 | Decide shadows by comparison, not assumption. r186 deleted the `PCFSoftShadowMap` implementation; `render-service` now names `PCFShadowMap`, and `VSMShadowMap` is the soft filter that survives. Render gallery presets under both and choose by eye, because this is the only user-visible regression in the r186 upgrade and it lands on marketing surface | **Premise was wrong; the real defect is fixed 2026-09-12.** **No shipped preset enables shadows** -- `neutral-studio-v1` sets `shadows.enabled: false` deliberately, `gallery-studio-v1` spreads it, and every light has `castsShadow: false`. So r186 is not a visible regression here and there is nothing to compare by eye: both filters render the same image, which has no shadow in it. Yesterday's `PCFShadowMap` edit corrected a line that never executes, and its claim about keeping the log clean was overstated -- the assignment is inside `if (preset.shadows.enabled)`, so the deprecation warning never fired either. What WAS wrong: `shadows.type` described a filter and selected nothing, and after r186 the one string the validator accepted was the one filter that no longer exists. It now selects from `basic`/`pcf`/`vsm`, the renderer maps each to its three constant, and the renderer checks at load that the map covers the schema's list -- verified by adding `pcf-soft` back and watching the service refuse to start. The gallery is unaffected for a second, independent reason: neither `<Canvas>` in `site/` sets r3f's `shadows` prop, so `shadowMap.enabled` is false there as well, and the only shadowing on that surface is drei's `ContactShadows`, which runs its own depth pass to a texture and never reads `shadowMap.type`. Across both paths r186's PCFSoft removal changes nothing anyone can see. **Open, and the founder's call:** whether a gallery preset should cast shadows at all -- a visual decision, not a repair, and the only thing a by-eye comparison would actually be for |
+| 13.6 | Decide shadows by comparison, not assumption. r186 deleted the `PCFSoftShadowMap` implementation; `render-service` now names `PCFShadowMap`, and `VSMShadowMap` is the soft filter that survives. Render gallery presets under both and choose by eye, because this is the only user-visible regression in the r186 upgrade and it lands on marketing surface | **Premise was wrong; the real defect is fixed 2026-09-12.** **No shipped preset enables shadows** -- `neutral-studio-v1` sets `shadows.enabled: false` deliberately, `gallery-studio-v1` spreads it, and every light has `castsShadow: false`. So r186 is not a visible regression here and there is nothing to compare by eye: both filters render the same image, which has no shadow in it. Yesterday's `PCFShadowMap` edit corrected a line that never executes, and its claim about keeping the log clean was overstated -- the assignment is inside `if (preset.shadows.enabled)`, so the deprecation warning never fired either. What WAS wrong: `shadows.type` described a filter and selected nothing, and after r186 the one string the validator accepted was the one filter that no longer exists. It now selects from `basic`/`pcf`/`vsm`, the renderer maps each to its three constant, and the renderer checks at load that the map covers the schema's list -- verified by adding `pcf-soft` back and watching the service refuse to start. The gallery is unaffected for a second, independent reason: neither `<Canvas>` in `site/` sets r3f's `shadows` prop, so `shadowMap.enabled` is false there as well, and the only shadowing on that surface is drei's `ContactShadows`, which runs its own depth pass to a texture and never reads `shadowMap.type`. Across both paths r186's PCFSoft removal changes nothing anyone can see. **Comparison rendered 2026-09-12; see 13.8.** The filter question is answered and it is not a decision. What remains open is whether the gallery should cast shadows at all, which turns out to cost renderer work rather than a preset flag |
 
 | 13.7 | `render-service` in CI. Found while fixing 13.6: a shipped subsystem with 37 tests ran in no workflow, so the 13.6 change itself would have had no CI coverage. Every one of those tests is pure -- framing arithmetic, PNG readback packing, cache identity, contract and preset validation -- and none acquires a device, so the job installs with `--ignore-scripts` and skips the `webgpu` package's native Dawn build | **Done 2026-09-12.** Verified against exactly that install with no binding built: 37 pass, 0 fail. The GPU smoke and the two conformance runs stay manual, because those do need a device |
+
+| 13.8 | Render the shadow comparison 13.6 called for, on three gallery assets spanning the size range: espresso machine (0.76 m radius), ribbon tea pavilion (5.67 m), gothic gatehouse (12.47 m) | **Done 2026-09-12.** See the measurements and the three findings below |
+
+### What the comparison measured
+
+Each asset rendered through the real service under four rigs, against a fourth
+control with the ground present and nothing casting, so the shadow itself is
+isolated. Deltas are per-pixel maximum across RGB, and the percentage is pixels
+differing by more than two levels out of 255.
+
+| Asset | shadow vs no shadow | PCF vs VSM |
+| --- | --- | --- |
+| espresso-machine (0.76 m) | max 54/255, 1.84% of pixels | max 41/255, 0.29% |
+| ribbon-tea-pavilion (5.67 m) | max 26/255, 6.05% | max 17/255, 0.20% |
+| gothic-gatehouse (12.47 m) | max 27/255, 2.61% | max 25/255, 1.29% |
+| ribbon-tea-pavilion at 1280px | max 40/255, 6.01% | max 17/255, **0.14%** |
+
+**The filter is not a decision.** PCF and VSM differ on at most 1.3% of pixels and
+never by more than 41 levels, at a shadow edge, with a mean delta of 0.01--0.09.
+There is nothing to choose between them by eye, which is what the 1:1 crop of the
+pavilion's shadow edge confirms. `pcf` stays the shipped name.
+
+**Turning shadows on is renderer work, not a preset flag.** Four things stand in the
+way, and the first three were each found by the probe producing no shadow at all:
+
+1. **A receiver.** The service renders an asset against a flat background with no
+   ground, so a shadow has nowhere to land. The no-ground variants came out
+   comparable to the shipped render -- self-shadowing on these assets is invisible.
+   The probe added a plane; a real implementation has to decide whether the gallery
+   gets a visible floor or a shadow-only catcher, which is the look the site already
+   uses via drei `ContactShadows`.
+2. **Per-asset shadow-camera placement.** A directional light's position is only a
+   direction for shading, but the shadow camera is *physically placed there*. Preset
+   positions are fixed world coordinates -- key at `(4, 7, 5)` -- and gallery assets
+   run from 0.76 m to 43.4 m radius, so the caster sits 9.1 m from an espresso
+   machine and **inside** a 12 m gatehouse or a 43 m cathedral. Without fitting, no
+   asset in the gallery gets a shadow. The fit must move the camera along the
+   preset's direction, never change that direction, or shading changes with it.
+3. **Frustum fitting.** three's default directional shadow camera is a fixed 10-unit
+   box. near/far must bracket the light's *distance to the asset*, not the asset's
+   radius -- sizing far from the radius put the far plane at 9.07 m with the caster
+   at 9.14 m, and the result was a correctly rendered 2048x2048 shadow map with no
+   shadow in the picture. Silent in both directions.
+
+4. **The camera is standing on the light.** Pointed out by the owner mid-review and
+   confirmed by orbiting: `beautyCameraSpec` looks down `[1, 0.65, 1]`, azimuth 45
+   degrees, and the key light at `(4, 7, 5)` is azimuth `atan2(5, 4)` = 51 degrees.
+   **Six degrees apart**, so the shadow falls almost directly behind the asset from
+   the camera's point of view and the shipped 3/4 view is close to the worst angle
+   for showing one. An eight-step orbit of the pavilion at 22 degrees elevation makes
+   this obvious: barely visible at 45, unmistakable at 225 and 270. Any decision to
+   ship shadows has to separate the camera azimuth from the key light's, or move the
+   key -- and moving the key changes the lighting of all 86 gallery assets, so the
+   camera is the cheaper end.
+
+Not a finding, but ruled out along the way: shadow maps work in this WebGPU/Dawn
+build. A minimal box-on-plane scene casts correctly under all three filters, which
+is what separated "the rig is wrong" from "the backend cannot do this".
 
 ### Explicitly not in this phase
 
