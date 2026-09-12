@@ -3,6 +3,28 @@
 Changes to `@kiln/engine`. Source and installable packages are distributed through
 GitHub. The package is not published on the npm registry.
 
+## The published tool reference is correct again — 2026-09-12
+
+- `docs/tools.md` is generated from the tool registry, and `docs/` is in the package's
+  `files` list — so a stale reference is not an internal note being wrong, it is shipped
+  to every install. It was stale: regenerating moved **128 lines**.
+- The cause was an in-range dependency bump. `zod` 4.4.3 → 4.6.2 changed
+  `z.toJSONSchema` to emit `items: false`, `minItems` and `maxItems` for fixed-length
+  tuples, so every tuple input in the published reference understated its own schema.
+- Nothing caught it because the generator's `--check` mode appeared in **no workflow and
+  no test** — the same shape as the render service's 37 tests running nowhere. An
+  offline gate that runs nowhere is worth exactly as much as no gate.
+- It is a test now rather than a workflow step: the generator exports
+  `toolReferenceMarkdown()` with its CLI behaviour behind a direct-entry guard, and
+  `scripts/tool-reference.test.mjs` compares the published file to the registry. `bun
+  test` already runs on Linux, Windows and both macOS architectures, so this needs no
+  new job — and cannot become a job somebody forgets to add, which is the failure mode
+  being fixed.
+- Compared whole rather than section by section: the drift that shipped was four added
+  lines inside one nested schema, which any summary comparison would have missed.
+  Verified by dropping a single `minItems` line and watching the test name the file and
+  the command that fixes it.
+
 ## Every directory that holds code is linted now — 2026-09-12
 
 - 14.4 left the one-off tools in `scripts/` out and priced the alternative at 26 lint

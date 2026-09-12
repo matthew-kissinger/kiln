@@ -1679,6 +1679,7 @@ the installed tree.
 | 14.1 | Re-ground 7.12 / SEP-2640 against an authoritative source | **Done 2026-09-12.** Deferred still, for a stronger reason. See below |
 | 14.2 | Establish what actually blocks the `ai` 7 family, and gate it | **Done 2026-09-12.** `@strands-agents/sdk@1.17.0` is latest, declares peer `@ai-sdk/provider: ^3.0.0`, and its `VercelModel` is typed on `LanguageModelV3` in 21 places. `@openrouter/ai-sdk-provider@3.0.0` requires `ai: ^7.0.0`; `ai@7.0.99` depends on `@ai-sdk/provider@4.0.14`. The family cannot be taken until Strands ships a release accepting the v4 spec -- no budget changes that. `scripts/peer-ranges.test.mjs` now fails on a peer range the version beside it does not meet, verified by patching the installed `@openrouter/ai-sdk-provider` manifest to peer `ai: ^7.0.0` and watching it report `installed 6.0.282` |
 | 14.3 | Assert the prompt-cache breakpoint on the wire, offline | **Done 2026-09-12.** Both native transports captured in `src/agent/providers.test.ts`, both differential. See below |
+| 14.8 | Regenerate `docs/tools.md` and wire its drift check into the suite | **Done 2026-09-12.** 128 insertions of understated schema, published since 13.2. The check is a test now, verified by dropping one `minItems` line and watching it name the file |
 | 14.7 | The rest of `scripts/` under the formatter, now that 14.5 made it free | **Done 2026-09-12.** 480 files where 442 were; every directory holding code is in the surface. Turned up two findings nothing else would have: two `any` in the evaluation host, and a stale generated doc -- see 14.8 |
 | 14.6 | `render-service/` into the lint surface, which needed its line endings settled first | **Done 2026-09-12.** 442 files where 416 were. See below |
 | 14.5 | Give the coverage ratchet a scope, so repo-only code cannot move the engine's contract | **Done 2026-09-12.** Measured over `src/` alone; baseline re-measured at 95.39% functions / 92.59% lines; `lines` raised 92 to 92.1 so the narrowing does not quietly hand back slack. See below |
@@ -1944,3 +1945,20 @@ re-running the check.
 Not folded into 14.7: regenerating a shipped document and wiring its gate is its own
 change with its own reasoning, and burying it in a formatting pass is how a doc
 artifact changes without anyone reading why.
+
+**Fixed 2026-09-12.** `docs/` is in the package's `files` list, so this was not an
+internal note being wrong -- the understated schemas were published to every
+install. Regenerating moved 128 lines.
+
+The wiring is a test, not a workflow step. `generate-tool-reference.ts` now exports
+`toolReferenceMarkdown()` and `toolReferencePath`, with the CLI behaviour behind a
+direct-entry guard so importing the module neither writes the file nor sets an exit
+code, and `scripts/tool-reference.test.mjs` compares the published file to the
+registry. `bun test` already runs on Linux, Windows and both macOS architectures, so
+a test needs no new job and cannot be a job somebody forgets to add -- which is the
+failure mode being fixed, not a new instance of it.
+
+Compared whole rather than section by section, because the drift that shipped was
+four added lines inside one nested schema and any summary comparison would have
+missed it. Verified by dropping a single `minItems` line and watching the test name
+the file with the command that fixes it.
