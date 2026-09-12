@@ -962,11 +962,13 @@ building by hand.
 ### SEP-2640, the Skills Extension
 
 Extension identifier `io.modelcontextprotocol/skills`. It serves Agent Skills
-over MCP on the existing Resources primitive under a `skill://` URI scheme, with
-`skills/list` returning lightweight discovery metadata and `skills/activate`
-returning the full bundle plus scoped tools, prompts, resources and nested
-skills. Scoped primitives stay out of the top-level lists until activation, so
-progressive disclosure moves into the protocol itself.
+over MCP on the existing Resources primitive under a `skill://` URI scheme.
+
+**This paragraph originally described `skills/activate` returning a bundle plus
+scoped tools, prompts, resources and nested skills, with progressive disclosure
+moving into the protocol itself. That design is gone -- see Phase 14's re-read
+(14.9), which replaces this description.** The record is kept because the plan
+below was decided against it.
 
 Ratified, this would collapse most of Phase 7: no per-harness directories, no
 filesystem copies, no registration step, and the ad-hoc path served by the same
@@ -1679,6 +1681,7 @@ the installed tree.
 | 14.1 | Re-ground 7.12 / SEP-2640 against an authoritative source | **Done 2026-09-12.** Deferred still, for a stronger reason. See below |
 | 14.2 | Establish what actually blocks the `ai` 7 family, and gate it | **Done 2026-09-12.** `@strands-agents/sdk@1.17.0` is latest, declares peer `@ai-sdk/provider: ^3.0.0`, and its `VercelModel` is typed on `LanguageModelV3` in 21 places. `@openrouter/ai-sdk-provider@3.0.0` requires `ai: ^7.0.0`; `ai@7.0.99` depends on `@ai-sdk/provider@4.0.14`. The family cannot be taken until Strands ships a release accepting the v4 spec -- no budget changes that. `scripts/peer-ranges.test.mjs` now fails on a peer range the version beside it does not meet, verified by patching the installed `@openrouter/ai-sdk-provider` manifest to peer `ai: ^7.0.0` and watching it report `installed 6.0.282` |
 | 14.3 | Assert the prompt-cache breakpoint on the wire, offline | **Done 2026-09-12.** Both native transports captured in `src/agent/providers.test.ts`, both differential. See below |
+| 14.9 | Re-read SEP-2640 from primary sources; correct the record and close the readiness gap it exposed | **Done 2026-09-12.** The recorded design was two mechanisms out of date, the recorded status heuristic was backwards, and "nothing to build against" is no longer true. Still not implemented, for a different reason. See below |
 | 14.8 | Regenerate `docs/tools.md` and wire its drift check into the suite | **Done 2026-09-12.** 128 insertions of understated schema, published since 13.2. The check is a test now, verified by dropping one `minItems` line and watching it name the file |
 | 14.7 | The rest of `scripts/` under the formatter, now that 14.5 made it free | **Done 2026-09-12.** 480 files where 442 were; every directory holding code is in the surface. Turned up two findings nothing else would have: two `any` in the evaluation host, and a stale generated doc -- see 14.8 |
 | 14.6 | `render-service/` into the lint surface, which needed its line endings settled first | **Done 2026-09-12.** 442 files where 416 were. See below |
@@ -1962,3 +1965,103 @@ Compared whole rather than section by section, because the drift that shipped wa
 four added lines inside one nested schema and any summary comparison would have
 missed it. Verified by dropping a single `minItems` line and watching the test name
 the file with the command that fixes it.
+
+### 14.9 -- SEP-2640, read from the spec instead of from a page about it
+
+Re-checked 2026-09-12 against the SEP text on the PR branch
+(`seps/2640-skills-extension.md`) and the working group's own repository
+(`modelcontextprotocol/experimental-ext-skills`), which carries the spec at
+`specification/stable/skills.mdx` plus eighteen design documents. Three things this
+ledger recorded are wrong.
+
+**The design changed, and not cosmetically.** The extension now defines
+`skills/list`, **`skills/get`**, and an optional `resources/directory/read`.
+`skills/activate` is gone. So is everything that hung off it: no bundle, no scoped
+tools or prompts revealed on activation, no progressive disclosure in the protocol.
+The SEP is explicit that it "defines only the transport binding" and delegates the
+format and the progressive-disclosure model entirely to the Agent Skills
+specification. A `skills/list` entry is
+`{uri, frontmatter, resources: [{uri, digest, size}] | "dynamic"}`, where
+`frontmatter` is the verbatim YAML rendered as JSON, and `resources` is the unit a
+host verifies and a user's approval binds to.
+
+**The status heuristic recorded here was backwards.** This ledger told a future
+session to "read the labels, not the prose", after a page summary twice reported the
+SEP as Final. The SEP document's own `Status:` field now reads **Final**, while the
+pull request's label still reads `draft`. Under the SEP process the document is the
+status of record and the label lags it, so the note was pointing at the weaker
+signal. What made the summaries untrustworthy was that they narrated merge state and
+implementation state as if they were the same thing; the fix is to read the SEP's own
+header and the individual implementation PRs, which is what this entry does.
+
+**"Nothing to build against" is no longer true.** The spec's Dependencies section:
+"This extension has no dependencies beyond the base MCP Resources primitive." The
+2026-07-28 list-caching attributes are additive. Capability declaration rides SEP-2133
+extension negotiation, and `@modelcontextprotocol/sdk@1.30.0` -- the pinned version --
+already carries `extensions` in `ServerCapabilitiesSchema`, while `setRequestHandler`
+accepts any schema, so `skills/list` and `skills/get` are registerable today. The
+conformance tests **merged** on 2026-09-11 (`conformance#330`).
+
+### Why 7.12 still waits, stated correctly
+
+Not the SDK, and not the spec. **Nothing public consumes it.**
+
+| Implementation | State, 2026-09-12 |
+| --- | --- |
+| TypeScript SDK convenience wrappers (`ext-skills#71`) | **Closed, unmerged** (2026-08-19) |
+| Python SDK (`python-sdk#3485`) | Open |
+| C# SDK (`csharp-sdk#1856`) | Open |
+| Go SDK (`go-sdk#1238`) | Open |
+| Conformance tests (`conformance#330`) | **Merged** 2026-09-11 |
+| gemini-cli, fast-agent, goose, codex | Prototypes, all in one contributor's forks |
+| Claude Code | "prototyped internally at Anthropic; not yet public" |
+| GitHub MCP Server (`github-mcp-server#2360`) | **Closed, unmerged** |
+
+Shipping the extension now would add a third transport of the tool-and-skill surface
+that no host can call. This repository's central claim is that the registry drives
+skins which are actually exercised, and a surface nobody calls is the opposite of
+that. **The thing to re-check is the TypeScript SDK**: the published package gaining
+skills helpers, or `ext-skills#71` reopening and landing, is the signal that a host
+is expected to call this. Not the SEP's status, which is already Final.
+
+### What the re-read is worth having done
+
+Two pieces of the eventual work turn out to be already in place, and one gap was
+open.
+
+`skills/list` publishes, per file, `{uri, digest, size}` where the digest is
+`sha256:{hex}` over raw bytes. 7.13's `/.well-known/agent-skills/index.json` already
+derives sha256 over skill artifacts, so that derivation extends rather than gets
+invented -- per file instead of per archive.
+
+The SEP requires the final `<skill-path>` segment to equal the frontmatter `name`,
+"so the skill name is always recoverable from the URI alone, without reading
+frontmatter". `check:skills` has enforced exactly that -- `name` matches the
+directory, and the Agent Skills naming rules -- since Phase 7. Nothing to add.
+
+**The gap: skill bytes were not canonical.** `skills/**` was `-text` in
+`.gitattributes` and carried the same accidental mix 14.6 found in
+`render-service/src`: five files fully CRLF, two mixed, seven LF. It went unnoticed
+because `check-skills.mjs` parses frontmatter with `\r?\n` and splits lines the same
+way -- tolerant parsing, which is correct, over an artifact whose *bytes* this
+repository publishes a digest of. Under `skills/list` those bytes become an
+addressable resource with a published `digest` and `size`; under 7.13 they already
+are. A digest is only a property of the content if the line endings are canonical.
+
+Normalized to LF across `skills/` and both registry copies, the attribute removed,
+and `check:skills` now rejects CRLF in any skill file with the reason in its header.
+Verified by reintroducing one CRLF and watching it name the file -- and then, more
+usefully, by `git checkout` restoring HEAD's pre-normalization bytes and the gate
+firing on that too, which is the regression path that actually happens.
+
+**Archives are on the record as removed, which bears on 7.13.** An earlier revision
+of the SEP let an entry advertise pre-packed tar and ZIP archives; the Core
+Maintainers removed them, for unpacking attack surface (decompression bombs, path
+traversal, symlinks escaping the directory, normalization collisions overwriting
+`SKILL.md`, setuid bits, device nodes) and because two encodings of one skill puts a
+compatibility hazard in every host. 7.13's archives are not invalidated -- they are
+Cloudflare's discovery RFC, fetched over HTTPS from this project's own origin, not
+supplied by an arbitrary connected server -- but if archives ever come back to MCP,
+the SEP names the conditions: no symlinks, no non-regular entries, a declared
+uncompressed size, never the sole retrieval form, and unpacking to exactly the file
+set the entry enumerates.

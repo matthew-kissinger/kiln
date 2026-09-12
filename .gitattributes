@@ -19,7 +19,6 @@ bun.lock -diff linguist-generated=true
 *.kiln.js -text
 src/** -text
 dist/** -text
-skills/** -text
 scripts/create-workspace.mjs -text
 package.json -text
 plugin.json -text

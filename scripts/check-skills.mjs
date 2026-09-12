@@ -7,7 +7,17 @@
  * load-bearing for every harness that reads them. A violation is silent -- the
  * harness simply skips the skill -- so the constraints are asserted here.
  *
- * Second, `skills/` is the maintained copy, but a bare clone registers nothing
+ * Second, a skill's bytes are becoming an addressable artifact rather than a local
+ * file. SEP-2640 serves each file of a skill as an MCP resource and publishes a
+ * per-file `{digest, size}` in `skills/list`, and this repository already publishes
+ * sha256 digests of skill artifacts at `/.well-known/agent-skills/index.json` (7.13).
+ * A digest is only a property of the content if the line endings are canonical, so
+ * CRLF is rejected here. It had arrived by accident in seven files -- five fully
+ * CRLF, two mixed -- and went unnoticed because the frontmatter parser below is
+ * tolerant of both. Tolerant parsing is right; silently publishing a digest over
+ * whichever ending an editor happened to write is not.
+ *
+ * Third, `skills/` is the maintained copy, but a bare clone registers nothing
  * from it: Claude Code scans only `.claude/skills/`, while codex, opencode,
  * hermes and agy scan `.agents/skills/`. Those copies exist so a fresh clone has
  * a working loadout, and copies drift. Symlinks would avoid the duplication but
@@ -93,6 +103,14 @@ async function validate(label, dir, name) {
   if (lines > 500) errors.push(`${label}: SKILL.md is ${lines} lines, over the recommended 500`);
 }
 
+/** Every file of a skill, rejected if its bytes are not canonically LF. */
+async function checkLineEndings(label, dir) {
+  for (const file of await tree(dir)) {
+    const bytes = await readFile(join(dir, file));
+    if (bytes.includes('\r\n')) errors.push(`${label}/${file}: CRLF; skill bytes must be LF`);
+  }
+}
+
 const canonicalDir = join(repo, CANONICAL);
 const names = (await readdir(canonicalDir, { withFileTypes: true }))
   .filter((entry) => entry.isDirectory())
@@ -100,7 +118,10 @@ const names = (await readdir(canonicalDir, { withFileTypes: true }))
   .sort();
 
 if (names.length === 0) errors.push(`${CANONICAL}/ contains no skills`);
-for (const name of names) await validate(`${CANONICAL}/${name}`, join(canonicalDir, name), name);
+for (const name of names) {
+  await validate(`${CANONICAL}/${name}`, join(canonicalDir, name), name);
+  await checkLineEndings(`${CANONICAL}/${name}`, join(canonicalDir, name));
+}
 
 for (const registry of REGISTRIES) {
   const dir = join(repo, registry);
@@ -123,6 +144,7 @@ for (const registry of REGISTRIES) {
   for (const name of expected) {
     if (!present.includes(name)) continue;
     await validate(`${registry}/${name}`, join(dir, name), name);
+    await checkLineEndings(`${registry}/${name}`, join(dir, name));
     const from = join(canonicalDir, name);
     const to = join(dir, name);
     const [a, b] = await Promise.all([tree(from), tree(to)]);
