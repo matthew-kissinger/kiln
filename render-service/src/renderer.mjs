@@ -166,7 +166,10 @@ function disposeGltf(gltf) {
 function applyPresentationPreset(renderer, scene, root, preset, environment) {
   renderer.toneMappingExposure = preset.exposure;
   renderer.shadowMap.enabled = preset.shadows.enabled;
-  if (preset.shadows.enabled) renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+  // r186 removed the PCFSoft implementation: three keeps the constant, warns, and
+  // substitutes PCFShadowMap anyway. Naming the real filter keeps the log clean and
+  // makes the shadow this service actually produces legible from the source.
+  if (preset.shadows.enabled) renderer.shadowMap.type = THREE.PCFShadowMap;
   scene.background = new THREE.Color(preset.background);
   scene.environment = environment;
 
