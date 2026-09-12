@@ -154,6 +154,27 @@ describe('repository reliability contracts', () => {
     expect(workflow).toContain('Report the native dependency inventory');
   });
 
+  // The 2026-09-10 rewrite moved `refs/tags/oss-2026-09-05` as well as `main`, and a
+  // tag is the one ref `git fetch` will not update on its own. That makes the stale
+  // tag, not the branch, what keeps 288 MB of removed files reachable in an old clone
+  // -- so the documented remedy has to force it. This is not hypothetical tidying: the
+  // instructions here really did omit it, and a clone that had run them still measured
+  // 228 MB against a fresh clone's 26 MB.
+  //
+  // Asserting the absence matters more than asserting the presence. The broken form is
+  // the shorter, more obvious one, so it is what a later edit reaches for.
+  test('the re-clone remedy moves the rewritten tag, not just the branch', async () => {
+    const readme = await readText('README.md');
+
+    expect(readme).toContain('git fetch --tags --force origin');
+    // Both near-misses are *refused* by git rather than silently ineffective, which is
+    // why a reader cannot discover `--force` by trying the obvious things first.
+    expect(readme).not.toContain('git fetch origin && git reset --hard origin/main');
+    expect(readme).toContain('oss-2026-09-05');
+    // Forcing the tag frees nothing until the objects it pinned are actually dropped.
+    expect(readme).toContain('git gc --prune=now');
+  });
+
   test('standalone agent context stays concise and names the safety-critical paths', async () => {
     const agents = await readText('AGENTS.md');
 

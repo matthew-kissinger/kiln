@@ -2065,3 +2065,73 @@ supplied by an arbitrary connected server -- but if archives ever come back to M
 the SEP names the conditions: no symlinks, no non-regular entries, a declared
 uncompressed size, never the sole retrieval form, and unpacking to exactly the file
 set the entry enumerates.
+
+
+## Phase 15 -- What an audit of the audit found
+
+Opened 2026-09-12, after Phase 14 closed with every row done or blocked upstream. The
+starting question was whether "nothing open" was true, and the way to answer it was to
+measure the repository rather than re-read the record. Every gate passes offline --
+`check:toolchain`, `check:skills`, `typecheck`, `lint` over 481 files, 1858 pass / 2
+skip / 0 fail across 215 files, render-service 37 pass, coverage 95.39% functions /
+92.59% lines with 46 functions and 222 lines of slack. `bun outdated` across all three
+manifests returns only the upstream-blocked `ai` 7 family plus one `webgpu` patch.
+
+So the ledger was accurate. Four things it does not cover came out of measuring anyway,
+and three of them are the same shape: a claim this repository publishes that nobody had
+re-measured since the day it was written.
+
+| ID | Task | State |
+| --- | --- | --- |
+| 15.1 | The README's remedy for converting a pre-rewrite clone does not work | **Done 2026-09-12.** See below |
+| 15.2 | Three CI jobs report on every PR and block nothing | Queued; the repository half and the GitHub setting |
+| 15.3 | The documented offline gate does not run render-service's 37 tests, or `check:skills` | Queued |
+| 15.4 | `version` has been `0.6.0` for 21 shipped changes, and the tarball is named from it | Queued; owner chose to bump per shipped change |
+
+### 15.1 -- the tag is the whole rewrite, on the clone side too
+
+Phase 3 already learned this in one direction. `git push --force origin main` looked
+complete while a fresh clone still measured 57 MiB, because `refs/tags/oss-2026-09-05`
+still pointed at the original `d941f15` and held every removed blob reachable; pushing
+the tag took the clone from 92 MB to 52 MB, and the note written then says *"anyone
+repeating this work should push every ref."*
+
+The same fact applies to a reader converting an old clone, and the README did not say
+so. Its remedy was `git fetch origin && git reset --hard origin/main`, which moves the
+branch and leaves the tag. **This working copy was the evidence**: `.git` at 228 MB,
+`HEAD` in sync with `origin/main`, the local tag still at `d941f15` with 66 removed
+PNGs, against a fresh clone's 26 MB of identical content.
+
+Reproduced in a throwaway copy by running the documented commands verbatim -- 59 MB
+afterwards, and only because a `git gc` the README never mentions was added; without it,
+228 MB. The two obvious next guesses are worse than ineffective, they are **refused**:
+
+| Command | Result |
+| --- | --- |
+| `git fetch origin && git reset --hard origin/main` (documented) | tag unchanged at `d941f15` |
+| `git fetch --tags origin` | `! [rejected] ... would clobber existing tag` |
+| `git fetch --prune-tags --tags origin` | same rejection |
+| `git fetch --tags --force origin` | `t [tag update]`, then 23 MB after `gc --prune=now` |
+
+A reader therefore cannot discover `--force` by trying the obvious things first, which
+is what makes this a documentation defect rather than a shortcut anybody would find.
+
+Fixed, pinned in `scripts/reliability.test.mjs`, and verified the way the ratchet's own
+tests are: the assertion fails on the old README text for the stated reason before it
+passes on the new one. It asserts the **absence** of the broken form as well as the
+presence of the working one, because the short version is the one a later simplification
+reaches for.
+
+Applied to this clone as well, backup first: a `git bundle` of the pre-rewrite lineage
+(`dd9d5f7`, 177 commits, 235 MB) was written outside the tree and *verified by restoring
+it* -- 119 removed files present at the tip, and all 83 posters recovered with sha256
+matching the `imageHash` in their `examples/renders/*.json` receipts, which is invariant
+I1 from Phase 1 run against the backup instead of the bucket. Only then the tag was
+forced and the objects pruned: 228 MB to 23 MB, `fsck` clean, `HEAD` and tree hash
+byte-identical.
+
+**The clone figures had also drifted**, which is the second instance of the same shape.
+60 MB full and 49 MB filtered, where the README said 52 MB and 48 MB: `.git` grew 18 MB
+to 26 MB when the runtime bundles were re-added after the rewrite, and the checkout is
+unchanged at 34 MB. The timing claims came out rather than being restated, because they
+are network-bound and cannot be honestly re-measured from a different link.

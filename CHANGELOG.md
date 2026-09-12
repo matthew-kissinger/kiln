@@ -3,6 +3,31 @@
 Changes to `@kiln/engine`. Source and installable packages are distributed through
 GitHub. The package is not published on the npm registry.
 
+## The documented way to convert an old clone did not work — 2026-09-12
+
+- The 2026-09-10 rewrite moved `refs/tags/oss-2026-09-05` as well as `main`, and a tag
+  is the one ref `git fetch` will not update on its own. So the README's remedy
+  — `git fetch origin && git reset --hard origin/main` — left the old tag in place,
+  holding every removed file reachable. Measured on the clone this was found in:
+  `.git` at 228 MB where a fresh clone is 26 MB, with identical content.
+- Reproduced by running the documented commands verbatim in a throwaway copy. The two
+  obvious next guesses are not merely ineffective, they are **refused**: plain
+  `git fetch --tags` and even `--prune-tags` both report `would clobber existing tag`,
+  so a reader has no route to the answer without already knowing `--force`.
+- The instructions now force the tag and then reclaim. Verified end to end on the real
+  stale clone: 228 MB to 23 MB, `fsck` clean, `HEAD` and the working tree hash
+  byte-identical before and after. The plan document already recorded that "the tag was
+  the whole rewrite" for the *push* side; this is the same fact on the clone side, which
+  is the side a reader is on.
+- `scripts/reliability.test.mjs` pins it, and asserts the **absence** of the broken form
+  as well as the presence of the working one — the short version is what a later
+  simplification reaches for.
+- Clone figures re-measured: 60 MB full and 49 MB with `--filter=blob:none`, where the
+  README said 52 MB and 48 MB. `.git` grew from 18 MB to 26 MB when the runtime bundles
+  were re-added after the rewrite; the checkout is unchanged at 34 MB. The timing claims
+  are removed rather than restated — they are network-bound and cannot be honestly
+  re-verified from a different link.
+
 ## Skill bytes are canonical, and the SEP-2640 record is corrected — 2026-09-12
 
 - Re-read SEP-2640 from the spec text on its PR branch and the working group's own
