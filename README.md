@@ -110,7 +110,7 @@ cd ../my-assets
 
 Choose `claude`, `codex`, `opencode`, `hermes`, or `agy` for `--harness`, then open that harness in the
 new directory using its generated START.md instructions and accept its project and MCP trust prompts. Sign in to your harness
-first. The MCP server and local CLI are tested on Node.js 22.23.1.
+first. The MCP server and local CLI are tested on Node.js 22.23.2.
 
 Try: “Read AGENTS.md, then make a wooden workbench with a lower shelf. Render it,
 review the result, and save the source and GLB.”

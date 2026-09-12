@@ -43,7 +43,7 @@ release. Do not substitute an unverified npm registry package.
 ## Start on a Mac with a local package
 
 Install Node.js from the [official download page](https://nodejs.org/en/download).
-The pinned package-test runtime is Node **22.23.1**. Use native ARM64 Node on Apple
+The pinned package-test runtime is Node **22.23.2**. Use native ARM64 Node on Apple
 Silicon, or x64 Node on an Intel Mac. Check what this terminal is running:
 
 ```sh
@@ -53,7 +53,7 @@ node -p "process.platform + ' ' + process.arch"
 ```
 
 The last line should say `darwin arm64` or `darwin x64`. The npm supplied with Node
-can install the package; contributor CI pins npm 12.0.1 for reproducible receipts.
+can install the package; contributor CI pins npm 12.0.2 for reproducible receipts.
 You do not need to change global npm or install Homebrew for this workflow.
 
 Choose a permanent installation directory and use the real tarball filename:
@@ -279,7 +279,7 @@ with Docker running. See the [recorded Linux package check](evaluation/platform-
 for the pinned image, exact candidate hash, coverage, and limitations.
 
 CI builds one tarball on Linux, then runs the same npm package smoke natively on
-`macos-15` (ARM64) and `macos-15-intel` (x64), with Node 22.23.1 and npm 12.0.1.
+`macos-15` (ARM64) and `macos-15-intel` (x64), with Node 22.23.2 and npm 12.0.2.
 The Mac jobs install no contributor dependencies and do not set up Bun. Their
 retained receipts include the tarball hash, native architecture and completed
 checks. These versioned runner labels follow [GitHub's runner catalog](https://docs.github.com/en/actions/reference/runners/github-hosted-runners);

@@ -8,7 +8,7 @@ used CPU or GPU. Remove credentials and private paths from shared logs.
 ## Work on the engine
 
 Read [AGENTS.md](AGENTS.md) and the [README](README.md). Contributor checks use Bun
-1.3.14, Node 22.23.1 and npm 12.0.1. End users only need Node/npm for a built package.
+1.4.2, Node 22.23.2 and npm 12.0.2. End users only need Node/npm for a built package.
 
 ```sh
 bun install --frozen-lockfile
