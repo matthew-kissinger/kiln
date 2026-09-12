@@ -30,6 +30,21 @@ in-process Strands tools (`src/agent/tools.ts`) and the stdio MCP server. **Both
 registry** -- never hand-write a tool definition in a skin, or the transports drift apart and the
 repo's central claim stops being true. There is a test that asserts name parity; keep it passing.
 
+One file, but **two surfaces, deliberately different sizes.** `kilnToolRegistry` is the
+in-process agent loop's four tools; `createKilnProgramToolRegistry` is the host-agent MCP
+surface of thirteen, which is what `docs/tools.md` documents and what a published release
+advertises. "Both iterate the registry" means the definitions live in one file, not that the
+two lists match.
+
+The one name that differs is **`kiln_screenshot`, and it is merged rather than missing.** On
+the in-process surface `kiln_render` returns metrics only and `kiln_screenshot` carries the
+six-view grid -- two tools, so a cheap structural check need not pay for an image. On MCP
+`kiln_render` is unified: it holds `media: screenshotMedia` and returns metrics, part paths
+and images together, with six views when `capture` is omitted. A separate `kiln_screenshot`
+there would be a second way to ask for the same grid. `src/mcp-parity.test.ts` asserts the
+MCP surface does not carry it, so the merge stays deliberate; no capability is absent from
+the MCP workflow.
+
 Prefer an explicit terminal submit tool over `structuredOutputSchema` in the in-process loop: the
 latter's coexistence with a full tool set is provider-dependent, while a submit tool is unambiguous
 everywhere. The MCP surface has no submit tool, because there the host agent writes the file itself.

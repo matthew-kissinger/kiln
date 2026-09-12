@@ -1,8 +1,11 @@
 # Updating an existing Kiln integration
 
-This candidate keeps the package version at `0.6.0` until release review. Existing
-inline-code calls and the legacy capture format remain supported. The additions
+Existing inline-code calls and the legacy capture format remain supported. The additions
 below are opt-in, except for corrections to export, camera and setup behavior.
+
+The package version moves with every change that ships, so the version you are moving to
+is whatever the [latest release](https://github.com/matthew-kissinger/kiln/releases/latest)
+says; see [CHANGELOG.md](../CHANGELOG.md) for what changed between any two.
 
 ## Retain the source once
 

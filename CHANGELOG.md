@@ -3,6 +3,38 @@
 Changes to `@kiln/engine`. Source and installable packages are distributed through
 GitHub. The package is not published on the npm registry.
 
+## Post-release polish: the install guide had gone stale — 2026-09-12
+
+- `docs/install.md` told readers to use a checkout **"until an updated package is
+  released"**, naming `kiln-engine-0.6.0.tgz`, an eight-tool surface, and five tools the
+  package lacked. All three were true when written and none survived `v0.7.0`. Verified by
+  driving the published tarball's MCP server over stdio: it advertises **13 tools**,
+  including all five that section said were missing.
+- Rewritten to link the latest release and the generated tool reference instead of
+  restating either. The section was fragile because it duplicated facts that live in gated
+  files — `docs/tools.md` is already checked against the registry, so it does not need
+  repeating in prose that nothing checks.
+- A test now enforces the rule that follows: install guidance may not hard-code a release
+  tarball version, and must point at `releases/latest` and `tools.md`. Scoped to the docs
+  that tell a reader how to *obtain* the package; `CONTRIBUTING.md` keeps its
+  `kiln-engine-0.6.0.tgz` because there the filename is the evidence for why the version
+  policy exists. Both failure modes verified — a pinned version, and a link that stops
+  pointing at the latest release.
+- `docs/migration.md` said "keeps the package version at `0.6.0` until release review",
+  which stopped being true at the tag.
+- **AGENTS.md now explains the two tool surfaces**, which was a real comprehension trap:
+  `registry.ts` holds the in-process loop's four tools and the MCP surface's thirteen, and
+  "both skins consume it" read as one shared list. The one differing name,
+  `kiln_screenshot`, is **merged rather than missing** — in-process, `kiln_render` returns
+  metrics only and `kiln_screenshot` carries the six-view grid, so a cheap structural check
+  need not pay for an image; on MCP, `kiln_render` is unified and returns metrics, part
+  paths and images together, so a separate screenshot tool would be a second way to ask for
+  the same grid.
+- Also measured while checking the new-developer path, in a fresh clone: **~31 seconds from
+  nothing to a rendered GLB** (4s clone, 26s install, 1s render), and the documented
+  render-service step works verbatim — `npm --prefix render-service ci --ignore-scripts` in
+  2s, then 37 tests pass.
+
 ## The Windows failure was a real bug in the alias lock — 2026-09-12
 
 - `rejects lost updates from eight independent processes` went red once on a Windows
