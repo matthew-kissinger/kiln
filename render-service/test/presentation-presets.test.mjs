@@ -4,6 +4,7 @@ import {
   DEFAULT_PRESENTATION_PRESET_ID,
   PRESENTATION_PRESET_CAPABILITIES,
   PRESENTATION_PRESET_IDS,
+  SHADOW_FILTERS,
   getPresentationPreset,
   isPresentationPresetId,
 } from '../src/presentation-presets.mjs';
@@ -51,7 +52,7 @@ describe('versioned presentation preset registry', () => {
       rim: { enabled: true, color: 0xffead6, intensity: 1.2, position: [-2, 5, -5], castsShadow: false },
       shadows: {
         enabled: false,
-        type: 'pcf-soft',
+        type: 'pcf',
         mapSize: [1024, 1024],
         bias: 0,
         normalBias: 0,
@@ -59,6 +60,23 @@ describe('versioned presentation preset registry', () => {
       },
     });
     assert.equal(recursivelyFrozen(getPresentationPreset('neutral-studio-v1')), true);
+  });
+
+  // `shadows.type` described a filter and selected nothing: the validator demanded the
+  // string `pcf-soft` while the renderer hardcoded a constant and never read the field.
+  // r186 then deleted the PCFSoft implementation outright, so the one name the schema
+  // accepted was the one name that no longer exists. These are the filters that do.
+  it('offers only shadow filters that r186 left, and every preset names one of them', () => {
+    assert.deepEqual(SHADOW_FILTERS, ['basic', 'pcf', 'vsm']);
+    assert.equal(Object.isFrozen(SHADOW_FILTERS), true);
+    assert.equal(SHADOW_FILTERS.includes('pcf-soft'), false);
+    for (const id of PRESENTATION_PRESET_IDS) {
+      const { shadows } = getPresentationPreset(id);
+      assert.ok(
+        SHADOW_FILTERS.includes(shadows.type),
+        `${id} names shadow filter ${shadows.type}, which is not one of ${SHADOW_FILTERS.join(', ')}`,
+      );
+    }
   });
 
   it('resolves by ID only and rejects unknown IDs at the request and receipt boundaries', () => {

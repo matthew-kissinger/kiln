@@ -3,6 +3,37 @@
 Changes to `@kiln/engine`. Source and installable packages are distributed through
 GitHub. The package is not published on the npm registry.
 
+## A preset's shadow filter now selects a filter — 2026-09-12
+
+- Going to compare shadow filters by eye turned up the reason there was nothing to
+  compare: **no shipped presentation preset enables shadows.** `neutral-studio-v1` sets
+  `shadows.enabled: false` to preserve the pre-registry visual, `gallery-studio-v1` is a
+  spread of it, and every light has `castsShadow: false`. So r186 deleting the PCFSoft
+  implementation is not a visible regression here, and yesterday's switch to
+  `PCFShadowMap` corrected a line that never runs. Its claim to keep the log clean was
+  overstated: the assignment sits inside `if (preset.shadows.enabled)`, so three's
+  deprecation warning never fired from this service either.
+- What was actually wrong is that `shadows.type` described a filter and selected nothing.
+  The validator demanded the exact string `pcf-soft` while the renderer ignored the field
+  and hardcoded a constant — and after r186, the one name the schema accepted was the one
+  name that no longer exists.
+- It selects a filter now. `SHADOW_FILTERS` is `basic`, `pcf`, `vsm` — what r186 left —
+  and the renderer maps each to its three constant. `vsm` is the soft option that
+  survives, with one catch recorded where someone choosing it will read it: under VSM
+  every shadow receiver also casts, so a ground plane starts casting too.
+- The names live in the schema that validates them and the constants live in the module
+  that imports three, so the renderer checks at load that the map covers the list. A name
+  the validator accepts and the map lacks would set `shadowMap.type` to `undefined` mid
+  render — not a crash, just a quietly different image. Verified by adding `pcf-soft` back
+  to the list and watching the service refuse to start.
+- The gallery is not affected either, for a different reason: neither `<Canvas>` in the
+  site sets r3f's `shadows` prop, so `renderer.shadowMap.enabled` stays false there too,
+  and the only shadowing on that surface is drei's `ContactShadows` — its own depth pass to
+  a texture, which never consults `shadowMap.type`. Between the two paths, r186's PCFSoft
+  removal changes nothing anyone can see in this repository.
+- Worth knowing while reading this: `render-service` runs in **no** CI workflow. Its 37
+  tests and its GPU conformance runs are manual only.
+
 ## The lint baseline is zero, and stays zero — 2026-09-12
 
 - `bun run lint` reported **14 warnings and 11 infos** and exited 0. All 25 are fixed;

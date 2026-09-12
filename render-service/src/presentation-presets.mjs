@@ -46,6 +46,19 @@ function validateDirectional(value, path) {
   if (typeof value.castsShadow !== 'boolean') throw new TypeError(`${path}.castsShadow must be boolean`);
 }
 
+/**
+ * The shadow filters that exist, as preset-facing names.
+ *
+ * `pcf-soft` was here until r186 deleted the PCFSoft implementation. three kept the
+ * constant, warns on it, and substitutes PCFShadowMap -- so a preset naming it was
+ * asking for a filter that no longer exists and quietly receiving a different one.
+ * These three survive, and `renderer.mjs` maps each to its three constant, which is
+ * what makes this field select a filter rather than describe one. `vsm` is the soft
+ * option now, with one behavioural catch worth knowing before choosing it: under VSM
+ * every shadow receiver also casts, so a ground plane starts casting too.
+ */
+export const SHADOW_FILTERS = Object.freeze(['basic', 'pcf', 'vsm']);
+
 function validatePreset(preset) {
   exactKeys(preset, PRESET_KEYS, 'presentation preset');
   if (!/^[a-z0-9]+(?:-[a-z0-9]+)*-v[1-9][0-9]*$/.test(preset.id)) {
@@ -70,7 +83,8 @@ function validatePreset(preset) {
     `${preset.id}.shadows`,
   );
   if (typeof preset.shadows.enabled !== 'boolean') throw new TypeError(`${preset.id}.shadows.enabled must be boolean`);
-  if (preset.shadows.type !== 'pcf-soft') throw new TypeError(`${preset.id}.shadows.type must be pcf-soft`);
+  if (!SHADOW_FILTERS.includes(preset.shadows.type))
+    throw new TypeError(`${preset.id}.shadows.type must be one of ${SHADOW_FILTERS.join(', ')}`);
   tuple(preset.shadows.mapSize, 2, `${preset.id}.shadows.mapSize`, (entry, path) => {
     if (!Number.isInteger(entry) || entry < 1 || entry > 8192) throw new TypeError(`${path} must be an integer in [1,8192]`);
   });
@@ -103,7 +117,7 @@ const definitions = [
     // Disabled preserves the exact pre-registry v1 visual behavior.
     shadows: {
       enabled: false,
-      type: 'pcf-soft',
+      type: 'pcf',
       mapSize: [1024, 1024],
       bias: 0,
       normalBias: 0,
