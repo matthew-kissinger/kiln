@@ -219,7 +219,10 @@ Build a program and return geometry metrics, exact part paths and images. Omit c
                               {
                                 "type": "number"
                               }
-                            ]
+                            ],
+                            "items": false,
+                            "minItems": 3,
+                            "maxItems": 3
                           },
                           "target": {
                             "type": "array",
@@ -233,7 +236,10 @@ Build a program and return geometry metrics, exact part paths and images. Omit c
                               {
                                 "type": "number"
                               }
-                            ]
+                            ],
+                            "items": false,
+                            "minItems": 3,
+                            "maxItems": 3
                           },
                           "relativeTo": {
                             "type": "string",
@@ -259,7 +265,10 @@ Build a program and return geometry metrics, exact part paths and images. Omit c
                                   {
                                     "type": "number"
                                   }
-                                ]
+                                ],
+                                "items": false,
+                                "minItems": 3,
+                                "maxItems": 3
                               },
                               "rotation": {
                                 "type": "array",
@@ -273,7 +282,10 @@ Build a program and return geometry metrics, exact part paths and images. Omit c
                                   {
                                     "type": "number"
                                   }
-                                ]
+                                ],
+                                "items": false,
+                                "minItems": 3,
+                                "maxItems": 3
                               }
                             },
                             "additionalProperties": false
@@ -302,7 +314,10 @@ Build a program and return geometry metrics, exact part paths and images. Omit c
                               {
                                 "type": "number"
                               }
-                            ]
+                            ],
+                            "items": false,
+                            "minItems": 3,
+                            "maxItems": 3
                           },
                           "up": {
                             "type": "array",
@@ -316,7 +331,10 @@ Build a program and return geometry metrics, exact part paths and images. Omit c
                               {
                                 "type": "number"
                               }
-                            ]
+                            ],
+                            "items": false,
+                            "minItems": 3,
+                            "maxItems": 3
                           },
                           "halfHeight": {
                             "type": "number",
@@ -534,7 +552,10 @@ Render sampled animation frames to check motion and attachments. Use shot for th
                     {
                       "type": "number"
                     }
-                  ]
+                  ],
+                  "items": false,
+                  "minItems": 3,
+                  "maxItems": 3
                 },
                 "target": {
                   "type": "array",
@@ -548,7 +569,10 @@ Render sampled animation frames to check motion and attachments. Use shot for th
                     {
                       "type": "number"
                     }
-                  ]
+                  ],
+                  "items": false,
+                  "minItems": 3,
+                  "maxItems": 3
                 },
                 "relativeTo": {
                   "type": "string",
@@ -574,7 +598,10 @@ Render sampled animation frames to check motion and attachments. Use shot for th
                         {
                           "type": "number"
                         }
-                      ]
+                      ],
+                      "items": false,
+                      "minItems": 3,
+                      "maxItems": 3
                     },
                     "rotation": {
                       "type": "array",
@@ -588,7 +615,10 @@ Render sampled animation frames to check motion and attachments. Use shot for th
                         {
                           "type": "number"
                         }
-                      ]
+                      ],
+                      "items": false,
+                      "minItems": 3,
+                      "maxItems": 3
                     }
                   },
                   "additionalProperties": false
@@ -617,7 +647,10 @@ Render sampled animation frames to check motion and attachments. Use shot for th
                     {
                       "type": "number"
                     }
-                  ]
+                  ],
+                  "items": false,
+                  "minItems": 3,
+                  "maxItems": 3
                 },
                 "up": {
                   "type": "array",
@@ -631,7 +664,10 @@ Render sampled animation frames to check motion and attachments. Use shot for th
                     {
                       "type": "number"
                     }
-                  ]
+                  ],
+                  "items": false,
+                  "minItems": 3,
+                  "maxItems": 3
                 },
                 "halfHeight": {
                   "type": "number",
@@ -826,7 +862,10 @@ Render roof-off floor-plan, dollhouse, and eye-level cutaway views. Optional ver
                           {
                             "type": "number"
                           }
-                        ]
+                        ],
+                        "items": false,
+                        "minItems": 3,
+                        "maxItems": 3
                       },
                       "target": {
                         "type": "array",
@@ -840,7 +879,10 @@ Render roof-off floor-plan, dollhouse, and eye-level cutaway views. Optional ver
                           {
                             "type": "number"
                           }
-                        ]
+                        ],
+                        "items": false,
+                        "minItems": 3,
+                        "maxItems": 3
                       },
                       "relativeTo": {
                         "type": "string",
@@ -866,7 +908,10 @@ Render roof-off floor-plan, dollhouse, and eye-level cutaway views. Optional ver
                               {
                                 "type": "number"
                               }
-                            ]
+                            ],
+                            "items": false,
+                            "minItems": 3,
+                            "maxItems": 3
                           },
                           "rotation": {
                             "type": "array",
@@ -880,7 +925,10 @@ Render roof-off floor-plan, dollhouse, and eye-level cutaway views. Optional ver
                               {
                                 "type": "number"
                               }
-                            ]
+                            ],
+                            "items": false,
+                            "minItems": 3,
+                            "maxItems": 3
                           }
                         },
                         "additionalProperties": false
@@ -909,7 +957,10 @@ Render roof-off floor-plan, dollhouse, and eye-level cutaway views. Optional ver
                           {
                             "type": "number"
                           }
-                        ]
+                        ],
+                        "items": false,
+                        "minItems": 3,
+                        "maxItems": 3
                       },
                       "up": {
                         "type": "array",
@@ -923,7 +974,10 @@ Render roof-off floor-plan, dollhouse, and eye-level cutaway views. Optional ver
                           {
                             "type": "number"
                           }
-                        ]
+                        ],
+                        "items": false,
+                        "minItems": 3,
+                        "maxItems": 3
                       },
                       "halfHeight": {
                         "type": "number",
@@ -1044,7 +1098,10 @@ Inspect a part with context or isolation. Use legacy part/orbit controls or shot
                 {
                   "type": "number"
                 }
-              ]
+              ],
+              "items": false,
+              "minItems": 3,
+              "maxItems": 3
             }
           },
           "required": [
@@ -1079,7 +1136,10 @@ Inspect a part with context or isolation. Use legacy part/orbit controls or shot
                 {
                   "type": "number"
                 }
-              ]
+              ],
+              "items": false,
+              "minItems": 3,
+              "maxItems": 3
             }
           },
           "required": [
@@ -1180,7 +1240,10 @@ Inspect a part with context or isolation. Use legacy part/orbit controls or shot
                     {
                       "type": "number"
                     }
-                  ]
+                  ],
+                  "items": false,
+                  "minItems": 3,
+                  "maxItems": 3
                 },
                 "target": {
                   "type": "array",
@@ -1194,7 +1257,10 @@ Inspect a part with context or isolation. Use legacy part/orbit controls or shot
                     {
                       "type": "number"
                     }
-                  ]
+                  ],
+                  "items": false,
+                  "minItems": 3,
+                  "maxItems": 3
                 },
                 "relativeTo": {
                   "type": "string",
@@ -1220,7 +1286,10 @@ Inspect a part with context or isolation. Use legacy part/orbit controls or shot
                         {
                           "type": "number"
                         }
-                      ]
+                      ],
+                      "items": false,
+                      "minItems": 3,
+                      "maxItems": 3
                     },
                     "rotation": {
                       "type": "array",
@@ -1234,7 +1303,10 @@ Inspect a part with context or isolation. Use legacy part/orbit controls or shot
                         {
                           "type": "number"
                         }
-                      ]
+                      ],
+                      "items": false,
+                      "minItems": 3,
+                      "maxItems": 3
                     }
                   },
                   "additionalProperties": false
@@ -1263,7 +1335,10 @@ Inspect a part with context or isolation. Use legacy part/orbit controls or shot
                     {
                       "type": "number"
                     }
-                  ]
+                  ],
+                  "items": false,
+                  "minItems": 3,
+                  "maxItems": 3
                 },
                 "up": {
                   "type": "array",
@@ -1277,7 +1352,10 @@ Inspect a part with context or isolation. Use legacy part/orbit controls or shot
                     {
                       "type": "number"
                     }
-                  ]
+                  ],
+                  "items": false,
+                  "minItems": 3,
+                  "maxItems": 3
                 },
                 "halfHeight": {
                   "type": "number",
@@ -1497,7 +1575,10 @@ Apply exact-string replacements to a program revision and render the result (ren
                               {
                                 "type": "number"
                               }
-                            ]
+                            ],
+                            "items": false,
+                            "minItems": 3,
+                            "maxItems": 3
                           },
                           "target": {
                             "type": "array",
@@ -1511,7 +1592,10 @@ Apply exact-string replacements to a program revision and render the result (ren
                               {
                                 "type": "number"
                               }
-                            ]
+                            ],
+                            "items": false,
+                            "minItems": 3,
+                            "maxItems": 3
                           },
                           "relativeTo": {
                             "type": "string",
@@ -1537,7 +1621,10 @@ Apply exact-string replacements to a program revision and render the result (ren
                                   {
                                     "type": "number"
                                   }
-                                ]
+                                ],
+                                "items": false,
+                                "minItems": 3,
+                                "maxItems": 3
                               },
                               "rotation": {
                                 "type": "array",
@@ -1551,7 +1638,10 @@ Apply exact-string replacements to a program revision and render the result (ren
                                   {
                                     "type": "number"
                                   }
-                                ]
+                                ],
+                                "items": false,
+                                "minItems": 3,
+                                "maxItems": 3
                               }
                             },
                             "additionalProperties": false
@@ -1580,7 +1670,10 @@ Apply exact-string replacements to a program revision and render the result (ren
                               {
                                 "type": "number"
                               }
-                            ]
+                            ],
+                            "items": false,
+                            "minItems": 3,
+                            "maxItems": 3
                           },
                           "up": {
                             "type": "array",
@@ -1594,7 +1687,10 @@ Apply exact-string replacements to a program revision and render the result (ren
                               {
                                 "type": "number"
                               }
-                            ]
+                            ],
+                            "items": false,
+                            "minItems": 3,
+                            "maxItems": 3
                           },
                           "halfHeight": {
                             "type": "number",
