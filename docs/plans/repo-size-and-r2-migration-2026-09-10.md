@@ -1549,3 +1549,43 @@ documented split -- validate covers syntax and sandbox rules, not semantics -- a
 Lane B's sandbox rejection did carry its specific diagnostic
 (`generated code used an undeclared variable`), so the generic message is what a
 caller sees only when no diagnostic maps to the failure.
+
+## Phase 13 -- Parity, gates, and the remaining polish queue
+
+Opened 2026-09-12. Phases 6, 9, 10, 11 and 12 are closed; 7.12 is the only older
+row still open and it is blocked upstream. This phase is the agreed queue for
+getting the repository to a state a stranger can build on, decided with the owner
+on 2026-09-12.
+
+### The lesson this phase starts from
+
+The r186 bump moved `three` in the engine and in `render-service` and **missed
+`site/`**. That is not tidiness: kiln emits `EXT_mesh_gpu_instancing`, and r186
+fixed that extension's custom instance attribute sharing in `GLTFLoader`, so a
+site one minor behind renders the gallery with an unfixed loader for an extension
+the engine writes. The same class of defect -- a value that must agree across
+files with nothing enforcing it -- had been caught in the prose that same morning,
+by a person, hours earlier. Twice in one day is the argument for a gate rather
+than for more care.
+
+| ID | Task | State |
+| --- | --- | --- |
+| 13.1 | `site/` to three 0.186.0, and `check:toolchain` gains a cross-manifest guard: `three` must be byte-identical in every manifest that pins it, and `@types/three` must track its minor | **Done 2026-09-12.** Verified by injecting three separate defects -- the exact site drift that shipped, a `render-service` drift, and a `@types/three` left a minor behind -- and confirming each is caught and names the offending manifest |
+| 13.2 | Safe in-range dependency refresh, kept strictly separate from the deferred majors: `ai` 6.0.222 to 6.0.282, `openai` 6.46.0 to 6.49.0, `@ai-sdk/provider` 3.0.14 to 3.0.16, `@aws-sdk/client-bedrock-runtime` 3.1083.0 to 3.1131.0, and in `site/` react/react-dom 19.3.0 and vite 8.3.0 | Approved, not started |
+| 13.3 | Raise the coverage ratchet from 92/91 to 94/92. Measured 95.27% functions / 92.49% lines, so this keeps roughly 1.3 and 0.5 points for normal churn | Approved, not started |
+| 13.4 | Promote the Windows job from `continue-on-error` to blocking | Approved, not started. The suite itself has never failed there; both red runs were new code of this session's own -- a `sharp/package.json` require and a `URL.pathname` that yields `/D:/...` -- which is the job doing its job |
+| 13.5 | Clear the one substantive lint finding: an unused import in `src/__tests__/optimize.test.ts`. Everything else in the 14/11 baseline is `useTemplate` and `useOptionalChain` style | Approved, not started |
+| 13.6 | Decide shadows by comparison, not assumption. r186 deleted the `PCFSoftShadowMap` implementation; `render-service` now names `PCFShadowMap`, and `VSMShadowMap` is the soft filter that survives. Render gallery presets under both and choose by eye, because this is the only user-visible regression in the r186 upgrade and it lands on marketing surface | Approved, not started |
+
+### Explicitly not in this phase
+
+- **7.12 / SEP-2640.** Still `In Review` on the Skills Over MCP working group's own
+  board, with the reference implementation also in review. Nothing to build against.
+  Re-checked 2026-09-11; the first summary read claimed it had gone Final, and that
+  was wrong -- the charter is the authority, not a page summary.
+- **The `ai` 7 / `@ai-sdk/provider` 4 / `@openrouter/ai-sdk-provider` 3 family.**
+  Deferred by decision. Only `test:live` exercises those paths, it spends money, and
+  the deliberate prompt-cache transport asymmetry is exactly what a provider major
+  breaks silently. 13.2 deliberately takes the in-range updates and leaves these.
+- **11.4.** Answered: the CLI already joins a running service, and auto-spawn would
+  make a one-shot command pay a GPU startup it cannot amortize.

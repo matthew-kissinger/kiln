@@ -40,6 +40,36 @@ if (!new RegExp(`^\\s*bun-version:\\s*${expectedEngines.bun}\\s*$`, 'mu').test(p
 // Dated receipts under docs/evaluation/ are deliberately absent: they record the
 // toolchain a run actually used, and rewriting one to match a new pin would
 // falsify it.
+// three ships in three manifests -- the engine, the GPU render service, and the
+// site's viewer -- and they must agree. Not tidiness: kiln EMITS
+// EXT_mesh_gpu_instancing, and r186 fixed that extension's custom instance
+// attribute sharing in GLTFLoader, so a site one minor behind renders the gallery
+// with an unfixed loader for an extension the engine writes. The r186 bump moved
+// the engine and the service and missed the site, which is why this is a gate and
+// not a note: the same class of drift had already been caught in the prose that
+// morning, by a person, hours earlier.
+const threeManifests = ['package.json', 'render-service/package.json', 'site/package.json'];
+const threePins = new Map();
+for (const name of threeManifests) {
+  const manifest = JSON.parse(await readFile(new URL(`../${name}`, import.meta.url), 'utf8'));
+  const deps = { ...manifest.dependencies, ...manifest.devDependencies };
+  if (deps.three !== undefined) threePins.set(name, deps.three);
+  // `@types/three` tracks three's minor. A caret range is fine; a DIFFERENT minor is
+  // the bug, because the types then describe a release the runtime is not running.
+  if (deps['@types/three'] !== undefined) {
+    const wanted = String(deps.three ?? threePins.get('package.json') ?? '').split('.').slice(0, 2).join('.');
+    if (wanted && !String(deps['@types/three']).replace(/^[\^~]/u, '').startsWith(`${wanted}.`)) {
+      errors.push(`${name}: @types/three ${deps['@types/three']} does not track three ${wanted}.x`);
+    }
+  }
+}
+{
+  const distinct = new Set(threePins.values());
+  if (distinct.size > 1) {
+    const shown = [...threePins].map(([name, pin]) => `${name}=${pin}`).join(', ');
+    errors.push(`three must be identical in every manifest that pins it: ${shown}`);
+  }
+}
 const guidance = [
   ['AGENTS.md', [`Bun \`${expectedEngines.bun}\`; Node \`${expectedEngines.node}\`; npm \`${expectedEngines.npm}\``]],
   ['CONTRIBUTING.md', [`${expectedEngines.bun}, Node ${expectedEngines.node} and npm ${expectedEngines.npm}`]],
