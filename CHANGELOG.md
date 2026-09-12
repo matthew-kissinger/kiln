@@ -3,6 +3,31 @@
 Changes to `@kiln/engine`. Source and installable packages are distributed through
 GitHub. The package is not published on the npm registry.
 
+## A Windows flake now arrives with its own diagnosis — 2026-09-12
+
+- `rejects lost updates from eight independent processes` went red once on a Windows
+  runner, on a pull request that could not reach it. Ten consecutive `main` runs had
+  Windows green before it, and the rerun passed — a low-probability flake, not a
+  regression.
+- The failure said `Worker failed:` with empty stderr, which explains nothing. The
+  eight-process run takes **~60 ms** on an idle Linux host against a **10-second** hang
+  guard, so the Windows overshoot was ~170×. Two causes fit equally well from outside:
+  eight concurrent cold Bun starts transpiling TypeScript on a shared runner behind a
+  virus scanner, or a genuine stall in `rename`/`rmdir` under Windows contention. The lock
+  is a fail-fast `mkdir`, so it is not waiting on the lock either way.
+- **The obvious fix — raising the bound — is the one not taken.** It would remove the
+  symptom and discard the only evidence.
+- Instead each child's elapsed time is recorded and reported on failure, so the next
+  occurrence discriminates the two on sight. Both signatures were produced deliberately to
+  confirm they read differently: all eight over the guard is startup contention, while
+  `1 of 8 workers failed [0:39ms 1:40ms 2:42ms 3:41ms 4:FAILED 5:41ms 6:52ms 7:52ms]` is a
+  real stall.
+- `slowestWorkerMs` also lands in the success receipt, because a run at 60 ms and a run at
+  9,000 ms both pass today and nothing distinguishes them until one goes red.
+- This diagnoses; it does not fix. `src/experiments/program-aliases` has no `exports` entry
+  and no shipped importer, so if the cause turns out to be real contention it is a question
+  about an experiment, not about the engine.
+
 ## `--receipt` was relative to the wrong directory — 2026-09-12
 
 - `scripts/verify-package-receipt.mjs` resolved `--receipt` against `--root` rather than the

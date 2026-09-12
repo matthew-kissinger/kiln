@@ -53,13 +53,20 @@ it('rejects lost updates from eight independent processes', async () => {
     ]);
     expect(error).toBe('');
     expect(code).toBe(0);
-    expect(JSON.parse(output)).toMatchObject({
+    const receipt = JSON.parse(output);
+    expect(receipt).toMatchObject({
       processes: 8,
       updated: 1,
       rejected: 7,
       immutableReferencesResolved: 3,
       originalSourcePreserved: true,
     });
+    // Presence, not a bound. This is a wall-clock figure on whatever host is running, so
+    // asserting a ceiling here would be the flake this field exists to diagnose. What
+    // matters is that a passing receipt records its own headroom against the 10s guard --
+    // ~60ms on an idle Linux host, and the number that would have shown how close the
+    // 2026-09-12 Windows run came before it went red.
+    expect(typeof receipt.slowestWorkerMs).toBe('number');
   } finally {
     clearTimeout(timer);
   }
