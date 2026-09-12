@@ -3,6 +3,21 @@
 Changes to `@kiln/engine`. Source and installable packages are distributed through
 GitHub. The package is not published on the npm registry.
 
+## The r186 bump missed the site, and now a gate catches that — 2026-09-12
+
+- `site/` was still on three 0.185.1 while the engine and `render-service` moved to
+  0.186.0. Substantive rather than untidy: kiln emits `EXT_mesh_gpu_instancing`, and
+  r186 fixed that extension's custom instance attribute sharing in `GLTFLoader`, so
+  the site was rendering the gallery with an unfixed loader for an extension the
+  engine writes.
+- `check:toolchain` now asserts `three` is byte-identical in every manifest that pins
+  it, and that `@types/three` tracks its minor. Verified by injecting three defects —
+  the exact drift that shipped, a `render-service` drift, and a stale `@types/three` —
+  and confirming each is caught and names the offending manifest.
+- The reason this is a gate and not a note: the same class of defect, a value that
+  must agree across files with nothing enforcing it, had been caught in the prose that
+  same morning by a person. Twice in one day is an argument for a check.
+
 ## Finishing the CommonJS removal the r186 bump started — 2026-09-12
 
 - The previous entry's fix was incomplete, and looked complete.
