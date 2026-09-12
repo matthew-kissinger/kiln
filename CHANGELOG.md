@@ -3,6 +3,23 @@
 Changes to `@kiln/engine`. Source and installable packages are distributed through
 GitHub. The package is not published on the npm registry.
 
+## `--receipt` was relative to the wrong directory — 2026-09-12
+
+- `scripts/verify-package-receipt.mjs` resolved `--receipt` against `--root` rather than the
+  working directory. Those are **the same directory in the CI step**, which is why the
+  original passed its own tests and every CI run — and different everywhere else.
+- Found by using it. Assembling the release from downloaded artifacts puts the receipts in
+  a staging directory while `root` is the repository, so every path silently became
+  `<repo>/linux-package.json` and all four verifications failed with `ENOENT`. The
+  assembly refused to publish, which is what it is for.
+- A path a person types on a command line belongs to where they typed it. `root` now
+  locates `package.json` and nothing else.
+- The test that passed while the bug existed is the finding worth keeping: its fixture had
+  `root` and the receipt in the same temp directory, mirroring the CI step, so it could not
+  tell the two rules apart. It now addresses the receipt explicitly and a second case pins
+  the resolution rule with `root` and the receipt in *different* directories. Both fail if
+  the old behaviour is reintroduced — the doubled path in the error is its signature.
+
 ## webgpu 0.6.1 is held out of 0.7.0 — 2026-09-12
 
 - The bump was slated for this release and then held, because reading what is in it

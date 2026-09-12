@@ -17,7 +17,7 @@
  */
 import { createHash } from 'node:crypto';
 import { readFile } from 'node:fs/promises';
-import { dirname, isAbsolute, join, resolve } from 'node:path';
+import { dirname, join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 /** Checks the smoke run must report, named individually so a silent drop is a failure. */
@@ -63,9 +63,15 @@ export async function verifyReceipt(argv, root) {
   }
   if (!arch) throw new Error('--arch is required');
 
+  // `--receipt` is resolved against the working directory, not `root`. Those are the same
+  // directory in the CI step, which is why the original resolved it against `root` and the
+  // tests still passed -- and different everywhere else. Assembling a release from
+  // downloaded artifacts is the case that found it: the receipts sit in a staging
+  // directory while `root` is the repository, and every path silently became
+  // `<repo>/linux-package.json`. A path a person types on a command line belongs to where
+  // they typed it. `root` locates `package.json` and nothing else.
   const receiptPath = option(argv, 'receipt') ?? 'package-smoke.json';
-  const resolved = isAbsolute(receiptPath) ? receiptPath : join(root, receiptPath);
-  const receipt = JSON.parse(await readFile(resolved, 'utf8'));
+  const receipt = JSON.parse(await readFile(resolve(receiptPath), 'utf8'));
   const manifest = JSON.parse(await readFile(join(root, 'package.json'), 'utf8'));
 
   const problems = receiptProblems(receipt, { platform, arch, manifest });

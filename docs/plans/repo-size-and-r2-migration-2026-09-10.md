@@ -2089,6 +2089,7 @@ re-measured since the day it was written.
 | 15.4 | `version` has been `0.6.0` for 21 shipped changes, and the tarball is named from it | **Done 2026-09-12.** 0.7.0, gated. See below |
 | 15.5 | Linux and Windows package receipts had no reproducible source | **Done 2026-09-12.** Four receipts from one CI run; the check extracted. See below |
 | 15.6 | `webgpu` 0.6.0 to 0.6.1 in `render-service/` | **Deferred 2026-09-12, and the reason is its publish date.** Gated on the owner's GPU smoke. See below |
+| 15.7 | `--receipt` resolved against `root`, not the working directory | **Done 2026-09-12.** Found by assembling the release. See below |
 
 ### 15.1 -- the tag is the whole rewrite, on the clone side too
 
@@ -2340,3 +2341,35 @@ build execution and is not one. Left in place rather than deleted, because remov
 field that appears to be a security boundary is a decision the owner should make
 knowingly: either wire it to a tool that honours it, or drop it. Noted so the version key
 is not mistaken for something enforcing anything when 15.6 is eventually taken.
+
+
+### 15.7 -- a test that could not tell two rules apart
+
+`verify-package-receipt.mjs` shipped in 15.5 resolving `--receipt` against `--root`. In
+the CI step those are the same directory, so it worked there, passed its own eleven tests,
+and passed on four platforms across three pull requests.
+
+Assembling the release is the first use where they differ: the receipts are downloaded
+artifacts in a staging directory while `root` is the repository, so every path became
+`<repo>/linux-package.json` and all four verifications failed with `ENOENT`. The assembly
+script refused to publish rather than warning, which is the only reason this was found
+before a release carried four unverified receipts.
+
+The fix is one line. The lesson is in the test that did not catch it.
+
+Its fixture wrote `package.json` and `package-smoke.json` into **one** temp directory and
+passed that directory as `root`, which mirrors the CI step exactly -- and that is precisely
+why it was blind. A fixture that reproduces the environment where a bug is invisible
+inherits the blindness. The two rules "relative to root" and "relative to the working
+directory" have identical behaviour whenever those directories coincide, so the assertion
+had no way to distinguish them no matter how many fields it checked.
+
+It now addresses the receipt explicitly, and a second case pins the rule with `root` and
+the receipt in deliberately *different* directories. Both fail if the old behaviour comes
+back, and the error names the defect: a doubled path,
+`/tmp/kiln-receipt-root-BkY0tL/tmp/kiln-receipt-cwd-7OWwVU/package-smoke.json`.
+
+Worth pairing with 15.3, which was the same shape in a different medium: there an
+assertion read the whole file when it needed to read one block, and the prose in the same
+commit kept it green. Here a fixture collapsed two directories that had to stay apart.
+Both times the assertion was true and measured nothing.

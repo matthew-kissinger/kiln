@@ -78,7 +78,19 @@ describe('package receipt verification', () => {
     await writeFile(join(dir, 'package-smoke.json'), JSON.stringify(receipt));
     await writeFile(join(dir, 'package.json'), JSON.stringify(manifest));
 
-    const argv = ['--platform', 'linux', '--arch', 'x64'];
+    // The receipt is addressed explicitly, because `--receipt` is relative to the working
+    // directory and this fixture lives in a temp directory. The original version resolved
+    // it against `root` instead, and this test passed anyway -- `root` and the receipt's
+    // directory were the same here, exactly as they are in the CI step. Keeping them
+    // different is what makes the assertion mean something.
+    const argv = [
+      '--platform',
+      'linux',
+      '--arch',
+      'x64',
+      '--receipt',
+      join(dir, 'package-smoke.json'),
+    ];
     // Without the override it reports the unreadable path rather than crashing.
     const unresolvable = await verifyReceipt(argv, dir);
     expect(unresolvable).toHaveLength(1);
@@ -91,6 +103,23 @@ describe('package receipt verification', () => {
     const tampered = await verifyReceipt([...argv, '--tarball', tarball], dir);
     expect(tampered).toHaveLength(1);
     expect(tampered[0]).toContain('tarballSha256');
+  });
+
+  test('--receipt is relative to the working directory, not to root', async () => {
+    const dir = await mkdtemp(join(tmpdir(), 'kiln-receipt-cwd-'));
+    await writeFile(join(dir, 'package-smoke.json'), JSON.stringify(good()));
+    // `root` is a DIFFERENT directory that has the manifest but no receipt. If the receipt
+    // were resolved against it, this would throw ENOENT instead of reporting problems.
+    const manifestRoot = await mkdtemp(join(tmpdir(), 'kiln-receipt-root-'));
+    await writeFile(join(manifestRoot, 'package.json'), JSON.stringify(manifest));
+
+    const problems = await verifyReceipt(
+      ['--platform', 'linux', '--arch', 'x64', '--receipt', join(dir, 'package-smoke.json')],
+      manifestRoot,
+    );
+    // Only the tarball is unreadable; every field check found the receipt and passed.
+    expect(problems).toHaveLength(1);
+    expect(problems[0]).toContain('unreadable');
   });
 
   test('an unknown platform is refused before anything is read', async () => {
