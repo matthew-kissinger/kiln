@@ -15,6 +15,7 @@ import { validateRenderMode } from './contract.mjs';
 import {
   DEFAULT_PRESENTATION_PRESET_ID,
   PRESENTATION_PRESET_IDS,
+  SHADOW_FILTERS,
   getPresentationPreset,
 } from './presentation-presets.mjs';
 
@@ -163,13 +164,30 @@ function disposeGltf(gltf) {
   }
 }
 
+/**
+ * Preset filter name -> three constant. The schema owns the names because it validates
+ * them; this owns the constants because it is the module that imports three.
+ *
+ * The two have to cover each other, so that is checked here rather than remembered: a
+ * name the validator accepts and this map lacks would set `shadowMap.type` to undefined
+ * at render time, which is not a crash -- just a quietly different image. Note the
+ * comparison is against undefined, since BasicShadowMap is 0.
+ */
+const SHADOW_MAP_TYPES = {
+  basic: THREE.BasicShadowMap,
+  pcf: THREE.PCFShadowMap,
+  vsm: THREE.VSMShadowMap,
+};
+for (const name of SHADOW_FILTERS) {
+  if (SHADOW_MAP_TYPES[name] === undefined) {
+    throw new Error(`presentation preset shadow filter '${name}' has no three constant`);
+  }
+}
+
 function applyPresentationPreset(renderer, scene, root, preset, environment) {
   renderer.toneMappingExposure = preset.exposure;
   renderer.shadowMap.enabled = preset.shadows.enabled;
-  // r186 removed the PCFSoft implementation: three keeps the constant, warns, and
-  // substitutes PCFShadowMap anyway. Naming the real filter keeps the log clean and
-  // makes the shadow this service actually produces legible from the source.
-  if (preset.shadows.enabled) renderer.shadowMap.type = THREE.PCFShadowMap;
+  if (preset.shadows.enabled) renderer.shadowMap.type = SHADOW_MAP_TYPES[preset.shadows.type];
   scene.background = new THREE.Color(preset.background);
   scene.environment = environment;
 
