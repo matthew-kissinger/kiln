@@ -2496,3 +2496,115 @@ six views when `capture` is omitted. A separate screenshot tool there would be a
 to ask for the same grid. The parity test pins the absence, and the first version of this
 note cited that test as if it were the reason -- a test records a decision, it does not
 explain it.
+
+## Phase 16 -- What a user's bug report actually contained
+
+Opened 2026-09-12 from a Reddit reply: VS Code Copilot showed "massive token usage
+because of how Copilot mishandles `resource_link`", compacting seven times in about
+thirty seconds, and the reporter had patched `createKilnAssetDefs` locally to return
+`resourceUris` instead of `resources`. Three questions: was it already fixed, is it a
+harness bug, or is it ours. The answer turned out to be "ours, but not where they
+pointed" -- and finding that took measuring rather than reading.
+
+| ID | Task | State |
+| --- | --- | --- |
+| 16.1 | Is the report already resolved? | **No, and provably.** `src/assets-resources.ts` has exactly one commit in its history (`dd98f82`, PR #54), and so does the `runTool` block that spreads links into `content`. The surface had never been touched since it shipped |
+| 16.2 | Does the reported mechanism exist? | **No.** `kiln_save`/`kiln_export` results are ~2 KB; the links are 941 B of URIs carrying no bytes. A JSON-RPC tap recorded the Copilot CLI calling `resources/read` **zero** times |
+| 16.3 | Asset links carried none of the fields a client needs to decide | **Done 2026-09-12.** `size` + `annotations.audience`/`priority` added; `editable.zip` unadvertised. See below |
+| 16.4 | `kiln_present` puts up to 16 MiB of base64 files in `_meta` | **Open, with the shape decided.** The widget may call `resources/read` itself; see below |
+| 16.5 | Reproduce in the reporter's actual client | **In flight.** The Copilot CLI is not that client; VS Code Copilot Chat is |
+
+### 16.2 -- the measurement that redirected the whole phase
+
+The instinct was to accept the report's mechanism and patch it. What the numbers said:
+
+| Response | Whole | model-facing text | links | `_meta` |
+| --- | --- | --- | --- | --- |
+| `kiln_export` | 2,044 B | 1,058 B | 941 B | absent |
+| `kiln_present` | 29,410 B | 1,058 B | 941 B | **25,661 B (87.3%)** |
+
+So no asset tool sends file bytes to the model -- except `kiln_present`, which is the
+only def in the registry carrying `ui:`, and which base64-encodes `asset.glb`,
+`source.kiln.js` and `preview.png` into `_meta` up to `WIDGET_TRANSFER_LIMIT` = **16
+MiB**. `src/asset-widget.ts`'s header comment -- *"binary files never enter
+model-facing tool text"* -- is an assumption about client behaviour, not a property
+the code enforces.
+
+Two token deltas were measured on the Copilot CLI and then **discarded as evidence**,
+which is worth recording because the first reading of them was wrong. A save-then-ask
+session cost 240.4k input tokens for a tool-free question, against 169.8k for the same
+question in a no-save session; that 70.6k gap looked like the resource links being
+inlined. It is not. Copilot's reported input figure is **cumulative across internal
+agent turns**, so one extra tool call adds roughly one whole transcript resend. The
+stub server settled it independently: a tool returning **2,000,000 bytes** in `_meta`
+produced a 31.2k-token turn. A correlation that survives one control can still be
+measuring the wrong variable.
+
+### 16.3 -- the fields that were missing
+
+The pinned SDK's `ResourceLinkSchema` carries `size`, `annotations.audience`,
+`annotations.priority`, `description` and `title`. Kiln set **none** of them, so a
+client deciding what to spend context on had only a MIME type to go on. `audience` is
+precisely the spec's channel for "for the human, not the model", and `size` lets a
+client price a link before resolving it.
+
+Both are now emitted. `asset.glb` and `preview.png` are `['user']`, because the model
+already receives rendered views as image blocks from `kiln_render` and geometry from
+metrics -- decoding a mesh buys it nothing. `source.kiln.js` is `['user','assistant']`,
+since re-reading source is a legitimate model move even though `kiln_source` is the
+cheaper way.
+
+`editable.zip` is no longer advertised: it is a bundle of the files listed beside it,
+so a client resolving every link paid twice, and it was simultaneously the largest
+entry and the only derived one. It stays readable at its URI and in `downloadUrls`.
+
+Net wire cost went **941 B to 1,017 B**, and that is not sold as a saving -- it is 76
+bytes for every client becoming *able* to choose. The test compares each declared
+`size` against the bytes `resources/read` actually returns for that URI, because a
+size a client cannot trust is worse than none.
+
+**The reporter's own patch is the shape to avoid.** Returning plain `resourceUris`
+strips the typed blocks, so conforming clients lose `resources/read` discovery and the
+widget wiring -- it fixes one broken client by degrading every correct one.
+
+### 16.4 -- why the widget can stop carrying bytes, without a ceiling cut
+
+The obvious fix was to drop the inline base64 and let the widget fetch. Checking
+before committing said no: `src/viewer/chat-app.ts` spoke only `ui/*` --
+`ui/notifications/tool-result` inbound (the host **pushes** the whole result),
+`ui/resource-teardown`, and two outbound notifications -- with no way to ask the
+server for anything. The fallback on the table was cutting `WIDGET_TRANSFER_LIMIT`,
+which nerfs a working feature.
+
+Reading the frontier instead found the answer already standardised. **MCP Apps**
+(official extension, spec revision 2026-01-26) states that *"UI iframes can use the
+following subset of standard MCP protocol messages: Tools: `tools/call`; Resources:
+`resources/read`"*. So a widget **may** read resources itself, and Kiln is already on
+that dialect -- `chat-app.ts` sends `ui/initialize` today and simply never uses the
+read it is entitled to. The server half also already exists: `mcp-server.ts` registers
+`kiln://assets/{collection}/{asset}/{revision}/{file}` and serves every file as
+`blob`/`text`.
+
+So the shape is: `_meta` carries the manifest and URIs, the widget reads each file
+through `resources/read`, and `decodeWidgetAsset` keeps verifying sha256 against the
+manifest exactly as it does now. This is **strictly better than the present
+behaviour**, not a reduction: today anything over 16 MiB is *refused* a preview, and
+per-file reads have no such wall. `tools/call` is available to the widget as a second
+independent path if a host does not proxy reads. MCP Apps is supported by Claude,
+Claude Desktop, VS Code Copilot, Goose and Postman.
+
+### 16.5 -- the client under test was never the client reported
+
+The Copilot **CLI** (1.0.83) does not reproduce the report: zero `resources/read`, and
+`_meta` demonstrably not forwarded to the model. The reporter said "from VsCode", and
+VS Code Copilot Chat is a **different MCP client** -- shipped **built in** to VS Code
+1.137 (invisible to `code --list-extensions`; installing it fails as a downgrade).
+Registering a tapped server there needs `code --add-mcp`, and the reproduction is in
+flight behind that tap.
+
+One harness fact worth keeping: of everything installed here, only the Copilot CLI
+prints token counts and credits per run, which is why it is the instrument for token
+accounting even though it is not the client with the bug. `antigravity` has no
+headless mode at all -- it is an Electron IDE whose `bin/` holds only
+`language_server` and `webm_encoder` -- so `--harness agy` targets a GUI, and `gemini`
+CLI is the headless substitute for that model family.

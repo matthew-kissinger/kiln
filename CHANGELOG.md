@@ -3,6 +3,29 @@
 Changes to `@kiln/engine`. Source and installable packages are distributed through
 GitHub. The package is not published on the npm registry.
 
+## Asset links now say how big they are and who they are for — 2026-09-12
+
+- A user reported "massive token usage" from VS Code Copilot, attributing it to
+  `resource_link` mishandling. Measuring first: `kiln_save`/`kiln_export` put **941 B of
+  URIs** on the wire and no file bytes, and a JSON-RPC tap showed the Copilot **CLI**
+  never calls `resources/read` at all. So the stated mechanism does not exist in our
+  responses — but the report was standing next to something real.
+- Kiln emitted only four of `ResourceLink`'s fields. The spec also carries **`size`** and
+  **`annotations.audience`**, which are exactly how a server tells a client "this artifact
+  is for the human to download, not for the model to read". Emitting neither left every
+  client guessing from a MIME type, including the ones that guess "inline everything".
+  Both are now set, with `priority`: `asset.glb` and `preview.png` are `['user']` because
+  the model already receives rendered views as image blocks and geometry as metrics;
+  `source.kiln.js` is addressed to both.
+- `editable.zip` is no longer advertised. It is a bundle of the files listed beside it, so
+  a client resolving every link paid for the same bytes twice — and it was the largest
+  entry while being the only derived one. It stays readable at its URI (which is what the
+  widget's download button uses) and stays in `downloadUrls`.
+- Net wire cost went **941 B → 1,017 B**. This is not a size win and is not claimed as
+  one: it trades 76 bytes for every client being *able* to decide correctly. The `size` is
+  compared in the test against the bytes `resources/read` actually returns for that URI,
+  because a declared size a client cannot trust is worse than no size at all.
+
 ## Post-release polish: the install guide had gone stale — 2026-09-12
 
 - `docs/install.md` told readers to use a checkout **"until an updated package is

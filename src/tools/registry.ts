@@ -2553,6 +2553,11 @@ export function createKilnAssetDefs(context: KilnToolContext): KilnToolDef[] {
             name: z.string(),
             uri: z.string(),
             mimeType: z.string(),
+            size: z.number().int().nonnegative(),
+            annotations: z.object({
+              audience: z.array(z.enum(['user', 'assistant'])),
+              priority: z.number(),
+            }),
           }),
         ),
         downloadUrls: z.record(z.string(), z.string()).optional(),

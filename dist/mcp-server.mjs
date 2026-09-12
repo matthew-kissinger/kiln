@@ -25834,18 +25834,37 @@ __export(exports_assets_resources, {
   assetLinks: () => assetLinks
 });
 function assetLinks(collection, manifest) {
-  return [...Object.keys(manifest.files), "manifest.json", "editable.zip"].map((name) => ({
+  const manifestBytes = new TextEncoder().encode(JSON.stringify(manifest, null, 2)).byteLength;
+  return [...Object.keys(manifest.files), "manifest.json"].map((name) => ({
     type: "resource_link",
     name,
     uri: `kiln://assets/${collection}/${manifest.assetId}/${manifest.revisionId}/${name}`,
-    mimeType: assetMime2(name)
+    mimeType: assetMime2(name),
+    size: manifest.files[name]?.bytes ?? manifestBytes,
+    annotations: {
+      audience: audiences[name] ?? ["user"],
+      priority: priorities[name] ?? 0.3
+    }
   }));
 }
 function assetMime2(name) {
   return name.endsWith(".glb") ? "model/gltf-binary" : name.endsWith(".png") ? "image/png" : name.endsWith(".zip") ? "application/zip" : name.endsWith(".json") ? "application/json" : "text/javascript";
 }
+var audiences, priorities;
 var init_assets_resources = __esm(() => {
   init_assets();
+  audiences = {
+    "asset.glb": ["user"],
+    "preview.png": ["user"],
+    "manifest.json": ["user"],
+    "source.kiln.js": ["user", "assistant"]
+  };
+  priorities = {
+    "asset.glb": 0.9,
+    "preview.png": 0.8,
+    "source.kiln.js": 0.5,
+    "manifest.json": 0.3
+  };
 });
 
 // src/widget-transfer.ts
@@ -28129,7 +28148,12 @@ function createKilnAssetDefs(context) {
           type: z4.literal("resource_link"),
           name: z4.string(),
           uri: z4.string(),
-          mimeType: z4.string()
+          mimeType: z4.string(),
+          size: z4.number().int().nonnegative(),
+          annotations: z4.object({
+            audience: z4.array(z4.enum(["user", "assistant"])),
+            priority: z4.number()
+          })
         })),
         downloadUrls: z4.record(z4.string(), z4.string()).optional()
       }),
