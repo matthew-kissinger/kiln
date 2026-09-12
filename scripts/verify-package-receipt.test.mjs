@@ -1,0 +1,102 @@
+import { describe, expect, test } from 'bun:test';
+import { createHash } from 'node:crypto';
+import { mkdtemp, writeFile } from 'node:fs/promises';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
+import { receiptProblems, verifyReceipt } from './verify-package-receipt.mjs';
+
+const manifest = {
+  version: '0.7.0',
+  engines: { bun: '1.4.2', node: '22.23.2', npm: '12.0.2' },
+};
+
+/** A receipt that must pass, so every case below differs from it by exactly one field. */
+const good = () => ({
+  status: 'passed',
+  platform: 'linux',
+  arch: 'x64',
+  node: 'v22.23.2',
+  npm: '12.0.2',
+  engineVersion: '0.7.0',
+  tarballSha256: 'unchecked-here',
+  tarball: '/nonexistent.tgz',
+  checks: [
+    'packaged-node-worker',
+    'source-reference-edit-images',
+    'server-restart-persistence',
+    'exact-source-export',
+    'csg-wasm',
+  ],
+});
+
+const target = { platform: 'linux', arch: 'x64', manifest };
+
+describe('package receipt verification', () => {
+  test('a receipt matching the release is accepted', () => {
+    expect(receiptProblems(good(), target)).toEqual([]);
+  });
+
+  // One case per field, because the whole reason this left the workflow as a one-liner
+  // is that a per-platform copy can assert the wrong platform and still pass.
+  test.each([
+    ['status', { status: 'failed' }, 'status'],
+    ['platform', { platform: 'darwin' }, 'platform'],
+    ['arch', { arch: 'arm64' }, 'arch'],
+    ['node', { node: 'v22.22.0' }, 'node'],
+    ['npm', { npm: '11.0.0' }, 'npm'],
+    ['engineVersion', { engineVersion: '0.6.0' }, 'engineVersion'],
+  ])('a receipt disagreeing about %s is rejected', (_label, patch, named) => {
+    const problems = receiptProblems({ ...good(), ...patch }, target);
+    expect(problems).toHaveLength(1);
+    expect(problems[0]).toContain(named);
+  });
+
+  test('a dropped check is named individually', () => {
+    const receipt = good();
+    receipt.checks = receipt.checks.filter((c) => c !== 'server-restart-persistence');
+    expect(receiptProblems(receipt, target)).toEqual(['missing check: server-restart-persistence']);
+  });
+
+  test('a receipt with no checks at all reports every one of them', () => {
+    expect(receiptProblems({ ...good(), checks: undefined }, target)).toHaveLength(4);
+  });
+
+  // The end-to-end path, including the hash the release actually depends on.
+  test('the tarball hash is checked against the file, and --tarball overrides the path', async () => {
+    const dir = await mkdtemp(join(tmpdir(), 'kiln-receipt-'));
+    const tarball = join(dir, 'kiln-engine-0.7.0.tgz');
+    const bytes = Buffer.from('not really a tarball');
+    await writeFile(tarball, bytes);
+
+    const receipt = {
+      ...good(),
+      tarballSha256: createHash('sha256').update(bytes).digest('hex'),
+      // A path belonging to a runner that no longer exists, which is what a downloaded
+      // receipt always carries.
+      tarball: '/runner/work/kiln/candidate/kiln-engine-0.7.0.tgz',
+    };
+    await writeFile(join(dir, 'package-smoke.json'), JSON.stringify(receipt));
+    await writeFile(join(dir, 'package.json'), JSON.stringify(manifest));
+
+    const argv = ['--platform', 'linux', '--arch', 'x64'];
+    // Without the override it reports the unreadable path rather than crashing.
+    const unresolvable = await verifyReceipt(argv, dir);
+    expect(unresolvable).toHaveLength(1);
+    expect(unresolvable[0]).toContain('unreadable');
+
+    expect(await verifyReceipt([...argv, '--tarball', tarball], dir)).toEqual([]);
+
+    // And a tarball that is present but wrong is rejected, not waved through.
+    await writeFile(tarball, Buffer.from('tampered'));
+    const tampered = await verifyReceipt([...argv, '--tarball', tarball], dir);
+    expect(tampered).toHaveLength(1);
+    expect(tampered[0]).toContain('tarballSha256');
+  });
+
+  test('an unknown platform is refused before anything is read', async () => {
+    await expect(verifyReceipt(['--platform', 'solaris', '--arch', 'x64'], '.')).rejects.toThrow(
+      'must be one of',
+    );
+    await expect(verifyReceipt(['--platform', 'linux'], '.')).rejects.toThrow('--arch is required');
+  });
+});

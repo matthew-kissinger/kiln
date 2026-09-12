@@ -2087,6 +2087,7 @@ re-measured since the day it was written.
 | 15.2 | Three CI jobs report on every PR and block nothing | **Done 2026-09-12.** Both halves. See below |
 | 15.3 | The documented offline gate does not run render-service's 37 tests, or `check:skills` | **Done 2026-09-12.** See below |
 | 15.4 | `version` has been `0.6.0` for 21 shipped changes, and the tarball is named from it | **Done 2026-09-12.** 0.7.0, gated. See below |
+| 15.5 | Linux and Windows package receipts had no reproducible source | **Done 2026-09-12.** Four receipts from one CI run; the check extracted. See below |
 
 ### 15.1 -- the tag is the whole rewrite, on the clone side too
 
@@ -2246,3 +2247,52 @@ So the sequence was the repository's own TDD rule applied to a release step: bum
 1860 tests pass on a mismatch, add the assertion, watch it name `mcp 0.6.0` against
 `mcp 0.7.0`, rebuild, watch it pass. A byte comparison is not a version check, and the
 difference only shows up when the version is the one thing that moved.
+
+
+### 15.5 -- a receipt that could not fail
+
+The 2026-09-05 release attached four platform receipts. Only two of them had a
+reproducible source: `test:package` ran in the macOS job and nowhere else, so
+`linux-package.json` and `windows-package.json` were made by hand. Wiring the other two
+platforms in is what the owner chose over hand-making them again, on the grounds that it
+is what makes the *next* release cheap rather than this one.
+
+That turned a copy-paste job into an extraction, and the reason is worth stating because
+it is not deduplication. The receipt check was a ~400-character `node -e` one-liner
+living inside the macOS job, and it hard-codes `assert.equal(r.platform,'darwin')`.
+Copied to Linux and Windows, the line that has to change is buried mid-string among six
+other assertions -- so the natural failure is a Linux job that asserts `darwin`, passes,
+and attests nothing. **A receipt that cannot fail is not evidence**, and four near-copies
+of one assertion is four chances to produce one.
+
+`scripts/verify-package-receipt.mjs` is now one line in each of the four package jobs,
+and extracting it bought two things nobody was looking for:
+
+- Expected Node and npm versions are read from `engines` instead of written a second
+  time, so `check-toolchain.mjs` stays their single source. The one-liner carried
+  `'v22.23.2'` and `'12.0.2'` as literals, which would have silently outlived a
+  toolchain bump.
+- The receipt already records `engineVersion`, so it is now checked against
+  `package.json`. Combined with 15.4 that closes the loop: the tarball's name, the
+  committed bundle's `identity`, and every platform receipt now have to agree on one
+  version.
+
+`--tarball` overrides the path the receipt recorded, which is what lets one verifier
+serve both uses. In the job the receipt names a tarball sitting right there and the
+default is correct. At release-assembly time the receipts are downloaded artifacts whose
+absolute paths belong to runners that no longer exist -- but their `tarballSha256` is
+exactly what has to be checked against the file about to be published. Without the
+override, verifying a release's own receipts would fail on a missing file, which is the
+kind of thing found by thinking about the last step before writing the first.
+
+Verified against a real receipt rather than fixtures alone. The Linux smoke was run on a
+Linux host before the job was written -- 16 checks, `status: passed`,
+`engineVersion: 0.7.0` -- so the job landed with evidence instead of hope. That receipt
+is accepted; asking the verifier to assert `darwin` against it is rejected with
+`platform: expected darwin, receipt says linux`; and appending one byte to the tarball is
+rejected naming both hashes.
+
+`REQUIRED_CHECKS` moves to eight, and **15.2's gate is what forced that edit** -- the
+suite fails on a job whose context nobody decided about. First time a gate from this
+phase caught the next change rather than a past one, which is the only real evidence that
+any of them will keep working.
