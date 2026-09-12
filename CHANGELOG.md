@@ -3,6 +3,51 @@
 Changes to `@kiln/engine`. Source and installable packages are distributed through
 GitHub. The package is not published on the npm registry.
 
+## The prompt-cache breakpoint is asserted on the wire — 2026-09-12
+
+- The two deferred rows in the queue were both deferred *with a reason*. Checking the
+  reasons rather than inheriting them changed both answers.
+- **The `ai` 7 family is blocked upstream, and money was never the constraint.** The
+  recorded reason was that only `test:live` exercises those paths and it spends money.
+  What actually blocks it: `@strands-agents/sdk@1.17.0` is the latest release, declares
+  peer `@ai-sdk/provider: ^3.0.0`, and types its `VercelModel` on `LanguageModelV3`,
+  while `@openrouter/ai-sdk-provider@3` requires `ai@^7`, which depends on
+  `@ai-sdk/provider@4`. No budget moves that.
+- And `typecheck` would not have caught it. `@ai-sdk/provider@4` still exports
+  `LanguageModelV3` beside V4, so the import keeps compiling; the break is a v4 model
+  handed to a v3 wrapper, at runtime, on the one path no offline suite drives. There is
+  a gate for it now: `scripts/peer-ranges.test.mjs` walks the installed tree and fails
+  on a peer range the version beside it does not meet.
+- **It found a mismatch that already exists.** `@strands-agents/sdk` declares peer
+  `@anthropic-ai/sdk: ^0.109.1` — on a 0.x version that means `>=0.109.1 <0.110.0` —
+  and the last dependency refresh took 0.125.0. Fifteen minors past the declared
+  range, moved by a routine in-range update, noticed by nothing. Kept, and listed with
+  its reasoning in the gate's `ACCEPTED` table, so the next one fails while this one is
+  a decision on the record rather than a silence.
+- **The native cache breakpoint is now asserted against the bytes.** The OpenRouter
+  half already was: it drives `doStream` with `fetch` replaced and reads the outgoing
+  JSON. The native half asserted that `toCachedSystemPrompt` returns
+  `[TextBlock, CachePointBlock]` — the input to the transport, never its output. So the
+  claim the design rests on, that a cache point becomes `cache_control` on the wire,
+  was carried by a comment, on two dependencies that move inside their caret ranges on
+  every refresh. Losing it bills full price for every prefix that should have been a
+  cache read, with every offline gate green.
+- Both native transports are captured now, offline: the Anthropic client takes a
+  `fetch` that records and throws, Bedrock a `requestHandler` that does the same. Both
+  tests are differential — a plain string goes out with no breakpoint — so the
+  breakpoint has one possible origin. Establishing that took an injected defect, which
+  disproved the first draft's premise: Bedrock does *not* auto-inject a system cache
+  point here, because that needs a `cacheConfig` and Kiln passes none. Patching the
+  installed adapters to drop `cache_control` and the converse `cachePoint` fails
+  exactly the new tests while every pre-existing test stays green — including the one
+  named "the adapter emits `cache_control`", which never checked that it did.
+- **7.12 / SEP-2640 stays deferred, for a better reason.** PR 2640 is open and still
+  labelled `draft`; a page summary reported it Final for the second time and was wrong
+  again. But the row turns on something downstream: `@modelcontextprotocol/sdk`
+  publishes 1.30.0 as latest, the version already installed, so there is no TypeScript
+  surface for `skill://` resources to build against whatever the SEP does next. Check
+  the SDK's version, not the pull request.
+
 ## A preset's shadow filter now selects a filter — 2026-09-12
 
 - Going to compare shadow filters by eye turned up the reason there was nothing to

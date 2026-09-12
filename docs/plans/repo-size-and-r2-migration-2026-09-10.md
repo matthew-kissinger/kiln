@@ -1642,10 +1642,102 @@ is what separated "the rig is wrong" from "the backend cannot do this".
 - **7.12 / SEP-2640.** Still `In Review` on the Skills Over MCP working group's own
   board, with the reference implementation also in review. Nothing to build against.
   Re-checked 2026-09-11; the first summary read claimed it had gone Final, and that
-  was wrong -- the charter is the authority, not a page summary.
+  was wrong -- the charter is the authority, not a page summary. Re-checked again
+  2026-09-12 and superseded by Phase 14: the row now turns on the TypeScript SDK's
+  version, not on the SEP's status.
 - **The `ai` 7 / `@ai-sdk/provider` 4 / `@openrouter/ai-sdk-provider` 3 family.**
   Deferred by decision. Only `test:live` exercises those paths, it spends money, and
   the deliberate prompt-cache transport asymmetry is exactly what a provider major
   breaks silently. 13.2 deliberately takes the in-range updates and leaves these.
+  **Superseded by Phase 14**, which checked this reason rather than inheriting it:
+  the family is blocked upstream and the money was never the binding constraint.
 - **11.4.** Answered: the CLI already joins a running service, and auto-spawn would
   make a one-shot command pay a GPU startup it cannot amortize.
+
+
+## Phase 14 -- The two deferred rows, re-grounded
+
+Opened 2026-09-12, after Phase 13 closed. Nothing here was queued work. Both rows
+left open were deferred *with a reason*, and this phase checked the reasons instead
+of inheriting them. One held for a different cause than the one recorded, one was
+wrong, and the wrong one was sitting on top of a mismatch that already exists in
+the installed tree.
+
+| ID | Task | State |
+| --- | --- | --- |
+| 14.1 | Re-ground 7.12 / SEP-2640 against an authoritative source | **Done 2026-09-12.** Deferred still, for a stronger reason. See below |
+| 14.2 | Establish what actually blocks the `ai` 7 family, and gate it | **Done 2026-09-12.** `@strands-agents/sdk@1.17.0` is latest, declares peer `@ai-sdk/provider: ^3.0.0`, and its `VercelModel` is typed on `LanguageModelV3` in 21 places. `@openrouter/ai-sdk-provider@3.0.0` requires `ai: ^7.0.0`; `ai@7.0.99` depends on `@ai-sdk/provider@4.0.14`. The family cannot be taken until Strands ships a release accepting the v4 spec -- no budget changes that. `scripts/peer-ranges.test.mjs` now fails on a peer range the version beside it does not meet, verified by patching the installed `@openrouter/ai-sdk-provider` manifest to peer `ai: ^7.0.0` and watching it report `installed 6.0.282` |
+| 14.3 | Assert the prompt-cache breakpoint on the wire, offline | **Done 2026-09-12.** Both native transports captured in `src/agent/providers.test.ts`, both differential. See below |
+
+### 14.1 -- the decisive fact is not the SEP's status
+
+Checked against the GitHub API rather than a rendered page: PR 2640 is `OPEN`,
+neither merged nor closed, labelled `SEP`, `draft` ("SEP proposal with a sponsor")
+and `extension`, last updated 2026-09-11T22:34Z. A page summary again reported it
+as accepted and "now Final, with reference implementations and conformance tests in
+place." That is the **second** time the same summary has been wrong about this row,
+so the 2026-09-11 note is now load-bearing rather than incidental: read the labels,
+not the prose.
+
+What actually settles the row sits downstream of the SEP. `@modelcontextprotocol/sdk`
+publishes **1.30.0** as latest -- the exact version installed here, at protocol
+2025-11-25. There is no TypeScript surface for `skill://` resources to build
+against, so ratification tomorrow would still leave nothing to implement. The thing
+to re-check is the SDK's version, not the pull request's.
+
+### 14.2 -- why a peer range needed a gate of its own
+
+The repository's recurring defect is a value that must agree across files with
+nothing enforcing it. A peer range is that shape one level out: the agreement is
+between manifests this repository does not own, `bun install` warns and installs
+anyway, and the code that breaks is a provider adapter reached only through the
+agent loop.
+
+`typecheck` looks like it would catch this and does not.
+`@ai-sdk/provider@4.0.14` still exports `LanguageModelV3` beside V2 and V4, so
+`import type { LanguageModelV3 }` keeps compiling after the bump; the break is a v4
+model handed to a v3 wrapper, at runtime, on a path only `test:live` drives.
+
+**The mismatch that already exists.** The peer walk found one, and it is not the
+deferred family: `@strands-agents/sdk@1.17.0` declares peer
+`@anthropic-ai/sdk: ^0.109.1`, which on a 0.x version resolves to
+`>=0.109.1 <0.110.0`, and 13.2 took **0.125.0**. Fifteen minors past the range its
+author declares, moved by a routine in-range refresh, noticed by nothing. Kept
+rather than reverted -- the surface Kiln uses is `messages.stream` plus
+system-prompt formatting -- and listed in the gate's `ACCEPTED` table with that
+reasoning, so a *second* mismatch fails while this one is a decision on the record.
+The staleness arm is gated too: an accepted entry that stops mismatching must be
+dropped, verified by widening the range in the installed manifest and watching the
+test say so.
+
+### 14.3 -- what "only `test:live` exercises those paths" was hiding
+
+Half true, and the wrong half had been assumed.
+
+The OpenRouter side already asserted the bytes: it drives `doStream` with
+`globalThis.fetch` replaced and reads `cache_control` and `provider.sort` out of the
+outgoing JSON. The native side asserted that `toCachedSystemPrompt` returns
+`[TextBlock, CachePointBlock]` and that those carry the discriminators the adapters
+branch on -- the **input** to the transport, never its output. So the claim the whole
+design rests on, that a cache point becomes `cache_control` on the wire, was carried
+by a comment. Both native dependencies move inside their caret ranges on every
+refresh, and losing this silently bills full price for every prefix that should have
+been a cache read while every offline gate stays green.
+
+Both native transports are now captured offline: the Anthropic client takes a
+`fetch` that records and throws, the Bedrock client a `requestHandler` that does the
+same, and neither test reaches the network. Both are differential -- a plain string
+goes out with no breakpoint at all -- so the breakpoint has exactly one possible
+origin.
+
+Establishing that took an injected defect. The first draft asserted that Bedrock
+auto-injects a system cache point for `anthropic`/`claude` model ids and that Kiln's
+block array is therefore redundant there. It does not:
+`_shouldEnableCaching()` returns false when no `cacheConfig` was passed, and Kiln
+passes none to either native provider. `toCachedSystemPrompt` is the sole mechanism
+on all three transports.
+
+Verified the way the rest of this queue was -- by patching the installed Strands
+adapters to drop `cache_control` and the converse `cachePoint`. Each injection fails
+exactly the new test while **every pre-existing test stays green**, including the one
+named "the adapter emits `cache_control`", which never checked that it did.
