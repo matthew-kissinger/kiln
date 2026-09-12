@@ -21,11 +21,14 @@
 import { describe, expect, test } from 'bun:test';
 import { readdirSync, readFileSync, statSync } from 'node:fs';
 import { join } from 'node:path';
+import { fileURLToPath } from 'node:url';
 
-const SRC = new URL('..', import.meta.url).pathname;
+// `fileURLToPath`, never `URL.pathname`: on Windows the latter yields
+// `/D:/a/kiln/src/`, whose leading slash makes every fs call ENOENT.
+const SRC = fileURLToPath(new URL('..', import.meta.url));
 const ESM_BUILD = 'three-subdivide/build/index.module.js';
 /** This file names the bad pattern in prose and in a regex, so it matches itself. */
-const SELF = new URL(import.meta.url).pathname;
+const SELF = fileURLToPath(new URL(import.meta.url));
 
 /** Every `.ts` under `src/`, so a new file cannot reintroduce the bare specifier. */
 function sourceFiles(dir: string, out: string[] = []): string[] {
@@ -55,7 +58,9 @@ describe('three-subdivide is loaded as ESM', () => {
 
   test('the ESM build contains no require() call, which is the whole point', () => {
     const esm = readFileSync(
-      new URL('../../node_modules/three-subdivide/build/index.module.js', import.meta.url).pathname,
+      fileURLToPath(
+        new URL('../../node_modules/three-subdivide/build/index.module.js', import.meta.url),
+      ),
       'utf8',
     );
     expect(esm).not.toMatch(/\brequire\s*\(/u);
@@ -63,7 +68,7 @@ describe('three-subdivide is loaded as ESM', () => {
 
   test('the dependency is pinned exactly, so no minor can add an exports map under us', () => {
     const pkg = JSON.parse(
-      readFileSync(new URL('../../package.json', import.meta.url).pathname, 'utf8'),
+      readFileSync(fileURLToPath(new URL('../../package.json', import.meta.url)), 'utf8'),
     ) as { dependencies?: Record<string, string>; devDependencies?: Record<string, string> };
     const range = { ...pkg.dependencies, ...pkg.devDependencies }['three-subdivide'];
     expect(range).toMatch(/^\d+\.\d+\.\d+$/u);
