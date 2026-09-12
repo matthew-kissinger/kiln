@@ -3,6 +3,28 @@
 Changes to `@kiln/engine`. Source and installable packages are distributed through
 GitHub. The package is not published on the npm registry.
 
+## webgpu 0.6.1 is held out of 0.7.0 — 2026-09-12
+
+- The bump was slated for this release and then held, because reading what is in it
+  changed the decision. `webgpu@0.6.1` was published **the same day**, and
+  `v0.6.0...v0.6.1` bumps the `third_party/dawn` submodule to "latest" alongside a real
+  fix — unmapping a device's buffers when the device is destroyed, with 114 lines of new
+  tests upstream.
+- The fix is worth having: render-service creates and destroys a device per capture, and
+  buffer unmapping on destroy is the readback path. That is not what holds it.
+- What holds it is that **nothing here can exercise it.** CI installs render-service with
+  `--ignore-scripts` so the 37 pure tests run without a device — which means they prove
+  the package resolves and nothing more. `render-service/src/`, `package.json` and
+  `package-lock.json` all ship inside the engine tarball, so an untested native bump would
+  be in the release artifact, attested by four receipts that never touched a GPU.
+- So 0.7.0 ships from what CI has fully proven, and this is the first change after it,
+  gated on the GPU smoke that already holds Phase 4 §7 and the two conformance runs.
+- Noted while looking, not changed: `render-service/package.json` has an `allowScripts`
+  field keyed `{"webgpu@0.6.0": true}` that **nothing reads** — not Bun's
+  `trustedDependencies`, no `@lavamoat/allow-scripts` in the tree, and the README says
+  plain `npm install`, which runs scripts anyway. It looks like a control over native
+  build execution and is not one. Left for a deliberate decision rather than deleted.
+
 ## All four platform receipts come from CI now — 2026-09-12
 
 - The 2026-09-05 release attached `linux-package.json` and `windows-package.json`, but

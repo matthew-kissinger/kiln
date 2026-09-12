@@ -2088,6 +2088,7 @@ re-measured since the day it was written.
 | 15.3 | The documented offline gate does not run render-service's 37 tests, or `check:skills` | **Done 2026-09-12.** See below |
 | 15.4 | `version` has been `0.6.0` for 21 shipped changes, and the tarball is named from it | **Done 2026-09-12.** 0.7.0, gated. See below |
 | 15.5 | Linux and Windows package receipts had no reproducible source | **Done 2026-09-12.** Four receipts from one CI run; the check extracted. See below |
+| 15.6 | `webgpu` 0.6.0 to 0.6.1 in `render-service/` | **Deferred 2026-09-12, and the reason is its publish date.** Gated on the owner's GPU smoke. See below |
 
 ### 15.1 -- the tag is the whole rewrite, on the clone side too
 
@@ -2296,3 +2297,46 @@ rejected naming both hashes.
 suite fails on a job whose context nobody decided about. First time a gate from this
 phase caught the next change rather than a past one, which is the only real evidence that
 any of them will keep working.
+
+
+### 15.6 -- a native patch that is three hours old
+
+The bump was selected for the release and then held, because reading what is in it
+changed the decision. `webgpu@0.6.1` was published 2026-09-12T10:25Z, roughly three hours
+before it was considered here, and `v0.6.0...v0.6.1` is four commits:
+
+| Change | Weight |
+| --- | --- |
+| unmap a device's buffers when the device is destroyed | `index.js` +63, and a new `device-destroy-tests.js` +114 |
+| `third_party/dawn` submodule, "update to latest" | the entire native graphics engine moves |
+| `third_party/depot_tools` submodule | toolchain |
+| README | +2/-2 |
+
+The fix is relevant rather than incidental: render-service creates and destroys devices
+per capture, and buffer unmapping on destroy is the readback path this repository has a
+test file for. It is worth having.
+
+What holds it is the second row against the calendar. A submodule bumped to "latest"
+means the driver-facing native code moved by an unbounded amount, on the same day, and
+**nothing in this repository can exercise it.** CI installs render-service with
+`--ignore-scripts` precisely so the 37 pure tests can run without a device, so those
+tests prove the package still resolves and nothing more. `render-service/src/`,
+`package.json` and `package-lock.json` all ship inside the engine tarball, so this is not
+a local-only dependency: it would be in the release artifact, attested by four receipts
+that never touched a GPU.
+
+So 0.7.0 ships from what CI has fully proven, and this is the first change after it,
+gated on the owner's GPU smoke -- the same gate that already holds Phase 4 section 7 and
+the two conformance runs. The distinction worth keeping is between a dependency whose
+tests are evidence and one whose tests are only resolution: `--ignore-scripts` is correct
+for CI and is exactly why CI cannot clear this.
+
+**One thing found while looking, not fixed here.** `render-service/package.json` carries
+an `allowScripts` field keyed by exact version -- `{"webgpu@0.6.0": true}` -- and
+**nothing reads it.** It is not Bun's `trustedDependencies`, there is no
+`@lavamoat/allow-scripts` dependency in the tree, and the README instructs plain
+`npm install`, which runs install scripts regardless. It looks like a control over native
+build execution and is not one. Left in place rather than deleted, because removing a
+field that appears to be a security boundary is a decision the owner should make
+knowingly: either wire it to a tool that honours it, or drop it. Noted so the version key
+is not mistaken for something enforcing anything when 15.6 is eventually taken.
