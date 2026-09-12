@@ -2091,7 +2091,7 @@ re-measured since the day it was written.
 | 15.6 | `webgpu` 0.6.0 to 0.6.1 in `render-service/` | **Deferred 2026-09-12, and the reason is its publish date.** Gated on the owner's GPU smoke. See below |
 | 15.7 | `--receipt` resolved against `root`, not the working directory | **Done 2026-09-12.** Found by assembling the release. See below |
 | 15.8 | `v0.7.0` released | **Done 2026-09-12.** Tag `v0.7.0` at `44b4bc8`; four receipts and `SHA256SUMS.txt` from one CI run, each verified against the published tarball |
-| 15.9 | A Windows flake whose failure message said nothing | **Diagnosed, not masked, 2026-09-12.** See below. The cause is still open and needs a Windows host |
+| 15.9 | The Windows failure was a real bug in the alias lock, not a flake | **Found and fixed 2026-09-12.** `mkdir` contention on Windows reports `EPERM`/`EACCES`, which was rethrown. See below |
 
 ### 15.1 -- the tag is the whole rewrite, on the clone side too
 
@@ -2391,43 +2391,55 @@ That chain is what 15.4 and 15.5 were for, and it only closed because 15.7's bug
 caught by a script that refused rather than warned. A release assembled by hand would
 have had no step at which four receipts and one tarball were required to agree.
 
-### 15.9 -- a flake diagnosed rather than silenced
+### 15.9 -- the number that was in the log the whole time
 
-`rejects lost updates from eight independent processes` went red once, on a Windows
-runner, on a pull request whose diff could not reach it. Ten consecutive `main` runs had
-Windows green beforehand and the rerun passed, so: low-probability flake, not a
-regression.
+`rejects lost updates from eight independent processes` went red once on a Windows runner,
+on a pull request whose diff could not reach it. The first reading here was that it was a
+timing flake, with two candidate causes -- runner startup contention or a stall in
+`rename`/`rmdir` -- and a note that neither could be told apart from a Linux host. **That
+was wrong, and the datum refuting it was already captured:**
 
-The failure message was `Worker failed:` with an empty stderr. That is the actual defect
-here -- the test could fail without saying anything about why.
+```
+(fail) rejects lost updates from eight independent processes [123.61ms]
+```
 
-Measured: the eight-process run takes ~60ms on an idle Linux host against a 10-second hang
-guard, so Windows overshot by roughly 170x. Two causes fit equally well from outside, and
-**they cannot be told apart from a Linux host**:
+123ms. Both hang guards are 10 and 15 seconds away. Nothing was slow, nothing was killed,
+and every explanation resting on elapsed time was dead on arrival. Ten green `main` runs
+and a green rerun made "flake" the comfortable conclusion, and the duration beside the
+failure was the thing that should have been read first.
 
-1. Eight concurrent cold Bun starts transpiling TypeScript on a shared two-core runner
-   behind a virus scanner.
-2. A genuine stall in `rename` or `rmdir` under Windows contention.
+A worker died fast, and `compareAndSet` has exactly one way to do that: the `throw error`
+beside its lock, reached whenever `mkdir` reports contention with a code other than
+`EEXIST`.
 
-The lock is a fail-fast `mkdir` with no retry loop, so neither explanation is "waiting on
-the lock".
+**Windows has exactly that case.** Directory deletion there is not synchronous: a directory
+whose last handle has not closed sits in a pending-delete state, and `mkdir` on that name
+fails with `EPERM` or `EACCES` rather than `EEXIST`. Every release in this file runs
+`rmdir(lock)` inside a `finally`, so with eight processes contending on one lock, a
+process arriving in that window is ordinary contention -- and the code rethrew it, exiting
+the worker non-zero with a stack trace the parent reported as `Worker failed:` and an
+empty stderr.
 
-Raising the bound from 10s is the obvious fix and it is the wrong one: it removes the
-symptom and throws away the only evidence that would ever distinguish those two. So each
-child's elapsed time is recorded and reported on failure instead. Both signatures were
-produced deliberately rather than assumed:
+Two changes, and the second matters as much as the first:
 
-| Forced condition | Output |
-| --- | --- |
-| guard 8ms, all children over | `8 of 8 workers failed [0:FAILED ... 7:FAILED]` -- startup contention |
-| guard 45ms, between fast and slow | `1 of 8 workers failed [0:39ms 1:40ms 2:42ms 3:41ms 4:FAILED 5:41ms 6:52ms 7:52ms]` -- a real stall |
+- `isLockContention` recognises `EPERM` and `EACCES` **on Windows only**. Widening it to
+  every platform is the over-fix: on POSIX those codes from `mkdir` mean the parent
+  directory is not writable, and swallowing them would report a real permission fault as
+  "busy". Both mistakes are pinned -- reverting to `EEXIST`-only fails the Windows case,
+  over-widening fails the POSIX guard.
+- Lock release can no longer decide what the call throws. `rmdir` has no `force`, and on
+  Windows it can fail while a scanner holds the directory; inside a `finally` that would
+  replace a precise `Alias conflict` with an unrelated errno, or turn a successful write
+  into a failure. Cleanup failures are swallowed now, and a lingering lock degrades to
+  "busy" because `isLockContention` treats it that way.
 
-`slowestWorkerMs` is in the success receipt too, because a run at 60ms and a run at
-9,000ms both pass today and nothing tells them apart until one goes red. The test asserts
-the field is a number and deliberately not a ceiling, since a wall-clock bound in the
-assertion would be the very flake this is meant to diagnose.
+Verified on Linux, because the decision was the defect and a predicate taking `platform`
+as a parameter has every branch reachable from anywhere. That is the general point: this
+looked like it needed a Windows host, and it needed the error-code decision extracted far
+enough to test.
 
-**Still open, and it is not the engine's correctness.** `src/experiments/program-aliases`
-has no `exports` entry and no shipped importer; it is an experiment receipt. If the cause
-turns out to be real Windows contention, that is a question about the experiment, and
-answering it needs a Windows host.
+**The lesson is the diagnosis, not the fix.** "Intermittent on one platform, green on
+rerun, ten green runs behind it" is a description that fits both a flake and a real race,
+and the reflex was to treat the frequency as the diagnosis. The distinguishing evidence
+cost nothing to read. This sits alongside 15.3 and 15.7: there an assertion was true and
+measured nothing; here an explanation was plausible and measured nothing.

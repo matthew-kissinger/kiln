@@ -1,8 +1,28 @@
 /** Offline prototype only: deliberately absent from the package's public exports/tools. */
-import { mkdir, readFile, rename, rm, rmdir, writeFile } from 'node:fs/promises';
+import { mkdir, readFile, rename, rm, writeFile } from 'node:fs/promises';
 import { randomUUID } from 'node:crypto';
 import { join } from 'node:path';
 import { assertProgramRef, type ProgramStore } from '../program-store';
+
+/**
+ * Whether a failed lock acquisition means "somebody else has it" rather than "broken".
+ *
+ * `mkdir` is the mutex, so POSIX answers this with `EEXIST` and nothing else. Windows has
+ * a second way to say the same thing: directory deletion is not synchronous, and a
+ * directory whose last handle has not closed sits in a pending-delete state where `mkdir`
+ * on that name fails with `EPERM` or `EACCES` instead of `EEXIST`. Every release here runs
+ * `rmdir(lock)` in a `finally`, so with eight processes contending, one arriving in that
+ * window is ordinary contention -- and the original code rethrew it, killing the worker.
+ *
+ * Narrowed to Windows deliberately. On POSIX, `EPERM`/`EACCES` from `mkdir` means the
+ * parent directory is not writable, and swallowing that would turn a real permission
+ * problem into a misleading "busy".
+ */
+export function isLockContention(error: unknown, platform: string = process.platform): boolean {
+  const code = (error as NodeJS.ErrnoException).code;
+  if (code === 'EEXIST') return true;
+  return platform === 'win32' && (code === 'EPERM' || code === 'EACCES');
+}
 
 export class ExperimentalProgramAliases {
   constructor(
@@ -46,7 +66,7 @@ export class ExperimentalProgramAliases {
     try {
       await mkdir(lock);
     } catch (error) {
-      if ((error as NodeJS.ErrnoException).code === 'EEXIST')
+      if (isLockContention(error))
         throw new Error(`Alias busy: ${name}; reread and retry explicitly.`);
       throw error;
     }
@@ -61,7 +81,16 @@ export class ExperimentalProgramAliases {
       });
       await rename(temporary, target);
     } finally {
-      await Promise.all([rm(temporary, { force: true }), rmdir(lock)]);
+      // Cleanup must not decide what this call throws. `rmdir` has no `force`, and on
+      // Windows it can fail with `EBUSY`/`EPERM` while a scanner or another process holds
+      // the directory -- which in a `finally` would replace a precise `Alias conflict`
+      // with an unrelated errno, or turn a successful write into a failure. The lock's
+      // own name is what the next caller contends on, and `isLockContention` now treats a
+      // lingering one as busy, so failing to remove it degrades rather than corrupts.
+      await Promise.all([
+        rm(temporary, { force: true }).catch(() => {}),
+        rm(lock, { recursive: true, force: true }).catch(() => {}),
+      ]);
     }
   }
 }

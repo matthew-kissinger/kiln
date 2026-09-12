@@ -29,20 +29,17 @@ if (process.argv[2] === '--child') {
       ['original', 'candidate-a', 'candidate-b'].map((code) => store.put(code)),
     );
     await aliases.compareAndSet('bridge', null, refs[0]!);
-    // Each child is killed at 10s as a hang guard, and on 2026-09-12 one was killed on a
-    // Windows runner -- `Worker failed:` with an empty stderr, which says nothing about
-    // why. The whole eight-process run takes ~90ms on an idle Linux host, so that is a
-    // ~115x overshoot, and two causes fit equally well from the outside: eight concurrent
-    // cold Bun starts transpiling TypeScript on a shared runner behind a virus scanner,
-    // or a genuine stall in `rename`/`rmdir` under Windows contention. The lock is a
-    // fail-fast `mkdir`, so it is NOT waiting on the lock either way.
+    // A child was killed here once on a Windows runner, reported as `Worker failed:` with
+    // an empty stderr, which said nothing about why. The timings below exist because that
+    // message could not distinguish a slow child from a dead one -- and the distinction
+    // turned out to matter: the failing test took 123ms, so nothing was slow at all. The
+    // cause was the lock's error handling, fixed in `isLockContention`.
     //
-    // Raising the bound would make the symptom go away and discard the only evidence.
-    // Instead each child's elapsed time is recorded and reported on failure, so the next
-    // occurrence discriminates the two on sight: uniformly slow children mean startup
-    // contention, one slow child among seven fast ones means the stall is real. Same
-    // move 13.4 made with the native dependency inventory -- make the rare failure
-    // arrive with its own diagnosis attached.
+    // Kept anyway, because the per-child comparison is what made that readable. All eight
+    // over the guard means the host is contended; one FAILED beside seven fast children
+    // means a worker died, which points at the code rather than the runner. The receipt
+    // also carries the slowest child on success, so a run at 60ms and a run at 9,000ms
+    // stop looking identical while both pass.
     const spawnedAt = performance.now();
     const children = Array.from({ length: 8 }, (_, i) => {
       const child = Bun.spawn(
