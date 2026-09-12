@@ -3,6 +3,15 @@ coverageSkipTestFiles = true
 coverageReporter = ["text", "lcov"]
 coverageDir = "coverage"
 coveragePathIgnorePatterns = [
+  # The ratchet is a contract about the shipped engine, so it is measured over
+  # `src/` alone. `scripts/` is repo-only -- it is not in `files` or `exports`,
+  # and its correctness is asserted by its own tests, which still run here. Four
+  # of its files were being instrumented because a test imports them, 229 lines
+  # against the engine's 45,726, and that was enough for a FORMATTING change in a
+  # repo-only script to move the engine's coverage contract: reflowing two dense
+  # single-expression files took lines from 92.49% to 92.14%. A number treated as
+  # a contract should not have an input like that.
+  "scripts/**",
   "**/*.test.ts",
   "**/*.test.mjs",
   "**/__tests__/**",

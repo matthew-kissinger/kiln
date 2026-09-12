@@ -88,7 +88,8 @@ do not lower them without an explicit measured rationale. Live model tests are o
 `bun run test:live` and may spend money.
 
 Tests and CI pin `KILN_RENDER=cpu`. The coverage ratchet must not vary by whether the runner has a
-GPU.
+GPU. It is measured over `src/` alone -- the shipped engine -- so nothing you change under
+`scripts/` can move it; those tests still run, and their correctness is their own assertions' job.
 
 Use strict test-driven development for behavior changes: add a focused failing test, observe the
 expected failure, implement the smallest fix, and rerun both the focused and full gates. Preserve

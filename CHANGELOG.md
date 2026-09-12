@@ -3,6 +3,35 @@
 Changes to `@kiln/engine`. Source and installable packages are distributed through
 GitHub. The package is not published on the npm registry.
 
+## The coverage ratchet has a scope now — 2026-09-12
+
+- The previous entry blamed 162 lines of lost coverage slack on helper scripts being
+  measured and never executed. The number was right; the mechanism was wrong. Bun
+  instruments only files it loads, and `coveragePathIgnorePatterns` already dropped
+  `**/*.test.mjs`, so those tools were never in the report — there is no `SF:` record
+  for `dispatch-asset`, `upload-posters`, `geometry-experiments` or `harness`.
+- Exactly **four** files under `scripts/` were instrumented, because tests import them:
+  `evaluation/observe-shipping.mjs`, `build-runtime.mjs`, `evaluation/conditions.ts` and
+  `authorship.ts`. 229 lines against the engine's 45,726 — 0.5% of the denominator, and
+  worth 0.10 points. Two of the four are dense single-expression files, so reflowing
+  them inflated their line counts while their covered lines stayed put. That is where
+  the 162 lines went.
+- So the finding is narrower and worse than "helper scripts dilute the ratchet": the
+  engine's coverage contract had a **repo-only formatting input**. A number this
+  repository enforces as policy could be moved by reformatting code that does not ship.
+- `bunfig.toml` now ignores `scripts/**` for coverage. Those tests still run — they are
+  the gates — but their sources leave the denominator, so the ratchet is a statement
+  about the shipped engine and nothing else. Re-measured on the narrowed scope: **95.39%
+  functions, 92.59% lines**.
+- Narrowing hands back 44 lines of slack no new test earned, so `lines` goes 92 → **92.1**
+  to hold the 224-line margin 13.3 chose rather than pocket it. `functions` stays at 94,
+  where the margin is unchanged in practice. Tightening further is a separate decision.
+- And the record carries its own scope now. `measuredBaseline` requires `measuredOver`,
+  the gate refuses a baseline without it, and it prints it: `Recorded baseline:
+  functions 95.39%, lines 92.59% (over src/, bun@1.4.2, 2026-09-12)`. A percentage
+  without its scope is as ambiguous as a threshold without a baseline — which is what
+  made the wrong explanation above plausible enough to write down.
+
 ## The repository's own gates are linted now — 2026-09-12
 
 - Adding a file to `scripts/` and running `biome check` on its path printed "No files
@@ -19,13 +48,10 @@ GitHub. The package is not published on the npm registry.
 - Left, with the cost measured rather than guessed. The rest of `scripts/` is one-off
   tools, several authored as dense single-expression lines. Taking the whole directory
   is 26 lint findings, a 1,530-line reflow (3,078 lines to 4,608, pure formatting), and
-  **162 lines of coverage slack** — `test:coverage` measures `scripts`, those tools are
-  never executed, so the reflow lands in the uncovered denominator and lines fall
-  92.49% to 92.14% against a threshold of 92. Measured by taking the full pass and
-  running the gate.
-- Which says something about the ratchet worth recording: line coverage over manual
-  helper scripts is noise inside a number this repository treats as a contract.
-  Narrowing what `test:coverage` measures is the real fix, and a separate decision.
+  **162 lines of coverage slack** — lines fall 92.49% to 92.14% against a threshold of
+  92. Measured by taking the full pass and running the gate.
+- **Corrected below**: the mechanism first given for that third cost was wrong, and it
+  pointed at the wrong fix.
 - `render-service/` stays out for an unrelated reason: its sources are CRLF by
   `.gitattributes`, and the formatter would rewrite the line endings.
 - One incidental finding: Biome prints at most 20 diagnostics by default, so a count

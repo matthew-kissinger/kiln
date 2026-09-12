@@ -1600,7 +1600,18 @@ never by more than 41 levels, at a shadow edge, with a mean delta of 0.01--0.09.
 There is nothing to choose between them by eye, which is what the 1:1 crop of the
 pavilion's shadow edge confirms. `pcf` stays the shipped name.
 
-**Turning shadows on is renderer work, not a preset flag.** Four things stand in the
+**Decided 2026-09-12: the gallery does not cast shadows.** The owner's call, and the
+measurements support it. The site's `<Canvas>` already grounds an asset with drei
+`ContactShadows`, which runs its own depth pass and never consults
+`shadowMap.type`, so the surface a visitor actually looks at has the cue that
+matters. A directional shadow would add 2-6% of pixels at a maximum delta of
+27-54/255, from a shipped 3/4 view whose camera sits six degrees from the key light
+-- close to the worst angle for showing one -- in exchange for the four pieces of
+silently-failing renderer work below. **This row is closed, not deferred.** The
+analysis stays because it is the reason, and because anything that revisits the
+question starts from these four rather than rediscovering them.
+
+**Turning shadows on is renderer work, not a preset flag.** Four things stood in the
 way, and the first three were each found by the probe producing no shadow at all:
 
 1. **A receiver.** The service renders an asset against a flat background with no
@@ -1668,6 +1679,7 @@ the installed tree.
 | 14.1 | Re-ground 7.12 / SEP-2640 against an authoritative source | **Done 2026-09-12.** Deferred still, for a stronger reason. See below |
 | 14.2 | Establish what actually blocks the `ai` 7 family, and gate it | **Done 2026-09-12.** `@strands-agents/sdk@1.17.0` is latest, declares peer `@ai-sdk/provider: ^3.0.0`, and its `VercelModel` is typed on `LanguageModelV3` in 21 places. `@openrouter/ai-sdk-provider@3.0.0` requires `ai: ^7.0.0`; `ai@7.0.99` depends on `@ai-sdk/provider@4.0.14`. The family cannot be taken until Strands ships a release accepting the v4 spec -- no budget changes that. `scripts/peer-ranges.test.mjs` now fails on a peer range the version beside it does not meet, verified by patching the installed `@openrouter/ai-sdk-provider` manifest to peer `ai: ^7.0.0` and watching it report `installed 6.0.282` |
 | 14.3 | Assert the prompt-cache breakpoint on the wire, offline | **Done 2026-09-12.** Both native transports captured in `src/agent/providers.test.ts`, both differential. See below |
+| 14.5 | Give the coverage ratchet a scope, so repo-only code cannot move the engine's contract | **Done 2026-09-12.** Measured over `src/` alone; baseline re-measured at 95.39% functions / 92.59% lines; `lines` raised 92 to 92.1 so the narrowing does not quietly hand back slack. See below |
 | 14.4 | Bring the repository's own gates under the lint gate, which they were never under | **Done 2026-09-12** for the gates and their tests: 416 files checked where 405 were, and the tree reports nothing. The one-off tools beside them are measured and deliberately left, below |
 
 ### 14.1 -- the decisive fact is not the SEP's status
@@ -1771,17 +1783,27 @@ was one 1,300-character line before this pass. Taking the whole directory costs:
   lines where the fix is unreviewable and the file is no more readable after.
 - **A 1,530-line reflow.** `scripts/` goes from 3,078 lines to 4,608, a 50% growth
   that is entirely formatting.
-- **162 lines of coverage slack.** `test:coverage` measures `src scripts`, the
-  one-off tools are never executed by a test, so the reflow lands almost entirely
-  in the uncovered denominator: lines fall 92.49% to 92.14% against a threshold of
-  92, leaving 62 lines of room where there were 224. Measured by taking the full
+- **162 lines of coverage slack.** Lines fall 92.49% to 92.14% against a threshold
+  of 92, leaving 62 lines of room where there were 224. Measured by taking the full
   pass and running the gate, not estimated.
 
-That third cost is the interesting one, because it says something the ratchet has
-been quietly absorbing all along: line coverage over manual helper scripts is
-noise in a number the repository treats as a contract. Narrowing what
-`test:coverage` measures is the real fix and it is a separate decision, so it is
-recorded here rather than folded in.
+**Correction, 2026-09-12, to the sentence this row first carried.** It said the
+one-off tools are never executed so the reflow lands in the uncovered denominator.
+That number is right and that mechanism is wrong, and the wrong mechanism pointed
+at the wrong fix. Bun instruments only files it loads, and
+`coveragePathIgnorePatterns` already dropped `**/*.test.mjs`, so the one-off tools
+were **never in the report at all**: no `SF:` record for `dispatch-asset`,
+`promote-asset`, `upload-posters`, `curate-texture-library`, `geometry-experiments`
+or `harness`. Exactly four files under `scripts/` were instrumented, because tests
+import them -- `evaluation/observe-shipping.mjs`, `build-runtime.mjs`,
+`evaluation/conditions.ts` and `authorship.ts` -- totalling 229 lines against the
+engine's 45,726, which is 0.5% of the denominator. Two of those four are dense
+single-expression files, and reflowing them inflated their line counts while their
+covered lines stayed where they were. That is where the 162 lines went.
+
+So the finding is not "helper scripts dilute the ratchet in bulk"; `scripts/` was
+only ever dragging the total down by 0.10 points. It is narrower and worse: **the
+engine's coverage contract had a repo-only formatting input at all.** Fixed in 14.5.
 
 `render-service/` stays out for an unrelated reason: its `src/**` is CRLF by
 `.gitattributes` and Biome's formatter would rewrite the line endings.
@@ -1790,3 +1812,37 @@ One incidental finding worth keeping. Biome caps output at 20 diagnostics by
 default, so `bun run lint` reported 20 findings in `scripts/` when there were 26.
 `--error-on-warnings` still fails the gate, so nothing escapes -- but a count read
 off that output is a floor, not a total.
+
+### 14.5 -- the ratchet now says what it measures
+
+The owner's call on 14.4's open question was to take the proper fix rather than the
+cheap one. Measuring first changed what the proper fix was: see the correction in
+14.4. The problem was never volume, it was that a number the repository enforces as
+policy could be moved by reformatting code that does not ship.
+
+`bunfig.toml` ignores `scripts/**` for coverage. Those tests still run -- they are
+the gates -- but their sources leave the denominator, so the ratchet is a statement
+about the shipped engine and nothing else. Re-measured on the narrowed scope:
+**95.39% functions (3168/3321), 92.59% lines (42336/45726)**, both a little higher
+than the blended numbers because the four instrumented `scripts/` files sat at
+72.93%.
+
+That narrowing hands back 44 lines of slack no new test earned, so `lines` goes from
+92 to **92.1**, holding the 224-line margin 13.3 chose instead of pocketing it --
+222 lines now. `functions` stays at 94, where the margin is unchanged in practice
+(1.39 points against 1.27, 46 functions against 42). Tightening further is a
+separate decision with its own friction and is not taken here.
+
+**The record now carries its own scope.** `measuredBaseline` requires a
+`measuredOver`, the gate refuses a baseline without one, and it prints it:
+`Recorded baseline: functions 95.39%, lines 92.59% (over src/, bun@1.4.2,
+2026-09-12)`. A percentage without its scope is as ambiguous as a threshold without
+a baseline, and that ambiguity is exactly what made 14.4's first explanation
+plausible enough to write down. Verified by a case in
+`scripts/check-coverage.test.mjs` that omits the field, and by
+`reliability.test.mjs` pinning both the raised threshold and the scope --
+`bunfig.toml` losing the `scripts/**` line puts the formatting input straight back.
+
+`AGENTS.md` states the scope where an agent reads it, beside the existing rule that
+the ratchet must not vary by whether the runner has a GPU. Same class of rule: the
+contract must not depend on things that are not the engine.
