@@ -3,6 +3,30 @@
 Changes to `@kiln/engine`. Source and installable packages are distributed through
 GitHub. The package is not published on the npm registry.
 
+## Three CI jobs reported and blocked nothing — 2026-09-12
+
+- `build portable Node package` and both `Node package · macOS` jobs run on every push
+  and every pull request, and were required by nothing. Measured before changing
+  anything: **24 of 24 green across the last 8 runs on main**, and a pull request that
+  broke macOS packaging would still have merged.
+- The test named `every CI job blocks; none of them merely reports` was green throughout,
+  because it checked only `continue-on-error` — the narrower of the two ways a job can
+  fail to block. Its own comment already described the gap it did not cover: *"the other
+  half is a GitHub setting."* For three jobs that setting had simply never been made.
+- 13.4 set the precedent that a context is required only once it has reported, since a
+  required context that never reports blocks every merge instead of guarding it. It
+  promoted the Windows job on nine runs with seven green; these three clear that bar.
+- The test now derives every context `ci.yml` can produce — expanding the macOS matrix
+  into its two legs, because GitHub requires the expanded name — and compares it against
+  the list that has to be required. Adding a job without deciding whether it gates a
+  merge now fails the suite. Verified three ways: a new job, a renamed job, and a dropped
+  matrix leg each fail, naming the exact context gained or lost.
+- **`build the gallery` is deliberately not required.** `pages.yml` is path-filtered, so
+  it stays silent on any pull request touching none of `examples/`, `site/`, `src/`,
+  `scripts/authorship.ts` or `README.md`. Requiring it would block every such merge —
+  the exact trap 13.4 named. The rule is now written down: unconditional workflow,
+  required; conditional workflow, unrequired.
+
 ## The documented way to convert an old clone did not work — 2026-09-12
 
 - The 2026-09-10 rewrite moved `refs/tags/oss-2026-09-05` as well as `main`, and a tag

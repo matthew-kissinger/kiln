@@ -136,9 +136,16 @@ describe('repository reliability contracts', () => {
   // intermittent native fault was ruled out. Demoting it again is a decision, not a
   // detail, so it cannot happen by dropping one line back into the file unnoticed.
   //
-  // This asserts the repository's half. The other half is a GitHub setting: the job's
-  // check context has to be listed in main's branch protection, or a red Windows run
-  // fails the workflow and still permits the merge.
+  // The other half is a GitHub setting, and for three jobs it had simply never been
+  // made: `build portable Node package` and both macOS package jobs ran on every pull
+  // request, reported green 24 times out of 24, and were required by nothing -- so a
+  // change that broke macOS packaging still merged. This test's name claimed otherwise
+  // while checking only `continue-on-error`, which is the narrower of the two ways a
+  // job can fail to block.
+  //
+  // `REQUIRED_CHECKS` cannot verify the GitHub setting from here. What it does is turn
+  // the omission from silent into loud: adding a job to this workflow without deciding
+  // whether it gates a merge now fails the suite.
   test('every CI job blocks; none of them merely reports', async () => {
     const workflow = await readText('.github/workflows/ci.yml');
 
@@ -152,6 +159,43 @@ describe('repository reliability contracts', () => {
     // It must never be why Windows reports red, so it is failure-tolerant by design.
     expect(workflow.match(/^ {8}continue-on-error:/gmu)).toHaveLength(1);
     expect(workflow).toContain('Report the native dependency inventory');
+
+    // Every check context this workflow can produce, and therefore every context that
+    // has to be listed in main's branch protection. A matrix job contributes one per
+    // leg, which is why the two macOS legs appear separately: GitHub requires the
+    // expanded name, not the job key.
+    //
+    // Scoped to this workflow on purpose. `pages.yml` also reports a context -- `build
+    // the gallery` -- and it must NOT be required, because that workflow is
+    // path-filtered: it stays silent on a pull request touching none of `examples/`,
+    // `site/`, `src/`, `scripts/authorship.ts` or `README.md`, and a required context
+    // that never reports blocks every such merge instead of guarding it. `ci.yml` has
+    // no path filter, so all six of its contexts always report and can all be
+    // required. Conditional workflow, unrequired; unconditional workflow, required.
+    const REQUIRED_CHECKS = [
+      'build portable Node package',
+      'Node package \u00b7 macOS arm64',
+      'Node package \u00b7 macOS x64',
+      'render service tests',
+      'typecheck \u00b7 lint \u00b7 test',
+      'typecheck \u00b7 lint \u00b7 test (Windows)',
+    ];
+
+    // Derived from the workflow rather than restated, so a renamed or added job is a
+    // failure here instead of a context that silently stops being required. The job
+    // key is the context when a job declares no `name`.
+    const body = workflow.slice(workflow.indexOf('\njobs:'));
+    const heads = [...body.matchAll(/^ {2}([a-z][\w-]*):$/gmu)];
+    const produced = heads.flatMap((head, index) => {
+      const job = body.slice(head.index, heads[index + 1]?.index ?? body.length);
+      const declared = job.match(/^ {4}name: (.+)$/mu)?.[1] ?? head[1];
+      const legs = [...job.matchAll(/^ {12}arch: (\S+)$/gmu)].map(([, arch]) => arch);
+      return legs.length > 0
+        ? legs.map((arch) => declared.replace(/\$\{\{ matrix\.arch \}\}/u, arch))
+        : [declared];
+    });
+
+    expect(produced.sort()).toEqual([...REQUIRED_CHECKS].sort());
   });
 
   // The 2026-09-10 rewrite moved `refs/tags/oss-2026-09-05` as well as `main`, and a

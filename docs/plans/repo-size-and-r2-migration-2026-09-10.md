@@ -2084,7 +2084,7 @@ re-measured since the day it was written.
 | ID | Task | State |
 | --- | --- | --- |
 | 15.1 | The README's remedy for converting a pre-rewrite clone does not work | **Done 2026-09-12.** See below |
-| 15.2 | Three CI jobs report on every PR and block nothing | Queued; the repository half and the GitHub setting |
+| 15.2 | Three CI jobs report on every PR and block nothing | **Done 2026-09-12.** Both halves. See below |
 | 15.3 | The documented offline gate does not run render-service's 37 tests, or `check:skills` | Queued |
 | 15.4 | `version` has been `0.6.0` for 21 shipped changes, and the tarball is named from it | Queued; owner chose to bump per shipped change |
 
@@ -2135,3 +2135,49 @@ byte-identical.
 to 26 MB when the runtime bundles were re-added after the rewrite, and the checkout is
 unchanged at 34 MB. The timing claims came out rather than being restated, because they
 are network-bound and cannot be honestly re-measured from a different link.
+
+
+### 15.2 -- the other half of "every CI job blocks"
+
+`ci.yml` has five jobs producing six check contexts, because `macos-package` is a
+matrix. Three of the six were required by main's branch protection. The other three
+-- `build portable Node package`, `Node package . macOS arm64` and `Node package .
+macOS x64` -- ran on every push and every pull request, reported **24 of 24 green
+across the last 8 runs on main**, and gated nothing. A change that broke macOS
+packaging failed the workflow and still permitted the merge.
+
+This is the sibling of the defect class Phase 14 named. That one was a gate that
+existed but ran nowhere; this is a gate that runs, reports, and does not bite.
+
+What makes it worth recording is that the repository already knew. The test
+`every CI job blocks; none of them merely reports` carries the comment *"This asserts
+the repository's half. The other half is a GitHub setting: the job's check context has
+to be listed in main's branch protection."* The comment was right, the name was
+broader than the assertion, and for three jobs the setting had never been made. A test
+name is a claim; this one outran its `continue-on-error` check by three contexts.
+
+13.4's precedent decides the promotion rather than green runs alone: a context is
+required only once it has reported, because one that never reports blocks every merge
+instead of guarding it. It promoted the Windows job on nine runs, seven green. These
+three have reported on every run since they were added.
+
+The test now derives the context list from the workflow -- expanding the matrix into
+one context per leg, since GitHub requires the expanded name and not the job key --
+and compares it against the list that must be required. Verified by three separate
+mutations, each failing and naming the exact context gained or lost: a job added, a
+job renamed, and one matrix leg dropped. The first derivation attempt was wrong in a
+way worth noting, because it still produced a plausible list: slicing each job with
+`search()` from the job's own offset matched that job's header at position 0, so every
+job sliced to a single newline and the matrix never expanded. It failed loudly only
+because the expected list was written out independently.
+
+**`build the gallery` stays unrequired, and that is the interesting half.** It is a
+seventh context, from `pages.yml`, and it appeared on this phase's own first pull
+request. Requiring it would be the obvious way to "complete the set" and would be
+wrong: `pages.yml` is path-filtered to `examples/`, `site/`, `src/`,
+`scripts/authorship.ts` and `README.md`, so it is silent on any pull request touching
+none of those -- and a required context that never reports blocks the merge. `ci.yml`
+carries no path filter, which is exactly why all six of its contexts can be required.
+The rule, so nobody completes the set later: unconditional workflow, required;
+conditional workflow, unrequired. `deploy to Pages` is a third case and needs nothing,
+since it reports `skipping` rather than staying absent.
