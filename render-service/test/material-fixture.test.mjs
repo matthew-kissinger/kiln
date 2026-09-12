@@ -7,7 +7,8 @@ import { buildMaterialChannelsFixture } from './generate-material-fixture.mjs';
 
 const fixtureUrl = new URL('./fixtures/material-channels-v1.glb', import.meta.url);
 const manifestUrl = new URL('./fixtures/material-channels-v1.manifest.json', import.meta.url);
-const MATERIAL_CHANNELS_V1_SHA256 = 'sha256:8ef3e9e5f28303639fc1d28c8648dda2494aed4c11b74ad17cb30b7726a59a9e';
+const MATERIAL_CHANNELS_V1_SHA256 =
+  'sha256:8ef3e9e5f28303639fc1d28c8648dda2494aed4c11b74ad17cb30b7726a59a9e';
 
 function sha256(bytes) {
   return `sha256:${createHash('sha256').update(bytes).digest('hex')}`;
@@ -19,7 +20,12 @@ function parseGlb(bytes) {
   assert.equal(bytes.readUInt32LE(8), bytes.length, 'GLB declared length');
   const jsonLength = bytes.readUInt32LE(12);
   assert.equal(bytes.readUInt32LE(16), 0x4e4f534a, 'JSON chunk type');
-  const json = JSON.parse(bytes.subarray(20, 20 + jsonLength).toString('utf8').trim());
+  const json = JSON.parse(
+    bytes
+      .subarray(20, 20 + jsonLength)
+      .toString('utf8')
+      .trim(),
+  );
   const binHeader = 20 + jsonLength;
   assert.equal(bytes.readUInt32LE(binHeader + 4), 0x004e4942, 'BIN chunk type');
   const binLength = bytes.readUInt32LE(binHeader);
@@ -54,7 +60,9 @@ describe('material channel conformance fixture', () => {
 
   it('embeds every required PNG and binds every PBR channel explicitly', async () => {
     const glb = parseGlb(await readFile(fixtureUrl));
-    const byName = Object.fromEntries(glb.json.materials.map((material) => [material.name, material]));
+    const byName = Object.fromEntries(
+      glb.json.materials.map((material) => [material.name, material]),
+    );
     const albedo = byName.AlbedoChecker;
     const normal = byName.NormalResponse;
     const orm = byName.SharedOrmResponse;
@@ -93,10 +101,9 @@ describe('material channel conformance fixture', () => {
 
   it('pins high-contrast source pixels for each statistical GPU assertion', async () => {
     const glb = parseGlb(await readFile(fixtureUrl));
-    const decoded = Object.fromEntries(glb.json.images.map((image) => [
-      image.name,
-      PNG.sync.read(imageBytes(glb, image)),
-    ]));
+    const decoded = Object.fromEntries(
+      glb.json.images.map((image) => [image.name, PNG.sync.read(imageBytes(glb, image))]),
+    );
     assert.deepEqual(channelRange(decoded.AlbedoChecker, 0), { min: 18, max: 245 });
     assert.deepEqual(channelRange(decoded.NormalSplit, 0), { min: 32, max: 224 });
     assert.deepEqual(channelRange(decoded.SharedOrm, 0), { min: 32, max: 255 });

@@ -22,14 +22,10 @@
 // gateway callers can never deliver an app-layer bearer token through it.
 // Renders are serialized: one GPU, one queue.
 import { createServer } from 'node:http';
-import {
-  PRESENTATION_PROFILE_ID,
-  initRenderer,
-  renderGlb,
-} from './renderer.mjs';
+import { PRESENTATION_PROFILE_ID, initRenderer, renderGlb } from './renderer.mjs';
 import { acquireGpu } from './gpu.mjs';
 import { buildHealthDocument } from './health-contract.mjs';
-import {createRendererCaptureIdentity} from './cache-identity.mjs';
+import { createRendererCaptureIdentity } from './cache-identity.mjs';
 import {
   buildRenderFidelityV1,
   buildRenderOperationalEvidenceV1,
@@ -64,7 +60,7 @@ try {
   console.error(`FATAL: ${e.message}`);
   process.exit(1);
 }
-gpuState.captureIdentity=createRendererCaptureIdentity(gpuState);
+gpuState.captureIdentity = createRendererCaptureIdentity(gpuState);
 console.log(`adapter: ${JSON.stringify(gpuState.summary)}`);
 console.log(`rendererId: ${gpuState.rendererId}`);
 if (!TOKEN) console.warn('WARNING: RENDER_SERVICE_TOKEN unset — POST routes are UNAUTHENTICATED');
@@ -77,7 +73,11 @@ function readBody(req) {
     let total = 0;
     req.on('data', (c) => {
       total += c.length;
-      if (total > MAX_BODY) { reject(Object.assign(new Error('body too large'), { status: 413 })); req.destroy(); return; }
+      if (total > MAX_BODY) {
+        reject(Object.assign(new Error('body too large'), { status: 413 }));
+        req.destroy();
+        return;
+      }
       chunks.push(c);
     });
     req.on('end', () => resolve(Buffer.concat(chunks)));
@@ -87,7 +87,10 @@ function readBody(req) {
 
 function send(res, status, obj) {
   const body = JSON.stringify(obj);
-  res.writeHead(status, { 'content-type': 'application/json', 'content-length': Buffer.byteLength(body) });
+  res.writeHead(status, {
+    'content-type': 'application/json',
+    'content-length': Buffer.byteLength(body),
+  });
   res.end(body);
 }
 
@@ -99,7 +102,9 @@ const server = createServer(async (req, res) => {
   // parameter, but logging the raw URL would make any future one a disclosure.
   const log = {
     method: req.method,
-    path: String(req.url ?? '').split('?')[0].slice(0, 200),
+    path: String(req.url ?? '')
+      .split('?')[0]
+      .slice(0, 200),
     auth: 'not-required',
   };
   const done = (status, obj) => {
@@ -109,14 +114,16 @@ const server = createServer(async (req, res) => {
       path: log.path,
       status,
     });
-    console.log(JSON.stringify({
-      evt: 'request',
-      ...log,
-      outcomeCode,
-      status,
-      ...(status >= 400 && obj?.error ? { error: obj.error } : {}),
-      ms: +(performance.now() - started).toFixed(1),
-    }));
+    console.log(
+      JSON.stringify({
+        evt: 'request',
+        ...log,
+        outcomeCode,
+        status,
+        ...(status >= 400 && obj?.error ? { error: obj.error } : {}),
+        ms: +(performance.now() - started).toFixed(1),
+      }),
+    );
   };
   try {
     // /ping: RunPod load-balancer health convention (200 = healthy). The boot
@@ -148,7 +155,11 @@ const server = createServer(async (req, res) => {
       const raw = await readBody(req);
       log.bodyBytes = raw.length;
       let body;
-      try { body = JSON.parse(raw.toString('utf8')); } catch { return done(400, { ok: false, error: 'invalid JSON' }); }
+      try {
+        body = JSON.parse(raw.toString('utf8'));
+      } catch {
+        return done(400, { ok: false, error: 'invalid JSON' });
+      }
       if (!body || typeof body !== 'object' || Array.isArray(body)) {
         return done(400, { ok: false, error: 'JSON body must be an object' });
       }
@@ -164,15 +175,21 @@ const server = createServer(async (req, res) => {
       // New fidelity-aware callers assert the identity they sent. Legacy callers
       // omit it and retain their exact historical response shape.
       let inputGlbSha256;
-      try { inputGlbSha256 = validateInputGlbIdentity(glb, body.input_glb_sha256); }
-      catch (e) { return done(e.status ?? 400, { ok: false, error: String(e.message ?? e) }); }
+      try {
+        inputGlbSha256 = validateInputGlbIdentity(glb, body.input_glb_sha256);
+      } catch (e) {
+        return done(e.status ?? 400, { ok: false, error: String(e.message ?? e) });
+      }
       const fidelityRequested = body.input_glb_sha256 !== undefined;
       log.inputGlbSha256 = inputGlbSha256;
       // Validated BEFORE the queue: malformed exact cameras or legacy views are
       // immediate 400s, not GPU-queue work. renderGlb validates again for direct callers.
       let renderMode;
-      try { renderMode = validateRenderMode(body); }
-      catch (e) { return done(e.status ?? 400, { ok: false, error: String(e.message ?? e) }); }
+      try {
+        renderMode = validateRenderMode(body);
+      } catch (e) {
+        return done(e.status ?? 400, { ok: false, error: String(e.message ?? e) });
+      }
       log.renderMode = renderMode.mode;
       if (renderMode.mode === 'camera') {
         log.camerasRequested = renderMode.cameras.length;
@@ -191,20 +208,23 @@ const server = createServer(async (req, res) => {
         log.renderOperationalStart = operationalStart;
         return {
           operationalStart,
-          result: await renderGlb(glb, renderMode.mode === 'camera'
-            ? {
-                cameras: renderMode.cameras,
-                width: renderMode.width,
-                height: renderMode.height,
-                lightingPresetId: renderMode.lightingPresetId,
-                background: renderMode.background,
-              }
-            : {
-                size: renderMode.size,
-                viewDirs: renderMode.viewDirs,
-                beautySize: renderMode.beautySize,
-                background: renderMode.background,
-              }),
+          result: await renderGlb(
+            glb,
+            renderMode.mode === 'camera'
+              ? {
+                  cameras: renderMode.cameras,
+                  width: renderMode.width,
+                  height: renderMode.height,
+                  lightingPresetId: renderMode.lightingPresetId,
+                  background: renderMode.background,
+                }
+              : {
+                  size: renderMode.size,
+                  viewDirs: renderMode.viewDirs,
+                  beautySize: renderMode.beautySize,
+                  background: renderMode.background,
+                },
+          ),
         };
       });
       const result = queued.result;
@@ -244,22 +264,24 @@ const server = createServer(async (req, res) => {
         views: result.views.map((b) => b.toString('base64')),
         ...(result.beauty ? { beauty: result.beauty.toString('base64') } : {}),
         ...(fidelity ? { inputGlbSha256, fidelity, operationalEvidence } : {}),
-        ...(renderMode.mode === 'camera' ? {
-          backend: gpuState.backend,
-          cameras: result.cameras,
-          width: result.width,
-          height: result.height,
-          lightingPresetId: result.lightingPresetId,
-          viewSha256,
-          outputSetSha256: outputSetHash,
-          cameraReceipts: result.cameras.map((camera, index) => ({
-            index,
-            camera,
-            width: result.width,
-            height: result.height,
-            outputSha256: viewSha256[index],
-          })),
-        } : {}),
+        ...(renderMode.mode === 'camera'
+          ? {
+              backend: gpuState.backend,
+              cameras: result.cameras,
+              width: result.width,
+              height: result.height,
+              lightingPresetId: result.lightingPresetId,
+              viewSha256,
+              outputSetSha256: outputSetHash,
+              cameraReceipts: result.cameras.map((camera, index) => ({
+                index,
+                camera,
+                width: result.width,
+                height: result.height,
+                outputSha256: viewSha256[index],
+              })),
+            }
+          : {}),
       });
     }
     done(404, { ok: false, error: 'not found' });
@@ -270,11 +292,15 @@ const server = createServer(async (req, res) => {
           outcomeCode: 'render_failed',
           ...log.renderOperationalStart,
         });
-      } catch { /* never mask the original render failure with metrics evidence */ }
+      } catch {
+        /* never mask the original render failure with metrics evidence */
+      }
       delete log.renderOperationalStart;
     }
     done(e.status ?? 500, { ok: false, error: String(e.message ?? e) });
   }
 });
 
-server.listen(PORT, HOST, () => console.log(`kiln-render-service listening on ${HOST ?? '*'}:${PORT}`));
+server.listen(PORT, HOST, () =>
+  console.log(`kiln-render-service listening on ${HOST ?? '*'}:${PORT}`),
+);

@@ -54,7 +54,10 @@ describe('provider-free render contract', () => {
     parsed.viewDirs[0][0] = 99;
     assert.equal(validateViewDirs(undefined)[0][0], 1);
 
-    const requested = [[1, 0, 0], [0, 0, -1]];
+    const requested = [
+      [1, 0, 0],
+      [0, 0, -1],
+    ];
     const directions = validateViewDirs(requested);
     assert.deepEqual(directions, requested);
     assert.notEqual(directions, requested);
@@ -74,12 +77,17 @@ describe('provider-free render contract', () => {
     });
     assert.notEqual(parsed.cameras, body.cameras);
     assert.notEqual(parsed.cameras[0].position, body.cameras[0].position);
-    assert.equal(validateRenderMode({ ...body, lighting_preset_id: undefined }).lightingPresetId,
-      SUPPORTED_LIGHTING_PRESET_ID);
-    assert.equal(validateRenderMode({
-      ...body,
-      input_glb_sha256: `sha256:${'a'.repeat(64)}`,
-    }).mode, 'camera');
+    assert.equal(
+      validateRenderMode({ ...body, lighting_preset_id: undefined }).lightingPresetId,
+      SUPPORTED_LIGHTING_PRESET_ID,
+    );
+    assert.equal(
+      validateRenderMode({
+        ...body,
+        input_glb_sha256: `sha256:${'a'.repeat(64)}`,
+      }).mode,
+      'camera',
+    );
   });
 
   it('rejects mixed legacy and exact selectors in either direction', () => {
@@ -87,26 +95,44 @@ describe('provider-free render contract', () => {
       throws400(() => validateRenderMode({ ...exactBody(), ...legacy }), /mutually exclusive/);
     }
     throws400(() => validateRenderMode({ ...exactBody(), mystery_option: true }), /unknown/);
-    throws400(() => validateRenderMode({ ...exactBody(), background: '#000000' }), /cannot override/);
-    for (const cameraOnly of [{ width: 1 }, { height: 1 }, { lighting_preset_id: SUPPORTED_LIGHTING_PRESET_ID }]) {
+    throws400(
+      () => validateRenderMode({ ...exactBody(), background: '#000000' }),
+      /cannot override/,
+    );
+    for (const cameraOnly of [
+      { width: 1 },
+      { height: 1 },
+      { lighting_preset_id: SUPPORTED_LIGHTING_PRESET_ID },
+    ]) {
       throws400(() => validateRenderMode(cameraOnly), /require cameras/);
     }
   });
 
   it('bounds dimensions, camera count, and total transient pixels', () => {
     throws400(() => validateCameraMode({ cameras: [], width: 1, height: 1 }), /1\.\.12/);
-    throws400(() => validateCameraMode({
-      cameras: Array.from({ length: MAX_CAMERAS + 1 }, () => camera({ aspect: 1 })),
-      width: 1,
-      height: 1,
-    }), /1\.\.12/);
+    throws400(
+      () =>
+        validateCameraMode({
+          cameras: Array.from({ length: MAX_CAMERAS + 1 }, () => camera({ aspect: 1 })),
+          width: 1,
+          height: 1,
+        }),
+      /1\.\.12/,
+    );
     throws400(() => validateCameraMode({ cameras: [camera()], width: 0, height: 720 }), /width/);
-    throws400(() => validateCameraMode({ cameras: [camera()], width: 1280, height: 4097 }), /height/);
-    throws400(() => validateCameraMode({
-      cameras: [camera({ aspect: 1 }), camera({ aspect: 1 })],
-      width: 4096,
-      height: 4096,
-    }), /total pixels/);
+    throws400(
+      () => validateCameraMode({ cameras: [camera()], width: 1280, height: 4097 }),
+      /height/,
+    );
+    throws400(
+      () =>
+        validateCameraMode({
+          cameras: [camera({ aspect: 1 }), camera({ aspect: 1 })],
+          width: 4096,
+          height: 4096,
+        }),
+      /total pixels/,
+    );
     const boundary = validateCameraMode({
       cameras: [camera({ aspect: 1 })],
       width: 4096,
@@ -117,16 +143,37 @@ describe('provider-free render contract', () => {
 
   it('fails closed on malformed or ambiguous perspective cameras', () => {
     const base = { cameras: [camera()], width: 1280, height: 720 };
-    throws400(() => validateCameraMode({ ...base, cameras: [{ ...camera(), surprise: true }] }), /unknown/);
-    throws400(() => validateCameraMode({ ...base, cameras: [camera({ position: [0, 0] })] }), /position/);
-    throws400(() => validateCameraMode({ ...base, cameras: [camera({ target: [12, 8, 15] })] }), /differ/);
-    throws400(() => validateCameraMode({ ...base, cameras: [camera({ up: [0, 0, 0] })] }), /non-zero/);
-    throws400(() => validateCameraMode({ ...base, cameras: [camera({ up: [12, 7, 15] })] }), /collinear/);
+    throws400(
+      () => validateCameraMode({ ...base, cameras: [{ ...camera(), surprise: true }] }),
+      /unknown/,
+    );
+    throws400(
+      () => validateCameraMode({ ...base, cameras: [camera({ position: [0, 0] })] }),
+      /position/,
+    );
+    throws400(
+      () => validateCameraMode({ ...base, cameras: [camera({ target: [12, 8, 15] })] }),
+      /differ/,
+    );
+    throws400(
+      () => validateCameraMode({ ...base, cameras: [camera({ up: [0, 0, 0] })] }),
+      /non-zero/,
+    );
+    throws400(
+      () => validateCameraMode({ ...base, cameras: [camera({ up: [12, 7, 15] })] }),
+      /collinear/,
+    );
     throws400(() => validateCameraMode({ ...base, cameras: [camera({ fovDeg: 180 })] }), /fovDeg/);
     throws400(() => validateCameraMode({ ...base, cameras: [camera({ near: 0 })] }), /near/);
     throws400(() => validateCameraMode({ ...base, cameras: [camera({ far: 0.05 })] }), /far/);
-    throws400(() => validateCameraMode({ ...base, cameras: [camera({ aspect: 1 })] }), /width\/height/);
-    throws400(() => validateCameraMode({ ...base, lightingPresetId: 'dramatic-night-v1' }), /neutral-studio-v1/);
+    throws400(
+      () => validateCameraMode({ ...base, cameras: [camera({ aspect: 1 })] }),
+      /width\/height/,
+    );
+    throws400(
+      () => validateCameraMode({ ...base, lightingPresetId: 'dramatic-night-v1' }),
+      /neutral-studio-v1/,
+    );
   });
 
   it('binds ordered output identity without pretending it is a composite hash', () => {
@@ -135,7 +182,10 @@ describe('provider-free render contract', () => {
     assert.match(sha256(first), /^sha256:[0-9a-f]{64}$/);
     assert.equal(outputSetSha256([first, second]), outputSetSha256([first, second]));
     assert.notEqual(outputSetSha256([first, second]), outputSetSha256([second, first]));
-    assert.notEqual(outputSetSha256([first, second]), outputSetSha256([Buffer.concat([first, second])]));
+    assert.notEqual(
+      outputSetSha256([first, second]),
+      outputSetSha256([Buffer.concat([first, second])]),
+    );
   });
 
   it('computes the exact input GLB identity and fails closed on a claimed mismatch', () => {
@@ -216,10 +266,11 @@ describe('provider-free render contract', () => {
       /presentationProfile must be one of: neutral-studio-v1, gallery-studio-v1/,
     );
     throws400(
-      () => buildRenderFidelityV1({
-        ...common,
-        resolvedCameras: [camera({ position: [99, 8, 15] })],
-      }),
+      () =>
+        buildRenderFidelityV1({
+          ...common,
+          resolvedCameras: [camera({ position: [99, 8, 15] })],
+        }),
       /resolved cameras do not match/,
     );
     throws400(
@@ -231,17 +282,19 @@ describe('provider-free render contract', () => {
       /timings.secretMs is unknown/,
     );
     throws400(
-      () => buildRenderFidelityV1({
-        ...common,
-        timings: { totalMs: 10, queueAndTotalMs: 9 },
-      }),
+      () =>
+        buildRenderFidelityV1({
+          ...common,
+          timings: { totalMs: 10, queueAndTotalMs: 9 },
+        }),
       /queueAndTotalMs must be at least totalMs/,
     );
     throws400(
-      () => buildRenderFidelityV1({
-        ...common,
-        timings: { totalMs: 10, queueWaitMs: 13, queueAndTotalMs: 12 },
-      }),
+      () =>
+        buildRenderFidelityV1({
+          ...common,
+          timings: { totalMs: 10, queueWaitMs: 13, queueAndTotalMs: 12 },
+        }),
       /queueWaitMs must not exceed queueAndTotalMs/,
     );
   });
@@ -271,14 +324,38 @@ describe('provider-free render contract', () => {
       'route_not_found',
       'render_failed',
     ]);
-    assert.equal(httpRenderOutcomeCode({ method: 'GET', path: '/health', status: 200 }), 'health_ok');
-    assert.equal(httpRenderOutcomeCode({ method: 'POST', path: '/render', status: 200 }), 'gpu_success');
-    assert.equal(httpRenderOutcomeCode({ method: 'POST', path: '/render', status: 401 }), 'auth_rejected');
-    assert.equal(httpRenderOutcomeCode({ method: 'POST', path: '/render', status: 400 }), 'request_rejected');
-    assert.equal(httpRenderOutcomeCode({ method: 'POST', path: '/render', status: 413 }), 'request_rejected');
-    assert.equal(httpRenderOutcomeCode({ method: 'POST', path: '/bake', status: 501 }), 'not_implemented');
-    assert.equal(httpRenderOutcomeCode({ method: 'GET', path: '/missing', status: 404 }), 'route_not_found');
-    assert.equal(httpRenderOutcomeCode({ method: 'POST', path: '/render', status: 500 }), 'render_failed');
+    assert.equal(
+      httpRenderOutcomeCode({ method: 'GET', path: '/health', status: 200 }),
+      'health_ok',
+    );
+    assert.equal(
+      httpRenderOutcomeCode({ method: 'POST', path: '/render', status: 200 }),
+      'gpu_success',
+    );
+    assert.equal(
+      httpRenderOutcomeCode({ method: 'POST', path: '/render', status: 401 }),
+      'auth_rejected',
+    );
+    assert.equal(
+      httpRenderOutcomeCode({ method: 'POST', path: '/render', status: 400 }),
+      'request_rejected',
+    );
+    assert.equal(
+      httpRenderOutcomeCode({ method: 'POST', path: '/render', status: 413 }),
+      'request_rejected',
+    );
+    assert.equal(
+      httpRenderOutcomeCode({ method: 'POST', path: '/bake', status: 501 }),
+      'not_implemented',
+    );
+    assert.equal(
+      httpRenderOutcomeCode({ method: 'GET', path: '/missing', status: 404 }),
+      'route_not_found',
+    );
+    assert.equal(
+      httpRenderOutcomeCode({ method: 'POST', path: '/render', status: 500 }),
+      'render_failed',
+    );
   });
 
   it('builds bounded queue/concurrency evidence with only stable fields', () => {
@@ -375,7 +452,9 @@ describe('provider-free render contract', () => {
     let now = 100;
     const queue = createSerialRenderQueue({ now: () => now, processStartedAt: 0 });
     let releaseFirst;
-    const firstGate = new Promise((resolve) => { releaseFirst = resolve; });
+    const firstGate = new Promise((resolve) => {
+      releaseFirst = resolve;
+    });
     const starts = [];
     const first = queue.enqueue(async (start) => {
       starts.push(start);
@@ -415,7 +494,12 @@ describe('provider-free render contract', () => {
   it('serial queue settles a failed render and still starts the next job warm', async () => {
     let now = 10;
     const queue = createSerialRenderQueue({ now: () => now, processStartedAt: 0 });
-    await assert.rejects(queue.enqueue(async () => { throw new Error('device lost'); }), /device lost/);
+    await assert.rejects(
+      queue.enqueue(async () => {
+        throw new Error('device lost');
+      }),
+      /device lost/,
+    );
     now = 20;
     const next = await queue.enqueue(async (start) => start);
     assert.deepEqual(next, {

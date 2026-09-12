@@ -2,11 +2,23 @@
 // no caller-controlled light/color/exposure object crosses the HTTP boundary.
 
 const PRESET_KEYS = Object.freeze([
-  'id', 'environment', 'background', 'exposure', 'ambient',
-  'sun', 'key', 'fill', 'rim', 'shadows',
+  'id',
+  'environment',
+  'background',
+  'exposure',
+  'ambient',
+  'sun',
+  'key',
+  'fill',
+  'rim',
+  'shadows',
 ]);
 const ACTIVE_DIRECTIONAL_KEYS = Object.freeze([
-  'enabled', 'color', 'intensity', 'position', 'castsShadow',
+  'enabled',
+  'color',
+  'intensity',
+  'position',
+  'castsShadow',
 ]);
 const DISABLED_DIRECTIONAL_KEYS = Object.freeze(['enabled']);
 
@@ -22,7 +34,8 @@ function exactKeys(value, expected, path) {
 }
 
 function finite(value, path, { minimum = -Infinity } = {}) {
-  if (!Number.isFinite(value) || value < minimum) throw new TypeError(`${path} must be finite >= ${minimum}`);
+  if (!Number.isFinite(value) || value < minimum)
+    throw new TypeError(`${path} must be finite >= ${minimum}`);
 }
 
 function color(value, path) {
@@ -32,18 +45,26 @@ function color(value, path) {
 }
 
 function tuple(value, length, path, validate) {
-  if (!Array.isArray(value) || value.length !== length) throw new TypeError(`${path} must have ${length} entries`);
-  value.forEach((entry, index) => validate(entry, `${path}[${index}]`));
+  if (!Array.isArray(value) || value.length !== length)
+    throw new TypeError(`${path} must have ${length} entries`);
+  value.forEach((entry, index) => {
+    validate(entry, `${path}[${index}]`);
+  });
 }
 
 function validateDirectional(value, path) {
-  exactKeys(value, value?.enabled === false ? DISABLED_DIRECTIONAL_KEYS : ACTIVE_DIRECTIONAL_KEYS, path);
+  exactKeys(
+    value,
+    value?.enabled === false ? DISABLED_DIRECTIONAL_KEYS : ACTIVE_DIRECTIONAL_KEYS,
+    path,
+  );
   if (typeof value.enabled !== 'boolean') throw new TypeError(`${path}.enabled must be boolean`);
   if (!value.enabled) return;
   color(value.color, `${path}.color`);
   finite(value.intensity, `${path}.intensity`, { minimum: 0 });
   tuple(value.position, 3, `${path}.position`, finite);
-  if (typeof value.castsShadow !== 'boolean') throw new TypeError(`${path}.castsShadow must be boolean`);
+  if (typeof value.castsShadow !== 'boolean')
+    throw new TypeError(`${path}.castsShadow must be boolean`);
 }
 
 /**
@@ -65,28 +86,33 @@ function validatePreset(preset) {
     throw new TypeError('presentation preset id must end in a positive version');
   }
   exactKeys(preset.environment, ['type', 'sigma'], `${preset.id}.environment`);
-  if (preset.environment.type !== 'room') throw new TypeError(`${preset.id}.environment.type must be room`);
+  if (preset.environment.type !== 'room')
+    throw new TypeError(`${preset.id}.environment.type must be room`);
   finite(preset.environment.sigma, `${preset.id}.environment.sigma`, { minimum: 0 });
   if (!/^#[0-9a-f]{6}$/.test(preset.background)) {
     throw new TypeError(`${preset.id}.background must be lowercase #rrggbb`);
   }
   finite(preset.exposure, `${preset.id}.exposure`, { minimum: 0 });
   exactKeys(preset.ambient, ['type', 'sky', 'ground', 'intensity'], `${preset.id}.ambient`);
-  if (preset.ambient.type !== 'hemisphere') throw new TypeError(`${preset.id}.ambient.type must be hemisphere`);
+  if (preset.ambient.type !== 'hemisphere')
+    throw new TypeError(`${preset.id}.ambient.type must be hemisphere`);
   color(preset.ambient.sky, `${preset.id}.ambient.sky`);
   color(preset.ambient.ground, `${preset.id}.ambient.ground`);
   finite(preset.ambient.intensity, `${preset.id}.ambient.intensity`, { minimum: 0 });
-  for (const role of ['sun', 'key', 'fill', 'rim']) validateDirectional(preset[role], `${preset.id}.${role}`);
+  for (const role of ['sun', 'key', 'fill', 'rim'])
+    validateDirectional(preset[role], `${preset.id}.${role}`);
   exactKeys(
     preset.shadows,
     ['enabled', 'type', 'mapSize', 'bias', 'normalBias', 'radius'],
     `${preset.id}.shadows`,
   );
-  if (typeof preset.shadows.enabled !== 'boolean') throw new TypeError(`${preset.id}.shadows.enabled must be boolean`);
+  if (typeof preset.shadows.enabled !== 'boolean')
+    throw new TypeError(`${preset.id}.shadows.enabled must be boolean`);
   if (!SHADOW_FILTERS.includes(preset.shadows.type))
     throw new TypeError(`${preset.id}.shadows.type must be one of ${SHADOW_FILTERS.join(', ')}`);
   tuple(preset.shadows.mapSize, 2, `${preset.id}.shadows.mapSize`, (entry, path) => {
-    if (!Number.isInteger(entry) || entry < 1 || entry > 8192) throw new TypeError(`${path} must be an integer in [1,8192]`);
+    if (!Number.isInteger(entry) || entry < 1 || entry > 8192)
+      throw new TypeError(`${path} must be an integer in [1,8192]`);
   });
   finite(preset.shadows.bias, `${preset.id}.shadows.bias`);
   finite(preset.shadows.normalBias, `${preset.id}.shadows.normalBias`, { minimum: 0 });
@@ -111,8 +137,20 @@ const definitions = [
     // role lets future world-oriented IDs add one without changing the schema.
     sun: { enabled: false },
     key: { enabled: true, color: 0xffffff, intensity: 3, position: [4, 7, 5], castsShadow: false },
-    fill: { enabled: true, color: 0xdce8ff, intensity: 1.8, position: [-4, 3, 2], castsShadow: false },
-    rim: { enabled: true, color: 0xffead6, intensity: 1.2, position: [-2, 5, -5], castsShadow: false },
+    fill: {
+      enabled: true,
+      color: 0xdce8ff,
+      intensity: 1.8,
+      position: [-4, 3, 2],
+      castsShadow: false,
+    },
+    rim: {
+      enabled: true,
+      color: 0xffead6,
+      intensity: 1.2,
+      position: [-2, 5, -5],
+      castsShadow: false,
+    },
     // These are the WebGPU/three.js controls the renderer knows how to apply.
     // Disabled preserves the exact pre-registry v1 visual behavior.
     shadows: {
@@ -127,7 +165,14 @@ const definitions = [
 ];
 
 // Gallery photography uses a lower exposure without changing the default tool rig.
-definitions.push(validatePreset({ ...definitions[0], id: 'gallery-studio-v1', exposure: 0.9, background: '#747474' }));
+definitions.push(
+  validatePreset({
+    ...definitions[0],
+    id: 'gallery-studio-v1',
+    exposure: 0.9,
+    background: '#747474',
+  }),
+);
 
 for (const definition of definitions) deepFreeze(definition);
 export const PRESENTATION_PRESET_IDS = Object.freeze(definitions.map(({ id }) => id));
@@ -135,7 +180,9 @@ export const DEFAULT_PRESENTATION_PRESET_ID = PRESENTATION_PRESET_IDS[0];
 export const PRESENTATION_PRESET_CAPABILITIES = Object.freeze(
   PRESENTATION_PRESET_IDS.map((id) => `render.profile.${id}`),
 );
-const registry = Object.freeze(Object.fromEntries(definitions.map((preset) => [preset.id, preset])));
+const registry = Object.freeze(
+  Object.fromEntries(definitions.map((preset) => [preset.id, preset])),
+);
 
 export function isPresentationPresetId(id) {
   return typeof id === 'string' && Object.hasOwn(registry, id);
