@@ -1668,6 +1668,7 @@ the installed tree.
 | 14.1 | Re-ground 7.12 / SEP-2640 against an authoritative source | **Done 2026-09-12.** Deferred still, for a stronger reason. See below |
 | 14.2 | Establish what actually blocks the `ai` 7 family, and gate it | **Done 2026-09-12.** `@strands-agents/sdk@1.17.0` is latest, declares peer `@ai-sdk/provider: ^3.0.0`, and its `VercelModel` is typed on `LanguageModelV3` in 21 places. `@openrouter/ai-sdk-provider@3.0.0` requires `ai: ^7.0.0`; `ai@7.0.99` depends on `@ai-sdk/provider@4.0.14`. The family cannot be taken until Strands ships a release accepting the v4 spec -- no budget changes that. `scripts/peer-ranges.test.mjs` now fails on a peer range the version beside it does not meet, verified by patching the installed `@openrouter/ai-sdk-provider` manifest to peer `ai: ^7.0.0` and watching it report `installed 6.0.282` |
 | 14.3 | Assert the prompt-cache breakpoint on the wire, offline | **Done 2026-09-12.** Both native transports captured in `src/agent/providers.test.ts`, both differential. See below |
+| 14.4 | Bring the repository's own gates under the lint gate, which they were never under | **Done 2026-09-12** for the gates and their tests: 416 files checked where 405 were, and the tree reports nothing. The one-off tools beside them are measured and deliberately left, below |
 
 ### 14.1 -- the decisive fact is not the SEP's status
 
@@ -1741,3 +1742,51 @@ Verified the way the rest of this queue was -- by patching the installed Strands
 adapters to drop `cache_control` and the converse `cachePoint`. Each injection fails
 exactly the new test while **every pre-existing test stays green**, including the one
 named "the adapter emits `cache_control`", which never checked that it did.
+
+### 14.4 -- the lint baseline covered a subset of the repository
+
+13.5 took the lint baseline to zero and `CONTRIBUTING.md` said so. Biome's
+`files.includes` was `src/**/*.ts`, `site/src/**/*.{ts,tsx}` and `site/*.ts`, so
+`scripts/` -- which holds this repository's own gates, and which `test:coverage`
+already measures -- was outside the surface entirely. Found by adding
+`scripts/peer-ranges.test.mjs` and watching `biome check` on its own path report
+"No files were processed."
+
+**Taken: the gates and their tests.** `scripts/check-*.mjs` and
+`scripts/**/*.test.mjs`, which is a category rather than a subset -- the checks are
+now checked. 416 files where 405 were. Ten findings were behind the hole: seven
+format, reflowing seven files by 116 lines in total, and three real ones. A dead
+`const` in `check-vision.mjs`, easy to miss because the identical line two loops
+down is load-bearing, which is also what made the fix need a block-scoped anchor.
+And two `useTemplate` on the `JSON.stringify(...) + '\n'` idiom. `reliability.test.mjs`
+asserts both include patterns, verified by dropping `scripts/check-*.mjs` and
+watching it fail: a directory silently leaving the lint surface is how this started.
+
+**Left, with the cost measured rather than guessed.** The rest of `scripts/` is
+one-off tools -- dispatch, promotion, poster upload, geometry experiments -- and
+several are authored as dense single-expression lines; `observe-shipping.test.mjs`
+was one 1,300-character line before this pass. Taking the whole directory costs:
+
+- **26 lint findings**, 22 of them the same `+ '\n'` idiom, several inside minified
+  lines where the fix is unreviewable and the file is no more readable after.
+- **A 1,530-line reflow.** `scripts/` goes from 3,078 lines to 4,608, a 50% growth
+  that is entirely formatting.
+- **162 lines of coverage slack.** `test:coverage` measures `src scripts`, the
+  one-off tools are never executed by a test, so the reflow lands almost entirely
+  in the uncovered denominator: lines fall 92.49% to 92.14% against a threshold of
+  92, leaving 62 lines of room where there were 224. Measured by taking the full
+  pass and running the gate, not estimated.
+
+That third cost is the interesting one, because it says something the ratchet has
+been quietly absorbing all along: line coverage over manual helper scripts is
+noise in a number the repository treats as a contract. Narrowing what
+`test:coverage` measures is the real fix and it is a separate decision, so it is
+recorded here rather than folded in.
+
+`render-service/` stays out for an unrelated reason: its `src/**` is CRLF by
+`.gitattributes` and Biome's formatter would rewrite the line endings.
+
+One incidental finding worth keeping. Biome caps output at 20 diagnostics by
+default, so `bun run lint` reported 20 findings in `scripts/` when there were 26.
+`--error-on-warnings` still fails the gate, so nothing escapes -- but a count read
+off that output is a floor, not a total.
