@@ -2086,7 +2086,7 @@ re-measured since the day it was written.
 | 15.1 | The README's remedy for converting a pre-rewrite clone does not work | **Done 2026-09-12.** See below |
 | 15.2 | Three CI jobs report on every PR and block nothing | **Done 2026-09-12.** Both halves. See below |
 | 15.3 | The documented offline gate does not run render-service's 37 tests, or `check:skills` | **Done 2026-09-12.** See below |
-| 15.4 | `version` has been `0.6.0` for 21 shipped changes, and the tarball is named from it | Queued; owner chose to bump per shipped change |
+| 15.4 | `version` has been `0.6.0` for 21 shipped changes, and the tarball is named from it | **Done 2026-09-12.** 0.7.0, gated. See below |
 
 ### 15.1 -- the tag is the whole rewrite, on the clone side too
 
@@ -2217,3 +2217,32 @@ That is three for three in this phase: every fix wired the check into `bun test`
 than adding a CI job, for the reason Phase 14 gave -- a job is the thing somebody forgets
 to add. 15.2 is the exception that proves it, since half of it could only ever be a
 GitHub setting, and the repository half is what makes that half's absence loud.
+
+
+### 15.4 -- a version that did not move, and a gate that could not see it
+
+`version` was set to `0.6.0` at the OSS release and stayed there through 21 shipped
+changes, while `package-candidate` named every tarball from it on every push. Two people
+holding `kiln-engine-0.6.0.tgz` could have materially different software: the three.js
+r186 major, the CommonJS removal, 128 lines of understated tool schema and a changed
+`shadows.type` contract all landed under that one filename. That is why 0.7.0 rather
+than a patch -- what accumulated is behaviour, not fixes.
+
+The interesting half is the gate. `runtimeBuildIdentity` hashes `engineVersion` into each
+entry's `identity` in `dist/build.json`, so a bump that is not rebuilt leaves the
+committed bundle claiming a version it was not built at -- and `identity` is the value a
+build receipt cites.
+
+**Nothing caught that, and it was measured rather than reasoned.** With `version` at
+0.7.0 and `dist/build.json` still recording 0.6.0, the full suite passed: 1860 tests,
+zero failures. The obvious candidate to catch it cannot. `mcp-bundle.test.ts` rebuilds
+`dist/mcp-server.mjs` and compares sha256 against the committed bytes, but the engine
+version is read from `package.json` at module load rather than inlined by the bundler, so
+the bytes are byte-identical at any version. The rebuild confirmed it from the other
+side: `dist/build.json` was the *only* file that changed, all five `.mjs` bundles
+untouched.
+
+So the sequence was the repository's own TDD rule applied to a release step: bump, watch
+1860 tests pass on a mismatch, add the assertion, watch it name `mcp 0.6.0` against
+`mcp 0.7.0`, rebuild, watch it pass. A byte comparison is not a version check, and the
+difference only shows up when the version is the one thing that moved.

@@ -252,6 +252,29 @@ describe('repository reliability contracts', () => {
     expect(scripts.test).not.toContain('render-service');
   });
 
+  // `version` sat at 0.6.0 through 21 shipped changes while CI named every tarball from
+  // it, so two people could hold `kiln-engine-0.6.0.tgz` and have materially different
+  // software -- across a three.js major, a history rewrite and a `dist/` re-add. The
+  // version moves per shipped change now, which only means anything if the committed
+  // bundle agrees with it.
+  //
+  // Nothing caught the disagreement before. `mcp-bundle.test.ts` rebuilds
+  // `dist/mcp-server.mjs` and compares bytes, but the engine version is read from
+  // package.json at runtime rather than inlined, so the bytes are identical and the
+  // stale `engineVersion` in `dist/build.json` passed unnoticed. `runtimeBuildIdentity`
+  // hashes that version into `identity`, which is the value a receipt cites.
+  test('the committed runtime bundle records the version it ships as', async () => {
+    const { version } = await readJson('package.json');
+    const build = await readJson('dist/build.json');
+
+    expect(typeof version).toBe('string');
+    const entries = Object.entries(build.entries ?? {});
+    expect(entries.length).toBeGreaterThan(0);
+    for (const [name, entry] of entries) {
+      expect(`${name} ${entry.engineVersion}`).toBe(`${name} ${version}`);
+    }
+  });
+
   test('standalone agent context stays concise and names the safety-critical paths', async () => {
     const agents = await readText('AGENTS.md');
 
