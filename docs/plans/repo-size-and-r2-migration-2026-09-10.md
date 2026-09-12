@@ -1489,3 +1489,63 @@ SHA answered in one request what several rounds of deduction had not -- the
 dependency was right there and pinned, so there was nothing to guess about. And
 `.well-known` is the only dot-entry in `site/dist`, so the flag was verified to
 add exactly that and nothing else before being set.
+
+## Phase 12 -- The in-loop MCP surface, finally exercised by real models
+
+Taken 2026-09-11. Phase 9's blind clone-and-author run validated the CLI path end
+to end but could not reach the in-loop MCP surface, "because only a harness session
+started inside the workspace registers `kiln_workspace`". That sentence was the
+real blocker the whole time. A note in the working plan had recorded it instead as
+"needs credits or a working free model", which was wrong: it generalized a
+third-party harness's billing failure -- one of the two dead opencode attempts --
+into a requirement. The owner had already authorized subscription dogfooding; see
+the M6 record. No credit purchase was needed or made.
+
+Closed by two runs in two fresh generated workspaces, each a different model, so
+neither inherited the engine implementation or the example collection that
+`kiln-setup-workspace` warns changes what a model produces.
+
+| Lane | Harness | Model | Result |
+| --- | --- | --- | --- |
+| A | `opencode` | `muse-spark-1.3-contributor-free` | Authored, reviewed, refined, exported. Exit 0 |
+| B | `agy` | `gemini-3.8-flash-high` | Authored, reviewed, refined, saved, exported. Exit 0 |
+
+Both followed the same real loop rather than a happy path: render, **look at the
+image**, find a specific defect in their own work, fix it through an anchored
+`kiln_edit`, and re-render to confirm. Lane A found its corner plates stopping
+flush at the box edge instead of wrapping, and corrected the inset. Lane B found
+bracket bolts protruding to `y = -0.012` under the floor and guarded the bottom
+face, reaching `lowestPart.y = -5.96e-9`. Neither needed help; neither reported a
+blocking defect.
+
+Three things were verified that had never been verified by a real harness:
+
+- **Phase 11's auto-spawn works.** Nobody started the render service. The first
+  view needing PBR shading started it, and both lanes rendered material-faithful
+  on `dawn-vulkan:nvidia-geforce-gtx-1660-ti`, with `materialFaithful: true`. The
+  claim that there is "no order to get right and no session to restart" is now
+  exercised rather than argued.
+- **The generated workspace config loads in both harnesses.** `agy mcp list`
+  reports "No MCP servers configured" inside a workspace that has a valid
+  `.agents/mcp_config.json`, which looked like `antigravity-cli#60` -- project-local
+  `mcpServers` read and silently ignored. It is not: a run resolves all thirteen
+  tools. That subcommand lists user-level servers only. Worth knowing before it
+  is diagnosed as a defect again.
+- **`kiln-setup-workspace`'s loadout audit is followed.** Lane B reported nine
+  unrelated user-level registrations unprompted. That is 9.8's problem measured
+  rather than asserted, and it does not change 9.8's answer: the suppression
+  mechanisms are still name-based, and the generator still has no names to write.
+
+### Two findings from the reports, both verified rather than taken on trust
+
+| Task | Detail |
+| --- | --- |
+| 12.1 | Lane A reported a doubled root: `/WoodenCrate[0]/WoodenCrate[0]/Mesh_...`, "harmless but unexpected on first read". **Reproduced, and the engine is correct.** The exported GLB has exactly one root and no per-primitive child nodes; the `parts` array is two levels deeper because it walks `/{scene}/{node}/{node}/{primitive}`, and `createRoot(name)` names the glTF **scene** and the root **node** identically. So the path is accurate and the repetition is two different things that share a name. Recorded so it is not re-investigated as duplicate nesting; Lane A's own characterization was right |
+| 12.2 | Lane A noted `materials: 38` on an asset with three distinct materials. Accurate but easy to misread: `materials` counts per-mesh material slots and equals the draw count, while the same result already carries `distinctMaterials` alongside it. Measured on a fixture reusing two material objects across six meshes: `materials: 6`, `distinctMaterials: 2`, `uniqueMaterials: 2`. Both numbers are honest and both are present; only the more eye-catching one is the less useful. Not changed -- renaming a stable result field is a schema break for a cached tool definition, and the correct value is already there |
+
+Also observed, and **not** a defect: `kiln_validate` accepts a program whose
+`createPart` arity is wrong, and `kiln_render` then rejects it. That is the
+documented split -- validate covers syntax and sandbox rules, not semantics -- and
+Lane B's sandbox rejection did carry its specific diagnostic
+(`generated code used an undeclared variable`), so the generic message is what a
+caller sees only when no diagnostic maps to the failure.
