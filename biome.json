@@ -7,7 +7,9 @@
       "site/src/**/*.{ts,tsx}",
       "site/*.ts",
       "scripts/check-*.mjs",
-      "scripts/**/*.test.mjs"
+      "scripts/**/*.test.mjs",
+      "render-service/src/**/*.mjs",
+      "render-service/test/**/*.mjs"
     ],
     "maxSize": 4194304
   },

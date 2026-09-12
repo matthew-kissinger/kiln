@@ -7,7 +7,8 @@ import { PNG } from 'pngjs';
 
 const fixtureUrl = new URL('./fixtures/material-channels-v1.glb', import.meta.url);
 const manifestUrl = new URL('./fixtures/material-channels-v1.manifest.json', import.meta.url);
-const noHardware = /(?:no webgpu adapter|no usable .*device|software adapter refused|couldn(?:'|’)t find a suitable webgpu backend|requestadapter.*(?:failed|null)|(?:vulkan|d3d12|metal).*(?:unavailable|not found|failed to init))/i;
+const noHardware =
+  /(?:no webgpu adapter|no usable .*device|software adapter refused|couldn(?:'|’)t find a suitable webgpu backend|requestadapter.*(?:failed|null)|(?:vulkan|d3d12|metal).*(?:unavailable|not found|failed to init))/i;
 
 // A fixture with embedded PNG buffer views has no reason to cross a network
 // boundary. Fail closed if a loader regression ever attempts to do so.
@@ -33,7 +34,9 @@ Object.defineProperty(globalThis, 'fetch', {
 // The exemption is a hole in a guard, so prove the guard is still closed around
 // it before rendering anything through it.
 await globalThis.fetch('https://example.invalid/texture.png').then(
-  () => { throw new Error('network guard is open: an https fetch was permitted'); },
+  () => {
+    throw new Error('network guard is open: an https fetch was permitted');
+  },
   (error) => {
     if (!/network disabled/.test(String(error?.message ?? error)))
       throw new Error(`network guard failed for an unexpected reason: ${error}`);
@@ -93,7 +96,10 @@ function colorDistance(a, b) {
 }
 
 async function main() {
-  const [glb, manifestText] = await Promise.all([readFile(fixtureUrl), readFile(manifestUrl, 'utf8')]);
+  const [glb, manifestText] = await Promise.all([
+    readFile(fixtureUrl),
+    readFile(manifestUrl, 'utf8'),
+  ]);
   const manifest = JSON.parse(manifestText);
   let rendered;
   try {
@@ -107,7 +113,9 @@ async function main() {
   } catch (error) {
     const message = String(error?.message ?? error);
     if (noHardware.test(message)) {
-      process.stdout.write(`SKIP material GPU conformance: no usable hardware WebGPU adapter (${message})\n`);
+      process.stdout.write(
+        `SKIP material GPU conformance: no usable hardware WebGPU adapter (${message})\n`,
+      );
       process.exit(0);
     }
     throw error;
@@ -118,13 +126,14 @@ async function main() {
   assert.equal(png.width, manifest.render.width);
   assert.equal(png.height, manifest.render.height);
   const region = (name) => manifest.regions[name];
-  const stats = Object.fromEntries(Object.entries(manifest.regions).map(([name, box]) => [
-    name,
-    summarize(pixelsIn(png, box)),
-  ]));
+  const stats = Object.fromEntries(
+    Object.entries(manifest.regions).map(([name, box]) => [name, summarize(pixelsIn(png, box))]),
+  );
 
-  assert.ok(stats.AlbedoChecker.lumaSpread >= 45,
-    `albedo checker did not modulate base color: ${stats.AlbedoChecker.lumaSpread}`);
+  assert.ok(
+    stats.AlbedoChecker.lumaSpread >= 45,
+    `albedo checker did not modulate base color: ${stats.AlbedoChecker.lumaSpread}`,
+  );
 
   // This threshold is measured, and it was previously a guess that had never run:
   // the albedo assertion above always failed first, so nothing below it was ever
@@ -142,11 +151,15 @@ async function main() {
   // fixture would buy headroom and is the better instrument, but it would change
   // what this file conforms -- the default tool rig.
   const normalDelta = lumaDelta(halves(png, region('NormalResponse')));
-  assert.ok(normalDelta >= 1,
-    `normal map halves did not change lighting response: ${normalDelta.toFixed(1)}`);
+  assert.ok(
+    normalDelta >= 1,
+    `normal map halves did not change lighting response: ${normalDelta.toFixed(1)}`,
+  );
 
-  assert.ok(stats.SharedOrmResponse.lumaSpread >= 5,
-    `shared ORM channels did not change material response: ${stats.SharedOrmResponse.lumaSpread}`);
+  assert.ok(
+    stats.SharedOrmResponse.lumaSpread >= 5,
+    `shared ORM channels did not change material response: ${stats.SharedOrmResponse.lumaSpread}`,
+  );
 
   const aoDelta = lumaDelta(halves(png, region('AoResponse')));
   assert.ok(aoDelta >= 5, `AO red channel did not occlude one half: ${aoDelta.toFixed(1)}`);
@@ -154,30 +167,56 @@ async function main() {
   const emissivePixels = pixelsIn(png, region('EmissiveResponse'));
   const emissive = summarize(emissivePixels);
   assert.ok(emissive.lumaSpread >= 30, `emissive checker response is flat: ${emissive.lumaSpread}`);
-  assert.ok(percentile(emissivePixels.map((pixel) => pixel[0]), 0.9) >=
-    percentile(emissivePixels.map((pixel) => pixel[1]), 0.9) + 35,
-  'emissive red channel is not visibly dominant');
+  assert.ok(
+    percentile(
+      emissivePixels.map((pixel) => pixel[0]),
+      0.9,
+    ) >=
+      percentile(
+        emissivePixels.map((pixel) => pixel[1]),
+        0.9,
+      ) +
+        35,
+    'emissive red channel is not visibly dominant',
+  );
 
   const backgroundSamples = [
     [png.data[0], png.data[1], png.data[2]],
-    (() => { const i = (png.width - 1) * 4; return [png.data[i], png.data[i + 1], png.data[i + 2]]; })(),
-    (() => { const i = ((png.height - 1) * png.width) * 4; return [png.data[i], png.data[i + 1], png.data[i + 2]]; })(),
-    (() => { const i = (png.width * png.height - 1) * 4; return [png.data[i], png.data[i + 1], png.data[i + 2]]; })(),
+    (() => {
+      const i = (png.width - 1) * 4;
+      return [png.data[i], png.data[i + 1], png.data[i + 2]];
+    })(),
+    (() => {
+      const i = (png.height - 1) * png.width * 4;
+      return [png.data[i], png.data[i + 1], png.data[i + 2]];
+    })(),
+    (() => {
+      const i = (png.width * png.height - 1) * 4;
+      return [png.data[i], png.data[i + 1], png.data[i + 2]];
+    })(),
   ];
-  const background = [0, 1, 2].map((channel) => mean(backgroundSamples.map((pixel) => pixel[channel])));
+  const background = [0, 1, 2].map((channel) =>
+    mean(backgroundSamples.map((pixel) => pixel[channel])),
+  );
   const alphaPixels = pixelsIn(png, region('AlphaResponse'));
-  const backgroundFraction = alphaPixels.filter((pixel) => colorDistance(pixel, background) <= 8).length / alphaPixels.length;
-  assert.ok(backgroundFraction >= 0.2 && backgroundFraction <= 0.8,
-    `alpha mask must expose both material and background: ${(backgroundFraction * 100).toFixed(1)}% background`);
+  const backgroundFraction =
+    alphaPixels.filter((pixel) => colorDistance(pixel, background) <= 8).length /
+    alphaPixels.length;
+  assert.ok(
+    backgroundFraction >= 0.2 && backgroundFraction <= 0.8,
+    `alpha mask must expose both material and background: ${(backgroundFraction * 100).toFixed(1)}% background`,
+  );
 
-  process.stdout.write(`${JSON.stringify({
-    result: 'PASS',
-    fixtureId: manifest.fixtureId,
-    normalHalfLumaDelta: +normalDelta.toFixed(1),
-    aoHalfLumaDelta: +aoDelta.toFixed(1),
-    alphaBackgroundFraction: +backgroundFraction.toFixed(3),
-    regions: stats,
-  })}\n`);
+  process.stdout.write(
+    `${JSON.stringify({
+      result: 'PASS',
+      fixtureId: manifest.fixtureId,
+      normalHalfLumaDelta: +normalDelta.toFixed(1),
+      aoHalfLumaDelta: +aoDelta.toFixed(1),
+      alphaBackgroundFraction: +backgroundFraction.toFixed(3),
+      regions: stats,
+    })}\n`,
+  );
   process.exit(0);
 }
 

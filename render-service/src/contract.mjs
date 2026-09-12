@@ -66,7 +66,12 @@ export function httpRenderOutcomeCode({ method, path, status }) {
   if (status === 501) return 'not_implemented';
   if (status === 404) return 'route_not_found';
   if (status === 400 || status === 413) return 'request_rejected';
-  if (method === 'GET' && (path === '/health' || path === '/ping') && status >= 200 && status < 300) {
+  if (
+    method === 'GET' &&
+    (path === '/health' || path === '/ping') &&
+    status >= 200 &&
+    status < 300
+  ) {
     return 'health_ok';
   }
   if (method === 'POST' && path === '/render' && status >= 200 && status < 300) {
@@ -109,9 +114,10 @@ export function buildRenderOperationalEvidenceV1(input) {
     throw badRequest('firstRenderInProcess must be boolean');
   }
 
-  const evidenceClamped = queueWaitMs > MAX_OPERATIONAL_MS
-    || workerAgeMsAtStart > MAX_OPERATIONAL_MS
-    || input.queueDepthAtEnqueue > MAX_OPERATIONAL_QUEUE_DEPTH;
+  const evidenceClamped =
+    queueWaitMs > MAX_OPERATIONAL_MS ||
+    workerAgeMsAtStart > MAX_OPERATIONAL_MS ||
+    input.queueDepthAtEnqueue > MAX_OPERATIONAL_QUEUE_DEPTH;
   return {
     version: RENDER_OPERATIONAL_EVIDENCE_VERSION,
     outcomeCode: input.outcomeCode,
@@ -164,7 +170,7 @@ export function createSerialRenderQueue(options = {}) {
         }
       };
       const run = tail.then(runJob, runJob);
-      tail = run.catch(() => { });
+      tail = run.catch(() => {});
       return run;
     },
   });
@@ -183,11 +189,7 @@ function finiteNumber(value, path) {
 }
 
 function pixelDimension(value, path) {
-  if (
-    !Number.isInteger(value)
-    || value < MIN_CAMERA_DIMENSION
-    || value > MAX_CAMERA_DIMENSION
-  ) {
+  if (!Number.isInteger(value) || value < MIN_CAMERA_DIMENSION || value > MAX_CAMERA_DIMENSION) {
     throw badRequest(
       `${path} must be an integer in [${MIN_CAMERA_DIMENSION},${MAX_CAMERA_DIMENSION}]`,
     );
@@ -218,7 +220,11 @@ export function validateCameraMode(input) {
   if (!input || typeof input !== 'object' || Array.isArray(input)) {
     throw badRequest('camera render options must be an object');
   }
-  if (!Array.isArray(input.cameras) || input.cameras.length < 1 || input.cameras.length > MAX_CAMERAS) {
+  if (
+    !Array.isArray(input.cameras) ||
+    input.cameras.length < 1 ||
+    input.cameras.length > MAX_CAMERAS
+  ) {
     throw badRequest(`cameras must contain 1..${MAX_CAMERAS} entries`);
   }
   const width = pixelDimension(input.width, 'width');
@@ -234,7 +240,18 @@ export function validateCameraMode(input) {
     if (!value || typeof value !== 'object' || Array.isArray(value)) {
       throw badRequest(`cameras[${index}] must be an object`);
     }
-    const allowed = new Set(['position', 'target', 'up', 'fovDeg', 'aspect', 'near', 'far', 'version', 'projection', 'halfHeight']);
+    const allowed = new Set([
+      'position',
+      'target',
+      'up',
+      'fovDeg',
+      'aspect',
+      'near',
+      'far',
+      'version',
+      'projection',
+      'halfHeight',
+    ]);
     for (const key of Object.keys(value)) {
       if (!allowed.has(key)) throw badRequest(`cameras[${index}].${key} is unknown`);
     }
@@ -255,13 +272,24 @@ export function validateCameraMode(input) {
       throw badRequest(`cameras[${index}].up must not be collinear with view`);
     }
     const versioned = value.version !== undefined || value.projection !== undefined;
-    if (versioned && (value.version !== 'kiln.camera.v1' || !['orthographic','perspective'].includes(value.projection))) throw badRequest('invalid versioned camera');
+    if (
+      versioned &&
+      (value.version !== 'kiln.camera.v1' ||
+        !['orthographic', 'perspective'].includes(value.projection))
+    )
+      throw badRequest('invalid versioned camera');
     const orthographic = value.projection === 'orthographic';
-    if (orthographic && value.fovDeg !== undefined) throw badRequest('orthographic camera cannot use fovDeg');
-    if (!orthographic && value.halfHeight !== undefined) throw badRequest('perspective camera cannot use halfHeight');
-    const halfHeight = orthographic ? finiteNumber(value.halfHeight, `cameras[${index}].halfHeight`) : undefined;
+    if (orthographic && value.fovDeg !== undefined)
+      throw badRequest('orthographic camera cannot use fovDeg');
+    if (!orthographic && value.halfHeight !== undefined)
+      throw badRequest('perspective camera cannot use halfHeight');
+    const halfHeight = orthographic
+      ? finiteNumber(value.halfHeight, `cameras[${index}].halfHeight`)
+      : undefined;
     if (orthographic && halfHeight <= 0) throw badRequest('halfHeight must be positive');
-    const fovDeg = orthographic ? undefined : finiteNumber(value.fovDeg, `cameras[${index}].fovDeg`);
+    const fovDeg = orthographic
+      ? undefined
+      : finiteNumber(value.fovDeg, `cameras[${index}].fovDeg`);
     const aspect = finiteNumber(value.aspect, `cameras[${index}].aspect`);
     const near = finiteNumber(value.near, `cameras[${index}].near`);
     const far = finiteNumber(value.far, `cameras[${index}].far`);
@@ -274,11 +302,19 @@ export function validateCameraMode(input) {
     if (Math.abs(aspect - targetAspect) > Math.max(1, targetAspect) * 1e-9) {
       throw badRequest(`cameras[${index}].aspect must equal width/height`);
     }
-    return { position, target, up, ...(orthographic ? {halfHeight} : {fovDeg}), aspect, near, far, ...(versioned ? {version:value.version,projection:value.projection} : {}) };
+    return {
+      position,
+      target,
+      up,
+      ...(orthographic ? { halfHeight } : { fovDeg }),
+      aspect,
+      near,
+      far,
+      ...(versioned ? { version: value.version, projection: value.projection } : {}),
+    };
   });
-  const lightingPresetId = input.lightingPresetId === undefined
-    ? SUPPORTED_LIGHTING_PRESET_ID
-    : input.lightingPresetId;
+  const lightingPresetId =
+    input.lightingPresetId === undefined ? SUPPORTED_LIGHTING_PRESET_ID : input.lightingPresetId;
   if (!isPresentationPresetId(lightingPresetId)) {
     throw badRequest(supportedPresetMessage('lighting_preset_id'));
   }
@@ -318,7 +354,11 @@ export function validateRenderMode(body) {
     });
     return { mode: 'camera', ...camera };
   }
-  if (body.width !== undefined || body.height !== undefined || body.lighting_preset_id !== undefined) {
+  if (
+    body.width !== undefined ||
+    body.height !== undefined ||
+    body.lighting_preset_id !== undefined
+  ) {
     throw badRequest('width, height, and lighting_preset_id require cameras');
   }
   return {
@@ -370,11 +410,13 @@ function cloneCamera(camera) {
     position: [...camera.position],
     target: [...camera.target],
     up: [...camera.up],
-    ...(camera.projection === 'orthographic' ? {halfHeight:camera.halfHeight} : {fovDeg:camera.fovDeg}),
+    ...(camera.projection === 'orthographic'
+      ? { halfHeight: camera.halfHeight }
+      : { fovDeg: camera.fovDeg }),
     aspect: camera.aspect,
     near: camera.near,
     far: camera.far,
-    ...(camera.version ? {version:camera.version,projection:camera.projection} : {}),
+    ...(camera.version ? { version: camera.version, projection: camera.projection } : {}),
   };
 }
 
@@ -395,10 +437,10 @@ export function buildRenderFidelityV1({
   timings,
 }) {
   if (
-    typeof rendererId !== 'string'
-    || rendererId.trim() !== rendererId
-    || rendererId.length < 1
-    || rendererId.length > 160
+    typeof rendererId !== 'string' ||
+    rendererId.trim() !== rendererId ||
+    rendererId.length < 1 ||
+    rendererId.length > 160
   ) {
     throw badRequest('rendererId must be a non-empty string of at most 160 characters');
   }
@@ -415,12 +457,10 @@ export function buildRenderFidelityV1({
     throw badRequest('resolvedCameras must be an array');
   }
 
-  const requestedCameras = renderMode.mode === 'camera'
-    ? renderMode.cameras.map(cloneCamera)
-    : [];
+  const requestedCameras = renderMode.mode === 'camera' ? renderMode.cameras.map(cloneCamera) : [];
   if (
-    resolvedCameras.length !== requestedCameras.length
-    || JSON.stringify(resolvedCameras) !== JSON.stringify(requestedCameras)
+    resolvedCameras.length !== requestedCameras.length ||
+    JSON.stringify(resolvedCameras) !== JSON.stringify(requestedCameras)
   ) {
     throw badRequest('resolved cameras do not match the validated requested cameras');
   }
@@ -443,8 +483,8 @@ export function buildRenderFidelityV1({
     throw badRequest('timings.queueAndTotalMs must be at least totalMs');
   }
   if (
-    checkedTimings.queueWaitMs !== undefined
-    && checkedTimings.queueWaitMs > checkedTimings.queueAndTotalMs
+    checkedTimings.queueWaitMs !== undefined &&
+    checkedTimings.queueWaitMs > checkedTimings.queueAndTotalMs
   ) {
     throw badRequest('timings.queueWaitMs must not exceed queueAndTotalMs');
   }

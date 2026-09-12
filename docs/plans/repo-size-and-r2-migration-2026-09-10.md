@@ -1679,6 +1679,7 @@ the installed tree.
 | 14.1 | Re-ground 7.12 / SEP-2640 against an authoritative source | **Done 2026-09-12.** Deferred still, for a stronger reason. See below |
 | 14.2 | Establish what actually blocks the `ai` 7 family, and gate it | **Done 2026-09-12.** `@strands-agents/sdk@1.17.0` is latest, declares peer `@ai-sdk/provider: ^3.0.0`, and its `VercelModel` is typed on `LanguageModelV3` in 21 places. `@openrouter/ai-sdk-provider@3.0.0` requires `ai: ^7.0.0`; `ai@7.0.99` depends on `@ai-sdk/provider@4.0.14`. The family cannot be taken until Strands ships a release accepting the v4 spec -- no budget changes that. `scripts/peer-ranges.test.mjs` now fails on a peer range the version beside it does not meet, verified by patching the installed `@openrouter/ai-sdk-provider` manifest to peer `ai: ^7.0.0` and watching it report `installed 6.0.282` |
 | 14.3 | Assert the prompt-cache breakpoint on the wire, offline | **Done 2026-09-12.** Both native transports captured in `src/agent/providers.test.ts`, both differential. See below |
+| 14.6 | `render-service/` into the lint surface, which needed its line endings settled first | **Done 2026-09-12.** 442 files where 416 were. See below |
 | 14.5 | Give the coverage ratchet a scope, so repo-only code cannot move the engine's contract | **Done 2026-09-12.** Measured over `src/` alone; baseline re-measured at 95.39% functions / 92.59% lines; `lines` raised 92 to 92.1 so the narrowing does not quietly hand back slack. See below |
 | 14.4 | Bring the repository's own gates under the lint gate, which they were never under | **Done 2026-09-12** for the gates and their tests: 416 files checked where 405 were, and the tree reports nothing. The one-off tools beside them are measured and deliberately left, below |
 
@@ -1846,3 +1847,46 @@ plausible enough to write down. Verified by a case in
 `AGENTS.md` states the scope where an agent reads it, beside the existing rule that
 the ratchet must not vary by whether the runner has a GPU. Same class of rule: the
 contract must not depend on things that are not the engine.
+
+### 14.6 -- render-service was kept out by a frozen accident
+
+14.4 left `render-service/` out because its `src/**` is `-text` in
+`.gitattributes` and Biome's formatter would rewrite the line endings. Looking at
+what the attribute was protecting turned that from a reason into the finding.
+
+**The attribute was sweeping, not deliberate.** It arrived in the OSS release
+commit (#51) alongside the other `-text` entries, and what it froze is
+*inconsistent*: `contract.mjs`, `health-contract.mjs`, `presentation-presets.mjs`
+and `server.mjs` fully CRLF; `renderer.mjs` at 395 of 399 lines; `cache-identity.mjs`,
+`display-output.mjs` and `readback.mjs` each carrying a single stray CRLF line;
+`framing.mjs`, `gpu.mjs`, `register-hooks.mjs` and `three-alias-hooks.mjs` fully LF.
+A single stray CRLF line in an otherwise-LF file is the signature of an editor, not
+of a decision.
+
+**Those bytes really are hashed, which is why the replacement matters.**
+`fingerprintRendererInputs` walks `render-service/src/` and hashes the file bytes
+into the renderer's capture identity, so this is not a directory where line endings
+are cosmetic. But `-text` only guarantees "whatever was committed"; the
+`* text=auto eol=lf` rule at the top of the file guarantees what the fingerprint
+actually needs, which is ONE line ending on every platform. Normalizing is a
+strictly better guarantee than the attribute it replaces.
+
+**Nothing re-validates the old fingerprint.** `capture-producer.v1` digests appear
+in checked-in `examples/*.provenance.json` and evaluation results, but they are
+records of the renderer build a poster was made under -- no test recomputes one and
+compares. The precedent settles it: 13.6 edited `presentation-presets.mjs` and
+`renderer.mjs` (#86), changing the fingerprint, and every gate stayed green. A later
+build hashing differently is the point of recording it.
+
+Eight files converted to LF, the attribute removed with the reasoning left in
+`.gitattributes` where the next reader will ask, and the directory joined the lint
+surface: 442 files where 416 were. Twenty-two format findings, then five real ones
+-- three `useIterableCallbackReturn` and two `useTemplate`. The
+`useIterableCallbackReturn` in `presentation-presets.mjs` is the same defect 13.5
+fixed in the Bradley-Terry fit: a one-expression arrow in a `forEach` returning a
+value the callback's contract discards. That is production render-service code, and
+it was outside every lint gate this repository has.
+
+`reliability.test.mjs` pins both include patterns and asserts the `-text` line stays
+gone, since the next edit to a CRLF-era file is what would reintroduce the mix.
+render-service's own 37 tests pass on the normalized sources.

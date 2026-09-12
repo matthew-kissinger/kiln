@@ -20,9 +20,18 @@ bun.lock -diff linguist-generated=true
 src/** -text
 dist/** -text
 skills/** -text
-render-service/src/** -text
 scripts/create-workspace.mjs -text
 package.json -text
 plugin.json -text
 .claude-plugin/** -text
 docs/**/*.mjs -text
+
+# `render-service/src/**` was in the list above and is deliberately not any more.
+# Its bytes ARE hashed -- `fingerprintRendererInputs` walks that directory into the
+# renderer's capture identity -- but `-text` only froze whatever was committed, and
+# what was committed was inconsistent: four files fully CRLF, `renderer.mjs` at
+# 395 of 399 lines, three carrying a single stray CRLF line, four fully LF. The
+# `* text=auto eol=lf` rule at the top gives what the fingerprint actually needs,
+# which is ONE line ending on every platform, and it makes the directory editable
+# by ordinary tooling. Provenance receipts record the identity a poster was made
+# under; a later renderer build hashing differently is the point of recording it.

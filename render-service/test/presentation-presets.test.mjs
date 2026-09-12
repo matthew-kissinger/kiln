@@ -47,9 +47,27 @@ describe('versioned presentation preset registry', () => {
       exposure: 1.38,
       ambient: { type: 'hemisphere', sky: 0xffffff, ground: 0x6f7888, intensity: 2 },
       sun: { enabled: false },
-      key: { enabled: true, color: 0xffffff, intensity: 3, position: [4, 7, 5], castsShadow: false },
-      fill: { enabled: true, color: 0xdce8ff, intensity: 1.8, position: [-4, 3, 2], castsShadow: false },
-      rim: { enabled: true, color: 0xffead6, intensity: 1.2, position: [-2, 5, -5], castsShadow: false },
+      key: {
+        enabled: true,
+        color: 0xffffff,
+        intensity: 3,
+        position: [4, 7, 5],
+        castsShadow: false,
+      },
+      fill: {
+        enabled: true,
+        color: 0xdce8ff,
+        intensity: 1.8,
+        position: [-4, 3, 2],
+        castsShadow: false,
+      },
+      rim: {
+        enabled: true,
+        color: 0xffead6,
+        intensity: 1.2,
+        position: [-2, 5, -5],
+        castsShadow: false,
+      },
       shadows: {
         enabled: false,
         type: 'pcf',
@@ -83,33 +101,61 @@ describe('versioned presentation preset registry', () => {
     assert.equal(isPresentationPresetId('neutral-studio-v1'), true);
     assert.equal(isPresentationPresetId('dramatic-night-v1'), false);
     assert.equal(getPresentationPreset('dramatic-night-v1'), undefined);
-    assert.throws(() => validateRenderMode({
-      cameras: [camera], width: 512, height: 512, lighting_preset_id: 'dramatic-night-v1',
-    }), (error) => error?.status === 400 && /neutral-studio-v1/.test(error.message));
+    assert.throws(
+      () =>
+        validateRenderMode({
+          cameras: [camera],
+          width: 512,
+          height: 512,
+          lighting_preset_id: 'dramatic-night-v1',
+        }),
+      (error) => error?.status === 400 && /neutral-studio-v1/.test(error.message),
+    );
     for (const nonId of [null, { exposure: 2 }, ['neutral-studio-v1']]) {
-      assert.throws(() => validateRenderMode({
-        cameras: [camera], width: 512, height: 512, lighting_preset_id: nonId,
-      }), (error) => error?.status === 400 && /neutral-studio-v1/.test(error.message));
+      assert.throws(
+        () =>
+          validateRenderMode({
+            cameras: [camera],
+            width: 512,
+            height: 512,
+            lighting_preset_id: nonId,
+          }),
+        (error) => error?.status === 400 && /neutral-studio-v1/.test(error.message),
+      );
     }
     const renderMode = validateRenderMode({ cameras: [camera], width: 512, height: 512 });
-    assert.throws(() => buildRenderFidelityV1({
-      rendererId: 'dawn-vulkan:test',
-      inputGlbSha256: sha256(Buffer.from('glb')),
-      presentationProfile: 'dramatic-night-v1',
-      renderMode,
-      resolvedCameras: renderMode.cameras,
-      timings: { totalMs: 1 },
-    }), (error) => error?.status === 400 && /neutral-studio-v1/.test(error.message));
+    assert.throws(
+      () =>
+        buildRenderFidelityV1({
+          rendererId: 'dawn-vulkan:test',
+          inputGlbSha256: sha256(Buffer.from('glb')),
+          presentationProfile: 'dramatic-night-v1',
+          renderMode,
+          resolvedCameras: renderMode.cameras,
+          timings: { totalMs: 1 },
+        }),
+      (error) => error?.status === 400 && /neutral-studio-v1/.test(error.message),
+    );
   });
 
   it('advertises every registry ID through provider-free health contract data', () => {
-    assert.deepEqual(PRESENTATION_PRESET_CAPABILITIES, ['render.profile.neutral-studio-v1', 'render.profile.gallery-studio-v1']);
-    assert.ok(PRESENTATION_PRESET_CAPABILITIES.every((capability) => RENDER_CAPABILITIES.includes(capability)));
-    const health = buildHealthDocument({
-      rendererId: 'dawn-vulkan:test',
-      backend: 'vulkan',
-      summary: { vendor: 'test' },
-    }, true);
+    assert.deepEqual(PRESENTATION_PRESET_CAPABILITIES, [
+      'render.profile.neutral-studio-v1',
+      'render.profile.gallery-studio-v1',
+    ]);
+    assert.ok(
+      PRESENTATION_PRESET_CAPABILITIES.every((capability) =>
+        RENDER_CAPABILITIES.includes(capability),
+      ),
+    );
+    const health = buildHealthDocument(
+      {
+        rendererId: 'dawn-vulkan:test',
+        backend: 'vulkan',
+        summary: { vendor: 'test' },
+      },
+      true,
+    );
     assert.equal(health.presentationProfile, 'neutral-studio-v1');
     assert.deepEqual(health.lightingPresetIds, ['neutral-studio-v1', 'gallery-studio-v1']);
     assert.notEqual(health.lightingPresetIds, PRESENTATION_PRESET_IDS);

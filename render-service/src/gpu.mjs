@@ -56,15 +56,22 @@ export async function acquireGpu({ allowSoftware = false } = {}) {
   try {
     Object.defineProperty(globalThis, 'navigator', { value: { gpu }, configurable: true });
   } catch {
-    try { Object.defineProperty(globalThis.navigator, 'gpu', { value: gpu, configurable: true }); } catch { /* three gets device directly */ }
+    try {
+      Object.defineProperty(globalThis.navigator, 'gpu', { value: gpu, configurable: true });
+    } catch {
+      /* three gets device directly */
+    }
   }
   const adapter = await gpu.requestAdapter({ powerPreference: 'high-performance' });
-  if (!adapter) throw new Error('no WebGPU adapter: no usable Vulkan/D3D12/Metal device visible to Dawn');
+  if (!adapter)
+    throw new Error('no WebGPU adapter: no usable Vulkan/D3D12/Metal device visible to Dawn');
   const software = isSoftwareAdapter(adapter);
   if (software && !allowSoftware) {
     const { description } = adapterSummary(adapter);
-    throw new Error(`software adapter refused (fail closed): ${description}. ` +
-      'On Linux this usually means the NVIDIA Vulkan ICD failed to init - check GLVND libs (libegl1/libgl1/libglvnd0).');
+    throw new Error(
+      `software adapter refused (fail closed): ${description}. ` +
+        'On Linux this usually means the NVIDIA Vulkan ICD failed to init - check GLVND libs (libegl1/libgl1/libglvnd0).',
+    );
   }
   const device = await adapter.requestDevice({
     requiredFeatures: [...adapter.features],
@@ -75,16 +82,20 @@ export async function acquireGpu({ allowSoftware = false } = {}) {
   process.once('beforeExit', markGpuShutdown);
   device.lost.then((info) => {
     if (!shouldExitOnDeviceLost(info)) return;
-    console.error(JSON.stringify({
-      evt: 'device_lost',
-      reason: info?.reason ?? 'unknown',
-      message: info?.message ?? '',
-    }));
+    console.error(
+      JSON.stringify({
+        evt: 'device_lost',
+        reason: info?.reason ?? 'unknown',
+        message: info?.message ?? '',
+      }),
+    );
     process.exit(1);
   });
   const summary = adapterSummary(adapter);
-  const backend = process.platform === 'win32' ? 'd3d12' : process.platform === 'darwin' ? 'metal' : 'vulkan';
-  const rendererId = `dawn-${backend}:${summary.device || summary.vendor}:${summary.description}`.slice(0, 160);
+  const backend =
+    process.platform === 'win32' ? 'd3d12' : process.platform === 'darwin' ? 'metal' : 'vulkan';
+  const rendererId =
+    `dawn-${backend}:${summary.device || summary.vendor}:${summary.description}`.slice(0, 160);
   state = { gpu, adapter, device, summary, software, backend, rendererId };
   return state;
 }

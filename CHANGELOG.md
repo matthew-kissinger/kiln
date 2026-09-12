@@ -3,6 +3,34 @@
 Changes to `@kiln/engine`. Source and installable packages are distributed through
 GitHub. The package is not published on the npm registry.
 
+## render-service joins the lint surface — 2026-09-12
+
+- It was left out because `render-service/src/**` is `-text` in `.gitattributes` and the
+  formatter would rewrite the line endings. Looking at what the attribute protected
+  turned that reason into the finding.
+- **It was sweeping, not deliberate.** The line arrived in the OSS release commit
+  alongside the other `-text` entries, and what it froze is inconsistent: four files
+  fully CRLF, `renderer.mjs` at 395 of 399 lines, three carrying a single stray CRLF
+  line, four fully LF. One stray CRLF line in an otherwise-LF file is an editor's
+  signature, not a decision.
+- **Those bytes are genuinely hashed**, so the replacement matters:
+  `fingerprintRendererInputs` walks that directory into the renderer's capture identity.
+  But `-text` only guarantees "whatever was committed", while the `* text=auto eol=lf`
+  rule guarantees what the fingerprint needs — one line ending on every platform. The
+  normalization is a stricter guarantee than the attribute it replaces.
+- **Nothing re-validates the old digest.** `capture-producer.v1` fingerprints in
+  checked-in provenance receipts record the renderer build a poster was made under; no
+  test recomputes one. 13.6 already edited two of these files and every gate stayed
+  green — a later build hashing differently is the point of recording it.
+- Eight files to LF, the attribute removed with the reasoning left where the next reader
+  will ask, and the directory linted: **442 files where 416 were.** Twenty-two format
+  findings, then five real ones. One of them, `useIterableCallbackReturn` in
+  `presentation-presets.mjs`, is the same defect 13.5 fixed in the Bradley-Terry fit —
+  a one-expression arrow in a `forEach` returning a value the contract discards — sitting
+  in production render-service code that was outside every lint gate this repo has.
+- `reliability.test.mjs` pins both include patterns and asserts the `-text` line stays
+  gone. render-service's own 37 tests pass on the normalized sources.
+
 ## The coverage ratchet has a scope now — 2026-09-12
 
 - The previous entry blamed 162 lines of lost coverage slack on helper scripts being

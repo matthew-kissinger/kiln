@@ -1,5 +1,5 @@
-import {renderDisplayTarget} from './display-output.mjs';
-import {packRgbaReadback} from './readback.mjs';
+import { renderDisplayTarget } from './display-output.mjs';
+import { packRgbaReadback } from './readback.mjs';
 // GLB bytes -> PBR PNG views. Headless three.js WebGPURenderer, RenderTarget-only.
 //
 // B1a engineering notes encoded here:
@@ -31,7 +31,7 @@ globalThis.createImageBitmap = async (blob) => {
   const buf = Buffer.from(await blob.arrayBuffer());
   if (buf[0] !== 0x89 || buf[1] !== 0x50) throw new Error('only PNG images supported in GLB');
   const png = PNG.sync.read(buf);
-  return { width: png.width, height: png.height, data: new Uint8Array(png.data), close() { } };
+  return { width: png.width, height: png.height, data: new Uint8Array(png.data), close() {} };
 };
 
 const THREE = await import('three/webgpu');
@@ -56,11 +56,16 @@ export const PRESENTATION_LIGHTS = Object.freeze({
     ground: defaultPresentation.ambient.ground,
     intensity: defaultPresentation.ambient.intensity,
   }),
-  ...Object.fromEntries(['key', 'fill', 'rim'].map((role) => [role, Object.freeze({
-    color: defaultPresentation[role].color,
-    intensity: defaultPresentation[role].intensity,
-    position: defaultPresentation[role].position,
-  })])),
+  ...Object.fromEntries(
+    ['key', 'fill', 'rim'].map((role) => [
+      role,
+      Object.freeze({
+        color: defaultPresentation[role].color,
+        intensity: defaultPresentation[role].intensity,
+        position: defaultPresentation[role].position,
+      }),
+    ]),
+  ),
 });
 
 /**
@@ -89,7 +94,8 @@ export function snapRenderSize(requested) {
 const _rtPools = new Map();
 function rtPool(size, count) {
   const pool = _rtPools.get(size) ?? [];
-  while (pool.length < count) pool.push(new THREE.RenderTarget(size, size, { depthBuffer: true, samples: 4 }));
+  while (pool.length < count)
+    pool.push(new THREE.RenderTarget(size, size, { depthBuffer: true, samples: 4 }));
   _rtPools.set(size, pool);
   return pool.slice(0, count);
 }
@@ -98,21 +104,35 @@ export async function initRenderer(opts = {}) {
   if (ctx) return ctx;
   const gpuState = await acquireGpu(opts);
   const fakeCanvas = {
-    width: 4, height: 4, style: {},
-    addEventListener() { }, removeEventListener() { }, dispatchEvent() { },
-    getContext() { throw new Error('default canvas context requested — RT-only expectation violated'); },
+    width: 4,
+    height: 4,
+    style: {},
+    addEventListener() {},
+    removeEventListener() {},
+    dispatchEvent() {},
+    getContext() {
+      throw new Error('default canvas context requested — RT-only expectation violated');
+    },
   };
-  const renderer = new THREE.WebGPURenderer({ canvas: fakeCanvas, device: gpuState.device, antialias: false, samples: 4, outputBufferType: THREE.HalfFloatType });
+  const renderer = new THREE.WebGPURenderer({
+    canvas: fakeCanvas,
+    device: gpuState.device,
+    antialias: false,
+    samples: 4,
+    outputBufferType: THREE.HalfFloatType,
+  });
   await renderer.init();
   renderer.toneMapping = THREE.ACESFilmicToneMapping;
   renderer.outputColorSpace = THREE.SRGBColorSpace;
   renderer.toneMappingExposure = PRESENTATION_EXPOSURE;
 
   const pmrem = new THREE.PMREMGenerator(renderer);
-  const environments = new Map(PRESENTATION_PRESET_IDS.map((id) => {
-    const preset = getPresentationPreset(id);
-    return [id, pmrem.fromScene(new RoomEnvironment(), preset.environment.sigma).texture];
-  }));
+  const environments = new Map(
+    PRESENTATION_PRESET_IDS.map((id) => {
+      const preset = getPresentationPreset(id);
+      return [id, pmrem.fromScene(new RoomEnvironment(), preset.environment.sigma).texture];
+    }),
+  );
   const environment = environments.get(PRESENTATION_PROFILE_ID);
 
   const loader = new GLTFLoader();
@@ -123,15 +143,32 @@ export async function initRenderer(opts = {}) {
 function toDataTextures(root) {
   root.traverse((o) => {
     for (const mat of Array.isArray(o.material) ? o.material : o.material ? [o.material] : []) {
-      for (const slot of ['map', 'normalMap', 'roughnessMap', 'metalnessMap', 'aoMap', 'emissiveMap']) {
+      for (const slot of [
+        'map',
+        'normalMap',
+        'roughnessMap',
+        'metalnessMap',
+        'aoMap',
+        'emissiveMap',
+      ]) {
         const tex = mat[slot];
         if (tex?.image?.data && !tex.isDataTexture) {
-          const dt = new THREE.DataTexture(tex.image.data, tex.image.width, tex.image.height, THREE.RGBAFormat);
-          dt.colorSpace = tex.colorSpace; dt.flipY = tex.flipY;
-          dt.wrapS = tex.wrapS; dt.wrapT = tex.wrapT;
-          dt.magFilter = tex.magFilter; dt.minFilter = THREE.LinearMipmapLinearFilter;
-          dt.generateMipmaps = true; dt.needsUpdate = true;
-          mat[slot] = dt; mat.needsUpdate = true;
+          const dt = new THREE.DataTexture(
+            tex.image.data,
+            tex.image.width,
+            tex.image.height,
+            THREE.RGBAFormat,
+          );
+          dt.colorSpace = tex.colorSpace;
+          dt.flipY = tex.flipY;
+          dt.wrapS = tex.wrapS;
+          dt.wrapT = tex.wrapT;
+          dt.magFilter = tex.magFilter;
+          dt.minFilter = THREE.LinearMipmapLinearFilter;
+          dt.generateMipmaps = true;
+          dt.needsUpdate = true;
+          mat[slot] = dt;
+          mat.needsUpdate = true;
         }
       }
     }
@@ -234,9 +271,17 @@ function orthoCam(center, min, max, dir) {
 }
 
 function exactPerspectiveCam(spec) {
-  const cam = spec.projection === 'orthographic'
-    ? new THREE.OrthographicCamera(-spec.halfHeight * spec.aspect, spec.halfHeight * spec.aspect, spec.halfHeight, -spec.halfHeight, spec.near, spec.far)
-    : new THREE.PerspectiveCamera(spec.fovDeg, spec.aspect, spec.near, spec.far);
+  const cam =
+    spec.projection === 'orthographic'
+      ? new THREE.OrthographicCamera(
+          -spec.halfHeight * spec.aspect,
+          spec.halfHeight * spec.aspect,
+          spec.halfHeight,
+          -spec.halfHeight,
+          spec.near,
+          spec.far,
+        )
+      : new THREE.PerspectiveCamera(spec.fovDeg, spec.aspect, spec.near, spec.far);
   cam.position.set(...spec.position);
   cam.up.set(...spec.up);
   cam.lookAt(new THREE.Vector3(...spec.target));
@@ -248,7 +293,7 @@ function exactPerspectiveCam(spec) {
 async function readPng(renderer, rt, w, h) {
   const pixels = await renderer.readRenderTargetPixelsAsync(rt, 0, 0, w, h);
   const png = new PNG({ width: w, height: h });
-  packRgbaReadback(pixels,w,h).copy(png.data);
+  packRgbaReadback(pixels, w, h).copy(png.data);
   // Fast encode: deflate 1 + no row filtering is ~10x quicker than the adaptive
   // default and consumers read pixels, not bytes (image tokens scale with
   // dimensions, not file size).
@@ -280,13 +325,13 @@ export async function renderGlb(glbBytes, opts = {}) {
   // beauty target below is allocated per request and disposed, so it keeps a
   // plain clamp — it has no pool to poison.
   const size = renderMode.mode === 'legacy' ? snapRenderSize(renderMode.size ?? 384) : null;
-  const beautySize = renderMode.mode === 'legacy' && renderMode.beautySize
-    ? Math.min(Math.max(renderMode.beautySize, 128), 4096)
-    : null;
+  const beautySize =
+    renderMode.mode === 'legacy' && renderMode.beautySize
+      ? Math.min(Math.max(renderMode.beautySize, 128), 4096)
+      : null;
   const viewDirs = renderMode.mode === 'legacy' ? renderMode.viewDirs : null;
-  const presentationPresetId = renderMode.mode === 'camera'
-    ? renderMode.lightingPresetId
-    : PRESENTATION_PROFILE_ID;
+  const presentationPresetId =
+    renderMode.mode === 'camera' ? renderMode.lightingPresetId : PRESENTATION_PROFILE_ID;
   const presentation = getPresentationPreset(presentationPresetId);
 
   const t0 = performance.now();
@@ -299,7 +344,13 @@ export async function renderGlb(glbBytes, opts = {}) {
     const tLoad = performance.now();
 
     scene = new THREE.Scene();
-    applyPresentationPreset(renderer, scene, gltf.scene, presentation, environments.get(presentationPresetId));
+    applyPresentationPreset(
+      renderer,
+      scene,
+      gltf.scene,
+      presentation,
+      environments.get(presentationPresetId),
+    );
     // Legacy callers retain their historical escape hatch. Exact camera mode is
     // preset-ID-only and validateRenderMode rejects a background field.
     if (renderMode.mode === 'legacy' && opts.background !== undefined) {
@@ -363,7 +414,12 @@ export async function renderGlb(glbBytes, opts = {}) {
     if (beautySize) {
       const rtB = new THREE.RenderTarget(beautySize, beautySize, { depthBuffer: true, samples: 4 });
       requestTargets.push(rtB);
-      renderDisplayTarget(renderer, scene, exactPerspectiveCam(beautyCameraSpec(center.toArray(), sizes.length() * 0.62 + 1e-3)), rtB);
+      renderDisplayTarget(
+        renderer,
+        scene,
+        exactPerspectiveCam(beautyCameraSpec(center.toArray(), sizes.length() * 0.62 + 1e-3)),
+        rtB,
+      );
       beauty = await readPng(renderer, rtB, beautySize, beautySize);
     }
     const tEnd = performance.now();

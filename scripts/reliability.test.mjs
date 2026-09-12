@@ -84,6 +84,13 @@ describe('repository reliability contracts', () => {
     // ledger 14.4 with what taking them costs.
     expect(biome.files.includes).toContain('scripts/check-*.mjs');
     expect(biome.files.includes).toContain('scripts/**/*.test.mjs');
+    // render-service joined the surface once its sources stopped being CRLF. It is
+    // a shipped subsystem with 37 tests in CI, so it belongs here; what kept it out
+    // was a `.gitattributes` `-text` line freezing an inconsistent line-ending mix.
+    expect(biome.files.includes).toContain('render-service/src/**/*.mjs');
+    expect(biome.files.includes).toContain('render-service/test/**/*.mjs');
+    // And the attribute must stay gone, or the next edit reintroduces the mix.
+    expect(await readText('.gitattributes')).not.toContain('render-service/src/** -text');
 
     // Views must be byte-reproducible: a runner that happens to reach a GPU render
     // service must not be able to change what the golden-image tests compare.

@@ -23,9 +23,9 @@ bun run test:coverage
 tolerated baseline to compare against, so any diagnostic your change produces is
 yours -- either fix it, or suppress it with a `biome-ignore` comment that says why.
 
-The surface is `src/`, `site/src/`, `site/*.ts`, and in `scripts/` the gates and
-their tests (`check-*.mjs`, `**/*.test.mjs`). The one-off tools beside them and
-`render-service/` are out -- see ledger 14.4 for what taking them costs. If you add
+The surface is `src/`, `site/src/`, `site/*.ts`, `render-service/`, and in `scripts/`
+the gates and their tests (`check-*.mjs`, `**/*.test.mjs`). The one-off tools beside
+them are out -- see ledger 14.4 for what taking them costs. If you add
 a directory, add it to `files.includes` in `biome.json`: Biome silently processes
 nothing outside that list, which is how `scripts/` went unlinted while the coverage
 run measured it. Note that `biome` prints at most 20 diagnostics by default, so a
