@@ -8,7 +8,9 @@
  * keys so native construction never touches the network).
  */
 import { test, expect, describe, beforeAll, afterAll } from 'bun:test';
-import { CachePointBlock, TextBlock } from '@strands-agents/sdk';
+import { CachePointBlock, Message, TextBlock, type SystemPrompt } from '@strands-agents/sdk';
+import { AnthropicModel } from '@strands-agents/sdk/models/anthropic';
+import { BedrockModel } from '@strands-agents/sdk/models/bedrock';
 import {
   resolveKilnAgentModel,
   makeKilnModel,
@@ -502,5 +504,142 @@ describe('OpenRouter-Anthropic prompt caching (cache_control)', () => {
     // request-settings directive above is how OpenRouter gets it instead.
     expect(modelConsumesSystemPromptCachePoints(model)).toBe(false);
     expect(toCachedSystemPrompt('SYSTEM', model)).toBe('SYSTEM');
+  });
+});
+
+/**
+ * The cache breakpoint, asserted against the bytes that leave the process.
+ *
+ * The OpenRouter half above already does this: it drives `doStream` with
+ * `globalThis.fetch` replaced and reads the outgoing JSON. The native half did
+ * not. It asserted that `toCachedSystemPrompt` returns `[TextBlock,
+ * CachePointBlock]` and that those carry the discriminators the adapters branch
+ * on -- which is the INPUT to the transport, not its output. So the claim the
+ * whole design rests on, that a cache point becomes `cache_control` on the wire,
+ * was carried by a comment and by `test:live`: opt-in, billed, and absent from
+ * CI. `@anthropic-ai/sdk` and `@aws-sdk/client-bedrock-runtime` both move inside
+ * their caret ranges on every dependency refresh, and losing this silently bills
+ * full price for every prefix that should have been a cache read while every
+ * offline gate stays green.
+ *
+ * Neither test reaches the network: the Anthropic client takes a `fetch` that
+ * records and throws, the Bedrock client a `requestHandler` that does the same.
+ */
+describe('the cache breakpoint reaches the wire (captured transports, no network)', () => {
+  const TEXT = 'You generate exportable 3D game assets as Kiln code.';
+
+  /**
+   * Run a real `stream()` against a transport that records one request and fails.
+   *
+   * The recorded body is decoded rather than coerced: Bedrock hands its request
+   * handler a `Uint8Array`, and `@aws-sdk/core` shims it to warn when a consumer
+   * calls a string method on it -- a warning today and, the shim says, a throw
+   * later. Anthropic's `fetch` gets a string, so both shapes arrive here.
+   */
+  async function captureRequest(
+    model: {
+      stream(messages: Message[], options: { systemPrompt: SystemPrompt }): AsyncIterable<unknown>;
+    },
+    systemPrompt: SystemPrompt,
+    read: () => string | Uint8Array | undefined,
+  ): Promise<Record<string, unknown>> {
+    const messages = [new Message({ role: 'user', content: [new TextBlock('hi')] })];
+    let failure: unknown;
+    try {
+      for await (const _event of model.stream(messages, { systemPrompt })) {
+        // The transport throws on the first request, so no event ever arrives.
+      }
+    } catch (error) {
+      failure = error;
+    }
+    const sent = read();
+    // Rethrow rather than report "no request": if construction or formatting threw
+    // before the transport ran, that error is the finding, not this assertion.
+    if (sent === undefined) throw failure ?? new Error('the transport was never called');
+    const text = typeof sent === 'string' ? sent : new TextDecoder().decode(sent);
+    return JSON.parse(text) as Record<string, unknown>;
+  }
+
+  function anthropicModel(): {
+    model: AnthropicModel;
+    read: () => string | undefined;
+  } {
+    let body: string | undefined;
+    const model = new AnthropicModel({
+      modelId: 'claude-opus-4-8',
+      apiKey: 'test-key',
+      maxTokens: 1024,
+      clientConfig: {
+        maxRetries: 0,
+        fetch: (async (_url: unknown, init: { body: string }) => {
+          body = init.body;
+          throw new Error('captured by the test transport');
+        }) as unknown as typeof fetch,
+      },
+    });
+    return { model, read: () => body };
+  }
+
+  test('a plain string system prompt goes out uncached — nothing else adds the breakpoint', async () => {
+    // Kiln passes no `cacheConfig`, so the adapter's own caching is off and a
+    // string is forwarded verbatim. This is what makes the next test
+    // differential: `cache_control` below can only have come from Kiln's blocks.
+    const { model, read } = anthropicModel();
+    const body = await captureRequest(model, TEXT, read);
+    expect(body['system']).toBe(TEXT);
+  });
+
+  test('toCachedSystemPrompt becomes cache_control on the system text block', async () => {
+    const { model, read } = anthropicModel();
+    const shaped = toCachedSystemPrompt(TEXT, model);
+    expect(Array.isArray(shaped)).toBe(true);
+    const body = await captureRequest(model, shaped, read);
+    expect(body['system']).toEqual([
+      { type: 'text', text: TEXT, cache_control: { type: 'ephemeral' } },
+    ]);
+  });
+
+  function bedrockModel(modelId: string): {
+    model: BedrockModel;
+    read: () => Uint8Array | string | undefined;
+  } {
+    let sent: Uint8Array | string | undefined;
+    const model = new BedrockModel({
+      modelId,
+      region: 'us-west-2',
+      maxTokens: 1024,
+      clientConfig: {
+        maxAttempts: 1,
+        credentials: { accessKeyId: 'test-key-id', secretAccessKey: 'test-secret' },
+        requestHandler: {
+          handle: (request: { body: Uint8Array | string }) => {
+            sent = request.body;
+            throw new Error('captured by the test transport');
+          },
+        },
+      },
+    });
+    return { model, read: () => sent };
+  }
+
+  test("Bedrock converse: a plain string carries no cachePoint, Kiln's blocks add one", async () => {
+    // Differential for the same reason as the Anthropic pair, and it took an
+    // injected defect to establish it: the adapter CAN auto-inject a system cache
+    // point for a model id containing `anthropic` or `claude`, but only when it
+    // was given a `cacheConfig`, and Kiln passes none to either native provider.
+    // So on all three transports `toCachedSystemPrompt` is the sole mechanism,
+    // and the entry below has exactly one possible origin.
+    const plain = bedrockModel('global.anthropic.claude-opus-4-8');
+    expect(await captureRequest(plain.model, TEXT, plain.read)).toMatchObject({
+      system: [{ text: TEXT }],
+    });
+
+    const cached = bedrockModel('global.anthropic.claude-opus-4-8');
+    const body = await captureRequest(
+      cached.model,
+      toCachedSystemPrompt(TEXT, cached.model),
+      cached.read,
+    );
+    expect(body['system']).toEqual([{ text: TEXT }, { cachePoint: { type: 'default' } }]);
   });
 });
