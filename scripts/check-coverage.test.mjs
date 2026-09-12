@@ -31,7 +31,10 @@ async function fixture(thresholds, measuredBaseline = { functions: 100, lines: 1
       '',
     ].join('\n'),
   );
-  await writeFile(join(directory, 'thresholds.json'), JSON.stringify({ measuredBaseline, thresholds }));
+  await writeFile(
+    join(directory, 'thresholds.json'),
+    JSON.stringify({ measuredBaseline, thresholds }),
+  );
   return directory;
 }
 

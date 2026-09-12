@@ -3,6 +3,34 @@
 Changes to `@kiln/engine`. Source and installable packages are distributed through
 GitHub. The package is not published on the npm registry.
 
+## The repository's own gates are linted now — 2026-09-12
+
+- Adding a file to `scripts/` and running `biome check` on its path printed "No files
+  were processed." Biome's `files.includes` was `src/`, `site/src/` and `site/*.ts`, so
+  the directory holding this repository's gates — and which `test:coverage` already
+  measures — sat outside the lint surface. The zero-warning baseline 13.5 established
+  was zero across a subset.
+- Taken: `scripts/check-*.mjs` and `scripts/**/*.test.mjs` — the checks are now checked.
+  416 files where 405 were. Ten findings were behind the hole: seven format, and three
+  real ones. A dead `const` in `check-vision.mjs`, easy to miss because the identical
+  line two loops down is load-bearing. Two `useTemplate` on the
+  `JSON.stringify(…) + '\n'` idiom. `reliability.test.mjs` asserts both include
+  patterns, verified by dropping one and watching it fail.
+- Left, with the cost measured rather than guessed. The rest of `scripts/` is one-off
+  tools, several authored as dense single-expression lines. Taking the whole directory
+  is 26 lint findings, a 1,530-line reflow (3,078 lines to 4,608, pure formatting), and
+  **162 lines of coverage slack** — `test:coverage` measures `scripts`, those tools are
+  never executed, so the reflow lands in the uncovered denominator and lines fall
+  92.49% to 92.14% against a threshold of 92. Measured by taking the full pass and
+  running the gate.
+- Which says something about the ratchet worth recording: line coverage over manual
+  helper scripts is noise inside a number this repository treats as a contract.
+  Narrowing what `test:coverage` measures is the real fix, and a separate decision.
+- `render-service/` stays out for an unrelated reason: its sources are CRLF by
+  `.gitattributes`, and the formatter would rewrite the line endings.
+- One incidental finding: Biome prints at most 20 diagnostics by default, so a count
+  read off `bun run lint` is a floor, not a total. The gate still fails either way.
+
 ## The prompt-cache breakpoint is asserted on the wire — 2026-09-12
 
 - The two deferred rows in the queue were both deferred *with a reason*. Checking the
