@@ -32,6 +32,10 @@ GitHub. The package is not published on the npm registry.
   where zod refuses — "Transforms cannot be represented in JSON Schema" — while the MCP
   SDK converts with `io: 'input'` and never sees it. Only the in-process parity test
   caught that.
+- Confirmed in the client that rejected them: before the fix VS Code logged the error 26
+  seconds after our server connected; after it, all 13 `mcp_kiln_*` tools list, `kiln_edit`
+  included. Copilot Chat logs only validation failures and never successes, so this rests
+  on the before/after, not on a passing log line.
 - Gated two ways: no array in any advertised schema may have a falsy `items`, and a camera
   vector must still reject two, four, and non-numeric members at runtime. The second gate
   exists because the first one alone would pass on a schema that had quietly become an

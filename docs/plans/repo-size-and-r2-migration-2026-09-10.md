@@ -2512,7 +2512,7 @@ pointed" -- and finding that took measuring rather than reading.
 | 16.2 | Does the reported mechanism exist? | **No.** `kiln_save`/`kiln_export` results are ~2 KB; the links are 941 B of URIs carrying no bytes. A JSON-RPC tap recorded the Copilot CLI calling `resources/read` **zero** times |
 | 16.3 | Asset links carried none of the fields a client needs to decide | **Done 2026-09-12.** `size` + `annotations.audience`/`priority` added; `editable.zip` unadvertised. See below |
 | 16.4 | `kiln_present` puts up to 16 MiB of base64 files in `_meta` | **Open, with the shape decided.** The widget may call `resources/read` itself; see below |
-| 16.5 | Reproduce in the reporter's actual client | **In flight.** The Copilot CLI is not that client; VS Code Copilot Chat is |
+| 16.5 | Reproduce in the reporter's actual client | **Done 2026-09-12.** VS Code logged the error 26s after our pre-fix server connected; after the fix the owner's own VS Code lists 13 of 13, `kiln_edit` included |
 
 ### 16.2 -- the measurement that redirected the whole phase
 
@@ -2668,3 +2668,43 @@ advertised schema may carry a falsy `items`, **and** a camera vector must still 
 two, four, and non-numeric members at runtime. The first alone would stay green on a
 schema that had quietly widened into an unbounded number list, which is exactly the
 regression this fix could have introduced for the harnesses that already worked.
+
+### 16.7 -- how the VS Code side actually resolved
+
+The pre-fix reproduction is exact. `code --add-mcp` registered a tapped server at
+18:09:14; the tap recorded `initialize` then `tools/list` returning **33,937 B**; VS
+Code logged `Discovered 13 tools` at 18:09:39 and
+`Error: tool parameters array type must have items` at **18:09:40.648** -- twenty-six
+seconds after registration, from our own schema. Discovery succeeding and validation
+failing afterwards is why the server looked healthy while five tools were unusable.
+
+After the fix the same tap recorded `tools/list` at **32,081 B**, matching the local
+measurement exactly, and the owner's VS Code listed all thirteen `mcp_kiln_*` tools
+including `kiln_edit` -- the one the error had named.
+
+Two things are recorded as *not* proven, because the temptation is to round them up:
+
+- **No log line ever says a tool validated successfully.** Copilot Chat logs the
+  failure, not the pass, so "zero errors" is only evidence in a window that actually
+  started the server. `window2` had zero errors and an **empty** server log -- it never
+  started one, so its zero means nothing. Errors continuing at 23:37-23:40 in `window1`
+  are likewise not evidence against the fix: the stale pre-fix server was still
+  registered there and was stopped two seconds before the last of them.
+- **The server named `kiln` was never located.** The pasted error read
+  `mcp_kiln_kiln_edit`, but every server VS Code ran was one of the two registered here
+  (`kiln_workspace`, `kiln_verify`); there is no `kiln` in any MCP log, none in
+  `~/.config/Code/User/mcp.json`, none in `/home/matthewk/X/kiln/.vscode/`, and the
+  checkout at `scratch/kiln-docs/engine` is on `dccfe41` with no `dist` at all. The
+  before/after in the owner's own client is the evidence; the process behind it was not
+  identified.
+
+A GUI host is a poor instrument and that cost real time. What worked, in order of
+usefulness: **a JSON-RPC tap** wrapping the server (it answers "what did this client
+actually ask for" with no guessing -- it is how `resources/read` was ruled out at zero
+calls), then **`~/.config/Code/logs/*/window*/`**, where per-server logs give
+`Discovered N tools` and the Copilot Chat log gives the validation errors. `code chat -m
+agent` drives the desktop editor but cannot clear workspace trust, and there is no
+`--disable-workspace-trust` flag. `code serve-web` renders the editor in a browser and
+is scriptable, but Copilot Chat there needs a GitHub sign-in, so it is a dead end for
+unattended work. Registering a *new* server name is the reliable way to force a start;
+killing the process is not -- VS Code marks it `Error` and waits.
