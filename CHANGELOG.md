@@ -3,6 +3,195 @@
 Changes to `@kiln/engine`. Source and installable packages are distributed through
 GitHub. The package is not published on the npm registry.
 
+## The setup defects, and a bind that was never ours to choose — 2026-09-13
+
+- **The render service binds loopback now, and widening it costs a token.** `HOST` unset used to
+  bind every interface, and the documented manual start -- `npm start`, "nothing else to
+  configure" -- did exactly that with `RENDER_SERVICE_TOKEN` unset and only a warning. What sat
+  behind it is a `POST /render` that accepts a 48 MB GLB, parses it with three.js and hands the
+  buffers to Dawn and a native Vulkan driver, on a queue that renders one frame at a time -- so a
+  single caller can hold the GPU indefinitely, and an untrusted binary-asset parser sits in front
+  of a kernel driver. That is the shape of CVE-2026-7482, where a crafted model file drove a heap
+  overread in a local inference server that operators had put on the public internet by the
+  hundred thousand. Their default was loopback; ours was not.
+
+  The fix is a rule rather than a flag: **the bind address decides whether auth is required.**
+  Loopback is free, because the operating system is the boundary. Anything wider requires a token
+  and otherwise refuses to boot -- the same choice this file already makes for a software adapter,
+  where a driver regression yields a service that will not start rather than one that silently
+  does the wrong thing. `RENDER_SERVICE_ALLOW_UNAUTHENTICATED=1` is the explicit waiver, spelled
+  so an operator has to type the word. The container image sets `HOST=0.0.0.0` itself, because a
+  container binding loopback is unreachable through `-p`. Verified on hardware: a LAN address is
+  refused by default, an exposed bind with no token exits 1 before the GPU is even acquired, and
+  an exposed bind with one serves while returning 401 without the header.
+
+- **Two generated workspaces could not work, and both for the same reason.** A codex workspace
+  wrote `.codex/config.toml` that codex never reads -- every source it consults is
+  `$CODEX_HOME`-rooted -- so a harness the README lists reached no Kiln tools at all. A hermes
+  workspace redirected `HERMES_HOME` to get its MCP servers and skills read, and that one
+  variable resolves the config path *and* the credential path, so the run died before its first
+  model call. Both now configure **per invocation** through generated launchers: codex via `-c`
+  overrides, hermes via `--in` plus the program store riding the environment into the MCP child.
+  Neither writes outside the workspace and neither touches authentication. The rule they
+  establish: *a workspace may add configuration to an invocation, but it must not replace the home
+  that holds credentials.*
+
+  The hermes diagnosis was wrong before it was right. There is no provider key to inherit --
+  `~/.hermes/.env` holds tool toggles and every API key reads "not set", because the provider is a
+  subscription OAuth. What the redirect actually lost was `model.default` and `model.provider`.
+  Two more things fell out of measuring rather than assuming: `--skills` takes skill *names*, not
+  a path, and the documented `--ignore-rules` was suppressing the workspace's own AGENTS.md.
+
+- **A launcher test, because that is why nobody saw either one.** `harness-smoke.mjs` invokes each
+  CLI directly and never touches the generated launcher, so both defects passed every check. The
+  new test asserts the launcher's shape -- that it registers per invocation, parses under the
+  interpreter that will run it, and never names the home that holds credentials.
+
+- **`arrayLinear` was making copies that were not copies.** It read only `source.position`, so
+  every instance stood up straight however the source was laid down -- while `arrayRadial` next
+  door set a rotation on every copy. Two dispatched models hit this independently. Copies now
+  carry the source's rotation and scale. Separately, `arrayRadial` could only ever orbit the
+  parent's origin, which is what its docstring says and not something a caller could work around;
+  it takes an optional `center` now. These helpers had no unit tests at all, which is how a
+  disagreement between two neighbours survived. **This changes exported geometry** for a program
+  that arrays a rotated or scaled source.
+
+- **The helper overview stopped making models guess.** A bare `kiln_list_primitives` returned
+  names grouped by category and nothing else, and models reliably guessed the JS-conventional
+  `createPart(parent, {...})`. The overview now carries the exact signatures of the two helpers
+  every program calls, read from the catalog so it cannot drift from what a detail request
+  returns.
+
+- **`--render gpu` starts the renderer it needs.** It used to throw when nothing was listening
+  even though the installation ships a service that could start, because only the MCP server ever
+  asked for that. `gpu` means "I asked for a guarantee and would rather know than be quietly
+  downgraded"; answering it with a technicality was the defect. `auto` deliberately still does not
+  spawn -- a one-shot sheet should not pay a GPU boot. Fixing it also removed a dead `throw` and a
+  real crash: the spawn branch read `options.serviceDir` on a path that can now be reached with no
+  options at all.
+
+- **Which Kiln answered is now a question a tool can settle.** A server named `kiln` may be a
+  different installation, and two live examples on one development machine proved it -- an
+  extracted 0.6.0 package registered in `~/.cursor/mcp.json` beside a 0.7.0 checkout, and a stale
+  cached tool namespace. Both were local leftovers rather than repo defects, but the workspace
+  guide has always said "do not substitute it silently" with nothing behind it.
+  `kiln_list_primitives {capabilities:true}` now reports `engine.version` and
+  `engine.installUrl`, and the guide says to compare them against the workspace manifest.
+
+- `zod` 4.6.4 and `webgpu` 0.6.1. The latter was gated on a GPU smoke that has now passed twice:
+  `dawn-vulkan` on a GTX 1660 Ti boots and renders through the engine on 0.6.1.
+
+## Seven harnesses, one version, and the defects only a plain prompt could find — 2026-09-13
+
+- **Two new harness adapters: `copilot` and `cursor-agent`**, bringing the dispatch table to
+  seven. Both were verified end to end rather than written from documentation, and both needed
+  a flag that is not obvious: Copilot's `--allow-all-tools` is *required* for non-interactive
+  mode by its own help, and Cursor needs three separate grants -- `--force` for tool calls,
+  `--approve-mcps` for the server, `--trust` for the workspace -- because an unapproved MCP
+  server is gated independently of tool permission.
+- **`create-workspace.mjs` learned both harnesses.** Copilot reads a workspace `.mcp.json`,
+  the same filename Claude Code reads, and not the same contents: its own `copilot mcp add`
+  writes `type: "local"` plus a tool filter where Claude writes `type: "stdio"` and none. The
+  generated config is the spelling Copilot produced for itself. Cursor gets `.cursor/mcp.json`.
+- **Tool names are not portable, and a prompt that names one is a harness dependency.**
+  Copilot namespaces every MCP tool as `<server>-<tool>`, so an agent asked for
+  `kiln_list_primitives` found nothing by that literal name and correctly reported the tools
+  missing -- while `copilot -p` listing its own tools showed all thirteen as
+  `kiln_workspace-kiln_*`. `harness-smoke.mjs` now says the prefix may exist.
+- **The smoke brief was measuring the wrong thing.** It told the agent to call
+  `kiln_list_primitives` and then "nothing else". A bare call returns a compact overview where
+  `createPart` is one name among eighteen, and the overview's own first line says to ask again
+  with `{names:[...]}` for signatures. Two of five harnesses guessed the JS-conventional
+  `createPart(parent, {name, geo, material})` and were rejected at build time; three wrote the
+  real positional form. Asking for the signatures made both failures pass with the same models.
+  The engine's opaque rejection is not at fault: nothing from a sandboxed exception may cross
+  that boundary, by design.
+- **One version, everywhere a client can read it.** `package.json` moved to 0.7.0 and four
+  other declarations did not: `plugin.json`, `.claude-plugin/plugin.json`,
+  `.codex-plugin/plugin.json` and `MCP_SERVER_VERSION`. Every MCP client reported
+  `kiln v0.6.0` against a 0.7.0 engine, which is worth nothing to a bug reporter citing a
+  version. A test now asserts all five agree, so the next bump cannot miss them.
+- **Gemini CLI is excluded, not missing.** Google switched it off for individual tiers on
+  18 June 2026 in favour of Antigravity CLI; it now fails at startup with
+  `IneligibleTierError`. `agy` is the replacement and already had an adapter.
+- **`agy` print mode does not run unattended by itself.** Its log says what happens instead:
+  `Print mode: soft-denying tool confirmation "CallMcpTool" at step 10`, then exit 0 with no
+  program. It needs `--dangerously-skip-permissions`.
+- **Claude Code's allow-list needed the third server spelling.** `mcp__kiln_workspace` is what
+  a generated workspace and a user-level registration both use; with only `mcp__kiln` and
+  `mcp__plugin_kiln_kiln` listed, a run stopped and asked for `kiln_list_primitives` by name.
+- New: [docs/harnesses.md](docs/harnesses.md), the per-harness install, upgrade, headless-flag
+  and MCP-config reference. [docs/dogfooding.md](docs/dogfooding.md) now opens with the method
+  -- three tiers, and why a scripted brief is a wiring probe rather than a dogfood.
+- [ROADMAP.md](ROADMAP.md) carries a stabilisation queue for the first time. The two items at
+  the top are setup defects rather than engine defects, and both sit on a path the README
+  documents: a generated codex workspace cannot see Kiln at all (codex has no project-local
+  config mechanism -- every source is `$CODEX_HOME`-rooted), and a generated hermes workspace
+  cannot reach a model (its launcher redirects `HERMES_HOME`, and the provider lives in the
+  real home). The codex fix is verified but not applied. The rule it establishes: a workspace
+  may add configuration to an invocation, and must not replace the home holding credentials.
+
+## Five tools were unusable in VS Code, and had been since 0.7.0's camera work — 2026-09-12
+
+- `kiln_render`, `kiln_edit`, `kiln_inspect`, `kiln_view_interior` and
+  `kiln_screenshot_animation` all carried a `z.tuple` camera vector. Zod renders that as
+  JSON Schema 2020-12: `prefixItems` plus **`items: false`**, meaning "nothing beyond the
+  listed positions". VS Code's tool validator tests `items` for truthiness, so `false`
+  reads to it as an array with no items and it refuses to register the tool:
+  *"Failed to validate tool mcp_kiln_kiln_edit: tool parameters array type must have
+  items."* That is the whole authoring loop — no render, no edit.
+- **Not a regression, and not broken anywhere else.** The tuple arrived with the camera
+  capture work in `b2eff76` (2026-09-05) and never changed. Claude Code, opencode 1.18.30
+  and the Copilot **CLI** 1.0.83 all register 13 of 13; only VS Code Copilot Chat rejects
+  any. The two Copilot surfaces disagree with each other.
+- **Kiln was the conformant party.** SEP-1613 is Final: 2020-12 is the default dialect and
+  *"Clients MUST support at least JSON Schema 2020-12"*. The fix is still worth taking,
+  because tuples are the one construct the two dialects spell irreconcilably — draft-07
+  uses `items: [...]`, 2020-12 uses `prefixItems` + `items: false` — while a bounded
+  uniform array (`items: {type: number}` with `minItems`/`maxItems`) is valid and
+  identical in both. Choosing it removes a class of client incompatibility rather than
+  patching one client.
+- It also made the surface smaller: the `tools/list` frame went **33,937 B to 32,081 B**,
+  about 464 tokens saved once per session for every harness, and `docs/tools.md` lost 288
+  lines of tuple boilerplate.
+- The tuple TypeScript type is preserved by a static assertion, so nothing downstream
+  needed a cast. It is deliberately not a zod `.transform`: that reads as equivalent and
+  **breaks every non-MCP harness**, because the Strands skin converts with `io: 'output'`
+  where zod refuses — "Transforms cannot be represented in JSON Schema" — while the MCP
+  SDK converts with `io: 'input'` and never sees it. Only the in-process parity test
+  caught that.
+- Confirmed in the client that rejected them: before the fix VS Code logged the error 26
+  seconds after our server connected; after it, all 13 `mcp_kiln_*` tools list, `kiln_edit`
+  included. Copilot Chat logs only validation failures and never successes, so this rests
+  on the before/after, not on a passing log line.
+- Gated two ways: no array in any advertised schema may have a falsy `items`, and a camera
+  vector must still reject two, four, and non-numeric members at runtime. The second gate
+  exists because the first one alone would pass on a schema that had quietly become an
+  unbounded number list.
+
+## Asset links now say how big they are and who they are for — 2026-09-12
+
+- A user reported "massive token usage" from VS Code Copilot, attributing it to
+  `resource_link` mishandling. Measuring first: `kiln_save`/`kiln_export` put **941 B of
+  URIs** on the wire and no file bytes, and a JSON-RPC tap showed the Copilot **CLI**
+  never calls `resources/read` at all. So the stated mechanism does not exist in our
+  responses — but the report was standing next to something real.
+- Kiln emitted only four of `ResourceLink`'s fields. The spec also carries **`size`** and
+  **`annotations.audience`**, which are exactly how a server tells a client "this artifact
+  is for the human to download, not for the model to read". Emitting neither left every
+  client guessing from a MIME type, including the ones that guess "inline everything".
+  Both are now set, with `priority`: `asset.glb` and `preview.png` are `['user']` because
+  the model already receives rendered views as image blocks and geometry as metrics;
+  `source.kiln.js` is addressed to both.
+- `editable.zip` is no longer advertised. It is a bundle of the files listed beside it, so
+  a client resolving every link paid for the same bytes twice — and it was the largest
+  entry while being the only derived one. It stays readable at its URI (which is what the
+  widget's download button uses) and stays in `downloadUrls`.
+- Net wire cost went **941 B → 1,017 B**. This is not a size win and is not claimed as
+  one: it trades 76 bytes for every client being *able* to decide correctly. The `size` is
+  compared in the test against the bytes `resources/read` actually returns for that URI,
+  because a declared size a client cannot trust is worse than no size at all.
+
 ## Post-release polish: the install guide had gone stale — 2026-09-12
 
 - `docs/install.md` told readers to use a checkout **"until an updated package is

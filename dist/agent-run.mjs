@@ -740,16 +740,16 @@ const rock = await hull('Rock', ...rockChunks);`
       signature: "arrayLinear(namePrefix, source, count, offset: [x,y,z], parent?)",
       returns: "THREE.Object3D[]",
       category: "arrays",
-      description: "`count` is the TOTAL, source included: the source stays where it is as copy 0 and the call returns count-1 new instances, so count 10 gives 10 posts, not 11. Copies share geometry + material via createInstance.",
+      description: "`count` is the TOTAL, source included: the source stays where it is as copy 0 and the call returns count-1 new instances, so count 10 gives 10 posts, not 11. Copies share geometry + material via createInstance, and carry the source rotation and scale.",
       example: `const post = createPart('Post0', cylinderGeo(0.05,0.05,1.5,6), wood, { position: [0,0.75,0], parent: root });
 arrayLinear('Post', post, 10, [0.5, 0, 0], root);`
     },
     {
       name: "arrayRadial",
-      signature: "arrayRadial(namePrefix, source, count, axis?: 'x'|'y'|'z', parent?)",
+      signature: "arrayRadial(namePrefix, source, count, axis?: 'x'|'y'|'z', parent?, center?: [x,y,z])",
       returns: "THREE.Object3D[]",
       category: "arrays",
-      description: "`count` is the TOTAL, source included: the source stays at its angle as copy 0 and the call returns count-1 new instances, so count 8 gives 8 bolts evenly spaced, not 9. Each copy's local rotation is oriented outward. Perfect for gear teeth, radial bolts, circle of columns.",
+      description: "`count` is the TOTAL, source included: the source stays at its angle as copy 0 and the call returns count-1 new instances, so count 8 gives 8 bolts evenly spaced, not 9. Each copy's local rotation is oriented outward. Copies orbit the parent's origin unless you pass `center`. Perfect for gear teeth, radial bolts, circle of columns.",
       example: `const bolt = createPart('Bolt0', cylinderGeo(0.02,0.02,0.1,6), steel, { position: [1,0,0], parent: root });
 arrayRadial('Bolt', bolt, 8, 'y', root);`
     },
@@ -9110,24 +9110,34 @@ import { mergeVertices as threeMergeVertices } from "three/examples/jsm/utils/Bu
 function arrayLinear(namePrefix, source, count, offset, parent) {
   const out = [];
   const base = source.position.toArray();
+  const rotation = degreesOf(source.rotation);
+  const scale = source.scale.toArray();
   for (let i = 1;i < count; i++) {
     const pos = [
       base[0] + offset[0] * i,
       base[1] + offset[1] * i,
       base[2] + offset[2] * i
     ];
-    out.push(createInstance(`${namePrefix}${i}`, source, { position: pos, parent }));
+    out.push(createInstance(`${namePrefix}${i}`, source, { position: pos, rotation, scale, parent }));
   }
   return out;
 }
-function arrayRadial(namePrefix, source, count, axis = "y", parent) {
+function degreesOf(euler) {
+  return [
+    THREE6.MathUtils.radToDeg(euler.x),
+    THREE6.MathUtils.radToDeg(euler.y),
+    THREE6.MathUtils.radToDeg(euler.z)
+  ];
+}
+function arrayRadial(namePrefix, source, count, axis = "y", parent, center) {
   const out = [];
-  const basePos = source.position.clone();
+  const pivot = center ? new THREE6.Vector3(...center) : new THREE6.Vector3;
+  const basePos = source.position.clone().sub(pivot);
   const axisVec = axis === "x" ? new THREE6.Vector3(1, 0, 0) : axis === "z" ? new THREE6.Vector3(0, 0, 1) : new THREE6.Vector3(0, 1, 0);
   for (let i = 1;i < count; i++) {
     const angle = i / count * Math.PI * 2;
     const m = new THREE6.Matrix4().makeRotationAxis(axisVec, angle);
-    const rotated = basePos.clone().applyMatrix4(m);
+    const rotated = basePos.clone().applyMatrix4(m).add(pivot);
     const eulerDeg = axis === "y" ? [0, angle * 180 / Math.PI, 0] : axis === "x" ? [angle * 180 / Math.PI, 0, 0] : [0, 0, angle * 180 / Math.PI];
     out.push(createInstance(`${namePrefix}${i}`, source, {
       position: [rotated.x, rotated.y, rotated.z],
@@ -26707,8 +26717,13 @@ import { z as z2 } from "zod";
 var refInput = z2.string().regex(programRefPattern).describe("Returned p_ handle or full sha256 ref.");
 
 // src/tools/discovery.ts
-init_list_primitives();
 import { z as z3 } from "zod";
+
+// src/engine-identity.ts
+var ENGINE_INSTALL_URL = new URL("../", import.meta.url).href;
+
+// src/tools/discovery.ts
+init_list_primitives();
 init_protocol();
 init_capture_limits();
 var inputSchema = z3.object({
@@ -27212,7 +27227,7 @@ var legacyCaptureInput = z4.object({
     name: z4.string().optional().describe("Cell label. Auto-derived from the angles if omitted.")
   })).optional().describe("One camera per cell, in row-major order. Omit to use the preset default cameras. Must not exceed the preset capacity (max 9 overall).")
 }).optional().describe("Optional. Choose the contact-sheet shape and cameras. Omit it entirely for the standard six-view 3x2 grid, which is the right default for most assets.");
-var cameraVec3Input = z4.tuple([z4.number(), z4.number(), z4.number()]);
+var cameraVec3Input = z4.array(z4.number()).length(3);
 var cameraShotInput = z4.object({
   name: z4.string().optional(),
   subject: z4.object({ path: z4.string().optional(), name: z4.string().optional() }).strict().refine((v) => v.path === undefined !== (v.name === undefined), {

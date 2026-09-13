@@ -208,38 +208,20 @@ Build a program and return geometry metrics, exact part paths and images. Omit c
                             ]
                           },
                           "position": {
-                            "type": "array",
-                            "prefixItems": [
-                              {
-                                "type": "number"
-                              },
-                              {
-                                "type": "number"
-                              },
-                              {
-                                "type": "number"
-                              }
-                            ],
-                            "items": false,
                             "minItems": 3,
-                            "maxItems": 3
+                            "maxItems": 3,
+                            "type": "array",
+                            "items": {
+                              "type": "number"
+                            }
                           },
                           "target": {
-                            "type": "array",
-                            "prefixItems": [
-                              {
-                                "type": "number"
-                              },
-                              {
-                                "type": "number"
-                              },
-                              {
-                                "type": "number"
-                              }
-                            ],
-                            "items": false,
                             "minItems": 3,
-                            "maxItems": 3
+                            "maxItems": 3,
+                            "type": "array",
+                            "items": {
+                              "type": "number"
+                            }
                           },
                           "relativeTo": {
                             "type": "string",
@@ -254,38 +236,20 @@ Build a program and return geometry metrics, exact part paths and images. Omit c
                             "type": "object",
                             "properties": {
                               "origin": {
-                                "type": "array",
-                                "prefixItems": [
-                                  {
-                                    "type": "number"
-                                  },
-                                  {
-                                    "type": "number"
-                                  },
-                                  {
-                                    "type": "number"
-                                  }
-                                ],
-                                "items": false,
                                 "minItems": 3,
-                                "maxItems": 3
+                                "maxItems": 3,
+                                "type": "array",
+                                "items": {
+                                  "type": "number"
+                                }
                               },
                               "rotation": {
-                                "type": "array",
-                                "prefixItems": [
-                                  {
-                                    "type": "number"
-                                  },
-                                  {
-                                    "type": "number"
-                                  },
-                                  {
-                                    "type": "number"
-                                  }
-                                ],
-                                "items": false,
                                 "minItems": 3,
-                                "maxItems": 3
+                                "maxItems": 3,
+                                "type": "array",
+                                "items": {
+                                  "type": "number"
+                                }
                               }
                             },
                             "additionalProperties": false
@@ -303,38 +267,20 @@ Build a program and return geometry metrics, exact part paths and images. Omit c
                             "maximum": 100
                           },
                           "targetOffset": {
-                            "type": "array",
-                            "prefixItems": [
-                              {
-                                "type": "number"
-                              },
-                              {
-                                "type": "number"
-                              },
-                              {
-                                "type": "number"
-                              }
-                            ],
-                            "items": false,
                             "minItems": 3,
-                            "maxItems": 3
+                            "maxItems": 3,
+                            "type": "array",
+                            "items": {
+                              "type": "number"
+                            }
                           },
                           "up": {
-                            "type": "array",
-                            "prefixItems": [
-                              {
-                                "type": "number"
-                              },
-                              {
-                                "type": "number"
-                              },
-                              {
-                                "type": "number"
-                              }
-                            ],
-                            "items": false,
                             "minItems": 3,
-                            "maxItems": 3
+                            "maxItems": 3,
+                            "type": "array",
+                            "items": {
+                              "type": "number"
+                            }
                           },
                           "halfHeight": {
                             "type": "number",
@@ -541,38 +487,20 @@ Render sampled animation frames to check motion and attachments. Use shot for th
                   ]
                 },
                 "position": {
-                  "type": "array",
-                  "prefixItems": [
-                    {
-                      "type": "number"
-                    },
-                    {
-                      "type": "number"
-                    },
-                    {
-                      "type": "number"
-                    }
-                  ],
-                  "items": false,
                   "minItems": 3,
-                  "maxItems": 3
+                  "maxItems": 3,
+                  "type": "array",
+                  "items": {
+                    "type": "number"
+                  }
                 },
                 "target": {
-                  "type": "array",
-                  "prefixItems": [
-                    {
-                      "type": "number"
-                    },
-                    {
-                      "type": "number"
-                    },
-                    {
-                      "type": "number"
-                    }
-                  ],
-                  "items": false,
                   "minItems": 3,
-                  "maxItems": 3
+                  "maxItems": 3,
+                  "type": "array",
+                  "items": {
+                    "type": "number"
+                  }
                 },
                 "relativeTo": {
                   "type": "string",
@@ -587,38 +515,20 @@ Render sampled animation frames to check motion and attachments. Use shot for th
                   "type": "object",
                   "properties": {
                     "origin": {
-                      "type": "array",
-                      "prefixItems": [
-                        {
-                          "type": "number"
-                        },
-                        {
-                          "type": "number"
-                        },
-                        {
-                          "type": "number"
-                        }
-                      ],
-                      "items": false,
                       "minItems": 3,
-                      "maxItems": 3
+                      "maxItems": 3,
+                      "type": "array",
+                      "items": {
+                        "type": "number"
+                      }
                     },
                     "rotation": {
-                      "type": "array",
-                      "prefixItems": [
-                        {
-                          "type": "number"
-                        },
-                        {
-                          "type": "number"
-                        },
-                        {
-                          "type": "number"
-                        }
-                      ],
-                      "items": false,
                       "minItems": 3,
-                      "maxItems": 3
+                      "maxItems": 3,
+                      "type": "array",
+                      "items": {
+                        "type": "number"
+                      }
                     }
                   },
                   "additionalProperties": false
@@ -636,38 +546,20 @@ Render sampled animation frames to check motion and attachments. Use shot for th
                   "maximum": 100
                 },
                 "targetOffset": {
-                  "type": "array",
-                  "prefixItems": [
-                    {
-                      "type": "number"
-                    },
-                    {
-                      "type": "number"
-                    },
-                    {
-                      "type": "number"
-                    }
-                  ],
-                  "items": false,
                   "minItems": 3,
-                  "maxItems": 3
+                  "maxItems": 3,
+                  "type": "array",
+                  "items": {
+                    "type": "number"
+                  }
                 },
                 "up": {
-                  "type": "array",
-                  "prefixItems": [
-                    {
-                      "type": "number"
-                    },
-                    {
-                      "type": "number"
-                    },
-                    {
-                      "type": "number"
-                    }
-                  ],
-                  "items": false,
                   "minItems": 3,
-                  "maxItems": 3
+                  "maxItems": 3,
+                  "type": "array",
+                  "items": {
+                    "type": "number"
+                  }
                 },
                 "halfHeight": {
                   "type": "number",
@@ -851,38 +743,20 @@ Render roof-off floor-plan, dollhouse, and eye-level cutaway views. Optional ver
                         ]
                       },
                       "position": {
-                        "type": "array",
-                        "prefixItems": [
-                          {
-                            "type": "number"
-                          },
-                          {
-                            "type": "number"
-                          },
-                          {
-                            "type": "number"
-                          }
-                        ],
-                        "items": false,
                         "minItems": 3,
-                        "maxItems": 3
+                        "maxItems": 3,
+                        "type": "array",
+                        "items": {
+                          "type": "number"
+                        }
                       },
                       "target": {
-                        "type": "array",
-                        "prefixItems": [
-                          {
-                            "type": "number"
-                          },
-                          {
-                            "type": "number"
-                          },
-                          {
-                            "type": "number"
-                          }
-                        ],
-                        "items": false,
                         "minItems": 3,
-                        "maxItems": 3
+                        "maxItems": 3,
+                        "type": "array",
+                        "items": {
+                          "type": "number"
+                        }
                       },
                       "relativeTo": {
                         "type": "string",
@@ -897,38 +771,20 @@ Render roof-off floor-plan, dollhouse, and eye-level cutaway views. Optional ver
                         "type": "object",
                         "properties": {
                           "origin": {
-                            "type": "array",
-                            "prefixItems": [
-                              {
-                                "type": "number"
-                              },
-                              {
-                                "type": "number"
-                              },
-                              {
-                                "type": "number"
-                              }
-                            ],
-                            "items": false,
                             "minItems": 3,
-                            "maxItems": 3
+                            "maxItems": 3,
+                            "type": "array",
+                            "items": {
+                              "type": "number"
+                            }
                           },
                           "rotation": {
-                            "type": "array",
-                            "prefixItems": [
-                              {
-                                "type": "number"
-                              },
-                              {
-                                "type": "number"
-                              },
-                              {
-                                "type": "number"
-                              }
-                            ],
-                            "items": false,
                             "minItems": 3,
-                            "maxItems": 3
+                            "maxItems": 3,
+                            "type": "array",
+                            "items": {
+                              "type": "number"
+                            }
                           }
                         },
                         "additionalProperties": false
@@ -946,38 +802,20 @@ Render roof-off floor-plan, dollhouse, and eye-level cutaway views. Optional ver
                         "maximum": 100
                       },
                       "targetOffset": {
-                        "type": "array",
-                        "prefixItems": [
-                          {
-                            "type": "number"
-                          },
-                          {
-                            "type": "number"
-                          },
-                          {
-                            "type": "number"
-                          }
-                        ],
-                        "items": false,
                         "minItems": 3,
-                        "maxItems": 3
+                        "maxItems": 3,
+                        "type": "array",
+                        "items": {
+                          "type": "number"
+                        }
                       },
                       "up": {
-                        "type": "array",
-                        "prefixItems": [
-                          {
-                            "type": "number"
-                          },
-                          {
-                            "type": "number"
-                          },
-                          {
-                            "type": "number"
-                          }
-                        ],
-                        "items": false,
                         "minItems": 3,
-                        "maxItems": 3
+                        "maxItems": 3,
+                        "type": "array",
+                        "items": {
+                          "type": "number"
+                        }
                       },
                       "halfHeight": {
                         "type": "number",
@@ -1087,21 +925,12 @@ Inspect a part with context or isolation. Use legacy part/orbit controls or shot
               "additionalProperties": false
             },
             "point": {
-              "type": "array",
-              "prefixItems": [
-                {
-                  "type": "number"
-                },
-                {
-                  "type": "number"
-                },
-                {
-                  "type": "number"
-                }
-              ],
-              "items": false,
               "minItems": 3,
-              "maxItems": 3
+              "maxItems": 3,
+              "type": "array",
+              "items": {
+                "type": "number"
+              }
             }
           },
           "required": [
@@ -1125,21 +954,12 @@ Inspect a part with context or isolation. Use legacy part/orbit controls or shot
               "additionalProperties": false
             },
             "point": {
-              "type": "array",
-              "prefixItems": [
-                {
-                  "type": "number"
-                },
-                {
-                  "type": "number"
-                },
-                {
-                  "type": "number"
-                }
-              ],
-              "items": false,
               "minItems": 3,
-              "maxItems": 3
+              "maxItems": 3,
+              "type": "array",
+              "items": {
+                "type": "number"
+              }
             }
           },
           "required": [
@@ -1229,38 +1049,20 @@ Inspect a part with context or isolation. Use legacy part/orbit controls or shot
                   ]
                 },
                 "position": {
-                  "type": "array",
-                  "prefixItems": [
-                    {
-                      "type": "number"
-                    },
-                    {
-                      "type": "number"
-                    },
-                    {
-                      "type": "number"
-                    }
-                  ],
-                  "items": false,
                   "minItems": 3,
-                  "maxItems": 3
+                  "maxItems": 3,
+                  "type": "array",
+                  "items": {
+                    "type": "number"
+                  }
                 },
                 "target": {
-                  "type": "array",
-                  "prefixItems": [
-                    {
-                      "type": "number"
-                    },
-                    {
-                      "type": "number"
-                    },
-                    {
-                      "type": "number"
-                    }
-                  ],
-                  "items": false,
                   "minItems": 3,
-                  "maxItems": 3
+                  "maxItems": 3,
+                  "type": "array",
+                  "items": {
+                    "type": "number"
+                  }
                 },
                 "relativeTo": {
                   "type": "string",
@@ -1275,38 +1077,20 @@ Inspect a part with context or isolation. Use legacy part/orbit controls or shot
                   "type": "object",
                   "properties": {
                     "origin": {
-                      "type": "array",
-                      "prefixItems": [
-                        {
-                          "type": "number"
-                        },
-                        {
-                          "type": "number"
-                        },
-                        {
-                          "type": "number"
-                        }
-                      ],
-                      "items": false,
                       "minItems": 3,
-                      "maxItems": 3
+                      "maxItems": 3,
+                      "type": "array",
+                      "items": {
+                        "type": "number"
+                      }
                     },
                     "rotation": {
-                      "type": "array",
-                      "prefixItems": [
-                        {
-                          "type": "number"
-                        },
-                        {
-                          "type": "number"
-                        },
-                        {
-                          "type": "number"
-                        }
-                      ],
-                      "items": false,
                       "minItems": 3,
-                      "maxItems": 3
+                      "maxItems": 3,
+                      "type": "array",
+                      "items": {
+                        "type": "number"
+                      }
                     }
                   },
                   "additionalProperties": false
@@ -1324,38 +1108,20 @@ Inspect a part with context or isolation. Use legacy part/orbit controls or shot
                   "maximum": 100
                 },
                 "targetOffset": {
-                  "type": "array",
-                  "prefixItems": [
-                    {
-                      "type": "number"
-                    },
-                    {
-                      "type": "number"
-                    },
-                    {
-                      "type": "number"
-                    }
-                  ],
-                  "items": false,
                   "minItems": 3,
-                  "maxItems": 3
+                  "maxItems": 3,
+                  "type": "array",
+                  "items": {
+                    "type": "number"
+                  }
                 },
                 "up": {
-                  "type": "array",
-                  "prefixItems": [
-                    {
-                      "type": "number"
-                    },
-                    {
-                      "type": "number"
-                    },
-                    {
-                      "type": "number"
-                    }
-                  ],
-                  "items": false,
                   "minItems": 3,
-                  "maxItems": 3
+                  "maxItems": 3,
+                  "type": "array",
+                  "items": {
+                    "type": "number"
+                  }
                 },
                 "halfHeight": {
                   "type": "number",
@@ -1564,38 +1330,20 @@ Apply exact-string replacements to a program revision and render the result (ren
                             ]
                           },
                           "position": {
-                            "type": "array",
-                            "prefixItems": [
-                              {
-                                "type": "number"
-                              },
-                              {
-                                "type": "number"
-                              },
-                              {
-                                "type": "number"
-                              }
-                            ],
-                            "items": false,
                             "minItems": 3,
-                            "maxItems": 3
+                            "maxItems": 3,
+                            "type": "array",
+                            "items": {
+                              "type": "number"
+                            }
                           },
                           "target": {
-                            "type": "array",
-                            "prefixItems": [
-                              {
-                                "type": "number"
-                              },
-                              {
-                                "type": "number"
-                              },
-                              {
-                                "type": "number"
-                              }
-                            ],
-                            "items": false,
                             "minItems": 3,
-                            "maxItems": 3
+                            "maxItems": 3,
+                            "type": "array",
+                            "items": {
+                              "type": "number"
+                            }
                           },
                           "relativeTo": {
                             "type": "string",
@@ -1610,38 +1358,20 @@ Apply exact-string replacements to a program revision and render the result (ren
                             "type": "object",
                             "properties": {
                               "origin": {
-                                "type": "array",
-                                "prefixItems": [
-                                  {
-                                    "type": "number"
-                                  },
-                                  {
-                                    "type": "number"
-                                  },
-                                  {
-                                    "type": "number"
-                                  }
-                                ],
-                                "items": false,
                                 "minItems": 3,
-                                "maxItems": 3
+                                "maxItems": 3,
+                                "type": "array",
+                                "items": {
+                                  "type": "number"
+                                }
                               },
                               "rotation": {
-                                "type": "array",
-                                "prefixItems": [
-                                  {
-                                    "type": "number"
-                                  },
-                                  {
-                                    "type": "number"
-                                  },
-                                  {
-                                    "type": "number"
-                                  }
-                                ],
-                                "items": false,
                                 "minItems": 3,
-                                "maxItems": 3
+                                "maxItems": 3,
+                                "type": "array",
+                                "items": {
+                                  "type": "number"
+                                }
                               }
                             },
                             "additionalProperties": false
@@ -1659,38 +1389,20 @@ Apply exact-string replacements to a program revision and render the result (ren
                             "maximum": 100
                           },
                           "targetOffset": {
-                            "type": "array",
-                            "prefixItems": [
-                              {
-                                "type": "number"
-                              },
-                              {
-                                "type": "number"
-                              },
-                              {
-                                "type": "number"
-                              }
-                            ],
-                            "items": false,
                             "minItems": 3,
-                            "maxItems": 3
+                            "maxItems": 3,
+                            "type": "array",
+                            "items": {
+                              "type": "number"
+                            }
                           },
                           "up": {
-                            "type": "array",
-                            "prefixItems": [
-                              {
-                                "type": "number"
-                              },
-                              {
-                                "type": "number"
-                              },
-                              {
-                                "type": "number"
-                              }
-                            ],
-                            "items": false,
                             "minItems": 3,
-                            "maxItems": 3
+                            "maxItems": 3,
+                            "type": "array",
+                            "items": {
+                              "type": "number"
+                            }
                           },
                           "halfHeight": {
                             "type": "number",

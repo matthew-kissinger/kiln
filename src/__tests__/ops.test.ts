@@ -7,8 +7,16 @@
 
 import { describe, it, expect } from 'bun:test';
 import * as THREE from 'three';
-import { boxGeo, sphereGeo, cylinderGeo } from '../primitives';
-import { mergeVertices, subdivide, revolveGeo, lathe, pipeAlongPath } from '../ops';
+import { boxGeo, sphereGeo, cylinderGeo, createPart, gameMaterial } from '../primitives';
+import {
+  arrayLinear,
+  arrayRadial,
+  mergeVertices,
+  subdivide,
+  revolveGeo,
+  lathe,
+  pipeAlongPath,
+} from '../ops';
 
 describe('mergeVertices', () => {
   it('default (attribute-aware) preserves per-face normal splits', () => {
@@ -268,5 +276,80 @@ describe('pipeAlongPath', () => {
 
   it('rejects single-point input', () => {
     expect(() => pipeAlongPath([[0, 0, 0]], 0.05)).toThrow('need at least 2 points');
+  });
+});
+
+describe('arrayLinear', () => {
+  // Two dispatched models hit this independently: they oriented a source part,
+  // arrayed it, and every copy came back axis-aligned. `arrayLinear` read only
+  // `source.position`, so "copies of source" lost the source's orientation --
+  // while `arrayRadial` next door set a rotation on every copy. The two helpers
+  // disagreed about what a copy is.
+  it('carries the source rotation and scale onto every copy', () => {
+    const root = new THREE.Object3D();
+    const source = createPart('Slat0', boxGeo(1, 0.1, 0.4), gameMaterial(0x8b6f3d), {
+      position: [0, 0.5, 0],
+      rotation: [0, 0, 30],
+      scale: [1, 1, 2],
+      parent: root,
+    });
+
+    const copies = arrayLinear('Slat', source, 4, [0.5, 0, 0], root);
+
+    expect(copies).toHaveLength(3);
+    for (const [index, copy] of copies.entries()) {
+      const i = index + 1;
+      expect(copy.position.toArray()).toEqual([0.5 * i, 0.5, 0]);
+      // Degrees in, radians on the object: 30deg about Z.
+      expect(copy.rotation.z).toBeCloseTo(Math.PI / 6, 10);
+      expect(copy.rotation.x).toBeCloseTo(0, 10);
+      expect(copy.rotation.y).toBeCloseTo(0, 10);
+      expect(copy.scale.toArray()).toEqual([1, 1, 2]);
+    }
+  });
+
+  it('leaves an unrotated, unscaled source byte-identical to before', () => {
+    // The fix must not move geometry for the overwhelmingly common case.
+    const root = new THREE.Object3D();
+    const source = createPart('Post0', cylinderGeo(0.05, 0.05, 1.5, 6), gameMaterial(0x8b6f3d), {
+      position: [0, 0.75, 0],
+      parent: root,
+    });
+    for (const copy of arrayLinear('Post', source, 3, [0.5, 0, 0], root)) {
+      expect(copy.rotation.toArray().slice(0, 3)).toEqual([0, 0, 0]);
+      expect(copy.scale.toArray()).toEqual([1, 1, 1]);
+    }
+  });
+});
+
+describe('arrayRadial', () => {
+  it('orbits the parent origin by default, unchanged', () => {
+    const root = new THREE.Object3D();
+    const bolt = createPart('Bolt0', cylinderGeo(0.02, 0.02, 0.1, 6), gameMaterial(0x8899aa), {
+      position: [1, 0, 0],
+      parent: root,
+    });
+    const copies = arrayRadial('Bolt', bolt, 4, 'y', root);
+    expect(copies).toHaveLength(3);
+    // Quarter turns about Y from [1,0,0]: [0,0,-1], [-1,0,0], [0,0,1].
+    expect(copies[0]!.position.x).toBeCloseTo(0, 10);
+    expect(copies[0]!.position.z).toBeCloseTo(-1, 10);
+    expect(copies[1]!.position.x).toBeCloseTo(-1, 10);
+  });
+
+  it('orbits an explicit centre when one is given', () => {
+    // The helper could only ever orbit the parent's origin, so arraying rivets
+    // around a hub that is not at the origin meant hand-writing the matrix.
+    const root = new THREE.Object3D();
+    const rivet = createPart('Rivet0', cylinderGeo(0.02, 0.02, 0.1, 6), gameMaterial(0x8899aa), {
+      position: [3, 0, 0],
+      parent: root,
+    });
+    const copies = arrayRadial('Rivet', rivet, 4, 'y', root, [2, 0, 0]);
+    // Radius 1 about [2,0,0], not radius 3 about the origin.
+    expect(copies[0]!.position.x).toBeCloseTo(2, 10);
+    expect(copies[0]!.position.z).toBeCloseTo(-1, 10);
+    expect(copies[1]!.position.x).toBeCloseTo(1, 10);
+    expect(copies[1]!.position.z).toBeCloseTo(0, 10);
   });
 });

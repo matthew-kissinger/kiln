@@ -25,12 +25,16 @@ From an installed package, the equivalent is `kiln-init /absolute/empty-workspac
 | `--harness` | Launch from the workspace |
 | --- | --- |
 | `claude` | `claude` |
-| `codex` | `codex` |
+| `copilot` | `copilot` |
+| `cursor-agent` | `cursor-agent` |
 | `opencode` | `opencode` |
 | `agy` | `node agy.mjs` |
-| `hermes` | `node hermes.mjs --ignore-rules` |
+| `codex` | `node codex.mjs` |
+| `hermes` | `node hermes.mjs` |
 
-Antigravity and Hermes get a generated launcher because each needs arguments or a separate profile that the bare command does not supply. Hermes authenticates in its own profile; setup copies no credentials.
+**Use the launcher where the table names one, and read the workspace's own START.md over this table.** Antigravity, Codex and Hermes keep all configuration in a user-level home and read nothing from a project directory, so their workspace configuration is applied per invocation by the generated launcher. Running their bare command inside the workspace reaches no Kiln tools at all. None of the three writes outside the workspace, and none touches the user's existing configuration or authentication.
+
+Hermes needs one user-level registration for the MCP server, because it has no project-scoped equivalent and no per-invocation flag for one. Its START.md prints the exact `hermes mcp add` command; offer to run it, and verify with `hermes mcp list`. Never redirect `HERMES_HOME` at the workspace: that one variable resolves the configuration path and the credential path together, so pointing it at a workspace leaves the run with no provider.
 
 ## Start the GPU render service
 
@@ -42,7 +46,7 @@ Offer to run its install. It lives in the engine installation rather than the wo
 cd render-service && npm install
 ```
 
-That is the whole setup. Once installed, the MCP server starts the service on the first view that needs PBR shading and stops it when the session ends, so there is no terminal to leave running and no ordering to get right. Add `npm start` only when the service should outlive a single session, such as one GPU shared by a batch of dispatched agents. If the machine has no usable GPU, report that and continue on CPU views; it is a limit to state, not a setup failure.
+That is the whole setup. Once installed, the MCP server starts the service on the first view that needs PBR shading and stops it when the session ends, so there is no terminal to leave running and no ordering to get right -- except one: install it *before* the session that will use it, because the server checks at startup whether a renderer could run here and a session older than the install stays on CPU for its lifetime. Add `npm start` only when the service should outlive a single session, such as one GPU shared by a batch of dispatched agents; it binds loopback, and widening that with `HOST` requires `RENDER_SERVICE_TOKEN`. If the machine has no usable GPU, report that and continue on CPU views; it is a limit to state, not a setup failure.
 
 ## Verify the loadout before authoring
 
@@ -54,7 +58,7 @@ Report the rest of the session's loadout at the same time. Skills and MCP server
 
 ## Wiring a workspace by hand
 
-`--harness` covers claude, codex, opencode, hermes and agy. For any other harness, or an engine installed as a package elsewhere, assemble the same loadout in an empty directory: register the installation's `dist/mcp-server.mjs` as a stdio MCP server named `kiln_workspace`, give it `KILN_PROGRAM_STORE` pointing at `.kiln/programs` inside that directory plus `KILN_RENDER=auto`, and copy the skills you need from `skills/` into both `.claude/skills/` and `.agents/skills/` there.
+`--harness` covers claude, codex, opencode, hermes, agy, copilot and cursor-agent. For any other harness, or an engine installed as a package elsewhere, assemble the same loadout in an empty directory: register the installation's `dist/mcp-server.mjs` as a stdio MCP server named `kiln_workspace`, give it `KILN_PROGRAM_STORE` pointing at `.kiln/programs` inside that directory plus `KILN_RENDER=auto`, and copy the skills you need from `skills/` into both `.claude/skills/` and `.agents/skills/` there.
 
 A hand-wired directory carries no manifest, so it gets no runtime preflight and `--repair` cannot correct its paths later. Prefer the generated workspace wherever the harness is supported, and tell the user which of the two they have.
 

@@ -22,8 +22,10 @@ cd render-service && npm install
 
 That install is the only manual step. Once it has run, the MCP server starts the service itself on the
 first view that needs PBR shading, reuses it for the rest of the session, and stops it on the way out.
-There is no order to get right: a session that never renders a material never starts a renderer, and
-nothing has to be restarted to pick one up.
+There is no order to get right: a session that never renders a material never starts a renderer. The
+one exception is installing the service *after* an MCP session began -- the server checks at startup
+whether a renderer could run at all, so a session older than the install stays on CPU for its
+lifetime.
 
 Start it by hand instead when you want it to outlive any one session — a batch of dispatched agents
 sharing one GPU is the usual reason:
@@ -34,15 +36,24 @@ cd render-service && npm start
 
 Either way the service listens on port 8000, where `auto` looks by default, and the first process to
 claim the port wins: a service already listening is joined rather than replaced, and a session that
-merely found one does not stop it on exit. Set `KILN_RENDER_SERVICE_PORT` to move it. A hand-started
-service binds every interface, which is what a container deployment needs; one started on your behalf
-binds loopback only, because that choice is not ours to make for you.
+merely found one does not stop it on exit. Set `KILN_RENDER_SERVICE_PORT` to move it.
+
+**Either way it binds loopback, and widening that costs a token.** `POST /render` takes a 48 MB GLB
+and renders it on the GPU one frame at a time, so an exposed bind with no auth hands any caller on
+that network both your GPU and a binary-asset parser. `HOST` widens the bind and a bind wider than
+loopback requires `RENDER_SERVICE_TOKEN` -- without one the service refuses to start rather than
+warning. `RENDER_SERVICE_ALLOW_UNAUTHENTICATED=1` waives that when something in front of the process
+already authenticates for it. The container image sets `HOST=0.0.0.0` itself, because a container
+binding loopback is unreachable through `-p`.
 
 If the server sets `RENDER_SERVICE_TOKEN`, set the matching `KILN_RENDER_TOKEN` in the client environment; a health check can succeed while unauthenticated render requests return 401. For a remote service, supply `--render-port URL` or set `KILN_RENDER_PORT_URL` — either short-circuits every local path above, so a hosted GPU stays one flag. See the service README for deployment and authentication options.
 
-The CLI is deliberately not on the on-demand path. A one-shot `kiln render` should not pay a GPU
-process's startup to draw one sheet, so it uses a service that is already listening and otherwise
-returns CPU views.
+`--render auto` is deliberately not on the on-demand path. A one-shot `kiln render` should not pay a
+GPU process's startup to draw one sheet, so `auto` uses a service that is already listening and
+otherwise returns CPU views. **`--render gpu` does start one**, because that mode is a demand for a
+material-faithful render rather than a preference -- refusing it while a renderer this installation
+ships sits one spawn away would answer a guarantee with a technicality. It still fails loudly when no
+renderer can be got at all, naming both what it probed and why nothing could start.
 
 In `auto` mode, an unavailable service falls back to CPU views. Read `degraded` and `degradeReason` before drawing conclusions about materials. Structural QA does not use image pixels.
 
