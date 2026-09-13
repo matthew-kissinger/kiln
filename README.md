@@ -124,7 +124,7 @@ cd ../my-assets
 # Follow START.md for your harness
 ```
 
-Choose `claude`, `codex`, `opencode`, `hermes`, or `agy` for `--harness`, then open that harness in the
+Choose `claude`, `codex`, `opencode`, `hermes`, `agy`, `copilot`, or `cursor-agent` for `--harness`, then open that harness in the
 new directory using its generated START.md instructions and accept its project and MCP trust prompts. Sign in to your harness
 first. The MCP server and local CLI are tested on Node.js 22.23.2.
 
@@ -282,6 +282,7 @@ pull requests; [AGENTS.md](AGENTS.md) covers repository conventions.
 
 - [Library and architecture](docs/architecture.md)
 - [Headless generation](docs/dispatch.md)
+- [Headless harnesses](docs/harnesses.md)
 - [Program-reference design](docs/programs.md)
 - [Example collection](docs/examples.md)
 - [Production history](docs/history/production-architecture.md)

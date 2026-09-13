@@ -7,7 +7,7 @@ node scripts/create-workspace.mjs ../my-assets --harness opencode
 ```
 
 An installed local package also provides `kiln-init`; see [installation](install.md).
-Choose `claude`, `codex`, `opencode`, `hermes`, or `agy`. Setup preflights the runtime,
+Choose `claude`, `codex`, `opencode`, `hermes`, `agy`, `copilot`, or `cursor-agent`. Setup preflights the runtime,
 stages the complete workspace and refuses a nonempty destination. It never writes
 global configuration or copies credentials.
 

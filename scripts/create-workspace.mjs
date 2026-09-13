@@ -21,7 +21,7 @@ import { fileURLToPath, pathToFileURL } from 'node:url';
 const installation = resolve(dirname(fileURLToPath(import.meta.url)), '..');
 const quote = JSON.stringify;
 const hash = (value) => createHash('sha256').update(value).digest('hex');
-const harnesses = ['claude', 'codex', 'opencode', 'hermes', 'agy'];
+const harnesses = ['claude', 'codex', 'opencode', 'hermes', 'agy', 'copilot', 'cursor-agent'];
 /** Where each harness family actually looks for skills, relative to the workspace. */
 const skillRegistries = ['.claude/skills', '.agents/skills'];
 const core = ['kiln-author-asset', 'kiln-refine-asset', 'kiln-qa-asset'];
@@ -103,6 +103,32 @@ function managedFiles(root, runtime, harness, nodeExecutable) {
     files['agy.mjs'] =
       `import { spawn } from 'node:child_process';\nimport { dirname } from 'node:path';\nimport { fileURLToPath } from 'node:url';\nconst root = dirname(fileURLToPath(import.meta.url));\nconst args = process.argv.slice(2);\nconst has = names => args.some(arg => names.some(name => arg === name || arg.startsWith(name + '=')));\nif (!has(['--project', '--new-project', '--conversation', '--continue', '-c'])) args.unshift('--new-project');\nargs.unshift('--add-dir', root);\nif (has(['--print', '--prompt', '-p']) && !has(['--disable-slash-commands'])) args.unshift('--disable-slash-commands');\nconst child = spawn('agy', args, { cwd: root, stdio: 'inherit', windowsHide: true });\nchild.on('error', error => { console.error(error.message); process.exitCode = 1; });\nchild.on('exit', code => { process.exitCode = code ?? 1; });\n`;
   }
+  // Copilot reads a workspace `.mcp.json`, the same filename as Claude Code, and
+  // not the same contents: `copilot mcp add` writes `type: "local"` plus an
+  // explicit tool filter where Claude writes `type: "stdio"` and no filter. The
+  // spelling here is the one Copilot's own CLI produced, rather than Claude's
+  // adapted by hand, because an unreadable server does not report itself -- it
+  // just answers as though the tools were never mentioned.
+  //
+  // Its skills need no new directory: `copilot skill --help` lists
+  // `.github/skills/`, `.agents/skills/` and `.claude/skills/` as project
+  // sources, and the registration copies below already write the last two.
+  if (harness === 'copilot')
+    files['.mcp.json'] = quote({
+      mcpServers: { kiln_workspace: { tools: ['*'], type: 'local', ...mcp } },
+    });
+  // Cursor's CLI reads `.cursor/mcp.json` here or `~/.cursor/mcp.json` globally,
+  // and the user-level file is the hazard: an entry named `kiln` there can point
+  // at a different installation. One did -- an extracted 0.6.0 package while the
+  // checkout was 0.7.0. A workspace-local config under its own name is what keeps
+  // a trial pinned to the engine it is supposed to be testing.
+  //
+  // Its skills need no new directory either: Cursor's project skill paths are
+  // `.agents/skills/` and `.cursor/skills/`, with `.claude/skills/` supported as
+  // legacy, so the registration copies below already land in one it reads. The
+  // CLI also applies a project-root AGENTS.md as a rule.
+  if (harness === 'cursor-agent')
+    files['.cursor/mcp.json'] = quote({ mcpServers: { kiln_workspace: mcp } });
   if (harness === 'opencode')
     files['opencode.json'] = quote({
       $schema: 'https://opencode.ai/config.json',
@@ -295,8 +321,8 @@ export async function createWorkspace(directory, harness = 'claude', options = {
     for (const name of skills)
       await cp(join(runtime, 'skills', name), join(stage, 'skills', name), { recursive: true });
     // Registration copies. No harness scans a bare `skills/`: Claude Code reads
-    // only `.claude/skills/`, while codex, opencode, hermes and agy read
-    // `.agents/skills/`. Without these the workspace has skill files that the
+    // only `.claude/skills/`, while codex, opencode, hermes, agy, copilot and
+    // cursor-agent read `.agents/skills/`. Without these the workspace has skill files that the
     // agent can read only when told to, which is how it worked before. Copies
     // rather than symlinks because those need developer mode or an
     // administrator on Windows.

@@ -3,6 +3,56 @@
 Changes to `@kiln/engine`. Source and installable packages are distributed through
 GitHub. The package is not published on the npm registry.
 
+## Seven harnesses, one version, and the defects only a plain prompt could find — 2026-09-13
+
+- **Two new harness adapters: `copilot` and `cursor-agent`**, bringing the dispatch table to
+  seven. Both were verified end to end rather than written from documentation, and both needed
+  a flag that is not obvious: Copilot's `--allow-all-tools` is *required* for non-interactive
+  mode by its own help, and Cursor needs three separate grants -- `--force` for tool calls,
+  `--approve-mcps` for the server, `--trust` for the workspace -- because an unapproved MCP
+  server is gated independently of tool permission.
+- **`create-workspace.mjs` learned both harnesses.** Copilot reads a workspace `.mcp.json`,
+  the same filename Claude Code reads, and not the same contents: its own `copilot mcp add`
+  writes `type: "local"` plus a tool filter where Claude writes `type: "stdio"` and none. The
+  generated config is the spelling Copilot produced for itself. Cursor gets `.cursor/mcp.json`.
+- **Tool names are not portable, and a prompt that names one is a harness dependency.**
+  Copilot namespaces every MCP tool as `<server>-<tool>`, so an agent asked for
+  `kiln_list_primitives` found nothing by that literal name and correctly reported the tools
+  missing -- while `copilot -p` listing its own tools showed all thirteen as
+  `kiln_workspace-kiln_*`. `harness-smoke.mjs` now says the prefix may exist.
+- **The smoke brief was measuring the wrong thing.** It told the agent to call
+  `kiln_list_primitives` and then "nothing else". A bare call returns a compact overview where
+  `createPart` is one name among eighteen, and the overview's own first line says to ask again
+  with `{names:[...]}` for signatures. Two of five harnesses guessed the JS-conventional
+  `createPart(parent, {name, geo, material})` and were rejected at build time; three wrote the
+  real positional form. Asking for the signatures made both failures pass with the same models.
+  The engine's opaque rejection is not at fault: nothing from a sandboxed exception may cross
+  that boundary, by design.
+- **One version, everywhere a client can read it.** `package.json` moved to 0.7.0 and four
+  other declarations did not: `plugin.json`, `.claude-plugin/plugin.json`,
+  `.codex-plugin/plugin.json` and `MCP_SERVER_VERSION`. Every MCP client reported
+  `kiln v0.6.0` against a 0.7.0 engine, which is worth nothing to a bug reporter citing a
+  version. A test now asserts all five agree, so the next bump cannot miss them.
+- **Gemini CLI is excluded, not missing.** Google switched it off for individual tiers on
+  18 June 2026 in favour of Antigravity CLI; it now fails at startup with
+  `IneligibleTierError`. `agy` is the replacement and already had an adapter.
+- **`agy` print mode does not run unattended by itself.** Its log says what happens instead:
+  `Print mode: soft-denying tool confirmation "CallMcpTool" at step 10`, then exit 0 with no
+  program. It needs `--dangerously-skip-permissions`.
+- **Claude Code's allow-list needed the third server spelling.** `mcp__kiln_workspace` is what
+  a generated workspace and a user-level registration both use; with only `mcp__kiln` and
+  `mcp__plugin_kiln_kiln` listed, a run stopped and asked for `kiln_list_primitives` by name.
+- New: [docs/harnesses.md](docs/harnesses.md), the per-harness install, upgrade, headless-flag
+  and MCP-config reference. [docs/dogfooding.md](docs/dogfooding.md) now opens with the method
+  -- three tiers, and why a scripted brief is a wiring probe rather than a dogfood.
+- [ROADMAP.md](ROADMAP.md) carries a stabilisation queue for the first time. The two items at
+  the top are setup defects rather than engine defects, and both sit on a path the README
+  documents: a generated codex workspace cannot see Kiln at all (codex has no project-local
+  config mechanism -- every source is `$CODEX_HOME`-rooted), and a generated hermes workspace
+  cannot reach a model (its launcher redirects `HERMES_HOME`, and the provider lives in the
+  real home). The codex fix is verified but not applied. The rule it establishes: a workspace
+  may add configuration to an invocation, and must not replace the home holding credentials.
+
 ## Five tools were unusable in VS Code, and had been since 0.7.0's camera work — 2026-09-12
 
 - `kiln_render`, `kiln_edit`, `kiln_inspect`, `kiln_view_interior` and

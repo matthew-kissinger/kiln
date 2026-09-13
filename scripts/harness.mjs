@@ -61,7 +61,12 @@ export const HARNESSES = {
     defaultModel: 'gemini-3.8-flash-high',
     // --print takes its prompt ATTACHED. Passed separately, Go's flag package
     // reads the next flag as the prompt and silently ignores what you typed.
+    // Print mode does not run unattended by itself. Its own log says what happens
+    // instead: `Print mode: soft-denying tool confirmation "CallMcpTool" at step
+    // 10`, then the turn ends exit 0 with no program -- the same silent shape the
+    // Claude and Codex notes describe. A smoke run reached step 10 and died there.
     argv: ({ model, prompt, timeout, logFile, sandbox }) => [
+      '--dangerously-skip-permissions',
       '--model',
       model,
       '--print-timeout',
@@ -78,7 +83,12 @@ export const HARNESSES = {
     // ladder below never fires -- which is exactly how a ten-asset batch came
     // back empty in forty seconds with no usable diagnosis.
     needsLogFile: true,
-    probe: (model) => ['--model', model, '--print=reply with the single word OK'],
+    probe: (model) => [
+      '--dangerously-skip-permissions',
+      '--model',
+      model,
+      '--print=reply with the single word OK',
+    ],
     // Antigravity rate-limits per model id, and a 429 on one variant does not
     // mean the account is out of quota -- so fall back down the ladder rather
     // than failing the batch.
@@ -106,7 +116,7 @@ export const HARNESSES = {
       '--permission-mode',
       'acceptEdits',
       '--allowedTools',
-      'mcp__plugin_kiln_kiln mcp__kiln Read Write Edit Glob Grep',
+      'mcp__kiln_workspace mcp__plugin_kiln_kiln mcp__kiln Read Write Edit Glob Grep',
       '--add-dir',
       sandbox,
     ],
@@ -198,9 +208,92 @@ export const HARNESSES = {
     // batch script picks the next model instead.
     fallbackModels: [],
   },
+  // Copilot earns its place here for the failure it reported rather than for any
+  // authoring strength. A user hit `mcp_kiln_kiln_edit: tool parameters array
+  // type must have items` from the VS Code extension, which shares this CLI's
+  // schema validator: it reads `items` as a plain object and a JSON Schema
+  // 2020-12 tuple gives it `prefixItems` plus `items: false`, so five of
+  // thirteen tools were rejected before the model ever saw them. Nothing else in
+  // this table noticed -- Claude Code, OpenCode and this CLI all loaded 13 of 13.
+  // A dispatch adapter is the cheap standing reproduction for that whole class of
+  // breakage, and it does not need an editor open to run.
+  copilot: {
+    bin: 'copilot',
+    // `copilot mcp --help` states the load order: user `~/.copilot/mcp-config.json`,
+    // then workspace `.mcp.json` or `.github/mcp.json`. The workspace spelling is
+    // the same file Claude Code reads, so one `.mcp.json` serves both and there is
+    // no Copilot-only config format to keep in sync as the server changes.
+    defaultModel: null,
+    // `--allow-all-tools` is not optional hardening: the CLI's own help says it is
+    // required for non-interactive mode. A `-p` run without it has no terminal to
+    // prompt on, which is the same exit-0-wrote-nothing shape the Claude and Codex
+    // notes above describe.
+    //
+    // `--disable-builtin-mcps` drops the bundled github-mcp-server. A clean room
+    // is meant to hold the brief, the skills and Kiln; a second server's worth of
+    // tool descriptions is context no other harness here carries, and it makes any
+    // comparison of tool counts or context cost meaningless.
+    probe: (model) => [
+      ...modelFlag(model),
+      '--allow-all-tools',
+      '--disable-builtin-mcps',
+      '--no-color',
+      '-p',
+      'reply with the single word OK',
+    ],
+    argv: ({ model, prompt, sandbox }) => [
+      ...modelFlag(model),
+      '--allow-all-tools',
+      '--disable-builtin-mcps',
+      '--no-color',
+      '-C',
+      sandbox,
+      '--add-dir',
+      sandbox,
+      '-p',
+      prompt,
+    ],
+    fallbackModels: [],
+  },
+  // Cursor's CLI needs three separate grants where the others need one, and each
+  // covers a different refusal: `--force` allows the tool calls, `--approve-mcps`
+  // approves the MCP server itself, and `--trust` accepts the workspace. An MCP
+  // server this CLI has never seen is gated independently of tool permission, so
+  // `--force` alone leaves the Kiln tools unreachable.
+  //
+  // Its MCP config is `.cursor/mcp.json` in the workspace or `~/.cursor/mcp.json`,
+  // and the risk there is specific: a user-level entry named `kiln` may point at a
+  // different installation entirely. One on this machine pointed at an extracted
+  // 0.6.0 package while the checkout was 0.7.0, which is the silent-wrong-engine
+  // case `kiln_list_primitives` capability output is meant to expose.
+  'cursor-agent': {
+    bin: 'cursor-agent',
+    // `-p` is a boolean here and the prompt is positional, unlike Claude's
+    // `-p <prompt>`. Passing it as a flag value drops the prompt.
+    defaultModel: null,
+    probe: (model) => [
+      ...modelFlag(model),
+      '-p',
+      '--force',
+      '--approve-mcps',
+      '--trust',
+      'reply with the single word OK',
+    ],
+    argv: ({ model, prompt, sandbox }) => [
+      ...modelFlag(model),
+      '-p',
+      '--force',
+      '--approve-mcps',
+      '--trust',
+      '--workspace',
+      sandbox,
+      prompt,
+    ],
+    fallbackModels: [],
+  },
   // Hermes is the odd one out, and the reason this table earns its keep: a
   // Python agent with its own skill store, its own config file and its own
-  // provider routing, nothing like the four JavaScript CLIs above. It takes the
+  // provider routing, nothing like the six CLIs above. It takes the
   // same MCP server and the same brief anyway, which is the portability claim
   // this repository actually makes -- Kiln is not a Claude Code plugin that
   // happens to run elsewhere.
@@ -452,7 +545,10 @@ export function makeSandbox(name) {
   // having written nothing but a polite explanation of which permissions they
   // would need, which is the worst possible failure for an unattended path:
   // exit 0, no program, no error. The MCP server name depends on how Kiln was
-  // installed (as a plugin it is `plugin_kiln_kiln`), so allow both spellings.
+  // installed (as a plugin it is `plugin_kiln_kiln`), so allow every spelling.
+  // `kiln_workspace` is the third and it is the one `create-workspace.mjs` and a
+  // user-level registration both use: a smoke run with only the other two listed
+  // stopped and asked for `kiln_list_primitives` by name, exit 0, no program.
   //
   // Scoped deliberately rather than reached for with
   // `--dangerously-skip-permissions`: this settings file governs one throwaway
@@ -461,7 +557,16 @@ export function makeSandbox(name) {
   // write its program. Nothing here grants the child the shell.
   const settings = {
     permissions: {
-      allow: ['mcp__kiln', 'mcp__plugin_kiln_kiln', 'Read', 'Write', 'Edit', 'Glob', 'Grep'],
+      allow: [
+        'mcp__kiln_workspace',
+        'mcp__kiln',
+        'mcp__plugin_kiln_kiln',
+        'Read',
+        'Write',
+        'Edit',
+        'Glob',
+        'Grep',
+      ],
     },
   };
   mkdirSync(join(sandbox, '.claude'), { recursive: true });

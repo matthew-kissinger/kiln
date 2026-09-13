@@ -2708,3 +2708,143 @@ agent` drives the desktop editor but cannot clear workspace trust, and there is 
 is scriptable, but Copilot Chat there needs a GitHub sign-in, so it is a dead end for
 unattended work. Registering a *new* server name is the reliable way to force a start;
 killing the process is not -- VS Code marks it `Error` and waits.
+
+
+## Phase 17 -- Seven harnesses, and what a plain prompt found that a scripted one could not
+
+| # | Question | Answer |
+|---|---|---|
+| 17.1 | How many harnesses can reach the tools? | **Seven.** `copilot` and `cursor-agent` adapters added; a full `smoke:harness` run returned 6/7, the seventh being opencode's *default model* down provider-side (three distinct `UnknownError` refs, and it fails on a bare "reply OK"). `muse-spark` passes |
+| 17.2 | Is npm the right way to install these? | **No, and it was never the real problem.** Every one of the seven ships a first-party `update` subcommand. The flakiness was three simultaneous owners of one binary: `codex` existed at `/usr/bin` (0.153.4, root-owned `sudo npm -g`), in an inactive nvm tree (0.139.0), and in the user prefix, with a `.zshrc` wrapper pinning the oldest. `codex doctor` reported `PATH entries (5)` |
+| 17.3 | Does the engine advertise its own version honestly? | **It did not.** `package.json` moved to 0.7.0 and four other declarations stayed at 0.6.0, so every MCP client reported `kiln v0.6.0`. Fixed, with a parity test |
+| 17.4 | Does a scripted brief measure what it claims? | **No.** See 17.5 |
+| 17.5 | What did Tier-1 plain prompts find? | Two `create-workspace.mjs` defects and two array-helper traps, none reachable by tier 0. See below |
+
+### 17.4 -- the brief was the harness dependency
+
+`harness-smoke.mjs` told the agent to call `kiln_list_primitives` and then "nothing else".
+Three things were wrong with that, and each failed before the model saw the subject.
+
+**Naming a tool is a portability bug.** Copilot namespaces MCP tools as `<server>-<tool>`.
+Its agent looked for the literal `kiln_list_primitives`, found none, and correctly reported
+the tools unavailable -- while `copilot -p` listing its own tools showed all thirteen as
+`kiln_workspace-kiln_*`. That single clause cost a whole harness. Saying the prefix may
+exist fixed it: 10 s, 12 tris.
+
+**A bare overview is names, not signatures.** It returns `createPart` as one name among
+eighteen in `structure:`, and its own first line says to call again with `{names:[...]}`.
+Under a brief that also says "nothing else", two of five harnesses wrote the
+JS-conventional `createPart(parent, {name, geo, material})` and were rejected at build
+time; codex, hermes and agy wrote the real positional form. Asking for the signatures made
+both failures pass **with the same models** -- claude 18 s, cursor-agent 17 s. It was never
+a model-capability difference.
+
+**The opaque rejection is not a defect.** `Generated asset execution was rejected.` carries
+no position because nothing from a sandboxed exception may cross that boundary; a syntax
+error is the one exception, recovered host-side by re-parsing with acorn. `kiln_validate`
+returning `valid: true` for that program is also correct -- it is documented as static.
+
+### 17.5 -- two workspace defects that only an authoring run could reach
+
+**A generated hermes workspace cannot run at all.** `hermes.mjs` sets
+`HERMES_HOME=<workspace>/.hermes` so the generated `config.yaml` supplies `mcp_servers` and
+`skills.external_dirs`. That same redirect discards the provider: the user's `model:` and
+`~/.hermes/.env` live in the real home, so the run dies with *"No inference provider
+configured"*. Tier 0 never saw it because `smoke:harness` invokes `hermes` directly and
+never touches the launcher. The fix is a decision about how a workspace inherits provider
+secrets, so it is recorded rather than guessed at.
+
+**A generated codex workspace's MCP registration is inert.** `managedFiles` writes
+`.codex/config.toml`, but codex reads only `$CODEX_HOME/config.toml`: run from inside the
+workspace, `codex doctor` still reports `config.toml ~/.codex/config.toml` and counts the
+user-level servers. Codex workspaces therefore depend on a user-level registration existing.
+Its programs do land in the workspace store, but by accident of `--cd` setting the server's
+CWD, not because the workspace config was read.
+
+### 17.6 -- the array helpers surprise agents in two different ways
+
+Two models found these independently, and `src/ops.ts` confirms both.
+
+- **`arrayLinear` drops rotation.** It reads `source.position` only and passes
+  `{ position }` to `createInstance`; the source's rotation never reaches the copies. The
+  longship author proved it with an isolated four-bar control -- source tilted 30 degrees,
+  copies axis-aligned -- then kept the helper for spacing and restored the angle in a loop.
+- **`arrayRadial` orbits the world origin.** `basePos.applyMatrix4(m)` rotates the position
+  vector about the origin, which its own comment states and its example hides by starting at
+  `[1, 0, 0]`. A diving-bell author put it on portholes whose centres are off-origin and the
+  bolts were "flung across the scene".
+
+They are also inconsistent with each other: `arrayRadial` sets a rotation on every copy,
+`arrayLinear` carries none.
+
+### 17.7 -- what the tiers are actually for
+
+Tier 0 proves plumbing and nothing else, which is why it may name a tool. Tier 1 is one
+sentence -- "Generate a weathered dockside crane asset with rusted steel and frayed rope" --
+in a generated workspace, and the agent finding `kiln-author-asset` unaided is part of the
+result; opencode did, then made 18 tool calls, bound five procedural textures, reviewed a
+material-faithful GPU sheet and saved a 10,304-triangle asset. Asking for the subject rather
+than the API is what produced the textures. Tier 2 hands over nothing but a repository
+location, so the setup instructions are inside the system under test.
+
+Evidence rule for every tier: rebuild the saved source independently. The gallery counts
+`proceduralTexture` calls in the source rather than trusting the report -- which is how a
+lighthouse described as "green-grey barnacled stone" was shown to contain zero textures and
+zero `pbrMaterial`, its barnacles modelled as geometry.
+
+### 17.8 -- which harnesses actually read a workspace-local config
+
+Registering `kiln_workspace` at user level for all seven made the tier-1 runs work, and it
+also **masked** the question this section answers. The program store is not a discriminator
+either: a user-level server with no `KILN_PROGRAM_STORE` defaults to `.kiln/programs`
+relative to its CWD, and the harness runs with the workspace as CWD, so both paths write to
+the same place. The only honest test is to remove the user-level entry and see what survives.
+
+- **agy reads it.** With `kiln_workspace` removed from its user config and
+  `agy mcp list` reporting none, a run inside the workspace still listed every Kiln tool.
+  `.agents/mcp_config.json` is genuinely consumed.
+- **codex cannot read one, structurally.** Every configuration source it has is
+  `$CODEX_HOME`-rooted: `-c key=value` overrides `~/.codex/config.toml`, `-p <name>` layers
+  `$CODEX_HOME/<name>.config.toml`, and `-C/--cd` only changes the working directory. Run
+  from inside a workspace, `codex doctor` still reports `config.toml ~/.codex/config.toml`.
+  The `.codex/config.toml` that `managedFiles` writes can never be read by anything.
+- **claude, copilot, cursor-agent and opencode** read project-local config as their
+  documented norm, and their generated files match the spelling each one's own tooling
+  produces. They were not re-tested with the user-level entry removed, so this row is
+  documentation rather than measurement.
+
+### 17.9 -- the agnostic fix for a harness whose config is user-global
+
+Two of the three user-global harnesses are handled by redirecting their home -- `agy.mjs`
+sets nothing, `hermes.mjs` sets `HERMES_HOME` -- and that redirect is precisely what breaks
+hermes: the provider selection and API key live in the real home, so an isolated home is a
+logged-out home. Codex would hit the same wall for `auth.json` if a `codex.mjs` launcher
+redirected `CODEX_HOME`.
+
+**Inject the server per invocation instead of redirecting the home.** Codex takes nested
+TOML overrides on the command line, and they compose into exactly the entry the workspace
+needs:
+
+```sh
+codex exec \
+  -c 'mcp_servers.kiln_workspace.command="node"' \
+  -c 'mcp_servers.kiln_workspace.args=["<runtime>/dist/mcp-server.mjs"]' \
+  -c 'mcp_servers.kiln_workspace.env={KILN_PROGRAM_STORE="<ws>/.kiln/programs",KILN_RENDER="auto"}' \
+  --approve-for-me --skip-git-repo-check --cd <ws> "<prompt>"
+```
+
+Verified with the user-level registration removed: all thirteen tools appeared as
+`mcp__kiln_workspace__*`. Nothing is written outside the workspace, `CODEX_HOME` is
+untouched so authentication survives, and only documented flags are used. The shape is the
+generated-launcher pattern the repository already uses for agy and hermes, so
+`codex.mjs` belongs beside `agy.mjs` and `hermes.mjs` rather than being a special case.
+
+The principle generalises, and it is the rule worth carrying to the next user-global
+harness: **a workspace may add configuration to an invocation, but it must not replace the
+home that holds credentials.** Redirecting a home is what turned a working hermes install
+into "No inference provider configured".
+
+One more duplicate surfaced during that test: codex also exposes
+`mcp__codex_apps__kiln_local_kiln_*`, a second Kiln registration from a codex app, alongside
+`kiln_workspace`. Same hazard as the stale `kiln` in `~/.cursor/mcp.json` -- a name that
+looks like this engine and may not be it.

@@ -208,3 +208,30 @@ it('steers the session to the loop, the render service and its own inherited con
     await rm(root, { recursive: true, force: true });
   }
 }, 30000);
+
+it('writes each harness the MCP config spelling it actually reads', async () => {
+  const root = await mkdtemp(join(tmpdir(), 'kiln-harness-mcp-'));
+  const server = /dist[\\/]mcp-server\.mjs$/;
+  try {
+    // Copilot loads a workspace `.mcp.json` -- the same filename Claude Code
+    // reads -- but not the same contents: `copilot mcp add` writes
+    // `type: "local"` and an explicit tool filter where Claude writes
+    // `type: "stdio"` and none. One file cannot serve both, so the generator
+    // has to know which harness asked.
+    const copilot = join(root, 'copilot');
+    expect(run([copilot, '--harness', 'copilot'], root).status).toBe(0);
+    const forCopilot = JSON.parse(await readFile(join(copilot, '.mcp.json'), 'utf8'));
+    expect(forCopilot.mcpServers.kiln_workspace.type).toBe('local');
+    expect(forCopilot.mcpServers.kiln_workspace.tools).toEqual(['*']);
+    expect(forCopilot.mcpServers.kiln_workspace.args[0]).toMatch(server);
+
+    // Cursor's CLI reads `.cursor/mcp.json`, and a user-level entry there can
+    // name a different installation entirely -- so the workspace gets its own.
+    const cursor = join(root, 'cursor');
+    expect(run([cursor, '--harness', 'cursor-agent'], root).status).toBe(0);
+    const forCursor = JSON.parse(await readFile(join(cursor, '.cursor/mcp.json'), 'utf8'));
+    expect(forCursor.mcpServers.kiln_workspace.args[0]).toMatch(server);
+  } finally {
+    await rm(root, { recursive: true, force: true });
+  }
+}, 30000);

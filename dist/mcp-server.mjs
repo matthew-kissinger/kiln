@@ -29103,7 +29103,7 @@ async function createPackagedLocalToolContext(base = {}, env = process.env, inst
 
 // src/mcp-server.ts
 var MCP_SERVER_NAME = "kiln";
-var MCP_SERVER_VERSION = "0.6.0";
+var MCP_SERVER_VERSION = "0.7.0";
 var packagedSkillsDir = fileURLToPath6(new URL("../skills", import.meta.url));
 var MCP_SERVER_INSTRUCTIONS = `Kiln turns JavaScript you write into GLB 3D assets and returns rendered views for review.
 
