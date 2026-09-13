@@ -55,4 +55,11 @@ it('advertises one version everywhere a client or installer can read it', async 
   }
   const { MCP_SERVER_VERSION } = await import('../mcp-server');
   expect(MCP_SERVER_VERSION).toBe(engine);
+  // The literal that `engineIdentity()` reports to a model asking which
+  // installation answered. It cannot read `package.json` -- this graph is kept
+  // free of import-time node dependencies, per AGENTS.md -- so this assertion is
+  // the only thing keeping it true.
+  const { ENGINE_VERSION, ENGINE_INSTALL_URL } = await import('../engine-identity');
+  expect(ENGINE_VERSION).toBe(engine);
+  expect(ENGINE_INSTALL_URL).toMatch(/^file:\/\/.*\/$/);
 });

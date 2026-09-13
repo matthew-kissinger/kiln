@@ -15,16 +15,19 @@
 //                                whose shape it chose from that length, so this
 //                                rejects rather than truncating.
 //   POST /bake                -> 501 (texture bakes are a later workstream)
-// Auth: $RENDER_SERVICE_TOKEN on POST routes (required if set; boot warns loudly
-// when unset), supplied as either `x-render-token: <token>` or
+// Auth: $RENDER_SERVICE_TOKEN on POST routes, supplied as either
+// `x-render-token: <token>` or
 // `Authorization: Bearer <token>`. The custom header exists because RunPod's
 // load-balancer gateway consumes Authorization for its own edge API-key auth, so
 // gateway callers can never deliver an app-layer bearer token through it.
+// A token is OPTIONAL on a loopback bind and REQUIRED on any wider one; see
+// bind-policy.mjs, which refuses the boot rather than warning about it.
 // Renders are serialized: one GPU, one queue.
 import { createServer } from 'node:http';
 import { PRESENTATION_PROFILE_ID, initRenderer, renderGlb } from './renderer.mjs';
 import { acquireGpu } from './gpu.mjs';
 import { buildHealthDocument } from './health-contract.mjs';
+import { describeBind, resolveBindPolicy } from './bind-policy.mjs';
 import { createRendererCaptureIdentity } from './cache-identity.mjs';
 import {
   buildRenderFidelityV1,
@@ -39,12 +42,23 @@ import {
 
 const PROCESS_STARTED_AT = performance.now();
 const PORT = Number(process.env.PORT ?? 8000);
-// Unset binds every interface, which is what a container deployment needs and is
-// the long-standing default here. A service started FOR the user -- by the MCP
-// server's on-demand start -- passes 127.0.0.1 instead, because choosing on
-// somebody's behalf to put a renderer on their LAN is not ours to choose.
-const HOST = process.env.HOST || undefined;
 const TOKEN = process.env.RENDER_SERVICE_TOKEN ?? '';
+// Unset now means loopback, and a wider bind has to say so AND carry a token.
+// `bind-policy.mjs` owns that rule and the reasoning; the container sets
+// HOST=0.0.0.0 explicitly, so its bind is a decision rather than an inheritance.
+// This runs BEFORE the GPU is acquired: a misconfiguration should cost the
+// operator a message, not thirty seconds of adapter initialization first.
+let bind;
+try {
+  bind = resolveBindPolicy({
+    host: process.env.HOST,
+    token: TOKEN,
+    allowUnauthenticated: process.env.RENDER_SERVICE_ALLOW_UNAUTHENTICATED,
+  });
+} catch (e) {
+  console.error(`FATAL: ${e.message}`);
+  process.exit(1);
+}
 
 const MAX_BODY = 96 * 1024 * 1024; // 64MB base64 ≈ 48MB GLB, plus JSON overhead
 const MAX_GLB = 48 * 1024 * 1024;
@@ -63,7 +77,13 @@ try {
 gpuState.captureIdentity = createRendererCaptureIdentity(gpuState);
 console.log(`adapter: ${JSON.stringify(gpuState.summary)}`);
 console.log(`rendererId: ${gpuState.rendererId}`);
-if (!TOKEN) console.warn('WARNING: RENDER_SERVICE_TOKEN unset — POST routes are UNAUTHENTICATED');
+// Only reachable on a loopback bind or an explicit waiver -- an exposed bind with
+// no token never got this far. So this is information, not a warning: on loopback
+// the absence of a token is the correct, documented, zero-config default.
+if (!TOKEN && bind.exposed)
+  console.warn(
+    'WARNING: exposed bind with RENDER_SERVICE_ALLOW_UNAUTHENTICATED=1 — POST routes are UNAUTHENTICATED',
+  );
 
 const renderQueue = createSerialRenderQueue({ processStartedAt: PROCESS_STARTED_AT });
 
@@ -301,6 +321,8 @@ const server = createServer(async (req, res) => {
   }
 });
 
-server.listen(PORT, HOST, () =>
-  console.log(`kiln-render-service listening on ${HOST ?? '*'}:${PORT}`),
+server.listen(PORT, bind.host, () =>
+  console.log(
+    `kiln-render-service listening on ${describeBind(bind, { token: TOKEN, allowUnauthenticated: process.env.RENDER_SERVICE_ALLOW_UNAUTHENTICATED })}:${PORT}`,
+  ),
 );

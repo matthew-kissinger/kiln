@@ -128,6 +128,15 @@ Choose `claude`, `codex`, `opencode`, `hermes`, `agy`, `copilot`, or `cursor-age
 new directory using its generated START.md instructions and accept its project and MCP trust prompts. Sign in to your harness
 first. The MCP server and local CLI are tested on Node.js 22.23.2.
 
+**Follow START.md rather than launching the harness directly.** Some harnesses keep all
+configuration in a user-level home and read nothing from a project directory, so the workspace
+reaches them through a small generated launcher -- `node codex.mjs`, `node agy.mjs`,
+`node hermes.mjs` -- which passes the server, the program store and the directory per
+invocation. Nothing is written outside the workspace and your existing configuration and
+sign-in are left alone. Starting those harnesses with their bare command in the workspace finds
+no Kiln tools. START.md names the right command for the harness you chose, and hermes needs one
+extra user-level registration that it prints for you.
+
 Try: “Read AGENTS.md, then make a wooden workbench with a lower shelf. Render it,
 review the result, and save the source and GLB.”
 

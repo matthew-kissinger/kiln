@@ -95,9 +95,28 @@ function managedFiles(root, runtime, harness, nodeExecutable) {
     'kiln.mjs': `// Generated runtime launcher. Repair paths with kiln-init <workspace> --repair.\nimport { dirname, join } from 'node:path';\nimport { fileURLToPath } from 'node:url';\nprocess.env.KILN_PROGRAM_STORE = join(dirname(fileURLToPath(import.meta.url)), '.kiln', 'programs');\ntry {\n  const { main } = await import(${quote(pathToFileURL(join(runtime, 'dist/cli.mjs')).href)});\n  process.exitCode = await main(process.argv.slice(2));\n} catch (error) {\n  console.error(error.message + '\\nIf the installation moved, run kiln-init <workspace> --repair from the current Kiln installation.');\n  process.exitCode = 1;\n}\n`,
   };
   if (harness === 'claude') files['.mcp.json'] = quote({ mcpServers: { kiln_workspace: mcp } });
-  if (harness === 'codex')
+  if (harness === 'codex') {
+    // Codex has NO project-local configuration. Every source it reads is
+    // $CODEX_HOME-rooted: `-c` overrides ~/.codex/config.toml, `-p <name>` layers
+    // $CODEX_HOME/<name>.config.toml, and `-C`/`--cd` changes only the working
+    // directory. So this file is documentation of intent, not configuration --
+    // codex will never read it, and the launcher below is what registers the
+    // server. It stays because a reader looking for the workspace's MCP wiring
+    // looks here first, and finding nothing is worse than finding a pointer.
     files['.codex/config.toml'] =
-      `[mcp_servers.kiln_workspace]\ncommand = ${quote(mcp.command)}\nargs = [${quote(server)}]\n[mcp_servers.kiln_workspace.env]\nKILN_PROGRAM_STORE = ${quote(store)}\nKILN_RENDER = "auto"\n`;
+      `# Codex does not read a project-local config. This file records what the\n# workspace registers; \`node codex.mjs\` is what actually applies it, passing\n# these values as -c overrides per invocation.\n[mcp_servers.kiln_workspace]\ncommand = ${quote(mcp.command)}\nargs = [${quote(server)}]\n[mcp_servers.kiln_workspace.env]\nKILN_PROGRAM_STORE = ${quote(store)}\nKILN_RENDER = "auto"\n`;
+    // Per-invocation `-c` overrides are the whole fix. They add the server to
+    // this one run and write nothing anywhere: $CODEX_HOME keeps its own config
+    // and, critically, its authentication. That is the rule a workspace has to
+    // respect for any harness whose configuration is user-global -- it may add
+    // configuration to an invocation, but it must not relocate the home that
+    // holds credentials. Redirecting the home is what broke hermes.
+    //
+    // `--cd` sets the project directory; a workspace is deliberately not a git
+    // checkout, so `--skip-git-repo-check` is required rather than optional.
+    files['codex.mjs'] =
+      `import { spawn } from 'node:child_process';\nimport { dirname } from 'node:path';\nimport { fileURLToPath } from 'node:url';\nconst root = dirname(fileURLToPath(import.meta.url));\nconst overrides = [\n  ['mcp_servers.kiln_workspace.command', ${quote(mcp.command)}],\n  ['mcp_servers.kiln_workspace.args', [${quote(server)}]],\n  ['mcp_servers.kiln_workspace.env.KILN_PROGRAM_STORE', ${quote(store)}],\n  ['mcp_servers.kiln_workspace.env.KILN_RENDER', 'auto'],\n].flatMap(([key, value]) => ['-c', key + '=' + JSON.stringify(value)]);\nconst args = process.argv.slice(2);\nconst sub = args.find(arg => !arg.startsWith('-'));\nconst rest = sub === 'exec' ? args : ['exec', ...args];\nconst child = spawn('codex', [...rest.slice(0, 1), ...overrides, '--cd', root, '--skip-git-repo-check', ...rest.slice(1)], { cwd: root, stdio: 'inherit', windowsHide: true });\nchild.on('error', error => { console.error(error.message); process.exitCode = 1; });\nchild.on('exit', code => { process.exitCode = code ?? 1; });\n`;
+  }
   if (harness === 'agy') {
     files['.agents/mcp_config.json'] = quote({ mcpServers: { kiln_workspace: mcp } });
     files['agy.mjs'] =
@@ -143,16 +162,31 @@ function managedFiles(root, runtime, harness, nodeExecutable) {
       },
     });
   if (harness === 'hermes') {
-    // Hermes scans project-local skills only inside a git checkout (nearest
-    // ancestor with .git), and a workspace is deliberately not one. `external_dirs`
-    // is unconditional, so it is what actually registers them here. YAML is a
-    // superset of JSON, so the JSON form below is valid config.
+    // Hermes, like codex, has no project-local configuration: everything is
+    // $HERMES_HOME-rooted and `hermes mcp add` has no scope flag. This file used
+    // to be made real by pointing HERMES_HOME at it -- which worked for MCP
+    // servers and skills, and silently took the provider selection and the
+    // credential store with it. A workspace configured that way could not reach a
+    // model at all: `model.default` and `model.provider` came back unset and the
+    // run died before its first call. So this is documentation of intent now, and
+    // the launcher applies what it can through documented flags.
     files['.hermes/config.yaml'] = quote({
+      note: 'Hermes reads no project-local config. This file records what the workspace wants; node hermes.mjs applies the skills path and program store per invocation. Registering the MCP server is user-level; START.md has the one command.',
       mcp_servers: { kiln_workspace: mcp },
       skills: { external_dirs: [join(root, '.agents', 'skills')] },
     });
+    // No HERMES_HOME redirect. `--in` sets the project directory, which is what
+    // makes hermes inject this workspace's AGENTS.md as a rule -- so the guide
+    // reaches the agent without any skill registration. `--skills` is NOT used:
+    // it takes skill NAMES resolved against configured sources, not a path, and
+    // handing it a directory fails with "Unknown skill(s)".
+    //
+    // The program store needs no configuration file at all: the MCP server reads
+    // KILN_PROGRAM_STORE from its environment, and a server hermes spawns
+    // inherits this one -- so a user-level registration gets retargeted at this
+    // workspace's store without anything being written outside it.
     files['hermes.mjs'] =
-      `import { spawn } from 'node:child_process';\nimport { dirname, join } from 'node:path';\nimport { fileURLToPath } from 'node:url';\nconst root = dirname(fileURLToPath(import.meta.url));\nconst child = spawn('hermes', process.argv.slice(2), { cwd: root, stdio: 'inherit', windowsHide: true, env: { ...process.env, HERMES_HOME: join(root, '.hermes'), TERMINAL_CWD: root } });\nchild.on('error', (error) => { console.error(error.message); process.exitCode = 1; });\nchild.on('exit', (code) => { process.exitCode = code ?? 1; });\n`;
+      `import { spawn } from 'node:child_process';\nimport { dirname, join } from 'node:path';\nimport { fileURLToPath } from 'node:url';\nconst root = dirname(fileURLToPath(import.meta.url));\nconst args = process.argv.slice(2);\nconst has = names => args.some(arg => names.some(name => arg === name || arg.startsWith(name + '=')));\nif (!has(['--in'])) args.unshift('--in', root);\nconst child = spawn('hermes', args, { cwd: root, stdio: 'inherit', windowsHide: true, env: { ...process.env, KILN_PROGRAM_STORE: join(root, '.kiln', 'programs'), KILN_RENDER: 'auto', TERMINAL_CWD: root } });\nchild.on('error', (error) => { console.error(error.message); process.exitCode = 1; });\nchild.on('exit', (code) => { process.exitCode = code ?? 1; });\n`;
   }
   return { files, store, server };
 }
@@ -161,7 +195,7 @@ const guide = `# Kiln asset workspace
 
 Author and refine assets in this directory. The engine is installed separately. Do not read its implementation or example collection to solve an asset task.
 
-Two surfaces drive the same engine and share .kiln/programs, so either is fine and you can mix them freely. The kiln_workspace MCP server returns each render as an image in your context. The node kiln.mjs CLI writes renders to disk, so read the PNG back before judging anything visual. A server named kiln may be a different installation; do not substitute it silently, and report the setup problem instead.
+Two surfaces drive the same engine and share .kiln/programs, so either is fine and you can mix them freely. The kiln_workspace MCP server returns each render as an image in your context. The node kiln.mjs CLI writes renders to disk, so read the PNG back before judging anything visual. A server named kiln may be a different installation; do not substitute it silently, and report the setup problem instead. To check, call kiln_list_primitives with capabilities true and compare capabilities.engine.installUrl against runtime in .kiln/workspace.json.
 
 Read the skill for your task from skills/ in this directory, never a global plugin copy. The maintained copies are there, mirrored into .claude/skills/ and .agents/skills/ because harnesses scan different directories. Use kiln_list_primitives for API signatures.
 
@@ -179,7 +213,7 @@ Export at any point. Source is node kiln.mjs source PROGRAM_REF --out revised.ki
 
 This workspace asks for render mode auto: a GPU service when one answers on port 8000, CPU views otherwise. Without that service every render reports viewFidelity.materialFaithful false, and nothing rendered here can confirm a material.
 
-To start it, read runtime from .kiln/workspace.json and run npm install && npm start in render-service/ under that path. It is a separate package with a native dependency, so the install is its own step and can take a while. Start it at any time; the CLI picks it up on the next call. If MCP renders still report CPU afterwards, restart this session, because the MCP server resolves the service once at startup.
+To start it, read runtime from .kiln/workspace.json and run npm install && npm start in render-service/ under that path. It is a separate package with a native dependency, so the install is its own step and can take a while. Start it at any time; the CLI picks it up on the next call, and MCP starts one itself on the first render that needs it. The one case that needs a restart is installing it AFTER this session began: the MCP server checks at startup whether a renderer could run here, and a session that began before the install stays on CPU for its lifetime.
 
 For a task about appearance, say so rather than silently accepting CPU views.
 
@@ -331,18 +365,21 @@ export async function createWorkspace(directory, harness = 'claude', options = {
         await cp(join(runtime, 'skills', name), join(stage, registry, name), { recursive: true });
     manifest.skillHashes = await fileHashes(join(stage, 'skills'));
     await writeFile(join(stage, '.kiln/workspace.json'), quote(manifest));
-    const command =
-      harness === 'hermes'
-        ? 'node hermes.mjs --ignore-rules'
-        : harness === 'agy'
-          ? 'node agy.mjs'
-          : harness;
+    // Harnesses whose configuration is user-global reach this workspace only
+    // through their generated launcher. codex was missing from this map, so
+    // START.md told the reader to run bare `codex` -- which reads no
+    // project-local config at all, and is exactly the invocation that cannot see
+    // the tools.
+    const launchers = { agy: 'node agy.mjs', codex: 'node codex.mjs', hermes: 'node hermes.mjs' };
+    const command = launchers[harness] ?? harness;
     const launch =
       harness === 'hermes'
-        ? 'Hermes uses a separate profile; authenticate in that profile or supply provider credentials through the environment.'
+        ? `Hermes keeps configuration in $HERMES_HOME and has no project-local equivalent, so the launcher supplies this workspace's directory, skills and program store per invocation and leaves your provider and credentials exactly as they are. Registering the server itself is the one user-level step; run it once:\n\n\`\`\`bash\nhermes mcp add kiln_workspace --command ${nodeExecutable} --env KILN_RENDER=auto --args ${server}\n\`\`\`\n\nVerify with \`hermes mcp list\`. The launcher retargets the program store at this workspace through the environment, so one registration serves every workspace. Skills reach the agent through this directory's AGENTS.md and \`skills/\`; to have hermes register them as skills too, add \`skills.external_dirs\` pointing at ${join(root, '.agents', 'skills')} to your own config once. Pass \`--ignore-rules\` only when you want to suppress AGENTS.md along with your user-level rules.`
         : harness === 'agy'
           ? 'The launcher supplies the absolute project directory. For headless runs, use node agy.mjs --model MODEL --print "Read AGENTS.md and the project skills. Use only kiln_workspace MCP tools. YOUR TASK.". Print mode disables automatic slash-command/skill expansion to avoid automatic expansion of a global skill. Use absolute task-file paths in headless prompts and verify that tool calls use kiln_workspace; global configuration and authentication remain unchanged.'
-          : `This directory is configured for ${harness}.`;
+          : harness === 'codex'
+            ? 'Codex keeps configuration in $CODEX_HOME and has no project-local equivalent, so `node codex.mjs` passes this workspace\'s server, program store and directory as per-invocation `-c` overrides. It writes nothing outside this directory and leaves your $CODEX_HOME and its authentication untouched. Running bare `codex` here reaches no Kiln tools. For headless runs, add the prompt: node codex.mjs "Read AGENTS.md and the project skills, then YOUR TASK.".'
+            : `This directory is configured for ${harness}.`;
     await writeFile(
       join(stage, 'START.md'),
       `# Start making assets\n\n\`\`\`bash\ncd ${root}\n${command}\n\`\`\`\n\n${launch} Accept the project/MCP trust prompts. Ask the agent to read AGENTS.md and create an asset. Kiln needs no separate model key.\n\nCore author/refine/QA skills are installed and registered for this harness. Optional compose/batch skills are selected at setup with --skills compose,batch.\n\nKeep assets here and engine source outside. This separates task context, not operating-system permissions. User instructions and authentication can still apply.\n\nRun repair after anything that invalidates the generated absolute paths: moving this workspace, moving or reinstalling the runtime, or replacing the Node that setup recorded -- an nvm switch or uninstall does that, because the manifest pins the exact interpreter the preflight check validated.\n\n\`\`\`bash\nnode ${join(runtime, 'scripts/create-workspace.mjs')} ${root} --repair\n\`\`\`\n\nThat path is where the installation was at setup. If the installation itself moved, run the same command from its current location; \`runtime\` in .kiln/workspace.json records where this workspace last expected it.\n\nRepair updates generated runtime paths only and refuses edited configuration; it preserves skills, assets, and saved revisions.\n`,

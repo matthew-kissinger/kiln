@@ -80,9 +80,33 @@ overlap; the contents do not.
 | copilot | `.mcp.json` | `mcpServers.<name>` with `type: "local"` and `tools: ["*"]` |
 | cursor-agent | `.cursor/mcp.json` | `mcpServers.<name>` |
 | agy | `.agents/mcp_config.json` | `mcpServers.<name>` |
-| codex | `.codex/config.toml` | `[mcp_servers.<name>]` |
+| codex | **none** -- config is `$CODEX_HOME`-rooted | per-invocation `-c mcp_servers.<name>.…` from `codex.mjs` |
 | opencode | `opencode.json` | `mcp.<name>` with `type: "local"` and `command` as an array |
-| hermes | `.hermes/config.yaml` | `mcp_servers.<name>` |
+| hermes | **none** -- config is `$HERMES_HOME`-rooted | one user-level `hermes mcp add`; the workspace supplies `--in` and the program store |
+
+**Two of these have no project-local configuration at all, and both used to be written as
+though they did.** Codex reads only `$CODEX_HOME`: `-c` overrides `~/.codex/config.toml`,
+`-p <name>` layers `$CODEX_HOME/<name>.config.toml`, and `-C`/`--cd` changes the working
+directory and nothing else. Hermes reads only `$HERMES_HOME`, and `hermes mcp add` has no
+scope flag -- confirmed against upstream HEAD, not just the installed build.
+
+So a workspace configures them **per invocation**, through a generated launcher. Codex takes
+nested TOML overrides, which is a complete fix: the server is registered for that run and
+nothing is written, so `$CODEX_HOME` keeps its configuration and its authentication. Hermes
+has no equivalent for MCP servers, so registering the server is one user-level command that
+`START.md` prints; the launcher still supplies the project directory and retargets the program
+store through the environment, so one registration serves every workspace.
+
+The rule both follow, and the one to apply to the next harness like them: **a workspace may add
+configuration to an invocation, but it must not replace the home that holds credentials.**
+Redirecting `HERMES_HOME` at a workspace is what broke hermes -- that single variable resolves
+the config path *and* the `.env` path, and `hermes config path` / `hermes config env-path`
+report them separately, which is how to check any harness for the same trap.
+
+Two flag notes that cost a run each. Hermes' `--skills` takes skill *names* resolved against
+configured sources, not a directory; a path fails the whole run with `Unknown skill(s)`.
+And `--ignore-rules` suppresses the workspace's own `AGENTS.md` along with user-level rules,
+so it is opt-in rather than part of the documented command.
 
 Copilot and Claude Code read the same *filename* and not the same *contents*: `copilot mcp
 add` writes `type: "local"` plus an explicit tool filter where Claude writes `type: "stdio"`
@@ -90,11 +114,17 @@ and no filter. The generated Copilot config is the one Copilot's own CLI produce
 config a harness cannot read does not announce itself -- the agent simply answers as though
 the tools were never mentioned.
 
-**A server named `kiln` may be a different installation.** A user-level
-`~/.cursor/mcp.json` on the development machine named `kiln` and pointed at an extracted
-0.6.0 package while the checkout was 0.7.0; `cursor-agent mcp list` reported it
-`Connection failed`. Workspaces therefore register `kiln_workspace` under their own name.
-Report a mismatch rather than silently substituting it.
+**A server named `kiln` may be a different installation, and there is now a way to check.**
+Two on one development machine: `~/.cursor/mcp.json` named `kiln` and pointed at an extracted
+0.6.0 package -- present, not a git checkout -- while the checkout beside it was 0.7.0; and
+`~/.codex/cache/codex_apps_tools/` held a cached `kiln_local` tool namespace. Both were local
+leftovers rather than anything this repository ships, but both answer tool calls without
+announcing what they are.
+
+Call `kiln_list_primitives` with `capabilities: true` and compare `capabilities.engine` --
+`version` and `installUrl` -- against `runtime` in `.kiln/workspace.json`. Workspaces also
+register under their own `kiln_workspace` name. Report a mismatch rather than silently
+substituting it.
 
 Skills need no per-harness directory beyond the two the generator already writes. Claude Code
 reads `.claude/skills/`. Every other harness here reads `.agents/skills/`: `copilot skill

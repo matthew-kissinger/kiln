@@ -2848,3 +2848,203 @@ One more duplicate surfaced during that test: codex also exposes
 `mcp__codex_apps__kiln_local_kiln_*`, a second Kiln registration from a codex app, alongside
 `kiln_workspace`. Same hazard as the stale `kiln` in `~/.cursor/mcp.json` -- a name that
 looks like this engine and may not be it.
+
+## Phase 18 -- Closing the stabilisation queue
+
+The queue ROADMAP.md opened on 2026-09-13 is closed. This phase records what changed about
+the *diagnoses*, because in three of eight rows the first explanation was wrong and the
+measurement that corrected it is the reusable part.
+
+### 18.1 -- the hermes failure had no credential in it
+
+The row read "the workspace launcher discards the provider selection and API key". Half of
+that was invented. Measured instead of assumed:
+
+| | real home | `HERMES_HOME` -> workspace |
+| --- | --- | --- |
+| `model.default` | `gpt-5.6-sol` | not set |
+| `model.provider` | `openai-codex` ("ChatGPT or Codex Subscription") | not set -> "Auto" |
+| every API key | not set | not set |
+
+`~/.hermes/.env` holds `TERMINAL_TIMEOUT`, `BROWSER_*` and `*_DEBUG` -- tool toggles. The
+provider is a **subscription OAuth**, so the credential is a token in `auth.json`, and there
+is no key anywhere for a workspace to inherit. A plan to symlink `.env` forward would have
+linked the wrong file and fixed nothing.
+
+`HERMES_HOME` resolves both paths, which `hermes config path` and `hermes config env-path`
+report separately and which is why the redirect was so quietly destructive:
+
+```
+HERMES_HOME=<ws>/.hermes hermes config path      -> <ws>/.hermes/config.yaml   # wanted
+HERMES_HOME=<ws>/.hermes hermes config env-path   -> <ws>/.hermes/.env          # not wanted
+```
+
+The owner's instinct that the install might be stale was also correct: it was 45 commits
+behind. Updating it first was the right order, and it changed nothing -- upstream HEAD still
+has no project-local config and `hermes mcp add` still has no scope flag. So the fix is the
+invocation-shaped one, and the update is now recorded as checked rather than assumed.
+
+### 18.2 -- two flags that fail in opposite directions
+
+Both found by running the launcher rather than reading the help twice.
+
+`--skills SKILLS` reads "Preload one or more skills for the session", which sounds like a
+path and is not: it takes NAMES resolved against configured sources. Handing it
+`<ws>/.agents/skills` aborts the whole run with `Unknown skill(s): <path>`. Skills reach the
+agent through `--in`, which makes hermes inject the workspace's AGENTS.md as a rule.
+
+`--ignore-rules` was in the *documented* hermes command, presumably to keep user-level rules
+out of a workspace session. It also skips AGENTS.md -- the workspace's own guide, the thing
+the whole directory exists to deliver. It is gone from the generated instruction and
+documented as opt-in for anyone who does want both suppressed.
+
+### 18.3 -- S7 was two claims and only one was a defect
+
+"`--render auto` falls back to CPU rather than starting the GPU service" described intended
+behaviour. `RenderPortOptions.autoSpawn` says why in its own docstring: a one-shot CLI
+invocation should not pay a GPU process's startup to draw one sheet. That stands.
+
+The defect was next door. `--render gpu` **threw** when nothing was listening, even where the
+installation ships a renderer that would start in seconds, because only the MCP server ever
+passed `autoSpawn`. A mode whose entire meaning is "I asked for a guarantee and would rather
+know than be quietly downgraded" was answering with a technicality. `mode === 'gpu'` now
+implies the spawn.
+
+Making that change surfaced two more things the type checker found and no test would have:
+the branch read `options.serviceDir` unguarded, and `gpu` can now reach it with no options at
+all -- a crash; and the outer `if (mode === 'gpu') throw` became unreachable, which TS proved
+by narrowing `mode` to `'auto'`. The remaining message names both facts, what was probed and
+why nothing could start, because "not reachable" alone left the reader unable to tell whether
+to start something or install something.
+
+The workspace guide's "restart this session, because the MCP server resolves the service once
+at startup" was wrong about the mechanism and accidentally right about one case. `autoSpawn`
+attaches a lazy port that starts the renderer on the first view needing it -- no restart. But
+`buildRenderPort` attaches nothing when the service is not INSTALLED, deliberately, so that a
+CPU-only machine reports an ordinary CPU render rather than a GPU degrade. Install it
+mid-session and that session stays on CPU for its lifetime. The sentence now says that, and
+the code was left alone: attaching unconditionally would make every machine without a GPU
+report a degrade on every render.
+
+### 18.4 -- the bind default, and why refusing beats warning
+
+`HOST` unset bound every interface. The MCP server's on-demand spawn already passed
+`127.0.0.1`, so the exposure was confined to the *documented* manual start -- `npm start`,
+under the words "Nothing else to configure".
+
+What that exposed is worth stating plainly, because "a render service" sounds harmless.
+`POST /render` accepts a 48 MB GLB, parses it with three.js, and hands the buffers to Dawn and
+a native Vulkan driver, on a queue that renders one frame at a time. So an unauthenticated
+exposed bind is a free GPU, a denial of the owner's own renders from a single slow request,
+and an untrusted binary-asset parser in front of a kernel driver. CVE-2026-7482 is that last
+one realised: a crafted model file drove a heap out-of-bounds read in a local inference
+server, scored 9.1, against roughly 175k publicly reachable instances. Their default was
+loopback and operators widened it. Ours widened itself.
+
+The rule is **the bind address decides whether auth is required** -- loopback free, anything
+wider token-or-refuse, `RENDER_SERVICE_ALLOW_UNAUTHENTICATED=1` as an explicit waiver the
+operator has to spell out. Refusing rather than warning is not a new policy in that file; it
+is the one already applied to a software adapter, so a driver regression yields a service that
+will not start rather than one that silently renders on CPU. A warning on the stderr of a
+backgrounded process is not a control.
+
+Two details worth keeping. `0.0.0.0` and `::` are NOT loopback: reading an unspecified bind as
+local is the exact mistake, and the test pins it. And the policy is a **pure module** with its
+own test, because `render-service/test/` had no HTTP-surface test at all and every one of its
+tests is pure -- which is what makes `npm ci --ignore-scripts` sufficient in CI. The one module
+deciding whether this service is reachable from the network must not be the one that needs a
+GPU to verify.
+
+### 18.5 -- both stale `kiln` servers were local, and the fix is a field not a cleanup
+
+Investigated rather than documented further:
+
+| Suspect | Finding |
+| --- | --- |
+| `kiln` in `~/.cursor/mcp.json` | Points at `/home/matthewk/kiln-oss-test/src/mcp-server.ts`. The directory exists, reports **0.6.0**, and is **not a git repository** -- an extracted package. Registered beside the correct `kiln_workspace`, so Cursor offers both |
+| `codex_apps__kiln_local` | Appears only in `~/.codex/cache/codex_apps_tools/<hash>.json`, a **cache** file. `~/.codex/config.toml` registers only `kiln_workspace` |
+
+Neither is shipped by this repository and removing them is a local edit. What the repository
+was missing is different: the generated guide has always said *"a server named kiln may be a
+different installation; do not substitute it silently"*, and nothing in any tool result let an
+agent comply. `kiln_list_primitives {capabilities:true}` now reports
+`engine: {version, installUrl}`, and the guide names the comparison against `runtime` in
+`.kiln/workspace.json`.
+
+`src/engine-identity.ts` reads no file, deliberately: `src/views/renderer-id.ts` does a
+`readFileSync` at module load and AGENTS.md warns about that specific hazard, and this module is
+reachable from the tool registry. The version is a literal, kept honest by the version-parity
+test that already pins three plugin manifests and `MCP_SERVER_VERSION` to `package.json`.
+
+### 18.6 -- the check that would have caught 18.1 and S1
+
+Both workspace defects passed every gate, for one reason: `harness-smoke.mjs` invokes each CLI
+directly and never touches the generated launcher. The launcher was the only unexercised
+artifact in the workspace, and it was where both bugs lived.
+
+`workspace-bootstrap.test.ts` now asserts each user-global harness's launcher: that it
+registers per invocation, that it parses under `node --check` rather than a regex, and that it
+does **not** name the home holding credentials. A real invocation needs a signed-in CLI and
+costs money, which is what Tier 0 is for; what belongs in CI is the shape.
+
+### 18.7 -- the array helpers disagreed with each other
+
+`arrayLinear` read only `source.position`, so a copy of a rotated part came back
+axis-aligned, while `arrayRadial` twelve lines below set a rotation on every copy. Two
+dispatched models hit it independently. Copies carry rotation and scale now. This **changes
+exported geometry** for a program that arrays a rotated or scaled source, which is correct at
+0.7.0 and recorded in the changelog as a behaviour change.
+
+`arrayRadial` orbiting the parent's origin was not a bug -- its docstring and example both say
+so -- but it was unworkaroundable short of writing the matrix by hand, so it takes an optional
+`center`. Both helpers had **no unit tests**, which is how two neighbours contradicting each
+other survived; there are seven now, written failing first.
+
+### 18.8 -- what stayed deferred, re-checked rather than restated
+
+- **`ai` 7 / `openai` 7**: re-read from the registry, and it is now **two** independent
+  conflicts, not one. `@strands-agents/sdk@1.17.0` (latest) peers `@ai-sdk/provider: ^3.0.0`
+  *and* `openai: ^6.45.0`; `@openrouter/ai-sdk-provider@3.0.0` peers `ai: ^7.0.0`, which needs
+  provider 4. Upstream and structural.
+- **SEP-2640**: the re-check signal 14.1 named was the published TypeScript SDK gaining skills
+  helpers. This repo has since moved to `@modelcontextprotocol/{client,server}@2.0.0`, which
+  are also the latest -- and neither carries `skills/list`. Still nothing public consumes it.
+- **16.4 / S4**: confirmed against the spec rather than the memory of it. MCP Apps (Stable,
+  2026-01-26) permits a UI iframe `tools/call`, `resources/read`, `notifications/message`,
+  `ui/initialize` and `ping`. The decided shape holds; deferred to the next cycle by the
+  owner's call, since today's over-limit behaviour is a graceful refusal.
+- **Tier 2 dogfooding**: still never run, still the tier most likely to find documentation
+  defects, and still needing one harness isolated from user-level registration.
+
+### 18.9 -- `bun test --update-snapshots` wrote a corrupt file, twice in a row
+
+Worth recording because the failure mode is silent and the obvious retry reproduces it.
+
+Changing two catalog descriptions moved two review-gate snapshots, as intended. Running
+`bun test <file> --update-snapshots` (Bun 1.4.2) reported `0 fail` and `snapshots: +2 added`,
+and an immediate isolated re-run passed. The full gate then failed on both, with
+
+```
+error: Failed to snapshot value: // Scene & structure (globals ...
+```
+
+which reads like a serializer complaint and is not one. The written `.snap` file was **invalid
+JavaScript**: the new content is shorter than the old, and the writer overwrote in place rather
+than rewriting, leaving an orphaned tail of the previous value *after* the closing delimiter.
+
+```
+  // e.g. const v = validateAsset(root, 'prop');"
+`;
+n' | 'vehicle')          <-- orphaned tail of the old snapshot
+  // Checks geometry and material costs for the selected category. ...
+`;
+```
+
+`node --check` on a copy renamed to `.js` proves it in one command, and confirms the committed
+file was valid before. `+2 added` rather than "updated" was the tell in the tool output.
+
+The fix is to **delete the `.snap` file and regenerate**, which produces a valid file and a diff
+containing only the intended change. The lesson generalises past snapshots: a formatter or
+writer reporting success is not evidence that what it wrote parses. Where a generated file is
+executable, check that it executes -- which is the same reasoning behind running `node --check`
+on the generated launchers in 18.6 rather than regex-matching them.

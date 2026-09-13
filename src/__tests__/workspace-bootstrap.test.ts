@@ -235,3 +235,60 @@ it('writes each harness the MCP config spelling it actually reads', async () => 
     await rm(root, { recursive: true, force: true });
   }
 }, 30000);
+
+// The two defects this covers were invisible to every existing check, because
+// `harness-smoke.mjs` invokes each CLI directly and never touches the generated
+// launcher. A generated codex workspace could not see Kiln at all -- codex reads
+// no project-local config, so `.codex/config.toml` was inert -- and a generated
+// hermes workspace could not reach a model, because redirecting HERMES_HOME to
+// the workspace took the provider selection and the credential store with it.
+//
+// Both are launcher-shaped, so this asserts the launcher's shape. Running one for
+// real needs a signed-in CLI and costs money, which is what `docs/dogfooding.md`
+// Tier 0 is for; what belongs in CI is that the launcher exists, is valid JS, and
+// carries the flags the fix depends on.
+it('gives every user-global harness a launcher that configures without relocating its home', async () => {
+  const root = await mkdtemp(join(tmpdir(), 'kiln-harness-launcher-'));
+  try {
+    const codexDir = join(root, 'codex');
+    expect(run([codexDir, '--harness', 'codex'], root).status).toBe(0);
+    const codex = await readFile(join(codexDir, 'codex.mjs'), 'utf8');
+    // Per-invocation `-c` overrides are the fix: they register the server for one
+    // run and write nothing, so $CODEX_HOME keeps its config AND its auth.
+    expect(codex).toContain('mcp_servers.kiln_workspace.command');
+    expect(codex).toContain('mcp_servers.kiln_workspace.args');
+    expect(codex).toContain('mcp_servers.kiln_workspace.env.KILN_PROGRAM_STORE');
+    expect(codex).toContain("'-c'");
+    // A workspace is deliberately not a git checkout.
+    expect(codex).toContain('--skip-git-repo-check');
+    expect(codex).toContain("'--cd'");
+    // The launcher must never move the home that holds credentials.
+    expect(codex).not.toContain('CODEX_HOME');
+
+    const hermesDir = join(root, 'hermes');
+    expect(run([hermesDir, '--harness', 'hermes'], root).status).toBe(0);
+    const hermes = await readFile(join(hermesDir, 'hermes.mjs'), 'utf8');
+    // The regression under test. HERMES_HOME resolves BOTH the config path and
+    // the credential path, so redirecting it is what broke the run.
+    expect(hermes).not.toContain('HERMES_HOME');
+    // `--in` is what makes hermes treat this directory as the project, which is
+    // also what injects the workspace's AGENTS.md.
+    expect(hermes).toContain("'--in'");
+    // The program store rides the environment, so no config file is needed for
+    // it and a user-level registration still lands in THIS workspace.
+    expect(hermes).toContain('KILN_PROGRAM_STORE');
+    // `--skills` takes skill NAMES, not a path; passing a directory fails with
+    // "Unknown skill(s)" and takes the whole run with it.
+    expect(hermes).not.toContain("'--skills'");
+
+    // Parsed by the interpreter that will run it, not by a regex: a launcher is
+    // generated from a template string, so a stray escape produces a file that
+    // looks fine and throws on the user's first invocation.
+    for (const path of [join(codexDir, 'codex.mjs'), join(hermesDir, 'hermes.mjs')]) {
+      const check = spawnSync('node', ['--check', path], { encoding: 'utf8' });
+      expect(check.status, `${path}: ${check.stderr}`).toBe(0);
+    }
+  } finally {
+    await rm(root, { recursive: true, force: true });
+  }
+}, 30000);

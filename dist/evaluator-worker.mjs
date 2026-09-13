@@ -3532,24 +3532,34 @@ import { mergeVertices as threeMergeVertices } from "three/examples/jsm/utils/Bu
 function arrayLinear(namePrefix, source, count, offset, parent) {
   const out = [];
   const base = source.position.toArray();
+  const rotation = degreesOf(source.rotation);
+  const scale = source.scale.toArray();
   for (let i = 1;i < count; i++) {
     const pos = [
       base[0] + offset[0] * i,
       base[1] + offset[1] * i,
       base[2] + offset[2] * i
     ];
-    out.push(createInstance(`${namePrefix}${i}`, source, { position: pos, parent }));
+    out.push(createInstance(`${namePrefix}${i}`, source, { position: pos, rotation, scale, parent }));
   }
   return out;
 }
-function arrayRadial(namePrefix, source, count, axis = "y", parent) {
+function degreesOf(euler) {
+  return [
+    THREE4.MathUtils.radToDeg(euler.x),
+    THREE4.MathUtils.radToDeg(euler.y),
+    THREE4.MathUtils.radToDeg(euler.z)
+  ];
+}
+function arrayRadial(namePrefix, source, count, axis = "y", parent, center) {
   const out = [];
-  const basePos = source.position.clone();
+  const pivot = center ? new THREE4.Vector3(...center) : new THREE4.Vector3;
+  const basePos = source.position.clone().sub(pivot);
   const axisVec = axis === "x" ? new THREE4.Vector3(1, 0, 0) : axis === "z" ? new THREE4.Vector3(0, 0, 1) : new THREE4.Vector3(0, 1, 0);
   for (let i = 1;i < count; i++) {
     const angle = i / count * Math.PI * 2;
     const m = new THREE4.Matrix4().makeRotationAxis(axisVec, angle);
-    const rotated = basePos.clone().applyMatrix4(m);
+    const rotated = basePos.clone().applyMatrix4(m).add(pivot);
     const eulerDeg = axis === "y" ? [0, angle * 180 / Math.PI, 0] : axis === "x" ? [angle * 180 / Math.PI, 0, 0] : [0, 0, angle * 180 / Math.PI];
     out.push(createInstance(`${namePrefix}${i}`, source, {
       position: [rotated.x, rotated.y, rotated.z],
@@ -18493,16 +18503,16 @@ const rock = await hull('Rock', ...rockChunks);`
       signature: "arrayLinear(namePrefix, source, count, offset: [x,y,z], parent?)",
       returns: "THREE.Object3D[]",
       category: "arrays",
-      description: "`count` is the TOTAL, source included: the source stays where it is as copy 0 and the call returns count-1 new instances, so count 10 gives 10 posts, not 11. Copies share geometry + material via createInstance.",
+      description: "`count` is the TOTAL, source included: the source stays where it is as copy 0 and the call returns count-1 new instances, so count 10 gives 10 posts, not 11. Copies share geometry + material via createInstance, and carry the source rotation and scale.",
       example: `const post = createPart('Post0', cylinderGeo(0.05,0.05,1.5,6), wood, { position: [0,0.75,0], parent: root });
 arrayLinear('Post', post, 10, [0.5, 0, 0], root);`
     },
     {
       name: "arrayRadial",
-      signature: "arrayRadial(namePrefix, source, count, axis?: 'x'|'y'|'z', parent?)",
+      signature: "arrayRadial(namePrefix, source, count, axis?: 'x'|'y'|'z', parent?, center?: [x,y,z])",
       returns: "THREE.Object3D[]",
       category: "arrays",
-      description: "`count` is the TOTAL, source included: the source stays at its angle as copy 0 and the call returns count-1 new instances, so count 8 gives 8 bolts evenly spaced, not 9. Each copy's local rotation is oriented outward. Perfect for gear teeth, radial bolts, circle of columns.",
+      description: "`count` is the TOTAL, source included: the source stays at its angle as copy 0 and the call returns count-1 new instances, so count 8 gives 8 bolts evenly spaced, not 9. Each copy's local rotation is oriented outward. Copies orbit the parent's origin unless you pass `center`. Perfect for gear teeth, radial bolts, circle of columns.",
       example: `const bolt = createPart('Bolt0', cylinderGeo(0.02,0.02,0.1,6), steel, { position: [1,0,0], parent: root });
 arrayRadial('Bolt', bolt, 8, 'y', root);`
     },

@@ -20,11 +20,12 @@ import {
 import { buildRenderPort, resolveRenderMode } from './cli-render-mode';
 import { localProgramStore } from './program-store-node';
 import { isDirectEntry } from './direct-entry';
+import { ENGINE_VERSION } from './engine-identity';
 import { createPackagedLocalToolContext } from './local-runtime';
 
 /** Server identity reported in the MCP handshake. */
 export const MCP_SERVER_NAME = 'kiln';
-export const MCP_SERVER_VERSION = '0.7.0';
+export const MCP_SERVER_VERSION = ENGINE_VERSION;
 
 /**
  * Absolute path to the skills that ship beside this server. Both entry shapes

@@ -2384,16 +2384,16 @@ const rock = await hull('Rock', ...rockChunks);`
       signature: "arrayLinear(namePrefix, source, count, offset: [x,y,z], parent?)",
       returns: "THREE.Object3D[]",
       category: "arrays",
-      description: "`count` is the TOTAL, source included: the source stays where it is as copy 0 and the call returns count-1 new instances, so count 10 gives 10 posts, not 11. Copies share geometry + material via createInstance.",
+      description: "`count` is the TOTAL, source included: the source stays where it is as copy 0 and the call returns count-1 new instances, so count 10 gives 10 posts, not 11. Copies share geometry + material via createInstance, and carry the source rotation and scale.",
       example: `const post = createPart('Post0', cylinderGeo(0.05,0.05,1.5,6), wood, { position: [0,0.75,0], parent: root });
 arrayLinear('Post', post, 10, [0.5, 0, 0], root);`
     },
     {
       name: "arrayRadial",
-      signature: "arrayRadial(namePrefix, source, count, axis?: 'x'|'y'|'z', parent?)",
+      signature: "arrayRadial(namePrefix, source, count, axis?: 'x'|'y'|'z', parent?, center?: [x,y,z])",
       returns: "THREE.Object3D[]",
       category: "arrays",
-      description: "`count` is the TOTAL, source included: the source stays at its angle as copy 0 and the call returns count-1 new instances, so count 8 gives 8 bolts evenly spaced, not 9. Each copy's local rotation is oriented outward. Perfect for gear teeth, radial bolts, circle of columns.",
+      description: "`count` is the TOTAL, source included: the source stays at its angle as copy 0 and the call returns count-1 new instances, so count 8 gives 8 bolts evenly spaced, not 9. Each copy's local rotation is oriented outward. Copies orbit the parent's origin unless you pass `center`. Perfect for gear teeth, radial bolts, circle of columns.",
       example: `const bolt = createPart('Bolt0', cylinderGeo(0.02,0.02,0.1,6), steel, { position: [1,0,0], parent: root });
 arrayRadial('Bolt', bolt, 8, 'y', root);`
     },
@@ -6268,24 +6268,34 @@ import { mergeVertices as threeMergeVertices } from "three/examples/jsm/utils/Bu
 function arrayLinear(namePrefix, source, count, offset, parent) {
   const out = [];
   const base = source.position.toArray();
+  const rotation = degreesOf(source.rotation);
+  const scale = source.scale.toArray();
   for (let i = 1;i < count; i++) {
     const pos = [
       base[0] + offset[0] * i,
       base[1] + offset[1] * i,
       base[2] + offset[2] * i
     ];
-    out.push(createInstance(`${namePrefix}${i}`, source, { position: pos, parent }));
+    out.push(createInstance(`${namePrefix}${i}`, source, { position: pos, rotation, scale, parent }));
   }
   return out;
 }
-function arrayRadial(namePrefix, source, count, axis = "y", parent) {
+function degreesOf(euler) {
+  return [
+    THREE4.MathUtils.radToDeg(euler.x),
+    THREE4.MathUtils.radToDeg(euler.y),
+    THREE4.MathUtils.radToDeg(euler.z)
+  ];
+}
+function arrayRadial(namePrefix, source, count, axis = "y", parent, center) {
   const out = [];
-  const basePos = source.position.clone();
+  const pivot = center ? new THREE4.Vector3(...center) : new THREE4.Vector3;
+  const basePos = source.position.clone().sub(pivot);
   const axisVec = axis === "x" ? new THREE4.Vector3(1, 0, 0) : axis === "z" ? new THREE4.Vector3(0, 0, 1) : new THREE4.Vector3(0, 1, 0);
   for (let i = 1;i < count; i++) {
     const angle = i / count * Math.PI * 2;
     const m = new THREE4.Matrix4().makeRotationAxis(axisVec, angle);
-    const rotated = basePos.clone().applyMatrix4(m);
+    const rotated = basePos.clone().applyMatrix4(m).add(pivot);
     const eulerDeg = axis === "y" ? [0, angle * 180 / Math.PI, 0] : axis === "x" ? [angle * 180 / Math.PI, 0, 0] : [0, 0, angle * 180 / Math.PI];
     out.push(createInstance(`${namePrefix}${i}`, source, {
       position: [rotated.x, rotated.y, rotated.z],
@@ -26326,8 +26336,17 @@ function createKilnSourceDef(store) {
 }
 
 // src/tools/discovery.ts
-init_list_primitives();
 import { z as z3 } from "zod";
+
+// src/engine-identity.ts
+var ENGINE_VERSION = "0.7.0";
+var ENGINE_INSTALL_URL = new URL("../", import.meta.url).href;
+function engineIdentity() {
+  return { version: ENGINE_VERSION, installUrl: ENGINE_INSTALL_URL };
+}
+
+// src/tools/discovery.ts
+init_list_primitives();
 init_protocol();
 init_capture_limits();
 var inputSchema = z3.object({
@@ -26353,6 +26372,7 @@ function createKilnDiscoveryDef(context) {
       }
       const capabilities = {
         version: "kiln.capabilities.v1",
+        engine: engineIdentity(),
         execution: context.localExecution ?? (context.evaluatorPort ? { mode: "host-injected", limits: "unspecified by host" } : context.evaluatorProfile === "evaluator-required" ? { mode: "host-required", available: false } : { mode: "trusted-local", terminable: false }),
         source: {
           ...input.capabilities && context.programStore?.stats ? { storage: await context.programStore.stats() } : {},
@@ -26451,8 +26471,15 @@ Note: ${entry.promptNotes}` : ""}`;
         return missing(`No helper matches ${input.name ? `name "${input.name}"` : `query "${input.query ?? input.category}"`}.`);
       const overview = input.overview ?? !(input.name || input.query || input.category || input.offset || input.limit);
       if (overview) {
+        const mustCall = ["createRoot", "createPart"].map((name) => all.find((entry) => entry.name === name)).filter((entry) => Boolean(entry)).map((entry) => `  ${entry.signature} -> ${entry.returns}`);
         const text = [
           'Kiln helper overview. Use {names:["boxGeo","createPart"]} for up to six signatures/examples together, {name:"boxGeo"} for one, {query:"holes"} for an operation, or {category:"geometry"} to browse.',
+          ...mustCall.length ? [
+            `Every program calls these two, so their exact signatures are here rather than a request away:
+${mustCall.join(`
+`)}
+Parts AUTO-ADD to opts.parent; never call parent.add(createPart(...)). rotation is DEGREES.`
+          ] : [],
           ...categories.map((group) => `${group}: ${matches.filter((entry) => entry.category === group).map((entry) => entry.name).join(", ")}`).filter((line) => !line.endsWith(": ")),
           "Custom geometry: THREE.BufferGeometry, indexed triangles and ordinary functions are available. GLB exports position, normal, UV0, tangent, indices and material groups. Query meshGeo, parametricSurface, sweepProfile, loftProfiles or twist for focused examples.",
           "Source: send code once; reuse programRef for source reads, edits and all later view calls. Local CLI/MCP stores survive restarts; an injected memory store lasts for its registry instance.",
@@ -28440,20 +28467,16 @@ async function buildRenderPort(mode, portUrl, options) {
   const rendererId = await probeRenderService(localUrl);
   if (rendererId)
     return attach(localUrl, `GPU service (${rendererId})`);
-  if (options?.autoSpawn) {
-    const dir = options.serviceDir ?? renderServiceDir();
-    const state = options.start ? "ready" : localRenderServiceState(dir);
+  if (options?.autoSpawn || mode === "gpu") {
+    const dir = options?.serviceDir ?? renderServiceDir();
+    const state = options?.start ? "ready" : localRenderServiceState(dir);
     if (state === "ready") {
-      const start = options.start ?? (() => startLocalRenderService(dir));
+      const start = options?.start ?? (() => startLocalRenderService(dir));
       return attachLazy(start, "GPU service (started on demand)");
     }
     if (mode === "gpu")
-      throw new Error(`no GPU render service is reachable, and ${explainRenderServiceState(state, dir)}.
+      throw new Error(`no GPU render service is reachable at ${localUrl}, and ${explainRenderServiceState(state, dir)}.
 ` + "Set --render-port or KILN_RENDER_PORT_URL to point at one elsewhere, or use " + "--render auto to fall back to the CPU rasterizer.");
-  }
-  if (mode === "gpu") {
-    throw new Error(`no GPU render service is reachable.
-` + `Looked at ${localUrl}; set --render-port or KILN_RENDER_PORT_URL to ` + "point somewhere else, or use --render auto to fall back to the CPU rasterizer.");
   }
   selected.set(context, "cpu raster (no GPU service found)");
   return context;
@@ -28595,6 +28618,10 @@ function isDirectEntry(moduleUrl) {
     return false;
   }
 }
+
+// src/engine-identity.ts
+var ENGINE_VERSION2 = "0.7.0";
+var ENGINE_INSTALL_URL2 = new URL("../", import.meta.url).href;
 
 // src/local-runtime.ts
 init_subprocess();
@@ -29103,7 +29130,7 @@ async function createPackagedLocalToolContext(base = {}, env = process.env, inst
 
 // src/mcp-server.ts
 var MCP_SERVER_NAME = "kiln";
-var MCP_SERVER_VERSION = "0.7.0";
+var MCP_SERVER_VERSION = ENGINE_VERSION2;
 var packagedSkillsDir = fileURLToPath6(new URL("../skills", import.meta.url));
 var MCP_SERVER_INSTRUCTIONS = `Kiln turns JavaScript you write into GLB 3D assets and returns rendered views for review.
 

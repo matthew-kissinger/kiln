@@ -3,6 +3,84 @@
 Changes to `@kiln/engine`. Source and installable packages are distributed through
 GitHub. The package is not published on the npm registry.
 
+## The setup defects, and a bind that was never ours to choose — 2026-09-13
+
+- **The render service binds loopback now, and widening it costs a token.** `HOST` unset used to
+  bind every interface, and the documented manual start -- `npm start`, "nothing else to
+  configure" -- did exactly that with `RENDER_SERVICE_TOKEN` unset and only a warning. What sat
+  behind it is a `POST /render` that accepts a 48 MB GLB, parses it with three.js and hands the
+  buffers to Dawn and a native Vulkan driver, on a queue that renders one frame at a time -- so a
+  single caller can hold the GPU indefinitely, and an untrusted binary-asset parser sits in front
+  of a kernel driver. That is the shape of CVE-2026-7482, where a crafted model file drove a heap
+  overread in a local inference server that operators had put on the public internet by the
+  hundred thousand. Their default was loopback; ours was not.
+
+  The fix is a rule rather than a flag: **the bind address decides whether auth is required.**
+  Loopback is free, because the operating system is the boundary. Anything wider requires a token
+  and otherwise refuses to boot -- the same choice this file already makes for a software adapter,
+  where a driver regression yields a service that will not start rather than one that silently
+  does the wrong thing. `RENDER_SERVICE_ALLOW_UNAUTHENTICATED=1` is the explicit waiver, spelled
+  so an operator has to type the word. The container image sets `HOST=0.0.0.0` itself, because a
+  container binding loopback is unreachable through `-p`. Verified on hardware: a LAN address is
+  refused by default, an exposed bind with no token exits 1 before the GPU is even acquired, and
+  an exposed bind with one serves while returning 401 without the header.
+
+- **Two generated workspaces could not work, and both for the same reason.** A codex workspace
+  wrote `.codex/config.toml` that codex never reads -- every source it consults is
+  `$CODEX_HOME`-rooted -- so a harness the README lists reached no Kiln tools at all. A hermes
+  workspace redirected `HERMES_HOME` to get its MCP servers and skills read, and that one
+  variable resolves the config path *and* the credential path, so the run died before its first
+  model call. Both now configure **per invocation** through generated launchers: codex via `-c`
+  overrides, hermes via `--in` plus the program store riding the environment into the MCP child.
+  Neither writes outside the workspace and neither touches authentication. The rule they
+  establish: *a workspace may add configuration to an invocation, but it must not replace the home
+  that holds credentials.*
+
+  The hermes diagnosis was wrong before it was right. There is no provider key to inherit --
+  `~/.hermes/.env` holds tool toggles and every API key reads "not set", because the provider is a
+  subscription OAuth. What the redirect actually lost was `model.default` and `model.provider`.
+  Two more things fell out of measuring rather than assuming: `--skills` takes skill *names*, not
+  a path, and the documented `--ignore-rules` was suppressing the workspace's own AGENTS.md.
+
+- **A launcher test, because that is why nobody saw either one.** `harness-smoke.mjs` invokes each
+  CLI directly and never touches the generated launcher, so both defects passed every check. The
+  new test asserts the launcher's shape -- that it registers per invocation, parses under the
+  interpreter that will run it, and never names the home that holds credentials.
+
+- **`arrayLinear` was making copies that were not copies.** It read only `source.position`, so
+  every instance stood up straight however the source was laid down -- while `arrayRadial` next
+  door set a rotation on every copy. Two dispatched models hit this independently. Copies now
+  carry the source's rotation and scale. Separately, `arrayRadial` could only ever orbit the
+  parent's origin, which is what its docstring says and not something a caller could work around;
+  it takes an optional `center` now. These helpers had no unit tests at all, which is how a
+  disagreement between two neighbours survived. **This changes exported geometry** for a program
+  that arrays a rotated or scaled source.
+
+- **The helper overview stopped making models guess.** A bare `kiln_list_primitives` returned
+  names grouped by category and nothing else, and models reliably guessed the JS-conventional
+  `createPart(parent, {...})`. The overview now carries the exact signatures of the two helpers
+  every program calls, read from the catalog so it cannot drift from what a detail request
+  returns.
+
+- **`--render gpu` starts the renderer it needs.** It used to throw when nothing was listening
+  even though the installation ships a service that could start, because only the MCP server ever
+  asked for that. `gpu` means "I asked for a guarantee and would rather know than be quietly
+  downgraded"; answering it with a technicality was the defect. `auto` deliberately still does not
+  spawn -- a one-shot sheet should not pay a GPU boot. Fixing it also removed a dead `throw` and a
+  real crash: the spawn branch read `options.serviceDir` on a path that can now be reached with no
+  options at all.
+
+- **Which Kiln answered is now a question a tool can settle.** A server named `kiln` may be a
+  different installation, and two live examples on one development machine proved it -- an
+  extracted 0.6.0 package registered in `~/.cursor/mcp.json` beside a 0.7.0 checkout, and a stale
+  cached tool namespace. Both were local leftovers rather than repo defects, but the workspace
+  guide has always said "do not substitute it silently" with nothing behind it.
+  `kiln_list_primitives {capabilities:true}` now reports `engine.version` and
+  `engine.installUrl`, and the guide says to compare them against the workspace manifest.
+
+- `zod` 4.6.4 and `webgpu` 0.6.1. The latter was gated on a GPU smoke that has now passed twice:
+  `dawn-vulkan` on a GTX 1660 Ti boots and renders through the engine on 0.6.1.
+
 ## Seven harnesses, one version, and the defects only a plain prompt could find — 2026-09-13
 
 - **Two new harness adapters: `copilot` and `cursor-agent`**, bringing the dispatch table to

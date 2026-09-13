@@ -15,15 +15,31 @@ npm install
 npm start
 ```
 
-It listens on `:8000`, which is where `kiln --render auto` looks. Nothing else to configure:
+It listens on `127.0.0.1:8000`, which is where `kiln --render auto` looks. Nothing else to
+configure, and nothing off this machine can reach it:
 
 ```bash
 cd .. && bun run kiln render examples/well.kiln.js --views sheet.png
 #   sheet.png  (GPU dawn-d3d12:nvidia-geforce-rtx-3070:D3D12 driver version 32.0.16.1074)
 ```
 
-Set `PORT` to move it and `RENDER_SERVICE_TOKEN` to require auth. Point the engine at a non-default
-location with `--render-port <url>` or `KILN_RENDER_PORT_URL`.
+Set `PORT` to move it. Point the engine at a non-default location with `--render-port <url>` or
+`KILN_RENDER_PORT_URL`.
+
+**To serve other machines, say so and bring a token.** `HOST` widens the bind, and a bind wider
+than loopback requires `RENDER_SERVICE_TOKEN` -- without one the process refuses to start rather
+than warning:
+
+```bash
+HOST=0.0.0.0 RENDER_SERVICE_TOKEN=$(openssl rand -hex 32) npm start
+```
+
+`POST /render` takes a 48 MB GLB and renders it on the GPU one frame at a time, so an exposed bind
+with no auth hands any caller on that network both your GPU and a binary-asset parser. If something
+in front of this process already authenticates for it -- a reverse proxy, a private container
+network -- `RENDER_SERVICE_ALLOW_UNAUTHENTICATED=1` waives the requirement explicitly. The
+container image sets `HOST=0.0.0.0` itself, because a container that binds loopback is unreachable
+through `-p`.
 
 **The process refuses to boot on a software adapter.** A driver regression gives you a service that
 will not start, never one that quietly renders on CPU while reporting success.

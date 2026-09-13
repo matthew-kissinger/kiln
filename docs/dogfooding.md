@@ -17,6 +17,12 @@ bun run smoke:harness                       # every CLI on PATH
 bun run smoke:harness -- --harness copilot  # one
 ```
 
+**What Tier 0 cannot see: the generated launcher.** It invokes each CLI directly, so a harness
+whose workspace reaches it only through `node <harness>.mjs` passes this tier while being
+completely unusable from a real workspace. Two did, for months. `workspace-bootstrap.test.ts`
+now covers the launcher's shape, and Tier 1 is what exercises it for real -- run Tier 1 from a
+generated workspace using the command its own `START.md` names, never the bare CLI.
+
 This is a **wiring probe, not a dogfood.** It names a tool on purpose, because its whole job
 is to prove that a named tool is reachable and that the engine accepts what came back. Passing
 it means the plumbing works. It says nothing about whether an agent can author anything.

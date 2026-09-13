@@ -29,42 +29,31 @@ newcomer are in **setup**, not in the engine.
 
 ## Stabilisation queue
 
-Ordered by whether someone arriving at the repository hits it on the documented path.
+Closed 2026-09-13. Ordered as it was worked: whatever broke a documented path first.
 
-### Blocking a documented path
-
-| # | Item | State |
+| # | Item | Outcome |
 |---|---|---|
-| S1 | **A generated codex workspace cannot see Kiln.** `managedFiles` writes `.codex/config.toml`, and codex has no project-local config mechanism at all -- every source is `$CODEX_HOME`-rooted. The README lists `codex` as a supported `--harness` | Fix known and verified: a generated `codex.mjs` launcher passing `-c` overrides per invocation. See ledger 17.9 |
-| S2 | **A generated hermes workspace cannot run.** Its launcher redirects `HERMES_HOME` so the workspace config can supply MCP servers and skills; the same redirect discards the provider selection and API key, and the run dies before the first model call | Needs hermes' equivalent of per-invocation injection. The rule from S1 applies: add configuration to the invocation, never replace the home that holds credentials |
+| S1 | A generated codex workspace could not see Kiln -- `.codex/config.toml` was inert, because codex reads no project-local config | **Fixed.** A generated `codex.mjs` passes `-c` overrides per invocation. Verified by authoring through it: the program landed in the workspace store, which only the override could do, while `$CODEX_HOME` and its auth were untouched. `START.md` also stopped telling codex users to run the bare CLI |
+| S2 | A generated hermes workspace could not reach a model | **Fixed, and the diagnosis was wrong at first.** There is no provider key: `~/.hermes/.env` holds tool toggles, and the provider is a subscription OAuth. `HERMES_HOME` resolves the config path *and* the credential path, so the redirect left `model.default` and `model.provider` unset. The launcher no longer redirects it; `--in` supplies the project directory and the program store rides the environment into the MCP child. Verified end to end on a real model call. `--skills` turned out to take names rather than a path, and `--ignore-rules` was suppressing the workspace's own AGENTS.md |
+| S3 | `arrayLinear` dropped the source's rotation; `arrayRadial` could orbit only the parent origin | **Both addressed, as two different things.** Dropping rotation and scale was a defect -- copies now carry both. Orbiting the parent origin was documented behaviour with no way around it, so `arrayRadial` gained an optional `center`. The array helpers had no unit tests at all; they have seven now |
+| S5 | A bare `kiln_list_primitives` returned names, so models guessed `createPart(parent, {...})` | **Fixed.** The overview now carries the exact signatures of the two helpers every program calls, read from the catalog so it cannot drift from the detail view |
+| S6 | The render service bound `*:8000` unauthenticated | **Fixed with a policy, not a flag.** The bind address decides whether auth is required: loopback is free, anything wider requires `RENDER_SERVICE_TOKEN` or refuses to boot. `RENDER_SERVICE_ALLOW_UNAUTHENTICATED=1` is the explicit waiver. All three paths verified on hardware, including that a LAN address is now refused by default |
+| S7 | `--render auto` fell back to CPU rather than starting the GPU service | **Split, because only half was a defect.** `auto` not spawning is correct and stays -- a one-shot sheet should not pay a GPU boot. `--render gpu` erroring while a shippable renderer sat one spawn away was the defect; it now starts one. Verified from cold: a GPU render, not a throw. The workspace guide's claim about restarting a session was also wrong about *why*, and now states the one case where it is true |
+| S8 | A server named `kiln` may be a different installation | **Both instances were stale local state, not repo defects** -- an extracted 0.6.0 package in `~/.cursor/mcp.json`, and a cached tool namespace in `~/.codex/cache/`. What the repo lacked was a way to *check*: `kiln_list_primitives {capabilities:true}` now reports `engine.version` and `engine.installUrl`, so the workspace guide's "do not substitute it silently" has something behind it |
+| S4 | `kiln_present` puts up to 16 MiB of base64 in `_meta` | **Deferred to the next cycle** by decision. The shape is settled and the MCP Apps spec confirms it: a UI iframe may call `resources/read`, so the widget can fetch what the manifest names. Today's over-limit behaviour is a graceful refusal, not a failure |
 
-Both were invisible to the wiring smoke, which invokes each CLI directly and never touches
-the generated launcher. Whatever fixes them should come with a check that exercises the
-launcher.
-
-### Costs an agent revisions
-
-| # | Item | State |
-|---|---|---|
-| S3 | `arrayLinear` silently drops the source's rotation; `arrayRadial` orbits the world origin rather than a local centre. Two models hit these independently, and they are inconsistent with each other -- the radial helper sets a rotation on every copy, the linear one carries none | Confirmed in `src/ops.ts`; no fix attempted |
-| S4 | `kiln_present` puts up to 16 MiB of base64 files in `_meta` | Open with the shape decided: the widget calls `resources/read` itself. Ledger 16.4 |
-| S5 | A bare `kiln_list_primitives` returns names, not signatures, and models guess the JS-conventional `createPart(parent, {…})` from it | Mitigated in the smoke brief only. Whether the overview itself should lead with a signature is undecided |
-
-### Polish
-
-| # | Item | State |
-|---|---|---|
-| S6 | The render service binds `*:8000` and warns `RENDER_SERVICE_TOKEN unset — POST routes are UNAUTHENTICATED` | Default worth revisiting before anyone runs it on a shared machine |
-| S7 | `kiln render --render auto` falls back to CPU rather than starting the GPU service, though the MCP server instructions say it is "started on demand" | The two surfaces behave differently; the sentence is true of one of them |
-| S8 | A server named `kiln` may be a different installation. Two live examples on the development machine: a stale 0.6.0 package in `~/.cursor/mcp.json`, and `codex_apps`' `kiln_local_*` | Documented in `docs/harnesses.md`; no code change |
+The structural fix matters more than any single row: both S1 and S2 were invisible because
+`harness-smoke.mjs` invokes each CLI directly and never touches the generated launcher. A test now
+asserts the launcher's shape -- that it registers per invocation and never relocates the home holding
+credentials -- so the next harness whose config mechanism we guess at fails loudly.
 
 ## Dependencies
 
 | Family | State |
 |---|---|
 | `three` r186 + `@types/three` 0.186.0 | **Taken.** The types blocker recorded in earlier plans has resolved; both are pinned at 0.186.0 |
-| `webgpu` 0.6.0 to 0.6.1 in `render-service/` | **Unblocked.** It was gated on the owner's GPU smoke, and that smoke now passes: `dawn-vulkan` on a GTX 1660 Ti returned `materialFaithful: true` on 13 September 2026 |
-| `zod` 4.6.2 to 4.6.4 | Patch, safe, not taken |
+| `webgpu` 0.6.0 to 0.6.1 in `render-service/` | **Taken** 2026-09-13, after the GPU smoke it was gated on passed. Re-verified on the same hardware: `dawn-vulkan` on a GTX 1660 Ti boots and renders through the engine on 0.6.1 |
+| `zod` 4.6.2 to 4.6.4 | **Taken** 2026-09-13 |
 | `ai` 6→7, `@ai-sdk/provider` 3→4, `@openrouter/ai-sdk-provider` 2→3, `openai` 6→7 | **Still genuinely blocked, and not by money.** `@strands-agents/sdk@1.17.0` peer-requires `@ai-sdk/provider: ^3.0.0`, while `@openrouter/ai-sdk-provider@3` requires `ai: ^7`, which depends on provider 4. The conflict is structural and upstream |
 | SEP-2640 / `skill://` resources | Deferred by decision; see ledger 7.12 and 14.1 |
 
