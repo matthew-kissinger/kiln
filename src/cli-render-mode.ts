@@ -291,9 +291,12 @@ interface ViewFidelityLike {
 export interface RenderPortOptions {
   /**
    * Start the render service that ships with this installation when no renderer
-   * is already listening. Off by default, and deliberately so: a one-shot CLI
-   * invocation should not pay a GPU process's startup to draw one sheet, whereas
-   * a long-lived MCP server amortizes it across a whole session.
+   * is already listening. Off by default for `auto`, and deliberately so: a
+   * one-shot CLI invocation should not pay a GPU process's startup to draw one
+   * sheet, whereas a long-lived MCP server amortizes it across a whole session.
+   *
+   * `mode === 'gpu'` implies it regardless of this flag, because that mode is an
+   * explicit demand for a guarantee rather than a preference.
    *
    * Attaching happens ONLY where a renderer could actually run. On a machine that
    * did not install one, `viewRenderPort` stays absent and the session is
@@ -359,27 +362,31 @@ export async function buildRenderPort(
   // Nothing is listening. If this installation can start one, hand back a port
   // that will -- lazily, so a session that never renders a material never pays
   // for a GPU process, and so the start is not in front of the first connection.
-  if (options?.autoSpawn) {
-    const dir = options.serviceDir ?? renderServiceDir();
-    const state = options.start ? 'ready' : localRenderServiceState(dir);
+  //
+  // `gpu` implies it. That mode means "I asked for a guarantee and would rather
+  // know than be quietly downgraded", and refusing while a renderer this
+  // installation ships sits one spawn away is not an honest way to answer it. It
+  // stays OFF for `auto`, which is a one-shot CLI sheet's default and should not
+  // pay a GPU process's startup to draw it.
+  if (options?.autoSpawn || mode === 'gpu') {
+    // `options` is optional and `gpu` reaches here without it, so every read is
+    // guarded -- this branch used to be entered only by a caller that passed one.
+    const dir = options?.serviceDir ?? renderServiceDir();
+    const state = options?.start ? 'ready' : localRenderServiceState(dir);
     if (state === 'ready') {
-      const start = options.start ?? (() => startLocalRenderService(dir));
+      const start = options?.start ?? (() => startLocalRenderService(dir));
       return attachLazy(start, 'GPU service (started on demand)');
     }
+    // The only remaining way to fail `gpu`: nothing is listening AND this
+    // installation cannot start one. Naming both facts is the whole message --
+    // "not reachable" alone left the user guessing whether to start something or
+    // install something.
     if (mode === 'gpu')
       throw new Error(
-        `no GPU render service is reachable, and ${explainRenderServiceState(state, dir)}.\n` +
+        `no GPU render service is reachable at ${localUrl}, and ${explainRenderServiceState(state, dir)}.\n` +
           'Set --render-port or KILN_RENDER_PORT_URL to point at one elsewhere, or use ' +
           '--render auto to fall back to the CPU rasterizer.',
       );
-  }
-
-  if (mode === 'gpu') {
-    throw new Error(
-      'no GPU render service is reachable.\n' +
-        `Looked at ${localUrl}; set --render-port or KILN_RENDER_PORT_URL to ` +
-        'point somewhere else, or use --render auto to fall back to the CPU rasterizer.',
-    );
   }
 
   selected.set(context, 'cpu raster (no GPU service found)');

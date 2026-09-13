@@ -10,7 +10,9 @@ Use a model available through your configured provider. Confirm image input supp
 
 Run `bun run smoke:harness -- --harness opencode` before a batch. A quota or authentication failure is not a measure of asset quality. Inspect the retained transcript and build result when a run fails.
 
-For new integrations, start with the [workspace setup guide](clean-room.md). The older dispatch adapters in [scripts/harness.mjs](../scripts/harness.mjs) have their own harness-specific setup and may inherit user configuration; do not assume every adapter provides the same isolation as a fresh workspace.
+Per-harness install, upgrade, headless flags and MCP config locations are in
+[headless harnesses](harnesses.md). For new integrations, start with the
+[workspace setup guide](clean-room.md). The older dispatch adapters in [scripts/harness.mjs](../scripts/harness.mjs) have their own harness-specific setup and may inherit user configuration; do not assume every adapter provides the same isolation as a fresh workspace.
 
 ## Comparing runs
 

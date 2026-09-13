@@ -42,25 +42,48 @@ export function arrayLinear(
   const out: THREE.Object3D[] = [];
   // Source is already at some position; clones start at offset 1.
   const base = source.position.toArray() as [number, number, number];
+  // Orientation and scale travel with the copy. Reading position alone made a
+  // "copy" that stood up straight however the source was laid down, which cost
+  // two dispatched models a revision each -- and disagreed with `arrayRadial`
+  // below, which has always set a rotation on every copy.
+  const rotation = degreesOf(source.rotation);
+  const scale = source.scale.toArray() as [number, number, number];
   for (let i = 1; i < count; i++) {
     const pos: [number, number, number] = [
       base[0] + offset[0] * i,
       base[1] + offset[1] * i,
       base[2] + offset[2] * i,
     ];
-    out.push(createInstance(`${namePrefix}${i}`, source, { position: pos, parent }));
+    out.push(
+      createInstance(`${namePrefix}${i}`, source, { position: pos, rotation, scale, parent }),
+    );
   }
   return out;
 }
 
+/** `createInstance` takes degrees; an Object3D holds radians. */
+function degreesOf(euler: THREE.Euler): [number, number, number] {
+  return [
+    THREE.MathUtils.radToDeg(euler.x),
+    THREE.MathUtils.radToDeg(euler.y),
+    THREE.MathUtils.radToDeg(euler.z),
+  ];
+}
+
 /**
  * Radial array: place `count` copies of `source` around an axis at radius.
- * Source stays put; clones orbit around the origin on the given axis.
+ * Source stays put; clones orbit `center` (the parent's origin by default) on
+ * the given axis.
+ *
+ * `center` exists because the default could not be worked around: a ring of
+ * rivets about a hub that is not at the parent's origin meant writing the
+ * rotation matrix by hand. Omitting it is byte-identical to the old behavior.
  *
  * @example
  * const bolt = createPart('Bolt', cylinderGeo(0.02, 0.02, 0.1, 6), steel,
  *   { position: [1, 0, 0], parent: root });
  * arrayRadial('Bolt', bolt, 8, 'y', root);  // 8 bolts around Y axis
+ * arrayRadial('Rivet', rivet, 6, 'y', hub, [2, 0, 0]);  // ring about the hub
  */
 export function arrayRadial(
   namePrefix: string,
@@ -68,9 +91,13 @@ export function arrayRadial(
   count: number,
   axis: 'x' | 'y' | 'z' = 'y',
   parent?: THREE.Object3D,
+  center?: [number, number, number],
 ): THREE.Object3D[] {
   const out: THREE.Object3D[] = [];
-  const basePos = source.position.clone();
+  const pivot = center ? new THREE.Vector3(...center) : new THREE.Vector3();
+  // Orbit in pivot-relative space, then translate back, so the default (pivot at
+  // the origin) leaves the arithmetic it always did.
+  const basePos = source.position.clone().sub(pivot);
   const axisVec =
     axis === 'x'
       ? new THREE.Vector3(1, 0, 0)
@@ -81,7 +108,7 @@ export function arrayRadial(
   for (let i = 1; i < count; i++) {
     const angle = (i / count) * Math.PI * 2;
     const m = new THREE.Matrix4().makeRotationAxis(axisVec, angle);
-    const rotated = basePos.clone().applyMatrix4(m);
+    const rotated = basePos.clone().applyMatrix4(m).add(pivot);
     // Rotate local frame too so the copy faces outward consistently.
     const eulerDeg: [number, number, number] =
       axis === 'y'

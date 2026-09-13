@@ -14,6 +14,11 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
 ENV NVIDIA_VISIBLE_DEVICES=all
 ENV NVIDIA_DRIVER_CAPABILITIES=graphics,compute,utility
 ENV PORT=8000
+# Explicit, because the default is now loopback and a container that binds only
+# loopback is unreachable through `-p`. An exposed bind requires
+# RENDER_SERVICE_TOKEN at runtime -- the deployment already sets one, which is why
+# the x-render-token header exists.
+ENV HOST=0.0.0.0
 
 WORKDIR /app
 COPY package.json ./

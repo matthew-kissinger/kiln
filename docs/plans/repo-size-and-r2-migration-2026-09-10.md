@@ -2496,3 +2496,555 @@ six views when `capture` is omitted. A separate screenshot tool there would be a
 to ask for the same grid. The parity test pins the absence, and the first version of this
 note cited that test as if it were the reason -- a test records a decision, it does not
 explain it.
+
+## Phase 16 -- What a user's bug report actually contained
+
+Opened 2026-09-12 from a Reddit reply: VS Code Copilot showed "massive token usage
+because of how Copilot mishandles `resource_link`", compacting seven times in about
+thirty seconds, and the reporter had patched `createKilnAssetDefs` locally to return
+`resourceUris` instead of `resources`. Three questions: was it already fixed, is it a
+harness bug, or is it ours. The answer turned out to be "ours, but not where they
+pointed" -- and finding that took measuring rather than reading.
+
+| ID | Task | State |
+| --- | --- | --- |
+| 16.1 | Is the report already resolved? | **No, and provably.** `src/assets-resources.ts` has exactly one commit in its history (`dd98f82`, PR #54), and so does the `runTool` block that spreads links into `content`. The surface had never been touched since it shipped |
+| 16.2 | Does the reported mechanism exist? | **No.** `kiln_save`/`kiln_export` results are ~2 KB; the links are 941 B of URIs carrying no bytes. A JSON-RPC tap recorded the Copilot CLI calling `resources/read` **zero** times |
+| 16.3 | Asset links carried none of the fields a client needs to decide | **Done 2026-09-12.** `size` + `annotations.audience`/`priority` added; `editable.zip` unadvertised. See below |
+| 16.4 | `kiln_present` puts up to 16 MiB of base64 files in `_meta` | **Open, with the shape decided.** The widget may call `resources/read` itself; see below |
+| 16.5 | Reproduce in the reporter's actual client | **Done 2026-09-12.** VS Code logged the error 26s after our pre-fix server connected; after the fix the owner's own VS Code lists 13 of 13, `kiln_edit` included |
+
+### 16.2 -- the measurement that redirected the whole phase
+
+The instinct was to accept the report's mechanism and patch it. What the numbers said:
+
+| Response | Whole | model-facing text | links | `_meta` |
+| --- | --- | --- | --- | --- |
+| `kiln_export` | 2,044 B | 1,058 B | 941 B | absent |
+| `kiln_present` | 29,410 B | 1,058 B | 941 B | **25,661 B (87.3%)** |
+
+So no asset tool sends file bytes to the model -- except `kiln_present`, which is the
+only def in the registry carrying `ui:`, and which base64-encodes `asset.glb`,
+`source.kiln.js` and `preview.png` into `_meta` up to `WIDGET_TRANSFER_LIMIT` = **16
+MiB**. `src/asset-widget.ts`'s header comment -- *"binary files never enter
+model-facing tool text"* -- is an assumption about client behaviour, not a property
+the code enforces.
+
+Two token deltas were measured on the Copilot CLI and then **discarded as evidence**,
+which is worth recording because the first reading of them was wrong. A save-then-ask
+session cost 240.4k input tokens for a tool-free question, against 169.8k for the same
+question in a no-save session; that 70.6k gap looked like the resource links being
+inlined. It is not. Copilot's reported input figure is **cumulative across internal
+agent turns**, so one extra tool call adds roughly one whole transcript resend. The
+stub server settled it independently: a tool returning **2,000,000 bytes** in `_meta`
+produced a 31.2k-token turn. A correlation that survives one control can still be
+measuring the wrong variable.
+
+### 16.3 -- the fields that were missing
+
+The pinned SDK's `ResourceLinkSchema` carries `size`, `annotations.audience`,
+`annotations.priority`, `description` and `title`. Kiln set **none** of them, so a
+client deciding what to spend context on had only a MIME type to go on. `audience` is
+precisely the spec's channel for "for the human, not the model", and `size` lets a
+client price a link before resolving it.
+
+Both are now emitted. `asset.glb` and `preview.png` are `['user']`, because the model
+already receives rendered views as image blocks from `kiln_render` and geometry from
+metrics -- decoding a mesh buys it nothing. `source.kiln.js` is `['user','assistant']`,
+since re-reading source is a legitimate model move even though `kiln_source` is the
+cheaper way.
+
+`editable.zip` is no longer advertised: it is a bundle of the files listed beside it,
+so a client resolving every link paid twice, and it was simultaneously the largest
+entry and the only derived one. It stays readable at its URI and in `downloadUrls`.
+
+Net wire cost went **941 B to 1,017 B**, and that is not sold as a saving -- it is 76
+bytes for every client becoming *able* to choose. The test compares each declared
+`size` against the bytes `resources/read` actually returns for that URI, because a
+size a client cannot trust is worse than none.
+
+**The reporter's own patch is the shape to avoid.** Returning plain `resourceUris`
+strips the typed blocks, so conforming clients lose `resources/read` discovery and the
+widget wiring -- it fixes one broken client by degrading every correct one.
+
+### 16.4 -- why the widget can stop carrying bytes, without a ceiling cut
+
+The obvious fix was to drop the inline base64 and let the widget fetch. Checking
+before committing said no: `src/viewer/chat-app.ts` spoke only `ui/*` --
+`ui/notifications/tool-result` inbound (the host **pushes** the whole result),
+`ui/resource-teardown`, and two outbound notifications -- with no way to ask the
+server for anything. The fallback on the table was cutting `WIDGET_TRANSFER_LIMIT`,
+which nerfs a working feature.
+
+Reading the frontier instead found the answer already standardised. **MCP Apps**
+(official extension, spec revision 2026-01-26) states that *"UI iframes can use the
+following subset of standard MCP protocol messages: Tools: `tools/call`; Resources:
+`resources/read`"*. So a widget **may** read resources itself, and Kiln is already on
+that dialect -- `chat-app.ts` sends `ui/initialize` today and simply never uses the
+read it is entitled to. The server half also already exists: `mcp-server.ts` registers
+`kiln://assets/{collection}/{asset}/{revision}/{file}` and serves every file as
+`blob`/`text`.
+
+So the shape is: `_meta` carries the manifest and URIs, the widget reads each file
+through `resources/read`, and `decodeWidgetAsset` keeps verifying sha256 against the
+manifest exactly as it does now. This is **strictly better than the present
+behaviour**, not a reduction: today anything over 16 MiB is *refused* a preview, and
+per-file reads have no such wall. `tools/call` is available to the widget as a second
+independent path if a host does not proxy reads. MCP Apps is supported by Claude,
+Claude Desktop, VS Code Copilot, Goose and Postman.
+
+### 16.5 -- the client under test was never the client reported
+
+The Copilot **CLI** (1.0.83) does not reproduce the report: zero `resources/read`, and
+`_meta` demonstrably not forwarded to the model. The reporter said "from VsCode", and
+VS Code Copilot Chat is a **different MCP client** -- shipped **built in** to VS Code
+1.137 (invisible to `code --list-extensions`; installing it fails as a downgrade).
+Registering a tapped server there needs `code --add-mcp`, and the reproduction is in
+flight behind that tap.
+
+One harness fact worth keeping: of everything installed here, only the Copilot CLI
+prints token counts and credits per run, which is why it is the instrument for token
+accounting even though it is not the client with the bug. `antigravity` has no
+headless mode at all -- it is an Electron IDE whose `bin/` holds only
+`language_server` and `webm_encoder` -- so `--harness agy` targets a GUI, and `gemini`
+CLI is the headless substitute for that model family.
+
+### 16.6 -- the bug the report was actually sitting on top of
+
+The user pasted one line from their own VS Code session while this phase was open:
+
+> Failed to validate tool mcp_kiln_kiln_edit: Error: tool parameters array type must have
+> items. Please open an issue for the MCP server or extension which provides this tool
+
+That is a different failure from the token complaint, and a worse one. Five of the
+thirteen tools -- `kiln_render`, `kiln_edit`, `kiln_inspect`, `kiln_view_interior`,
+`kiln_screenshot_animation` -- shared a `z.tuple` camera vector, which zod renders as
+`prefixItems` plus **`items: false`**. VS Code tests `items` for truthiness, so a
+2020-12-correct tuple reads to it as an array with no items and the tool is refused
+outright. Those five are the authoring loop: in that host an asset could not be built
+at all, while `tools/list` looked healthy.
+
+**It was never a regression.** The tuple arrived with the camera capture work in
+`b2eff76` (2026-09-05) and has not changed since. Measured, not assumed:
+
+| harness | tools registered |
+| --- | --- |
+| Claude Code | 13 of 13 (this repo's own session holds all five) |
+| opencode 1.18.30 | 13 of 13 |
+| Copilot **CLI** 1.0.83 | 13 of 13 |
+| VS Code Copilot Chat 0.65.0 | rejects 5 |
+
+The two Copilot surfaces disagree with each other, which is the clearest sign this is
+client-side.
+
+**And Kiln was the conformant party.** SEP-1613 is **Final**: 2020-12 is the default
+dialect for `inputSchema`/`outputSchema`, it names "positional array validation (->
+`prefixItems`)" as the migration, and it says *"Clients MUST support at least JSON
+Schema 2020-12"*. The same error is filed against many servers -- `microsoft/vscode`
+#296386, #277462, #257537, `docker/mcp-gateway` #311, a GitLab MR, and a PR elsewhere
+titled "Emit strict-validators-friendly JSON schemas (no tuple items, no `$ref`)" --
+and the mirror image exists too, `typescript-sdk` #745, where an SDK emitting draft-07
+breaks strict 2020-12 clients such as Claude Code.
+
+The change was still worth making, and the reason is not "Copilot asked". **Tuples are
+the one construct the two dialects spell irreconcilably**: draft-07 says `items: [...]`,
+2020-12 says `prefixItems` + `items: false`. A bounded uniform array -- `items: {type:
+number}` with `minItems`/`maxItems` -- is the only representation that is valid and
+*identical* under both. Choosing it retires a class of incompatibility instead of
+patching a client. It also shrank the surface: `tools/list` went 33,937 B to 32,081 B
+(~464 tokens per session, every harness) and `docs/tools.md` lost 288 lines.
+
+**The near-miss is the part worth keeping.** The first attempt recovered the tuple type
+with `.transform(v => v as [number, number, number])`. It typechecked, the MCP surface
+was perfect, and it **broke every non-MCP harness**: the Strands skin converts with
+`io: 'output'`, where zod throws "Transforms cannot be represented in JSON Schema",
+while the MCP SDK converts with `io: 'input'` and never sees it. Nothing but the
+in-process parity test would have caught it -- a change can be invisible on the
+transport you are looking at and fatal on the one you are not. A static type assertion
+has no such asymmetry, and both `io` modes were checked before it was kept.
+
+Two gates, because the obvious one is not sufficient on its own: no array in any
+advertised schema may carry a falsy `items`, **and** a camera vector must still refuse
+two, four, and non-numeric members at runtime. The first alone would stay green on a
+schema that had quietly widened into an unbounded number list, which is exactly the
+regression this fix could have introduced for the harnesses that already worked.
+
+### 16.7 -- how the VS Code side actually resolved
+
+The pre-fix reproduction is exact. `code --add-mcp` registered a tapped server at
+18:09:14; the tap recorded `initialize` then `tools/list` returning **33,937 B**; VS
+Code logged `Discovered 13 tools` at 18:09:39 and
+`Error: tool parameters array type must have items` at **18:09:40.648** -- twenty-six
+seconds after registration, from our own schema. Discovery succeeding and validation
+failing afterwards is why the server looked healthy while five tools were unusable.
+
+After the fix the same tap recorded `tools/list` at **32,081 B**, matching the local
+measurement exactly, and the owner's VS Code listed all thirteen `mcp_kiln_*` tools
+including `kiln_edit` -- the one the error had named.
+
+Two things are recorded as *not* proven, because the temptation is to round them up:
+
+- **No log line ever says a tool validated successfully.** Copilot Chat logs the
+  failure, not the pass, so "zero errors" is only evidence in a window that actually
+  started the server. `window2` had zero errors and an **empty** server log -- it never
+  started one, so its zero means nothing. Errors continuing at 23:37-23:40 in `window1`
+  are likewise not evidence against the fix: the stale pre-fix server was still
+  registered there and was stopped two seconds before the last of them.
+- **The server named `kiln` was never located.** The pasted error read
+  `mcp_kiln_kiln_edit`, but every server VS Code ran was one of the two registered here
+  (`kiln_workspace`, `kiln_verify`); there is no `kiln` in any MCP log, none in
+  `~/.config/Code/User/mcp.json`, none in `/home/matthewk/X/kiln/.vscode/`, and the
+  checkout at `scratch/kiln-docs/engine` is on `dccfe41` with no `dist` at all. The
+  before/after in the owner's own client is the evidence; the process behind it was not
+  identified.
+
+A GUI host is a poor instrument and that cost real time. What worked, in order of
+usefulness: **a JSON-RPC tap** wrapping the server (it answers "what did this client
+actually ask for" with no guessing -- it is how `resources/read` was ruled out at zero
+calls), then **`~/.config/Code/logs/*/window*/`**, where per-server logs give
+`Discovered N tools` and the Copilot Chat log gives the validation errors. `code chat -m
+agent` drives the desktop editor but cannot clear workspace trust, and there is no
+`--disable-workspace-trust` flag. `code serve-web` renders the editor in a browser and
+is scriptable, but Copilot Chat there needs a GitHub sign-in, so it is a dead end for
+unattended work. Registering a *new* server name is the reliable way to force a start;
+killing the process is not -- VS Code marks it `Error` and waits.
+
+
+## Phase 17 -- Seven harnesses, and what a plain prompt found that a scripted one could not
+
+| # | Question | Answer |
+|---|---|---|
+| 17.1 | How many harnesses can reach the tools? | **Seven.** `copilot` and `cursor-agent` adapters added; a full `smoke:harness` run returned 6/7, the seventh being opencode's *default model* down provider-side (three distinct `UnknownError` refs, and it fails on a bare "reply OK"). `muse-spark` passes |
+| 17.2 | Is npm the right way to install these? | **No, and it was never the real problem.** Every one of the seven ships a first-party `update` subcommand. The flakiness was three simultaneous owners of one binary: `codex` existed at `/usr/bin` (0.153.4, root-owned `sudo npm -g`), in an inactive nvm tree (0.139.0), and in the user prefix, with a `.zshrc` wrapper pinning the oldest. `codex doctor` reported `PATH entries (5)` |
+| 17.3 | Does the engine advertise its own version honestly? | **It did not.** `package.json` moved to 0.7.0 and four other declarations stayed at 0.6.0, so every MCP client reported `kiln v0.6.0`. Fixed, with a parity test |
+| 17.4 | Does a scripted brief measure what it claims? | **No.** See 17.5 |
+| 17.5 | What did Tier-1 plain prompts find? | Two `create-workspace.mjs` defects and two array-helper traps, none reachable by tier 0. See below |
+
+### 17.4 -- the brief was the harness dependency
+
+`harness-smoke.mjs` told the agent to call `kiln_list_primitives` and then "nothing else".
+Three things were wrong with that, and each failed before the model saw the subject.
+
+**Naming a tool is a portability bug.** Copilot namespaces MCP tools as `<server>-<tool>`.
+Its agent looked for the literal `kiln_list_primitives`, found none, and correctly reported
+the tools unavailable -- while `copilot -p` listing its own tools showed all thirteen as
+`kiln_workspace-kiln_*`. That single clause cost a whole harness. Saying the prefix may
+exist fixed it: 10 s, 12 tris.
+
+**A bare overview is names, not signatures.** It returns `createPart` as one name among
+eighteen in `structure:`, and its own first line says to call again with `{names:[...]}`.
+Under a brief that also says "nothing else", two of five harnesses wrote the
+JS-conventional `createPart(parent, {name, geo, material})` and were rejected at build
+time; codex, hermes and agy wrote the real positional form. Asking for the signatures made
+both failures pass **with the same models** -- claude 18 s, cursor-agent 17 s. It was never
+a model-capability difference.
+
+**The opaque rejection is not a defect.** `Generated asset execution was rejected.` carries
+no position because nothing from a sandboxed exception may cross that boundary; a syntax
+error is the one exception, recovered host-side by re-parsing with acorn. `kiln_validate`
+returning `valid: true` for that program is also correct -- it is documented as static.
+
+### 17.5 -- two workspace defects that only an authoring run could reach
+
+**A generated hermes workspace cannot run at all.** `hermes.mjs` sets
+`HERMES_HOME=<workspace>/.hermes` so the generated `config.yaml` supplies `mcp_servers` and
+`skills.external_dirs`. That same redirect discards the provider: the user's `model:` and
+`~/.hermes/.env` live in the real home, so the run dies with *"No inference provider
+configured"*. Tier 0 never saw it because `smoke:harness` invokes `hermes` directly and
+never touches the launcher. The fix is a decision about how a workspace inherits provider
+secrets, so it is recorded rather than guessed at.
+
+**A generated codex workspace's MCP registration is inert.** `managedFiles` writes
+`.codex/config.toml`, but codex reads only `$CODEX_HOME/config.toml`: run from inside the
+workspace, `codex doctor` still reports `config.toml ~/.codex/config.toml` and counts the
+user-level servers. Codex workspaces therefore depend on a user-level registration existing.
+Its programs do land in the workspace store, but by accident of `--cd` setting the server's
+CWD, not because the workspace config was read.
+
+### 17.6 -- the array helpers surprise agents in two different ways
+
+Two models found these independently, and `src/ops.ts` confirms both.
+
+- **`arrayLinear` drops rotation.** It reads `source.position` only and passes
+  `{ position }` to `createInstance`; the source's rotation never reaches the copies. The
+  longship author proved it with an isolated four-bar control -- source tilted 30 degrees,
+  copies axis-aligned -- then kept the helper for spacing and restored the angle in a loop.
+- **`arrayRadial` orbits the world origin.** `basePos.applyMatrix4(m)` rotates the position
+  vector about the origin, which its own comment states and its example hides by starting at
+  `[1, 0, 0]`. A diving-bell author put it on portholes whose centres are off-origin and the
+  bolts were "flung across the scene".
+
+They are also inconsistent with each other: `arrayRadial` sets a rotation on every copy,
+`arrayLinear` carries none.
+
+### 17.7 -- what the tiers are actually for
+
+Tier 0 proves plumbing and nothing else, which is why it may name a tool. Tier 1 is one
+sentence -- "Generate a weathered dockside crane asset with rusted steel and frayed rope" --
+in a generated workspace, and the agent finding `kiln-author-asset` unaided is part of the
+result; opencode did, then made 18 tool calls, bound five procedural textures, reviewed a
+material-faithful GPU sheet and saved a 10,304-triangle asset. Asking for the subject rather
+than the API is what produced the textures. Tier 2 hands over nothing but a repository
+location, so the setup instructions are inside the system under test.
+
+Evidence rule for every tier: rebuild the saved source independently. The gallery counts
+`proceduralTexture` calls in the source rather than trusting the report -- which is how a
+lighthouse described as "green-grey barnacled stone" was shown to contain zero textures and
+zero `pbrMaterial`, its barnacles modelled as geometry.
+
+### 17.8 -- which harnesses actually read a workspace-local config
+
+Registering `kiln_workspace` at user level for all seven made the tier-1 runs work, and it
+also **masked** the question this section answers. The program store is not a discriminator
+either: a user-level server with no `KILN_PROGRAM_STORE` defaults to `.kiln/programs`
+relative to its CWD, and the harness runs with the workspace as CWD, so both paths write to
+the same place. The only honest test is to remove the user-level entry and see what survives.
+
+- **agy reads it.** With `kiln_workspace` removed from its user config and
+  `agy mcp list` reporting none, a run inside the workspace still listed every Kiln tool.
+  `.agents/mcp_config.json` is genuinely consumed.
+- **codex cannot read one, structurally.** Every configuration source it has is
+  `$CODEX_HOME`-rooted: `-c key=value` overrides `~/.codex/config.toml`, `-p <name>` layers
+  `$CODEX_HOME/<name>.config.toml`, and `-C/--cd` only changes the working directory. Run
+  from inside a workspace, `codex doctor` still reports `config.toml ~/.codex/config.toml`.
+  The `.codex/config.toml` that `managedFiles` writes can never be read by anything.
+- **claude, copilot, cursor-agent and opencode** read project-local config as their
+  documented norm, and their generated files match the spelling each one's own tooling
+  produces. They were not re-tested with the user-level entry removed, so this row is
+  documentation rather than measurement.
+
+### 17.9 -- the agnostic fix for a harness whose config is user-global
+
+Two of the three user-global harnesses are handled by redirecting their home -- `agy.mjs`
+sets nothing, `hermes.mjs` sets `HERMES_HOME` -- and that redirect is precisely what breaks
+hermes: the provider selection and API key live in the real home, so an isolated home is a
+logged-out home. Codex would hit the same wall for `auth.json` if a `codex.mjs` launcher
+redirected `CODEX_HOME`.
+
+**Inject the server per invocation instead of redirecting the home.** Codex takes nested
+TOML overrides on the command line, and they compose into exactly the entry the workspace
+needs:
+
+```sh
+codex exec \
+  -c 'mcp_servers.kiln_workspace.command="node"' \
+  -c 'mcp_servers.kiln_workspace.args=["<runtime>/dist/mcp-server.mjs"]' \
+  -c 'mcp_servers.kiln_workspace.env={KILN_PROGRAM_STORE="<ws>/.kiln/programs",KILN_RENDER="auto"}' \
+  --approve-for-me --skip-git-repo-check --cd <ws> "<prompt>"
+```
+
+Verified with the user-level registration removed: all thirteen tools appeared as
+`mcp__kiln_workspace__*`. Nothing is written outside the workspace, `CODEX_HOME` is
+untouched so authentication survives, and only documented flags are used. The shape is the
+generated-launcher pattern the repository already uses for agy and hermes, so
+`codex.mjs` belongs beside `agy.mjs` and `hermes.mjs` rather than being a special case.
+
+The principle generalises, and it is the rule worth carrying to the next user-global
+harness: **a workspace may add configuration to an invocation, but it must not replace the
+home that holds credentials.** Redirecting a home is what turned a working hermes install
+into "No inference provider configured".
+
+One more duplicate surfaced during that test: codex also exposes
+`mcp__codex_apps__kiln_local_kiln_*`, a second Kiln registration from a codex app, alongside
+`kiln_workspace`. Same hazard as the stale `kiln` in `~/.cursor/mcp.json` -- a name that
+looks like this engine and may not be it.
+
+## Phase 18 -- Closing the stabilisation queue
+
+The queue ROADMAP.md opened on 2026-09-13 is closed. This phase records what changed about
+the *diagnoses*, because in three of eight rows the first explanation was wrong and the
+measurement that corrected it is the reusable part.
+
+### 18.1 -- the hermes failure had no credential in it
+
+The row read "the workspace launcher discards the provider selection and API key". Half of
+that was invented. Measured instead of assumed:
+
+| | real home | `HERMES_HOME` -> workspace |
+| --- | --- | --- |
+| `model.default` | `gpt-5.6-sol` | not set |
+| `model.provider` | `openai-codex` ("ChatGPT or Codex Subscription") | not set -> "Auto" |
+| every API key | not set | not set |
+
+`~/.hermes/.env` holds `TERMINAL_TIMEOUT`, `BROWSER_*` and `*_DEBUG` -- tool toggles. The
+provider is a **subscription OAuth**, so the credential is a token in `auth.json`, and there
+is no key anywhere for a workspace to inherit. A plan to symlink `.env` forward would have
+linked the wrong file and fixed nothing.
+
+`HERMES_HOME` resolves both paths, which `hermes config path` and `hermes config env-path`
+report separately and which is why the redirect was so quietly destructive:
+
+```
+HERMES_HOME=<ws>/.hermes hermes config path      -> <ws>/.hermes/config.yaml   # wanted
+HERMES_HOME=<ws>/.hermes hermes config env-path   -> <ws>/.hermes/.env          # not wanted
+```
+
+The owner's instinct that the install might be stale was also correct: it was 45 commits
+behind. Updating it first was the right order, and it changed nothing -- upstream HEAD still
+has no project-local config and `hermes mcp add` still has no scope flag. So the fix is the
+invocation-shaped one, and the update is now recorded as checked rather than assumed.
+
+### 18.2 -- two flags that fail in opposite directions
+
+Both found by running the launcher rather than reading the help twice.
+
+`--skills SKILLS` reads "Preload one or more skills for the session", which sounds like a
+path and is not: it takes NAMES resolved against configured sources. Handing it
+`<ws>/.agents/skills` aborts the whole run with `Unknown skill(s): <path>`. Skills reach the
+agent through `--in`, which makes hermes inject the workspace's AGENTS.md as a rule.
+
+`--ignore-rules` was in the *documented* hermes command, presumably to keep user-level rules
+out of a workspace session. It also skips AGENTS.md -- the workspace's own guide, the thing
+the whole directory exists to deliver. It is gone from the generated instruction and
+documented as opt-in for anyone who does want both suppressed.
+
+### 18.3 -- S7 was two claims and only one was a defect
+
+"`--render auto` falls back to CPU rather than starting the GPU service" described intended
+behaviour. `RenderPortOptions.autoSpawn` says why in its own docstring: a one-shot CLI
+invocation should not pay a GPU process's startup to draw one sheet. That stands.
+
+The defect was next door. `--render gpu` **threw** when nothing was listening, even where the
+installation ships a renderer that would start in seconds, because only the MCP server ever
+passed `autoSpawn`. A mode whose entire meaning is "I asked for a guarantee and would rather
+know than be quietly downgraded" was answering with a technicality. `mode === 'gpu'` now
+implies the spawn.
+
+Making that change surfaced two more things the type checker found and no test would have:
+the branch read `options.serviceDir` unguarded, and `gpu` can now reach it with no options at
+all -- a crash; and the outer `if (mode === 'gpu') throw` became unreachable, which TS proved
+by narrowing `mode` to `'auto'`. The remaining message names both facts, what was probed and
+why nothing could start, because "not reachable" alone left the reader unable to tell whether
+to start something or install something.
+
+The workspace guide's "restart this session, because the MCP server resolves the service once
+at startup" was wrong about the mechanism and accidentally right about one case. `autoSpawn`
+attaches a lazy port that starts the renderer on the first view needing it -- no restart. But
+`buildRenderPort` attaches nothing when the service is not INSTALLED, deliberately, so that a
+CPU-only machine reports an ordinary CPU render rather than a GPU degrade. Install it
+mid-session and that session stays on CPU for its lifetime. The sentence now says that, and
+the code was left alone: attaching unconditionally would make every machine without a GPU
+report a degrade on every render.
+
+### 18.4 -- the bind default, and why refusing beats warning
+
+`HOST` unset bound every interface. The MCP server's on-demand spawn already passed
+`127.0.0.1`, so the exposure was confined to the *documented* manual start -- `npm start`,
+under the words "Nothing else to configure".
+
+What that exposed is worth stating plainly, because "a render service" sounds harmless.
+`POST /render` accepts a 48 MB GLB, parses it with three.js, and hands the buffers to Dawn and
+a native Vulkan driver, on a queue that renders one frame at a time. So an unauthenticated
+exposed bind is a free GPU, a denial of the owner's own renders from a single slow request,
+and an untrusted binary-asset parser in front of a kernel driver. CVE-2026-7482 is that last
+one realised: a crafted model file drove a heap out-of-bounds read in a local inference
+server, scored 9.1, against roughly 175k publicly reachable instances. Their default was
+loopback and operators widened it. Ours widened itself.
+
+The rule is **the bind address decides whether auth is required** -- loopback free, anything
+wider token-or-refuse, `RENDER_SERVICE_ALLOW_UNAUTHENTICATED=1` as an explicit waiver the
+operator has to spell out. Refusing rather than warning is not a new policy in that file; it
+is the one already applied to a software adapter, so a driver regression yields a service that
+will not start rather than one that silently renders on CPU. A warning on the stderr of a
+backgrounded process is not a control.
+
+Two details worth keeping. `0.0.0.0` and `::` are NOT loopback: reading an unspecified bind as
+local is the exact mistake, and the test pins it. And the policy is a **pure module** with its
+own test, because `render-service/test/` had no HTTP-surface test at all and every one of its
+tests is pure -- which is what makes `npm ci --ignore-scripts` sufficient in CI. The one module
+deciding whether this service is reachable from the network must not be the one that needs a
+GPU to verify.
+
+### 18.5 -- both stale `kiln` servers were local, and the fix is a field not a cleanup
+
+Investigated rather than documented further:
+
+| Suspect | Finding |
+| --- | --- |
+| `kiln` in `~/.cursor/mcp.json` | Points at `/home/matthewk/kiln-oss-test/src/mcp-server.ts`. The directory exists, reports **0.6.0**, and is **not a git repository** -- an extracted package. Registered beside the correct `kiln_workspace`, so Cursor offers both |
+| `codex_apps__kiln_local` | Appears only in `~/.codex/cache/codex_apps_tools/<hash>.json`, a **cache** file. `~/.codex/config.toml` registers only `kiln_workspace` |
+
+Neither is shipped by this repository and removing them is a local edit. What the repository
+was missing is different: the generated guide has always said *"a server named kiln may be a
+different installation; do not substitute it silently"*, and nothing in any tool result let an
+agent comply. `kiln_list_primitives {capabilities:true}` now reports
+`engine: {version, installUrl}`, and the guide names the comparison against `runtime` in
+`.kiln/workspace.json`.
+
+`src/engine-identity.ts` reads no file, deliberately: `src/views/renderer-id.ts` does a
+`readFileSync` at module load and AGENTS.md warns about that specific hazard, and this module is
+reachable from the tool registry. The version is a literal, kept honest by the version-parity
+test that already pins three plugin manifests and `MCP_SERVER_VERSION` to `package.json`.
+
+### 18.6 -- the check that would have caught 18.1 and S1
+
+Both workspace defects passed every gate, for one reason: `harness-smoke.mjs` invokes each CLI
+directly and never touches the generated launcher. The launcher was the only unexercised
+artifact in the workspace, and it was where both bugs lived.
+
+`workspace-bootstrap.test.ts` now asserts each user-global harness's launcher: that it
+registers per invocation, that it parses under `node --check` rather than a regex, and that it
+does **not** name the home holding credentials. A real invocation needs a signed-in CLI and
+costs money, which is what Tier 0 is for; what belongs in CI is the shape.
+
+### 18.7 -- the array helpers disagreed with each other
+
+`arrayLinear` read only `source.position`, so a copy of a rotated part came back
+axis-aligned, while `arrayRadial` twelve lines below set a rotation on every copy. Two
+dispatched models hit it independently. Copies carry rotation and scale now. This **changes
+exported geometry** for a program that arrays a rotated or scaled source, which is correct at
+0.7.0 and recorded in the changelog as a behaviour change.
+
+`arrayRadial` orbiting the parent's origin was not a bug -- its docstring and example both say
+so -- but it was unworkaroundable short of writing the matrix by hand, so it takes an optional
+`center`. Both helpers had **no unit tests**, which is how two neighbours contradicting each
+other survived; there are seven now, written failing first.
+
+### 18.8 -- what stayed deferred, re-checked rather than restated
+
+- **`ai` 7 / `openai` 7**: re-read from the registry, and it is now **two** independent
+  conflicts, not one. `@strands-agents/sdk@1.17.0` (latest) peers `@ai-sdk/provider: ^3.0.0`
+  *and* `openai: ^6.45.0`; `@openrouter/ai-sdk-provider@3.0.0` peers `ai: ^7.0.0`, which needs
+  provider 4. Upstream and structural.
+- **SEP-2640**: the re-check signal 14.1 named was the published TypeScript SDK gaining skills
+  helpers. This repo has since moved to `@modelcontextprotocol/{client,server}@2.0.0`, which
+  are also the latest -- and neither carries `skills/list`. Still nothing public consumes it.
+- **16.4 / S4**: confirmed against the spec rather than the memory of it. MCP Apps (Stable,
+  2026-01-26) permits a UI iframe `tools/call`, `resources/read`, `notifications/message`,
+  `ui/initialize` and `ping`. The decided shape holds; deferred to the next cycle by the
+  owner's call, since today's over-limit behaviour is a graceful refusal.
+- **Tier 2 dogfooding**: still never run, still the tier most likely to find documentation
+  defects, and still needing one harness isolated from user-level registration.
+
+### 18.9 -- `bun test --update-snapshots` wrote a corrupt file, twice in a row
+
+Worth recording because the failure mode is silent and the obvious retry reproduces it.
+
+Changing two catalog descriptions moved two review-gate snapshots, as intended. Running
+`bun test <file> --update-snapshots` (Bun 1.4.2) reported `0 fail` and `snapshots: +2 added`,
+and an immediate isolated re-run passed. The full gate then failed on both, with
+
+```
+error: Failed to snapshot value: // Scene & structure (globals ...
+```
+
+which reads like a serializer complaint and is not one. The written `.snap` file was **invalid
+JavaScript**: the new content is shorter than the old, and the writer overwrote in place rather
+than rewriting, leaving an orphaned tail of the previous value *after* the closing delimiter.
+
+```
+  // e.g. const v = validateAsset(root, 'prop');"
+`;
+n' | 'vehicle')          <-- orphaned tail of the old snapshot
+  // Checks geometry and material costs for the selected category. ...
+`;
+```
+
+`node --check` on a copy renamed to `.js` proves it in one command, and confirms the committed
+file was valid before. `+2 added` rather than "updated" was the tell in the tool output.
+
+The fix is to **delete the `.snap` file and regenerate**, which produces a valid file and a diff
+containing only the intended change. The lesson generalises past snapshots: a formatter or
+writer reporting success is not evidence that what it wrote parses. Where a generated file is
+executable, check that it executes -- which is the same reasoning behind running `node --check`
+on the generated launchers in 18.6 rather than regex-matching them.

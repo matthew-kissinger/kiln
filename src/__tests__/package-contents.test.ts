@@ -34,3 +34,32 @@ it('declares Node commands and the files needed by an installed workspace', asyn
     ).toBeGreaterThan(0);
   }
 });
+
+it('advertises one version everywhere a client or installer can read it', async () => {
+  // The 0.7.0 release bumped `package.json` and added a gate that catches a bump
+  // which was never rebuilt. It did not catch the other direction: four separate
+  // declarations of the same number stayed at 0.6.0, so every MCP client reported
+  // `kiln v0.6.0` against a 0.7.0 engine and all three plugin manifests advertised
+  // a version that had not shipped for 21 changes. A bug report citing a version
+  // is only useful if the version is true.
+  const read = async (file: string) =>
+    JSON.parse(await readFile(resolve(import.meta.dir, '../..', file), 'utf8')).version;
+  const engine = await read('package.json');
+  expect(engine).toMatch(/^\d+\.\d+\.\d+$/);
+  for (const manifest of [
+    'plugin.json',
+    '.claude-plugin/plugin.json',
+    '.codex-plugin/plugin.json',
+  ]) {
+    expect(await read(manifest)).toBe(engine);
+  }
+  const { MCP_SERVER_VERSION } = await import('../mcp-server');
+  expect(MCP_SERVER_VERSION).toBe(engine);
+  // The literal that `engineIdentity()` reports to a model asking which
+  // installation answered. It cannot read `package.json` -- this graph is kept
+  // free of import-time node dependencies, per AGENTS.md -- so this assertion is
+  // the only thing keeping it true.
+  const { ENGINE_VERSION, ENGINE_INSTALL_URL } = await import('../engine-identity');
+  expect(ENGINE_VERSION).toBe(engine);
+  expect(ENGINE_INSTALL_URL).toMatch(/^file:\/\/.*\/$/);
+});

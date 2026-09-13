@@ -1,4 +1,5 @@
 import { z } from 'zod';
+import { engineIdentity } from '../engine-identity';
 import { listPrimitives } from '../list-primitives';
 import type { KilnToolContext, KilnToolDef } from './registry';
 import { MAX_PROGRAM_BYTES } from '../program-store';
@@ -65,6 +66,11 @@ export function createKilnDiscoveryDef(context: KilnToolContext): KilnToolDef {
       }
       const capabilities = {
         version: 'kiln.capabilities.v1',
+        // Which installation answered. A server named `kiln` may be a different
+        // one, and until this field existed nothing in a tool result could tell
+        // you -- so the workspace guide's "do not substitute it silently" had
+        // nothing to check against. Compare with `runtime` in .kiln/workspace.json.
+        engine: engineIdentity(),
         execution:
           context.localExecution ??
           (context.evaluatorPort
@@ -178,8 +184,23 @@ export function createKilnDiscoveryDef(context: KilnToolContext): KilnToolDef {
         input.overview ??
         !(input.name || input.query || input.category || input.offset || input.limit);
       if (overview) {
+        // The two helpers EVERY program calls, with their real signatures, in the
+        // overview itself. A list of bare names invites the JS-conventional guess
+        // `createPart(parent, {...})`, and dispatched models made exactly that
+        // guess often enough to cost each of them a revision before they read a
+        // detail entry. Read from the catalog rather than written out here, so the
+        // overview cannot drift from what {names:[...]} returns.
+        const mustCall = ['createRoot', 'createPart']
+          .map((name) => all.find((entry) => entry.name === name))
+          .filter((entry): entry is (typeof all)[number] => Boolean(entry))
+          .map((entry) => `  ${entry.signature} -> ${entry.returns}`);
         const text = [
           'Kiln helper overview. Use {names:["boxGeo","createPart"]} for up to six signatures/examples together, {name:"boxGeo"} for one, {query:"holes"} for an operation, or {category:"geometry"} to browse.',
+          ...(mustCall.length
+            ? [
+                `Every program calls these two, so their exact signatures are here rather than a request away:\n${mustCall.join('\n')}\nParts AUTO-ADD to opts.parent; never call parent.add(createPart(...)). rotation is DEGREES.`,
+              ]
+            : []),
           ...categories
             .map(
               (group) =>

@@ -190,3 +190,102 @@ function build() {
     expect(result).toBeDefined();
   });
 });
+
+/**
+ * A tool a client refuses to register is worse than a missing tool: the server looks
+ * healthy, `tools/list` succeeds, and only the call site fails.
+ *
+ * Zod renders `z.tuple` as JSON Schema 2020-12 -- `prefixItems` plus `items: false`,
+ * meaning "nothing beyond the listed positions". That is correct, and it is also
+ * unreadable to a consumer written against draft-07, where `items` must be a schema.
+ * VS Code's tool validator tests `items` for truthiness, so `false` reads to it as an
+ * array with no items and it rejects the whole tool:
+ *
+ *   Failed to validate tool mcp_kiln_kiln_edit: tool parameters array type must have items
+ *
+ * Five of the thirteen tools carried one, and they were the authoring loop --
+ * `kiln_render`, `kiln_edit`, `kiln_inspect`, `kiln_view_interior` and
+ * `kiln_screenshot_animation` -- so an asset could not be built in that host at all.
+ */
+describe('every advertised schema is readable by a draft-07 consumer', () => {
+  function arraysWithUnusableItems(schema: unknown, path: string): string[] {
+    if (!schema || typeof schema !== 'object') return [];
+    if (Array.isArray(schema))
+      return schema.flatMap((entry, index) => arraysWithUnusableItems(entry, `${path}[${index}]`));
+    const node = schema as Record<string, unknown>;
+    const declared = node['type'];
+    const isArray = declared === 'array' || (Array.isArray(declared) && declared.includes('array'));
+    // Truthiness, not presence: `items: false` is the 2020-12 spelling that trips this.
+    const here = isArray && !node['items'] ? [path] : [];
+    return [
+      ...here,
+      ...Object.entries(node).flatMap(([key, value]) =>
+        arraysWithUnusableItems(value, `${path}.${key}`),
+      ),
+    ];
+  }
+
+  it('no array in any tool schema has a falsy items keyword', async () => {
+    const tools = await listToolsOverMcp();
+    expect(tools.length).toBeGreaterThan(0);
+    const offenders = tools.flatMap((tool) =>
+      arraysWithUnusableItems(tool.inputSchema, `${tool.name}.inputSchema`),
+    );
+    expect(offenders).toEqual([]);
+  });
+
+  it('a three-number vector still round-trips exactly three numbers', async () => {
+    const tools = await listToolsOverMcp();
+    const render = tools.find((tool) => tool.name === 'kiln_render')!;
+    // Whatever shape it is advertised as, the bound has to survive the change: this
+    // fix must not quietly widen a camera vector into an unbounded number list.
+    const json = JSON.stringify(render.inputSchema);
+    expect(json).toContain('"maxItems":3');
+    expect(json).toContain('"minItems":3');
+  });
+});
+
+/**
+ * The portability fix above traded a tuple for a bounded uniform array. What must not
+ * have changed is what the server accepts, because every other harness was already
+ * working: loosening a camera vector into an unbounded number list would be a silent
+ * regression for all of them in exchange for a fix one host needed.
+ */
+describe('a camera vector is still exactly three numbers at runtime', () => {
+  const camera = (position: unknown) => ({
+    code: "const meta = { name: 'B', category: 'prop' }; function build() { const root = createRoot('B'); createPart('Body', boxGeo(1,1,1), gameMaterial(0x808080), { position: [0,0.5,0], parent: root }); return root; }",
+    capture: {
+      version: 'kiln.capture.v1',
+      shots: [{ camera: { type: 'explicit', projection: 'perspective', position } }],
+    },
+  });
+  const refusal = async (position: unknown) => {
+    const def = kilnMcpToolDefs().find((entry) => entry.name === 'kiln_render')!;
+    const result = await runTool(def, camera(position)).catch((error) => ({
+      isError: true as const,
+      content: [{ type: 'text', text: String(error) }],
+    }));
+    return { failed: result.isError === true, text: JSON.stringify(result) };
+  };
+
+  it('accepts exactly three numbers', async () => {
+    expect((await refusal([3, 2, 4])).failed).toBe(false);
+  });
+
+  /**
+   * Matched on the message zod actually produces, not on "some error appeared". An
+   * earlier draft of this test asserted a generic /invalid|error/ and passed on an
+   * unrelated "Unrecognized key" from a malformed `capture` -- it was green while
+   * measuring nothing about arity at all.
+   */
+  it.each([
+    ['two numbers', [1, 2], /position: Too small: expected array to have exactly 3 items/],
+    ['four numbers', [1, 2, 3, 4], /position: Too big: expected array to have exactly 3 items/],
+    ['a non-number member', [1, 2, 'three'], /position\.2[^"]*expected number/],
+    ['not an array at all', 3, /position: Invalid input: expected array, received number/],
+  ])('rejects %s', async (_label, position, expected) => {
+    const { failed, text } = await refusal(position);
+    expect(failed).toBe(true);
+    expect(text).toMatch(expected);
+  });
+});

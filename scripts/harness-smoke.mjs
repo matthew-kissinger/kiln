@@ -32,8 +32,25 @@ import { HARNESSES, REPO, makeSandbox, parseDuration, run } from './harness.mjs'
 // a single command-line string and a newline in it ends the command.
 const BRIEF = (file) =>
   [
-    'You have the Kiln MCP tools. Do exactly this, in order, and nothing else.',
-    '1) Call kiln_list_primitives and note one geometry helper it lists.',
+    // Tool names are not portable. Copilot namespaces every MCP tool as
+    // `<server>-<tool>`, so its agent was asked for `kiln_list_primitives`,
+    // found nothing by that literal name, and correctly reported the tools
+    // missing -- while `copilot -p` listing its own tools showed all thirteen as
+    // `kiln_workspace-kiln_*`. Naming a tool in a prompt is a harness dependency,
+    // so say the prefix may exist rather than assuming one spelling.
+    'You have the Kiln MCP tools. Their names may carry a server prefix such as',
+    '`kiln_workspace-kiln_render`; match on the part after any prefix.',
+    'Do exactly this, in order, and nothing else.',
+    // Ask for the SIGNATURES, not just the names. A bare `kiln_list_primitives`
+    // returns a compact overview -- `createPart` appears as a name in a list of
+    // eighteen -- and its own first line says to call again with `{names:[...]}`
+    // for signatures. With a brief that also says "nothing else", two of five
+    // harnesses guessed the JS-conventional `createPart(parent, {name, geo,
+    // material})` and were rejected at build time, while three wrote the real
+    // positional form. That measures signature-guessing luck, which is not what
+    // this script is for: it exists to prove the tools are reachable.
+    '1) Call kiln_list_primitives with {"names":["createRoot","createPart","boxGeo","gameMaterial"]}',
+    'and use exactly the signatures it returns.',
     `2) Write ${file} containing a Kiln program: a bare "const meta = { name: 'Smoke', category: 'prop' };"`,
     'then "function build() {" which calls createRoot(), makes one 1m box part with boxGeo and gameMaterial(0x808080),',
     'and returns the root. No imports and no exports.',
