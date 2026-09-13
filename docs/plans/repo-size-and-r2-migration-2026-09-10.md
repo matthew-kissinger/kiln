@@ -2608,3 +2608,63 @@ accounting even though it is not the client with the bug. `antigravity` has no
 headless mode at all -- it is an Electron IDE whose `bin/` holds only
 `language_server` and `webm_encoder` -- so `--harness agy` targets a GUI, and `gemini`
 CLI is the headless substitute for that model family.
+
+### 16.6 -- the bug the report was actually sitting on top of
+
+The user pasted one line from their own VS Code session while this phase was open:
+
+> Failed to validate tool mcp_kiln_kiln_edit: Error: tool parameters array type must have
+> items. Please open an issue for the MCP server or extension which provides this tool
+
+That is a different failure from the token complaint, and a worse one. Five of the
+thirteen tools -- `kiln_render`, `kiln_edit`, `kiln_inspect`, `kiln_view_interior`,
+`kiln_screenshot_animation` -- shared a `z.tuple` camera vector, which zod renders as
+`prefixItems` plus **`items: false`**. VS Code tests `items` for truthiness, so a
+2020-12-correct tuple reads to it as an array with no items and the tool is refused
+outright. Those five are the authoring loop: in that host an asset could not be built
+at all, while `tools/list` looked healthy.
+
+**It was never a regression.** The tuple arrived with the camera capture work in
+`b2eff76` (2026-09-05) and has not changed since. Measured, not assumed:
+
+| harness | tools registered |
+| --- | --- |
+| Claude Code | 13 of 13 (this repo's own session holds all five) |
+| opencode 1.18.30 | 13 of 13 |
+| Copilot **CLI** 1.0.83 | 13 of 13 |
+| VS Code Copilot Chat 0.65.0 | rejects 5 |
+
+The two Copilot surfaces disagree with each other, which is the clearest sign this is
+client-side.
+
+**And Kiln was the conformant party.** SEP-1613 is **Final**: 2020-12 is the default
+dialect for `inputSchema`/`outputSchema`, it names "positional array validation (->
+`prefixItems`)" as the migration, and it says *"Clients MUST support at least JSON
+Schema 2020-12"*. The same error is filed against many servers -- `microsoft/vscode`
+#296386, #277462, #257537, `docker/mcp-gateway` #311, a GitLab MR, and a PR elsewhere
+titled "Emit strict-validators-friendly JSON schemas (no tuple items, no `$ref`)" --
+and the mirror image exists too, `typescript-sdk` #745, where an SDK emitting draft-07
+breaks strict 2020-12 clients such as Claude Code.
+
+The change was still worth making, and the reason is not "Copilot asked". **Tuples are
+the one construct the two dialects spell irreconcilably**: draft-07 says `items: [...]`,
+2020-12 says `prefixItems` + `items: false`. A bounded uniform array -- `items: {type:
+number}` with `minItems`/`maxItems` -- is the only representation that is valid and
+*identical* under both. Choosing it retires a class of incompatibility instead of
+patching a client. It also shrank the surface: `tools/list` went 33,937 B to 32,081 B
+(~464 tokens per session, every harness) and `docs/tools.md` lost 288 lines.
+
+**The near-miss is the part worth keeping.** The first attempt recovered the tuple type
+with `.transform(v => v as [number, number, number])`. It typechecked, the MCP surface
+was perfect, and it **broke every non-MCP harness**: the Strands skin converts with
+`io: 'output'`, where zod throws "Transforms cannot be represented in JSON Schema",
+while the MCP SDK converts with `io: 'input'` and never sees it. Nothing but the
+in-process parity test would have caught it -- a change can be invisible on the
+transport you are looking at and fatal on the one you are not. A static type assertion
+has no such asymmetry, and both `io` modes were checked before it was kept.
+
+Two gates, because the obvious one is not sufficient on its own: no array in any
+advertised schema may carry a falsy `items`, **and** a camera vector must still refuse
+two, four, and non-numeric members at runtime. The first alone would stay green on a
+schema that had quietly widened into an unbounded number list, which is exactly the
+regression this fix could have introduced for the harnesses that already worked.

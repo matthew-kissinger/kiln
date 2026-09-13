@@ -28439,7 +28439,7 @@ var init_registry2 = __esm(() => {
       name: z4.string().optional().describe("Cell label. Auto-derived from the angles if omitted.")
     })).optional().describe("One camera per cell, in row-major order. Omit to use the preset default cameras. Must not exceed the preset capacity (max 9 overall).")
   }).optional().describe("Optional. Choose the contact-sheet shape and cameras. Omit it entirely for the standard six-view 3x2 grid, which is the right default for most assets.");
-  cameraVec3Input = z4.tuple([z4.number(), z4.number(), z4.number()]);
+  cameraVec3Input = z4.array(z4.number()).length(3);
   cameraShotInput = z4.object({
     name: z4.string().optional(),
     subject: z4.object({ path: z4.string().optional(), name: z4.string().optional() }).strict().refine((v) => v.path === undefined !== (v.name === undefined), {

@@ -3,6 +3,40 @@
 Changes to `@kiln/engine`. Source and installable packages are distributed through
 GitHub. The package is not published on the npm registry.
 
+## Five tools were unusable in VS Code, and had been since 0.7.0's camera work — 2026-09-12
+
+- `kiln_render`, `kiln_edit`, `kiln_inspect`, `kiln_view_interior` and
+  `kiln_screenshot_animation` all carried a `z.tuple` camera vector. Zod renders that as
+  JSON Schema 2020-12: `prefixItems` plus **`items: false`**, meaning "nothing beyond the
+  listed positions". VS Code's tool validator tests `items` for truthiness, so `false`
+  reads to it as an array with no items and it refuses to register the tool:
+  *"Failed to validate tool mcp_kiln_kiln_edit: tool parameters array type must have
+  items."* That is the whole authoring loop — no render, no edit.
+- **Not a regression, and not broken anywhere else.** The tuple arrived with the camera
+  capture work in `b2eff76` (2026-09-05) and never changed. Claude Code, opencode 1.18.30
+  and the Copilot **CLI** 1.0.83 all register 13 of 13; only VS Code Copilot Chat rejects
+  any. The two Copilot surfaces disagree with each other.
+- **Kiln was the conformant party.** SEP-1613 is Final: 2020-12 is the default dialect and
+  *"Clients MUST support at least JSON Schema 2020-12"*. The fix is still worth taking,
+  because tuples are the one construct the two dialects spell irreconcilably — draft-07
+  uses `items: [...]`, 2020-12 uses `prefixItems` + `items: false` — while a bounded
+  uniform array (`items: {type: number}` with `minItems`/`maxItems`) is valid and
+  identical in both. Choosing it removes a class of client incompatibility rather than
+  patching one client.
+- It also made the surface smaller: the `tools/list` frame went **33,937 B to 32,081 B**,
+  about 464 tokens saved once per session for every harness, and `docs/tools.md` lost 288
+  lines of tuple boilerplate.
+- The tuple TypeScript type is preserved by a static assertion, so nothing downstream
+  needed a cast. It is deliberately not a zod `.transform`: that reads as equivalent and
+  **breaks every non-MCP harness**, because the Strands skin converts with `io: 'output'`
+  where zod refuses — "Transforms cannot be represented in JSON Schema" — while the MCP
+  SDK converts with `io: 'input'` and never sees it. Only the in-process parity test
+  caught that.
+- Gated two ways: no array in any advertised schema may have a falsy `items`, and a camera
+  vector must still reject two, four, and non-numeric members at runtime. The second gate
+  exists because the first one alone would pass on a schema that had quietly become an
+  unbounded number list.
+
 ## Asset links now say how big they are and who they are for — 2026-09-12
 
 - A user reported "massive token usage" from VS Code Copilot, attributing it to

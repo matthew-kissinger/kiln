@@ -669,7 +669,33 @@ const legacyCaptureInput = z
       'six-view 3x2 grid, which is the right default for most assets.',
   );
 
-const cameraVec3Input = z.tuple([z.number(), z.number(), z.number()]);
+/**
+ * A three-number vector, advertised as a bounded uniform array rather than a tuple.
+ *
+ * `z.tuple` renders as JSON Schema 2020-12: `prefixItems` plus `items: false`, meaning
+ * "nothing beyond the listed positions". That is correct, and it is also unreadable to a
+ * consumer written against draft-07, where `items` must be a schema. VS Code's tool
+ * validator tests `items` for truthiness, so `false` reads to it as an array with no
+ * items and it refuses to register the tool at all -- `kiln_render`, `kiln_edit`,
+ * `kiln_inspect`, `kiln_view_interior` and `kiln_screenshot_animation` were all
+ * unusable there, which is the whole authoring loop.
+ *
+ * Every position holds the same type, so `minItems`/`maxItems` on a uniform array states
+ * exactly the same constraint and is valid under both drafts.
+ *
+ * The tuple TYPE is recovered by a static assertion, so `CameraVec3` still lines up
+ * across the view boundary and nothing downstream needs a cast. It is deliberately NOT
+ * `.transform(v => v as [number, number, number])`, which reads as the same thing and
+ * breaks every non-MCP harness: the Strands skin converts with `io: 'output'`, where zod
+ * refuses outright -- "Transforms cannot be represented in JSON Schema" -- while the MCP
+ * SDK converts with `io: 'input'` and never sees it. A change that looks identical on one
+ * transport can take the other one down. The assertion is sound because the runtime
+ * schema is unchanged: `.length(3)` still rejects every other arity.
+ */
+const cameraVec3Input = z.array(z.number()).length(3) as unknown as z.ZodType<
+  [number, number, number]
+>;
+
 const cameraShotInput = z
   .object({
     name: z.string().optional(),
