@@ -1,7 +1,7 @@
 import { afterEach, expect, test } from 'bun:test';
 import { mkdtemp, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
-import { dirname, join, resolve } from 'node:path';
+import { dirname, join } from 'node:path';
 import {
   FileAssetLibrary,
   localAssetLibrary,
@@ -56,22 +56,20 @@ test('project and additional named collection locations persist in workspace con
   ).toBe('override');
 });
 test('an unconfigured workspace exposes a project and a durable user library with clear labels', () => {
+  const workspace = join(tmpdir(), 'kiln-workspace-defaults');
+  const dataRoot = join(tmpdir(), 'kiln-user-data');
   const env = {
-    KILN_PROGRAM_STORE: '/work/game/.kiln/programs',
-    XDG_DATA_HOME: '/user/data',
+    KILN_PROGRAM_STORE: join(workspace, '.kiln', 'programs'),
+    XDG_DATA_HOME: dataRoot,
   };
   const store = localAssetLibrary(env);
   expect(store.collections()).toEqual([
     { id: 'project', label: 'This project' },
     { id: 'library', label: 'Your library' },
   ]);
-  expect(store.directory('project')).toBe(
-    join(dirname(dirname(resolve(env.KILN_PROGRAM_STORE))), 'assets', 'kiln'),
-  );
-  expect(store.directory('library')).toBe(join('/user/data', 'kiln', 'library'));
-  expect(defaultUserLibraryRoot(env, '/unused', 'linux')).toBe(
-    join('/user/data', 'kiln', 'library'),
-  );
+  expect(store.directory('project')).toBe(join(workspace, 'assets', 'kiln'));
+  expect(store.directory('library')).toBe(join(dataRoot, 'kiln', 'library'));
+  expect(defaultUserLibraryRoot(env, '/unused', 'linux')).toBe(join(dataRoot, 'kiln', 'library'));
 });
 test('a saved revision survives restarts, roundtrips without the source store, and detects tampering', async () => {
   const { root, store } = await library();
