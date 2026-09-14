@@ -17,6 +17,9 @@ test('crawler discovery points only to the canonical document, without hash rout
   expect(html).toContain('<meta property="og:image:height" content="630"');
   expect(html).toContain('<meta name="twitter:card" content="summary_large_image"');
   expect(html).toContain(
+    'content="27 Kiln assets built across coding-agent harnesses and multimodal models"',
+  );
+  expect(html).toContain(
     '<meta name="twitter:image" content="https://kilnstudio.tools/kiln-social.png"',
   );
   const socialImage = await readFile(new URL('../site/public/kiln-social.png', import.meta.url));
