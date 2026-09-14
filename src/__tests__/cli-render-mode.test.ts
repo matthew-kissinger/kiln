@@ -17,7 +17,7 @@ import type { AddressInfo } from 'node:net';
 
 import { afterEach, describe, expect, it } from 'bun:test';
 
-import { makeRemoteRenderPort, probeRenderService } from '../cli-render-mode';
+import { buildRenderPort, makeRemoteRenderPort, probeRenderService } from '../cli-render-mode';
 
 const servers: Server[] = [];
 
@@ -101,4 +101,51 @@ it('sends the shared grid background to the GPU service for ordinary asset sheet
   });
 
   expect(body?.background).toBe('#1a1a1a');
+});
+
+it('authenticates an auto-started local renderer with its inherited service token', async () => {
+  const previousClientToken = process.env.KILN_RENDER_TOKEN;
+  const previousServiceToken = process.env.RENDER_SERVICE_TOKEN;
+  const token = 'local-renderer-test-token';
+  let receivedToken: string | undefined;
+  const server = createServer(async (req, res) => {
+    receivedToken = req.headers['x-render-token'] as string | undefined;
+    for await (const _chunk of req) {
+      // Drain the request before answering, like the real render service.
+    }
+    res.setHeader('content-type', 'application/json');
+    res.end(
+      JSON.stringify({
+        ok: true,
+        rendererId: 'test-renderer',
+        views: [Buffer.from('png').toString('base64')],
+      }),
+    );
+  });
+  servers.push(server);
+  const url = await new Promise<string>((resolve) => {
+    server.listen(0, '127.0.0.1', () => {
+      resolve(`http://127.0.0.1:${(server.address() as AddressInfo).port}`);
+    });
+  });
+
+  try {
+    delete process.env.KILN_RENDER_TOKEN;
+    process.env.RENDER_SERVICE_TOKEN = token;
+    const context = await buildRenderPort('auto', undefined, {
+      autoSpawn: true,
+      start: async () => url,
+    });
+    await context.viewRenderPort!({
+      glb: new Uint8Array([1]),
+      viewDirs: [[1, 0, 0]],
+      size: 384,
+    });
+    expect(receivedToken).toBe(token);
+  } finally {
+    if (previousClientToken === undefined) delete process.env.KILN_RENDER_TOKEN;
+    else process.env.KILN_RENDER_TOKEN = previousClientToken;
+    if (previousServiceToken === undefined) delete process.env.RENDER_SERVICE_TOKEN;
+    else process.env.RENDER_SERVICE_TOKEN = previousServiceToken;
+  }
 });

@@ -5,6 +5,12 @@
  * their own store and renderer; schemas and image extraction stay in the registry.
  */
 import { McpServer, ResourceTemplate } from '@modelcontextprotocol/server';
+import {
+  EXTENSION_ID as MCP_APPS_EXTENSION_ID,
+  RESOURCE_MIME_TYPE as MCP_APPS_MIME_TYPE,
+  registerAppResource,
+  registerAppTool,
+} from '@modelcontextprotocol/ext-apps/server';
 import { localAssetLibrary } from './assets-node';
 import { readAssetResource, type AssetLink } from './assets-resources';
 import { serveStdio } from '@modelcontextprotocol/server/stdio';
@@ -26,6 +32,19 @@ import { createPackagedLocalToolContext } from './local-runtime';
 /** Server identity reported in the MCP handshake. */
 export const MCP_SERVER_NAME = 'kiln';
 export const MCP_SERVER_VERSION = ENGINE_VERSION;
+
+/** Optional wire features whose support is not negotiated by core MCP. */
+export type KilnMcpCompatibilityOptions = {
+  /**
+   * Add core `resource_link` blocks for saved artifact files.
+   *
+   * Core MCP 2026-07-28 permits these blocks but exposes no client capability
+   * for them. They therefore remain opt-in while clients differ in how they
+   * consume them. The same resource descriptors always remain in JSON text and
+   * structured content, and every URI remains readable through resources/read.
+   */
+  artifactResourceLinks?: boolean;
+};
 
 /**
  * Absolute path to the skills that ship beside this server. Both entry shapes
@@ -105,7 +124,11 @@ export function kilnMcpToolDefs(context: KilnToolContext = {}): KilnToolDef[] {
  * description of it. The JSON that accompanies an image has its embedded base64
  * stripped by the extractor, so pixels are never double-encoded onto the wire.
  */
-export async function runTool(def: KilnToolDef, args: unknown): Promise<KilnToolResult> {
+export async function runTool(
+  def: KilnToolDef,
+  args: unknown,
+  options: KilnMcpCompatibilityOptions = {},
+): Promise<KilnToolResult> {
   const output = await def.run(args);
 
   const multi = def.mediaMulti?.(output);
@@ -143,9 +166,16 @@ export async function runTool(def: KilnToolDef, args: unknown): Promise<KilnTool
   if (asText !== undefined) return { content: [{ type: 'text', text: asText }] };
 
   const resources = (output as { resources?: AssetLink[] } | null)?.resources ?? [];
-  const payload = resources.length ? { ...(output as object), resources: undefined } : output;
+  const includeResourceLinks = options.artifactResourceLinks === true;
+  const payload =
+    resources.length && includeResourceLinks
+      ? { ...(output as object), resources: undefined }
+      : output;
   return {
-    content: [{ type: 'text', text: JSON.stringify(payload, null, 2) }, ...resources],
+    content: [
+      { type: 'text', text: JSON.stringify(payload, null, 2) },
+      ...(includeResourceLinks ? resources : []),
+    ],
     ...(def.ui
       ? {
           structuredContent: output as Record<string, unknown>,
@@ -156,26 +186,45 @@ export async function runTool(def: KilnToolDef, args: unknown): Promise<KilnTool
 }
 
 /** Build the server, registering every def from the registry. */
-export function createKilnMcpServer(context: KilnToolContext = {}): McpServer {
+export function createKilnMcpServer(
+  context: KilnToolContext = {},
+  options: KilnMcpCompatibilityOptions = {},
+): McpServer {
   const server = new McpServer(
     {
       name: MCP_SERVER_NAME,
       version: MCP_SERVER_VERSION,
     },
-    { instructions: MCP_SERVER_INSTRUCTIONS },
+    {
+      instructions: MCP_SERVER_INSTRUCTIONS,
+      capabilities: {
+        extensions: {
+          [MCP_APPS_EXTENSION_ID]: { mimeTypes: [MCP_APPS_MIME_TYPE] },
+        },
+      },
+    },
   );
-  server.registerResource(
+  registerAppResource(
+    server,
     'kiln-asset-viewer',
     KILN_ASSET_WIDGET_URI,
     {
       description: 'Interactive Kiln asset viewer and downloads',
-      mimeType: 'text/html;profile=mcp-app',
+      _meta: {
+        ui: {
+          prefersBorder: true,
+          csp: { connectDomains: [], resourceDomains: [] },
+        },
+        'openai/widgetDescription':
+          'Inspect the saved 3D asset and download its GLB or editable bundle.',
+        'openai/widgetPrefersBorder': true,
+      },
     },
     async (uri) => ({
       contents: [
         {
           uri: uri.href,
-          mimeType: 'text/html;profile=mcp-app',
+          mimeType: MCP_APPS_MIME_TYPE,
           text: await (await import('./asset-widget')).readAssetWidgetHtml(),
           _meta: {
             ui: {
@@ -233,47 +282,54 @@ export function createKilnMcpServer(context: KilnToolContext = {}): McpServer {
   };
 
   for (const def of kilnMcpToolDefs(requestContext)) {
-    server.registerTool(
-      def.name,
-      {
-        description: def.description,
-        annotations: def.annotations,
-        ...(def.ui
-          ? {
-              _meta: {
-                ui: { resourceUri: def.ui.resourceUri },
-                'openai/outputTemplate': def.ui.resourceUri,
-                'openai/widgetAccessible': true,
-              },
-            }
-          : {}),
-        // The registry's zod schema, passed straight through as Standard Schema.
-        // The SDK advertises the derived JSON Schema and validates arguments, so
-        // there is no second copy of the schema anywhere in this file. No cast:
-        // a cast here would silently decouple the advertised schema from the
-        // registry's, which is the one thing this file exists not to do.
-        inputSchema: def.inputSchema,
-        ...(def.outputSchema ? { outputSchema: def.outputSchema } : {}),
-      },
-      async (args: unknown, request): Promise<KilnToolResult> => {
-        try {
-          return await requests.run(request.mcpReq.signal, () => runTool(def, args));
-        } catch (err) {
-          // A tool error is a result, not a transport failure: the calling agent
-          // should see the message and correct its program rather than lose the
-          // session.
-          return {
-            isError: true,
-            content: [
-              {
-                type: 'text' as const,
-                text: err instanceof Error ? err.message : String(err),
-              },
-            ],
-          };
-        }
-      },
-    );
+    const config = {
+      description: def.description,
+      annotations: def.annotations,
+      // The registry's zod schema, passed straight through as Standard Schema.
+      // The SDK advertises the derived JSON Schema and validates arguments, so
+      // there is no second copy of the schema anywhere in this file. No cast:
+      // a cast here would silently decouple the advertised schema from the
+      // registry's, which is the one thing this file exists not to do.
+      inputSchema: def.inputSchema,
+      ...(def.outputSchema ? { outputSchema: def.outputSchema } : {}),
+    };
+    const handler = async (
+      args: unknown,
+      request: Parameters<Parameters<typeof server.registerTool>[2]>[1],
+    ): Promise<KilnToolResult> => {
+      try {
+        return await requests.run(request.mcpReq.signal, () => runTool(def, args, options));
+      } catch (err) {
+        // A tool error is a result, not a transport failure: the calling agent
+        // should see the message and correct its program rather than lose the
+        // session.
+        return {
+          isError: true,
+          content: [
+            {
+              type: 'text' as const,
+              text: err instanceof Error ? err.message : String(err),
+            },
+          ],
+        };
+      }
+    };
+    if (def.ui) {
+      registerAppTool(
+        server,
+        def.name,
+        {
+          ...config,
+          _meta: {
+            ui: { resourceUri: def.ui.resourceUri, visibility: ['model'] },
+            'openai/outputTemplate': def.ui.resourceUri,
+          },
+        },
+        handler,
+      );
+    } else {
+      server.registerTool(def.name, config, handler);
+    }
   }
 
   return server;
@@ -314,5 +370,9 @@ if (isDirectEntry(import.meta.url)) {
   }
   // stdout is the MCP transport; diagnostics must never touch it.
   console.error(`kiln MCP server on stdio (${mode})`);
-  void serveStdio(() => createKilnMcpServer(context));
+  void serveStdio(() =>
+    createKilnMcpServer(context, {
+      artifactResourceLinks: process.env['KILN_MCP_RESOURCE_LINKS'] === '1',
+    }),
+  );
 }

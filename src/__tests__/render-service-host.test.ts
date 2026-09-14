@@ -28,6 +28,7 @@ import { afterEach, describe, expect, it } from 'bun:test';
 
 import {
   localRenderServiceState,
+  renderServiceNodeArguments,
   startLocalRenderService,
   stopLocalRenderService,
 } from '../render-service-host';
@@ -86,6 +87,14 @@ describe('localRenderServiceState', () => {
     await mkdir(join(shipped, 'node_modules/three'), { recursive: true });
     expect(localRenderServiceState(shipped)).toBe('ready');
   });
+});
+
+it('passes the Node import hook as a file URL on every platform', () => {
+  const [flag, hook, server] = renderServiceNodeArguments(resolve('render-service'));
+  expect(flag).toBe('--import');
+  expect(hook).toStartWith('file:');
+  expect(hook).toEndWith('/src/register-hooks.mjs');
+  expect(server).toEndWith(join('render-service', 'src', 'server.mjs'));
 });
 
 describe('buildRenderPort with autoSpawn', () => {

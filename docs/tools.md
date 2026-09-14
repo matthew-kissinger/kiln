@@ -1728,7 +1728,7 @@ Discover collections; list/search saved asset revisions; get a build record and 
 
 ## kiln_present
 
-Present one exact saved revision. Supporting MCP App clients show an interactive 3D card with GLB, editable ZIP, and source downloads. Other hosts receive portable resource links; this tool does not launch a local browser in coding harnesses. Call after saving or when the user wants to see or download an asset.
+Present one exact saved revision. Supporting MCP App clients show an interactive 3D card with GLB, editable ZIP, and source downloads. Every host receives exact artifact descriptors with resource URIs in the JSON result; verified hosts may also receive core MCP resource-link blocks. This tool does not launch a local browser in coding harnesses. Call after saving or when the user wants to see or download an asset.
 
 <details>
 <summary>Input JSON Schema</summary>
@@ -1767,7 +1767,7 @@ Present one exact saved revision. Supporting MCP App clients show an interactive
 
 ## kiln_export
 
-Get downloadable GLB, source, manifest, and portable ZIP resource links for one exact saved revision. The ZIP contains source when available and does not require the original program store. Use the host resource reader/download UI; no binary bytes are placed in tool text.
+Get exact GLB, source, preview, and manifest descriptors for one saved revision. Their resource URIs remain readable through resources/read, and configured hosts may also return download URLs including a portable editable ZIP. No binary bytes are placed in tool text.
 
 <details>
 <summary>Input JSON Schema</summary>

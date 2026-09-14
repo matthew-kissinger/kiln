@@ -3,6 +3,7 @@ import { mkdtemp, rm } from 'node:fs/promises';
 import { join } from 'node:path';
 import { tmpdir } from 'node:os';
 import { Client, InMemoryTransport } from '@modelcontextprotocol/client';
+import { EXTENSION_ID as MCP_APPS_EXTENSION_ID } from '@modelcontextprotocol/ext-apps/server';
 import { createKilnMcpServer } from './mcp-server';
 import { FileAssetLibrary } from './assets-node';
 import { MemoryProgramStore, retainProgram } from './program-store';
@@ -20,11 +21,14 @@ test('MCP saves an editable revision, exposes exact downloadable bytes, and rest
   const code =
     "const meta = { name: 'Box', category: 'prop' }; function build() { const root = createRoot('Box'); createPart('Body', boxGeo(1,1,1), gameMaterial(0x88aa66), {parent: root, position: [0,0.5,0]}); return root; }";
   const programRef = await retainProgram(programStore, code);
-  const server = createKilnMcpServer({
-    programStore,
-    assetLibrary,
-    assetDownloadUrls: async () => ({ 'asset.glb': 'https://example.com/asset.glb' }),
-  });
+  const server = createKilnMcpServer(
+    {
+      programStore,
+      assetLibrary,
+      assetDownloadUrls: async () => ({ 'asset.glb': 'https://example.com/asset.glb' }),
+    },
+    { artifactResourceLinks: true },
+  );
   const client = new Client({ name: 'asset-test', version: '1' });
   const [ct, st] = InMemoryTransport.createLinkedPair();
   await Promise.all([client.connect(ct), server.connect(st)]);
@@ -40,6 +44,11 @@ test('MCP saves an editable revision, exposes exact downloadable bytes, and rest
     expect(presentation.description).toContain('does not launch a local browser');
     expect(presentation.outputSchema).toBeDefined();
     expect(presentation._meta?.ui).toBeDefined();
+    const uiMeta = presentation._meta?.ui as { resourceUri?: string } | undefined;
+    expect(presentation._meta?.['ui/resourceUri']).toBe(uiMeta?.resourceUri);
+    expect(client.getServerCapabilities()?.extensions?.[MCP_APPS_EXTENSION_ID]).toEqual({
+      mimeTypes: ['text/html;profile=mcp-app'],
+    });
     const result = await client.callTool({
       name: 'kiln_save',
       arguments: { programRef, name: 'Box' },
@@ -148,7 +157,10 @@ test('every advertised asset link says how big it is and who it is for', async (
     programStore,
     "const meta = { name: 'Box', category: 'prop' }; function build() { const root = createRoot('Box'); createPart('Body', boxGeo(1,1,1), gameMaterial(0x88aa66), {parent: root, position: [0,0.5,0]}); return root; }",
   );
-  const server = createKilnMcpServer({ programStore, assetLibrary });
+  const server = createKilnMcpServer(
+    { programStore, assetLibrary },
+    { artifactResourceLinks: true },
+  );
   const client = new Client({ name: 'asset-link-test', version: '1' });
   const [ct, st] = InMemoryTransport.createLinkedPair();
   await Promise.all([client.connect(ct), server.connect(st)]);
@@ -189,6 +201,40 @@ test('every advertised asset link says how big it is and who it is for', async (
     );
     expect(bundle.bytes.byteLength).toBeGreaterThan(0);
     expect(Object.keys(record.files)).toContain('asset.glb');
+  } finally {
+    await client.close();
+    await server.close();
+    await rm(root, { recursive: true, force: true });
+  }
+});
+
+test('the default MCP transport keeps artifact URIs readable without resource-link blocks', async () => {
+  const root = await mkdtemp(join(tmpdir(), 'kiln-resource-link-compat-'));
+  const programStore = new MemoryProgramStore();
+  const assetLibrary = new FileAssetLibrary({ project: root });
+  const server = createKilnMcpServer({ programStore, assetLibrary });
+  const client = new Client({ name: 'portable-result-test', version: '1' });
+  const [ct, st] = InMemoryTransport.createLinkedPair();
+  await Promise.all([client.connect(ct), server.connect(st)]);
+  try {
+    const code =
+      "const meta = { name: 'Box', category: 'prop' }; function build() { const root = createRoot('Box'); createPart('Body', boxGeo(1,1,1), gameMaterial(0x88aa66), {parent: root, position: [0,0.5,0]}); return root; }";
+    const programRef = await retainProgram(programStore, code);
+    const result = await client.callTool({
+      name: 'kiln_save',
+      arguments: { programRef, name: 'Compatibility Box' },
+    });
+    expect(result.content.map((block) => block.type)).toEqual(['text']);
+    const payload = JSON.parse((result.content[0] as { type: 'text'; text: string }).text);
+    expect(payload.resources.length).toBeGreaterThan(0);
+    expect(
+      payload.resources.every((link: { uri?: string }) => link.uri?.startsWith('kiln://assets/')),
+    ).toBe(true);
+    const source = payload.resources.find(
+      (link: { name?: string }) => link.name === 'source.kiln.js',
+    );
+    const read = await client.readResource({ uri: source.uri });
+    expect('text' in read.contents[0]! ? read.contents[0].text : undefined).toBe(code);
   } finally {
     await client.close();
     await server.close();

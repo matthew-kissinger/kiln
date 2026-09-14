@@ -168,9 +168,10 @@ the same viewer. See [saved assets and the viewer](docs/collections.md).
 
 Create and refine assets in ChatGPT through a private MCP connection, then ask to
 see a saved revision. `kiln_present` opens that exact revision in an interactive 3D card in
-supporting MCP App clients. Coding harnesses normally receive exact resource links instead; their
-agent can launch the local viewer on the saved revision and provide its loopback URL. Orbit the
-model and inspect its animation without leaving chat.
+supporting MCP App clients. Every coding harness receives exact artifact descriptors and readable
+resource URIs in the JSON result; a verified host can opt into core MCP `resource_link` blocks.
+An agent can also launch the local viewer on the saved revision and provide its loopback URL.
+Orbit the model and inspect its animation without leaving chat.
 ChatGPT viewing was verified with real saved assets.
 
 1. Build the runtime and connect its stdio MCP server through an OpenAI Secure

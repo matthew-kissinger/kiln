@@ -11,7 +11,7 @@ const PORT = process.env.PORT;
 const TOKEN = process.env.RENDER_SERVICE_TOKEN;
 
 const here = dirname(fileURLToPath(import.meta.url));
-const glbPath = process.env.SMOKE_GLB ?? join(here, 'fixtures', 'model.glb');
+const glbPath = process.env.SMOKE_GLB ?? join(here, 'fixtures', 'material-channels-v1.glb');
 
 await import('../src/server.mjs');
 await new Promise((r) => setTimeout(r, 300));

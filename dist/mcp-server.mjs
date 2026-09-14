@@ -25953,6 +25953,12 @@ var init_asset_widget2 = __esm(() => {
 
 // src/mcp-server.ts
 import { McpServer, ResourceTemplate } from "@modelcontextprotocol/server";
+import {
+  EXTENSION_ID as MCP_APPS_EXTENSION_ID,
+  RESOURCE_MIME_TYPE as MCP_APPS_MIME_TYPE,
+  registerAppResource,
+  registerAppTool
+} from "@modelcontextprotocol/ext-apps/server";
 
 // src/assets-node.ts
 init_assets();
@@ -28185,7 +28191,7 @@ function createKilnAssetDefs(context) {
     },
     {
       name: "kiln_present",
-      description: "Present one exact saved revision. Supporting MCP App clients show an interactive 3D card with GLB, editable ZIP, and source downloads. Other hosts receive portable resource links; this tool does not launch a local browser in coding harnesses. Call after saving or when the user wants to see or download an asset.",
+      description: "Present one exact saved revision. Supporting MCP App clients show an interactive 3D card with GLB, editable ZIP, and source downloads. Every host receives exact artifact descriptors with resource URIs in the JSON result; verified hosts may also receive core MCP resource-link blocks. This tool does not launch a local browser in coding harnesses. Call after saving or when the user wants to see or download an asset.",
       inputSchema: exportInput,
       outputSchema: z4.object({
         ok: z4.literal(true),
@@ -28231,7 +28237,7 @@ function createKilnAssetDefs(context) {
     },
     {
       name: "kiln_export",
-      description: "Get downloadable GLB, source, manifest, and portable ZIP resource links for one exact saved revision. The ZIP contains source when available and does not require the original program store. Use the host resource reader/download UI; no binary bytes are placed in tool text.",
+      description: "Get exact GLB, source, preview, and manifest descriptors for one saved revision. Their resource URIs remain readable through resources/read, and configured hosts may also return download URLs including a portable editable ZIP. No binary bytes are placed in tool text.",
       inputSchema: exportInput,
       run: async (raw) => {
         const input = exportInput.parse(raw);
@@ -28259,7 +28265,7 @@ import { createHash as createHash8 } from "node:crypto";
 // src/render-service-host.ts
 import { spawn as spawn2 } from "node:child_process";
 import { existsSync as existsSync2 } from "node:fs";
-import { fileURLToPath as fileURLToPath3 } from "node:url";
+import { fileURLToPath as fileURLToPath3, pathToFileURL } from "node:url";
 import { join as join3 } from "node:path";
 var DEFAULT_LOCAL_RENDER_SERVICE_PORT = 8000;
 function localRenderServicePort() {
@@ -28268,6 +28274,13 @@ function localRenderServicePort() {
 }
 function localRenderServiceUrl() {
   return `http://127.0.0.1:${localRenderServicePort()}`;
+}
+function renderServiceNodeArguments(dir) {
+  return [
+    "--import",
+    pathToFileURL(join3(dir, "src/register-hooks.mjs")).href,
+    join3(dir, "src/server.mjs")
+  ];
 }
 var STARTUP_BUDGET_MS = Number(process.env["KILN_RENDER_SERVICE_STARTUP_MS"] ?? 60000);
 var STARTUP_POLL_MS = 250;
@@ -28331,7 +28344,7 @@ async function startLocalRenderService(dir = renderServiceDir()) {
     throw new Error(explainRenderServiceState(state, dir));
   registerTeardown();
   let stderr = "";
-  child = spawn2(nodeBinary(), ["--import", join3(dir, "src/register-hooks.mjs"), join3(dir, "src/server.mjs")], {
+  child = spawn2(nodeBinary(), renderServiceNodeArguments(dir), {
     cwd: dir,
     env: {
       ...process.env,
@@ -28487,7 +28500,7 @@ async function buildRenderPort(mode, portUrl, options) {
     context.viewRenderPort = makeLazyRenderPort(async () => {
       url = await start();
       return url;
-    }, process.env["KILN_RENDER_TOKEN"]);
+    }, process.env["KILN_RENDER_TOKEN"] ?? process.env["RENDER_SERVICE_TOKEN"]);
     context.viewRenderTimeoutMs = CLI_VIEW_RENDER_TIMEOUT_MS;
     context.captureCacheIdentity = () => url ? probeCaptureIdentity(url) : undefined;
     selected.set(context, label);
@@ -29191,7 +29204,7 @@ Most harnesses register skills only from their own directories, so these may not
 function kilnMcpToolDefs(context = {}) {
   return createKilnProgramToolRegistry(context);
 }
-async function runTool(def, args) {
+async function runTool(def, args, options = {}) {
   const output = await def.run(args);
   const multi = def.mediaMulti?.(output);
   if (multi) {
@@ -29223,28 +29236,46 @@ async function runTool(def, args) {
   if (asText !== undefined)
     return { content: [{ type: "text", text: asText }] };
   const resources = output?.resources ?? [];
-  const payload = resources.length ? { ...output, resources: undefined } : output;
+  const includeResourceLinks = options.artifactResourceLinks === true;
+  const payload = resources.length && includeResourceLinks ? { ...output, resources: undefined } : output;
   return {
-    content: [{ type: "text", text: JSON.stringify(payload, null, 2) }, ...resources],
+    content: [
+      { type: "text", text: JSON.stringify(payload, null, 2) },
+      ...includeResourceLinks ? resources : []
+    ],
     ...def.ui ? {
       structuredContent: output,
       _meta: await def.ui.data(output)
     } : {}
   };
 }
-function createKilnMcpServer(context = {}) {
+function createKilnMcpServer(context = {}, options = {}) {
   const server = new McpServer({
     name: MCP_SERVER_NAME,
     version: MCP_SERVER_VERSION
-  }, { instructions: MCP_SERVER_INSTRUCTIONS });
-  server.registerResource("kiln-asset-viewer", KILN_ASSET_WIDGET_URI, {
+  }, {
+    instructions: MCP_SERVER_INSTRUCTIONS,
+    capabilities: {
+      extensions: {
+        [MCP_APPS_EXTENSION_ID]: { mimeTypes: [MCP_APPS_MIME_TYPE] }
+      }
+    }
+  });
+  registerAppResource(server, "kiln-asset-viewer", KILN_ASSET_WIDGET_URI, {
     description: "Interactive Kiln asset viewer and downloads",
-    mimeType: "text/html;profile=mcp-app"
+    _meta: {
+      ui: {
+        prefersBorder: true,
+        csp: { connectDomains: [], resourceDomains: [] }
+      },
+      "openai/widgetDescription": "Inspect the saved 3D asset and download its GLB or editable bundle.",
+      "openai/widgetPrefersBorder": true
+    }
   }, async (uri) => ({
     contents: [
       {
         uri: uri.href,
-        mimeType: "text/html;profile=mcp-app",
+        mimeType: MCP_APPS_MIME_TYPE,
         text: await (await Promise.resolve().then(() => (init_asset_widget2(), exports_asset_widget2))).readAssetWidgetHtml(),
         _meta: {
           ui: {
@@ -29290,21 +29321,15 @@ function createKilnMcpServer(context = {}) {
     }
   };
   for (const def of kilnMcpToolDefs(requestContext)) {
-    server.registerTool(def.name, {
+    const config = {
       description: def.description,
       annotations: def.annotations,
-      ...def.ui ? {
-        _meta: {
-          ui: { resourceUri: def.ui.resourceUri },
-          "openai/outputTemplate": def.ui.resourceUri,
-          "openai/widgetAccessible": true
-        }
-      } : {},
       inputSchema: def.inputSchema,
       ...def.outputSchema ? { outputSchema: def.outputSchema } : {}
-    }, async (args, request) => {
+    };
+    const handler = async (args, request) => {
       try {
-        return await requests.run(request.mcpReq.signal, () => runTool(def, args));
+        return await requests.run(request.mcpReq.signal, () => runTool(def, args, options));
       } catch (err) {
         return {
           isError: true,
@@ -29316,7 +29341,18 @@ function createKilnMcpServer(context = {}) {
           ]
         };
       }
-    });
+    };
+    if (def.ui) {
+      registerAppTool(server, def.name, {
+        ...config,
+        _meta: {
+          ui: { resourceUri: def.ui.resourceUri, visibility: ["model"] },
+          "openai/outputTemplate": def.ui.resourceUri
+        }
+      }, handler);
+    } else {
+      server.registerTool(def.name, config, handler);
+    }
   }
   return server;
 }
@@ -29336,7 +29372,9 @@ if (isDirectEntry(import.meta.url)) {
     ]));
   }
   console.error(`kiln MCP server on stdio (${mode})`);
-  serveStdio(() => createKilnMcpServer(context));
+  serveStdio(() => createKilnMcpServer(context, {
+    artifactResourceLinks: process.env["KILN_MCP_RESOURCE_LINKS"] === "1"
+  }));
 }
 export {
   MCP_SERVER_INSTRUCTIONS,

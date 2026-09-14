@@ -2,16 +2,17 @@
   "schemaVersion": 1,
   "entries": {
     "mcp": {
-      "identity": "sha256:d9b848e40e1d4fc932ec6b08d10291fb5dede9f2155be7a80d1c867ae282577c",
+      "identity": "sha256:9c784960b8c9d45c9a179f12e60e2e61b7cff83d5c67695b672eebf04ca086c0",
       "engineVersion": "0.7.0",
       "toolchain": "bun@1.4.2",
-      "sourceHash": "7efbefcd064790488996dc67ba13a6a4e68b960c47fdfebdcd91ac180e0335b2",
-      "dependencyHash": "82c9bae4be67acfa200409a71834d66220481bd9f0c6e5840667579292f0c718",
+      "sourceHash": "65f9f084243609fc0616f98c5f21532c8d4f6c8ba6a13db4822993a5939002a5",
+      "dependencyHash": "ec89db810fc1196f4058317df0fd1b59ac0fd3ffea2ac52def221406488c6541",
       "dependencies": {
         "@gltf-transform/core": "4.5.0",
         "@gltf-transform/extensions": "4.5.0",
         "@gltf-transform/functions": "4.5.0",
         "@modelcontextprotocol/client": "^2.0.0",
+        "@modelcontextprotocol/ext-apps": "2.0.0",
         "@modelcontextprotocol/server": "^2.0.0",
         "@openrouter/ai-sdk-provider": "^2.10.0",
         "@types/three": "^0.186.0",
@@ -27,19 +28,20 @@
       },
       "target": "node",
       "file": "mcp-server.mjs",
-      "bundleHash": "sha256:5ca87421a8f574be854be3aebc2371e89c6d56fa7842de2de7bfc5a9124f1df1"
+      "bundleHash": "sha256:2ddb5b1621dc8b4728371fc81d3c1529b6c0f6e336e6788a8f65c6da345645b1"
     },
     "cli": {
-      "identity": "sha256:d9b848e40e1d4fc932ec6b08d10291fb5dede9f2155be7a80d1c867ae282577c",
+      "identity": "sha256:9c784960b8c9d45c9a179f12e60e2e61b7cff83d5c67695b672eebf04ca086c0",
       "engineVersion": "0.7.0",
       "toolchain": "bun@1.4.2",
-      "sourceHash": "7efbefcd064790488996dc67ba13a6a4e68b960c47fdfebdcd91ac180e0335b2",
-      "dependencyHash": "82c9bae4be67acfa200409a71834d66220481bd9f0c6e5840667579292f0c718",
+      "sourceHash": "65f9f084243609fc0616f98c5f21532c8d4f6c8ba6a13db4822993a5939002a5",
+      "dependencyHash": "ec89db810fc1196f4058317df0fd1b59ac0fd3ffea2ac52def221406488c6541",
       "dependencies": {
         "@gltf-transform/core": "4.5.0",
         "@gltf-transform/extensions": "4.5.0",
         "@gltf-transform/functions": "4.5.0",
         "@modelcontextprotocol/client": "^2.0.0",
+        "@modelcontextprotocol/ext-apps": "2.0.0",
         "@modelcontextprotocol/server": "^2.0.0",
         "@openrouter/ai-sdk-provider": "^2.10.0",
         "@types/three": "^0.186.0",
@@ -55,19 +57,20 @@
       },
       "target": "node",
       "file": "cli.mjs",
-      "bundleHash": "sha256:38230fb911cec65e873edeca0f835fe45669301399f2a5e72015cb7e3f534efd"
+      "bundleHash": "sha256:1dfe4d601166294d3394d15769e58e1607e2b8678c42d3b81d1a6aa4896db51b"
     },
     "worker": {
-      "identity": "sha256:d9b848e40e1d4fc932ec6b08d10291fb5dede9f2155be7a80d1c867ae282577c",
+      "identity": "sha256:9c784960b8c9d45c9a179f12e60e2e61b7cff83d5c67695b672eebf04ca086c0",
       "engineVersion": "0.7.0",
       "toolchain": "bun@1.4.2",
-      "sourceHash": "7efbefcd064790488996dc67ba13a6a4e68b960c47fdfebdcd91ac180e0335b2",
-      "dependencyHash": "82c9bae4be67acfa200409a71834d66220481bd9f0c6e5840667579292f0c718",
+      "sourceHash": "65f9f084243609fc0616f98c5f21532c8d4f6c8ba6a13db4822993a5939002a5",
+      "dependencyHash": "ec89db810fc1196f4058317df0fd1b59ac0fd3ffea2ac52def221406488c6541",
       "dependencies": {
         "@gltf-transform/core": "4.5.0",
         "@gltf-transform/extensions": "4.5.0",
         "@gltf-transform/functions": "4.5.0",
         "@modelcontextprotocol/client": "^2.0.0",
+        "@modelcontextprotocol/ext-apps": "2.0.0",
         "@modelcontextprotocol/server": "^2.0.0",
         "@openrouter/ai-sdk-provider": "^2.10.0",
         "@types/three": "^0.186.0",
@@ -86,16 +89,17 @@
       "bundleHash": "sha256:03c4ce7c118e4bca76c8feb1f70dff31533dacb1a77541af3f474697df59bdc5"
     },
     "agent-run": {
-      "identity": "sha256:d9b848e40e1d4fc932ec6b08d10291fb5dede9f2155be7a80d1c867ae282577c",
+      "identity": "sha256:9c784960b8c9d45c9a179f12e60e2e61b7cff83d5c67695b672eebf04ca086c0",
       "engineVersion": "0.7.0",
       "toolchain": "bun@1.4.2",
-      "sourceHash": "7efbefcd064790488996dc67ba13a6a4e68b960c47fdfebdcd91ac180e0335b2",
-      "dependencyHash": "82c9bae4be67acfa200409a71834d66220481bd9f0c6e5840667579292f0c718",
+      "sourceHash": "65f9f084243609fc0616f98c5f21532c8d4f6c8ba6a13db4822993a5939002a5",
+      "dependencyHash": "ec89db810fc1196f4058317df0fd1b59ac0fd3ffea2ac52def221406488c6541",
       "dependencies": {
         "@gltf-transform/core": "4.5.0",
         "@gltf-transform/extensions": "4.5.0",
         "@gltf-transform/functions": "4.5.0",
         "@modelcontextprotocol/client": "^2.0.0",
+        "@modelcontextprotocol/ext-apps": "2.0.0",
         "@modelcontextprotocol/server": "^2.0.0",
         "@openrouter/ai-sdk-provider": "^2.10.0",
         "@types/three": "^0.186.0",
@@ -114,16 +118,17 @@
       "bundleHash": "sha256:c90f03948131e6396530d8abaa3e569574c71dfbfba368b1ff3453cae7534b88"
     },
     "agent-providers": {
-      "identity": "sha256:d9b848e40e1d4fc932ec6b08d10291fb5dede9f2155be7a80d1c867ae282577c",
+      "identity": "sha256:9c784960b8c9d45c9a179f12e60e2e61b7cff83d5c67695b672eebf04ca086c0",
       "engineVersion": "0.7.0",
       "toolchain": "bun@1.4.2",
-      "sourceHash": "7efbefcd064790488996dc67ba13a6a4e68b960c47fdfebdcd91ac180e0335b2",
-      "dependencyHash": "82c9bae4be67acfa200409a71834d66220481bd9f0c6e5840667579292f0c718",
+      "sourceHash": "65f9f084243609fc0616f98c5f21532c8d4f6c8ba6a13db4822993a5939002a5",
+      "dependencyHash": "ec89db810fc1196f4058317df0fd1b59ac0fd3ffea2ac52def221406488c6541",
       "dependencies": {
         "@gltf-transform/core": "4.5.0",
         "@gltf-transform/extensions": "4.5.0",
         "@gltf-transform/functions": "4.5.0",
         "@modelcontextprotocol/client": "^2.0.0",
+        "@modelcontextprotocol/ext-apps": "2.0.0",
         "@modelcontextprotocol/server": "^2.0.0",
         "@openrouter/ai-sdk-provider": "^2.10.0",
         "@types/three": "^0.186.0",
