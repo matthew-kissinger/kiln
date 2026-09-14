@@ -17,7 +17,7 @@ import type { AddressInfo } from 'node:net';
 
 import { afterEach, describe, expect, it } from 'bun:test';
 
-import { probeRenderService } from '../cli-render-mode';
+import { makeRemoteRenderPort, probeRenderService } from '../cli-render-mode';
 
 const servers: Server[] = [];
 
@@ -70,4 +70,35 @@ describe('probeRenderService', () => {
     expect(await probeRenderService(url)).toBeUndefined();
     expect(performance.now() - started).toBeLessThan(1_000);
   });
+});
+
+it('sends the shared grid background to the GPU service for ordinary asset sheets', async () => {
+  let body: Record<string, unknown> | undefined;
+  const server = createServer(async (req, res) => {
+    const chunks: Buffer[] = [];
+    for await (const chunk of req) chunks.push(Buffer.from(chunk));
+    body = JSON.parse(Buffer.concat(chunks).toString('utf8'));
+    res.setHeader('content-type', 'application/json');
+    res.end(
+      JSON.stringify({
+        ok: true,
+        rendererId: 'test-renderer',
+        views: [Buffer.from('png').toString('base64')],
+      }),
+    );
+  });
+  servers.push(server);
+  const url = await new Promise<string>((resolve) => {
+    server.listen(0, '127.0.0.1', () => {
+      resolve(`http://127.0.0.1:${(server.address() as AddressInfo).port}`);
+    });
+  });
+
+  await makeRemoteRenderPort(url)({
+    glb: new Uint8Array([1]),
+    viewDirs: [[1, 0, 0]],
+    size: 384,
+  });
+
+  expect(body?.background).toBe('#1a1a1a');
 });

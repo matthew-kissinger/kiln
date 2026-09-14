@@ -16,20 +16,24 @@ function authoringDiagnosticAdvice(diagnostic) {
     return UNBOUND_VARIABLE_ADVICE;
   if (diagnostic === "ROUNDED_BOX_RADIUS")
     return ROUNDED_BOX_RADIUS_ADVICE;
-  return diagnostic === "GEAR_RADII_ORDER" ? GEAR_RADII_ORDER_ADVICE : "";
+  if (diagnostic === "GEAR_RADII_ORDER")
+    return GEAR_RADII_ORDER_ADVICE;
+  if (diagnostic === "PROCEDURAL_TEXTURE_UNKNOWN_KEY")
+    return PROCEDURAL_TEXTURE_UNKNOWN_KEY_ADVICE;
+  return diagnostic === "PARAMETRIC_PERIODIC_ENDPOINT" ? PARAMETRIC_PERIODIC_ENDPOINT_ADVICE : "";
 }
 function rethrowAuthoringError(error) {
   if (error instanceof ReferenceError && /(?: is not defined$|^Can't find variable: )/.test(error.message) && !/\b(?:loadTexture|process|fetch|globalThis|require|Bun|Deno)\b/.test(error.message)) {
-    throw new AuthoringDiagnosticError;
+    throw new AuthoringDiagnosticError("UNBOUND_VARIABLE");
   }
   throw error;
 }
-var UNBOUND_VARIABLE_ADVICE = "Check variable spelling and scope: generated code used an undeclared variable. Read the current source and check declarations before retrying. If it was meant to be a Kiln helper, call kiln_list_primitives to confirm the exact name and signature; the sandbox exposes only those globals.", GEAR_RADII_ORDER_ADVICE = "gearGeo requires boreRadius < rootRadius < tipRadius; specify rootRadius when changing tipRadius. Omitted radii keep their absolute defaults.", ROUNDED_BOX_RADIUS_ADVICE = "roundedBoxGeo: radius must be less than half the smallest dimension. Reduce radius or increase the smallest dimension; equality is invalid.", AuthoringDiagnosticError;
+var UNBOUND_VARIABLE_ADVICE = "Check variable spelling and scope: generated code used an undeclared variable. Read the current source and check declarations before retrying. If it was meant to be a Kiln helper, call kiln_list_primitives to confirm the exact name and signature; the sandbox exposes only those globals.", GEAR_RADII_ORDER_ADVICE = "gearGeo requires boreRadius < rootRadius < tipRadius; specify rootRadius when changing tipRadius. Omitted radii keep their absolute defaults.", ROUNDED_BOX_RADIUS_ADVICE = "roundedBoxGeo: radius must be less than half the smallest dimension. Reduce radius or increase the smallest dimension; equality is invalid.", PROCEDURAL_TEXTURE_UNKNOWN_KEY_ADVICE = 'Remove unsupported proceduralTexture fields. Call kiln_list_primitives with category "textures" and use only the documented fields for the selected layer op.', PARAMETRIC_PERIODIC_ENDPOINT_ADVICE = "Periodic parametricSurface endpoints must return matching positions. For periodicU, sample(uMin, v) and sample(uMax, v) must match; for periodicV, sample(u, vMin) and sample(u, vMax) must match.", AuthoringDiagnosticError;
 var init_authoring_diagnostic = __esm(() => {
   AuthoringDiagnosticError = class AuthoringDiagnosticError extends Error {
     diagnostic;
-    constructor(diagnostic = "UNBOUND_VARIABLE") {
-      super(authoringDiagnosticAdvice(diagnostic));
+    constructor(diagnostic, message = authoringDiagnosticAdvice(diagnostic)) {
+      super(message);
       this.diagnostic = diagnostic;
       this.name = "AuthoringDiagnosticError";
     }
@@ -3889,11 +3893,11 @@ function parametricSurface(sample, options = {}) {
       i = groups[i];
     return i;
   };
-  const join = (a, b, label) => {
+  const join = (a, b, _label) => {
     const pa = positions.slice(a * 3, a * 3 + 3), pb = positions.slice(b * 3, b * 3 + 3);
     const scale = Math.max(1, ...pa.map(Math.abs), ...pb.map(Math.abs));
     if (Math.hypot(...pa.map((x, k) => x - pb[k])) > scale * 0.000001)
-      throw new Error(`parametricSurface ${label}: endpoint positions do not match`);
+      throw new AuthoringDiagnosticError("PARAMETRIC_PERIODIC_ENDPOINT");
     groups[find(b)] = find(a);
     for (let k = 0;k < 3; k++)
       positions[b * 3 + k] = positions[a * 3 + k];
@@ -3973,7 +3977,9 @@ function creaseNormals(geometry, options = {}) {
   out.computeBoundingSphere();
   return out;
 }
-var init_geometry = () => {};
+var init_geometry = __esm(() => {
+  init_authoring_diagnostic();
+});
 
 // src/deform.ts
 import * as THREE6 from "three";
@@ -5051,7 +5057,7 @@ function assertKeys(record, allowed, path) {
   const allow = new Set(allowed);
   for (const key of Object.keys(record)) {
     if (!allow.has(key)) {
-      throw new ProceduralTextureError(`${path} has unknown key ${JSON.stringify(key)}.`);
+      throw new ProceduralTextureError(`${path} has unknown key ${JSON.stringify(key)}.`, "PROCEDURAL_TEXTURE_UNKNOWN_KEY");
     }
   }
 }
@@ -5384,10 +5390,11 @@ function canonicalizePortableMaterialSpecV2(input) {
 var MAX_PROCEDURAL_SIZE = 1024, MIN_PROCEDURAL_SIZE = 4, MAX_PROCEDURAL_LAYERS = 8, MAX_NOISE_OCTAVES = 6, MAX_PROCEDURAL_NAME_LENGTH = 80, MAX_PROCEDURAL_PATTERN_COUNT = 256, MAX_PORTABLE_MATERIAL_TEXTURES = 5, MAX_PORTABLE_MATERIAL_TEXELS, ProceduralTextureError, OPS, BLENDS, FORBIDDEN_KEYS, SHA256_K, rotateRight = (value, bits) => value >>> bits | value << 32 - bits, MATERIAL_TEXTURE_USAGE;
 var init_procedural_material_v2 = __esm(() => {
   init_textures();
+  init_authoring_diagnostic();
   MAX_PORTABLE_MATERIAL_TEXELS = 4 * 1024 * 1024;
-  ProceduralTextureError = class ProceduralTextureError extends Error {
-    constructor(message) {
-      super(message);
+  ProceduralTextureError = class ProceduralTextureError extends AuthoringDiagnosticError {
+    constructor(message, diagnostic) {
+      super(diagnostic, message);
       this.name = "ProceduralTextureError";
     }
   };
@@ -18640,12 +18647,12 @@ const cowl = new THREE.Mesh(cowlGeo, bodyMat); // SAME bodyMat as fuselage, no c
     },
     {
       name: "proceduralTexture",
-      signature: "proceduralTexture({ schemaVersion: 2, size?: 4..1024 pow2, usage?, name?, layers: [{ op: 'solid'|'checker'|'stripes'|'gradient'|'bricks'|'noise', ...params, blend?: 'normal'|'multiply'|'screen'|'overlay', opacity?: 0..1 }] })",
+      signature: "proceduralTexture({ schemaVersion: 2, size?: 4..1024 pow2, usage?, name?, layers: ProceduralLayer[] })",
       returns: "THREE.DataTexture (tiling, sRGB or linear per usage)",
       category: "textures",
       description: "Builds a tiling texture from a bounded layer stack — no image file needed. Layers composite bottom-first. Noise is seeded and tileable, so the same spec always produces the same bytes and a repeating material shows no seam. Baked to PNG and embedded in the GLB automatically.",
       example: "const bark = proceduralTexture({ schemaVersion: 2, size: 256, usage: 'albedo', name: 'Bark', layers: [{ op: 'solid', color: 0x5a4632 }, { op: 'noise', colorA: 0x3d2f21, colorB: 0x7a6248, scale: 6, octaves: 4, blend: 'overlay' }] });",
-      promptNotes: "Sync — no await. Strict V2 JSON boundary: unknown/prototype keys, callbacks, paths, URLs, and shader source are rejected. Prefer this over approved resources for describable surfaces. Max 8 layers, power-of-two size up to 1024. Only the six listed ops exist."
+      promptNotes: "Layer fields by op — solid: { color }; checker: { colorA, colorB, squares? }; stripes: { colorA, colorB, count?, angleDeg? }; gradient: { from, to, angleDeg? }; bricks: { brick, mortar, rows?, cols?, mortarWidth?, stagger? }; noise: { colorA, colorB, scale?, octaves?, seed? }. Every layer also accepts blend?: 'normal'|'multiply'|'screen'|'overlay' and opacity?: 0..1. Pattern counts are integers 1..256; noise octaves are 1..6. Sync — no await. Unknown/prototype keys, callbacks, paths, URLs, and shader source are rejected. Max 8 layers."
     },
     {
       name: "normalMapFromHeight",

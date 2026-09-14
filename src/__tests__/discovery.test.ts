@@ -71,6 +71,20 @@ describe('progressive capability discovery', () => {
     expect(selected.nextOffset).toBeNull();
   });
 
+  it('publishes every strict procedural texture layer shape instead of hiding parameters', async () => {
+    const selected = (await discovery().run({ name: 'proceduralTexture' })) as Result;
+    for (const fragment of [
+      'solid: { color }',
+      'checker: { colorA, colorB, squares? }',
+      'stripes: { colorA, colorB, count?, angleDeg? }',
+      'gradient: { from, to, angleDeg? }',
+      'bricks: { brick, mortar, rows?, cols?, mortarWidth?, stagger? }',
+      'noise: { colorA, colorB, scale?, octaves?, seed? }',
+    ]) {
+      expect(selected.text).toContain(fragment);
+    }
+  });
+
   it('searches descriptions and pages results without dropping or repeating entries', async () => {
     const tool = discovery();
     const first = (await tool.run({ category: 'geometry', query: 'geo', limit: 2 })) as Result;

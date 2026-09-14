@@ -10,7 +10,9 @@ test('viewer serves only configured collections and rejects cross-origin writes 
   const viewer = await startAssetViewer(new FileAssetLibrary({ project: root }), { port: 0 });
   try {
     const response = await fetch(`${viewer.url}api/collections`);
-    expect(await response.json()).toEqual({ collections: [{ id: 'project', label: 'project' }] });
+    expect(await response.json()).toEqual({
+      collections: [{ id: 'project', label: 'This project' }],
+    });
     expect((await fetch(`${viewer.url}api/assets?collection=project`)).status).toBe(200);
     expect((await fetch(`${viewer.url}api/assets?collection=unknown`)).status).toBe(400);
     expect((await fetch(`${viewer.url}package.json`)).status).toBe(404);

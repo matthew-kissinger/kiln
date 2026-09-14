@@ -80,7 +80,18 @@ const brick = proceduralTexture({
 const wall = pbrMaterial({ albedo: brick, normal: normalMapFromHeight(brick), roughness: 0.9 });
 ```
 
-Supported layer operations include `solid`, `checker`, `stripes`, `gradient`, `bricks`, and tileable `noise`. Layers specify opacity and blending; seeded noise makes the result reproducible. Read the texture catalog for current bounds and signatures.
+The layer operations are strict objects; fields from another operation are errors:
+
+| `op` | Required fields | Optional operation fields |
+| --- | --- | --- |
+| `solid` | `color` | — |
+| `checker` | `colorA`, `colorB` | `squares` |
+| `stripes` | `colorA`, `colorB` | `count`, `angleDeg` |
+| `gradient` | `from`, `to` | `angleDeg` |
+| `bricks` | `brick`, `mortar` | `rows`, `cols`, `mortarWidth`, `stagger` |
+| `noise` | `colorA`, `colorB` | `scale`, `octaves`, `seed` |
+
+Every layer also accepts `blend` (`normal`, `multiply`, `screen`, or `overlay`) and `opacity` from 0 to 1. Pattern counts are integers from 1 to 256; noise octaves are 1 to 6. Seeded noise is tileable and reproducible. Query `kiln_list_primitives` for `proceduralTexture` to retrieve this contract and an executable example.
 
 The bundled scanned library contains Poly Haven CC0 material families with recorded provenance. Use catalog IDs rather than file paths or URLs. Assets embed their textures and do not fetch them at runtime.
 

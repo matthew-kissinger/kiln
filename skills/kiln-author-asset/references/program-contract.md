@@ -13,7 +13,7 @@ function build() {
 }
 ```
 
-`meta.name` identifies the asset. `meta.category` selects subject-related validation/QA guidance; it does not impose a category triangle budget. Categories are `prop`, `character`, `vfx`, `environment`, `architecture`, `vegetation`, and `vehicle`. `meta.role` describes its scene role when composition needs one: `ground`, `building`, `wonder`, `poi`, `prop`, `fill`, or `vehicle`.
+`meta.name` identifies the asset. `meta.category` is descriptive source metadata and appears as `modelCategory` in render results, but it does **not** select validation or QA policy: the host-owned brief/intent is authoritative so generated source cannot weaken its own checks. If the host supplies no category, Kiln uses its default policy rather than trusting this field. Categories are `prop`, `character`, `vfx`, `environment`, `architecture`, `vegetation`, and `vehicle`. `meta.role` describes its scene role when composition needs one: `ground`, `building`, `wonder`, `poi`, `prop`, `fill`, or `vehicle`.
 
 `build()` returns a `THREE.Object3D` and may be async. Use `async`/`await` for Boolean operations, `roundedBoxGeo`, `extrudeProfile`, `revolveProfile`, `implicitSurface`, approved texture loading, and other catalog signatures marked async. `sweepProfile`, `loftProfiles`, and ordinary deformations are synchronous.
 

@@ -30,6 +30,7 @@ import {
   startLocalRenderService,
 } from './render-service-host';
 import type { KilnToolContext } from './tools/registry';
+import { GRID_BACKGROUND_HEX } from './views/background';
 
 export type RenderMode = 'auto' | 'cpu' | 'gpu';
 
@@ -70,7 +71,10 @@ export function makeRemoteRenderPort(url: string, token?: string): PbrRenderPort
       body['height'] = req.height;
       if (req.lightingPresetId) body['lighting_preset_id'] = req.lightingPresetId;
     }
-    if (req.viewDirs) body['views'] = req.viewDirs;
+    if (req.viewDirs) {
+      body['views'] = req.viewDirs;
+      body['background'] = GRID_BACKGROUND_HEX;
+    }
     if (req.size !== undefined) body['size'] = req.size;
     if (req.beautySize !== undefined) body['beauty_size'] = req.beautySize;
 

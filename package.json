@@ -107,7 +107,9 @@
     "site:skills": "cd site && bun scripts/build-skills-discovery.mjs",
     "site:dev": "bun run --cwd site dev",
     "site:build": "bun run --cwd site build",
-    "smoke:harness": "node scripts/harness-smoke.mjs"
+    "smoke:harness": "node scripts/harness-smoke.mjs",
+    "dogfood:gallery": "node scripts/dogfood-gallery.mjs",
+    "dogfood:tier2": "node scripts/tier2-dogfood.mjs"
   },
   "dependencies": {
     "@gltf-transform/core": "4.5.0",

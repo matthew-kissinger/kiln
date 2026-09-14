@@ -3,6 +3,7 @@ import { createAssetStage } from './scene';
 import { encodeAssetBundle, type AssetRecord } from '../assets';
 import { downloadChatFile, type ChatFileHost } from './chat-download';
 import { decodeWidgetAsset } from '../widget-transfer';
+import { assetAttributionRows } from './attribution';
 
 declare global {
   interface Window {
@@ -95,6 +96,9 @@ async function showResult(
   downloadUrls = received.downloadUrls;
   element('revision').textContent =
     `${record.manifest.editable ? 'Editable source included' : 'GLB asset'} · ${record.manifest.revisionId.slice(0, 10)}`;
+  element('attribution').textContent = assetAttributionRows(record.manifest)
+    .map(({ label, value }) => `${label}: ${value}`)
+    .join(' · ');
   try {
     stage ??= createAssetStage(element('stage'));
     const stats = await stage.load(record.files['asset.glb']!);

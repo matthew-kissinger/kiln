@@ -10,21 +10,24 @@ import { prepareDestination } from './cli-output';
 import { createPackagedLocalToolContext } from './local-runtime';
 import { buildRenderPort, resolveRenderMode } from './cli-render-mode';
 import { startAssetViewer } from './asset-viewer';
+import { assetViewerHref } from './viewer/deep-link';
 
 export const ASSET_USAGE = `
 ASSETS & VIEWER
   kiln save <source.js|programRef> --name <name> [--collection project]
        [--asset <id> --parent <revision>] [--description <text>] [--tag <tag>]
   kiln collections                        list configured collection names
-  kiln collections add <name> <directory>  remember a project or personal collection
+  kiln collections add <name> <directory>  remember another collection root
   kiln assets [--collection project]      list saved revisions (JSON)
   kiln asset <id> <revision> [--collection project] [--restore]
   kiln export <id> <revision> --out asset.zip [--format bundle|glb|source]
   kiln import <asset.zip|asset.glb> [--collection project] [--name <name>]
   kiln view [collection-directory|asset.glb|asset.zip] [--port 4318]
+       [--collection project --asset <id> --revision <revision>]
 
 KILN_COLLECTIONS is an optional JSON map of collection names to absolute folders.
-Default: project -> <workspace>/assets/kiln. Existing source/render commands still work.
+Defaults: project -> <workspace>/assets/kiln; library -> your OS user-data directory.
+An explicit map replaces both defaults. Existing source/render commands still work.
 View prints a local browser URL and remains running until interrupted.
 `;
 export async function assetMain(argv: readonly string[]): Promise<number> {
@@ -37,6 +40,7 @@ export async function assetMain(argv: readonly string[]): Promise<number> {
     'name',
     'asset',
     'parent',
+    'revision',
     'description',
     'brief',
     'tag',
@@ -180,8 +184,19 @@ export async function assetMain(argv: readonly string[]): Promise<number> {
     }
     const port = flags.port === undefined ? 4318 : Number(flags.port);
     if (!Number.isInteger(port) || port < 0 || port > 65535) throw new Error('Invalid port');
+    if ((flags.asset && !flags.revision) || (!flags.asset && flags.revision))
+      throw new Error('view requires --asset and --revision together');
     const viewer = await startAssetViewer(target, { port, standalone });
-    console.log(`${viewer.url}${standalone ? '?open=standalone' : ''}`);
+    const viewerUrl = standalone
+      ? `${viewer.url}?open=standalone`
+      : flags.asset && flags.revision
+        ? assetViewerHref(viewer.url, {
+            collection,
+            assetId: flags.asset,
+            revisionId: flags.revision,
+          })
+        : viewer.url;
+    console.log(viewerUrl);
     console.log('Kiln viewer · local files · Ctrl+C to stop');
   }
   return 0;

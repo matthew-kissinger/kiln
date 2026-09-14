@@ -6,7 +6,9 @@ import {
   type AssetManifest,
   type AssetRecord,
 } from '../assets';
+import { assetAttributionRows } from './attribution';
 import { createAssetStage } from './scene';
+import { assetViewerSelection } from './deep-link';
 
 const el = <T extends HTMLElement = HTMLElement>(id: string) => document.getElementById(id)! as T;
 const node = <K extends keyof HTMLElementTagNameMap>(tag: K, text?: string, className?: string) => {
@@ -261,6 +263,14 @@ async function openDetail(entry: Entry) {
     (entry.manifest.editable
       ? 'Source travels with this revision. Download the editable bundle to continue elsewhere.'
       : 'This GLB has no saved Kiln source. You can view and use the model.');
+  const attribution = el('asset-attribution');
+  attribution.replaceChildren();
+  for (const row of assetAttributionRows(entry.manifest)) {
+    const item = node('div');
+    item.append(node('span', row.label), node('strong', row.value));
+    attribution.append(item);
+  }
+  attribution.hidden = !attribution.childElementCount;
   el('provenance').textContent = entry.loose
     ? 'Standalone GLB. No source or build provenance supplied.'
     : JSON.stringify(entry.manifest, null, 2);
@@ -445,10 +455,24 @@ el('export-selection').onclick = () => {
 };
 async function start() {
   collections = (await json('/api/collections')).collections;
+  const requested = assetViewerSelection(location.search);
   const remembered = recalled('kiln.collection');
   await loadCollection(
-    collections.find((c) => c.id === remembered)?.id ?? collections[0]?.id ?? 'project',
+    collections.find((c) => c.id === requested?.collection)?.id ??
+      collections.find((c) => c.id === remembered)?.id ??
+      collections[0]?.id ??
+      'project',
   );
+  if (requested) {
+    const exact = entries.find(
+      (entry) =>
+        entry.collection === requested.collection &&
+        entry.manifest.assetId === requested.assetId &&
+        entry.manifest.revisionId === requested.revisionId,
+    );
+    if (!exact) throw new Error('The requested saved revision is not available.');
+    await openDetail(exact);
+  }
   if (new URLSearchParams(location.search).has('open')) {
     const response = await fetch('/api/standalone');
     if (!response.ok) throw new Error('File unavailable');
