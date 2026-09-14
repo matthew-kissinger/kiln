@@ -11,7 +11,7 @@ test('crawler discovery points only to the canonical document, without hash rout
     '<meta property="og:title" content="Kiln | Procedural 3D engine and agent toolchain"',
   );
   expect(html).toContain(
-    '<meta property="og:image" content="https://kilnstudio.tools/kiln-social-27.png"',
+    '<meta property="og:image" content="https://kilnstudio.tools/kiln-social-27-v2.png"',
   );
   expect(html).toContain('<meta property="og:image:width" content="1200"');
   expect(html).toContain('<meta property="og:image:height" content="630"');
@@ -20,9 +20,11 @@ test('crawler discovery points only to the canonical document, without hash rout
     'content="27 one-shot Kiln assets built across coding-agent harnesses and multimodal models"',
   );
   expect(html).toContain(
-    '<meta name="twitter:image" content="https://kilnstudio.tools/kiln-social-27.png"',
+    '<meta name="twitter:image" content="https://kilnstudio.tools/kiln-social-27-v2.png"',
   );
-  const socialImage = await readFile(new URL('../site/public/kiln-social-27.png', import.meta.url));
+  const socialImage = await readFile(
+    new URL('../site/public/kiln-social-27-v2.png', import.meta.url),
+  );
   expect(socialImage.subarray(1, 4).toString()).toBe('PNG');
   expect([...sitemap.matchAll(/<loc>(.*?)<\/loc>/g)].map((match) => match[1])).toEqual([
     'https://kilnstudio.tools/',
