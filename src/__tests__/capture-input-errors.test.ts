@@ -114,3 +114,61 @@ it('reports numeric shot paths for a tagged capture instead of rejecting valid v
     await server.close();
   }
 });
+
+it('explains the supported equivalents for common orbit and image-size guesses', async () => {
+  let builds = 0;
+  const server = createKilnMcpServer({
+    evaluatorPort: {
+      async render() {
+        builds++;
+        throw new Error('invalid input reached evaluation');
+      },
+    },
+  });
+  const client = new Client({ name: 'capture-guidance-test', version: '0' });
+  const [ct, st] = InMemoryTransport.createLinkedPair();
+  await Promise.all([server.connect(st), client.connect(ct)]);
+  const messageFor = (capture: Record<string, unknown>) =>
+    client
+      .callTool({
+        name: 'kiln_render',
+        arguments: { code: 'function build(){}', capture },
+      })
+      .then(
+        (result) =>
+          result.content
+            .filter((content) => content.type === 'text')
+            .map((content) => content.text)
+            .join(' '),
+        (error) => error.message as string,
+      );
+  try {
+    const orbit = await messageFor({
+      version: 'kiln.capture.v1',
+      shots: [
+        {
+          camera: {
+            type: 'orbit',
+            target: [0, 1, 0],
+            distance: 4,
+          },
+        },
+      ],
+    });
+    expect(orbit).toContain('Orbit cameras derive target and distance');
+    expect(orbit).toContain('subject and padding');
+
+    const dimensions = await messageFor({
+      version: 'kiln.capture.v1',
+      width: 800,
+      height: 600,
+      shots: [{}],
+    });
+    expect(dimensions).toContain('square per-shot size');
+    expect(dimensions).toContain('size');
+    expect(builds).toBe(0);
+  } finally {
+    await client.close();
+    await server.close();
+  }
+});

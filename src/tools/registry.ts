@@ -696,6 +696,26 @@ const cameraVec3Input = z.array(z.number()).length(3) as unknown as z.ZodType<
   [number, number, number]
 >;
 
+const orbitCameraError = (issue: { code?: string; keys?: string[] }): string | undefined => {
+  if (
+    issue.code === 'unrecognized_keys' &&
+    issue.keys?.some((key) => key === 'target' || key === 'distance')
+  ) {
+    return 'Orbit cameras derive target and distance from the selected subject bounds; choose subject and padding, or use an explicit camera with position and target.';
+  }
+  return undefined;
+};
+
+const advancedCaptureError = (issue: { code?: string; keys?: string[] }): string | undefined => {
+  if (
+    issue.code === 'unrecognized_keys' &&
+    issue.keys?.some((key) => key === 'width' || key === 'height')
+  ) {
+    return 'Advanced capture uses one square per-shot size from 128 to 1024; width and height are returned image dimensions, not request fields.';
+  }
+  return undefined;
+};
+
 const cameraShotInput = z
   .object({
     name: z.string().optional(),
@@ -709,15 +729,16 @@ const cameraShotInput = z
     visibility: z.enum(['context', 'isolate']).optional(),
     camera: z
       .discriminatedUnion('type', [
-        z
-          .object({
+        z.strictObject(
+          {
             type: z.literal('orbit'),
             azimuthDeg: z.number().optional(),
             elevationDeg: z.number().optional(),
             relativeTo: z.enum(['world', 'asset', 'part']).optional(),
             padding: z.number().positive().max(100).optional(),
-          })
-          .strict(),
+          },
+          { error: orbitCameraError },
+        ),
         z
           .object({
             type: z.literal('explicit'),
@@ -746,15 +767,16 @@ const cameraShotInput = z
       .optional(),
   })
   .strict();
-const advancedCaptureInput = z
-  .object({
+const advancedCaptureInput = z.strictObject(
+  {
     version: z.literal('kiln.capture.v1'),
     shots: z.array(cameraShotInput).min(1).max(9),
     cols: z.number().int().min(1).max(3).optional(),
     size: z.number().int().min(128).max(1024).optional(),
     output: z.enum(['grid', 'separate']).optional(),
-  })
-  .strict();
+  },
+  { error: advancedCaptureError },
+);
 // Error selection only: tagged input should explain its shot fields, not the
 // legacy branch's unknown keys. This does not coerce values or change JSON Schema.
 function taggedCaptureError(issue: { input?: unknown }): string | undefined {
@@ -2378,6 +2400,9 @@ const assetSelector = {
   collection: z
     .string()
     .regex(/^[a-z][a-z0-9_-]{0,79}$/)
+    .describe(
+      'Destination collection ID. Discover available IDs with kiln_assets action=collections. Follow an explicit user destination; otherwise use project.',
+    )
     .default('project'),
   assetId: z.string().regex(/^[a-z][a-z0-9_-]{0,79}$/),
   revisionId: z.string().regex(/^[a-z][a-z0-9_-]{0,79}$/),
@@ -2449,7 +2474,7 @@ export function createKilnAssetDefs(context: KilnToolContext): KilnToolDef[] {
     {
       name: 'kiln_save',
       description:
-        'Save a completed source revision as a durable asset with its exact GLB, source, preview, and build record. Use programRef returned by render/edit. To revise an existing asset, supply its assetId and parentRevision; previous revisions remain intact. Returns downloadable resources. Draft renders do not populate collections.',
+        'Save a completed source revision into the user-requested collection, or project when no destination was requested. Persists its exact GLB, source, preview, and build record. Discover destinations with kiln_assets action=collections. Use programRef returned by render/edit. To revise an existing asset, supply its assetId and parentRevision; previous revisions remain intact. Returns downloadable resources. Draft renders do not populate collections.',
       inputSchema: saveInput,
       run: async (raw) => {
         const input = saveInput.parse(raw);
@@ -2547,7 +2572,7 @@ export function createKilnAssetDefs(context: KilnToolContext): KilnToolDef[] {
     {
       name: 'kiln_present',
       description:
-        'Show a saved asset in an interactive chat viewer with GLB, editable ZIP, and source download buttons. Call after saving or when the user wants to see or download an asset. Other hosts receive portable resource links.',
+        'Present one exact saved revision. Supporting MCP App clients show an interactive 3D card with GLB, editable ZIP, and source downloads. Other hosts receive portable resource links; this tool does not launch a local browser in coding harnesses. Call after saving or when the user wants to see or download an asset.',
       inputSchema: exportInput,
       outputSchema: z.object({
         ok: z.literal(true),
@@ -2623,7 +2648,7 @@ export function createKilnAssetDefs(context: KilnToolContext): KilnToolDef[] {
     {
       name: 'kiln_import',
       description:
-        'Copy a pinned asset revision between configured project/personal collections, preserving identity and provenance. Copies never track later edits automatically. For a GLB or downloaded ZIP on disk, use kiln import <file> --collection <name> in the CLI.',
+        'Copy a pinned asset revision between configured collections, preserving identity and provenance. Copies never track later edits automatically. For a GLB or downloaded ZIP on disk, use kiln import <file> --collection <name> in the CLI.',
       inputSchema: importInput,
       run: async (raw) => {
         const input = importInput.parse(raw);

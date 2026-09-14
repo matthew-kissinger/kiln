@@ -9,6 +9,10 @@
  */
 
 import { TEXTURE_USAGES, type TextureUsage } from './textures';
+import {
+  AuthoringDiagnosticError,
+  type AuthoringDiagnostic,
+} from './evaluator/authoring-diagnostic';
 
 export const PROCEDURAL_TEXTURE_SPEC_VERSION = 2 as const;
 export const PORTABLE_MATERIAL_SPEC_VERSION = 2 as const;
@@ -164,9 +168,9 @@ export interface CanonicalPortableMaterialSpecV2 {
   };
 }
 
-export class ProceduralTextureError extends Error {
-  constructor(message: string) {
-    super(message);
+export class ProceduralTextureError extends AuthoringDiagnosticError {
+  constructor(message: string, diagnostic?: AuthoringDiagnostic) {
+    super(diagnostic, message);
     this.name = 'ProceduralTextureError';
   }
 }
@@ -236,7 +240,10 @@ function assertKeys(
   const allow = new Set(allowed);
   for (const key of Object.keys(record)) {
     if (!allow.has(key)) {
-      throw new ProceduralTextureError(`${path} has unknown key ${JSON.stringify(key)}.`);
+      throw new ProceduralTextureError(
+        `${path} has unknown key ${JSON.stringify(key)}.`,
+        'PROCEDURAL_TEXTURE_UNKNOWN_KEY',
+      );
     }
   }
 }

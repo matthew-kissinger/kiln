@@ -2,6 +2,7 @@
 import { createHash, randomUUID } from 'node:crypto';
 import { readFileSync, type Dirent } from 'node:fs';
 import { lstat, mkdir, readFile, readdir, realpath, rename, rm, writeFile } from 'node:fs/promises';
+import { homedir, platform } from 'node:os';
 import { dirname, join, relative, resolve, sep } from 'node:path';
 import {
   assetIdSchema,
@@ -32,7 +33,10 @@ export class FileAssetLibrary implements AssetLibrary {
     );
   }
   collections() {
-    return Object.keys(this.roots).map((id) => ({ id, label: id }));
+    return Object.keys(this.roots).map((id) => ({
+      id,
+      label: id === 'project' ? 'This project' : id === 'library' ? 'Your library' : id,
+    }));
   }
   directory(collection: string): string {
     const root = this.roots[collection];
@@ -191,6 +195,21 @@ export function collectionConfigPath(
     : process.cwd();
   return join(workspace, '.kiln', 'collections.json');
 }
+
+export function defaultUserLibraryRoot(
+  env: Record<string, string | undefined> = process.env,
+  home = homedir(),
+  operatingSystem = platform(),
+): string {
+  const dataRoot = env.XDG_DATA_HOME?.trim();
+  if (dataRoot) return join(dataRoot, 'kiln', 'library');
+  if (operatingSystem === 'darwin')
+    return join(home, 'Library', 'Application Support', 'Kiln', 'library');
+  if (operatingSystem === 'win32')
+    return join(env.LOCALAPPDATA?.trim() || join(home, 'AppData', 'Local'), 'Kiln', 'library');
+  return join(home, '.local', 'share', 'kiln', 'library');
+}
+
 export function localAssetLibrary(
   env: Record<string, string | undefined> = process.env,
 ): FileAssetLibrary {
@@ -214,5 +233,8 @@ export function localAssetLibrary(
     if ((error as NodeJS.ErrnoException).code !== 'ENOENT') throw error;
   }
   const workspace = dirname(dirname(config));
-  return new FileAssetLibrary({ project: join(workspace, 'assets', 'kiln') });
+  return new FileAssetLibrary({
+    project: join(workspace, 'assets', 'kiln'),
+    library: defaultUserLibraryRoot(env),
+  });
 }

@@ -1,7 +1,7 @@
 # Saved assets and the local viewer
 
 Save an asset with its editable source, inspect it in a browser, and move a pinned
-revision between a game project and a personal library. Everything runs locally;
+revision between a game project and your user library. Everything runs locally;
 viewing and exporting make no model calls. Collections are separate from source
 snapshots and disposable build caches.
 
@@ -27,20 +27,28 @@ and 64 MiB of uncompressed content.
 
 From the engine checkout, use `node dist/cli.mjs` instead of `node kiln.mjs`.
 
-## Project collections and personal libraries
+## Project collection and user library
 
-The default `project` collection lives at `<workspace>/assets/kiln`. Remember another
-location with:
+An unconfigured workspace exposes two local destinations:
+
+- `project` — `<workspace>/assets/kiln`, for assets owned by the current workspace. This is the
+  save default when no destination was requested.
+- `library` — Kiln's folder in the operating system's user-data directory, for assets the user
+  explicitly wants available across workspaces.
+
+The gallery is the viewer for these collections, not a third storage destination. The user chooses
+where an asset belongs through their request or the CLI's `--collection`; the agent passes that ID
+to `kiln_save`. Remember another location with:
 
 ```sh
-node kiln.mjs collections add personal /absolute/path/to/my-library
+node kiln.mjs collections add my-game /absolute/path/to/my-game-assets
 node kiln.mjs collections
-node kiln.mjs save chair.kiln.js --name "Chair" --collection personal
+node kiln.mjs save chair.kiln.js --name "Chair" --collection my-game
 ```
 
 Paths are stored in the workspace's `.kiln/collections.json`. Restart an existing
 viewer or MCP process after changing this configuration. `KILN_COLLECTIONS` can
-override it with a JSON map, such as `{"project":"/game/assets/kiln","personal":"/my-library"}`.
+override all defaults with a JSON map, such as `{"project":"/game/assets/kiln","library":"/my-library"}`.
 The configured directories are the only collection roots the server exposes.
 The CLI and MCP derive their workspace from the shared `KILN_PROGRAM_STORE` when set.
 
@@ -53,14 +61,22 @@ by default. There is no automatic deletion or disk quota for saved collections.
 ## Agents and refinement
 
 1. Author/review with the existing tools. Draft rendering retains source but does
-   not create gallery entries.
-2. Call `kiln_save` with `programRef`, `name`, and a collection. Optional fields include
-   tags, brief, description and known attribution.
+   not create saved collection revisions.
+2. If the user names a destination, discover configured IDs with `kiln_assets` using
+   `action: "collections"`; user intent wins. Otherwise use `project`. Call `kiln_save` with
+   `programRef`, `name`, and that collection. The authoring skill records the known model and
+   harness. Optional fields include tags, brief, description and author attribution; unknown
+   attribution is omitted.
 3. Save the returned asset/revision IDs. `kiln_export` returns resource links for the
    GLB, source, preview, manifest and ZIP. MCP clients choose how to show downloads.
 4. In a later session, use `kiln_assets` with `action: "restore"`, collection,
    assetId and revisionId. Use the returned programRef with `kiln_source`/`kiln_edit`.
 5. Save a child with the same assetId and `parentRevision` equal to the base revision.
+
+Every save is immutable. A child does not update or delete its parent, and concurrent children are
+retained as separate branch tips. The viewer exposes the revision selector and branch count, while
+its asset detail panel shows supplied model, harness, and author attribution directly above the
+downloads. The full build record remains available for inspection.
 
 `kiln_assets` also lists configured collections, searches/paginates revisions and
 retrieves complete build records. `kiln_import` copies one exact revision between
@@ -71,14 +87,22 @@ instruction for your agent. Library integrators can inject `AssetLibrary` into
 `KilnToolContext`; `makeKilnProgramTools` exposes the same registry through Strands
 plus a terminal submit tool. Existing generation/buffer surfaces remain compatible.
 
+When the user asks to see a saved result, an agent should call `kiln_present` first. Supporting
+chat clients render the interactive asset directly. In a coding harness that returns links but has
+terminal access, the agent should launch
+`node kiln.mjs view --collection COLLECTION --asset ASSET_ID --revision REVISION_ID` in a persistent
+process using the exact saved values, provide the printed deep-linked loopback URL, and open it with
+the harness's browser facility when available. Asking the user to start the viewer is the last
+fallback, not the normal workflow.
+
 ## Export and import
 
 ```sh
 node kiln.mjs export ASSET_ID REVISION_ID --out workbench.zip
 node kiln.mjs export ASSET_ID REVISION_ID --format glb --out workbench.glb
 node kiln.mjs export ASSET_ID REVISION_ID --format source --out workbench.kiln.js
-node kiln.mjs import workbench.zip --collection personal
-node kiln.mjs asset ASSET_ID REVISION_ID --collection personal --restore
+node kiln.mjs import workbench.zip --collection library
+node kiln.mjs asset ASSET_ID REVISION_ID --collection library --restore
 ```
 
 Exports refuse to overwrite existing files. ZIPs are ordinary archives containing

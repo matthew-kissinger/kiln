@@ -62,6 +62,66 @@ test('gear radii mistakes receive a closed repair hint through handler and actua
     'specify rootRadius when changing tipRadius',
   );
 }, 20000);
+test('procedural texture unknown keys receive closed repair advice through render tooling', async () => {
+  const source = `function build(){proceduralTexture({schemaVersion:2,layers:[{op:'solid',color:0,frequency:'PRIVATE_VALUE'}]});return createRoot('PRIVATE_SOURCE_MARKER');}`;
+  const wire = await evaluateEvaluatorRequestV1(
+    createEvaluatorRequestV1({ requestId: 'procedural-key', code: source }).json,
+  );
+  expect(JSON.parse(wire).error).toEqual({
+    code: 'EXECUTION_REJECTED',
+    message: 'Generated asset execution was rejected.',
+    diagnostic: 'PROCEDURAL_TEXTURE_UNKNOWN_KEY',
+  });
+  await expect(renderGLBViaSubprocess(source)).rejects.toMatchObject({
+    code: 'EXECUTION_REJECTED',
+    diagnostic: 'PROCEDURAL_TEXTURE_UNKNOWN_KEY',
+  });
+  await expect(renderGLBViaSubprocess(source)).rejects.toThrow(
+    'Remove unsupported proceduralTexture fields',
+  );
+  const defs = createKilnProgramToolRegistry({ evaluatorPort: { render: renderGLBViaSubprocess } });
+  const out = (await defs.find((d) => d.name === 'kiln_render')!.run({ code: source })) as {
+    ok: boolean;
+    error: string;
+  };
+  expect(out.ok).toBe(false);
+  expect(out.error).toContain('Remove unsupported proceduralTexture fields');
+  for (const output of [wire, out.error]) {
+    expect(output).not.toContain('frequency');
+    expect(output).not.toContain('PRIVATE_VALUE');
+    expect(output).not.toContain('PRIVATE_SOURCE_MARKER');
+  }
+}, 20000);
+
+test('periodic surface endpoint mismatches receive closed repair advice through render tooling', async () => {
+  const source = `function build(){parametricSurface((u,v)=>[u,v,0],{periodicU:true});return createRoot('PRIVATE_SOURCE_MARKER');}`;
+  const wire = await evaluateEvaluatorRequestV1(
+    createEvaluatorRequestV1({ requestId: 'periodic-endpoint', code: source }).json,
+  );
+  expect(JSON.parse(wire).error).toEqual({
+    code: 'EXECUTION_REJECTED',
+    message: 'Generated asset execution was rejected.',
+    diagnostic: 'PARAMETRIC_PERIODIC_ENDPOINT',
+  });
+  await expect(renderGLBViaSubprocess(source)).rejects.toMatchObject({
+    code: 'EXECUTION_REJECTED',
+    diagnostic: 'PARAMETRIC_PERIODIC_ENDPOINT',
+  });
+  await expect(renderGLBViaSubprocess(source)).rejects.toThrow(
+    'Periodic parametricSurface endpoints must return matching positions',
+  );
+  const defs = createKilnProgramToolRegistry({ evaluatorPort: { render: renderGLBViaSubprocess } });
+  const out = (await defs.find((d) => d.name === 'kiln_render')!.run({ code: source })) as {
+    ok: boolean;
+    error: string;
+  };
+  expect(out.ok).toBe(false);
+  expect(out.error).toContain('Periodic parametricSurface endpoints');
+  for (const output of [wire, out.error]) {
+    expect(output).not.toContain('endpoint positions do not match');
+    expect(output).not.toContain('PRIVATE_SOURCE_MARKER');
+  }
+}, 20000);
 test('undeclared variable gets bounded actionable diagnostic through handler and port', async () => {
   const wire = await evaluateEvaluatorRequestV1(request());
   expect(JSON.parse(wire).error.diagnostic).toBe('UNBOUND_VARIABLE');
@@ -108,6 +168,8 @@ test('arbitrary exceptions and safety denials retain generic rejection', async (
     `function build(){throw new Error('SECRET_HOST_PATH');}`,
     `function build(){throw new Error('roundedBoxGeo: radius must be less than half the smallest dimension SECRET_HOST_PATH');}`,
     `function build(){throw Object.assign(new Error('SECRET_HOST_PATH'),{name:'AuthoringDiagnosticError',diagnostic:'ROUNDED_BOX_RADIUS'});}`,
+    `function build(){throw Object.assign(new Error('SECRET_HOST_PATH'),{name:'AuthoringDiagnosticError',diagnostic:'PROCEDURAL_TEXTURE_UNKNOWN_KEY'});}`,
+    `function build(){throw Object.assign(new Error('SECRET_HOST_PATH'),{name:'AuthoringDiagnosticError',diagnostic:'PARAMETRIC_PERIODIC_ENDPOINT'});}`,
     `function build(){return process.env.SECRET;}`,
   ]) {
     const result = JSON.parse(

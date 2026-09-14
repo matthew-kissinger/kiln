@@ -1,5 +1,6 @@
 /** Owned custom meshes, surface sampling, and explicit topology diagnostics. */
 import * as THREE from 'three';
+import { AuthoringDiagnosticError } from './evaluator/authoring-diagnostic';
 
 export type Point3 = readonly [number, number, number];
 export interface MeshGeoData {
@@ -206,12 +207,12 @@ export function parametricSurface(
     while (groups[i] !== i) i = groups[i]!;
     return i;
   };
-  const join = (a: number, b: number, label: string) => {
+  const join = (a: number, b: number, _label: string) => {
     const pa = positions.slice(a * 3, a * 3 + 3),
       pb = positions.slice(b * 3, b * 3 + 3);
     const scale = Math.max(1, ...pa.map(Math.abs), ...pb.map(Math.abs));
     if (Math.hypot(...pa.map((x, k) => x - pb[k]!)) > scale * 1e-6)
-      throw new Error(`parametricSurface ${label}: endpoint positions do not match`);
+      throw new AuthoringDiagnosticError('PARAMETRIC_PERIODIC_ENDPOINT');
     groups[find(b)] = find(a);
     for (let k = 0; k < 3; k++) positions[b * 3 + k] = positions[a * 3 + k]!;
   };

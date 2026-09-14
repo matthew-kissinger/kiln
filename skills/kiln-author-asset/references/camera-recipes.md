@@ -31,7 +31,7 @@ kiln_render({ programRef: REF, capture: {
 } });
 ```
 
-Versioned capture accepts 1–9 shots, 1–3 columns, and image size 128–1024. Set `output: 'separate'` when individual images better fit the harness. `visibility: 'isolate'` hides everything outside the selected subtree; context remains visible by default. Orbit `relativeTo` is `world`, `asset`, or `part`.
+Versioned capture accepts 1–9 shots, 1–3 columns, and a square per-shot `size` from 128–1024. It does not accept `width`/`height`; those are returned dimensions. Set `output: 'separate'` when individual images better fit the harness. `visibility: 'isolate'` hides everything outside the selected subtree; context remains visible by default. Orbit `relativeTo` is `world`, `asset`, or `part`. Orbit cameras derive their target and distance from the selected subject bounds, so they accept `subject` and `padding`, not `target` or `distance`. Use an explicit camera when you need `position` and `target`.
 
 The same capture object can accompany `kiln_edit` so the edited result answers the same visual question. It is a render request, not a source change.
 

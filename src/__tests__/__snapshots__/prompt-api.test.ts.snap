@@ -385,13 +385,17 @@ await loadApprovedTexture(resourceId)
   // Prefer materialRecipe when a recipe already binds the family, or proceduralTexture V2 for
   // authored surfaces. NEVER texture.clone() a loaded texture (clone() corrupts encoded bytes
   // and breaks GLB export).
-proceduralTexture({ schemaVersion: 2, size?: 4..1024 pow2, usage?, name?, layers: [{ op: 'solid'|'checker'|'stripes'|'gradient'|'bricks'|'noise', ...params, blend?: 'normal'|'multiply'|'screen'|'overlay', opacity?: 0..1 }] })
+proceduralTexture({ schemaVersion: 2, size?: 4..1024 pow2, usage?, name?, layers: ProceduralLayer[] })
   // Builds a tiling texture from a bounded layer stack — no image file needed. Layers composite
   // bottom-first. Noise is seeded and tileable, so the same spec always produces the same bytes
   // and a repeating material shows no seam. Baked to PNG and embedded in the GLB automatically.
-  // NOTE: Sync — no await. Strict V2 JSON boundary: unknown/prototype keys, callbacks, paths,
-  // URLs, and shader source are rejected. Prefer this over approved resources for describable
-  // surfaces. Max 8 layers, power-of-two size up to 1024. Only the six listed ops exist.
+  // NOTE: Layer fields by op — solid: { color }; checker: { colorA, colorB, squares? };
+  // stripes: { colorA, colorB, count?, angleDeg? }; gradient: { from, to, angleDeg? }; bricks:
+  // { brick, mortar, rows?, cols?, mortarWidth?, stagger? }; noise: { colorA, colorB, scale?,
+  // octaves?, seed? }. Every layer also accepts blend?: 'normal'|'multiply'|'screen'|'overlay'
+  // and opacity?: 0..1. Pattern counts are integers 1..256; noise octaves are 1..6. Sync — no
+  // await. Unknown/prototype keys, callbacks, paths, URLs, and shader source are rejected. Max
+  // 8 layers.
 normalMapFromHeight(source: THREE.Texture, { strength?: number, name?: string })
   // Derives a tangent-space normal map from the source texture's brightness, treating it as
   // height. The cheap way to get real PBR surface relief out of a procedural albedo. Wraps at
@@ -966,13 +970,17 @@ await loadApprovedTexture(resourceId)
   // authored surfaces. NEVER texture.clone() a loaded texture (clone() corrupts encoded bytes
   // and breaks GLB export).
   // e.g. const bark = await loadApprovedTexture('kiln.texture.bark-brown-01-albedo.v1');
-proceduralTexture({ schemaVersion: 2, size?: 4..1024 pow2, usage?, name?, layers: [{ op: 'solid'|'checker'|'stripes'|'gradient'|'bricks'|'noise', ...params, blend?: 'normal'|'multiply'|'screen'|'overlay', opacity?: 0..1 }] })
+proceduralTexture({ schemaVersion: 2, size?: 4..1024 pow2, usage?, name?, layers: ProceduralLayer[] })
   // Builds a tiling texture from a bounded layer stack — no image file needed. Layers composite
   // bottom-first. Noise is seeded and tileable, so the same spec always produces the same bytes
   // and a repeating material shows no seam. Baked to PNG and embedded in the GLB automatically.
-  // NOTE: Sync — no await. Strict V2 JSON boundary: unknown/prototype keys, callbacks, paths,
-  // URLs, and shader source are rejected. Prefer this over approved resources for describable
-  // surfaces. Max 8 layers, power-of-two size up to 1024. Only the six listed ops exist.
+  // NOTE: Layer fields by op — solid: { color }; checker: { colorA, colorB, squares? };
+  // stripes: { colorA, colorB, count?, angleDeg? }; gradient: { from, to, angleDeg? }; bricks:
+  // { brick, mortar, rows?, cols?, mortarWidth?, stagger? }; noise: { colorA, colorB, scale?,
+  // octaves?, seed? }. Every layer also accepts blend?: 'normal'|'multiply'|'screen'|'overlay'
+  // and opacity?: 0..1. Pattern counts are integers 1..256; noise octaves are 1..6. Sync — no
+  // await. Unknown/prototype keys, callbacks, paths, URLs, and shader source are rejected. Max
+  // 8 layers.
   // e.g. const bark = proceduralTexture({ schemaVersion: 2, size: 256, usage: 'albedo', name:
   // 'Bark', layers: [{ op: 'solid', color: 0x5a4632 }, { op: 'noise', colorA: 0x3d2f21, colorB:
   // 0x7a6248, scale: 6, octaves: 4, blend: 'overlay' }] });

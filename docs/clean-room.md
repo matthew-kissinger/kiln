@@ -28,6 +28,12 @@ the workspace. For a refinement task, supply only the intended `.kiln.js` source
 For creation, supply a brief with no starting asset. Follow the generated `START.md`
 and ask the agent to read `AGENTS.md` and the relevant skill.
 
+If the brief depends on texture, roughness, metalness, glass or other material evidence,
+start the optional [GPU render service](rendering.md#running-the-gpu-renderer) before the
+first authoring session. CPU views are sufficient for shape and contact, but not materials.
+The MCP server probes renderer availability when its session starts; installing the renderer
+afterward requires restarting that agent session before it can use the new service.
+
 If paths move, use the [repair command](install.md#move-or-repair-an-installation).
 Repair preserves instruction/skill copies; new evaluations require fresh workspaces,
 not repaired old instructions.
@@ -71,10 +77,18 @@ The fresh corrected battleship creation and same-conversation roof-color revisio
 then completed through native MCP, with saved lineage and validated exports.
 This is an assisted readiness retest; retain the failed first take separately.
 
-Hermes: use `node hermes.mjs --ignore-rules`. The launcher sets a separate `HERMES_HOME`,
-process cwd and terminal directory without copying credentials. Authenticate that
-profile or provide credentials through the environment. Ask it explicitly to read
-the workspace instructions and relevant skill. Use absolute paths in headless briefs.
+Hermes: register `kiln_workspace` once with the exact command printed in `START.md`, then
+use `node hermes.mjs`. The launcher deliberately does **not** replace `HERMES_HOME`, because
+that single home contains the operator's provider selection, MCP registration and credentials.
+It supplies the workspace directory and program store per invocation. For a headless run:
+
+```sh
+node hermes.mjs -z \
+  'Read AGENTS.md and the project skills, then create an ornate astronomical clock.'
+```
+
+Do not add `--ignore-rules` unless you intend to suppress this workspace's own `AGENTS.md`.
+Use absolute paths when a headless prompt must refer to a file.
 
 Codex supports `exec --ignore-user-config --ephemeral`, per-run MCP overrides and
 `--cd`, while retaining authentication.
@@ -88,32 +102,44 @@ calls before describing a run as native MCP. `--pure` disables external plugins;
 do not use it as a general isolation switch for a workflow that needs those plugins.
 Audit inherited instructions separately.
 
-For headless Codex evaluation, the project must be trusted for its generated
-`.codex/config.toml` to load. On Codex 0.153.4, pass a project trust table as a TOML
-**value** when supplying trust for one invocation:
+For headless Codex evaluation, use the generated launcher. Codex has no project-local
+configuration; `.codex/config.toml` records the intended server for a human reader, while
+`codex.mjs` supplies the server and program store through per-run overrides:
 
 ```sh
-codex exec --ignore-user-config --ephemeral --cd /absolute/my-assets \
-  -c 'projects={"/absolute/my-assets"={trust_level="trusted"}}' \
-  'Read AGENTS.md and call kiln_list_primitives with capabilities true.'
+node codex.mjs --ignore-user-config --ephemeral --approve-for-me \
+  'Read AGENTS.md and the project skills, then create an articulated survey drone.'
 ```
 
-Replace the absolute path in both places with the intended trusted workspace.
-This does not write global configuration. Do not encode the path as a quoted
-dotted override key such as `projects."/absolute/my-assets".trust_level`:
-that CLI version splits override keys on dots literally, retaining the quotes.
-Our isolated test then failed to load the project MCP server even though
-`codex mcp list` displayed it. The corrected table value loaded the generated
-configuration and completed a native tool call without MCP definition overrides.
-Verify actual native calls in the conversation trace before starting asset work.
+This retains authentication while ignoring unrelated user configuration, writes no session
+rollout with `--ephemeral`, and leaves the workspace-scoped MCP override intact. The launcher
+also supplies `--cd` and `--skip-git-repo-check`; running bare `codex` in the workspace does
+not load Kiln. Verify actual native calls in the conversation trace before starting asset work.
 
 Claude supports `--strict-mcp-config`, `--mcp-config`, and `--setting-sources project`.
 Its `--bare` mode skips OAuth login and requires API-key authentication; do not use it
-for subscription runs. Claude remains a supported configuration route, but unavailable
-credits are not a reason to retry paid calls or substitute an unrequested model.
+for subscription runs. A complete project-only headless invocation is:
+
+```sh
+claude -p --strict-mcp-config --mcp-config .mcp.json \
+  --setting-sources project --autocompact auto \
+  --permission-mode acceptEdits \
+  --allowedTools 'mcp__kiln_workspace__*,Read,Write,Edit,Glob,Grep,Bash(node kiln.mjs *)' \
+  'Read AGENTS.md and the project skills, then create a derelict signal tower.'
+```
+
+For a confirmed context window larger than 333k, `--autocompact 333k` is a useful
+evaluation ceiling. Otherwise keep `auto`. Claude remains a supported configuration route,
+but unavailable credits are not a reason to retry paid calls or substitute an unrequested model.
 
 Use scoped permissions. Setup does not disable approvals globally. Headless runs need
 explicit grants for Kiln and local file operations through the harness's controls.
+
+For every harness, keep automatic compaction enabled and have long-running agents maintain
+the `KILN_PROGRESS.md` handoff described in the generated `AGENTS.md`. The default behavior,
+manual commands, public controls and the conditional 333k evaluation profile are in
+[headless harnesses](harnesses.md#long-running-sessions-and-compaction). Opaque harnesses
+keep their native policy; Kiln does not guess at a hidden threshold.
 
 ## Record a reproducible run
 

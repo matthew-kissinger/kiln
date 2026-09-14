@@ -85,6 +85,200 @@ the model, what the agent inherited (user-level skills, MCP servers, memory, per
 the transcript. A quota or authentication failure is not a measure of asset quality, and an
 interrupted run is not a completed asset.
 
+### Reproducible Tier 2 driver
+
+`dogfood:tier2` drives the outer, blind agent. It supports Agy, Claude Code, Codex, Hermes and
+OpenCode, using each harness's verified isolation: an operator-prepared clean auth home for Agy,
+strict empty MCP for Claude, ignored user configuration and rules for Codex, safe mode or an
+isolated home for Hermes, and a fresh XDG configuration plus pure mode for OpenCode. The ordinary
+routes keep their normal authentication store. Adding another adapter is appropriate only after
+its isolation can be demonstrated; a clean current directory by itself does not suppress
+user-level skills or MCP servers.
+
+The command is a dry run unless `--run-live` and an authorization record are both present. Start
+by inspecting the exact invocation without spending quota:
+
+```bash
+bun run dogfood:tier2 -- \
+  --harness codex \
+  --goal "a tide-powered cliffside signal station with articulated counterweights"
+```
+
+For a live three-run batch, record the operator's approval and quota/spend boundary first, then
+pass three independent, substantial goals:
+
+```bash
+bun run dogfood:tier2 -- \
+  --harness codex \
+  --run-live \
+  --authorization docs/evaluation/approved-tier2-run.md \
+  --timeout 45m \
+  --goal "a tide-powered cliffside signal station with articulated counterweights" \
+  --goal "a botanical clockwork conservatory whose solar petals track the sun" \
+  --goal "a lunar salvage crawler with a folding crane and articulated suspension"
+```
+
+Use `--compact-tokens 333000` only for a route whose usable context is larger than 333k. Omit it
+to keep the harness default when the context size is smaller or unknown. Claude Code maps it to
+`--autocompact`; Codex maps it to `model_auto_compact_token_limit` with `total` scope. Compaction
+is part of the headless-session evidence: confirm in the raw trace that work continues afterward,
+not merely that a compact event occurred.
+
+The outer prompt contains the public repository URL, the asset objective, and the required
+end-state: a fresh clone, a separate workspace, and an independently launched headless author.
+It does not name setup commands, skills, Kiln tools, primitives, or examples. Those are the public
+surface being tested. Claude runs in safe mode with a strict empty MCP configuration and no saved
+outer session. Codex ignores user configuration and execution rules and uses an ephemeral outer
+session. OpenCode uses `--pure` under a fresh `XDG_CONFIG_HOME`; Hermes uses `--safe-mode`.
+Agy has no equivalent flag, so it requires `--agy-home` pointing to an operator-prepared home
+whose `agy mcp list` is empty and which exposes only the authentication/runtime files the test
+needs. The driver never copies credentials into it. Authentication remains available where the
+selected route requires it. The outer agent receives unrestricted shell access because cloning,
+installation, workspace creation, and its child process require it; run this only on a machine or
+VM where that authority is acceptable.
+
+Hermes can anonymously route OpenCode Free models. Contributor-tier models may train on prompts
+and completions and therefore fail closed in unattended mode. Use
+`--allow-data-training-tier` only for public, non-sensitive evaluation material after recording
+that choice; the driver places the acknowledgement in a run-local isolated `HERMES_HOME`, never
+the operator's profile. For example:
+
+```bash
+bun run dogfood:tier2 -- \
+  --harness hermes \
+  --provider opencode-free \
+  --model muse-spark-1.3-contributor-free \
+  --allow-data-training-tier \
+  --goal "an ornate desert astrolabe caravan shrine"
+```
+
+By default, raw evidence is written with private permissions under ignored
+`.dogfood/tier2/<batch>/`, while each working directory lives outside the checkout under the OS
+temporary directory. Use `--out /external/evidence/path` and
+`--workspace-root /external/workspaces/path` for durable evidence. An output directory inside the
+checkout is refused unless it is under `.dogfood/`. Each run retains:
+
+- the exact invocation and inherited environment **names** (never values);
+- stdout JSONL and stderr without lossy filtering;
+- a sanitized receipt with path and credential-pattern redaction;
+- source and GLB candidate paths, sizes, and hashes from outside cloned examples/build output.
+
+### Retaining evaluation assets
+
+Dogfood assets are local-only candidates by default. Every Tier 2 run imports each newly saved Kiln
+revision or matching standalone source/GLB export into the standard user `library` collection in
+the operating system's user-data directory (`$XDG_DATA_HOME/kiln/library` or
+`~/.local/share/kiln/library` on Linux).
+The collection is independent of the temporary workspace and contains the exact source, GLB,
+optional preview, hashes, manifest metadata, run provenance, and `index.json`. Its importer scans the whole
+batch workspace so an outer agent that creates a sibling asset workspace is still captured.
+Managed and loose copies with identical source/GLB hashes merge into one entry; distinct preview
+variants are retained rather than overwritten.
+
+“Dogfood” is maintainer evaluation terminology for the importing workflow, not wording for the
+ordinary product flow. User-facing skills and the standard viewer describe generating assets,
+saving them to collections, and browsing **This project** or **Your library**.
+
+This user library is deliberately unrelated to `examples/` and the site build. **Never copy a
+candidate into the public gallery unless the operator explicitly asks to promote that specific
+asset.** A successful dogfood run, a good model review, or visibility in the local viewer is not
+promotion approval.
+
+Recover saved revisions from older workspaces without publishing anything:
+
+```bash
+bun run dogfood:gallery -- /path/to/old-run /path/to/another-run
+```
+
+Use `--gallery-root /private/path` to relocate the archive. Tier 2 accepts the same option, and
+`--no-local-gallery` is the explicit opt-out for an intentionally disposable run. Re-importing the
+same bytes is safe: entries are content-addressed and provenance is merged rather than duplicated.
+Review the collection in Kiln's normal interactive asset viewer from an asset workspace:
+
+```bash
+node kiln.mjs view
+```
+
+The printed loopback URL opens the single orbit, zoom, pan, wireframe, lighting, animation,
+revision, and download UI used for all saved assets. Select **Your library** in its collection
+sidebar. The importer never copies candidates into `examples/` or the site build. Public promotion
+remains a separate, manual operation after visual and provenance review.
+
+The archive root is required to be outside the repository, and every record is stamped
+`publication.state: "local-only"`. The importer refuses a repository-contained destination. These
+are the enforcement boundaries; the collection name stays neutral so evaluation runs and ordinary
+asset creation can grow the same local library without confusing an agent about the asset's use.
+
+A recovery pass on 14 September 2026 found 28 distinct source/GLB pairs from retained dogfood
+workspaces and session scratchpads; all 28 had a preview. The archive is machine-local and is not a
+new checked-in collection or a site-gallery input.
+
+Raw traces can still contain model-printed secrets or private paths. Keep the raw directory private
+and publish only a reviewed sanitized receipt. The receipt never promotes an artifact on the
+agent's own claim: both a newly discovered `.kiln.js` source and a GLB are required for
+`completed-pending-review`, and that status still requires visual and provenance review.
+
+Outcome classes are deliberately operational. `provider-quota` and `authentication` come only
+from explicit structured error events or stderr; ordinary telemetry fields such as
+`rateLimitType` cannot trigger them. A provider-level failure stops the remaining batch instead of
+spending calls that cannot succeed. `timed-out` uses a per-run process group and kills only the
+spawned outer agent and its descendants—there is no process-name reaper. `partial-asset`,
+`asset-failure`, and `harness-error` remain distinct so setup failures are not scored as weak 3D
+work.
+
+Claude Code may be pointed at an operator-controlled compatibility proxy through its normal
+environment for private harness testing. That route is experimental evaluation infrastructure,
+not a Kiln installation recommendation. Record the proxy version, resolved model, and whether MCP
+image blocks and nested tool calls survived in the reviewed receipt; never copy OAuth token
+contents into the run directory or documentation.
+
+### Blind setup trials · 13 September 2026
+
+These are setup-path observations, not a model leaderboard. Each outer agent received only the
+public repository URL, a substantial asset goal, and the required end state. The OpenCode and Agy
+images were reviewed by a human after the run; the driver status alone never establishes quality.
+
+| Outer route | Result | Evidence and qualification |
+| --- | --- | --- |
+| Claude Code 2.1.269 · Claude Opus 5 | Completed once; two later starts hit provider quota | Produced a weathered lighthouse after cloning, setup, a nested 86-turn author, nine revisions, and GPU review: 16,245 triangles, 38,461-byte source and 1,763,612-byte GLB. The result was detailed rather than placeholder geometry. |
+| OpenCode 1.18.30 · Muse Spark 1.3 Contributor Free | Completed, pending review, 25m10s | Produced a deep-sea cartographer console after three render/edit cycles: 16,548 triangles, 10,962-byte source and 266,976-byte GLB. Its relief map, drawers, porthole and articulated plotting arms read coherently, but CPU views cannot establish its materials. |
+| Agy 1.2.2 · Gemini 3.8 Flash High | Completed, pending review, 27m28s | Produced a detailed polar chronometer/armillary: 72,244 triangles, 57,670-byte source and 2,365,024-byte GLB, with a material-faithful GPU view. The outer setup agent also read a cloned Kiln example and engine source before authoring; that is a clean-room protocol failure and useful contamination evidence, even though the asset succeeded. |
+| Codex 0.154.0 · GPT-5.6 Luna, xhigh | Asset recovered; later provider quota | Cloned, configured a workspace, and launched a nested author that saved and exported a 16,604-triangle Ancient Tidal Observatory with a material-faithful GPU preview. The outer agent created the asset workspace beside `run-01`, exposing a driver discovery bug: the old receipt incorrectly reported no export. Whole-batch discovery and automatic local-gallery capture now cover this shape. |
+| Hermes 0.21.2 · GPT-5.6 Luna, xhigh through Codex OAuth | Provider quota after 2m43s | Reached clone and workspace setup under an isolated `HERMES_HOME`; quota arrived before authoring. An earlier attempt proved that Hermes safe mode alone does not isolate its state database, so the driver now always supplies an isolated home. |
+| Hermes 0.21.2 · Muse Spark 1.3 Contributor Free | Tool-protocol failure | With the data-training acknowledgement isolated to the run, the model emitted literal `atem:function_calls` markup instead of executable Hermes tool calls. A catalogue `toolcall=true` label was therefore insufficient for this route. |
+| Hermes 0.21.2 · MiMo v2.5 Free | Provider quota | The route returned HTTP 429 after three retries before setup could be evaluated. |
+| Hermes 0.21.2 · Nemotron 3.5 Lightning Free | Tool calls pass; Tier 2 protocol fail with retained asset | A direct keyless `opencode-free` probe produced a structured `terminal` call and consumed its result. The blind run cloned and set up Kiln, then authored a 5,760-triangle Celestial Telegraph itself instead of launching a child agent; it also read a checked-in example. The valid source/GLB/CPU preview is retained locally, but the run does not satisfy the nested clean-room protocol. |
+| Hermes 0.21.2 · Ling 3.0 Flash Free | Tool-call compatibility pass | A direct keyless probe emitted and completed a structured `terminal` call. No full asset run was attempted. DeepSeek V4 Flash Free reported unavailable, MiMo returned 429, and Nemotron 3 Ultra did not answer within the 30-second probe window. |
+| Codex 0.154.0 · GPT-5.6 Luna, xhigh · second run | Completed, pending review | Luna cloned and built Kiln, created the workspace, recovered from an OpenCode child route with zero balance, then launched a configured GPT-5.6 Sol child. The child produced a 15,296-triangle Deep-Space Salvage Winch, saved two collection revisions, and exported source, GLB, and a material-faithful GPU contact sheet. The local archive preserved both managed previews and the loose contact sheet. |
+
+The completed OpenCode and Agy runs both created `KILN_PROGRESS.md` and resumed their multi-cycle
+work from exact program references, validating the persistence shape generated into new
+workspaces. None of these trials crossed 333k usable context or emitted a compaction event. The
+per-harness controls in [Headless harnesses](harnesses.md#long-running-sessions-and-compaction) are therefore mapped
+and syntax-checked, but continuation after a real 333k compaction remains an explicit unverified
+test case.
+
+The second Luna run used the 333,000-token Codex ceiling and continued normally without compacting.
+Its stream reported 7,609,537 cumulative input tokens, of which 7,330,816 were cached; non-cached
+cumulative input was 278,721, still below the configured ceiling. That confirms the one-run setting
+did not disrupt a nested workflow, but it is not evidence of post-compaction continuation.
+
+For the private Claude-with-Codex experiment, two third-party projects were inspected. The broad
+[Claude Code Router](https://github.com/musistudio/claude-code-router) required connector scopes
+that were absent and modified operator-global Claude/Codex profiles despite attempted XDG
+isolation, so it was rejected and those changes were restored. The narrower
+[claude-code-proxy](https://github.com/raine/claude-code-proxy) 0.1.39 was pinned by release hash
+and run loopback-only from temporary state. Claude Code through that bridge completed a text smoke,
+a native Read tool call, discovery of all 13 Kiln MCP tools, and a GPU material-faithful astrolabe
+render whose image reached Claude's context. This proves the private evaluation route works for
+the exercised calls; it is not shipped setup guidance and does not imply support for either proxy.
+
+Findings from these trials produced concrete fixes: GPU-before-session guidance, complete headless
+launch shapes, attached Agy `--print=TEXT` spelling, harness-specific clean homes, receipt
+redaction and quota classification, exclusion of installed skill samples from artifact discovery,
+documented procedural texture keys and camera contracts, clearer category semantics, and closed
+actionable diagnostics for strict procedural keys and non-closing periodic surfaces.
+
 ## Harness checks · 5 September 2026
 
 These checks exercise source reuse across tool calls. They are small integration tests, not a model-quality ranking.

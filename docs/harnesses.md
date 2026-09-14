@@ -47,7 +47,7 @@ Verified against the versions in the footer. The traps are not stylistic -- each
 | harness | non-interactive | prompt position | unattended tool grant | working directory |
 | --- | --- | --- | --- | --- |
 | agy | `--print=TEXT` | **attached to the flag** | print mode | `--add-dir` |
-| claude | `-p TEXT` | flag value | `--permission-mode acceptEdits` + `--allowedTools` | `--add-dir` |
+| claude | `-p` then `TEXT` | positional; `-p` selects print mode | `--permission-mode acceptEdits` + `--allowedTools` | `--add-dir` |
 | codex | `exec TEXT` | positional after `exec` | `--approve-for-me` | `--cd` |
 | opencode | `run TEXT` | positional | `--auto` | `--dir` |
 | copilot | `-p TEXT` | flag value | `--allow-all-tools` | `-C` and `--add-dir` |
@@ -68,6 +68,60 @@ The ones that cost real time:
   sandbox and moves approval to `on-request`.
 - **A bare temp directory is not a trusted directory.** codex needs `--skip-git-repo-check`;
   cursor-agent needs `--trust`.
+
+## Long-running sessions and compaction
+
+Keep automatic compaction enabled. It is a normal continuation boundary, not a reason for a
+headless run to stop. Before that boundary -- or simply after every meaningful asset revision --
+have the agent update `KILN_PROGRESS.md` with the active goal, current `programRef`, files changed,
+validation and render results, unresolved errors, and the exact next action. The generated
+workspace `AGENTS.md` carries this instruction so it survives every harness's summary mechanism.
+
+`333000` tokens is a useful **large-context evaluation ceiling**, not a portable default. Apply it
+only after confirming that the selected model exposes more than 333k usable context. A 128k or 200k
+route needs its native lower trigger. When the window is unknown, leave the harness default alone.
+Do not set a fake `model_context_window` merely to make a threshold fit.
+
+| harness | default and manual behavior | public control | safe headless policy |
+| --- | --- | --- | --- |
+| claude | automatic; interactive `/compact` | Claude Code 2.1.269 exposes `--autocompact auto` or `--autocompact 100k` through `1M` | use `--autocompact 333k` only for a confirmed larger window; otherwise `auto` |
+| codex | automatic model default; interactive `/compact` | `model_auto_compact_token_limit`; scope is `total` (default) or `body_after_prefix` | use the per-run overrides below for a confirmed larger window; otherwise omit both |
+| hermes | automatic at the lower of its ratio and absolute thresholds; `/compress` is manual | `compression.threshold`, `compression.threshold_tokens`, and `compression.target_ratio` in `config.yaml` | `compression.threshold_tokens: 333000` is a no-later-than ceiling, but Kiln never edits the user-global Hermes config |
+| opencode | automatic by default; interactive `/compact` (`/summarize` alias) | v1 exposes `compaction.auto`, `compaction.prune`, and `compaction.reserved`, not a portable absolute trigger | retain native automatic compaction; do not set `OPENCODE_DISABLE_AUTOCOMPACT` |
+| copilot | automatic background compaction starts around 80%; the CLI waits for it near 95%; `/compact` is manual | no public Copilot CLI threshold setting; `--context` selects a window tier, not its trigger | retain native automatic compaction |
+| cursor-agent | automatically summarizes near a full context; `/summarize` is canonical and `/compress` is its alias | no public threshold override; `preCompact` hooks observe rather than replace it | retain native automatic compaction |
+| agy | public CLI documentation exposes context inspection, but not the trigger or summary policy | no supported compaction setting or command found | treat it as opaque, retain native behavior, and rely on the progress note |
+
+Codex's supported one-run spelling is:
+
+```sh
+codex exec \
+  -c model_auto_compact_token_limit=333000 \
+  -c 'model_auto_compact_token_limit_scope="total"' \
+  YOUR_PROMPT
+```
+
+Hermes's equivalent persistent configuration is:
+
+```yaml
+compression:
+  enabled: true
+  threshold_tokens: 333000
+```
+
+The Hermes ratio threshold still wins when it is lower. Because `config.yaml` also belongs to the
+operator's provider and credential profile, generated Kiln launchers explain this setting but do
+not mutate it.
+
+The controls above were checked against the versions in the footer and their vendor documentation:
+[Claude Code CLI](https://code.claude.com/docs/en/cli-usage),
+[Codex configuration](https://developers.openai.com/codex/config-reference),
+[Hermes configuration](https://github.com/NousResearch/hermes-agent/blob/main/website/docs/user-guide/configuration.md),
+[OpenCode configuration](https://dev.opencode.ai/docs/config/),
+[Copilot context management](https://docs.github.com/en/copilot/concepts/agents/copilot-cli/context-management),
+[Cursor summarization](https://docs.cursor.com/en/agent/chat/summarization), and
+[Antigravity CLI](https://antigravity.google/docs/cli-reference?app=cli). An absent control is
+recorded as absent or opaque rather than inferred from another harness.
 
 ## Where each harness reads MCP config
 

@@ -30,7 +30,14 @@ test('MCP saves an editable revision, exposes exact downloadable bytes, and rest
   await Promise.all([client.connect(ct), server.connect(st)]);
   try {
     const definitions = await client.listTools();
+    const saveDefinition = definitions.tools.find((tool) => tool.name === 'kiln_save')!;
+    expect(saveDefinition.description).toContain('user-requested collection');
+    const collectionProperty = saveDefinition.inputSchema.properties?.collection as
+      | { description?: string }
+      | undefined;
+    expect(collectionProperty?.description).toContain('Discover available IDs with kiln_assets');
     const presentation = definitions.tools.find((tool) => tool.name === 'kiln_present')!;
+    expect(presentation.description).toContain('does not launch a local browser');
     expect(presentation.outputSchema).toBeDefined();
     expect(presentation._meta?.ui).toBeDefined();
     const result = await client.callTool({

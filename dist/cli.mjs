@@ -40,20 +40,24 @@ function authoringDiagnosticAdvice(diagnostic) {
     return UNBOUND_VARIABLE_ADVICE;
   if (diagnostic === "ROUNDED_BOX_RADIUS")
     return ROUNDED_BOX_RADIUS_ADVICE;
-  return diagnostic === "GEAR_RADII_ORDER" ? GEAR_RADII_ORDER_ADVICE : "";
+  if (diagnostic === "GEAR_RADII_ORDER")
+    return GEAR_RADII_ORDER_ADVICE;
+  if (diagnostic === "PROCEDURAL_TEXTURE_UNKNOWN_KEY")
+    return PROCEDURAL_TEXTURE_UNKNOWN_KEY_ADVICE;
+  return diagnostic === "PARAMETRIC_PERIODIC_ENDPOINT" ? PARAMETRIC_PERIODIC_ENDPOINT_ADVICE : "";
 }
 function rethrowAuthoringError(error) {
   if (error instanceof ReferenceError && /(?: is not defined$|^Can't find variable: )/.test(error.message) && !/\b(?:loadTexture|process|fetch|globalThis|require|Bun|Deno)\b/.test(error.message)) {
-    throw new AuthoringDiagnosticError;
+    throw new AuthoringDiagnosticError("UNBOUND_VARIABLE");
   }
   throw error;
 }
-var UNBOUND_VARIABLE_ADVICE = "Check variable spelling and scope: generated code used an undeclared variable. Read the current source and check declarations before retrying. If it was meant to be a Kiln helper, call kiln_list_primitives to confirm the exact name and signature; the sandbox exposes only those globals.", GEAR_RADII_ORDER_ADVICE = "gearGeo requires boreRadius < rootRadius < tipRadius; specify rootRadius when changing tipRadius. Omitted radii keep their absolute defaults.", ROUNDED_BOX_RADIUS_ADVICE = "roundedBoxGeo: radius must be less than half the smallest dimension. Reduce radius or increase the smallest dimension; equality is invalid.", AuthoringDiagnosticError;
+var UNBOUND_VARIABLE_ADVICE = "Check variable spelling and scope: generated code used an undeclared variable. Read the current source and check declarations before retrying. If it was meant to be a Kiln helper, call kiln_list_primitives to confirm the exact name and signature; the sandbox exposes only those globals.", GEAR_RADII_ORDER_ADVICE = "gearGeo requires boreRadius < rootRadius < tipRadius; specify rootRadius when changing tipRadius. Omitted radii keep their absolute defaults.", ROUNDED_BOX_RADIUS_ADVICE = "roundedBoxGeo: radius must be less than half the smallest dimension. Reduce radius or increase the smallest dimension; equality is invalid.", PROCEDURAL_TEXTURE_UNKNOWN_KEY_ADVICE = 'Remove unsupported proceduralTexture fields. Call kiln_list_primitives with category "textures" and use only the documented fields for the selected layer op.', PARAMETRIC_PERIODIC_ENDPOINT_ADVICE = "Periodic parametricSurface endpoints must return matching positions. For periodicU, sample(uMin, v) and sample(uMax, v) must match; for periodicV, sample(u, vMin) and sample(u, vMax) must match.", AuthoringDiagnosticError;
 var init_authoring_diagnostic = __esm(() => {
   AuthoringDiagnosticError = class AuthoringDiagnosticError extends Error {
     diagnostic;
-    constructor(diagnostic = "UNBOUND_VARIABLE") {
-      super(authoringDiagnosticAdvice(diagnostic));
+    constructor(diagnostic, message = authoringDiagnosticAdvice(diagnostic)) {
+      super(message);
       this.diagnostic = diagnostic;
       this.name = "AuthoringDiagnosticError";
     }
@@ -11982,11 +11986,11 @@ function parametricSurface(sample, options = {}) {
       i = groups[i];
     return i;
   };
-  const join = (a, b, label) => {
+  const join = (a, b, _label) => {
     const pa = positions.slice(a * 3, a * 3 + 3), pb = positions.slice(b * 3, b * 3 + 3);
     const scale = Math.max(1, ...pa.map(Math.abs), ...pb.map(Math.abs));
     if (Math.hypot(...pa.map((x, k) => x - pb[k])) > scale * 0.000001)
-      throw new Error(`parametricSurface ${label}: endpoint positions do not match`);
+      throw new AuthoringDiagnosticError("PARAMETRIC_PERIODIC_ENDPOINT");
     groups[find(b)] = find(a);
     for (let k = 0;k < 3; k++)
       positions[b * 3 + k] = positions[a * 3 + k];
@@ -12066,7 +12070,9 @@ function creaseNormals(geometry, options = {}) {
   out.computeBoundingSphere();
   return out;
 }
-var init_geometry = () => {};
+var init_geometry = __esm(() => {
+  init_authoring_diagnostic();
+});
 
 // src/deform.ts
 import * as THREE19 from "three";
@@ -13144,7 +13150,7 @@ function assertKeys(record, allowed, path) {
   const allow = new Set(allowed);
   for (const key of Object.keys(record)) {
     if (!allow.has(key)) {
-      throw new ProceduralTextureError(`${path} has unknown key ${JSON.stringify(key)}.`);
+      throw new ProceduralTextureError(`${path} has unknown key ${JSON.stringify(key)}.`, "PROCEDURAL_TEXTURE_UNKNOWN_KEY");
     }
   }
 }
@@ -13477,10 +13483,11 @@ function canonicalizePortableMaterialSpecV2(input) {
 var MAX_PROCEDURAL_SIZE = 1024, MIN_PROCEDURAL_SIZE = 4, MAX_PROCEDURAL_LAYERS = 8, MAX_NOISE_OCTAVES = 6, MAX_PROCEDURAL_NAME_LENGTH = 80, MAX_PROCEDURAL_PATTERN_COUNT = 256, MAX_PORTABLE_MATERIAL_TEXTURES = 5, MAX_PORTABLE_MATERIAL_TEXELS, ProceduralTextureError, OPS, BLENDS, FORBIDDEN_KEYS, SHA256_K, rotateRight = (value, bits) => value >>> bits | value << 32 - bits, MATERIAL_TEXTURE_USAGE;
 var init_procedural_material_v2 = __esm(() => {
   init_textures();
+  init_authoring_diagnostic();
   MAX_PORTABLE_MATERIAL_TEXELS = 4 * 1024 * 1024;
-  ProceduralTextureError = class ProceduralTextureError extends Error {
-    constructor(message) {
-      super(message);
+  ProceduralTextureError = class ProceduralTextureError extends AuthoringDiagnosticError {
+    constructor(message, diagnostic) {
+      super(diagnostic, message);
       this.name = "ProceduralTextureError";
     }
   };
@@ -18799,12 +18806,12 @@ const cowl = new THREE.Mesh(cowlGeo, bodyMat); // SAME bodyMat as fuselage, no c
     },
     {
       name: "proceduralTexture",
-      signature: "proceduralTexture({ schemaVersion: 2, size?: 4..1024 pow2, usage?, name?, layers: [{ op: 'solid'|'checker'|'stripes'|'gradient'|'bricks'|'noise', ...params, blend?: 'normal'|'multiply'|'screen'|'overlay', opacity?: 0..1 }] })",
+      signature: "proceduralTexture({ schemaVersion: 2, size?: 4..1024 pow2, usage?, name?, layers: ProceduralLayer[] })",
       returns: "THREE.DataTexture (tiling, sRGB or linear per usage)",
       category: "textures",
       description: "Builds a tiling texture from a bounded layer stack — no image file needed. Layers composite bottom-first. Noise is seeded and tileable, so the same spec always produces the same bytes and a repeating material shows no seam. Baked to PNG and embedded in the GLB automatically.",
       example: "const bark = proceduralTexture({ schemaVersion: 2, size: 256, usage: 'albedo', name: 'Bark', layers: [{ op: 'solid', color: 0x5a4632 }, { op: 'noise', colorA: 0x3d2f21, colorB: 0x7a6248, scale: 6, octaves: 4, blend: 'overlay' }] });",
-      promptNotes: "Sync — no await. Strict V2 JSON boundary: unknown/prototype keys, callbacks, paths, URLs, and shader source are rejected. Prefer this over approved resources for describable surfaces. Max 8 layers, power-of-two size up to 1024. Only the six listed ops exist."
+      promptNotes: "Layer fields by op — solid: { color }; checker: { colorA, colorB, squares? }; stripes: { colorA, colorB, count?, angleDeg? }; gradient: { from, to, angleDeg? }; bricks: { brick, mortar, rows?, cols?, mortarWidth?, stagger? }; noise: { colorA, colorB, scale?, octaves?, seed? }. Every layer also accepts blend?: 'normal'|'multiply'|'screen'|'overlay' and opacity?: 0..1. Pattern counts are integers 1..256; noise octaves are 1..6. Sync — no await. Unknown/prototype keys, callbacks, paths, URLs, and shader source are rejected. Max 8 layers."
     },
     {
       name: "normalMapFromHeight",
@@ -21289,7 +21296,7 @@ var init_capture_limits = __esm(() => {
 });
 
 // src/views/background.ts
-var GRID_BACKGROUND_RGB;
+var GRID_BACKGROUND_RGB, GRID_BACKGROUND_HEX = "#1a1a1a";
 var init_background = __esm(() => {
   GRID_BACKGROUND_RGB = [26, 26, 26];
 });
@@ -25096,7 +25103,7 @@ function decodeEvaluatorResultV1(json, maxGlbBytes, expectedRequestId) {
     if (!codes.includes(value.error.code) || typeof value.error.message !== "string" || value.error.message !== evaluatorOutcomeMessage(value.error.code)) {
       return fail("result");
     }
-    if (value.error.diagnostic !== undefined && (value.error.code !== "EXECUTION_REJECTED" || value.error.diagnostic !== "UNBOUND_VARIABLE" && value.error.diagnostic !== "GEAR_RADII_ORDER" && value.error.diagnostic !== "ROUNDED_BOX_RADIUS"))
+    if (value.error.diagnostic !== undefined && (value.error.code !== "EXECUTION_REJECTED" || value.error.diagnostic !== "UNBOUND_VARIABLE" && value.error.diagnostic !== "GEAR_RADII_ORDER" && value.error.diagnostic !== "ROUNDED_BOX_RADIUS" && value.error.diagnostic !== "PROCEDURAL_TEXTURE_UNKNOWN_KEY" && value.error.diagnostic !== "PARAMETRIC_PERIODIC_ENDPOINT"))
       return fail("result");
     if (value.error.qa !== undefined) {
       if (value.error.code !== "QA_BLOCKED" || !isRecord6(value.error.qa) || !hasExactKeys(value.error.qa, ["report", "stage", "gltfValidation"]) || !validQaReport(value.error.qa.report) || !["scene", "final-glb"].includes(String(value.error.qa.stage)) || value.error.qa.gltfValidation !== undefined && !validGltfValidation(value.error.qa.gltfValidation)) {
@@ -28268,7 +28275,7 @@ function createKilnAssetDefs(context) {
   return [
     {
       name: "kiln_save",
-      description: "Save a completed source revision as a durable asset with its exact GLB, source, preview, and build record. Use programRef returned by render/edit. To revise an existing asset, supply its assetId and parentRevision; previous revisions remain intact. Returns downloadable resources. Draft renders do not populate collections.",
+      description: "Save a completed source revision into the user-requested collection, or project when no destination was requested. Persists its exact GLB, source, preview, and build record. Discover destinations with kiln_assets action=collections. Use programRef returned by render/edit. To revise an existing asset, supply its assetId and parentRevision; previous revisions remain intact. Returns downloadable resources. Draft renders do not populate collections.",
       inputSchema: saveInput,
       run: async (raw) => {
         const input = saveInput.parse(raw);
@@ -28361,7 +28368,7 @@ function createKilnAssetDefs(context) {
     },
     {
       name: "kiln_present",
-      description: "Show a saved asset in an interactive chat viewer with GLB, editable ZIP, and source download buttons. Call after saving or when the user wants to see or download an asset. Other hosts receive portable resource links.",
+      description: "Present one exact saved revision. Supporting MCP App clients show an interactive 3D card with GLB, editable ZIP, and source downloads. Other hosts receive portable resource links; this tool does not launch a local browser in coding harnesses. Call after saving or when the user wants to see or download an asset.",
       inputSchema: exportInput,
       outputSchema: z4.object({
         ok: z4.literal(true),
@@ -28416,7 +28423,7 @@ function createKilnAssetDefs(context) {
     },
     {
       name: "kiln_import",
-      description: "Copy a pinned asset revision between configured project/personal collections, preserving identity and provenance. Copies never track later edits automatically. For a GLB or downloaded ZIP on disk, use kiln import <file> --collection <name> in the CLI.",
+      description: "Copy a pinned asset revision between configured collections, preserving identity and provenance. Copies never track later edits automatically. For a GLB or downloaded ZIP on disk, use kiln import <file> --collection <name> in the CLI.",
       inputSchema: importInput,
       run: async (raw) => {
         const input = importInput.parse(raw);
@@ -28428,7 +28435,17 @@ function createKilnAssetDefs(context) {
     }
   ];
 }
-var KILN_ASSET_WIDGET_URI = "ui://kiln/asset-v5.html", DEFAULT_INLOOP_VIEW_RENDER_TIMEOUT_MS = 6000, viewEvidenceHistoryByContext, VIEW_EVIDENCE_GUIDANCE = " viewEvidence.current describes ONLY this request. lastFaithful is older hash-only evidence for reference, not reused pixels and not current verification.", listPrimitivesInput, validateInput, renderInput, screenshotInput, legacyCaptureInput, cameraVec3Input, cameraShotInput, advancedCaptureInput, captureInput, renderViewsInput, renderViewsBufferInput, screenshotAnimationInput, viewInteriorInput, KILN_RENDER_VIEWS_DESCRIPTION, kilnRenderViewsDef, KILN_SCREENSHOT_ANIMATION_DESCRIPTION, kilnScreenshotAnimationDef, KILN_VIEW_INTERIOR_DESCRIPTION, kilnViewInteriorDef, attachmentEndpointInput, inspectInput, inspectBufferInput, KILN_INSPECT_DESCRIPTION, kilnInspectDef, editOperationInput, editInput, KILN_EDIT_DESCRIPTION = "Patch an EXISTING Kiln program with exact-string replacements and render the result in one call. This is the refine verb: use it to change an asset you already have rather than re-emitting the whole file, so every line you did not touch stays byte-for-byte identical and the reply carries a unified diff of what actually changed. Pass the full current source as `code` and one or more { oldString, newString } edits, copied verbatim from that source. Edits apply in order and the call is all-or-nothing: if any oldString does not match, or matches more than once without replaceAll, NOTHING is applied and the reply names the edit that failed -- fix it and call again. The patched program comes back as `code`; write it to your file to keep it. Renders by default, so you see the change immediately; pass render:false to patch without rendering. Writes no files.", kilnEditDef, kilnToolRegistry, localCacheScope = 0, assetSelector;
+var KILN_ASSET_WIDGET_URI = "ui://kiln/asset-v5.html", DEFAULT_INLOOP_VIEW_RENDER_TIMEOUT_MS = 6000, viewEvidenceHistoryByContext, VIEW_EVIDENCE_GUIDANCE = " viewEvidence.current describes ONLY this request. lastFaithful is older hash-only evidence for reference, not reused pixels and not current verification.", listPrimitivesInput, validateInput, renderInput, screenshotInput, legacyCaptureInput, cameraVec3Input, orbitCameraError = (issue) => {
+  if (issue.code === "unrecognized_keys" && issue.keys?.some((key) => key === "target" || key === "distance")) {
+    return "Orbit cameras derive target and distance from the selected subject bounds; choose subject and padding, or use an explicit camera with position and target.";
+  }
+  return;
+}, advancedCaptureError = (issue) => {
+  if (issue.code === "unrecognized_keys" && issue.keys?.some((key) => key === "width" || key === "height")) {
+    return "Advanced capture uses one square per-shot size from 128 to 1024; width and height are returned image dimensions, not request fields.";
+  }
+  return;
+}, cameraShotInput, advancedCaptureInput, captureInput, renderViewsInput, renderViewsBufferInput, screenshotAnimationInput, viewInteriorInput, KILN_RENDER_VIEWS_DESCRIPTION, kilnRenderViewsDef, KILN_SCREENSHOT_ANIMATION_DESCRIPTION, kilnScreenshotAnimationDef, KILN_VIEW_INTERIOR_DESCRIPTION, kilnViewInteriorDef, attachmentEndpointInput, inspectInput, inspectBufferInput, KILN_INSPECT_DESCRIPTION, kilnInspectDef, editOperationInput, editInput, KILN_EDIT_DESCRIPTION = "Patch an EXISTING Kiln program with exact-string replacements and render the result in one call. This is the refine verb: use it to change an asset you already have rather than re-emitting the whole file, so every line you did not touch stays byte-for-byte identical and the reply carries a unified diff of what actually changed. Pass the full current source as `code` and one or more { oldString, newString } edits, copied verbatim from that source. Edits apply in order and the call is all-or-nothing: if any oldString does not match, or matches more than once without replaceAll, NOTHING is applied and the reply names the edit that failed -- fix it and call again. The patched program comes back as `code`; write it to your file to keep it. Renders by default, so you see the change immediately; pass render:false to patch without rendering. Writes no files.", kilnEditDef, kilnToolRegistry, localCacheScope = 0, assetSelector;
 var init_registry2 = __esm(() => {
   init_capture_cache();
   init_assets();
@@ -28475,13 +28492,13 @@ var init_registry2 = __esm(() => {
     }).optional(),
     visibility: z4.enum(["context", "isolate"]).optional(),
     camera: z4.discriminatedUnion("type", [
-      z4.object({
+      z4.strictObject({
         type: z4.literal("orbit"),
         azimuthDeg: z4.number().optional(),
         elevationDeg: z4.number().optional(),
         relativeTo: z4.enum(["world", "asset", "part"]).optional(),
         padding: z4.number().positive().max(100).optional()
-      }).strict(),
+      }, { error: orbitCameraError }),
       z4.object({
         type: z4.literal("explicit"),
         projection: z4.enum(["orthographic", "perspective"]),
@@ -28503,13 +28520,13 @@ var init_registry2 = __esm(() => {
       }).strict()
     ]).optional()
   }).strict();
-  advancedCaptureInput = z4.object({
+  advancedCaptureInput = z4.strictObject({
     version: z4.literal("kiln.capture.v1"),
     shots: z4.array(cameraShotInput).min(1).max(9),
     cols: z4.number().int().min(1).max(3).optional(),
     size: z4.number().int().min(128).max(1024).optional(),
     output: z4.enum(["grid", "separate"]).optional()
-  }).strict();
+  }, { error: advancedCaptureError });
   captureInput = z4.union([
     advancedCaptureInput,
     z4.strictObject(legacyCaptureInput.unwrap().shape, {
@@ -28571,7 +28588,7 @@ var init_registry2 = __esm(() => {
   kilnEditDef = createKilnEditDef();
   kilnToolRegistry = createKilnToolRegistry();
   assetSelector = {
-    collection: z4.string().regex(/^[a-z][a-z0-9_-]{0,79}$/).default("project"),
+    collection: z4.string().regex(/^[a-z][a-z0-9_-]{0,79}$/).describe("Destination collection ID. Discover available IDs with kiln_assets action=collections. Follow an explicit user destination; otherwise use project.").default("project"),
     assetId: z4.string().regex(/^[a-z][a-z0-9_-]{0,79}$/),
     revisionId: z4.string().regex(/^[a-z][a-z0-9_-]{0,79}$/)
   };
@@ -28701,8 +28718,10 @@ function makeRemoteRenderPort(url, token) {
       if (req.lightingPresetId)
         body["lighting_preset_id"] = req.lightingPresetId;
     }
-    if (req.viewDirs)
+    if (req.viewDirs) {
       body["views"] = req.viewDirs;
+      body["background"] = GRID_BACKGROUND_HEX;
+    }
     if (req.size !== undefined)
       body["size"] = req.size;
     if (req.beautySize !== undefined)
@@ -28854,6 +28873,7 @@ async function buildRenderPort(mode, portUrl, options) {
 var HEALTH_PROBE_TIMEOUT_MS = 1500, HEALTH_PROBE_BUSY_TIMEOUT_MS = 8000, CLI_VIEW_RENDER_TIMEOUT_MS = 20000, selected;
 var init_cli_render_mode = __esm(() => {
   init_render_service_host();
+  init_background();
   selected = new WeakMap;
 });
 
@@ -28861,6 +28881,7 @@ var init_cli_render_mode = __esm(() => {
 import { createHash as createHash10, randomUUID as randomUUID3 } from "node:crypto";
 import { readFileSync as readFileSync2 } from "node:fs";
 import { lstat as lstat2, mkdir as mkdir4, readFile as readFile4, readdir as readdir4, realpath as realpath2, rename as rename2, rm, writeFile as writeFile3 } from "node:fs/promises";
+import { homedir, platform } from "node:os";
 import { dirname as dirname4, join as join7, relative as relative2, resolve as resolve5, sep } from "node:path";
 async function verifyAssetRecord(record) {
   for (const [name, info] of Object.entries(record.manifest.files)) {
@@ -28879,7 +28900,10 @@ class FileAssetLibrary {
     this.roots = Object.fromEntries(Object.entries(roots).map(([id, path]) => [assetIdSchema.parse(id), resolve5(path)]));
   }
   collections() {
-    return Object.keys(this.roots).map((id) => ({ id, label: id }));
+    return Object.keys(this.roots).map((id) => ({
+      id,
+      label: id === "project" ? "This project" : id === "library" ? "Your library" : id
+    }));
   }
   directory(collection) {
     const root = this.roots[collection];
@@ -29030,6 +29054,16 @@ function collectionConfigPath(env = process.env) {
   const workspace = env.KILN_PROGRAM_STORE ? dirname4(dirname4(resolve5(env.KILN_PROGRAM_STORE))) : process.cwd();
   return join7(workspace, ".kiln", "collections.json");
 }
+function defaultUserLibraryRoot(env = process.env, home = homedir(), operatingSystem = platform()) {
+  const dataRoot = env.XDG_DATA_HOME?.trim();
+  if (dataRoot)
+    return join7(dataRoot, "kiln", "library");
+  if (operatingSystem === "darwin")
+    return join7(home, "Library", "Application Support", "Kiln", "library");
+  if (operatingSystem === "win32")
+    return join7(env.LOCALAPPDATA?.trim() || join7(home, "AppData", "Local"), "Kiln", "library");
+  return join7(home, ".local", "share", "kiln", "library");
+}
 function localAssetLibrary(env = process.env) {
   if (env.KILN_COLLECTIONS) {
     const value = JSON.parse(env.KILN_COLLECTIONS);
@@ -29048,7 +29082,10 @@ function localAssetLibrary(env = process.env) {
       throw error;
   }
   const workspace = dirname4(dirname4(config));
-  return new FileAssetLibrary({ project: join7(workspace, "assets", "kiln") });
+  return new FileAssetLibrary({
+    project: join7(workspace, "assets", "kiln"),
+    library: defaultUserLibraryRoot(env)
+  });
 }
 var digest4 = (bytes) => `sha256:${createHash10("sha256").update(bytes).digest("hex")}`;
 var init_assets_node = __esm(() => {
@@ -29148,6 +29185,31 @@ var init_asset_viewer = __esm(() => {
   init_assets_resources();
 });
 
+// src/viewer/deep-link.ts
+function assetViewerSelection(search) {
+  const params = new URLSearchParams(search);
+  const collection = params.get("collection");
+  const assetId = params.get("asset");
+  const revisionId = params.get("revision");
+  if (!collection || !assetId || !revisionId || !idPattern.test(collection) || !idPattern.test(assetId) || !revisionPattern.test(revisionId))
+    return;
+  return { collection, assetId, revisionId };
+}
+function assetViewerHref(base, selection) {
+  const url = new URL(base);
+  url.searchParams.set("collection", selection.collection);
+  url.searchParams.set("asset", selection.assetId);
+  url.searchParams.set("revision", selection.revisionId);
+  if (!assetViewerSelection(url.search))
+    throw new Error("Invalid asset viewer selection");
+  return url.href;
+}
+var idPattern, revisionPattern;
+var init_deep_link = __esm(() => {
+  idPattern = /^[a-z][a-z0-9_-]{0,79}$/u;
+  revisionPattern = /^r_[a-z0-9_-]{1,77}$/u;
+});
+
 // src/asset-cli.ts
 var exports_asset_cli = {};
 __export(exports_asset_cli, {
@@ -29167,6 +29229,7 @@ async function assetMain(argv) {
     "name",
     "asset",
     "parent",
+    "revision",
     "description",
     "brief",
     "tag",
@@ -29297,8 +29360,15 @@ async function assetMain(argv) {
     const port = flags.port === undefined ? 4318 : Number(flags.port);
     if (!Number.isInteger(port) || port < 0 || port > 65535)
       throw new Error("Invalid port");
+    if (flags.asset && !flags.revision || !flags.asset && flags.revision)
+      throw new Error("view requires --asset and --revision together");
     const viewer = await startAssetViewer(target, { port, standalone });
-    console.log(`${viewer.url}${standalone ? "?open=standalone" : ""}`);
+    const viewerUrl = standalone ? `${viewer.url}?open=standalone` : flags.asset && flags.revision ? assetViewerHref(viewer.url, {
+      collection,
+      assetId: flags.asset,
+      revisionId: flags.revision
+    }) : viewer.url;
+    console.log(viewerUrl);
     console.log("Kiln viewer · local files · Ctrl+C to stop");
   }
   return 0;
@@ -29308,15 +29378,17 @@ ASSETS & VIEWER
   kiln save <source.js|programRef> --name <name> [--collection project]
        [--asset <id> --parent <revision>] [--description <text>] [--tag <tag>]
   kiln collections                        list configured collection names
-  kiln collections add <name> <directory>  remember a project or personal collection
+  kiln collections add <name> <directory>  remember another collection root
   kiln assets [--collection project]      list saved revisions (JSON)
   kiln asset <id> <revision> [--collection project] [--restore]
   kiln export <id> <revision> --out asset.zip [--format bundle|glb|source]
   kiln import <asset.zip|asset.glb> [--collection project] [--name <name>]
   kiln view [collection-directory|asset.glb|asset.zip] [--port 4318]
+       [--collection project --asset <id> --revision <revision>]
 
 KILN_COLLECTIONS is an optional JSON map of collection names to absolute folders.
-Default: project -> <workspace>/assets/kiln. Existing source/render commands still work.
+Defaults: project -> <workspace>/assets/kiln; library -> your OS user-data directory.
+An explicit map replaces both defaults. Existing source/render commands still work.
 View prints a local browser URL and remains running until interrupted.
 `;
 var init_asset_cli = __esm(() => {
@@ -29329,6 +29401,7 @@ var init_asset_cli = __esm(() => {
   init_local_runtime();
   init_cli_render_mode();
   init_asset_viewer();
+  init_deep_link();
 });
 
 // src/cli.ts

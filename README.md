@@ -128,6 +128,11 @@ Choose `claude`, `codex`, `opencode`, `hermes`, `agy`, `copilot`, or `cursor-age
 new directory using its generated START.md instructions and accept its project and MCP trust prompts. Sign in to your harness
 first. The MCP server and local CLI are tested on Node.js 22.23.2.
 
+If the brief depends on textures, roughness, metalness, glass, or other material evidence,
+start the optional [GPU render service](docs/rendering.md#running-the-gpu-renderer) before
+the first authoring session. CPU views are useful for shape and contact, but not for judging
+materials; restart an already-open agent session after bringing the renderer online.
+
 **Follow START.md rather than launching the harness directly.** Some harnesses keep all
 configuration in a user-level home and read nothing from a project directory, so the workspace
 reaches them through a small generated launcher -- `node codex.mjs`, `node agy.mjs`,
@@ -152,16 +157,20 @@ agents use stdio directly; browser chat connections have different setup require
 
 ## Revise an asset
 
-Save finished work into a collection with `node kiln.mjs save workbench.kiln.js --name "Workbench"`.
-Run `node kiln.mjs view` to browse saved assets, inspect revisions, and download GLBs
-or editable ZIP bundles. Project collections and personal libraries use the same
-portable folders. See [saved assets and the viewer](docs/collections.md).
+Save finished work into this workspace with
+`node kiln.mjs save workbench.kiln.js --name "Workbench"`, or add
+`--collection library` when you explicitly want it in your cross-workspace user library.
+Run `node kiln.mjs view` to browse **This project** and **Your library**, inspect revisions,
+and download GLBs or editable ZIP bundles. Both use the same portable collection format and
+the same viewer. See [saved assets and the viewer](docs/collections.md).
 
 ## Use Kiln in a chat client
 
 Create and refine assets in ChatGPT through a private MCP connection, then ask to
-see a saved revision. `kiln_present` opens an interactive 3D card in supporting
-MCP App clients. Orbit the model and inspect its animation without leaving chat.
+see a saved revision. `kiln_present` opens that exact revision in an interactive 3D card in
+supporting MCP App clients. Coding harnesses normally receive exact resource links instead; their
+agent can launch the local viewer on the saved revision and provide its loopback URL. Orbit the
+model and inspect its animation without leaving chat.
 ChatGPT viewing was verified with real saved assets.
 
 1. Build the runtime and connect its stdio MCP server through an OpenAI Secure

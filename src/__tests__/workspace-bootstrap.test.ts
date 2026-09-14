@@ -127,6 +127,22 @@ it('refuses an otherwise loadable installation without the packaged worker befor
   }
 });
 
+it('teaches agents to honor the requested destination and save immutable history', async () => {
+  const author = await readFile(join(repo, 'skills/kiln-author-asset/SKILL.md'), 'utf8');
+  const refine = await readFile(join(repo, 'skills/kiln-refine-asset/SKILL.md'), 'utf8');
+  expect(author).toContain('The user chooses the destination');
+  expect(author).toContain('Use `project` only as the fallback');
+  expect(author).toContain('use `library` for an explicitly requested cross-workspace library');
+  expect(author).toContain(
+    'launch `node kiln.mjs view --collection COLLECTION --asset ASSET_ID --revision REVISION_ID` yourself',
+  );
+  expect(author).toContain('Do not ask the user to start the viewer');
+  expect(author).toContain('Record the actual model and harness');
+  expect(author).toContain('A finished asset is not delivered until');
+  expect(refine).toContain('immutable child revision');
+  expect(refine).toContain('prior revision remains intact');
+});
+
 it('launches Agy in its own project and disables automatic skill expansion for headless runs', async () => {
   const root = await mkdtemp(join(tmpdir(), 'kiln-agy-bootstrap-'));
   try {
@@ -144,6 +160,9 @@ it('launches Agy in its own project and disables automatic skill expansion for h
       });
     const first = invoke(['--print=Make a lamp']);
     expect(first.status).toBe(0);
+    const start = await readFile(join(task, 'START.md'), 'utf8');
+    expect(start).toContain('--print="Read AGENTS.md');
+    expect(start).not.toContain('--print "Read AGENTS.md');
     const launch = JSON.parse(first.stdout);
     expect(launch.cwd).toBe(task);
     expect(launch.windowsHide).toBe(true);
@@ -203,7 +222,18 @@ it('steers the session to the loop, the render service and its own inherited con
     // Inherited user-level skills and servers are the measured context leak; the
     // workspace cannot prevent them, so it must at least ask for them to be reported.
     expect(guide).toContain('user-level configuration');
+    // Long-running authoring sessions can cross a harness-managed compaction
+    // boundary. The workspace cannot choose a safe threshold without knowing
+    // the selected model's context window, but it can make the state needed to
+    // resume durable across every harness.
+    expect(guide).toContain('Context compaction');
+    expect(guide).toContain('KILN_PROGRESS.md');
+    expect(guide).toContain('current programRef');
+    expect(guide).toContain('exact next action');
     expect(await readFile(join(task, 'CLAUDE.md'), 'utf8')).toBe(guide);
+    expect(await readFile(join(task, 'START.md'), 'utf8')).toContain(
+      'Long-running and headless sessions may compact context automatically',
+    );
   } finally {
     await rm(root, { recursive: true, force: true });
   }

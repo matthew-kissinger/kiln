@@ -400,7 +400,9 @@ export function decodeEvaluatorResultV1(
       (value.error.code !== 'EXECUTION_REJECTED' ||
         (value.error.diagnostic !== 'UNBOUND_VARIABLE' &&
           value.error.diagnostic !== 'GEAR_RADII_ORDER' &&
-          value.error.diagnostic !== 'ROUNDED_BOX_RADIUS'))
+          value.error.diagnostic !== 'ROUNDED_BOX_RADIUS' &&
+          value.error.diagnostic !== 'PROCEDURAL_TEXTURE_UNKNOWN_KEY' &&
+          value.error.diagnostic !== 'PARAMETRIC_PERIODIC_ENDPOINT'))
     )
       return fail('result');
     if (value.error.qa !== undefined) {

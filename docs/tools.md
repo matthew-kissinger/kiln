@@ -1581,7 +1581,7 @@ Read a saved program revision without changing it. Returns exact source text in 
 
 ## kiln_save
 
-Save a completed source revision as a durable asset with its exact GLB, source, preview, and build record. Use programRef returned by render/edit. To revise an existing asset, supply its assetId and parentRevision; previous revisions remain intact. Returns downloadable resources. Draft renders do not populate collections.
+Save a completed source revision into the user-requested collection, or project when no destination was requested. Persists its exact GLB, source, preview, and build record. Discover destinations with kiln_assets action=collections. Use programRef returned by render/edit. To revise an existing asset, supply its assetId and parentRevision; previous revisions remain intact. Returns downloadable resources. Draft renders do not populate collections.
 
 <details>
 <summary>Input JSON Schema</summary>
@@ -1595,7 +1595,8 @@ Save a completed source revision as a durable asset with its exact GLB, source, 
     "collection": {
       "default": "project",
       "type": "string",
-      "pattern": "^[a-z][a-z0-9_-]{0,79}$"
+      "pattern": "^[a-z][a-z0-9_-]{0,79}$",
+      "description": "Destination collection ID. Discover available IDs with kiln_assets action=collections. Follow an explicit user destination; otherwise use project."
     },
     "programRef": {
       "type": "string"
@@ -1685,7 +1686,8 @@ Discover collections; list/search saved asset revisions; get a build record and 
     "collection": {
       "default": "project",
       "type": "string",
-      "pattern": "^[a-z][a-z0-9_-]{0,79}$"
+      "pattern": "^[a-z][a-z0-9_-]{0,79}$",
+      "description": "Destination collection ID. Discover available IDs with kiln_assets action=collections. Follow an explicit user destination; otherwise use project."
     },
     "assetId": {
       "type": "string",
@@ -1726,7 +1728,7 @@ Discover collections; list/search saved asset revisions; get a build record and 
 
 ## kiln_present
 
-Show a saved asset in an interactive chat viewer with GLB, editable ZIP, and source download buttons. Call after saving or when the user wants to see or download an asset. Other hosts receive portable resource links.
+Present one exact saved revision. Supporting MCP App clients show an interactive 3D card with GLB, editable ZIP, and source downloads. Other hosts receive portable resource links; this tool does not launch a local browser in coding harnesses. Call after saving or when the user wants to see or download an asset.
 
 <details>
 <summary>Input JSON Schema</summary>
@@ -1740,7 +1742,8 @@ Show a saved asset in an interactive chat viewer with GLB, editable ZIP, and sou
     "collection": {
       "default": "project",
       "type": "string",
-      "pattern": "^[a-z][a-z0-9_-]{0,79}$"
+      "pattern": "^[a-z][a-z0-9_-]{0,79}$",
+      "description": "Destination collection ID. Discover available IDs with kiln_assets action=collections. Follow an explicit user destination; otherwise use project."
     },
     "assetId": {
       "type": "string",
@@ -1778,7 +1781,8 @@ Get downloadable GLB, source, manifest, and portable ZIP resource links for one 
     "collection": {
       "default": "project",
       "type": "string",
-      "pattern": "^[a-z][a-z0-9_-]{0,79}$"
+      "pattern": "^[a-z][a-z0-9_-]{0,79}$",
+      "description": "Destination collection ID. Discover available IDs with kiln_assets action=collections. Follow an explicit user destination; otherwise use project."
     },
     "assetId": {
       "type": "string",
@@ -1802,7 +1806,7 @@ Get downloadable GLB, source, manifest, and portable ZIP resource links for one 
 
 ## kiln_import
 
-Copy a pinned asset revision between configured project/personal collections, preserving identity and provenance. Copies never track later edits automatically. For a GLB or downloaded ZIP on disk, use kiln import <file> --collection <name> in the CLI.
+Copy a pinned asset revision between configured collections, preserving identity and provenance. Copies never track later edits automatically. For a GLB or downloaded ZIP on disk, use kiln import <file> --collection <name> in the CLI.
 
 <details>
 <summary>Input JSON Schema</summary>
@@ -1816,7 +1820,8 @@ Copy a pinned asset revision between configured project/personal collections, pr
     "collection": {
       "default": "project",
       "type": "string",
-      "pattern": "^[a-z][a-z0-9_-]{0,79}$"
+      "pattern": "^[a-z][a-z0-9_-]{0,79}$",
+      "description": "Destination collection ID. Discover available IDs with kiln_assets action=collections. Follow an explicit user destination; otherwise use project."
     },
     "assetId": {
       "type": "string",
@@ -1829,7 +1834,8 @@ Copy a pinned asset revision between configured project/personal collections, pr
     "sourceCollection": {
       "default": "project",
       "type": "string",
-      "pattern": "^[a-z][a-z0-9_-]{0,79}$"
+      "pattern": "^[a-z][a-z0-9_-]{0,79}$",
+      "description": "Destination collection ID. Discover available IDs with kiln_assets action=collections. Follow an explicit user destination; otherwise use project."
     }
   },
   "required": [

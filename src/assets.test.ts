@@ -2,7 +2,12 @@ import { afterEach, expect, test } from 'bun:test';
 import { mkdtemp, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { FileAssetLibrary, localAssetLibrary, collectionConfigPath } from './assets-node';
+import {
+  FileAssetLibrary,
+  localAssetLibrary,
+  collectionConfigPath,
+  defaultUserLibraryRoot,
+} from './assets-node';
 import { decodeAssetBundle, encodeAssetBundle } from './assets';
 import { renderGLB } from './render';
 import { mkdir } from 'node:fs/promises';
@@ -29,27 +34,41 @@ async function draft() {
   };
 }
 
-test('project and personal collection locations persist in the workspace configuration', async () => {
+test('project and additional named collection locations persist in workspace configuration', async () => {
   const { root } = await library();
   const env = { KILN_PROGRAM_STORE: join(root, '.kiln', 'programs') };
   const config = collectionConfigPath(env);
   await mkdir(dirname(config), { recursive: true });
   await writeFile(
     config,
-    JSON.stringify({ project: join(root, 'game'), personal: join(root, 'library') }),
+    JSON.stringify({ project: join(root, 'game'), 'my-game': join(root, 'library') }),
   );
   expect(
     localAssetLibrary(env)
       .collections()
       .map((c) => c.id),
-  ).toEqual(['project', 'personal']);
-  expect(localAssetLibrary(env).directory('personal')).toBe(join(root, 'library'));
+  ).toEqual(['project', 'my-game']);
+  expect(localAssetLibrary(env).directory('my-game')).toBe(join(root, 'library'));
   expect(
     localAssetLibrary({
       ...env,
       KILN_COLLECTIONS: JSON.stringify({ override: root }),
     }).collections()[0]!.id,
   ).toBe('override');
+});
+test('an unconfigured workspace exposes a project and a durable user library with clear labels', () => {
+  const env = {
+    KILN_PROGRAM_STORE: '/work/game/.kiln/programs',
+    XDG_DATA_HOME: '/user/data',
+  };
+  const store = localAssetLibrary(env);
+  expect(store.collections()).toEqual([
+    { id: 'project', label: 'This project' },
+    { id: 'library', label: 'Your library' },
+  ]);
+  expect(store.directory('project')).toBe('/work/game/assets/kiln');
+  expect(store.directory('library')).toBe('/user/data/kiln/library');
+  expect(defaultUserLibraryRoot(env, '/unused', 'linux')).toBe('/user/data/kiln/library');
 });
 test('a saved revision survives restarts, roundtrips without the source store, and detects tampering', async () => {
   const { root, store } = await library();
