@@ -1,7 +1,7 @@
 import { afterEach, describe, expect, test } from 'bun:test';
 import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
-import { join } from 'node:path';
+import { join, resolve } from 'node:path';
 import {
   buildInvocation,
   classifyOutcome,
@@ -59,7 +59,7 @@ describe('Tier 2 blind dogfood driver', () => {
         '--gallery-root',
         '/tmp/private-gallery',
       ]),
-    ).toMatchObject({ localGallery: true, galleryRoot: '/tmp/private-gallery' });
+    ).toMatchObject({ localGallery: true, galleryRoot: resolve('/tmp/private-gallery') });
     expect(
       parseArgs([
         '--harness',
@@ -113,7 +113,7 @@ describe('Tier 2 blind dogfood driver', () => {
     });
     expect(opencode.args).toContain('--pure');
     expect(opencode.args).toContain('--auto');
-    expect(opencode.env).toEqual({ XDG_CONFIG_HOME: '/tmp/run/.outer-opencode-config' });
+    expect(opencode.env).toEqual({ XDG_CONFIG_HOME: join('/tmp/run', '.outer-opencode-config') });
 
     const hermes = buildInvocation({
       harness: 'hermes',
@@ -129,7 +129,7 @@ describe('Tier 2 blind dogfood driver', () => {
     expect(hermes.args).toContain('--yolo');
     expect(hermes.args).toContain('openai-codex');
     expect(hermes.args).toContain('xhigh');
-    expect(hermes.env).toEqual({ HERMES_HOME: '/tmp/run/.outer-hermes-home' });
+    expect(hermes.env).toEqual({ HERMES_HOME: join('/tmp/run', '.outer-hermes-home') });
   });
 
   test('only harnesses with per-run absolute controls accept compact tokens', () => {
@@ -166,7 +166,7 @@ describe('Tier 2 blind dogfood driver', () => {
     });
 
     expect(invocation.args).not.toContain('--safe-mode');
-    expect(invocation.env).toEqual({ HERMES_HOME: '/tmp/run/.outer-hermes-home' });
+    expect(invocation.env).toEqual({ HERMES_HOME: join('/tmp/run', '.outer-hermes-home') });
   });
 
   test('an isolated Hermes home preserves the selected free route for nested agents', () => {
@@ -207,7 +207,7 @@ describe('Tier 2 blind dogfood driver', () => {
       hermesHome: parsed.hermesHome,
     });
 
-    expect(invocation.env).toEqual({ HERMES_HOME: '/tmp/hermes-home' });
+    expect(invocation.env).toEqual({ HERMES_HOME: resolve('/tmp/hermes-home') });
   });
 
   test('Agy requires an operator-prepared clean auth home and attaches its print prompt', () => {
@@ -234,7 +234,7 @@ describe('Tier 2 blind dogfood driver', () => {
 
     expect(invocation.args).toContain('--print=brief');
     expect(invocation.args).toContain('--new-project');
-    expect(invocation.env).toEqual({ HOME: '/tmp/agy-home' });
+    expect(invocation.env).toEqual({ HOME: resolve('/tmp/agy-home') });
   });
 
   test('telemetry field names do not masquerade as a quota failure', () => {
@@ -338,7 +338,7 @@ describe('Tier 2 blind dogfood driver', () => {
       `spawn(process.execPath,['-e',${JSON.stringify(`setTimeout(()=>require('node:fs').writeFileSync(${JSON.stringify(marker)},'bad'),350)`)}],{stdio:'ignore'})`,
       'setInterval(()=>{},1000)',
     ].join(';');
-    const result = await runProcess(process.execPath, ['-e', childScript], {
+    const result = await runProcess('node', ['-e', childScript], {
       cwd: root,
       env: process.env,
       stdoutPath,

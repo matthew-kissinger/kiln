@@ -1,7 +1,7 @@
 import { afterEach, expect, test } from 'bun:test';
 import { mkdtemp, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
-import { join } from 'node:path';
+import { dirname, join, resolve } from 'node:path';
 import {
   FileAssetLibrary,
   localAssetLibrary,
@@ -11,7 +11,6 @@ import {
 import { decodeAssetBundle, encodeAssetBundle } from './assets';
 import { renderGLB } from './render';
 import { mkdir } from 'node:fs/promises';
-import { dirname } from 'node:path';
 
 const roots: string[] = [];
 afterEach(async () => {
@@ -66,9 +65,13 @@ test('an unconfigured workspace exposes a project and a durable user library wit
     { id: 'project', label: 'This project' },
     { id: 'library', label: 'Your library' },
   ]);
-  expect(store.directory('project')).toBe('/work/game/assets/kiln');
-  expect(store.directory('library')).toBe('/user/data/kiln/library');
-  expect(defaultUserLibraryRoot(env, '/unused', 'linux')).toBe('/user/data/kiln/library');
+  expect(store.directory('project')).toBe(
+    join(dirname(dirname(resolve(env.KILN_PROGRAM_STORE))), 'assets', 'kiln'),
+  );
+  expect(store.directory('library')).toBe(join('/user/data', 'kiln', 'library'));
+  expect(defaultUserLibraryRoot(env, '/unused', 'linux')).toBe(
+    join('/user/data', 'kiln', 'library'),
+  );
 });
 test('a saved revision survives restarts, roundtrips without the source store, and detects tampering', async () => {
   const { root, store } = await library();

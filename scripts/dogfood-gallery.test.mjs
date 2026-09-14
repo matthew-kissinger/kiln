@@ -1,7 +1,7 @@
 import { afterEach, describe, expect, test } from 'bun:test';
 import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
-import { dirname, join } from 'node:path';
+import { dirname, join, resolve } from 'node:path';
 import { FileAssetLibrary, localAssetLibrary } from '../src/assets-node';
 import {
   archiveSavedAssets,
@@ -69,13 +69,13 @@ function fixtureAsset(root, relativeRoot, overrides = {}) {
 describe('dogfood asset collection', () => {
   test('uses the XDG data directory without touching the repository gallery', () => {
     expect(defaultDogfoodGalleryRoot({ XDG_DATA_HOME: '/data' }, '/home/operator', 'linux')).toBe(
-      '/data/kiln/library',
+      join('/data', 'kiln', 'library'),
     );
     expect(defaultDogfoodGalleryRoot({}, '/home/operator', 'linux')).toBe(
-      '/home/operator/.local/share/kiln/library',
+      join('/home/operator', '.local', 'share', 'kiln', 'library'),
     );
     expect(defaultDogfoodGalleryRoot({}, '/Users/operator', 'darwin')).toBe(
-      '/Users/operator/Library/Application Support/Kiln/library',
+      join('/Users/operator', 'Library', 'Application Support', 'Kiln', 'library'),
     );
     expect(
       defaultDogfoodGalleryRoot(
@@ -83,15 +83,17 @@ describe('dogfood asset collection', () => {
         'C:\\Users\\operator',
         'win32',
       ),
-    ).toBe('C:\\Users\\operator\\AppData\\Local/Kiln/library');
+    ).toBe(join('C:\\Users\\operator\\AppData\\Local', 'Kiln', 'library'));
   });
 
   test('refuses a local gallery inside the repository boundary', () => {
-    expect(() => assertLocalGalleryRoot('/repo/examples/local', '/repo')).toThrow(
+    const repository = resolve(join(tmpdir(), 'kiln-repository-boundary'));
+    const outside = resolve(join(tmpdir(), 'kiln-library-outside'));
+    expect(() => assertLocalGalleryRoot(join(repository, 'examples', 'local'), repository)).toThrow(
       'outside the repository',
     );
-    expect(() => assertLocalGalleryRoot('/repo', '/repo')).toThrow('outside the repository');
-    expect(assertLocalGalleryRoot('/data/kiln/library', '/repo')).toBe('/data/kiln/library');
+    expect(() => assertLocalGalleryRoot(repository, repository)).toThrow('outside the repository');
+    expect(assertLocalGalleryRoot(outside, repository)).toBe(outside);
   });
 
   test('discovers saved assets in sibling workspaces and ignores cloned repositories', () => {
