@@ -7,6 +7,20 @@ test('crawler discovery points only to the canonical document, without hash rout
   const robots = await readFile(new URL('../site/public/robots.txt', import.meta.url), 'utf8');
   expect(html.match(/rel="canonical"/g)).toHaveLength(1);
   expect(html).toContain('<link rel="canonical" href="https://kilnstudio.tools/"');
+  expect(html).toContain(
+    '<meta property="og:title" content="Kiln | Editable 3D assets for coding agents"',
+  );
+  expect(html).toContain(
+    '<meta property="og:image" content="https://kilnstudio.tools/kiln-social.png"',
+  );
+  expect(html).toContain('<meta property="og:image:width" content="1200"');
+  expect(html).toContain('<meta property="og:image:height" content="630"');
+  expect(html).toContain('<meta name="twitter:card" content="summary_large_image"');
+  expect(html).toContain(
+    '<meta name="twitter:image" content="https://kilnstudio.tools/kiln-social.png"',
+  );
+  const socialImage = await readFile(new URL('../site/public/kiln-social.png', import.meta.url));
+  expect(socialImage.subarray(1, 4).toString()).toBe('PNG');
   expect([...sitemap.matchAll(/<loc>(.*?)<\/loc>/g)].map((match) => match[1])).toEqual([
     'https://kilnstudio.tools/',
   ]);
