@@ -18,7 +18,13 @@ const repo = fileURLToPath(new URL('../..', import.meta.url));
 
 describe('MCP server instructions', () => {
   it('names only skills that exist on disk', async () => {
-    const named = [...new Set(MCP_SERVER_INSTRUCTIONS.match(/kiln-[a-z-]+/g) ?? [])];
+    const named = [
+      ...new Set(
+        [...MCP_SERVER_INSTRUCTIONS.matchAll(/^\s*-\s+(kiln-[a-z-]+):/gm)].map(
+          (match) => match[1]!,
+        ),
+      ),
+    ];
     expect(named.length).toBeGreaterThan(0);
     for (const name of named) {
       const skill = join(repo, 'skills', name, 'SKILL.md');

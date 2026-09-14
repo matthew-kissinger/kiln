@@ -28368,7 +28368,7 @@ function createKilnAssetDefs(context) {
     },
     {
       name: "kiln_present",
-      description: "Present one exact saved revision. Supporting MCP App clients show an interactive 3D card with GLB, editable ZIP, and source downloads. Other hosts receive portable resource links; this tool does not launch a local browser in coding harnesses. Call after saving or when the user wants to see or download an asset.",
+      description: "Present one exact saved revision. Supporting MCP App clients show an interactive 3D card with GLB, editable ZIP, and source downloads. Every host receives exact artifact descriptors with resource URIs in the JSON result; verified hosts may also receive core MCP resource-link blocks. This tool does not launch a local browser in coding harnesses. Call after saving or when the user wants to see or download an asset.",
       inputSchema: exportInput,
       outputSchema: z4.object({
         ok: z4.literal(true),
@@ -28414,7 +28414,7 @@ function createKilnAssetDefs(context) {
     },
     {
       name: "kiln_export",
-      description: "Get downloadable GLB, source, manifest, and portable ZIP resource links for one exact saved revision. The ZIP contains source when available and does not require the original program store. Use the host resource reader/download UI; no binary bytes are placed in tool text.",
+      description: "Get exact GLB, source, preview, and manifest descriptors for one saved revision. Their resource URIs remain readable through resources/read, and configured hosts may also return download URLs including a portable editable ZIP. No binary bytes are placed in tool text.",
       inputSchema: exportInput,
       run: async (raw) => {
         const input = exportInput.parse(raw);
@@ -28597,7 +28597,7 @@ var init_registry2 = __esm(() => {
 // src/render-service-host.ts
 import { spawn as spawn2 } from "node:child_process";
 import { existsSync as existsSync2 } from "node:fs";
-import { fileURLToPath as fileURLToPath5 } from "node:url";
+import { fileURLToPath as fileURLToPath5, pathToFileURL } from "node:url";
 import { join as join6 } from "node:path";
 function localRenderServicePort() {
   const raw = Number(process.env["KILN_RENDER_SERVICE_PORT"]);
@@ -28605,6 +28605,13 @@ function localRenderServicePort() {
 }
 function localRenderServiceUrl() {
   return `http://127.0.0.1:${localRenderServicePort()}`;
+}
+function renderServiceNodeArguments(dir) {
+  return [
+    "--import",
+    pathToFileURL(join6(dir, "src/register-hooks.mjs")).href,
+    join6(dir, "src/server.mjs")
+  ];
 }
 function renderServiceDir() {
   const override = process.env["KILN_RENDER_SERVICE_DIR"];
@@ -28664,7 +28671,7 @@ async function startLocalRenderService(dir = renderServiceDir()) {
     throw new Error(explainRenderServiceState(state, dir));
   registerTeardown();
   let stderr = "";
-  child = spawn2(nodeBinary(), ["--import", join6(dir, "src/register-hooks.mjs"), join6(dir, "src/server.mjs")], {
+  child = spawn2(nodeBinary(), renderServiceNodeArguments(dir), {
     cwd: dir,
     env: {
       ...process.env,
@@ -28837,7 +28844,7 @@ async function buildRenderPort(mode, portUrl, options) {
     context.viewRenderPort = makeLazyRenderPort(async () => {
       url = await start();
       return url;
-    }, process.env["KILN_RENDER_TOKEN"]);
+    }, process.env["KILN_RENDER_TOKEN"] ?? process.env["RENDER_SERVICE_TOKEN"]);
     context.viewRenderTimeoutMs = CLI_VIEW_RENDER_TIMEOUT_MS;
     context.captureCacheIdentity = () => url ? probeCaptureIdentity(url) : undefined;
     selected.set(context, label);

@@ -3,7 +3,9 @@ import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync
 import { tmpdir } from 'node:os';
 import { join, resolve } from 'node:path';
 import {
+  agyIsolationEnv,
   buildInvocation,
+  childEnvironment,
   classifyOutcome,
   composeBlindPrompt,
   discoverArtifacts,
@@ -46,6 +48,31 @@ describe('Tier 2 blind dogfood driver', () => {
     ).toThrow(/authorization/i);
   });
 
+  test('live child environments exclude ambient secrets unless explicitly allowed', () => {
+    const base = {
+      PATH: '/bin',
+      HOME: '/home/tester',
+      CLOUDFLARE_TOKEN: 'must-not-pass',
+      OPENAI_API_KEY: 'explicit-provider-key',
+      LC_ALL: 'C',
+    };
+    expect(childEnvironment(base, { HOME: '/isolated' })).toEqual({
+      PATH: '/bin',
+      HOME: '/isolated',
+      LC_ALL: 'C',
+    });
+    expect(childEnvironment(base, {}, ['OPENAI_API_KEY'])).toEqual({
+      PATH: '/bin',
+      HOME: '/home/tester',
+      OPENAI_API_KEY: 'explicit-provider-key',
+      LC_ALL: 'C',
+    });
+    expect(
+      parseArgs(['--harness', 'codex', '--goal', 'a crane', '--allow-env', 'OPENAI_API_KEY'])
+        .allowedEnvironmentNames,
+    ).toEqual(['OPENAI_API_KEY']);
+  });
+
   test('user-library capture is default-on and can be explicitly redirected or disabled', () => {
     expect(parseArgs(['--harness', 'codex', '--goal', 'an intricate walking crane'])).toMatchObject(
       { localGallery: true, galleryRoot: null },
@@ -85,6 +112,8 @@ describe('Tier 2 blind dogfood driver', () => {
     expect(codex.args).toContain('--ephemeral');
     expect(codex.args).toContain('--dangerously-bypass-approvals-and-sandbox');
     expect(codex.args).toContain('model_auto_compact_token_limit=333000');
+    expect(codex.args).not.toContain('brief');
+    expect(codex.stdin).toBe('brief');
 
     const claude = buildInvocation({
       harness: 'claude',
@@ -234,7 +263,24 @@ describe('Tier 2 blind dogfood driver', () => {
 
     expect(invocation.args).toContain('--print=brief');
     expect(invocation.args).toContain('--new-project');
-    expect(invocation.env).toEqual({ HOME: resolve('/tmp/agy-home') });
+    expect(invocation.env).toEqual(agyIsolationEnv(resolve('/tmp/agy-home')));
+  });
+
+  test('Agy isolates the Windows profile variables used by its config resolver', () => {
+    expect(agyIsolationEnv('C:\\isolated\\agy-home', 'win32')).toEqual({
+      HOME: 'C:\\isolated\\agy-home',
+      USERPROFILE: 'C:\\isolated\\agy-home',
+      HOMEDRIVE: 'C:',
+      HOMEPATH: '\\isolated\\agy-home',
+    });
+  });
+
+  test('Agy keeps the conventional isolated HOME on Linux and macOS', () => {
+    for (const platform of ['linux', 'darwin']) {
+      expect(agyIsolationEnv('/tmp/isolated-agy-home', platform)).toEqual({
+        HOME: '/tmp/isolated-agy-home',
+      });
+    }
   });
 
   test('telemetry field names do not masquerade as a quota failure', () => {
@@ -284,6 +330,11 @@ describe('Tier 2 blind dogfood driver', () => {
     );
 
     expect(evidence).toEqual([{ class: 'harness-error', message: 'Error: child process failed' }]);
+  });
+
+  test('Codex stdin progress notices are not failure evidence', () => {
+    expect(evidenceFromTrace('', 'Reading prompt from stdin...\n')).toEqual([]);
+    expect(evidenceFromTrace('', 'Reading additional input from stdin...\n')).toEqual([]);
   });
 
   test('a source and GLB are necessary but remain pending human quality review', () => {
@@ -351,6 +402,31 @@ describe('Tier 2 blind dogfood driver', () => {
     expect(result.timedOut).toBe(true);
     expect(existsSync(marker)).toBe(false);
     expect(readFileSync(stderrPath, 'utf8')).toContain('deadline exceeded');
+  });
+
+  test('a harness prompt can be delivered through stdin without becoming a shell argument', async () => {
+    const root = mkdtempSync(join(tmpdir(), 'kiln-tier2-stdin-test-'));
+    roots.push(root);
+    const stdoutPath = join(root, 'stdout.jsonl');
+    const stderrPath = join(root, 'stderr.log');
+    const result = await runProcess(
+      'node',
+      [
+        '-e',
+        "process.stdin.setEncoding('utf8');let s='';process.stdin.on('data',d=>s+=d);process.stdin.on('end',()=>process.stdout.write(s))",
+      ],
+      {
+        cwd: root,
+        env: process.env,
+        stdin: 'line one\nline two',
+        stdoutPath,
+        stderrPath,
+        timeoutMs: 1_000,
+      },
+    );
+
+    expect(result.exitCode).toBe(0);
+    expect(readFileSync(stdoutPath, 'utf8')).toBe('line one\nline two');
   });
 
   test('sanitized receipts redact credentials and machine paths', () => {

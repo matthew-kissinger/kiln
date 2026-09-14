@@ -9,6 +9,8 @@ it('generated MCP command survives removal of a transient Node directory link', 
   const root = await mkdtemp(join(tmpdir(), 'kiln-node-link-'));
   const probe = spawnSync('node', ['-p', 'process.execPath'], { encoding: 'utf8' });
   expect(probe.status).toBe(0);
+  const versionProbe = spawnSync('node', ['--version'], { encoding: 'utf8' });
+  expect(versionProbe.status).toBe(0);
   const canonical = realpathSync(probe.stdout.trim()),
     link = join(root, 'ephemeral-shell'),
     alias = join(link, basename(canonical)),
@@ -30,7 +32,7 @@ it('generated MCP command survives removal of a transient Node directory link', 
       encoding: 'utf8',
     });
     expect(started.status).toBe(0);
-    expect(started.stdout).toMatch(/^v22\./);
+    expect(started.stdout).toBe(versionProbe.stdout);
   } finally {
     await rm(root, { recursive: true, force: true });
   }

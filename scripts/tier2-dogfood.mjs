@@ -53,6 +53,7 @@ Options:
                            Acknowledge a contributor model in an isolated Hermes home
   --hermes-home PATH       Operator-prepared isolated Hermes home for an authenticated route
   --agy-home PATH          Operator-prepared clean Agy home retaining only required auth
+  --allow-env NAME         Explicitly pass one environment variable (repeatable; secrets may reach the provider)
   --timeout 45m            Per-run wall deadline
   --compact-tokens N       Supported per-run compaction threshold (for example 333000)
   --out PATH               Raw evidence directory (default: ignored .dogfood/tier2/...)
@@ -74,6 +75,7 @@ export function parseArgs(argv) {
     allowDataTrainingTier: false,
     hermesHome: null,
     agyHome: null,
+    allowedEnvironmentNames: [],
     timeoutMs: parseDuration('45m'),
     compactTokens: null,
     outDir: null,
@@ -102,6 +104,7 @@ export function parseArgs(argv) {
     else if (arg === '--allow-data-training-tier') opts.allowDataTrainingTier = true;
     else if (arg === '--hermes-home') opts.hermesHome = resolve(value());
     else if (arg === '--agy-home') opts.agyHome = resolve(value());
+    else if (arg === '--allow-env') opts.allowedEnvironmentNames.push(value());
     else if (arg === '--timeout') {
       const duration = parseDuration(value());
       if (!duration) throw new Error('--timeout must be a positive duration such as 45m.');
@@ -160,6 +163,8 @@ export function parseArgs(argv) {
     throw new Error('--agy-home is supported only for Agy.');
   if (opts.harness === 'agy' && !opts.agyHome)
     throw new Error('Agy blind runs require an operator-prepared --agy-home.');
+  if (opts.allowedEnvironmentNames.some((name) => !/^[A-Za-z_][A-Za-z0-9_]*$/u.test(name)))
+    throw new Error('--allow-env requires an environment variable name.');
   if (opts.live && !opts.authorization)
     throw new Error('--run-live requires --authorization pointing to the recorded approval.');
   return opts;
@@ -230,7 +235,7 @@ export function buildInvocation({
     return {
       bin: 'agy',
       args,
-      env: { HOME: agyHome },
+      env: agyIsolationEnv(agyHome),
       isolation: [
         'operator-prepared clean Agy home suppresses user MCP servers and plugins',
         'only authentication/runtime links explicitly placed in that home are inherited',
@@ -261,10 +266,10 @@ export function buildInvocation({
         '-c',
         'model_auto_compact_token_limit_scope="total"',
       );
-    args.push(prompt);
     return {
       bin: 'codex',
       args,
+      stdin: prompt,
       isolation: [
         'user config ignored; CODEX_HOME retained for authentication',
         'user/project execution rules ignored',
@@ -347,6 +352,19 @@ export function buildInvocation({
   throw new Error(`Unsupported harness: ${harness}`);
 }
 
+export function agyIsolationEnv(agyHome, platform = process.platform) {
+  const env = { HOME: agyHome };
+  if (platform !== 'win32') return env;
+
+  env.USERPROFILE = agyHome;
+  const windowsHome = /^([A-Za-z]:)([\\/].*)$/u.exec(agyHome);
+  if (windowsHome) {
+    env.HOMEDRIVE = windowsHome[1];
+    env.HOMEPATH = windowsHome[2].replaceAll('/', '\\');
+  }
+  return env;
+}
+
 function appendErrorText(value, found) {
   if (typeof value === 'string') found.push(value);
   else if (value && typeof value === 'object') {
@@ -377,7 +395,7 @@ const AUTH_FAILURE =
   /\b401\b|authentication (?:failed|required)|unauthorized|invalid (?:api[ _-]?key|oauth token|access token)|(?:oauth|access) token (?:has )?expired|(?:not logged in|login required|sign[ -]?in required)|missing (?:api[ _-]?key|credentials)/iu;
 const HARNESS_STDOUT_FAILURE = /^API call failed after \d+ retries?:/iu;
 const BENIGN_STDERR_NOTICE =
-  /^root agent idle; waiting for \d+ background task\(s\)(?: \(bounded by --print-timeout\))?$/iu;
+  /^(?:root agent idle; waiting for \d+ background task\(s\)(?: \(bounded by --print-timeout\))?|Reading (?:additional input|prompt) from stdin\.\.\.)$/iu;
 
 function classifyMessage(message) {
   if (QUOTA_FAILURE.test(message)) return 'provider-quota';
@@ -442,7 +460,7 @@ function killProcessTree(child, signal = 'SIGTERM') {
 export function runProcess(
   bin,
   args,
-  { cwd, env, stdoutPath, stderrPath, timeoutMs, killGraceMs = 5_000, signal = null },
+  { cwd, env, stdin = null, stdoutPath, stderrPath, timeoutMs, killGraceMs = 5_000, signal = null },
 ) {
   return new Promise((resolveRun) => {
     const stdout = createWriteStream(stdoutPath, { flags: 'wx', mode: 0o600 });
@@ -458,12 +476,13 @@ export function runProcess(
       env,
       detached: process.platform !== 'win32',
       shell: resolved.shell,
-      stdio: ['ignore', 'pipe', 'pipe'],
+      stdio: [stdin === null ? 'ignore' : 'pipe', 'pipe', 'pipe'],
       windowsHide: true,
     };
     const child = resolved.shell
       ? spawn(quoteArg(resolved.cmd), args.map(quoteArg), spawnOptions)
       : spawn(resolved.cmd, args, spawnOptions);
+    if (stdin !== null) child.stdin.end(stdin);
     child.stdout.pipe(stdout);
     child.stderr.pipe(stderr);
     const started = Date.now();
@@ -647,6 +666,56 @@ function sensitiveEnvironmentNames(env) {
     .sort();
 }
 
+const CHILD_ENVIRONMENT_NAMES = new Set([
+  'ALLUSERSPROFILE',
+  'APPDATA',
+  'CODEX_HOME',
+  'CommonProgramFiles',
+  'CommonProgramFiles(x86)',
+  'CommonProgramW6432',
+  'ComSpec',
+  'HOME',
+  'HOMEDRIVE',
+  'HOMEPATH',
+  'LANG',
+  'LOCALAPPDATA',
+  'NODE_EXTRA_CA_CERTS',
+  'PATH',
+  'PATHEXT',
+  'PROGRAMDATA',
+  'ProgramFiles',
+  'ProgramFiles(x86)',
+  'ProgramW6432',
+  'PSModulePath',
+  'SSL_CERT_DIR',
+  'SSL_CERT_FILE',
+  'SystemDrive',
+  'SystemRoot',
+  'TEMP',
+  'TMP',
+  'TMPDIR',
+  'USERDOMAIN',
+  'USERNAME',
+  'USERPROFILE',
+  'WINDIR',
+  'XDG_CACHE_HOME',
+  'XDG_DATA_HOME',
+  'XDG_STATE_HOME',
+]);
+
+export function childEnvironment(base, overrides = {}, allowedNames = []) {
+  const allowed = new Set(allowedNames);
+  const env = {};
+  for (const [name, value] of Object.entries(base)) {
+    if (
+      value !== undefined &&
+      (CHILD_ENVIRONMENT_NAMES.has(name) || name.startsWith('LC_') || allowed.has(name))
+    )
+      env[name] = value;
+  }
+  return { ...env, ...overrides };
+}
+
 const savedAssetKey = (asset) => asset.manifestPath ?? `${asset.sourcePath}\0${asset.glbPath}`;
 
 async function main(argv) {
@@ -747,7 +816,8 @@ async function main(argv) {
     workspaceRoot,
     localGallery: opts.localGallery,
     localGalleryRoot: opts.localGallery ? galleryRoot : null,
-    inheritedSensitiveEnvironmentNames: sensitiveEnvironmentNames(process.env),
+    ambientSensitiveEnvironmentNames: sensitiveEnvironmentNames(process.env),
+    explicitlyAllowedEnvironmentNames: opts.allowedEnvironmentNames,
     requestedRunCount: planned.length,
     plannedRuns: planned.map(({ runId, goal }) => ({ runId, goal })),
     runs: [],
@@ -779,17 +849,23 @@ async function main(argv) {
         ),
       );
       const savedBefore = new Set(discoverSavedAssets([workspaceRoot]).map(savedAssetKey));
+      const runEnvironment = childEnvironment(
+        process.env,
+        plan.invocation.env,
+        opts.allowedEnvironmentNames,
+      );
       writeJsonAtomic(invocationPath, {
         command: plan.invocation.bin,
         args: plan.invocation.args,
         cwd: plan.workspace,
         isolation: plan.invocation.isolation,
-        inheritedEnvironmentNames: Object.keys(process.env).sort(),
+        inheritedEnvironmentNames: Object.keys(runEnvironment).sort(),
       });
       process.stdout.write(`[${plan.runId}] starting ${opts.harness} in ${plan.workspace}\n`);
       const processResult = await runProcess(plan.invocation.bin, plan.invocation.args, {
         cwd: plan.workspace,
-        env: { ...process.env, ...plan.invocation.env },
+        env: runEnvironment,
+        stdin: plan.invocation.stdin ?? null,
         stdoutPath,
         stderrPath,
         timeoutMs: opts.timeoutMs,

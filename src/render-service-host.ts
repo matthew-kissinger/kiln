@@ -22,7 +22,7 @@
  */
 import { spawn, type ChildProcess } from 'node:child_process';
 import { existsSync } from 'node:fs';
-import { fileURLToPath } from 'node:url';
+import { fileURLToPath, pathToFileURL } from 'node:url';
 import { join } from 'node:path';
 
 /**
@@ -49,6 +49,14 @@ export function localRenderServicePort(): number {
 
 export function localRenderServiceUrl(): string {
   return `http://127.0.0.1:${localRenderServicePort()}`;
+}
+
+export function renderServiceNodeArguments(dir: string): string[] {
+  return [
+    '--import',
+    pathToFileURL(join(dir, 'src/register-hooks.mjs')).href,
+    join(dir, 'src/server.mjs'),
+  ];
 }
 
 /** How long a starting service has to answer `/health` before it is called failed. */
@@ -173,25 +181,21 @@ export async function startLocalRenderService(dir = renderServiceDir()): Promise
 
   registerTeardown();
   let stderr = '';
-  child = spawn(
-    nodeBinary(),
-    ['--import', join(dir, 'src/register-hooks.mjs'), join(dir, 'src/server.mjs')],
-    {
-      cwd: dir,
-      env: {
-        ...process.env,
-        PORT: String(localRenderServicePort()),
-        // Loopback, where the documented manual start binds every interface. We
-        // are choosing on the user's behalf here, so the narrow choice is the
-        // right one; the Docker deployment sets its own HOST and is unaffected.
-        HOST: '127.0.0.1',
-      },
-      // NEVER `inherit`: stdout is the MCP transport, and the service greets its
-      // own boot on stdout. One `listening on :8000` line in that stream is a
-      // protocol error for every tool call after it.
-      stdio: ['ignore', 'ignore', 'pipe'],
+  child = spawn(nodeBinary(), renderServiceNodeArguments(dir), {
+    cwd: dir,
+    env: {
+      ...process.env,
+      PORT: String(localRenderServicePort()),
+      // Loopback, where the documented manual start binds every interface. We
+      // are choosing on the user's behalf here, so the narrow choice is the
+      // right one; the Docker deployment sets its own HOST and is unaffected.
+      HOST: '127.0.0.1',
     },
-  );
+    // NEVER `inherit`: stdout is the MCP transport, and the service greets its
+    // own boot on stdout. One `listening on :8000` line in that stream is a
+    // protocol error for every tool call after it.
+    stdio: ['ignore', 'ignore', 'pipe'],
+  });
   child.stderr?.on('data', (chunk: Buffer) => {
     stderr = `${stderr}${chunk.toString()}`.slice(-2_000);
   });

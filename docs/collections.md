@@ -67,8 +67,9 @@ by default. There is no automatic deletion or disk quota for saved collections.
    `programRef`, `name`, and that collection. The authoring skill records the known model and
    harness. Optional fields include tags, brief, description and author attribution; unknown
    attribution is omitted.
-3. Save the returned asset/revision IDs. `kiln_export` returns resource links for the
-   GLB, source, preview, manifest and ZIP. MCP clients choose how to show downloads.
+3. Save the returned asset/revision IDs. `kiln_export` returns exact artifact descriptors
+   and readable resource URIs for the GLB, source, preview, and manifest. Configured hosts
+   may also provide direct download URLs, including the editable ZIP.
 4. In a later session, use `kiln_assets` with `action: "restore"`, collection,
    assetId and revisionId. Use the returned programRef with `kiln_source`/`kiln_edit`.
 5. Save a child with the same assetId and `parentRevision` equal to the base revision.

@@ -337,7 +337,7 @@ export async function buildRenderPort(
     context.viewRenderPort = makeLazyRenderPort(async () => {
       url = await start();
       return url;
-    }, process.env['KILN_RENDER_TOKEN']);
+    }, process.env['KILN_RENDER_TOKEN'] ?? process.env['RENDER_SERVICE_TOKEN']);
     context.viewRenderTimeoutMs = CLI_VIEW_RENDER_TIMEOUT_MS;
     // Nothing to attest until a producer exists. `undefined` bypasses cell reuse,
     // which is the correct reading of "no renderer has drawn anything yet".

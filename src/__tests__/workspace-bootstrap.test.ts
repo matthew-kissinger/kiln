@@ -292,6 +292,7 @@ it('gives every user-global harness a launcher that configures without relocatin
     // A workspace is deliberately not a git checkout.
     expect(codex).toContain('--skip-git-repo-check');
     expect(codex).toContain("'--cd'");
+    expect(codex).toContain("process.platform === 'win32' ? 'codex.cmd' : 'codex'");
     // The launcher must never move the home that holds credentials.
     expect(codex).not.toContain('CODEX_HOME');
 

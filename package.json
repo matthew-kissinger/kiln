@@ -116,6 +116,7 @@
     "@gltf-transform/extensions": "4.5.0",
     "@gltf-transform/functions": "4.5.0",
     "@modelcontextprotocol/client": "^2.0.0",
+    "@modelcontextprotocol/ext-apps": "2.0.0",
     "@modelcontextprotocol/server": "^2.0.0",
     "@openrouter/ai-sdk-provider": "^2.10.0",
     "@types/three": "^0.186.0",

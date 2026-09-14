@@ -8,6 +8,28 @@ import { fileURLToPath } from 'node:url';
 const sha = (value) => createHash('sha256').update(value).digest('hex');
 const repo = resolve(dirname(fileURLToPath(import.meta.url)), '..');
 
+async function pinnedBun(root) {
+  const pkg = JSON.parse(await readFile(join(root, 'package.json'), 'utf8'));
+  const match = /^bun@(.+)$/.exec(pkg.packageManager ?? '');
+  if (!match) throw new Error('packageManager must pin the Bun build toolchain.');
+  const expected = match[1];
+  const installed = spawnSync('bun', ['--version'], {
+    cwd: root,
+    encoding: 'utf8',
+    windowsHide: true,
+  });
+  if (installed.status === 0 && installed.stdout.trim() === expected)
+    return { command: 'bun', prefix: [] };
+
+  // A stale Bun elsewhere on PATH must not silently change committed Node bundles.
+  // npm ships with Node on every supported platform and resolves the exact package
+  // version without requiring Bun itself to already be current.
+  return {
+    command: process.platform === 'win32' ? 'npx.cmd' : 'npx',
+    prefix: ['--yes', '--package', `bun@${expected}`, 'bun'],
+  };
+}
+
 async function sources(directory, prefix = '') {
   const entries = [];
   for (const item of (await readdir(directory, { withFileTypes: true })).sort((a, b) =>
@@ -52,9 +74,11 @@ export async function buildRuntime(target, root = repo) {
   };
   if (!entries[target]) throw new Error('Choose cli, mcp, or worker.');
   const before = await runtimeBuildIdentity(root);
+  const compiler = await pinnedBun(root);
   const built = spawnSync(
-    'bun',
+    compiler.command,
     [
+      ...compiler.prefix,
       'build',
       entries[target],
       '--target=node',
