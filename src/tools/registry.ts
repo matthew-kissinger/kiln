@@ -2466,6 +2466,14 @@ export function createKilnAssetDefs(context: KilnToolContext): KilnToolDef[] {
     limit: z.number().int().min(1).max(50).default(20),
   });
   const exportInput = z.object(assetSelector);
+  const profileExportInput = exportInput.extend({
+    profile: z
+      .enum(['editable', 'runtime'])
+      .default('editable')
+      .describe(
+        'editable preserves canonical source/GLB/build resources. runtime returns a standalone GLB and versioned review-metadata sidecar; no source bundle or geometry optimization.',
+      ),
+  });
   const importInput = z.object({
     ...assetSelector,
     sourceCollection: assetSelector.collection,
@@ -2635,10 +2643,27 @@ export function createKilnAssetDefs(context: KilnToolContext): KilnToolDef[] {
     {
       name: 'kiln_export',
       description:
-        'Get exact GLB, source, preview, and manifest descriptors for one saved revision. Their resource URIs remain readable through resources/read, and configured hosts may also return download URLs including a portable editable ZIP. No binary bytes are placed in tool text.',
-      inputSchema: exportInput,
+        'Export one saved revision. Default editable returns exact GLB, source, preview, and manifest descriptors; configured hosts may include portable editable ZIP download URLs. Opt-in runtime returns a standalone GLB plus a versioned metadata sidecar, moving only Kiln review clips out of GLB extras while preserving native animation and application metadata. Resource URIs remain readable through resources/read. Canonical revisions never change; no binary bytes are placed in tool text.',
+      inputSchema: profileExportInput,
       run: async (raw) => {
-        const input = exportInput.parse(raw);
+        const input = profileExportInput.parse(raw);
+        if (input.profile === 'runtime') {
+          const record = await library().read(input.collection, input.assetId, input.revisionId);
+          return {
+            ok: true,
+            profile: input.profile,
+            collection: input.collection,
+            asset: {
+              assetId: input.assetId,
+              revisionId: input.revisionId,
+              name: record.manifest.name,
+            },
+            resources: await (await import('../assets-resources')).runtimeAssetLinks(
+              input.collection,
+              record,
+            ),
+          };
+        }
         return links(
           input.collection,
           (await library().read(input.collection, input.assetId, input.revisionId)).manifest,

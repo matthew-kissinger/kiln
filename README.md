@@ -164,6 +164,11 @@ Run `node kiln.mjs view` to browse **This project** and **Your library**, inspec
 and download GLBs or editable ZIP bundles. Both use the same portable collection format and
 the same viewer. See [saved assets and the viewer](docs/collections.md).
 
+For application delivery, export with `--profile runtime --out asset.glb` to move
+Kiln's animation review metadata into a hash-linked JSON sidecar. Native glTF animation
+still plays without that sidecar. The default `editable` profile preserves saved files
+exactly; keep its ZIP for source and build records. [Export profiles](docs/export-profiles.md).
+
 ## Use Kiln in a chat client
 
 Create and refine assets in ChatGPT through a private MCP connection, then ask to

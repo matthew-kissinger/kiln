@@ -1,4 +1,10 @@
-import { encodeAssetBundle, type AssetLibrary, type AssetManifest } from './assets';
+import {
+  encodeAssetBundle,
+  type AssetLibrary,
+  type AssetManifest,
+  type AssetRecord,
+} from './assets';
+import { exportAssetGlb } from './asset-export';
 
 export interface AssetLink {
   type: 'resource_link';
@@ -68,12 +74,32 @@ export function assetMime(name: string): string {
           ? 'application/json'
           : 'text/javascript';
 }
+
+/** Derived resources are deterministic, read-only, and never replace a saved revision. */
+export async function runtimeAssetLinks(
+  collection: string,
+  record: AssetRecord,
+): Promise<AssetLink[]> {
+  const output = await exportAssetGlb(record, { profile: 'runtime' });
+  if (output.profile !== 'runtime') throw new Error('Expected runtime export');
+  return [
+    { name: 'runtime.glb', bytes: output.glb },
+    { name: output.metadata.name, bytes: output.metadata.bytes },
+  ].map(({ name, bytes }) => ({
+    type: 'resource_link',
+    name,
+    uri: `kiln://assets/${collection}/${record.manifest.assetId}/${record.manifest.revisionId}/${name}`,
+    mimeType: assetMime(name),
+    size: bytes.length,
+    annotations: { audience: ['user'], priority: name.endsWith('.glb') ? 0.9 : 0.3 },
+  }));
+}
 export async function readAssetResource(
   library: AssetLibrary,
   uri: string,
 ): Promise<{ bytes: Uint8Array; mimeType: string; name: string }> {
   const match =
-    /^kiln:\/\/assets\/([a-z][a-z0-9_-]{0,79})\/([a-z][a-z0-9_-]{0,79})\/([a-z][a-z0-9_-]{0,79})\/(asset\.glb|source\.kiln\.js|preview\.png|manifest\.json|editable\.zip)$/.exec(
+    /^kiln:\/\/assets\/([a-z][a-z0-9_-]{0,79})\/([a-z][a-z0-9_-]{0,79})\/([a-z][a-z0-9_-]{0,79})\/(asset\.glb|runtime\.glb|runtime\.kiln-metadata\.json|source\.kiln\.js|preview\.png|manifest\.json|editable\.zip)$/.exec(
       uri,
     );
   if (!match) throw new Error('Unknown asset resource');
@@ -82,6 +108,15 @@ export async function readAssetResource(
   const revision = match[3]!;
   const name = match[4]!;
   const record = await library.read(collection, asset, revision);
+  if (name === 'runtime.glb' || name === 'runtime.kiln-metadata.json') {
+    const output = await exportAssetGlb(record, { profile: 'runtime' });
+    if (output.profile !== 'runtime') throw new Error('Expected runtime export');
+    return {
+      bytes: name === 'runtime.glb' ? output.glb : output.metadata.bytes,
+      mimeType: assetMime(name),
+      name,
+    };
+  }
   const bytes =
     name === 'editable.zip'
       ? encodeAssetBundle([record])

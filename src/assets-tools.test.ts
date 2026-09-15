@@ -134,6 +134,43 @@ test('MCP saves an editable revision, exposes exact downloadable bytes, and rest
         revisionId: verbose.revisionId,
       });
     expect(JSON.stringify(exported).length).toBeLessThan(6000);
+    const runtime = await client.callTool({
+      name: 'kiln_export',
+      arguments: {
+        collection: 'project',
+        assetId: data.asset.assetId,
+        revisionId: data.asset.revisionId,
+        profile: 'runtime',
+      },
+    });
+    expect(runtime.isError).not.toBe(true);
+    const runtimePayload = JSON.parse(
+      (runtime.content as { type: string; text?: string }[]).find((block) => block.type === 'text')!
+        .text!,
+    );
+    expect(runtimePayload.profile).toBe('runtime');
+    const runtimeLinks = runtime.content.filter((block) => block.type === 'resource_link') as {
+      type: string;
+      name: string;
+      uri: string;
+      size: number;
+    }[];
+    expect(runtimeLinks.map((link) => link.name)).toEqual([
+      'runtime.glb',
+      'runtime.kiln-metadata.json',
+    ]);
+    expect(runtimePayload.downloadUrls).toBeUndefined();
+    for (const descriptor of runtimeLinks) {
+      const resource = await client.readResource({ uri: descriptor.uri });
+      const file = resource.contents[0]!;
+      const bytes = 'blob' in file ? Buffer.from(file.blob, 'base64') : Buffer.from(file.text);
+      expect(bytes.length).toBe(descriptor.size);
+      if (descriptor.name.endsWith('.json'))
+        expect(JSON.parse(bytes.toString()).source.revisionId).toBe(data.asset.revisionId);
+    }
+    expect(await assetLibrary.read('project', data.asset.assetId, data.asset.revisionId)).toEqual(
+      record,
+    );
   } finally {
     await client.close();
     await server.close();

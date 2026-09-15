@@ -246,7 +246,8 @@ export function createKilnMcpServer(
         list: undefined,
       }),
       {
-        description: 'Exact saved GLB, editable source, preview, manifest, or portable bundle.',
+        description:
+          'Saved GLB/source/preview/manifest/bundle, or derived runtime GLB and metadata sidecar.',
       },
       async (uri) => {
         const file = await readAssetResource(context.assetLibrary!, uri.href);

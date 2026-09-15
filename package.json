@@ -19,6 +19,7 @@
   "exports": {
     "./assets": "./src/assets.ts",
     "./assets/node": "./src/assets-node.ts",
+    "./asset-export": "./src/asset-export.ts",
     ".": "./src/cli.ts",
     "./agent": "./src/agent/index.ts",
     "./tools": "./src/tools/registry.ts",

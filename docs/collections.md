@@ -102,6 +102,7 @@ fallback, not the normal workflow.
 node kiln.mjs export ASSET_ID REVISION_ID --out workbench.zip
 node kiln.mjs export ASSET_ID REVISION_ID --format glb --out workbench.glb
 node kiln.mjs export ASSET_ID REVISION_ID --format source --out workbench.kiln.js
+node kiln.mjs export ASSET_ID REVISION_ID --profile runtime --out workbench-runtime.glb
 node kiln.mjs import workbench.zip --collection library
 node kiln.mjs asset ASSET_ID REVISION_ID --collection library --restore
 ```
@@ -111,6 +112,13 @@ one or more complete revisions. Source restore needs no original program store.
 Source is capped at 1 MiB; normal evaluator limits can be lower. Bundles are bounded,
 filenames are allowlisted and hashes are verified on import/read. GLBs must embed
 resources, rather than fetch remote URLs when viewed.
+
+The default `editable` profile preserves these exact saved files. Opt-in `runtime`
+writes a standalone GLB plus `workbench-runtime.kiln-metadata.json`, moving only
+Kiln's animation review extras into a hash-linked sidecar. Native playback needs no
+sidecar. It does not reduce geometry or draw calls, and it never changes the canonical
+revision. See [export profiles](export-profiles.md) for CLI/MCP/library usage, provenance,
+paired-write behavior and limitations. Viewer download buttons retain editable behavior.
 
 Imports preserve original IDs and parent references, even when an ancestor was not
 included. Importing the same revision twice is harmless; a conflicting identity is

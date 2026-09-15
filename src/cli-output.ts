@@ -3,6 +3,7 @@ import type { Stats } from 'node:fs';
 import {
   chmod,
   lstat,
+  link,
   mkdir,
   open,
   realpath,
@@ -11,7 +12,7 @@ import {
   unlink,
   writeFile,
 } from 'node:fs/promises';
-import { dirname, join } from 'node:path';
+import { dirname, join, resolve } from 'node:path';
 
 /**
  * Prepare the directories leading to a CLI destination.
@@ -68,5 +69,57 @@ export async function writeDestinationAtomic(
   } finally {
     // Preserve the original write/rename error; never unlink the destination.
     await unlink(temporary).catch(() => {});
+  }
+}
+
+/**
+ * Stage an exclusive multi-file export, then publish in order (sidecar before GLB).
+ * Hard links publish complete bytes without replacing existing files. A caught
+ * failure rolls back this call's outputs. This is not a crash/power-loss transaction;
+ * an interrupted process can leave a complete orphan sidecar, never a partial GLB.
+ */
+export async function writeNewDestinationsAtomic(
+  outputs: { path: string; data: Parameters<typeof writeFile>[1] }[],
+): Promise<void> {
+  const paths = outputs.map(({ path }) => {
+    const absolute = resolve(path);
+    return process.platform === 'win32' ? absolute.toLowerCase() : absolute;
+  });
+  if (new Set(paths).size !== paths.length) throw new Error('Export destinations must be distinct');
+  const staged: { path: string; temporary: string; published: boolean }[] = [];
+  try {
+    for (const { path, data } of outputs) {
+      await prepareDestination(path);
+      const temporary = join(dirname(path), `.kiln-write-${randomUUID()}.tmp`);
+      const file = await open(temporary, 'wx');
+      staged.push({ path, temporary, published: false });
+      try {
+        await writeFile(file, data);
+      } finally {
+        await file.close();
+      }
+    }
+    for (const output of staged) {
+      await link(output.temporary, output.path);
+      output.published = true;
+    }
+  } catch (error) {
+    for (const output of staged.filter((item) => item.published).reverse()) {
+      // An unrelated writer may have replaced an output since our publish. Never
+      // remove it: only unlink the inode still shared with our staging file.
+      try {
+        const [destination, temporary] = await Promise.all([
+          lstat(output.path),
+          lstat(output.temporary),
+        ]);
+        if (destination.dev === temporary.dev && destination.ino === temporary.ino)
+          await unlink(output.path);
+      } catch {
+        /* Preserve the original failure; leave an undeletable complete file. */
+      }
+    }
+    throw error;
+  } finally {
+    await Promise.all(staged.map(({ temporary }) => unlink(temporary).catch(() => {})));
   }
 }

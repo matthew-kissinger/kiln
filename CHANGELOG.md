@@ -3,6 +3,14 @@
 Changes to `@kiln/engine`. Source and installable packages are distributed through
 GitHub. The package is not published on the npm registry.
 
+## Unreleased: Saved-asset export profiles
+
+- Keep byte-preserving `editable` exports as the default. Opt-in `runtime` exports
+  move Kiln's duplicated scene review clips to a versioned, hash-linked sidecar,
+  preserving standalone native glTF playback and the canonical saved revision.
+  Available through the CLI, MCP and `@kiln/engine/asset-export` library entry.
+  [Usage, provenance contract and limits](docs/export-profiles.md).
+
 ## 0.7.1: Preserve CLI outputs on failed writes
 
 - GLB, preview PNG, and generated source replacements are written to unique sibling
