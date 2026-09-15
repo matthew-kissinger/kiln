@@ -5,6 +5,12 @@ CLI/MCP workflow first; choosing Blender or Unity does not require an exporter s
 The experimental Three.js exporter is included in builds containing this integration,
 but older installed releases do not gain it by setting an environment variable.
 
+For delivery files, see [editable and runtime export profiles](export-profiles.md).
+Converter selection applies when generating a GLB; the delivery profile applies to
+an already-saved revision. Keep an editable ZIP for authoring and compare runtime
+delivery when duplicate review data makes an animated GLB larger. Either converter
+works with either delivery profile; neither choice automatically enables compression.
+
 ## Choose the import route
 
 | Destination | Start here | Check in the destination |
