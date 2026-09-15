@@ -23,6 +23,7 @@ import { fileURLToPath } from 'node:url';
 /** Checks the smoke run must report, named individually so a silent drop is a failure. */
 const REQUIRED_CHECKS = [
   'packaged-node-worker',
+  'community-exporter-textured-subprocess',
   'source-reference-edit-images',
   'server-restart-persistence',
   'exact-source-export',

@@ -4,7 +4,7 @@ import { createEvaluatorRequestV1, decodeEvaluatorRequestV1 } from '../evaluator
 import { createKilnProgramToolRegistry } from '../tools/registry';
 import { createLocalToolContext } from '../local-runtime';
 const code = (colors = false) =>
-  `const meta={name:'policy',category:'prop'};function build(){const root=createRoot('Root');const geo=boxGeo(1,1,1);${colors ? "geo.setAttribute('color',geo.getAttribute('position').clone());" : ''}createPart('Body',geo,gameMaterial('#888888'),{parent:root});return root;}`;
+  `const meta={name:'policy',category:'prop'};function build(){const root=createRoot('Root');const geo=boxGeo(1,1,1);${colors ? "geo.setAttribute('customDisplacement',geo.getAttribute('position').clone());" : ''}createPart('Body',geo,gameMaterial('#888888'),{parent:root});return root;}`;
 test('geometry export policy roundtrips through strict worker protocol and rejects unknown policy', () => {
   const request = createEvaluatorRequestV1({
     requestId: 'policy',
@@ -20,7 +20,7 @@ test('geometry export policy roundtrips through strict worker protocol and rejec
     }),
   ).toThrow();
 });
-test('subprocess strict accepts supported geometry and rejects vertex colors while default warns', async () => {
+test('subprocess strict accepts supported geometry and rejects custom attributes while default warns', async () => {
   expect(
     (await renderGLBViaSubprocess(code(), { geometryPolicy: 'strict' })).glb.byteLength,
   ).toBeGreaterThan(0);

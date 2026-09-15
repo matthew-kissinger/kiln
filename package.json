@@ -157,5 +157,8 @@
     "ai": "^6.0.282",
     "openai": "^6.49.0",
     "typescript": "^7.0.2"
+  },
+  "optionalDependencies": {
+    "@napi-rs/canvas": "1.0.9"
   }
 }

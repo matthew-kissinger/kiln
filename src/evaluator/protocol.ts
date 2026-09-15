@@ -259,11 +259,22 @@ export function createEvaluatorRequestV1(input: CreateEvaluatorRequestV1Input): 
 function parseOptions(value: unknown): Omit<RenderGlbOptions, 'textureResolver'> {
   if (
     !isRecord(value) ||
-    !hasExactKeys(value, ['optimize', 'instance', 'intent', 'category', 'geometryPolicy'])
+    !hasExactKeys(value, [
+      'optimize',
+      'instance',
+      'intent',
+      'category',
+      'geometryPolicy',
+      'gltfExporter',
+    ])
   ) {
     return fail('request');
   }
   const options: Omit<RenderGlbOptions, 'textureResolver'> = {};
+  if (value.gltfExporter !== undefined) {
+    if (value.gltfExporter !== 'legacy' && value.gltfExporter !== 'three') fail('request');
+    options.gltfExporter = value.gltfExporter;
+  }
   if (value.geometryPolicy !== undefined) {
     if (!['warn', 'strict'].includes(String(value.geometryPolicy))) fail('request');
     options.geometryPolicy = value.geometryPolicy as 'warn' | 'strict';

@@ -2275,6 +2275,7 @@ function withBuildCache(context: KilnToolContext): KilnToolContext {
           env['KILN_QA_MODE'],
           env['KILN_BAKE_OPTIMIZE'],
           env['KILN_BAKE_INSTANCE'],
+          ...(env['KILN_GLTF_EXPORTER'] === 'three' ? ['three'] : []),
         ]);
       },
     }),

@@ -21,7 +21,16 @@ import {
   type AssetIntentV1,
   type SemanticLocalFrameV1,
 } from '../contracts';
-import { optimizeGlbBytes, renderSceneToGLB } from '../render';
+import {
+  optimizeGlbBytes,
+  renderSceneToGLB as exportScene,
+  type RenderSceneOptions,
+} from '../render';
+
+// These historical architecture experiment hashes remain pinned to their original converter.
+// Candidate geometry parity is measured independently by integration-corpus.mjs.
+const renderSceneToGLB = (root: THREE.Object3D, options: RenderSceneOptions) =>
+  exportScene(root, { ...options, gltfExporter: 'legacy' });
 import { loadTexture } from '../textures';
 
 const PUBLIC_HELPER_MINIMUM_LIFT = 0.15;

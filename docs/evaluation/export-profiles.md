@@ -83,3 +83,39 @@ This establishes these local generation/export flows and sampled native poses. I
 not establish compatibility with every glTF consumer, GPU visual equivalence, or scene
 performance. Arbitrary extras are preserved, not privacy-scrubbed. A process crash can
 leave a complete orphan sidecar; the paired publication is not a power-loss transaction.
+
+## Integration with the community exporter
+
+PR #115 merged as `e1f1e3d6274ab0212c82b72333278548827d10f4`. The export-profile
+candidate was combined with that main commit in an isolated worktree. The changelog
+retained both entries, and every runtime bundle was rebuilt from the combined source.
+No source-code conflicts were present. The final #115 documentation update produced
+the same combined source and CLI/MCP/worker bundle hashes as the tested runtime.
+
+Toolchain, skills, typecheck, lint and the combined engine suite passed: 1,977 tests,
+four existing skips, no failures. A fresh package installation passed its CLI, workspace,
+MCP, worker, source-edit and textured experimental-exporter checks. The ordinary
+generation/export script passed separately with `KILN_GLTF_EXPORTER=legacy` and
+`KILN_GLTF_EXPORTER=three`, including exact native JSON/BIN, decoded PNGs, standalone
+playback and CLI/MCP/HTTP delivery.
+
+The full Jaeger source was also replayed through the experimental exporter in a separate
+asset workspace. Both native animation batches combined on their asserted identical
+graph, and all 226 asset checks passed. Its runtime derivative passed the same delivery
+script with 16 clips, 359 tracks, eight decoded PNGs and 80 sampled poses, with zero
+Khronos errors or warnings. This replay produced a 3,771,324-byte canonical GLB and a
+2,102,160-byte runtime GLB, plus a 1,669,629-byte sidecar.
+
+An additional combined skin/morph fixture retained material extensions, double-sided
+surfaces, vertex colors and sampled deformed vertices through runtime export, both
+before and after full geometry optimization. Native JSON and BIN were unchanged outside
+the documented metadata fields. Khronos reported no errors; the fixture's three existing
+skin warnings were identical before and after delivery. Full optimization removed unused
+UV channels before delivery, as expected; the runtime profile introduced no such change.
+
+These features act at separate boundaries. The converter selects how source becomes a
+canonical GLB; the delivery profile derives files from a saved revision. The established
+converter and editable delivery remain the defaults. Runtime delivery neither enables nor
+qualifies the experimental converter. Its native-canvas requirement, unsupported UV shear
+cases and consumer-extension limits remain described in the
+[community-exporter guide](../community-exporter.md).
