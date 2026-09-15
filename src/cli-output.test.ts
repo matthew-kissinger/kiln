@@ -13,7 +13,7 @@ import {
 } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { writeDestinationAtomic } from './cli-output';
+import { writeDestinationAtomic, writeNewDestinationsAtomic } from './cli-output';
 
 async function fixture(run: (directory: string) => Promise<void>) {
   const directory = await mkdtemp(join(tmpdir(), 'kiln-output-'));
@@ -114,3 +114,63 @@ it.skipIf(process.platform === 'win32')(
       expect((await readdir(directory)).sort()).toEqual(['link.glb', 'target.glb']);
     }),
 );
+
+it('publishes an exclusive sidecar and GLB only after complete staging', () =>
+  fixture(async (directory) => {
+    const sidecar = join(directory, 'nested', 'asset.json');
+    const glb = join(directory, 'nested', 'asset.glb');
+    async function* staged() {
+      expect(await readdir(join(directory, 'nested'))).not.toContain('asset.json');
+      yield Buffer.from('complete GLB');
+    }
+    await writeNewDestinationsAtomic([
+      { path: sidecar, data: 'metadata' },
+      { path: glb, data: staged() },
+    ]);
+    expect(await readFile(sidecar, 'utf8')).toBe('metadata');
+    expect(await readFile(glb, 'utf8')).toBe('complete GLB');
+    expect((await readdir(join(directory, 'nested'))).sort()).toEqual(['asset.glb', 'asset.json']);
+    await expect(
+      writeNewDestinationsAtomic([
+        { path: sidecar, data: 'replacement' },
+        { path: glb, data: 'replacement' },
+      ]),
+    ).rejects.toThrow();
+    expect(await readFile(glb, 'utf8')).toBe('complete GLB');
+  }));
+
+it('rolls back only owned published outputs when the later exclusive publish fails', () =>
+  fixture(async (directory) => {
+    const sidecar = join(directory, 'asset.json');
+    const glb = join(directory, 'asset.glb');
+    await writeFile(glb, 'existing GLB');
+    await expect(
+      writeNewDestinationsAtomic([
+        { path: sidecar, data: 'metadata' },
+        { path: glb, data: 'new GLB' },
+      ]),
+    ).rejects.toThrow();
+    expect(await readFile(glb, 'utf8')).toBe('existing GLB');
+    expect(await readdir(directory)).toEqual(['asset.glb']);
+  }));
+
+it('does not publish either output after a partial staging write fails', () =>
+  fixture(async (directory) => {
+    async function* interrupted() {
+      yield Buffer.from('partial');
+      throw new Error('interrupted');
+    }
+    await expect(
+      writeNewDestinationsAtomic([
+        { path: join(directory, 'asset.json'), data: 'metadata' },
+        { path: join(directory, 'asset.glb'), data: interrupted() },
+      ]),
+    ).rejects.toThrow('interrupted');
+    expect(await readdir(directory)).toEqual([]);
+    await expect(
+      writeNewDestinationsAtomic([
+        { path: join(directory, 'same'), data: 'a' },
+        { path: join(directory, 'same'), data: 'b' },
+      ]),
+    ).rejects.toThrow('distinct');
+  }));

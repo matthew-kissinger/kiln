@@ -117,6 +117,101 @@ var init_assets = __esm(() => {
   allowedFiles = new Set(["asset.glb", "source.kiln.js", "preview.png"]);
 });
 
+// src/asset-export.ts
+async function sha256(bytes) {
+  const digest = await crypto.subtle.digest("SHA-256", Uint8Array.from(bytes));
+  return `sha256:${Array.from(new Uint8Array(digest), (byte) => byte.toString(16).padStart(2, "0")).join("")}`;
+}
+function validateMetadataFileName(name) {
+  if (name.length > 200 || !/^[a-z0-9][a-z0-9._-]*\.kiln-metadata\.json$/i.test(name) || /^(con|prn|aux|nul|com[0-9]|lpt[0-9])\./i.test(name))
+    throw new Error("Runtime metadata filename must be a portable sibling *.kiln-metadata.json filename");
+}
+async function exportAssetGlb(record, options = {}) {
+  const profile = options.profile ?? "editable";
+  if (profile !== "editable" && profile !== "runtime")
+    throw new Error("Unknown export profile");
+  validateRecordShape(record);
+  const bytes = record.files["asset.glb"];
+  if (profile === "editable")
+    return { profile, glb: bytes };
+  const name = options.metadataFileName ?? "runtime.kiln-metadata.json";
+  validateMetadataFileName(name);
+  for (const [file, data] of Object.entries(record.files)) {
+    if (await sha256(data) !== record.manifest.files[file].sha256)
+      throw new Error(`Asset integrity mismatch: ${file}`);
+  }
+  const view = new DataView(bytes.buffer, bytes.byteOffset, bytes.byteLength);
+  let end = 12;
+  while (end < bytes.length) {
+    if (end + 8 > bytes.length)
+      throw new Error("Invalid GLB chunk header");
+    const length = view.getUint32(end, true);
+    if (length % 4 || end + 8 + length > bytes.length)
+      throw new Error("Invalid GLB chunk length");
+    end += 8 + length;
+  }
+  const jsonEnd = 20 + view.getUint32(12, true);
+  const json = JSON.parse(decoder.decode(bytes.subarray(20, jsonEnd)));
+  if (!object(json) || !object(json.asset) || json.asset.version !== "2.0")
+    throw new Error("Invalid glTF asset");
+  const asset = json.asset;
+  if (owns(asset, "extras") && !object(asset.extras))
+    throw new Error("Cannot add provenance to non-object asset extras");
+  const extras = asset.extras ?? {};
+  if (owns(extras, "kilnProvenanceV1"))
+    throw new Error("Asset extras already contain kilnProvenanceV1; export from the canonical revision");
+  const scenes = [];
+  if (json.scenes !== undefined && !Array.isArray(json.scenes))
+    throw new Error("Invalid glTF scenes");
+  for (const [index, scene] of (json.scenes ?? []).entries()) {
+    if (!object(scene) || !object(scene.extras) || !owns(scene.extras, "kilnReviewClipsV1"))
+      continue;
+    const review = scene.extras.kilnReviewClipsV1;
+    if (!object(review) || review.version !== 1 || !Array.isArray(review.clips))
+      throw new Error("Unsupported scenes[].extras.kilnReviewClipsV1");
+    scenes.push({ index, kilnReviewClipsV1: review });
+    delete scene.extras.kilnReviewClipsV1;
+  }
+  const metadata = {
+    version: "kiln.runtime-metadata.v1",
+    source: {
+      assetId: record.manifest.assetId,
+      revisionId: record.manifest.revisionId,
+      glbSha256: record.manifest.files["asset.glb"].sha256,
+      ...record.manifest.files["source.kiln.js"] ? { sourceSha256: record.manifest.files["source.kiln.js"].sha256 } : {}
+    },
+    scenes
+  };
+  const metadataBytes = encoder.encode(JSON.stringify(metadata));
+  asset.extras = {
+    ...extras,
+    kilnProvenanceV1: {
+      version: "kiln.provenance.v1",
+      profile: "runtime",
+      metadata: { uri: name, sha256: await sha256(metadataBytes) }
+    }
+  };
+  const jsonBytes = encoder.encode(JSON.stringify(json));
+  const length = Math.ceil(jsonBytes.length / 4) * 4;
+  const result = new Uint8Array(20 + length + bytes.length - jsonEnd);
+  if (result.length > ASSET_LIMIT || metadataBytes.length > ASSET_LIMIT)
+    throw new Error("Runtime export exceeds 64 MiB");
+  result.set(bytes.subarray(0, 20));
+  const header = new DataView(result.buffer);
+  header.setUint32(8, result.length, true);
+  header.setUint32(12, length, true);
+  result.fill(32, 20, 20 + length);
+  result.set(jsonBytes, 20);
+  result.set(bytes.subarray(jsonEnd), 20 + length);
+  return { profile, glb: result, metadata: { name, bytes: metadataBytes } };
+}
+var encoder, decoder, object = (value) => value !== null && typeof value === "object" && !Array.isArray(value), owns = (value, key) => Object.hasOwn(value, key);
+var init_asset_export = __esm(() => {
+  init_assets();
+  encoder = new TextEncoder;
+  decoder = new TextDecoder;
+});
+
 // src/views/background.ts
 var GRID_BACKGROUND_RGB, GRID_BACKGROUND_HEX = "#1a1a1a";
 var init_background = __esm(() => {
@@ -10551,7 +10646,7 @@ function verifyResourcePayload(descriptor, payload) {
   if (!Number.isSafeInteger(pixels) || pixels > TEXTURE_RESOLVER_LIMITS_V1.maxPixels) {
     throw new ApprovedTextureResourceUnavailableError(descriptor.id, `pixel limit is ${TEXTURE_RESOLVER_LIMITS_V1.maxPixels}; received ${pixels}`);
   }
-  const hash = sha256(bytes);
+  const hash = sha2562(bytes);
   if (hash !== descriptor.contentHash) {
     throw new ApprovedTextureResourceUnavailableError(descriptor.id, `content hash ${hash} does not match the pinned ${descriptor.contentHash}`);
   }
@@ -10742,7 +10837,7 @@ function collectMaterialResourceProvenance(root) {
   });
   return [...records.values()].sort((a, b) => `${a.resourceId}:${a.usage}`.localeCompare(`${b.resourceId}:${b.usage}`));
 }
-var TEXTURE_RESOLVER_LIMITS_V1, ApprovedTextureResourceUnavailableError, EMBEDDED_RESOURCE_BASE64, isApprovedId = (value) => APPROVED_TEXTURE_RESOURCE_IDS.includes(value), bytesFromBase64 = (value) => new Uint8Array(Buffer.from(value, "base64")), sha256 = (bytes) => createHash3("sha256").update(bytes).digest("hex"), DEFAULT_APPROVED_TEXTURE_CACHE, materialTextures = (material) => {
+var TEXTURE_RESOLVER_LIMITS_V1, ApprovedTextureResourceUnavailableError, EMBEDDED_RESOURCE_BASE64, isApprovedId = (value) => APPROVED_TEXTURE_RESOURCE_IDS.includes(value), bytesFromBase64 = (value) => new Uint8Array(Buffer.from(value, "base64")), sha2562 = (bytes) => createHash3("sha256").update(bytes).digest("hex"), DEFAULT_APPROVED_TEXTURE_CACHE, materialTextures = (material) => {
   const standard = material;
   const candidates = [
     standard.map,
@@ -26152,7 +26247,8 @@ var init_measurement = __esm(() => {
 // src/assets-resources.ts
 var exports_assets_resources = {};
 __export(exports_assets_resources, {
-  assetLinks: () => assetLinks
+  assetLinks: () => assetLinks,
+  runtimeAssetLinks: () => runtimeAssetLinks
 });
 function assetLinks(collection, manifest) {
   const manifestBytes = new TextEncoder().encode(JSON.stringify(manifest, null, 2)).byteLength;
@@ -26171,9 +26267,26 @@ function assetLinks(collection, manifest) {
 function assetMime2(name) {
   return name.endsWith(".glb") ? "model/gltf-binary" : name.endsWith(".png") ? "image/png" : name.endsWith(".zip") ? "application/zip" : name.endsWith(".json") ? "application/json" : "text/javascript";
 }
+async function runtimeAssetLinks(collection, record) {
+  const output = await exportAssetGlb(record, { profile: "runtime" });
+  if (output.profile !== "runtime")
+    throw new Error("Expected runtime export");
+  return [
+    { name: "runtime.glb", bytes: output.glb },
+    { name: output.metadata.name, bytes: output.metadata.bytes }
+  ].map(({ name, bytes }) => ({
+    type: "resource_link",
+    name,
+    uri: `kiln://assets/${collection}/${record.manifest.assetId}/${record.manifest.revisionId}/${name}`,
+    mimeType: assetMime2(name),
+    size: bytes.length,
+    annotations: { audience: ["user"], priority: name.endsWith(".glb") ? 0.9 : 0.3 }
+  }));
+}
 var audiences, priorities;
 var init_assets_resources = __esm(() => {
   init_assets();
+  init_asset_export();
   audiences = {
     "asset.glb": ["user"],
     "preview.png": ["user"],
@@ -26479,11 +26592,12 @@ function localAssetLibrary(env = process.env) {
 
 // src/assets-resources.ts
 init_assets();
+init_asset_export();
 function assetMime(name) {
   return name.endsWith(".glb") ? "model/gltf-binary" : name.endsWith(".png") ? "image/png" : name.endsWith(".zip") ? "application/zip" : name.endsWith(".json") ? "application/json" : "text/javascript";
 }
 async function readAssetResource(library, uri) {
-  const match = /^kiln:\/\/assets\/([a-z][a-z0-9_-]{0,79})\/([a-z][a-z0-9_-]{0,79})\/([a-z][a-z0-9_-]{0,79})\/(asset\.glb|source\.kiln\.js|preview\.png|manifest\.json|editable\.zip)$/.exec(uri);
+  const match = /^kiln:\/\/assets\/([a-z][a-z0-9_-]{0,79})\/([a-z][a-z0-9_-]{0,79})\/([a-z][a-z0-9_-]{0,79})\/(asset\.glb|runtime\.glb|runtime\.kiln-metadata\.json|source\.kiln\.js|preview\.png|manifest\.json|editable\.zip)$/.exec(uri);
   if (!match)
     throw new Error("Unknown asset resource");
   const collection = match[1];
@@ -26491,6 +26605,16 @@ async function readAssetResource(library, uri) {
   const revision = match[3];
   const name = match[4];
   const record = await library.read(collection, asset, revision);
+  if (name === "runtime.glb" || name === "runtime.kiln-metadata.json") {
+    const output = await exportAssetGlb(record, { profile: "runtime" });
+    if (output.profile !== "runtime")
+      throw new Error("Expected runtime export");
+    return {
+      bytes: name === "runtime.glb" ? output.glb : output.metadata.bytes,
+      mimeType: assetMime(name),
+      name
+    };
+  }
   const bytes = name === "editable.zip" ? encodeAssetBundle([record]) : name === "manifest.json" ? new TextEncoder().encode(JSON.stringify(record.manifest, null, 2)) : record.files[name];
   if (!bytes)
     throw new Error("Asset file unavailable");
@@ -28396,6 +28520,9 @@ function createKilnAssetDefs(context) {
     limit: z4.number().int().min(1).max(50).default(20)
   });
   const exportInput = z4.object(assetSelector);
+  const profileExportInput = exportInput.extend({
+    profile: z4.enum(["editable", "runtime"]).default("editable").describe("editable preserves canonical source/GLB/build resources. runtime returns a standalone GLB and versioned review-metadata sidecar; no source bundle or geometry optimization.")
+  });
   const importInput = z4.object({
     ...assetSelector,
     sourceCollection: assetSelector.collection
@@ -28542,10 +28669,24 @@ function createKilnAssetDefs(context) {
     },
     {
       name: "kiln_export",
-      description: "Get exact GLB, source, preview, and manifest descriptors for one saved revision. Their resource URIs remain readable through resources/read, and configured hosts may also return download URLs including a portable editable ZIP. No binary bytes are placed in tool text.",
-      inputSchema: exportInput,
+      description: "Export one saved revision. Default editable returns exact GLB, source, preview, and manifest descriptors; configured hosts may include portable editable ZIP download URLs. Opt-in runtime returns a standalone GLB plus a versioned metadata sidecar, moving only Kiln review clips out of GLB extras while preserving native animation and application metadata. Resource URIs remain readable through resources/read. Canonical revisions never change; no binary bytes are placed in tool text.",
+      inputSchema: profileExportInput,
       run: async (raw) => {
-        const input = exportInput.parse(raw);
+        const input = profileExportInput.parse(raw);
+        if (input.profile === "runtime") {
+          const record = await library().read(input.collection, input.assetId, input.revisionId);
+          return {
+            ok: true,
+            profile: input.profile,
+            collection: input.collection,
+            asset: {
+              assetId: input.assetId,
+              revisionId: input.revisionId,
+              name: record.manifest.name
+            },
+            resources: await (await Promise.resolve().then(() => (init_assets_resources(), exports_assets_resources))).runtimeAssetLinks(input.collection, record)
+          };
+        }
         return links(input.collection, (await library().read(input.collection, input.assetId, input.revisionId)).manifest);
       }
     },
@@ -29603,7 +29744,7 @@ function createKilnMcpServer(context = {}, options = {}) {
     server.registerResource("asset-file", new ResourceTemplate("kiln://assets/{collection}/{asset}/{revision}/{file}", {
       list: undefined
     }), {
-      description: "Exact saved GLB, editable source, preview, manifest, or portable bundle."
+      description: "Saved GLB/source/preview/manifest/bundle, or derived runtime GLB and metadata sidecar."
     }, async (uri) => {
       const file = await readAssetResource(context.assetLibrary, uri.href);
       return {

@@ -30,6 +30,7 @@ import { randomUUID } from "node:crypto";
 import {
   chmod,
   lstat,
+  link,
   mkdir,
   open,
   realpath,
@@ -38,7 +39,7 @@ import {
   unlink,
   writeFile
 } from "node:fs/promises";
-import { dirname, join } from "node:path";
+import { dirname, join, resolve } from "node:path";
 async function prepareDestination(path) {
   await mkdir(dirname(path), { recursive: true });
   return path;
@@ -71,6 +72,46 @@ async function writeDestinationAtomic(path, data) {
     await rename(temporary, path);
   } finally {
     await unlink(temporary).catch(() => {});
+  }
+}
+async function writeNewDestinationsAtomic(outputs) {
+  const paths = outputs.map(({ path }) => {
+    const absolute = resolve(path);
+    return process.platform === "win32" ? absolute.toLowerCase() : absolute;
+  });
+  if (new Set(paths).size !== paths.length)
+    throw new Error("Export destinations must be distinct");
+  const staged = [];
+  try {
+    for (const { path, data } of outputs) {
+      await prepareDestination(path);
+      const temporary = join(dirname(path), `.kiln-write-${randomUUID()}.tmp`);
+      const file = await open(temporary, "wx");
+      staged.push({ path, temporary, published: false });
+      try {
+        await writeFile(file, data);
+      } finally {
+        await file.close();
+      }
+    }
+    for (const output of staged) {
+      await link(output.temporary, output.path);
+      output.published = true;
+    }
+  } catch (error) {
+    for (const output of staged.filter((item) => item.published).reverse()) {
+      try {
+        const [destination, temporary] = await Promise.all([
+          lstat(output.path),
+          lstat(output.temporary)
+        ]);
+        if (destination.dev === temporary.dev && destination.ino === temporary.ino)
+          await unlink(output.path);
+      } catch {}
+    }
+    throw error;
+  } finally {
+    await Promise.all(staged.map(({ temporary }) => unlink(temporary).catch(() => {})));
   }
 }
 var init_cli_output = () => {};
@@ -25822,9 +25863,9 @@ var init_program_store = __esm(() => {
 });
 
 // src/program-store-node.ts
-import { link, lstat as lstat2, mkdir as mkdir2, readFile, readdir, stat as stat2, unlink as unlink2, writeFile as writeFile2 } from "node:fs/promises";
+import { link as link2, lstat as lstat2, mkdir as mkdir2, readFile, readdir, stat as stat2, unlink as unlink2, writeFile as writeFile2 } from "node:fs/promises";
 import { randomUUID as randomUUID2 } from "node:crypto";
-import { join as join3, resolve as resolve2 } from "node:path";
+import { join as join3, resolve as resolve3 } from "node:path";
 
 class FileProgramStore {
   directory;
@@ -25907,7 +25948,7 @@ class FileProgramStore {
       await writeFile2(temporary, ref, { encoding: "utf8", flag: "wx", mode: 384 });
       try {
         try {
-          await link(temporary, join3(directory, `${handle}.ref`));
+          await link2(temporary, join3(directory, `${handle}.ref`));
           return handle;
         } catch (error) {
           if (error.code !== "EEXIST")
@@ -25929,7 +25970,7 @@ class FileProgramStore {
     await writeFile2(temporary, code, { encoding: "utf8", flag: "wx", mode: 384 });
     try {
       try {
-        await link(temporary, target);
+        await link2(temporary, target);
       } catch (error) {
         if (error.code !== "EEXIST")
           throw error;
@@ -25942,7 +25983,7 @@ class FileProgramStore {
   }
 }
 function localProgramStore() {
-  return new FileProgramStore(resolve2(process.env["KILN_PROGRAM_STORE"] ?? ".kiln/programs"));
+  return new FileProgramStore(resolve3(process.env["KILN_PROGRAM_STORE"] ?? ".kiln/programs"));
 }
 var init_program_store_node = __esm(() => {
   init_program_store();
@@ -26124,14 +26165,14 @@ import {
   utimes,
   writeFile as writeFile3
 } from "node:fs/promises";
-import { join as join4, resolve as resolve3 } from "node:path";
+import { join as join4, resolve as resolve4 } from "node:path";
 
 class FileBuildCache {
   maxBytes;
   directory;
   constructor(directory, maxBytes = 128 * 1024 * 1024) {
     this.maxBytes = maxBytes;
-    this.directory = resolve3(directory);
+    this.directory = resolve4(directory);
     if (!Number.isSafeInteger(maxBytes) || maxBytes < 0 || maxBytes > 1024 * 1024 * 1024)
       throw new Error("File build cache size must be 0..1 GiB.");
   }
@@ -26352,7 +26393,7 @@ var digest3 = (bytes) => createHash8("sha256").update(bytes).digest("hex"), comp
 var init_runtime_identity = () => {};
 
 // src/local-runtime.ts
-import { dirname as dirname3, join as join6, resolve as resolve4 } from "node:path";
+import { dirname as dirname3, join as join6, resolve as resolve5 } from "node:path";
 import { fileURLToPath as fileURLToPath4 } from "node:url";
 function integer2(env, name, fallback, min, max) {
   const value = env[name] === undefined ? fallback : Number(env[name]);
@@ -26424,7 +26465,7 @@ function createLocalToolContext(base = {}, env = process.env) {
   return {
     ...base,
     geometryPolicy,
-    programStore: base.programStore ?? new FileProgramStore(resolve4(env.KILN_PROGRAM_STORE ?? ".kiln/programs")),
+    programStore: base.programStore ?? new FileProgramStore(resolve5(env.KILN_PROGRAM_STORE ?? ".kiln/programs")),
     evaluatorPort,
     assetBuildOptions: {
       optimize,
@@ -26476,7 +26517,7 @@ async function createPackagedLocalToolContext(base = {}, env = process.env, inst
   }
   const cacheBytes = integer2(env, "KILN_BUILD_CACHE_MB", 128, 0, 1024) * 1024 * 1024;
   const store = context.programStore;
-  const directory = resolve4(env.KILN_BUILD_CACHE_DIR ?? join6(store instanceof FileProgramStore ? dirname3(store.directory) : ".kiln", "cache", "builds"));
+  const directory = resolve5(env.KILN_BUILD_CACHE_DIR ?? join6(store instanceof FileProgramStore ? dirname3(store.directory) : ".kiln", "cache", "builds"));
   context.buildCache = new FileBuildCache(directory, cacheBytes);
   context.evaluatorCacheIdentity = `${identity.identity}:${JSON.stringify({
     execution: context.localExecution,
@@ -27503,11 +27544,107 @@ var init_measurement = __esm(() => {
   init_camera();
 });
 
+// src/asset-export.ts
+async function sha2562(bytes) {
+  const digest = await crypto.subtle.digest("SHA-256", Uint8Array.from(bytes));
+  return `sha256:${Array.from(new Uint8Array(digest), (byte) => byte.toString(16).padStart(2, "0")).join("")}`;
+}
+function validateMetadataFileName(name) {
+  if (name.length > 200 || !/^[a-z0-9][a-z0-9._-]*\.kiln-metadata\.json$/i.test(name) || /^(con|prn|aux|nul|com[0-9]|lpt[0-9])\./i.test(name))
+    throw new Error("Runtime metadata filename must be a portable sibling *.kiln-metadata.json filename");
+}
+async function exportAssetGlb(record, options = {}) {
+  const profile = options.profile ?? "editable";
+  if (profile !== "editable" && profile !== "runtime")
+    throw new Error("Unknown export profile");
+  validateRecordShape(record);
+  const bytes = record.files["asset.glb"];
+  if (profile === "editable")
+    return { profile, glb: bytes };
+  const name = options.metadataFileName ?? "runtime.kiln-metadata.json";
+  validateMetadataFileName(name);
+  for (const [file, data] of Object.entries(record.files)) {
+    if (await sha2562(data) !== record.manifest.files[file].sha256)
+      throw new Error(`Asset integrity mismatch: ${file}`);
+  }
+  const view = new DataView(bytes.buffer, bytes.byteOffset, bytes.byteLength);
+  let end = 12;
+  while (end < bytes.length) {
+    if (end + 8 > bytes.length)
+      throw new Error("Invalid GLB chunk header");
+    const length = view.getUint32(end, true);
+    if (length % 4 || end + 8 + length > bytes.length)
+      throw new Error("Invalid GLB chunk length");
+    end += 8 + length;
+  }
+  const jsonEnd = 20 + view.getUint32(12, true);
+  const json = JSON.parse(decoder.decode(bytes.subarray(20, jsonEnd)));
+  if (!object(json) || !object(json.asset) || json.asset.version !== "2.0")
+    throw new Error("Invalid glTF asset");
+  const asset = json.asset;
+  if (owns(asset, "extras") && !object(asset.extras))
+    throw new Error("Cannot add provenance to non-object asset extras");
+  const extras = asset.extras ?? {};
+  if (owns(extras, "kilnProvenanceV1"))
+    throw new Error("Asset extras already contain kilnProvenanceV1; export from the canonical revision");
+  const scenes = [];
+  if (json.scenes !== undefined && !Array.isArray(json.scenes))
+    throw new Error("Invalid glTF scenes");
+  for (const [index, scene] of (json.scenes ?? []).entries()) {
+    if (!object(scene) || !object(scene.extras) || !owns(scene.extras, "kilnReviewClipsV1"))
+      continue;
+    const review = scene.extras.kilnReviewClipsV1;
+    if (!object(review) || review.version !== 1 || !Array.isArray(review.clips))
+      throw new Error("Unsupported scenes[].extras.kilnReviewClipsV1");
+    scenes.push({ index, kilnReviewClipsV1: review });
+    delete scene.extras.kilnReviewClipsV1;
+  }
+  const metadata = {
+    version: "kiln.runtime-metadata.v1",
+    source: {
+      assetId: record.manifest.assetId,
+      revisionId: record.manifest.revisionId,
+      glbSha256: record.manifest.files["asset.glb"].sha256,
+      ...record.manifest.files["source.kiln.js"] ? { sourceSha256: record.manifest.files["source.kiln.js"].sha256 } : {}
+    },
+    scenes
+  };
+  const metadataBytes = encoder.encode(JSON.stringify(metadata));
+  asset.extras = {
+    ...extras,
+    kilnProvenanceV1: {
+      version: "kiln.provenance.v1",
+      profile: "runtime",
+      metadata: { uri: name, sha256: await sha2562(metadataBytes) }
+    }
+  };
+  const jsonBytes = encoder.encode(JSON.stringify(json));
+  const length = Math.ceil(jsonBytes.length / 4) * 4;
+  const result = new Uint8Array(20 + length + bytes.length - jsonEnd);
+  if (result.length > ASSET_LIMIT || metadataBytes.length > ASSET_LIMIT)
+    throw new Error("Runtime export exceeds 64 MiB");
+  result.set(bytes.subarray(0, 20));
+  const header = new DataView(result.buffer);
+  header.setUint32(8, result.length, true);
+  header.setUint32(12, length, true);
+  result.fill(32, 20, 20 + length);
+  result.set(jsonBytes, 20);
+  result.set(bytes.subarray(jsonEnd), 20 + length);
+  return { profile, glb: result, metadata: { name, bytes: metadataBytes } };
+}
+var encoder, decoder, object = (value) => value !== null && typeof value === "object" && !Array.isArray(value), owns = (value, key) => Object.hasOwn(value, key);
+var init_asset_export = __esm(() => {
+  init_assets();
+  encoder = new TextEncoder;
+  decoder = new TextDecoder;
+});
+
 // src/assets-resources.ts
 var exports_assets_resources = {};
 __export(exports_assets_resources, {
   assetLinks: () => assetLinks,
-  readAssetResource: () => readAssetResource
+  readAssetResource: () => readAssetResource,
+  runtimeAssetLinks: () => runtimeAssetLinks
 });
 function assetLinks(collection, manifest) {
   const manifestBytes = new TextEncoder().encode(JSON.stringify(manifest, null, 2)).byteLength;
@@ -27526,8 +27663,24 @@ function assetLinks(collection, manifest) {
 function assetMime(name) {
   return name.endsWith(".glb") ? "model/gltf-binary" : name.endsWith(".png") ? "image/png" : name.endsWith(".zip") ? "application/zip" : name.endsWith(".json") ? "application/json" : "text/javascript";
 }
+async function runtimeAssetLinks(collection, record) {
+  const output = await exportAssetGlb(record, { profile: "runtime" });
+  if (output.profile !== "runtime")
+    throw new Error("Expected runtime export");
+  return [
+    { name: "runtime.glb", bytes: output.glb },
+    { name: output.metadata.name, bytes: output.metadata.bytes }
+  ].map(({ name, bytes }) => ({
+    type: "resource_link",
+    name,
+    uri: `kiln://assets/${collection}/${record.manifest.assetId}/${record.manifest.revisionId}/${name}`,
+    mimeType: assetMime(name),
+    size: bytes.length,
+    annotations: { audience: ["user"], priority: name.endsWith(".glb") ? 0.9 : 0.3 }
+  }));
+}
 async function readAssetResource(library, uri) {
-  const match = /^kiln:\/\/assets\/([a-z][a-z0-9_-]{0,79})\/([a-z][a-z0-9_-]{0,79})\/([a-z][a-z0-9_-]{0,79})\/(asset\.glb|source\.kiln\.js|preview\.png|manifest\.json|editable\.zip)$/.exec(uri);
+  const match = /^kiln:\/\/assets\/([a-z][a-z0-9_-]{0,79})\/([a-z][a-z0-9_-]{0,79})\/([a-z][a-z0-9_-]{0,79})\/(asset\.glb|runtime\.glb|runtime\.kiln-metadata\.json|source\.kiln\.js|preview\.png|manifest\.json|editable\.zip)$/.exec(uri);
   if (!match)
     throw new Error("Unknown asset resource");
   const collection = match[1];
@@ -27535,6 +27688,16 @@ async function readAssetResource(library, uri) {
   const revision = match[3];
   const name = match[4];
   const record = await library.read(collection, asset, revision);
+  if (name === "runtime.glb" || name === "runtime.kiln-metadata.json") {
+    const output = await exportAssetGlb(record, { profile: "runtime" });
+    if (output.profile !== "runtime")
+      throw new Error("Expected runtime export");
+    return {
+      bytes: name === "runtime.glb" ? output.glb : output.metadata.bytes,
+      mimeType: assetMime(name),
+      name
+    };
+  }
   const bytes = name === "editable.zip" ? encodeAssetBundle([record]) : name === "manifest.json" ? new TextEncoder().encode(JSON.stringify(record.manifest, null, 2)) : record.files[name];
   if (!bytes)
     throw new Error("Asset file unavailable");
@@ -27543,6 +27706,7 @@ async function readAssetResource(library, uri) {
 var audiences, priorities;
 var init_assets_resources = __esm(() => {
   init_assets();
+  init_asset_export();
   audiences = {
     "asset.glb": ["user"],
     "preview.png": ["user"],
@@ -28618,6 +28782,9 @@ function createKilnAssetDefs(context) {
     limit: z4.number().int().min(1).max(50).default(20)
   });
   const exportInput = z4.object(assetSelector);
+  const profileExportInput = exportInput.extend({
+    profile: z4.enum(["editable", "runtime"]).default("editable").describe("editable preserves canonical source/GLB/build resources. runtime returns a standalone GLB and versioned review-metadata sidecar; no source bundle or geometry optimization.")
+  });
   const importInput = z4.object({
     ...assetSelector,
     sourceCollection: assetSelector.collection
@@ -28764,10 +28931,24 @@ function createKilnAssetDefs(context) {
     },
     {
       name: "kiln_export",
-      description: "Get exact GLB, source, preview, and manifest descriptors for one saved revision. Their resource URIs remain readable through resources/read, and configured hosts may also return download URLs including a portable editable ZIP. No binary bytes are placed in tool text.",
-      inputSchema: exportInput,
+      description: "Export one saved revision. Default editable returns exact GLB, source, preview, and manifest descriptors; configured hosts may include portable editable ZIP download URLs. Opt-in runtime returns a standalone GLB plus a versioned metadata sidecar, moving only Kiln review clips out of GLB extras while preserving native animation and application metadata. Resource URIs remain readable through resources/read. Canonical revisions never change; no binary bytes are placed in tool text.",
+      inputSchema: profileExportInput,
       run: async (raw) => {
-        const input = exportInput.parse(raw);
+        const input = profileExportInput.parse(raw);
+        if (input.profile === "runtime") {
+          const record = await library().read(input.collection, input.assetId, input.revisionId);
+          return {
+            ok: true,
+            profile: input.profile,
+            collection: input.collection,
+            asset: {
+              assetId: input.assetId,
+              revisionId: input.revisionId,
+              name: record.manifest.name
+            },
+            resources: await (await Promise.resolve().then(() => (init_assets_resources(), exports_assets_resources))).runtimeAssetLinks(input.collection, record)
+          };
+        }
         return links(input.collection, (await library().read(input.collection, input.assetId, input.revisionId)).manifest);
       }
     },
@@ -29239,7 +29420,7 @@ import { createHash as createHash10, randomUUID as randomUUID4 } from "node:cryp
 import { readFileSync as readFileSync2 } from "node:fs";
 import { lstat as lstat3, mkdir as mkdir4, readFile as readFile4, readdir as readdir4, realpath as realpath3, rename as rename3, rm, writeFile as writeFile4 } from "node:fs/promises";
 import { homedir, platform } from "node:os";
-import { dirname as dirname4, join as join8, relative as relative2, resolve as resolve5, sep } from "node:path";
+import { dirname as dirname4, join as join8, relative as relative2, resolve as resolve6, sep } from "node:path";
 async function verifyAssetRecord(record) {
   for (const [name, info] of Object.entries(record.manifest.files)) {
     const bytes = record.files[name];
@@ -29254,7 +29435,7 @@ class FileAssetLibrary {
   constructor(roots) {
     if (!Object.keys(roots).length)
       throw new Error("Configure at least one collection");
-    this.roots = Object.fromEntries(Object.entries(roots).map(([id, path]) => [assetIdSchema.parse(id), resolve5(path)]));
+    this.roots = Object.fromEntries(Object.entries(roots).map(([id, path]) => [assetIdSchema.parse(id), resolve6(path)]));
   }
   collections() {
     return Object.keys(this.roots).map((id) => ({
@@ -29408,7 +29589,7 @@ class FileAssetLibrary {
   }
 }
 function collectionConfigPath(env = process.env) {
-  const workspace = env.KILN_PROGRAM_STORE ? dirname4(dirname4(resolve5(env.KILN_PROGRAM_STORE))) : process.cwd();
+  const workspace = env.KILN_PROGRAM_STORE ? dirname4(dirname4(resolve6(env.KILN_PROGRAM_STORE))) : process.cwd();
   return join8(workspace, ".kiln", "collections.json");
 }
 function defaultUserLibraryRoot(env = process.env, home = homedir(), operatingSystem = platform()) {
@@ -29574,7 +29755,7 @@ __export(exports_asset_cli, {
   assetMain: () => assetMain
 });
 import { readFile as readFile6, writeFile as writeFile5, stat as stat5, mkdir as mkdir5, rename as rename4 } from "node:fs/promises";
-import { basename, resolve as resolve6, dirname as dirname6 } from "node:path";
+import { basename, resolve as resolve7, dirname as dirname6 } from "node:path";
 import { randomUUID as randomUUID5 } from "node:crypto";
 async function assetMain(argv) {
   const command = argv[0];
@@ -29592,6 +29773,7 @@ async function assetMain(argv) {
     "tag",
     "out",
     "format",
+    "profile",
     "port",
     "render"
   ]);
@@ -29633,9 +29815,9 @@ async function assetMain(argv) {
         throw new Error("collections add requires name and directory");
       assetIdSchema.parse(name);
       const roots = Object.fromEntries(library.collections().map((c) => [c.id, library.directory(c.id)]));
-      if (roots[name] && roots[name] !== resolve6(directory))
+      if (roots[name] && roots[name] !== resolve7(directory))
         throw new Error("Collection name already points to another directory");
-      roots[name] = resolve6(directory);
+      roots[name] = resolve7(directory);
       const path = collectionConfigPath();
       await mkdir5(dirname6(path), { recursive: true });
       const temporary = `${path}.${randomUUID5()}.tmp`;
@@ -29687,14 +29869,36 @@ async function assetMain(argv) {
     } else {
       if (!flags.out)
         throw new Error("export requires --out");
-      const format = flags.format ?? "bundle";
+      const profile = flags.profile ?? "editable";
+      if (profile !== "editable" && profile !== "runtime")
+        throw new Error("Unknown export profile");
+      const format = flags.format ?? (profile === "runtime" ? "glb" : "bundle");
       if (!["bundle", "glb", "source"].includes(format))
         throw new Error("Unknown export format");
+      if (profile === "runtime") {
+        if (format !== "glb")
+          throw new Error("Runtime profile requires GLB format; use editable for source or bundle");
+        const destination = resolve7(flags.out);
+        if (!destination.toLowerCase().endsWith(".glb"))
+          throw new Error("Runtime output must end in .glb");
+        const metadataFileName = `${basename(destination).slice(0, -4)}.kiln-metadata.json`;
+        const output = await exportAssetGlb(record, { profile, metadataFileName });
+        if (output.profile !== "runtime")
+          throw new Error("Expected runtime export");
+        const metadataPath = resolve7(dirname6(destination), output.metadata.name);
+        await writeNewDestinationsAtomic([
+          { path: metadataPath, data: output.metadata.bytes },
+          { path: destination, data: output.glb }
+        ]);
+        console.log(`Saved ${destination}
+Saved ${metadataPath}`);
+        return 0;
+      }
       const bytes = format === "bundle" ? encodeAssetBundle([record]) : record.files[format === "glb" ? "asset.glb" : "source.kiln.js"];
       if (!bytes)
         throw new Error("Source unavailable");
-      await writeFile5(await prepareDestination(resolve6(flags.out)), bytes, { flag: "wx" });
-      console.log(`Saved ${resolve6(flags.out)}`);
+      await writeFile5(await prepareDestination(resolve7(flags.out)), bytes, { flag: "wx" });
+      console.log(`Saved ${resolve7(flags.out)}`);
     }
   } else if (command === "import") {
     const file = positional[0];
@@ -29710,7 +29914,7 @@ async function assetMain(argv) {
     if (file) {
       if ((await stat5(file)).isDirectory()) {
         await Promise.resolve().then(() => init_assets_node());
-        target = new FileAssetLibrary({ project: resolve6(file) });
+        target = new FileAssetLibrary({ project: resolve7(file) });
       } else
         standalone = { name: basename(file), bytes: await fileBytes(file) };
     }
@@ -29739,6 +29943,7 @@ ASSETS & VIEWER
   kiln assets [--collection project]      list saved revisions (JSON)
   kiln asset <id> <revision> [--collection project] [--restore]
   kiln export <id> <revision> --out asset.zip [--format bundle|glb|source]
+       [--profile editable|runtime]   runtime writes GLB + sibling metadata JSON
   kiln import <asset.zip|asset.glb> [--collection project] [--name <name>]
   kiln view [collection-directory|asset.glb|asset.zip] [--port 4318]
        [--collection project --asset <id> --revision <revision>]
@@ -29755,6 +29960,7 @@ var init_asset_cli = __esm(() => {
   init_program_store();
   init_registry2();
   init_cli_output();
+  init_asset_export();
   init_local_runtime();
   init_cli_render_mode();
   init_asset_viewer();
@@ -29768,13 +29974,13 @@ import { resolve as resolvePath } from "node:path";
 
 // src/direct-entry.ts
 import { realpathSync } from "node:fs";
-import { resolve } from "node:path";
+import { resolve as resolve2 } from "node:path";
 import { fileURLToPath } from "node:url";
 function isDirectEntry(moduleUrl) {
   if (!process.argv[1])
     return false;
   try {
-    return realpathSync(resolve(process.argv[1])) === realpathSync(fileURLToPath(moduleUrl));
+    return realpathSync(resolve2(process.argv[1])) === realpathSync(fileURLToPath(moduleUrl));
   } catch {
     return false;
   }

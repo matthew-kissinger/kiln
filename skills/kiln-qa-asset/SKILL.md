@@ -10,6 +10,8 @@ Match the checks to the requested delivery. A source build, an image review, a G
 
 ## Before integration
 
+Read the [export profile guide](references/export-profiles.md) when reviewing delivery files. Verify the selected converter separately from the editable/runtime profile. Runtime GLBs must preserve native playback without the sidecar; provenance checks use the sidecar filename and exact byte hash. Keep the canonical editable asset for source and full Kiln review data, and measure actual loading and rendering performance separately.
+
 Read validation/build findings and export warnings. `kiln_validate` only checks source; render and inspect the actual geometry when that is the task. Choose broad or part-specific views that reveal the suspected defect. Copy the returned `programRef` exactly for every view, whether it is a short `p_` handle or a full SHA-256 reference; request source text only when a repair needs it. A handle identifies a revision in its store; use full source and artifact hashes for integrity evidence.
 
 Distinguish expected open sheets from invalid solid topology. `geometryDiagnostics` reports boundary edges, non-manifold edges, orientation conflicts and degenerates; it does not prove absence of self-intersection. A capped loft, shell-like surface, or sampled field is not automatically a manufacturing-grade solid.

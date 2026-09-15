@@ -6,7 +6,8 @@ import { ASSET_LIMIT, assetIdSchema, decodeAssetBundle, encodeAssetBundle } from
 import { localProgramStore } from './program-store-node';
 import { programRefPattern, retainProgram } from './program-store';
 import { createKilnProgramToolRegistry } from './tools/registry';
-import { prepareDestination } from './cli-output';
+import { prepareDestination, writeNewDestinationsAtomic } from './cli-output';
+import { exportAssetGlb } from './asset-export';
 import { createPackagedLocalToolContext } from './local-runtime';
 import { buildRenderPort, resolveRenderMode } from './cli-render-mode';
 import { startAssetViewer } from './asset-viewer';
@@ -21,6 +22,7 @@ ASSETS & VIEWER
   kiln assets [--collection project]      list saved revisions (JSON)
   kiln asset <id> <revision> [--collection project] [--restore]
   kiln export <id> <revision> --out asset.zip [--format bundle|glb|source]
+       [--profile editable|runtime]   runtime writes GLB + sibling metadata JSON
   kiln import <asset.zip|asset.glb> [--collection project] [--name <name>]
   kiln view [collection-directory|asset.glb|asset.zip] [--port 4318]
        [--collection project --asset <id> --revision <revision>]
@@ -46,6 +48,7 @@ export async function assetMain(argv: readonly string[]): Promise<number> {
     'tag',
     'out',
     'format',
+    'profile',
     'port',
     'render',
   ]);
@@ -154,8 +157,28 @@ export async function assetMain(argv: readonly string[]): Promise<number> {
       } else console.log(JSON.stringify(record.manifest, null, 2));
     } else {
       if (!flags.out) throw new Error('export requires --out');
-      const format = flags.format ?? 'bundle';
+      const profile = flags.profile ?? 'editable';
+      if (profile !== 'editable' && profile !== 'runtime')
+        throw new Error('Unknown export profile');
+      const format = flags.format ?? (profile === 'runtime' ? 'glb' : 'bundle');
       if (!['bundle', 'glb', 'source'].includes(format)) throw new Error('Unknown export format');
+      if (profile === 'runtime') {
+        if (format !== 'glb')
+          throw new Error('Runtime profile requires GLB format; use editable for source or bundle');
+        const destination = resolve(flags.out);
+        if (!destination.toLowerCase().endsWith('.glb'))
+          throw new Error('Runtime output must end in .glb');
+        const metadataFileName = `${basename(destination).slice(0, -4)}.kiln-metadata.json`;
+        const output = await exportAssetGlb(record, { profile, metadataFileName });
+        if (output.profile !== 'runtime') throw new Error('Expected runtime export');
+        const metadataPath = resolve(dirname(destination), output.metadata.name);
+        await writeNewDestinationsAtomic([
+          { path: metadataPath, data: output.metadata.bytes },
+          { path: destination, data: output.glb },
+        ]);
+        console.log(`Saved ${destination}\nSaved ${metadataPath}`);
+        return 0;
+      }
       const bytes =
         format === 'bundle'
           ? encodeAssetBundle([record])

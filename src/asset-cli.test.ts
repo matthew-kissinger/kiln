@@ -1,6 +1,6 @@
 import { expect, test } from 'bun:test';
 import { spawnSync } from 'node:child_process';
-import { mkdtemp, readFile, rm } from 'node:fs/promises';
+import { mkdtemp, readFile, rm, readdir } from 'node:fs/promises';
 import { join, resolve } from 'node:path';
 import { tmpdir } from 'node:os';
 import { decodeAssetBundle } from './assets';
@@ -49,6 +49,69 @@ test('CLI saves, exports, imports, and restores a revision across independent st
     expect(JSON.parse(restored.stdout).programRef).toMatch(/^p_/);
     expect(run('second', ['import', file]).status).toBe(0);
     expect(JSON.parse(run('second', ['assets']).stdout).assets.length).toBe(1);
+    const canonical = decodeAssetBundle(new Uint8Array(await readFile(file)))[0]!.files[
+      'asset.glb'
+    ]!;
+    const editable = join(root, 'editable.glb');
+    expect(
+      run('first', [
+        'export',
+        asset.assetId,
+        asset.revisionId,
+        '--out',
+        editable,
+        '--format',
+        'glb',
+        '--profile',
+        'editable',
+      ]).status,
+    ).toBe(0);
+    expect(new Uint8Array(await readFile(editable))).toEqual(Uint8Array.from(canonical));
+    const runtime = join(root, 'runtime.glb');
+    expect(
+      run('first', [
+        'export',
+        asset.assetId,
+        asset.revisionId,
+        '--out',
+        runtime,
+        '--profile',
+        'runtime',
+      ]).status,
+    ).toBe(0);
+    const metadata = JSON.parse(await readFile(join(root, 'runtime.kiln-metadata.json'), 'utf8'));
+    expect(metadata.version).toBe('kiln.runtime-metadata.v1');
+    expect(metadata.source.revisionId).toBe(asset.revisionId);
+    const runtimeBefore = await readFile(runtime);
+    expect(
+      run('first', [
+        'export',
+        asset.assetId,
+        asset.revisionId,
+        '--out',
+        runtime,
+        '--profile',
+        'runtime',
+      ]).status,
+    ).toBe(1);
+    expect(await readFile(runtime)).toEqual(runtimeBefore);
+    for (const flags of [
+      ['--profile', 'unknown'],
+      ['--profile', 'runtime', '--format', 'bundle'],
+      ['--profile', 'runtime', '--format', 'source'],
+    ]) {
+      expect(
+        run('first', [
+          'export',
+          asset.assetId,
+          asset.revisionId,
+          '--out',
+          join(root, 'bad.glb'),
+          ...flags,
+        ]).status,
+      ).toBe(1);
+    }
+    expect(await readdir(root)).not.toContain('bad.glb');
   } finally {
     await rm(root, { recursive: true, force: true });
   }
