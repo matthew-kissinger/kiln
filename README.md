@@ -84,6 +84,12 @@ This writes a GLB and a six-view image of an existing program. It makes no model
 Rendering uses the CPU unless a compatible local GPU service is available.
 Use `--render cpu` to select the CPU explicitly.
 
+**Using assets in Blender or Unity?** Read the [handoff guide](docs/engine-handoff.md) for direct GLB import,
+materials, backfaces, named pivots and animation checks. The established exporter remains
+the default. An **experimental community exporter** is available for explicit comparison
+when you need its additional feature preservation; the guide includes activation, rollback
+and known limitations. No separate repository is required once this integration is on main.
+
 History was rewritten on 2026-09-10 to drop 288 MB of gallery renders and launch
 video that no tool reads, taking a clone from 440 MB to 60 MB, or 49 MB with
 `--filter=blob:none`; measured 2026-09-12. Every commit survived and the tree is

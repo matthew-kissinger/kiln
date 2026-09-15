@@ -4,14 +4,15 @@ Kiln can qualify Three.js `GLTFExporter` as its scene converter while retaining 
 Kiln validation, texture preparation and semantic metadata policy. The established exporter remains
 the default. This is a migration option, not a claim that every renderer supports every glTF feature.
 
-## Qualification switch, not an authoring choice
+## Normal workflow and experimental testing
 
-Ordinary users and coding agents should continue using the normal CLI/MCP export workflow.
-Do not add exporter selection to asset briefs or authoring skills. This temporary host setting
-exists for maintainers to compare implementations during migration. The intended end state is
-one qualified default exporter; a second permanent user-facing workflow is not the goal.
+Ordinary users and coding agents can continue using the normal CLI/MCP export workflow.
+For Blender or Unity handoff, read the [handoff guide](engine-handoff.md). It explains when
+trying the experimental converter is useful, how to compare outputs, and how to restore the
+default. Choosing Blender or Unity does not automatically require a different exporter.
+The intended end state remains one qualified default exporter.
 
-## Run a maintainer qualification
+## Try the experimental converter from a clone
 
 Use the supported toolchain and build matching runtime bundles first:
 

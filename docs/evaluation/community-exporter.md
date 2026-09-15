@@ -218,9 +218,10 @@ pipeline combination must be named in results rather than claiming universal eng
 
 ## Expanded qualification and unified migration
 
-The opt-in backend is a maintainer qualification mechanism. No exporter choice is added to the
-normal CLI/MCP schema or authoring skills. The target is one default implementation after the
-migration gates pass, not a permanent two-exporter product.
+The opt-in backend supports explicit experimental comparisons. The normal CLI/MCP schema is
+unchanged; user and agent handoff documentation explains when testing the candidate is useful,
+how to restore the default, and what remains unsupported. The target is one default implementation
+after the migration gates pass, not a permanent two-exporter product.
 
 ### Additional executable evidence
 
