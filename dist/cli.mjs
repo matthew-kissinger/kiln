@@ -29362,20 +29362,22 @@ function describeDrawnBy(output, context) {
   return "cpu raster (GPU configured; scene needs no PBR shading)";
 }
 async function buildRenderPort(mode, portUrl, options) {
+  const explicitClientToken = process.env["KILN_RENDER_TOKEN"];
+  const localClientToken = explicitClientToken ?? process.env["RENDER_SERVICE_TOKEN"];
   const context = mode === "gpu" ? { viewRenderRequired: true } : {};
-  const attach = (url, label) => {
-    context.viewRenderPort = makeRemoteRenderPort(url, process.env["KILN_RENDER_TOKEN"]);
+  const attach = (url, label, token) => {
+    context.viewRenderPort = makeRemoteRenderPort(url, token);
     context.viewRenderTimeoutMs = CLI_VIEW_RENDER_TIMEOUT_MS;
     context.captureCacheIdentity = () => probeCaptureIdentity(url);
     selected.set(context, label);
     return context;
   };
-  const attachLazy = (start, label) => {
+  const attachLazy = (start, label, token) => {
     let url;
     context.viewRenderPort = makeLazyRenderPort(async () => {
       url = await start();
       return url;
-    }, process.env["KILN_RENDER_TOKEN"] ?? process.env["RENDER_SERVICE_TOKEN"]);
+    }, token);
     context.viewRenderTimeoutMs = CLI_VIEW_RENDER_TIMEOUT_MS;
     context.captureCacheIdentity = () => url ? probeCaptureIdentity(url) : undefined;
     selected.set(context, label);
@@ -29386,20 +29388,20 @@ async function buildRenderPort(mode, portUrl, options) {
     return context;
   }
   if (portUrl)
-    return attach(portUrl, `GPU service (${portUrl})`);
+    return attach(portUrl, `GPU service (${portUrl})`, explicitClientToken);
   const envUrl = process.env["KILN_RENDER_PORT_URL"];
   if (envUrl)
-    return attach(envUrl, `GPU service (${envUrl})`);
+    return attach(envUrl, `GPU service (${envUrl})`, explicitClientToken);
   const localUrl = localRenderServiceUrl();
   const rendererId = await probeRenderService(localUrl);
   if (rendererId)
-    return attach(localUrl, `GPU service (${rendererId})`);
+    return attach(localUrl, `GPU service (${rendererId})`, localClientToken);
   if (options?.autoSpawn || mode === "gpu") {
     const dir = options?.serviceDir ?? renderServiceDir();
     const state = options?.start ? "ready" : localRenderServiceState(dir);
     if (state === "ready") {
       const start = options?.start ?? (() => startLocalRenderService(dir));
-      return attachLazy(start, "GPU service (started on demand)");
+      return attachLazy(start, "GPU service (started on demand)", localClientToken);
     }
     if (mode === "gpu")
       throw new Error(`no GPU render service is reachable at ${localUrl}, and ${explainRenderServiceState(state, dir)}.

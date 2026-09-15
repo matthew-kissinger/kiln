@@ -46,7 +46,7 @@ warning. `RENDER_SERVICE_ALLOW_UNAUTHENTICATED=1` waives that when something in 
 already authenticates for it. The container image sets `HOST=0.0.0.0` itself, because a container
 binding loopback is unreachable through `-p`.
 
-If the server sets `RENDER_SERVICE_TOKEN`, set the matching `KILN_RENDER_TOKEN` in the client environment; a health check can succeed while unauthenticated render requests return 401. For a remote service, supply `--render-port URL` or set `KILN_RENDER_PORT_URL` — either short-circuits every local path above, so a hosted GPU stays one flag. See the service README for deployment and authentication options.
+For local render services, client sessions automatically inherit `RENDER_SERVICE_TOKEN` as a fallback when `KILN_RENDER_TOKEN` is unset, whether starting on demand or joining an existing local service sharing the same environment on port 8000. `KILN_RENDER_TOKEN` remains the explicit client credential: set it to override the local token or to authenticate against a remote service. Explicit remote endpoints (`--render-port URL` or `KILN_RENDER_PORT_URL`) never infer credentials from `RENDER_SERVICE_TOKEN` and require `KILN_RENDER_TOKEN` directly. See the service README for deployment and authentication options.
 
 `--render auto` is deliberately not on the on-demand path. A one-shot `kiln render` should not pay a
 GPU process's startup to draw one sheet, so `auto` uses a service that is already listening and
