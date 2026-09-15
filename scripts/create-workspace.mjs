@@ -207,7 +207,7 @@ Read the skill for your task from skills/ in this directory, never a global plug
 4. Edit. Read exact anchors with kiln_source and a literal query, following nextOffset for more context, then call kiln_edit with programRef and edits. Each edit returns a new programRef; use that one from then on. Rewriting the whole file through the CLI works, but it loses the anchored diff and the revision lineage.
 5. Save. The user chooses a named destination; discover configured collections when needed and otherwise default to project. Use kiln_save, or node kiln.mjs save. Keep the exact asset and revision IDs. Save refinements as child revisions rather than replacing their parent. When the user wants to see the result, call kiln_present; if the host cannot render it, launch node kiln.mjs view yourself and provide its loopback URL.
 
-Export at any point. Source is node kiln.mjs source PROGRAM_REF --out revised.kiln.js; geometry is node kiln.mjs render PROGRAM_REF --out asset.glb --views sheet.png. Export refuses to overwrite a file. Replace PROGRAM_REF with the exact returned reference; full sha256 references also remain valid.
+Export at any point. Source is node kiln.mjs source PROGRAM_REF --out revised.kiln.js; geometry is node kiln.mjs render PROGRAM_REF --out asset.glb --views sheet.png. Source and ZIP exports refuse to overwrite a file. Render replaces existing GLB and PNG files only after each replacement is fully written and closed; a failed write or rename preserves the previous file. Replacement is per file, not a transaction across outputs. Replace PROGRAM_REF with the exact returned reference; full sha256 references also remain valid.
 
 ## Material-faithful views
 

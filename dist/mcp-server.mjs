@@ -26369,7 +26369,7 @@ function createKilnSourceDef(store) {
 import { z as z3 } from "zod";
 
 // src/engine-identity.ts
-var ENGINE_VERSION = "0.7.0";
+var ENGINE_VERSION = "0.7.1";
 var ENGINE_INSTALL_URL = new URL("../", import.meta.url).href;
 function engineIdentity() {
   return { version: ENGINE_VERSION, installUrl: ENGINE_INSTALL_URL };
@@ -28672,7 +28672,7 @@ function isDirectEntry(moduleUrl) {
 }
 
 // src/engine-identity.ts
-var ENGINE_VERSION2 = "0.7.0";
+var ENGINE_VERSION2 = "0.7.1";
 var ENGINE_INSTALL_URL2 = new URL("../", import.meta.url).href;
 
 // src/local-runtime.ts

@@ -7,7 +7,7 @@
 import { open, readFile, writeFile } from 'node:fs/promises';
 import { resolve as resolvePath } from 'node:path';
 
-import { prepareDestination } from './cli-output';
+import { prepareDestination, writeDestinationAtomic } from './cli-output';
 import { isDirectEntry } from './direct-entry';
 import { createPackagedLocalToolContext } from './local-runtime';
 import { createKilnProgramToolRegistry, type KilnToolContext } from './tools/registry';
@@ -174,7 +174,7 @@ async function emit(code: string, args: Args, context: KilnToolContext): Promise
   // `--views sheet.png` alone should not litter the working directory.
   const out = args.out ?? (args.views ? undefined : 'out.glb');
   if (out) {
-    await writeFile(await prepareDestination(resolvePath(out)), result.glb);
+    await writeDestinationAtomic(resolvePath(out), result.glb);
     console.log(`  ${out}  ${result.tris} tris  ${(result.glb.length / 1024).toFixed(1)} KB`);
   } else {
     console.log(`  ${result.tris} tris  ${(result.glb.length / 1024).toFixed(1)} KB`);
@@ -208,7 +208,7 @@ async function emit(code: string, args: Args, context: KilnToolContext): Promise
     }
     const media = def.media?.(output);
     if (!media) throw new Error('kiln_render returned no image');
-    await writeFile(await prepareDestination(resolvePath(args.views)), media.png);
+    await writeDestinationAtomic(resolvePath(args.views), media.png);
     // Report what actually drew the pixels, not what was configured. The engine
     // routes to the port only when the scene needs PBR shading, so a GPU that was
     // available and correctly skipped must not be reported as if it had drawn.
@@ -294,7 +294,7 @@ async function cmdGenerate(args: Args): Promise<number> {
   await emit(run.code, { ...args, out: outPath }, context);
 
   const source = outPath.replace(/\.glb$/i, '.kiln.js');
-  await writeFile(await prepareDestination(resolvePath(source)), run.code, 'utf8');
+  await writeDestinationAtomic(resolvePath(source), run.code);
   console.log(`  ${source}  (the program — edit and re-render it)`);
   return 0;
 }
