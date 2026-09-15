@@ -12,6 +12,8 @@ public static class KilnImportAudit {
         public float[] localPosition, worldPosition;
         public float[] materialMetallicFactors, materialRoughnessFactors;
         public int vertices, colors, uvSets, morphTargets, bones;
+        public float maxVertexDisplacement;
+        public bool deformed;
     }
     [Serializable] public class Mat {
         public string name, shader;
@@ -33,6 +35,11 @@ public static class KilnImportAudit {
         public List<Record> files = new();
     }
     static float[] Values(Vector3 v) => new[] {v.x, v.y, v.z};
+    static Vector3[] DeformedVertices(SkinnedMeshRenderer renderer) {
+        var baked = new Mesh();
+        try { renderer.BakeMesh(baked); return baked.vertices; }
+        finally { UnityEngine.Object.DestroyImmediate(baked); }
+    }
     static string Argument(string key) {
         var args = Environment.GetCommandLineArgs();
         var index = Array.IndexOf(args, key);
@@ -101,10 +108,19 @@ public static class KilnImportAudit {
                     var transforms = instance.GetComponentsInChildren<Transform>(true);
                     var initialPositions = transforms.Select(t => t.localPosition).ToArray();
                     var initialRotations = transforms.Select(t => t.localRotation).ToArray();
+                    var skins = instance.GetComponentsInChildren<SkinnedMeshRenderer>(true);
+                    var initialVertices = skins.Select(DeformedVertices).ToArray();
                     foreach (var time in new[] {clip.length * .5f, clip.length}) {
                         clip.SampleAnimation(instance, time);
                         for (int i = 0; i < transforms.Length; i++)
                             if (Vector3.Distance(transforms[i].localPosition, initialPositions[i]) > 1e-5f || Quaternion.Angle(transforms[i].localRotation, initialRotations[i]) > .01f) moving.Add(transforms[i].name);
+                        for (int i = 0; i < skins.Length; i++) {
+                            var current = DeformedVertices(skins[i]); var original = initialVertices[i];
+                            if (current.Length != original.Length) throw new InvalidOperationException("Animation changed vertex count");
+                            var node = record.nodes.Single(n => n.name == skins[i].name);
+                            for (int j = 0; j < current.Length; j++) node.maxVertexDisplacement = Math.Max(node.maxVertexDisplacement, Vector3.Distance(current[j], original[j]));
+                            node.deformed = node.maxVertexDisplacement > 1e-5f;
+                        }
                     }
                 }
                 record.animatedNodes = moving.OrderBy(n => n).ToList(); record.animatedNodeCount = moving.Count;

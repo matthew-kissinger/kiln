@@ -10849,6 +10849,7 @@ async function communitySceneDocument(root, clips, platform = browserPlatform) {
     if (found)
       return found;
     const copy = cleanClone(source);
+    normalizeTextureTransform(copy);
     copy.source = new THREE15.TextureSource(source.image);
     textures.set(source, copy);
     const bytes = source.userData["encoded"];
@@ -10867,6 +10868,11 @@ async function communitySceneDocument(root, clips, platform = browserPlatform) {
     if (found)
       return found;
     const copy = cleanClone(source);
+    const physical = copy;
+    if (physical.isMeshPhysicalMaterial && physical.sheen > 0) {
+      physical.sheenColor.multiplyScalar(physical.sheen);
+      physical.sheen = 1;
+    }
     for (const [key, value] of Object.entries(copy)) {
       if (value instanceof THREE15.Texture)
         copy[key] = texture(value);
@@ -10890,6 +10896,7 @@ async function communitySceneDocument(root, clips, platform = browserPlatform) {
       geometry.translate(0.5 - sprite.center.x, 0.5 - sprite.center.y, 0);
       geometry.rotateZ(sprite.material.rotation);
       const spriteMaterial = new THREE15.MeshBasicMaterial({
+        name: sprite.material.name,
         color: sprite.material.color,
         opacity: sprite.material.opacity,
         transparent: sprite.material.transparent,
@@ -10970,7 +10977,36 @@ async function communitySceneDocument(root, clips, platform = browserPlatform) {
     onlyVisible: false,
     animations: exportClips.filter((clip) => clip.tracks.length > 0)
   });
-  return createGltfIO().readBinary(new Uint8Array(bytes));
+  const io = createGltfIO();
+  const json = await io.binaryToJSON(new Uint8Array(bytes));
+  for (const binding of json.json.textures ?? []) {
+    if (binding.source === undefined || !binding.name)
+      continue;
+    const image = json.json.images?.[binding.source];
+    if (image && !image.name)
+      image.name = binding.name;
+  }
+  return io.readJSON(json);
+}
+function normalizeTextureTransform(texture) {
+  if (texture.matrixAutoUpdate)
+    texture.updateMatrix();
+  const e = texture.matrix.elements;
+  const sx = Math.hypot(e[0], e[1]);
+  const rotation = sx > 0 ? Math.atan2(-e[1], e[0]) : Math.atan2(e[3], e[4]);
+  const c = Math.cos(rotation);
+  const s = Math.sin(rotation);
+  const sy = e[3] * s + e[4] * c;
+  const reconstructed = [sx * c, -sx * s, 0, sy * s, sy * c, 0, e[6], e[7], 1];
+  const tolerance = 0.0000001 * Math.max(1, ...e.map(Math.abs));
+  if (e.some((value, i) => !Number.isFinite(value) || Math.abs(value - reconstructed[i]) > tolerance)) {
+    throw new Error(`Texture ${texture.name || "<unnamed>"}: UV matrix contains shear or perspective that KHR_texture_transform cannot represent; lossless UV baking is not yet qualified.`);
+  }
+  texture.offset.set(e[6], e[7]);
+  texture.repeat.set(sx, sy);
+  texture.rotation = rotation;
+  texture.center.set(0, 0);
+  texture.matrixAutoUpdate = false;
 }
 var browserPlatform;
 var init_community_exporter = __esm(() => {

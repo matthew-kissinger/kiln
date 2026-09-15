@@ -44,17 +44,22 @@ describe('custom mesh export contract', () => {
 
   it('identifies dropped attributes and rejects them in strict mode', async () => {
     const { root, geometry } = fixture();
-    geometry.setAttribute('uv1', new THREE.Float32BufferAttribute([0, 0, 1, 0, 0, 1], 2));
+    geometry.setAttribute(
+      'customDisplacement',
+      new THREE.Float32BufferAttribute([0, 0, 1, 0, 0, 1], 2),
+    );
     const result = await renderSceneToGLB(root);
     expect(
       result.warnings.some(
         (warning) =>
           warning.includes('CustomPanel') &&
-          warning.includes('uv1') &&
+          warning.includes('customDisplacement') &&
           warning.includes('EXPORT_ATTRIBUTE_UNSUPPORTED'),
       ),
     ).toBe(true);
-    await expect(renderSceneToGLB(root, { geometryPolicy: 'strict' })).rejects.toThrow('uv1');
+    await expect(renderSceneToGLB(root, { geometryPolicy: 'strict' })).rejects.toThrow(
+      'customDisplacement',
+    );
   });
 
   it('rejects nonfinite positions before writing invalid bytes', async () => {

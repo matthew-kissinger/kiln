@@ -26,7 +26,7 @@ it('reuses a packaged Node build across fresh CLI host instances and invalidates
       "const meta={name:'CachedBox'};function build(){const r=createRoot('Box');createPart('Body',boxGeo(1,1,1),gameMaterial('#aaaaaa'),{parent:r});return r;}";
     const probe = `import {createPackagedLocalToolContext} from ${JSON.stringify(join(repo, 'src/local-runtime.ts'))};
 import {createKilnProgramToolRegistry} from ${JSON.stringify(join(repo, 'src/tools/registry.ts'))};
-const context=await createPackagedLocalToolContext({}, {KILN_PROGRAM_STORE:${JSON.stringify(join(root, 'programs'))}}, ${JSON.stringify(root)});
+const context=await createPackagedLocalToolContext({}, {KILN_PROGRAM_STORE:${JSON.stringify(join(root, 'programs'))},KILN_GLTF_EXPORTER:process.env.KILN_GLTF_EXPORTER}, ${JSON.stringify(root)});
 if(context.localExecution.cacheScope!=='disk') throw new Error(JSON.stringify(context.localExecution));
 const tool=createKilnProgramToolRegistry(context).find(t=>t.name==='kiln_render');
 const result=await tool.run({code:process.argv[2]==='changed'?${JSON.stringify(code.replace('boxGeo(1,1,1)', 'boxGeo(1,2,1)'))}:${JSON.stringify(code)},capture:{preset:'1x1'}});

@@ -62,6 +62,11 @@ jobs:
       - name: Verify experimental exporter worker and cache isolation
         run: node scripts/exporter-cli-check.mjs
 
+      - name: Engine regressions with the community exporter selected
+        env:
+          KILN_GLTF_EXPORTER: three
+        run: bun run test
+
       - name: Upload coverage report
         if: ${{ always() && hashFiles('coverage/lcov.info') != '' }}
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
@@ -232,7 +237,9 @@ jobs:
         env:
           EXPECTED_ARCH: ${{ matrix.arch }}
         run: node -e "if(process.platform!=='darwin'||process.arch!==process.env.EXPECTED_ARCH)process.exit(1);console.log(process.platform,process.arch,process.version)"
-      - name: Install and exercise the end-user distribution
+      # Includes opt-in community export through the sanitized worker with native
+      # texture encoding, glTF validation and reload; no renderer or GPU required.
+      - name: Install and exercise default and community exporter distribution
         shell: bash
         run: |
           set -euo pipefail
@@ -274,7 +281,7 @@ jobs:
           path: candidate
       - name: Verify native host
         run: node -e "if(process.platform!=='linux')process.exit(1);console.log(process.platform,process.arch,process.version)"
-      - name: Install and exercise the end-user distribution
+      - name: Install and exercise default and community exporter distribution
         shell: bash
         run: |
           set -euo pipefail
@@ -312,7 +319,7 @@ jobs:
       # bash, not pwsh: the glob expansion and the single-tarball assertion below are the
       # same on every platform, and Windows runners ship Git bash. 13.4's Windows reds
       # were real defects, so this job gets the same 30-minute bound that one does.
-      - name: Install and exercise the end-user distribution
+      - name: Install and exercise default and community exporter distribution
         shell: bash
         run: |
           set -euo pipefail

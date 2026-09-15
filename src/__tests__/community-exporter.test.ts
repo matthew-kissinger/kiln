@@ -151,6 +151,7 @@ test('candidate retains sprite quad geometry and camera-facing semantics', async
     new THREE.SpriteMaterial({ color: 0xff4400, opacity: 0.5, transparent: true }),
   );
   sprite.name = 'Card';
+  sprite.material.name = 'SmokeMaterial';
   sprite.center.set(0, 0);
   sprite.position.set(1, 2, 3);
   root.add(sprite);
@@ -162,6 +163,7 @@ test('candidate retains sprite quad geometry and camera-facing semantics', async
     .find((node) => node.getName() === 'Card')!;
   expect(card.getTranslation()).toEqual([1, 2, 3]);
   expect(card.getMesh()!.listPrimitives()[0]!.getAttribute('POSITION')!.getCount()).toBe(4);
+  expect(card.getMesh()!.listPrimitives()[0]!.getMaterial()!.getName()).toBe('SmokeMaterial');
   expect(JSON.stringify(card.getExtras())).toContain('vfx.facing.camera-spherical');
   expect(root.children[0]).toBe(sprite);
 });
@@ -223,4 +225,136 @@ test('unresolved advisory animation tracks do not produce invalid empty glTF ani
   expect(result.gltfValidation.issues.numErrors).toBe(0);
   expect((await io().readBinary(result.bytes)).getRoot().listAnimations()).toHaveLength(0);
   expect(result.warnings.some((w) => w.includes('NoSuchNode'))).toBe(true);
+});
+
+test('candidate preserves texture rotation around a nonzero center without mutating source', async () => {
+  const root = fixture();
+  const mesh = root.getObjectByName('Mesh_Pennant') as THREE.Mesh<
+    THREE.BufferGeometry,
+    THREE.MeshPhysicalMaterial
+  >;
+  const texture = new THREE.DataTexture(new Uint8Array([255, 0, 0, 255]), 1, 1);
+  texture.offset.set(0.2, -0.1);
+  texture.repeat.set(1.3, 1.3);
+  texture.center.set(0.4, 0.6);
+  texture.rotation = 0.35;
+  texture.updateMatrix();
+  const originalMatrix = texture.matrix.clone();
+  mesh.material.map = texture;
+  const result = await renderSceneToGLB(root, { gltfExporter: 'three', derivative: true });
+  const json = (await io().writeJSON(await io().readBinary(result.bytes))).json;
+  const transform = json.materials![0]!.pbrMetallicRoughness!.baseColorTexture!.extensions![
+    'KHR_texture_transform'
+  ] as { offset: number[]; scale: number[]; rotation: number };
+  const c = Math.cos(transform.rotation);
+  const s = Math.sin(transform.rotation);
+  const restored = new THREE.Matrix3().set(
+    transform.scale[0]! * c,
+    transform.scale[1]! * s,
+    transform.offset[0]!,
+    -transform.scale[0]! * s,
+    transform.scale[1]! * c,
+    transform.offset[1]!,
+    0,
+    0,
+    1,
+  );
+  for (let i = 0; i < 9; i++)
+    expect(restored.elements[i]).toBeCloseTo(originalMatrix.elements[i]!, 6);
+  expect(texture.center.toArray()).toEqual([0.4, 0.6]);
+  expect(texture.offset.toArray()).toEqual([0.2, -0.1]);
+  expect(texture.matrix.equals(originalMatrix)).toBe(true);
+});
+
+test('candidate refuses sheared UV transforms instead of silently changing texture placement', async () => {
+  const root = fixture();
+  const mesh = root.getObjectByName('Mesh_Pennant') as THREE.Mesh<
+    THREE.BufferGeometry,
+    THREE.MeshPhysicalMaterial
+  >;
+  const texture = new THREE.DataTexture(new Uint8Array([255, 0, 0, 255]), 1, 1);
+  texture.name = 'ShearedSail';
+  texture.repeat.set(1.7, 1.3);
+  texture.rotation = 0.35;
+  mesh.material.map = texture;
+  await expect(renderSceneToGLB(root, { gltfExporter: 'three', derivative: true })).rejects.toThrow(
+    'ShearedSail: UV matrix contains shear',
+  );
+});
+
+test('candidate preserves a manual glTF-order UV matrix', async () => {
+  const root = fixture();
+  const mesh = root.getObjectByName('Mesh_Pennant') as THREE.Mesh<
+    THREE.BufferGeometry,
+    THREE.MeshPhysicalMaterial
+  >;
+  const texture = new THREE.DataTexture(new Uint8Array([255, 0, 0, 255]), 1, 1);
+  texture.matrixAutoUpdate = false;
+  const c = Math.cos(0.3),
+    s = Math.sin(0.3);
+  texture.matrix.set(1.7 * c, 1.3 * s, 0.2, -1.7 * s, 1.3 * c, -0.1, 0, 0, 1);
+  mesh.material.map = texture;
+  const result = await renderSceneToGLB(root, { gltfExporter: 'three', derivative: true });
+  const json = (await io().writeJSON(await io().readBinary(result.bytes))).json;
+  const transform = json.materials![0]!.pbrMetallicRoughness!.baseColorTexture!.extensions![
+    'KHR_texture_transform'
+  ] as { offset: number[]; scale: number[]; rotation: number };
+  expect(transform.offset).toEqual([0.2, -0.1]);
+  expect(transform.scale[0]).toBeCloseTo(1.7, 6);
+  expect(transform.scale[1]).toBeCloseTo(1.3, 6);
+  expect(transform.rotation).toBeCloseTo(0.3, 6);
+  expect(texture.matrixAutoUpdate).toBe(false);
+  expect(texture.offset.toArray()).toEqual([0, 0]);
+});
+
+test('physical material factors survive export and palette rewrite', async () => {
+  const root = fixture();
+  const material = (root.getObjectByName('Mesh_Pennant') as THREE.Mesh)
+    .material as THREE.MeshPhysicalMaterial;
+  material.clearcoat = 0.7;
+  material.clearcoatRoughness = 0.23;
+  material.transmission = 0.65;
+  material.thickness = 0.4;
+  material.attenuationDistance = 2.5;
+  material.attenuationColor.setRGB(0.2, 0.4, 0.6);
+  material.ior = 1.4;
+  material.specularIntensity = 0.55;
+  material.specularColor.setRGB(0.7, 0.8, 0.9);
+  material.sheen = 0.6;
+  material.sheenColor.setRGB(0.3, 0.5, 0.7);
+  material.sheenRoughness = 0.4;
+  material.iridescence = 0.35;
+  material.iridescenceIOR = 1.6;
+  material.iridescenceThicknessRange = [110, 370];
+  material.anisotropy = 0.45;
+  material.anisotropyRotation = 0.2;
+  const original = await renderSceneToGLB(root, { gltfExporter: 'three', derivative: true });
+  const rewritten = await optimizeGlbBytes(original.bytes, { mode: 'palette' });
+  if (!rewritten) throw new Error('Expected palette rewrite result');
+  for (const bytes of [original.bytes, rewritten.bytes]) {
+    const json = (await io().writeJSON(await io().readBinary(bytes))).json;
+    const output = json.materials![0]!;
+    expect(output.doubleSided).toBe(true);
+    expect(output.pbrMetallicRoughness!.metallicFactor).toBe(0.65);
+    expect(output.pbrMetallicRoughness!.roughnessFactor).toBe(0.27);
+    expect(output.extensions).toMatchObject({
+      KHR_materials_clearcoat: { clearcoatFactor: 0.7, clearcoatRoughnessFactor: 0.23 },
+      KHR_materials_transmission: { transmissionFactor: 0.65 },
+      KHR_materials_volume: {
+        thicknessFactor: 0.4,
+        attenuationDistance: 2.5,
+        attenuationColor: [0.2, 0.4, 0.6],
+      },
+      KHR_materials_ior: { ior: 1.4 },
+      KHR_materials_specular: { specularFactor: 0.55, specularColorFactor: [0.7, 0.8, 0.9] },
+      KHR_materials_sheen: { sheenColorFactor: [0.18, 0.3, 0.42], sheenRoughnessFactor: 0.4 },
+      KHR_materials_iridescence: {
+        iridescenceFactor: 0.35,
+        iridescenceIor: 1.6,
+        iridescenceThicknessMinimum: 110,
+        iridescenceThicknessMaximum: 370,
+      },
+      KHR_materials_anisotropy: { anisotropyStrength: 0.45, anisotropyRotation: 0.2 },
+    });
+  }
 });

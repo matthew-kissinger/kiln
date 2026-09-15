@@ -215,3 +215,110 @@ regression remains. Required evidence includes the complete engine gates, suppor
 packaging, independently authored CLI dogfood with GPU reviews, actual Three.js/Blender/Unity
 imports, animation and material checks, and a Unity player build. The engine/importer/version/render
 pipeline combination must be named in results rather than claiming universal engine support.
+
+## Expanded qualification and unified migration
+
+The opt-in backend is a maintainer qualification mechanism. No exporter choice is added to the
+normal CLI/MCP schema or authoring skills. The target is one default implementation after the
+migration gates pass, not a permanent two-exporter product.
+
+### Additional executable evidence
+
+- `src/__tests__/exporter-deformation.test.ts` samples combined skin and morph motion before
+  export and after GLTFLoader reload, both before and after the full optimization request.
+  Nonzero deformation must match at four sample times, within 1e-5 world units.
+- Physical-material tests assert actual clearcoat, transmission, volume, IOR, specular, sheen,
+  iridescence and anisotropy factors before/after palette rewriting, not just extension names.
+- Clean npm package checks require a textured candidate export through the real subprocess,
+  decoded checker pixels, named pivot and animation, double-sided material, native canvas,
+  and Khronos validation. Emissive strength proves selection reached the worker. These checks
+  run in the existing Linux, Windows and both macOS architecture package jobs.
+- `scripts/integration/run-browser-export.mjs` exercises real GPU rendering of source versus
+  exported/reimported scenes. `generate-deformation-fixtures.ts` and its expectation manifest
+  provide repeatable evaluated-deformation fixtures for the Blender/Unity adapters.
+
+### Additional gaps found and corrected
+
+The installed Three.js exporter ignores texture centers and manual UV matrices, and serializes
+Three's texture scale/rotation fields despite the differing multiplication order used by glTF.
+GPU comparison exposed the resulting placement error. The adapter now derives glTF-order TRS
+from the effective matrix on an export copy and checks that reconstruction is accurate. It
+rejects matrices with shear or perspective instead of silently changing their appearance.
+Uniform scale with rotated center and representable manual matrices are covered separately.
+The first center-only test was insufficient because it reconstructed Three's matrix order;
+that oracle was corrected and the GPU comparison remains independent.
+
+The exporter also ignores the separate Three.js sheen intensity. The adapter folds that
+intensity into the cloned sheen color, matching Three's actual renderer and glTF's single color
+factor. A focused test first failed on the missing intensity, then passed through export and
+palette rewrite. Sprite conversion now retains authored material names as well.
+
+### Remaining default-switch gate
+
+A diagnostic engine run with `KILN_GLTF_EXPORTER=three` identified tests tied to historical
+serialization and legacy-only attribute limitations, in addition to the real sprite naming
+issue. That run occurred while qualification tests/source were being edited and is not a
+release gate. Before a default switch, run the whole suite on a frozen build, classify each
+remaining difference, and keep historical byte fixtures explicit rather than silently accepting
+new snapshots. Low-level subprocess tests must compare the same explicit backend.
+
+Lossless handling of sheared texture transforms still needs a qualified implementation or an
+upstream solution. UV baking affects texture coordinate channels, shared materials and normal-map
+tangents, so it cannot be treated as an unchecked offset patch. No default switch is approved by
+this revision. Remaining advanced extensions, compression codecs and additional consumer/render
+pipelines require their own feature evidence; this report does not claim universal support.
+
+### Measured expanded results
+
+The expanded browser GPU gate passed eight supported fixtures and 25 pixel-exact source/reimport
+comparisons on Chrome 152 / RTX 3070, with maximum deformed-vertex delta 1.49e-8. Three sheared-UV
+fixtures assert explicit rejection and are not counted as supported exports. The sheen fixture
+also includes a visibly different sheen-disabled control.
+
+Real Blender 5.2 / Unity 6000.2 Built-in RP imports measured 0.538516 m skin displacement and
+0.600000 m morph displacement, matching independent fixture expectations. A separate Windows
+Unity player on RTX 3070 / Direct3D11 measured skin/morph silhouette changes across rendered
+frames with zero shader errors. The double-sided sheet produced 8,742 foreground pixels from
+both sides; its one-sided control produced 8,742 front and zero back. The reusable runner records
+input GLB, helper script and Unity package-lock hashes. Exact end-of-loop samples were avoided,
+and animation samples use separate frames because Unity caches GPU skinning within a frame.
+
+Local coverage after runtime fixes: 1,967 passed, four skipped, zero failed; functions 95.18%,
+lines 92.83%, above unchanged thresholds. The final CLI hash is
+`1ec303580d5452a0b3e2f3f9be6ccab3cd1b6acc21d1a2529b888efd48fc63d8`, runtime identity
+`7c4545f115e22467ba52185f40560683229fcc52bb545cff29856a9cf830f4c9`.
+All five final authored dogfood exports reproduce the prior reviewed GLBs byte-for-byte on this
+build. Hosted clean-package candidate checks and the candidate-selected engine suite are now
+part of the PR gates; their per-revision results are attached to the PR.
+
+The community route for the remaining UV case is an accessor-level UV bake using glTF Transform,
+with copies when shared mesh data requires different mappings. This is described by the maintainer
+in [discussion #1095](https://github.com/donmccurdy/glTF-Transform/discussions/1095).
+A future implementation should reuse those document/accessor APIs and qualify multiple texture
+slots, shared meshes and normal maps with the existing GPU fixtures. It should not fork the
+exporter or alter canonical geometry silently. The normal-map convention boundary also has
+[upstream discussion](https://github.com/mrdoob/three.js/issues/22165); checking installed exporter
+behavior remains necessary even when an upstream issue is marked closed.
+
+### Final frozen revision
+
+After the resource-name fix, the runtime identity is
+`413501ff069d991b8be09cdbabc57c8ca2333179bc67288e2c33eca586959ef8` and CLI SHA-256 is
+`9e7e7fc81233f4bb34584eabfa5a82a82f5c0f636965ec0f3b78872df5c539ed`.
+The final default coverage gate passed 1,967 tests, four skips, zero failures, with functions
+95.18% and lines 92.83%. The final browser gate again passed all 25 pixel comparisons.
+Clean npm installation of the final tarball passed on Node 22.23.2/npm 12.0.2 with the installed
+CLI hash verified. Four dogfood GLBs remain byte-identical; the industrial asset differs only by
+two restored image names (`CastBluePaint`, `CastBlueNormal`), with an identical BIN chunk.
+No geometry, encoded image bytes or shader values changed in that artifact.
+
+Historical architecture experiment hashes are now explicitly pinned to their original legacy
+converter; they were not regenerated to bless candidate differences. Unsupported-attribute
+policy tests use a genuinely unsupported custom attribute instead of newly supported colors/UVs.
+Subprocess parity tests cover both explicit backends. Texture round-trip tests compare decoded
+pixels rather than encoder-dependent PNG lengths, and cache tests use matching host settings.
+These changes preserve each assertion's purpose when the candidate is selected.
+
+The final frozen suite with `KILN_GLTF_EXPORTER=three` also passed **1,967 tests**, four skips and
+zero failures. CI now repeats that suite on Linux in addition to the default coverage gate and
+the explicit-backend packaged worker/cache checks.

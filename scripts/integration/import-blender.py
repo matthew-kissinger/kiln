@@ -7,6 +7,14 @@ import glob
 
 input_dir, output = sys.argv[sys.argv.index('--') + 1:]
 report = {'engine': 'blender', 'version': bpy.app.version_string, 'files': []}
+def deformed_vertices(obj):
+    evaluated = obj.evaluated_get(bpy.context.evaluated_depsgraph_get())
+    mesh = evaluated.to_mesh()
+    try:
+        return [v.co.copy() for v in mesh.vertices]
+    finally:
+        evaluated.to_mesh_clear()
+
 for path in sorted(glob.glob(os.path.join(input_dir, '*.glb'))):
     record = {'file': os.path.basename(path), 'nodes': [], 'materials': [], 'animations': []}
     report['files'].append(record)
@@ -42,6 +50,9 @@ for path in sorted(glob.glob(os.path.join(input_dir, '*.glb'))):
         record['animations'] = sorted(a.name for a in bpy.data.actions)
         bpy.context.scene.frame_set(0)
         initial = {o.name: o.matrix_basis.copy() for o in bpy.context.scene.objects}
+        mesh_objects = [o for o in bpy.context.scene.objects if o.type == 'MESH']
+        initial_vertices = {o.name: deformed_vertices(o) for o in mesh_objects}
+        displacements = {o.name: 0.0 for o in mesh_objects}
         moving = set()
         for action in bpy.data.actions:
             for frame in [int(action.frame_range[1] / 2), int(action.frame_range[1])]:
@@ -49,6 +60,15 @@ for path in sorted(glob.glob(os.path.join(input_dir, '*.glb'))):
                 for obj in bpy.context.scene.objects:
                     if max(abs(obj.matrix_basis[r][c] - initial[obj.name][r][c]) for r in range(4) for c in range(4)) > 1e-5:
                         moving.add(obj.name)
+                for obj in mesh_objects:
+                    current = deformed_vertices(obj)
+                    original = initial_vertices[obj.name]
+                    if len(current) != len(original):
+                        raise ValueError('Animation changed vertex count: ' + obj.name)
+                    displacements[obj.name] = max(displacements[obj.name], max(((a - b).length for a, b in zip(current, original)), default=0))
+        for node in record['nodes']:
+            node['maxVertexDisplacement'] = displacements.get(node['name'], 0)
+            node['deformed'] = node['maxVertexDisplacement'] > 1e-5
         record['animatedNodes'] = sorted(moving)
         record['animatedNodeCount'] = len(moving)
     except Exception as error:

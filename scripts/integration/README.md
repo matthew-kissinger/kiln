@@ -55,8 +55,11 @@ across engines. Unity may add a root or split primitives into separate objects.
 Both adapters record node positions, vertex counts, UV-set counts, colour-attribute
 presence, morph targets, materials and animation clip/action names. They sample imported
 animation at the start, midpoint and end, recording changed object names and
-`animatedNodeCount`; this catches inert transform clips but does not prove deformation
-or every keyframe. Blender samples the imported scene's active animation configuration;
+`animatedNodeCount`; this catches inert transform clips but does not prove every keyframe.
+They also compare evaluated local mesh vertices, recording `maxVertexDisplacement` and
+`deformed`. Blender uses its dependency graph; Unity bakes the imported skinned renderer
+to an inspection mesh. This is geometric evaluation, not CPU image rendering.
+Blender samples the imported scene's active animation configuration;
 Unity samples each imported clip on the instantiated prefab. Blender records
 armature modifiers and material metallic/roughness/culling values. Unity records skin
 bone counts, shader names, shader-property names and bound texture slots. For shaders
@@ -73,3 +76,47 @@ Run the portable assertion tests with:
 ```sh
 bun test scripts/integration/check-receipt.test.mjs
 ```
+
+## Deformation and thin-surface fixtures
+
+Generate the candidate's explicit skin, morph, and culling-control fixtures:
+
+```sh
+bun scripts/integration/generate-deformation-fixtures.ts --output /path/to/new-glbs
+node scripts/integration/run-imports.mjs \
+  --input /path/to/new-glbs --output /path/to/new-receipts \
+  --manifest scripts/integration/deformation-expectations.json \
+  --blender /path/to/blender
+```
+
+Add Unity arguments as above for its corresponding checks. These expectations target
+Blender 5.2 and Unity 6000.2 with glTFast 6.20; changed importer representations should
+be investigated before updating expectations.
+
+The skin fixture rotates its second bone by 60 degrees. Its furthest weighted vertex
+lies 0.2 m horizontally and 0.5 m vertically from that joint, so the expected displacement
+is `sqrt(0.2² + 0.5²) = 0.53851648 m`. The morph clip displaces its upper vertices by
+exactly 0.6 m. Both must deform after real import. Identical sheets differing only in
+material sidedness provide a culling control. Structural checks verify the material
+flag; actual GPU front/back rendering is still required to qualify shader behavior.
+
+After importing those four fixtures into a disposable Unity project, Windows hosts can
+build and run the GPU check without opening a visible player window:
+
+```sh
+node scripts/integration/run-deformation-player.mjs \
+  --unity /path/to/Unity.exe --unity-project /path/to/disposable-project \
+  --output /path/to/new-player-receipts
+```
+
+This profile builds a Windows player with serialized fixture references, then uses
+Direct3D11 to render front/back views and animation poses. It checks substantial skin
+and morph deformation, changed rendered pixels, visible two-sided back faces, culled
+single-sided back faces, and absence of unsupported shaders. Pose captures run on
+separate frames because Unity caches GPU skinning within a frame. The second pose is
+at 99.9% of clip duration to avoid a looping clip wrapping back to its start.
+
+The player receipt includes GPU identity and measured results; the runner records
+asset, helper-script, and package-lock hashes. This qualifies this explicit importer,
+player and render-pipeline combination. It does not establish runtime-downloaded GLB
+shader inclusion, other platforms, or physically identical shading across applications.

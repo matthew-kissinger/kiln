@@ -22,6 +22,7 @@ const good = () => ({
   tarball: '/nonexistent.tgz',
   checks: [
     'packaged-node-worker',
+    'community-exporter-textured-subprocess',
     'source-reference-edit-images',
     'server-restart-persistence',
     'exact-source-export',
@@ -58,7 +59,15 @@ describe('package receipt verification', () => {
   });
 
   test('a receipt with no checks at all reports every one of them', () => {
-    expect(receiptProblems({ ...good(), checks: undefined }, target)).toHaveLength(4);
+    expect(receiptProblems({ ...good(), checks: undefined }, target)).toHaveLength(5);
+  });
+
+  test('a package missing candidate texture coverage is rejected', () => {
+    const receipt = good();
+    receipt.checks = receipt.checks.filter((c) => c !== 'community-exporter-textured-subprocess');
+    expect(receiptProblems(receipt, target)).toEqual([
+      'missing check: community-exporter-textured-subprocess',
+    ]);
   });
 
   // The end-to-end path, including the hash the release actually depends on.

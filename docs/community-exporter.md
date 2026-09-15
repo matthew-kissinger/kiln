@@ -4,7 +4,14 @@ Kiln can qualify Three.js `GLTFExporter` as its scene converter while retaining 
 Kiln validation, texture preparation and semantic metadata policy. The established exporter remains
 the default. This is a migration option, not a claim that every renderer supports every glTF feature.
 
-## Try the candidate
+## Qualification switch, not an authoring choice
+
+Ordinary users and coding agents should continue using the normal CLI/MCP export workflow.
+Do not add exporter selection to asset briefs or authoring skills. This temporary host setting
+exists for maintainers to compare implementations during migration. The intended end state is
+one qualified default exporter; a second permanent user-facing workflow is not the goal.
+
+## Run a maintainer qualification
 
 Use the supported toolchain and build matching runtime bundles first:
 
@@ -32,6 +39,13 @@ exports do not load canvas. Native platform packaging must be qualified before c
 The headless adapter installs missing exporter-required Blob/image APIs in that host process; it
 does not emulate `document` or `window`. Browser scene conversion uses native image/canvas APIs
 through the same host-injected preparation interface.
+
+Texture transforms are normalized from their effective UV matrix. This preserves rotation
+centers and manually assigned glTF-compatible matrices without modifying the source. A Three.js
+texture combining nonuniform scale with rotation can contain shear, which glTF's texture TRS
+cannot represent. The candidate explicitly rejects such a transform. Lossless UV baking for
+these cases remains a blocker to making it the default; automatic texture/geometry changes
+are not introduced as a fallback.
 
 ## What is preserved
 
