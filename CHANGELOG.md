@@ -3,6 +3,14 @@
 Changes to `@kiln/engine`. Source and installable packages are distributed through
 GitHub. The package is not published on the npm registry.
 
+## 0.7.1: Preserve CLI outputs on failed writes
+
+- GLB, preview PNG, and generated source replacements are written to unique sibling
+  temporary files and renamed only after the write closes successfully. A failed
+  write or rename leaves the previous output intact. Source and asset exports
+  continue to refuse overwrites. Concurrent replacements can fail with a sharing
+  violation on Windows; the CLI reports the error without deleting the destination.
+
 ## The setup defects, and a bind that was never ours to choose — 2026-09-13
 
 - **The render service binds loopback now, and widening it costs a token.** `HOST` unset used to

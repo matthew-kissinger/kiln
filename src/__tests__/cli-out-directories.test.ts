@@ -1,5 +1,5 @@
 import { expect, it } from 'bun:test';
-import { mkdtemp, mkdir, rm, stat } from 'node:fs/promises';
+import { mkdtemp, mkdir, readFile, rm, stat, writeFile } from 'node:fs/promises';
 import { join, resolve } from 'node:path';
 
 /**
@@ -38,6 +38,14 @@ it('creates the directories leading to every CLI destination', async () => {
     expect(rendered.exitCode).toBe(0);
     expect(await wrote(glb)).toBe(true);
     expect(await wrote(views)).toBe(true);
+    const expectedGlb = await readFile(glb);
+    const expectedViews = await readFile(views);
+    await writeFile(glb, 'previous GLB');
+    await writeFile(views, 'previous PNG');
+    const replaced = run(['render', example, '--out', glb, '--views', views]);
+    expect(replaced.exitCode).toBe(0);
+    expect(await readFile(glb)).toEqual(expectedGlb);
+    expect(await readFile(views)).toEqual(expectedViews);
 
     const retained = run(['source', example]);
     expect(retained.exitCode).toBe(0);
@@ -46,6 +54,9 @@ it('creates the directories leading to every CLI destination', async () => {
     const copy = join(directory, 'source', 'deep', 'crate.kiln.js');
     expect(run(['source', programRef, '--out', copy]).exitCode).toBe(0);
     expect(await wrote(copy)).toBe(true);
+    await writeFile(copy, 'keep edited source');
+    expect(run(['source', programRef, '--out', copy]).exitCode).not.toBe(0);
+    expect(await readFile(copy, 'utf8')).toBe('keep edited source');
 
     const saved = run(['save', programRef, '--name', 'Crate', '--render', 'cpu']);
     expect(saved.exitCode).toBe(0);
@@ -53,6 +64,9 @@ it('creates the directories leading to every CLI destination', async () => {
     const bundle = join(directory, 'export', 'deep', 'crate.zip');
     expect(run(['export', asset.assetId, asset.revisionId, '--out', bundle]).exitCode).toBe(0);
     expect(await wrote(bundle)).toBe(true);
+    await writeFile(bundle, 'keep existing export');
+    expect(run(['export', asset.assetId, asset.revisionId, '--out', bundle]).exitCode).not.toBe(0);
+    expect(await readFile(bundle, 'utf8')).toBe('keep existing export');
   } finally {
     await rm(directory, { recursive: true, force: true });
   }
