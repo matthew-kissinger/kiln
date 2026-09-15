@@ -324,20 +324,26 @@ export async function buildRenderPort(
   portUrl: string | undefined,
   options?: RenderPortOptions,
 ): Promise<KilnToolContext> {
+  const explicitClientToken = process.env['KILN_RENDER_TOKEN'];
+  const localClientToken = explicitClientToken ?? process.env['RENDER_SERVICE_TOKEN'];
   const context: KilnToolContext = mode === 'gpu' ? { viewRenderRequired: true } : {};
-  const attach = (url: string, label: string): KilnToolContext => {
-    context.viewRenderPort = makeRemoteRenderPort(url, process.env['KILN_RENDER_TOKEN']);
+  const attach = (url: string, label: string, token?: string): KilnToolContext => {
+    context.viewRenderPort = makeRemoteRenderPort(url, token);
     context.viewRenderTimeoutMs = CLI_VIEW_RENDER_TIMEOUT_MS;
     context.captureCacheIdentity = () => probeCaptureIdentity(url);
     selected.set(context, label);
     return context;
   };
-  const attachLazy = (start: () => Promise<string>, label: string): KilnToolContext => {
+  const attachLazy = (
+    start: () => Promise<string>,
+    label: string,
+    token?: string,
+  ): KilnToolContext => {
     let url: string | undefined;
     context.viewRenderPort = makeLazyRenderPort(async () => {
       url = await start();
       return url;
-    }, process.env['KILN_RENDER_TOKEN'] ?? process.env['RENDER_SERVICE_TOKEN']);
+    }, token);
     context.viewRenderTimeoutMs = CLI_VIEW_RENDER_TIMEOUT_MS;
     // Nothing to attest until a producer exists. `undefined` bypasses cell reuse,
     // which is the correct reading of "no renderer has drawn anything yet".
@@ -354,14 +360,14 @@ export async function buildRenderPort(
   // An explicit URL is taken on trust: the user said where the renderer is, and a
   // health probe that fails would only turn their explicit choice into a silent
   // downgrade. `captureViewsViaPort` still degrades per-call if it does not answer.
-  if (portUrl) return attach(portUrl, `GPU service (${portUrl})`);
+  if (portUrl) return attach(portUrl, `GPU service (${portUrl})`, explicitClientToken);
 
   const envUrl = process.env['KILN_RENDER_PORT_URL'];
-  if (envUrl) return attach(envUrl, `GPU service (${envUrl})`);
+  if (envUrl) return attach(envUrl, `GPU service (${envUrl})`, explicitClientToken);
 
   const localUrl = localRenderServiceUrl();
   const rendererId = await probeRenderService(localUrl);
-  if (rendererId) return attach(localUrl, `GPU service (${rendererId})`);
+  if (rendererId) return attach(localUrl, `GPU service (${rendererId})`, localClientToken);
 
   // Nothing is listening. If this installation can start one, hand back a port
   // that will -- lazily, so a session that never renders a material never pays
@@ -379,7 +385,7 @@ export async function buildRenderPort(
     const state = options?.start ? 'ready' : localRenderServiceState(dir);
     if (state === 'ready') {
       const start = options?.start ?? (() => startLocalRenderService(dir));
-      return attachLazy(start, 'GPU service (started on demand)');
+      return attachLazy(start, 'GPU service (started on demand)', localClientToken);
     }
     // The only remaining way to fail `gpu`: nothing is listening AND this
     // installation cannot start one. Naming both facts is the whole message --
