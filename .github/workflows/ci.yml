@@ -59,6 +59,9 @@ jobs:
       - name: Unit tests and coverage gate
         run: bun run test:coverage
 
+      - name: Verify experimental exporter worker and cache isolation
+        run: node scripts/exporter-cli-check.mjs
+
       - name: Upload coverage report
         if: ${{ always() && hashFiles('coverage/lcov.info') != '' }}
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
@@ -126,6 +129,9 @@ jobs:
 
       - name: Unit tests
         run: bun run test
+
+      - name: Verify experimental exporter worker and cache isolation
+        run: node scripts/exporter-cli-check.mjs
 
       # Diagnostic only, and deliberately failure-tolerant: it exists so that IF the
       # GLib fault returns, the libvips/GLib versions arrive attached to that run

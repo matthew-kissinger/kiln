@@ -5,6 +5,7 @@ import { renderGLBViaIsolatedEvaluator } from './evaluator/isolation';
 import { renderGLBInProcess, resolveEvaluatorMode, type RenderGlbOptions } from './render';
 import { FileProgramStore } from './program-store-node';
 import { createCachedEvaluatorPort, MemoryBuildCache } from './build-cache';
+import { resolveGltfExporter } from './community-exporter';
 import { FileBuildCache } from './build-cache-node';
 import { installedRuntimeIdentity } from './runtime-identity';
 import { dirname, join, resolve } from 'node:path';
@@ -66,6 +67,7 @@ export function createLocalToolContext(
     ? (env.KILN_BAKE_INSTANCE as RenderGlbOptions['instance'])
     : 'auto';
   const maxGlbBytes = 16 * 1024 * 1024;
+  const gltfExporter = resolveGltfExporter(env.KILN_GLTF_EXPORTER ?? 'legacy');
   const maxResponseBytes = 32 * 1024 * 1024;
   const evaluatorPort: EvaluatorPortV1 = {
     async render(code, options = {}, controls = {}) {
@@ -79,6 +81,7 @@ export function createLocalToolContext(
       )
         throw new Error('geometryPolicy must be warn or strict');
       const resolved: RenderGlbOptions = {
+        ...(gltfExporter === 'three' ? { gltfExporter } : {}),
         optimize,
         instance,
         ...options,
@@ -197,6 +200,7 @@ export async function createPackagedLocalToolContext(
     qa: env.KILN_QA_MODE ?? 'enforce',
     geometryPolicy: context.geometryPolicy,
     timezone: env.TZ,
+    ...(env.KILN_GLTF_EXPORTER === 'three' ? { gltfExporter: 'three' } : {}),
   })}`;
   context.localExecution = {
     ...context.localExecution,

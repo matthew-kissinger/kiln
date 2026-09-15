@@ -12,18 +12,16 @@ import { rethrowAuthoringError } from './evaluator/authoring-diagnostic';
  */
 
 import * as THREE from 'three';
+import { createGltfIO } from './gltf-io';
+import { communitySceneDocument, resolveGltfExporter } from './community-exporter';
 import {
   geometryAttributeValues,
   inspectGeometryExport,
+  validateMaterialGroups,
   type GeometryExportPolicy,
 } from './geometry-export';
 import { createHash } from 'node:crypto';
-import { Document, WebIO, getBounds } from '@gltf-transform/core';
-import {
-  EXTMeshGPUInstancing,
-  KHRMaterialsVariants,
-  KHRTextureBasisu,
-} from '@gltf-transform/extensions';
+import { Document, getBounds } from '@gltf-transform/core';
 import {
   dedup,
   instance,
@@ -126,8 +124,7 @@ export type CapturedDiagnosticV1 = CharacterCapturedDiagnosticV1 | VehicleCaptur
 // Variants and Basisu are registered for READS as much as writes: once the kit
 // pass has run, every later pass that parses these bytes (metrics, optimize,
 // palette snap) would silently drop both extensions without them.
-const engineIO = (): WebIO =>
-  new WebIO().registerExtensions([EXTMeshGPUInstancing, KHRMaterialsVariants, KHRTextureBasisu]);
+const engineIO = createGltfIO;
 
 /**
  * World-space AABB of a stored GLB, computed from its bytes alone — node
@@ -635,23 +632,8 @@ function bridgeGeometry(
   const indexValues = indexAttr
     ? Array.from(indexAttr.array)
     : Array.from({ length: posAttr!.count }, (_, i) => i);
-  const groups = [...geometry.groups].sort((a, b) => a.start - b.start);
-  let covered = 0;
+  const groups = validateMaterialGroups(geometry, material.length, meshName);
   for (const group of groups) {
-    if (
-      group.start !== covered ||
-      !Number.isInteger(group.start) ||
-      !Number.isInteger(group.count) ||
-      group.count <= 0 ||
-      group.start % 3 ||
-      group.count % 3 ||
-      group.start + group.count > indexValues.length ||
-      !material[group.materialIndex ?? 0]
-    ) {
-      throw new TypeError(
-        `${meshName}: material groups must cover every triangle exactly once with valid material indices.`,
-      );
-    }
     const part = doc.createPrimitive().setMaterial(material[group.materialIndex ?? 0]!);
     for (const semantic of prim.listSemantics())
       part.setAttribute(semantic, prim.getAttribute(semantic)!);
@@ -664,10 +646,7 @@ function bridgeGeometry(
         .setBuffer(buf),
     );
     mesh.addPrimitive(part);
-    covered += group.count;
   }
-  if (covered !== indexValues.length)
-    throw new TypeError(`${meshName}: material groups do not cover every triangle.`);
   prim.dispose();
   return mesh;
 }
@@ -1016,6 +995,8 @@ export interface RenderSceneResult {
 }
 
 export interface RenderSceneOptions {
+  /** Host-only migration option; omitted keeps the established exporter. */
+  gltfExporter?: 'legacy' | 'three';
   /** Warn about unsupported custom attributes (default), or reject before export. */
   geometryPolicy?: GeometryExportPolicy;
   /** Name of the glTF scene. Defaults to 'Scene'. */
@@ -1330,7 +1311,8 @@ export async function renderSceneToGLB(
   const clips = opts.clips ?? [];
   if (opts.geometryPolicy !== undefined && !['warn', 'strict'].includes(opts.geometryPolicy))
     throw new Error('geometryPolicy must be warn or strict');
-  const warnings = inspectGeometryExport(root, opts.geometryPolicy);
+  const exporter = resolveGltfExporter(opts.gltfExporter);
+  const warnings = inspectGeometryExport(root, opts.geometryPolicy, exporter);
   const tris = countTriangles(root);
   const intent =
     opts.intent ??
@@ -1396,7 +1378,14 @@ export async function renderSceneToGLB(
     warnings.push(`${blocked.message} — block suppressed by ${qaSuppressedBy}`);
   }
 
-  const doc = new Document();
+  const doc =
+    exporter === 'three'
+      ? await communitySceneDocument(
+          root,
+          clips,
+          (await import('./exporter-node')).nodeExportPlatform,
+        )
+      : new Document();
   // `asset.generator` defaults to the serializer's own version string, which put
   // `glTF-Transform v4.4.1` inside every artifact's bytes -- and therefore inside
   // `artifactHash`. Taking 4.5.0 moved all 83 recorded hashes and failed the
@@ -1407,19 +1396,26 @@ export async function renderSceneToGLB(
   // Kiln's own version deliberately stays out too: it belongs in the provenance
   // record, where changing it does not move artifact bytes.
   doc.getRoot().getAsset().generator = 'Kiln';
-  const buf = doc.createBuffer();
-  const matCache = new Map<THREE.Material, GtMaterial>();
-  const meshCache = new Map<string, GtMesh>();
-  const texCache = new Map<THREE.Texture, GtTexture>();
-  const nodeMap = new Map<string, GtNode>();
+  if (exporter === 'legacy') {
+    const buf = doc.createBuffer();
+    const matCache = new Map<THREE.Material, GtMaterial>();
+    const meshCache = new Map<string, GtMesh>();
+    const texCache = new Map<THREE.Texture, GtTexture>();
+    const nodeMap = new Map<string, GtNode>();
 
-  const rootNode = bridgeNode(doc, buf, root, matCache, nodeMap, meshCache, texCache);
-  const gltfScene = doc.createScene(opts.sceneName ?? 'Scene').addChild(rootNode);
-  doc.getRoot().setDefaultScene(gltfScene);
+    const rootNode = bridgeNode(doc, buf, root, matCache, nodeMap, meshCache, texCache);
+    const gltfScene = doc.createScene(opts.sceneName ?? 'Scene').addChild(rootNode);
+    doc.getRoot().setDefaultScene(gltfScene);
 
-  if (clips.length > 0) {
-    gltfScene.setExtras({ [REVIEW_CLIPS_EXTRAS_KEY]: reviewClipExtras(clips) });
-    bridgeAnimations(doc, buf, clips, nodeMap, warnings);
+    if (clips.length > 0) {
+      gltfScene.setExtras({ [REVIEW_CLIPS_EXTRAS_KEY]: reviewClipExtras(clips) });
+      bridgeAnimations(doc, buf, clips, nodeMap, warnings);
+    }
+  } else {
+    const scene = doc.getRoot().getDefaultScene() ?? doc.getRoot().listScenes()[0];
+    if (!scene) throw new Error('Community exporter produced no scene.');
+    scene.setName(opts.sceneName ?? 'Scene');
+    if (clips.length > 0) scene.setExtras({ [REVIEW_CLIPS_EXTRAS_KEY]: reviewClipExtras(clips) });
   }
 
   // Dedupe accessors/materials/meshes so instanced parts (4 wheels, 10 posts,
@@ -1600,6 +1596,8 @@ export async function renderSceneToGLB(
  * Pure function: no file I/O, no globals, no WebGL.
  */
 export interface RenderGlbOptions {
+  /** Host-only migration option, transported explicitly to isolated workers. */
+  gltfExporter?: 'legacy' | 'three';
   geometryPolicy?: GeometryExportPolicy;
   optimize?: OptimizeMode;
   instance?: InstanceMode;
@@ -1626,6 +1624,7 @@ export async function renderGLBInProcess(
   });
   const requestedCategory = opts.intent?.category ?? opts.category;
   const scene = await renderSceneToGLB(root, {
+    gltfExporter: opts.gltfExporter,
     sceneName: meta.name || 'Scene',
     geometryPolicy: opts.geometryPolicy,
     clips,
@@ -1692,6 +1691,8 @@ export function resolveEvaluatorMode(
  */
 export async function renderGLB(code: string, opts: RenderGlbOptions = {}): Promise<RenderResult> {
   const mode = resolveEvaluatorMode();
+  const exporter = resolveGltfExporter(opts.gltfExporter);
+  if (exporter === 'three') opts = { ...opts, gltfExporter: exporter };
   if (mode === 'in-process') return renderGLBInProcess(code, opts);
   if (mode === 'subprocess') {
     const { renderGLBViaSubprocess } = await import('./evaluator/subprocess');
