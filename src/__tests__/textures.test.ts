@@ -266,7 +266,11 @@ describe('Wave 3B: loadTexture + pbrMaterial', () => {
     expect(base).not.toBeNull();
     const img = base!.getImage();
     expect(img).not.toBeNull();
-    expect(img!.byteLength).toBe(png.length);
+    // Encoders may choose different PNG compression/metadata. Pixel identity
+    // is the round-trip contract for both converters.
+    expect(await sharp(img!).ensureAlpha().raw().toBuffer()).toEqual(
+      await sharp(png).ensureAlpha().raw().toBuffer(),
+    );
   });
 
   it('untextured gameMaterial still exports without maps (regression)', async () => {

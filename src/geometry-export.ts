@@ -8,6 +8,39 @@ export const EXPORTED_GEOMETRY_ATTRIBUTES: Readonly<Record<string, number>> = {
   tangent: 4,
 };
 
+/** Both converters require a complete, non-overlapping triangle partition. */
+export function validateMaterialGroups(
+  geometry: THREE.BufferGeometry,
+  materialCount: number,
+  name: string,
+) {
+  const length = geometry.getIndex()?.count ?? geometry.getAttribute('position').count;
+  const groups = [...geometry.groups].sort((a, b) => a.start - b.start);
+  let covered = 0;
+  for (const group of groups) {
+    const materialIndex = group.materialIndex ?? 0;
+    if (
+      group.start !== covered ||
+      !Number.isInteger(group.start) ||
+      !Number.isInteger(group.count) ||
+      group.count <= 0 ||
+      group.start % 3 ||
+      group.count % 3 ||
+      group.start + group.count > length ||
+      !Number.isInteger(materialIndex) ||
+      materialIndex < 0 ||
+      materialIndex >= materialCount
+    )
+      throw new TypeError(
+        `${name}: material groups must cover every triangle exactly once with valid material indices.`,
+      );
+    covered = group.start + group.count;
+  }
+  if (covered !== length)
+    throw new TypeError(`${name}: material groups do not cover every triangle.`);
+  return groups;
+}
+
 /** Read logical values, including interleaved stride/offset and normalized integer attributes. */
 export function geometryAttributeValues(
   attribute: THREE.BufferAttribute | THREE.InterleavedBufferAttribute,
@@ -25,6 +58,7 @@ export function geometryAttributeValues(
 export function inspectGeometryExport(
   root: THREE.Object3D,
   policy: GeometryExportPolicy = 'warn',
+  exporter: 'legacy' | 'three' = 'legacy',
 ): string[] {
   const warnings: string[] = [];
   root.traverse((node) => {
@@ -40,7 +74,20 @@ export function inspectGeometryExport(
     const position = geometry.getAttribute('position');
     if (position?.itemSize !== 3) throw new TypeError(`${name}: position requires xyz vertices.`);
     for (const [key, attribute] of Object.entries(geometry.attributes)) {
-      const expected = EXPORTED_GEOMETRY_ATTRIBUTES[key];
+      const expected =
+        EXPORTED_GEOMETRY_ATTRIBUTES[key] ??
+        (exporter === 'three'
+          ? (
+              {
+                color: attribute.itemSize === 4 ? 4 : 3,
+                uv1: 2,
+                uv2: 2,
+                uv3: 2,
+                skinIndex: 4,
+                skinWeight: 4,
+              } as Record<string, number>
+            )[key]
+          : undefined);
       if (expected === undefined) {
         unsupported(key);
         continue;
@@ -68,9 +115,12 @@ export function inspectGeometryExport(
           throw new TypeError(`${name}: index ${i} is outside the position attribute.`);
       }
     }
-    // Material arrays are supported by bridgeGeometry's exact group-range validation.
-    for (const key of Object.keys(geometry.morphAttributes)) unsupported(`morph ${key}`);
-    if ((mesh as THREE.SkinnedMesh).isSkinnedMesh) unsupported('skinning');
+    if (exporter === 'three' && Array.isArray(mesh.material))
+      validateMaterialGroups(geometry, mesh.material.length, name);
+    if (exporter === 'legacy') {
+      for (const key of Object.keys(geometry.morphAttributes)) unsupported(`morph ${key}`);
+      if ((mesh as THREE.SkinnedMesh).isSkinnedMesh) unsupported('skinning');
+    }
     for (const key of ['kilnAttributeWarnings', 'kilnGeometryWarnings']) {
       const notes: unknown = geometry.userData[key];
       if (!Array.isArray(notes)) continue;

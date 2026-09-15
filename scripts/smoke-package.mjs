@@ -8,6 +8,7 @@ import { createRequire } from 'node:module';
 import { tmpdir } from 'node:os';
 import { dirname, join, resolve } from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
+import { smokePackageExporter } from './smoke-package-exporter.mjs';
 
 const repo = resolve(dirname(fileURLToPath(import.meta.url)), '..');
 const root = await mkdtemp(join(tmpdir(), 'kiln-package-café-'));
@@ -396,6 +397,9 @@ try {
     sha(await readFile(join(workspace, 'asset.glb'))),
   );
   receipt.checks.push('packaged-node-worker');
+  // Export/reload only: the native canvas encodes texture pixels; no CPU/GPU views.
+  receipt.communityExporter = await smokePackageExporter({ runtime, workspace, cli, command });
+  receipt.checks.push('community-exporter-textured-subprocess');
   const server = join(runtime, 'dist/mcp-server.mjs'),
     store = join(workspace, '.kiln/programs');
   const session = await connect(server, root, store);

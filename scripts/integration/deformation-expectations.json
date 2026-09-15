@@ -1,0 +1,14 @@
+{
+ "blender":{"files":{
+  "skin.glb":{"animationCount":1,"nodes":[{"name":"Mesh_Skin","bones":2},{"name":"Mesh_0","deformed":true,"maxVertexDisplacement":0.5385164807}]},
+  "morph.glb":{"animationCount":1,"nodes":[{"name":"Mesh_Morph","morphTargets":1,"deformed":true,"maxVertexDisplacement":0.6}]},
+  "double-sided.glb":{"animationCount":0,"nodes":[{"name":"Mesh_Sheet","deformed":false}],"materials":[{"name":"Surface","doubleSided":true}]},
+  "single-sided.glb":{"animationCount":0,"nodes":[{"name":"Mesh_Sheet","deformed":false}],"materials":[{"name":"Surface","doubleSided":false}]}
+ }},
+ "unity":{"files":{
+  "skin.glb":{"animationCount":1,"nodes":[{"name":"Mesh_Skin","bones":2,"deformed":true,"maxVertexDisplacement":0.5385164807}]},
+  "morph.glb":{"animationCount":1,"nodes":[{"name":"Mesh_Morph","morphTargets":1,"deformed":true,"maxVertexDisplacement":0.6}]},
+  "double-sided.glb":{"animationCount":0,"nodes":[{"name":"Mesh_Sheet","deformed":false}],"materials":[{"name":"Surface","hasCullMode":true,"cullMode":0}]},
+  "single-sided.glb":{"animationCount":0,"nodes":[{"name":"Mesh_Sheet","deformed":false}],"materials":[{"name":"Surface","hasCullMode":true,"cullMode":2}]}
+ }}
+}

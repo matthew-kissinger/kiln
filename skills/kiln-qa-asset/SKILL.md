@@ -18,6 +18,8 @@ Check material and camera fidelity independently. A fallback image may still ans
 
 ## In the destination
 
+For Blender, Unity or FBX, read the [engine handoff guide](references/engine-handoff.md) before choosing import settings or trying the experimental exporter. Check the actual target importer and render pipeline; a successful Kiln preview alone does not establish destination compatibility.
+
 Use the project's existing loader and renderer. Read the [integration checks](references/integration-checks.md) for manifests, frames, composition options, and limits.
 
 Confirm scale alongside existing objects, forward direction, ground contact, placement, and useful viewing distance. Check textures and lighting in the destination renderer. Exercise relevant animation, interaction, and collision; sample intermediate poses when checking motion. For web projects use the actual browser view, and for native projects use the destination runtime.

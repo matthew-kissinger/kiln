@@ -1,17 +1,12 @@
 /** GLB-native input adapter for the deterministic CPU geometry-flat renderer. */
+import { createGltfIO } from '../gltf-io';
 
 import {
   Primitive,
-  WebIO,
   type Accessor,
   type Material,
   type Texture as GltfTexture,
 } from '@gltf-transform/core';
-import {
-  EXTMeshGPUInstancing,
-  KHRMaterialsVariants,
-  KHRTextureBasisu,
-} from '@gltf-transform/extensions';
 import {
   BufferAttribute,
   BufferGeometry,
@@ -117,8 +112,7 @@ export interface LoadedGlbReviewScene extends LoadedGlbGeometryFlatScene {
   clips: AnimationClip[];
 }
 
-const glbIO = (): WebIO =>
-  new WebIO().registerExtensions([EXTMeshGPUInstancing, KHRMaterialsVariants, KHRTextureBasisu]);
+const glbIO = createGltfIO;
 
 function record(value: unknown): value is Record<string, unknown> {
   return typeof value === 'object' && value !== null && !Array.isArray(value);

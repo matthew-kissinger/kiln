@@ -1,5 +1,4 @@
-import { WebIO } from '@gltf-transform/core';
-import { EXTMeshGPUInstancing } from '@gltf-transform/extensions';
+import { createGltfIO } from '../gltf-io';
 import * as THREE from 'three';
 
 import {
@@ -143,7 +142,7 @@ function finalEffectAxis(
  * the pre-export Three.js scene.
  */
 export async function analyzeFinalVfxGlbBytesV1(bytes: Uint8Array): Promise<FinalVfxGlbEvidenceV1> {
-  const io = new WebIO().registerExtensions([EXTMeshGPUInstancing]);
+  const io = createGltfIO();
   const document = await io.readBinary(bytes);
   const root = document.getRoot();
   const renderableNodes = root.listNodes().filter((node) => node.getMesh() !== null);

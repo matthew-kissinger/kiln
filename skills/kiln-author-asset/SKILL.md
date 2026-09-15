@@ -12,6 +12,8 @@ Read the [program contract](references/program-contract.md) when writing source.
 
 Establish the subject, scale, style, and destination constraints from the request. Build a recognizable silhouette and meaningful construction details. Name parts by their role. Use metres, +X forward, +Y up, +Z right; ground contact normally sits at Y=0.
 
+For Blender, Unity or an FBX handoff, read the [engine handoff guide](references/engine-handoff.md). Prefer direct GLB import. The established exporter remains the default; the guide explains when an explicitly identified experimental comparison is useful. Preserve the baseline output, report the selected backend and destination checks, and do not change global host settings silently.
+
 Write ordinary JavaScript with `meta` and `build()`. Keep dimensions that should change together in named parameters. Use [geometry recipes](references/geometry-recipes.md) for freeform surfaces, deformations, lofts, Boolean materials, or repeated parts. A model can author its own equations and topology; it does not need to assemble everything from boxes.
 
 Submit `code` once to `kiln_render` or `kiln_validate`, then retain its `programRef`, including on a failed build. In a generated asset workspace, `node kiln.mjs source asset.kiln.js` imports a file directly. Copy the returned reference exactly for later views and edits. Built-in stores return short handles such as `p_7c94a132b8e0`; full SHA-256 references also work. Do not construct a handle or retransmit the program.

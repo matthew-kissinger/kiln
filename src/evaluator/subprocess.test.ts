@@ -16,10 +16,16 @@ function build() {
 
 describe('subprocess evaluator scaffold', () => {
   test('exports the same deterministic GLB through the v1 protocol', async () => {
-    const direct = await renderGLBInProcess(BOX_CODE);
-    const contained = await renderGLBViaSubprocess(BOX_CODE, {}, { deadlineMs: 30_000 });
-    expect(contained.artifactGlbSha256).toBe(direct.artifactGlbSha256);
-    expect(contained.glb).toEqual(direct.glb);
+    for (const gltfExporter of ['legacy', 'three'] as const) {
+      const direct = await renderGLBInProcess(BOX_CODE, { gltfExporter });
+      const contained = await renderGLBViaSubprocess(
+        BOX_CODE,
+        { gltfExporter },
+        { deadlineMs: 30_000 },
+      );
+      expect(contained.artifactGlbSha256).toBe(direct.artifactGlbSha256);
+      expect(contained.glb).toEqual(direct.glb);
+    }
   }, 60_000);
 
   test('does not inherit provider, AWS, loader, or Kiln environment variables', () => {

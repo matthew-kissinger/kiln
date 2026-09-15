@@ -3,6 +3,18 @@
 Changes to `@kiln/engine`. Source and installable packages are distributed through
 GitHub. The package is not published on the npm registry.
 
+## Unreleased: Experimental community exporter and engine handoff
+
+- The established GLB exporter remains the default. Builds containing this integration also
+  provide an experimental Three.js exporter for explicit comparison; no separate repository
+  is needed. See the [Blender/Unity handoff guide](docs/engine-handoff.md) for scoped CLI/MCP
+  activation, restoration of the default, tested import routes and known limitations.
+- Authoring and QA skills include the handoff guide so agents can discover the option when
+  destination requirements call for it. Blender/Unity does not automatically select it.
+- Expanded export, GPU, deformation and clean-package checks are documented in the
+  [qualification report](docs/evaluation/community-exporter.md). The candidate is not yet
+  qualified to replace the default for all supported workflows.
+
 ## 0.7.1: Preserve CLI outputs on failed writes
 
 - GLB, preview PNG, and generated source replacements are written to unique sibling
