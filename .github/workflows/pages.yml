@@ -79,7 +79,7 @@ jobs:
       # the script `bun test ./src ./scripts` would silently drop it -- and because
       # these are the only automated check on what a poster receipt asserts.
       - name: Test the site scripts
-        run: bun test scripts
+        run: bun test scripts --timeout 20000
         working-directory: site
 
       # Fifty programs through the evaluator, writing GLBs, thumbnails and the

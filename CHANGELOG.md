@@ -3,6 +3,18 @@
 Changes to `@kiln/engine`. Source and installable packages are distributed through
 GitHub. The package is not published on the npm registry.
 
+## Unreleased: Test suite holds under a loaded runner
+
+- The test scripts and CI set a 20 s per-test budget instead of Bun's 5 s default. Tests that take
+  under a second locally (a cold CLI spawn, the first `sharp` decode in a file) had timed out at 5 s
+  on the Windows runner and passed on re-run; a real hang still fails, twenty seconds later.
+- The tier-2 driver's process-group test no longer races node start-up. It stopped the run 50 ms
+  after spawn, so on a loaded runner the child died before it had spawned its descendant and the
+  orphan spawned afterwards survived. The test now waits for the child to announce its descendant
+  before interrupting the group, and a separate test proves the deadline reports itself. Temp
+  directories that a just-killed process tree still holds are removed with retries instead of
+  failing the run with `EBUSY`.
+
 ## Unreleased: Neutral view backdrop, and a named backdrop per capture
 
 - **Every contact sheet is now painted on the neutral studio grey `#aab1bc` instead of near-black

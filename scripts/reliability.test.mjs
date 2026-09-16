@@ -46,8 +46,11 @@ describe('repository reliability contracts', () => {
     const readme = (await readText('README.md')).replace(/\s+/g, ' ');
     const workflow = await readText('.github/workflows/ci.yml');
 
+    // The 20 s per-test budget is part of the contract: Bun's 5 s default is
+    // below a cold process spawn or a first native-library call on a loaded
+    // runner, and the suite lost three Windows runs to it in one day.
     expect(pkg.scripts['test:coverage']).toBe(
-      'KILN_SPIKE_LIVE=0 KILN_RENDER=cpu bun test src scripts --coverage && bun scripts/check-coverage.mjs',
+      'KILN_SPIKE_LIVE=0 KILN_RENDER=cpu bun test src scripts --coverage --timeout 20000 && bun scripts/check-coverage.mjs',
     );
     // A warning baseline is a number kept in prose that everyone agrees to ignore, and
     // the twenty-sixth finding arrives invisible. The tree reports nothing, so the flag

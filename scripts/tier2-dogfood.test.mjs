@@ -19,7 +19,11 @@ import {
 
 const roots = [];
 afterEach(() => {
-  for (const root of roots.splice(0)) rmSync(root, { recursive: true, force: true });
+  // A root can still be the working directory of a process tree the driver just
+  // killed; Windows reports that as EBUSY for a few hundred milliseconds after
+  // taskkill returns, so the removal retries instead of failing the test.
+  for (const root of roots.splice(0))
+    rmSync(root, { recursive: true, force: true, maxRetries: 10, retryDelay: 100 });
 });
 
 describe('Tier 2 blind dogfood driver', () => {
@@ -378,18 +382,12 @@ describe('Tier 2 blind dogfood driver', () => {
     ]);
   });
 
-  test('the deadline kills only the spawned process group', async () => {
+  test('the deadline reports itself and ends the process', async () => {
     const root = mkdtempSync(join(tmpdir(), 'kiln-tier2-timeout-test-'));
     roots.push(root);
-    const marker = join(root, 'descendant-survived');
     const stdoutPath = join(root, 'stdout.jsonl');
     const stderrPath = join(root, 'stderr.log');
-    const childScript = [
-      "const {spawn}=require('node:child_process')",
-      `spawn(process.execPath,['-e',${JSON.stringify(`setTimeout(()=>require('node:fs').writeFileSync(${JSON.stringify(marker)},'bad'),350)`)}],{stdio:'ignore'})`,
-      'setInterval(()=>{},1000)',
-    ].join(';');
-    const result = await runProcess('node', ['-e', childScript], {
+    const result = await runProcess('node', ['-e', 'setInterval(()=>{},1000)'], {
       cwd: root,
       env: process.env,
       stdoutPath,
@@ -397,12 +395,50 @@ describe('Tier 2 blind dogfood driver', () => {
       timeoutMs: 50,
       killGraceMs: 50,
     });
-    await new Promise((resolve) => setTimeout(resolve, 450));
 
     expect(result.timedOut).toBe(true);
-    expect(existsSync(marker)).toBe(false);
+    expect(result.interrupted).toBe(false);
     expect(readFileSync(stderrPath, 'utf8')).toContain('deadline exceeded');
-  });
+  }, 30_000);
+
+  test('stopping the run kills the descendants the process had spawned', async () => {
+    const root = mkdtempSync(join(tmpdir(), 'kiln-tier2-timeout-test-'));
+    roots.push(root);
+    const spawned = join(root, 'descendant-spawned');
+    const marker = join(root, 'descendant-survived');
+    const stdoutPath = join(root, 'stdout.jsonl');
+    const stderrPath = join(root, 'stderr.log');
+    // The child announces its descendant only once it exists. Stopping the run
+    // on a fixed timer instead raced node start-up on a loaded runner: the child
+    // was killed before it had spawned anything, and the orphan it spawned
+    // afterwards survived, which is not what the driver is asked to prevent.
+    const childScript = [
+      "const {spawn}=require('node:child_process')",
+      `spawn(process.execPath,['-e',${JSON.stringify(`setTimeout(()=>require('node:fs').writeFileSync(${JSON.stringify(marker)},'bad'),1500)`)}],{stdio:'ignore'})`,
+      `require('node:fs').writeFileSync(${JSON.stringify(spawned)},'ok')`,
+      'setInterval(()=>{},1000)',
+    ].join(';');
+    const controller = new AbortController();
+    const run = runProcess('node', ['-e', childScript], {
+      cwd: root,
+      env: process.env,
+      stdoutPath,
+      stderrPath,
+      timeoutMs: 20_000,
+      killGraceMs: 50,
+      signal: controller.signal,
+    });
+    while (!existsSync(spawned)) await new Promise((resolve) => setTimeout(resolve, 20));
+    controller.abort();
+    const result = await run;
+    // Outlive the descendant's own timer so a survivor would have written.
+    await new Promise((resolve) => setTimeout(resolve, 1700));
+
+    expect(result.interrupted).toBe(true);
+    expect(result.timedOut).toBe(false);
+    expect(existsSync(marker)).toBe(false);
+    expect(readFileSync(stderrPath, 'utf8')).toContain('terminating process group');
+  }, 30_000);
 
   test('a harness prompt can be delivered through stdin without becoming a shell argument', async () => {
     const root = mkdtempSync(join(tmpdir(), 'kiln-tier2-stdin-test-'));

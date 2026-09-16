@@ -119,7 +119,9 @@ test('headless textures retain pixels and source state across concurrent exports
   expect(texture.source).toBe(source);
   expect(texture.image).toBe(sourceImage);
   expect(mesh.userData['privatePayload']).toBe('do not export');
-});
+  // Under 1 s locally, but this is the file's first sharp decode, so it pays
+  // libvips start-up; a loaded Windows runner has taken 5.8 s for it.
+}, 30_000);
 
 test('candidate preserves morph and skin data and does not mutate bone references', async () => {
   process.env['KILN_GLTF_EXPORTER'] = 'three';
