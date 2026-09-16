@@ -1,6 +1,6 @@
 import { Vector3, Matrix4, Euler, type Object3D } from 'three';
 import { collectTriangles, measureBounds, orbitDir } from './raster';
-import { GRID_BACKGROUND_RGB } from './background';
+import { resolveBackdrop, type BackdropId } from './background';
 
 export type CameraVec3 = [number, number, number];
 export type CameraBounds = { min: CameraVec3; max: CameraVec3 };
@@ -371,8 +371,10 @@ export function rasterizeCamera(
   input: ResolvedAssetCameraV1,
   size = 384,
   backfaceCull = true,
+  backdrop?: BackdropId,
 ): Uint8Array {
   const camera = validateResolvedAssetCamera(input);
+  const bg = resolveBackdrop(backdrop).rgb;
   if (!Number.isInteger(size) || size < 1 || size > 2048)
     throw new Error('camera size must be an integer in 1..2048');
   const z = vec(camera.position).sub(vec(camera.target)).normalize(),
@@ -380,7 +382,7 @@ export function rasterizeCamera(
     y = z.clone().cross(x),
     position = vec(camera.position);
   const out = new Uint8Array(size * size * 3);
-  for (let i = 0; i < size * size; i++) out.set(GRID_BACKGROUND_RGB, i * 3);
+  for (let i = 0; i < size * size; i++) out.set(bg, i * 3);
   const depth = new Float64Array(size * size).fill(Infinity);
   const clip = (points: Vector3[], plane: number, near: boolean) => {
     const result: Vector3[] = [];

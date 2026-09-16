@@ -20,7 +20,7 @@
  * the offline audit grid) so inverted winding shows up as missing faces.
  */
 
-import { GRID_BACKGROUND_RGB } from './background';
+import { resolveBackdrop, type BackdropId } from './background';
 
 export interface ViewSpec {
   name: string;
@@ -119,10 +119,9 @@ export interface RasterOptions {
    * geometry is still drawn; only the camera center/zoom come from this box.
    */
   frameBounds?: { min: [number, number, number]; max: [number, number, number] };
+  /** Named backdrop to clear to. Omit for the default; see `views/background.ts`. */
+  backdrop?: BackdropId;
 }
-
-// Shared with the GPU render port so both producers paint the same backdrop.
-const BG = GRID_BACKGROUND_RGB;
 const AMBIENT = 0.25;
 const KEY_INTENSITY = 1.1;
 const KEY_DIR = normalize([1.5, 2, 1]);
@@ -312,6 +311,7 @@ export function rasterizeView(
 ): Uint8Array {
   const size = opts.size ?? 256;
   const cull = opts.backfaceCull ?? true;
+  const BG = resolveBackdrop(opts.backdrop).rgb;
   const { tris, bbox } = collectTriangles(root as DuckObject3D);
 
   const out = new Uint8Array(size * size * 3);
@@ -451,8 +451,13 @@ export function measureBounds(root: unknown): {
   return { min: [...bbox.min], max: [...bbox.max] };
 }
 
-/** Fraction of non-background pixels — used by tests and occupancy checks. */
-export function coverage(rgb: Uint8Array, size: number): number {
+/**
+ * Fraction of non-background pixels — used by tests and occupancy checks. The
+ * raster must be measured against the backdrop it was painted with, so pass the
+ * same `backdrop` the render used (omitted on both sides means the default).
+ */
+export function coverage(rgb: Uint8Array, size: number, backdrop?: BackdropId): number {
+  const BG = resolveBackdrop(backdrop).rgb;
   let filled = 0;
   for (let i = 0; i < size * size; i++) {
     if (rgb[i * 3] !== BG[0] || rgb[i * 3 + 1] !== BG[1] || rgb[i * 3 + 2] !== BG[2]) filled++;

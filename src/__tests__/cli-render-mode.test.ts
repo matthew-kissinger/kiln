@@ -72,7 +72,7 @@ describe('probeRenderService', () => {
   });
 });
 
-it('sends the shared grid background to the GPU service for ordinary asset sheets', async () => {
+it('names the shared grid backdrop to the GPU service for ordinary asset sheets', async () => {
   let body: Record<string, unknown> | undefined;
   const server = createServer(async (req, res) => {
     const chunks: Buffer[] = [];
@@ -100,7 +100,9 @@ it('sends the shared grid background to the GPU service for ordinary asset sheet
     size: 384,
   });
 
-  expect(body?.background).toBe('#1a1a1a');
+  // The engine names the backdrop; the service owns the colour table.
+  expect(body?.background).toBeUndefined();
+  expect(body?.backdrop).toBe('neutral');
 });
 
 it('authenticates an auto-started local renderer with its inherited service token', async () => {

@@ -13,6 +13,8 @@ import * as THREE from 'three';
 
 import { renderInspectView, listPartNames, INSPECT_SIZE } from '../inspect';
 import { executeKilnCode } from '../../render';
+import { GRID_BACKGROUND_RGB } from '../background';
+const BG = GRID_BACKGROUND_RGB;
 
 // A small red core fully enclosed by a larger blue shell. From EVERY camera the
 // shell covers the core, so this is the "buried part" the model cannot inspect
@@ -39,7 +41,7 @@ async function hueCounts(png: Buffer): Promise<{ red: number; blue: number; back
     const r = data[i * info.channels]!;
     const g = data[i * info.channels + 1]!;
     const b = data[i * info.channels + 2]!;
-    if (r === 26 && g === 26 && b === 26) background++;
+    if (r === BG[0] && g === BG[1] && b === BG[2]) background++;
     else if (r > b) red++;
     else if (b > r) blue++;
   }

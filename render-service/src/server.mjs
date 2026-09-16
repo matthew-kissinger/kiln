@@ -2,9 +2,9 @@
 //   GET  /health, /ping       -> 200 {ok, rendererId, adapter, capabilities, authRequired}
 //                                (never 503: a software or absent adapter aborts boot below,
 //                                 so a listening server always implies a hardware adapter)
-//   POST /render legacy: {glb_base64, input_glb_sha256?, size?, views?, beauty_size?, background?}
+//   POST /render legacy: {glb_base64, input_glb_sha256?, size?, views?, beauty_size?, backdrop?}
 //   POST /render camera: {glb_base64, input_glb_sha256?, cameras, width, height,
-//                         lighting_preset_id?}
+//                         lighting_preset_id?, backdrop?}
 //                             -> 200 legacy response unchanged, or exact camera
 //                                receipt metadata + ordered output identities
 //                                (`input_glb_sha256` opts into an additive,
@@ -236,13 +236,13 @@ const server = createServer(async (req, res) => {
                   width: renderMode.width,
                   height: renderMode.height,
                   lightingPresetId: renderMode.lightingPresetId,
-                  background: renderMode.background,
+                  backdrop: renderMode.backdrop,
                 }
               : {
                   size: renderMode.size,
                   viewDirs: renderMode.viewDirs,
                   beautySize: renderMode.beautySize,
-                  background: renderMode.background,
+                  backdrop: renderMode.backdrop,
                 },
           ),
         };

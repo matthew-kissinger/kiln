@@ -251,9 +251,9 @@ describe('makeKilnUnifiedTools', () => {
     const render = findTool(tools, 'kiln_render');
     const out = (await render.invoke({ capture: { preset: '1x1' } })) as unknown[];
     const json = (out[1] as JsonBlock).json as {
-      capture?: { preset?: string; cols?: number; cells?: number };
+      capture?: { preset?: string; cols?: number; cells?: number; backdrop?: string };
     };
-    expect(json.capture).toEqual({ preset: '1x1', cols: 1, cells: 1 });
+    expect(json.capture).toEqual({ preset: '1x1', cols: 1, cells: 1, backdrop: 'neutral' });
     expect(sink.rendered).toBe(true);
     expect(sink.capture).toEqual({ preset: '1x1' });
 
@@ -466,6 +466,23 @@ describe('makeKilnUnifiedTools', () => {
     expect(json['roofsHidden']).toBeGreaterThanOrEqual(1); // the 'Roof' group was lifted
     expect(json['wallsHidden']).toBeGreaterThanOrEqual(1); // near walls cut for the eye-level cell
     expect('pngBase64' in json).toBe(false); // image stripped by the media extractor
+  });
+
+  test('kiln_view_interior echoes the backdrop it painted, like every other image result', async () => {
+    const sink: UnifiedSink = { edits: [] };
+    const tools = makeKilnUnifiedTools({ seedCode: BUILDING_CODE, sink });
+    const plain = (await findTool(tools, 'kiln_view_interior').invoke({})) as unknown[];
+    const plainJson = (plain[1] as JsonBlock).json as { capture?: { backdrop?: string } };
+    expect(plainJson.capture?.backdrop).toBe('neutral');
+    const dark = (await findTool(tools, 'kiln_view_interior').invoke({
+      capture: { version: 'kiln.capture.v1', backdrop: 'dark', shots: [{ name: 'Inside' }] },
+    })) as unknown[];
+    const darkJson = (dark[1] as JsonBlock).json as {
+      ok?: boolean;
+      capture?: { backdrop?: string };
+    };
+    expect(darkJson.ok).toBe(true);
+    expect(darkJson.capture?.backdrop).toBe('dark');
   });
 
   test('kiln_view_interior on a broken buffer is image-free (plain JSON error)', async () => {

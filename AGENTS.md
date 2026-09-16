@@ -69,6 +69,18 @@ are indistinguishable after construction. Host telemetry rides `onViewsRendered`
 be treated as material evidence. Keep the input schema stable unless the active change explicitly
 versions it -- the tool definition is cached, and changing it invalidates that cache.
 
+Both producers paint one backdrop from one table. `src/views/background.ts` owns the three named
+backdrops and `render-service/src/backdrops.mjs` mirrors them; `backdrop.test.ts` fails if they
+drift. The default is the neutral studio grey, chosen by measuring silhouette-edge contrast over
+the whole example set. The GPU service clears to the linear colour that its tone mapping turns
+into exactly that value (`render-service/src/display-transform.mjs`), so a CPU fallback sheet and
+a GPU sheet share the backdrop pixel for pixel. A capture may name `neutral`, `dark` or `light`; it may never pass a
+free colour, because comparability across runs (arena, capture cache, reference comparison) assumes
+two sheets of one GLB differ only because the asset does, and a backdrop close to the asset colour
+hides the seams the model is meant to find. The chosen id is part of both capture-cache keys and is
+echoed as `capture.backdrop` in every render result. `kiln_save` paints its preview on the backdrop
+it is given and the manifest records it as `preview.backdrop`; a reader never guesses it.
+
 **The GPU is a view producer only, never gate evidence.** `QaContext` is deliberately image-free so a
 QA rule structurally cannot read a render buffer. Do not add pixels to it.
 
@@ -106,7 +118,7 @@ do not lower them without an explicit measured rationale. Live model tests are o
 
 `bun run test` is `bun test src scripts`, so it does **not** reach `render-service/`, which is a
 separate npm project. `bun run test:render-service` does; it needs `npm --prefix render-service ci
---ignore-scripts` once. All 37 of those tests are pure -- framing arithmetic, PNG readback packing,
+--ignore-scripts` once. All 49 of those tests are pure -- framing arithmetic, PNG readback packing,
 cache identity, contract and preset validation -- so none of them needs a GPU or the native Dawn
 build, which is why `--ignore-scripts` is enough. Run it whenever you change `render-service/`; CI
 requires it.

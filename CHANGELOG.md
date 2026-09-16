@@ -3,6 +3,54 @@
 Changes to `@kiln/engine`. Source and installable packages are distributed through
 GitHub. The package is not published on the npm registry.
 
+## Unreleased: Neutral view backdrop, and a named backdrop per capture
+
+- **Every contact sheet is now painted on the neutral studio grey `#aab1bc` instead of near-black
+  `#1a1a1a`.** The old value was pinned in PR #13 for CPU/GPU parity and never revisited; a dark
+  asset on it lost the silhouette, tail and ground contact the render tool asks the model to check.
+  The new default was chosen by measuring silhouette-edge contrast over the 86 examples plus a
+  near-black test asset on the CPU rasterizer: near-black left 39.7% of edge pixels under a 1.5:1
+  contrast ratio, the studio grey 12.8%. It is also the GPU studio preset's background, so a CPU
+  fallback sheet and a GPU sheet of the same request now share one colour on every path,
+  including exact-camera captures, which used to come back grey from the GPU and near-black from
+  the CPU fallback.
+- **`capture.backdrop` accepts `neutral`, `dark` or `light`** on `kiln_render`, `kiln_edit` and
+  `kiln_view_interior`. Free colours are deliberately not accepted: comparability across runs
+  assumes two sheets of one GLB differ only because the asset does. The chosen id is part of both
+  capture-cache keys and is echoed as `capture.backdrop` in every render result. The render
+  service accepts the same `backdrop` field in both modes from a mirrored table that the engine
+  suite asserts against. The CLI takes it inside a `--capture` recipe or as `--backdrop <id>`,
+  which merges into the same capture object and overrides the recipe's own value, so one shared
+  recipe can be re-run on another backdrop without editing it.
+- **The GPU backdrop is pixel-exact.** The service clears the scene background into its HDR
+  framebuffer and tone-maps it with the asset, so the neutral `#aab1bc` used to read back as
+  `(203, 207, 213)` while the CPU rasterizer painted `(170, 177, 188)`. The service now sets the
+  backdrop as the linear colour that comes out of the output pass as exactly the table's bytes,
+  through an analytic inverse of three's ACES filmic curve and sRGB transfer in
+  `render-service/src/display-transform.mjs`, verified against pixels read back from a dawn-d3d12
+  device. A GPU sheet and a CPU sheet of the same request now agree on the backdrop pixel for
+  pixel. Compositing after the pass was rejected because multisampled edges would have kept a
+  one-pixel fringe.
+- **The render service's free-hex `background` field is gone**, in both modes, along with the
+  presets' own background colour: the named backdrop table is the only source, so nothing can
+  paint a colour the engine would not. `background` in a request is a 400 naming `backdrop`.
+- **`kiln render --render gpu` no longer hangs after starting the renderer itself.** The host
+  kills a service it started from an `exit` hook, which suits the long-lived MCP server, but a
+  one-shot command never reached `exit`: the child's piped stderr kept the loop alive, so the
+  CLI finished its render and then sat forever with a GPU process orphaned behind it. The CLI
+  now stops a service it started when the command settles and leaves one it merely found alone.
+  For a batch of CLI renders, start the service once by hand so each command joins it.
+- Occupancy `coverage` takes the backdrop it should measure against. Sheets cached from earlier
+  versions are keyed by the old request shape and are simply re-rendered once.
+- `kiln_view_interior` echoes `capture` too, so every image result now says which backdrop its
+  silhouettes sat on. The guidance in the schema and skills states one rule for every asset
+  colour: switch only after a sheet shows a part merging with the grey, to `light` when that part
+  is darker than the grey and to `dark` when it is lighter.
+- **`kiln_save` takes the same `backdrop` for the preview it stores**, as does the CLI's
+  `kiln save --backdrop <id>`, and the manifest records the one used as `preview.backdrop`. A
+  preview used to be painted on the default whatever sheet had been accepted, so a grey asset
+  reviewed on `dark` was stored merging with the grey it had just been moved off.
+
 ## Unreleased: Experimental community exporter and engine handoff
 
 - The established GLB exporter remains the default. Builds containing this integration also

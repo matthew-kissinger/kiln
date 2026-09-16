@@ -74,6 +74,7 @@ describe('provider-free render contract', () => {
       height: 720,
       lightingPresetId: SUPPORTED_LIGHTING_PRESET_ID,
       totalPixels: 1280 * 720,
+      backdrop: 'neutral',
     });
     assert.notEqual(parsed.cameras, body.cameras);
     assert.notEqual(parsed.cameras[0].position, body.cameras[0].position);
@@ -95,9 +96,21 @@ describe('provider-free render contract', () => {
       throws400(() => validateRenderMode({ ...exactBody(), ...legacy }), /mutually exclusive/);
     }
     throws400(() => validateRenderMode({ ...exactBody(), mystery_option: true }), /unknown/);
+    // A free colour is refused in both modes; a named backdrop is accepted in
+    // both, and omitting it means the neutral entry.
+    throws400(() => validateRenderMode({ ...exactBody(), background: '#000000' }), /backdrop/);
+    throws400(() => validateRenderMode({ views: [[1, 0, 0]], background: '#000000' }), /backdrop/);
+    assert.equal(validateRenderMode({ ...exactBody(), backdrop: 'dark' }).backdrop, 'dark');
+    assert.equal(validateRenderMode(exactBody()).backdrop, 'neutral');
+    assert.equal(validateRenderMode({ views: [[1, 0, 0]] }).backdrop, 'neutral');
     throws400(
-      () => validateRenderMode({ ...exactBody(), background: '#000000' }),
-      /cannot override/,
+      () => validateRenderMode({ ...exactBody(), backdrop: '#1a1a1a' }),
+      /neutral, dark, light/,
+    );
+    assert.equal(validateRenderMode({ views: [[1, 0, 0]], backdrop: 'light' }).backdrop, 'light');
+    throws400(
+      () => validateRenderMode({ views: [[1, 0, 0]], backdrop: 'pink' }),
+      /neutral, dark, light/,
     );
     for (const cameraOnly of [
       { width: 1 },

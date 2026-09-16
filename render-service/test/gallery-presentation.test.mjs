@@ -4,7 +4,7 @@ import {
   getPresentationPreset,
   DEFAULT_PRESENTATION_PRESET_ID,
 } from '../src/presentation-presets.mjs';
-test('gallery profile changes gallery exposure and backdrop and leaves default studio unchanged', () => {
+test('gallery profile changes only the exposure and leaves default studio unchanged', () => {
   const original = getPresentationPreset('neutral-studio-v1');
   const gallery = getPresentationPreset('gallery-studio-v1');
   assert.ok(gallery, 'gallery profile must be selectable');
@@ -14,7 +14,6 @@ test('gallery profile changes gallery exposure and backdrop and leaves default s
     ...original,
     id: 'gallery-studio-v1',
     exposure: 0.9,
-    background: '#747474',
   });
   assert.ok(Object.isFrozen(gallery));
 });

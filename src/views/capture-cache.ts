@@ -149,6 +149,7 @@ export function createCachedRenderPort(
           width: request.width,
           height: request.height,
           lighting: request.lightingPresetId,
+          backdrop: request.backdrop,
         }),
       ),
     );
@@ -230,6 +231,8 @@ export interface CpuCaptureIdentity {
   camera: ResolvedAssetCameraV1;
   size: number;
   backfaceCull?: boolean;
+  /** Painted backdrop; part of the key because the pixels differ per backdrop. */
+  backdrop?: import('./background').BackdropId;
 }
 /** CPU entries are explicitly geometry-flat and live in a different key namespace from GPU cells. */
 export async function captureCpuCell(

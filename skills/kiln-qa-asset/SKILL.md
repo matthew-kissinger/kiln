@@ -16,7 +16,7 @@ Read validation/build findings and export warnings. `kiln_validate` only checks 
 
 Distinguish expected open sheets from invalid solid topology. `geometryDiagnostics` reports boundary edges, non-manifold edges, orientation conflicts and degenerates; it does not prove absence of self-intersection. A capped loft, shell-like surface, or sampled field is not automatically a manufacturing-grade solid.
 
-Check material and camera fidelity independently. A fallback image may still answer a geometry question, but it cannot establish faithful PBR appearance. Keep unresolved export or material findings visible in the delivery report.
+Read `capture.backdrop` in image results: views are on a neutral grey unless a capture asked for `dark` or `light`, and a silhouette judged on the wrong assumption about the backdrop is not evidence. Check material and camera fidelity independently. A fallback image may still answer a geometry question, but it cannot establish faithful PBR appearance. Keep unresolved export or material findings visible in the delivery report.
 
 ## In the destination
 

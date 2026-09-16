@@ -43,7 +43,6 @@ describe('versioned presentation preset registry', () => {
     assert.deepEqual(getPresentationPreset('neutral-studio-v1'), {
       id: 'neutral-studio-v1',
       environment: { type: 'room', sigma: 0.04 },
-      background: '#aab1bc',
       exposure: 1.38,
       ambient: { type: 'hemisphere', sky: 0xffffff, ground: 0x6f7888, intensity: 2 },
       sun: { enabled: false },

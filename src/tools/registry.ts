@@ -46,6 +46,7 @@ import {
   type ViewRenderTimeoutResolver,
 } from '../agent/view-render-timeout';
 import { ViewEvidenceHistoryStore } from '../views/evidence-history';
+import { BACKDROP_IDS, DEFAULT_BACKDROP_ID, type BackdropId } from '../views/background';
 import type { TextureUsage } from '../textures';
 
 // =============================================================================
@@ -457,6 +458,7 @@ async function renderDerivativeCell(
       input.size,
       [camera],
       context.captureLimits,
+      input.backdrop,
     );
     if (ported.ok && ported.derivativeFidelityAttested) {
       if (ported.inputGlbSha256 !== inputGlbSha256) {
@@ -510,6 +512,7 @@ async function renderDerivativeCell(
     renderGlbViewCell(derivativeGlb, input.view, {
       size: input.size,
       camera,
+      ...(input.backdrop ? { backdrop: input.backdrop } : {}),
       ...(input.backfaceCull !== undefined ? { backfaceCull: input.backfaceCull } : {}),
       ...(input.frameBounds ? { frameBounds: input.frameBounds } : {}),
     });
@@ -524,6 +527,7 @@ async function renderDerivativeCell(
           camera,
           size: input.size,
           backfaceCull: input.backfaceCull ?? true,
+          ...(input.backdrop ? { backdrop: input.backdrop } : {}),
         },
         produceFlat,
       )
@@ -627,6 +631,18 @@ const screenshotInput = z.object({
  * metrics-only `kiln_render` produces no image, so a grid shape would be a
  * meaningless argument there and would change that schema for no reason.
  */
+/**
+ * A named backdrop, never a free colour: sheets must stay comparable across
+ * runs, and a backdrop tuned to the asset colour hides the seams the model is
+ * meant to find. Neutral is the measured default; see `views/background.ts`.
+ */
+const backdropInput = z
+  .enum(BACKDROP_IDS as [BackdropId, ...BackdropId[]])
+  .optional()
+  .describe(
+    'Neutral grey unless a sheet shows merging: light if the part is darker, dark if lighter.',
+  );
+
 const legacyCaptureInput = z
   .object({
     preset: z
@@ -662,6 +678,7 @@ const legacyCaptureInput = z
         'One camera per cell, in row-major order. Omit to use the preset default cameras. ' +
           'Must not exceed the preset capacity (max 9 overall).',
       ),
+    backdrop: backdropInput,
   })
   .optional()
   .describe(
@@ -774,6 +791,7 @@ const advancedCaptureInput = z.strictObject(
     cols: z.number().int().min(1).max(3).optional(),
     size: z.number().int().min(128).max(1024).optional(),
     output: z.enum(['grid', 'separate']).optional(),
+    backdrop: backdropInput,
   },
   { error: advancedCaptureError },
 );
@@ -1082,8 +1100,8 @@ export interface KilnScreenshotResult {
   ok: boolean;
   /** View names in grid order (row-major). Defaults to Front, Right, Back, Left, Top, 3/4. */
   views?: string[];
-  /** Grid shape actually rendered — echoes the capture config back, or `3x2` by default. */
-  capture?: { preset: string; cols: number; cells: number };
+  /** Grid shape and backdrop actually rendered — echoes the capture config back, or `3x2` on neutral by default. */
+  capture?: { preset: string; cols: number; cells: number; backdrop?: BackdropId };
   width?: number;
   height?: number;
   /** The 3x2 grid PNG, base64-encoded (transports with image support strip this and attach the bytes). */
@@ -1174,8 +1192,8 @@ export interface KilnRenderViewsResult {
   materialContract?: ProceduralTextureMaterialContract;
   /** View names in grid order (row-major). Defaults to Front, Right, Back, Left, Top, 3/4. */
   views?: string[];
-  /** Grid shape actually rendered — echoes the capture config back, or `3x2` by default. */
-  capture?: { preset: string; cols: number; cells: number };
+  /** Grid shape and backdrop actually rendered — echoes the capture config back, or `3x2` on neutral by default. */
+  capture?: { preset: string; cols: number; cells: number; backdrop?: BackdropId };
   gridWidth?: number;
   gridHeight?: number;
   /** The 3x2 grid PNG, base64-encoded (transports with image support strip this and attach the bytes). */
@@ -1622,6 +1640,8 @@ export const kilnScreenshotAnimationDef: KilnToolDef = createKilnScreenshotAnima
 // =============================================================================
 
 export interface KilnViewInteriorResult {
+  /** Grid shape and backdrop actually rendered, echoed like every other image result. */
+  capture?: { preset: string; cols: number; cells: number; backdrop?: BackdropId };
   cameraShots?: import('../views').ResolvedCameraShotV1[];
   framesBase64?: string[];
   ok: boolean;
@@ -1690,6 +1710,7 @@ async function runViewInterior(
       gridWidth: grid.width,
       gridHeight: grid.height,
       ...(grid.cameraShots ? { cameraShots: grid.cameraShots } : {}),
+      ...(grid.capture ? { capture: grid.capture } : {}),
       roofsHidden: grid.roofsHidden,
       wallsHidden: grid.wallsHidden,
       ...(input.capture?.output === 'separate' && grid.perFramePngs
@@ -2456,6 +2477,10 @@ export function createKilnAssetDefs(context: KilnToolContext): KilnToolDef[] {
         author: z.string().max(200).optional(),
       })
       .optional(),
+    backdrop: z
+      .enum(BACKDROP_IDS as [BackdropId, ...BackdropId[]])
+      .optional()
+      .describe('Preview backdrop: the one the reviewed sheet used.'),
   });
   const assetsInput = z.object({
     action: z.enum(['collections', 'list', 'get', 'restore']).default('list'),
@@ -2483,24 +2508,33 @@ export function createKilnAssetDefs(context: KilnToolContext): KilnToolDef[] {
     {
       name: 'kiln_save',
       description:
-        'Save a completed source revision into the user-requested collection, or project when no destination was requested. Persists its exact GLB, source, preview, and build record. Discover destinations with kiln_assets action=collections. Use programRef returned by render/edit. To revise an existing asset, supply its assetId and parentRevision; previous revisions remain intact. Returns downloadable resources. Draft renders do not populate collections.',
+        'Save a completed source revision into the user-requested collection, or project when none was requested. Persists exact GLB, source, preview and build record. Use programRef returned by render/edit. To revise an asset, pass assetId and parentRevision; earlier revisions stay intact. Returns downloadable resources; draft renders never populate collections.',
       inputSchema: saveInput,
       run: async (raw) => {
-        const input = saveInput.parse(raw);
+        const { backdrop, ...input } = saveInput.parse(raw);
         const target = library();
         const code = await context.programStore!.get(input.programRef);
         const rendered = await evaluateGeneratedSource(code, context);
         let preview: Uint8Array | undefined;
         let previewInfo: import('../assets').AssetManifest['preview'];
         try {
-          const result = await runRenderViews({ code } as z.infer<typeof renderViewsInput>, {
-            ...context,
-            evaluatorPort: { render: async () => rendered },
-          });
+          // The preview is the default six-view sheet on the named backdrop, and
+          // the manifest records the one actually painted, so a preview reviewed
+          // on `dark` ships on `dark` and a reader never has to guess.
+          const result = await runRenderViews(
+            {
+              code,
+              ...(backdrop ? { capture: { backdrop } } : {}),
+            } as z.infer<typeof renderViewsInput>,
+            { ...context, evaluatorPort: { render: async () => rendered } },
+          );
           if (!result.ok || !result.pngBase64)
             throw new Error(result.error ?? 'Preview unavailable');
           preview = Uint8Array.from(Buffer.from(result.pngBase64, 'base64'));
-          previewInfo = { fidelity: result.viewFidelity };
+          previewInfo = {
+            fidelity: result.viewFidelity,
+            backdrop: result.capture?.backdrop ?? DEFAULT_BACKDROP_ID,
+          };
         } catch (error) {
           previewInfo = {
             error: error instanceof Error ? error.message : String(error),

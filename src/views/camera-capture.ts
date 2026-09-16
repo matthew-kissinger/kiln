@@ -5,7 +5,7 @@ import {
   withCameraVisibility,
   type ResolvedCameraShotV1,
 } from './camera';
-import type { CaptureConfig } from './capture';
+import { resolveCaptureBackdrop, type CaptureConfig } from './capture';
 import type { DerivativeCellRenderer, ViewGridResult } from './index';
 import { encodePng, decodePng } from './png';
 import { compositeCellGrid } from './grid';
@@ -18,7 +18,7 @@ export interface CameraCaptureGridResult extends ViewGridResult {
 }
 export function validateAdvancedCapture(config: CaptureConfig): void {
   for (const key of Object.keys(config))
-    if (!['version', 'shots', 'cols', 'size', 'output'].includes(key))
+    if (!['version', 'shots', 'cols', 'size', 'output', 'backdrop'].includes(key))
       throw new Error(`capture.${key} is unknown or incompatible with shots`);
   if (config.version !== 'kiln.capture.v1')
     throw new Error('advanced capture requires version kiln.capture.v1');
@@ -36,6 +36,7 @@ export function validateAdvancedCapture(config: CaptureConfig): void {
     throw new Error('capture.size must be 128..1024');
   if (config.output !== undefined && !['grid', 'separate'].includes(config.output))
     throw new Error('capture.output must be grid or separate');
+  resolveCaptureBackdrop(config.backdrop);
 }
 export async function renderCaptureGrid(
   root: unknown,
@@ -47,6 +48,7 @@ export async function renderCaptureGrid(
   const shots = config.shots!.map((s) => resolveAssetCamera(root, s));
   const size = config.size ?? 384;
   const cols = config.cols ?? Math.min(3, shots.length);
+  const backdrop = resolveCaptureBackdrop(config.backdrop);
   enforceCapturePixels(shots.length, size, cols, limits);
   const cells: Uint8Array[] = [];
   const perFramePngs: Buffer[] = [];
@@ -60,11 +62,18 @@ export async function renderCaptureGrid(
     const view = { name: shot.name, dir };
     const png = await withCameraVisibility(root, shot, async () => {
       if (render) {
-        const result = await render({ root, label: shot.name, view, size, camera: shot.camera });
+        const result = await render({
+          root,
+          label: shot.name,
+          view,
+          size,
+          camera: shot.camera,
+          backdrop,
+        });
         derivativeReceipts.push(result.receipt);
         return result.png;
       }
-      return encodePng(rasterizeCamera(root, shot.camera, size), size, size);
+      return encodePng(rasterizeCamera(root, shot.camera, size, true, backdrop), size, size);
     });
     const decoded = decodePng(png);
     if (decoded.width !== size || decoded.height !== size)
@@ -81,7 +90,12 @@ export async function renderCaptureGrid(
     width,
     height,
     views: shots.map((s) => s.name),
-    capture: { preset: `${cols}x${Math.ceil(shots.length / cols)}`, cols, cells: shots.length },
+    capture: {
+      preset: `${cols}x${Math.ceil(shots.length / cols)}`,
+      cols,
+      cells: shots.length,
+      backdrop,
+    },
     cameraShots: shots,
     perFramePngs,
     derivativeReceipts,

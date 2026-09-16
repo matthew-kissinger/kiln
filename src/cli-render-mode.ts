@@ -30,7 +30,7 @@ import {
   startLocalRenderService,
 } from './render-service-host';
 import type { KilnToolContext } from './tools/registry';
-import { GRID_BACKGROUND_HEX } from './views/background';
+import { DEFAULT_BACKDROP_ID } from './views/background';
 
 export type RenderMode = 'auto' | 'cpu' | 'gpu';
 
@@ -71,10 +71,11 @@ export function makeRemoteRenderPort(url: string, token?: string): PbrRenderPort
       body['height'] = req.height;
       if (req.lightingPresetId) body['lighting_preset_id'] = req.lightingPresetId;
     }
-    if (req.viewDirs) {
-      body['views'] = req.viewDirs;
-      body['background'] = GRID_BACKGROUND_HEX;
-    }
+    if (req.viewDirs) body['views'] = req.viewDirs;
+    // The service owns the colour table; the engine names the backdrop so both
+    // producers resolve one id to one colour. Always sent, so a sheet's backdrop
+    // never depends on which side's default happened to apply.
+    body['backdrop'] = req.backdrop ?? DEFAULT_BACKDROP_ID;
     if (req.size !== undefined) body['size'] = req.size;
     if (req.beautySize !== undefined) body['beauty_size'] = req.beautySize;
 

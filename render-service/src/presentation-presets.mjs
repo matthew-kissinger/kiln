@@ -4,7 +4,6 @@
 const PRESET_KEYS = Object.freeze([
   'id',
   'environment',
-  'background',
   'exposure',
   'ambient',
   'sun',
@@ -89,9 +88,6 @@ function validatePreset(preset) {
   if (preset.environment.type !== 'room')
     throw new TypeError(`${preset.id}.environment.type must be room`);
   finite(preset.environment.sigma, `${preset.id}.environment.sigma`, { minimum: 0 });
-  if (!/^#[0-9a-f]{6}$/.test(preset.background)) {
-    throw new TypeError(`${preset.id}.background must be lowercase #rrggbb`);
-  }
   finite(preset.exposure, `${preset.id}.exposure`, { minimum: 0 });
   exactKeys(preset.ambient, ['type', 'sky', 'ground', 'intensity'], `${preset.id}.ambient`);
   if (preset.ambient.type !== 'hemisphere')
@@ -130,7 +126,6 @@ const definitions = [
   validatePreset({
     id: 'neutral-studio-v1',
     environment: { type: 'room', sigma: 0.04 },
-    background: '#aab1bc',
     exposure: 1.38,
     ambient: { type: 'hemisphere', sky: 0xffffff, ground: 0x6f7888, intensity: 2 },
     // The v1 studio rig has no separate sun. Retaining this explicit disabled
@@ -170,7 +165,6 @@ definitions.push(
     ...definitions[0],
     id: 'gallery-studio-v1',
     exposure: 0.9,
-    background: '#747474',
   }),
 );
 

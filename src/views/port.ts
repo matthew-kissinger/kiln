@@ -66,6 +66,7 @@ export async function captureViewPngsViaPort(
   size: number,
   cameras?: readonly ResolvedAssetCameraV1[],
   limits?: CaptureLimits,
+  backdrop?: import('./background').BackdropId,
 ): Promise<PortViewPngsOutcome> {
   let timer: ReturnType<typeof setTimeout> | undefined;
   try {
@@ -83,6 +84,7 @@ export async function captureViewPngsViaPort(
     const result = await Promise.race([
       port({
         glb: requestGlb,
+        ...(backdrop ? { backdrop } : {}),
         ...(exactCameras
           ? { cameras: exactCameras, width: size, height: size }
           : { viewDirs: viewDirs.map((dir) => [...dir] as [number, number, number]), size }),
@@ -201,6 +203,7 @@ export async function captureViewsViaPort(
             input.size,
             [input.camera!],
             limits,
+            input.backdrop,
           );
           if (!result.ok) throw new Error(result.reason);
           if (!result.derivativeFidelityAttested || !result.inputGlbSha256)
@@ -252,7 +255,12 @@ export async function captureViewsViaPort(
     return { ok: false, reason: err instanceof Error ? err.message : String(err) };
   }
   const views = resolved.views;
-  const shape: CaptureShape = { preset: resolved.preset, cols: resolved.cols, cells: views.length };
+  const shape: CaptureShape = {
+    preset: resolved.preset,
+    cols: resolved.cols,
+    cells: views.length,
+    backdrop: resolved.backdrop,
+  };
 
   let cameras: ResolvedAssetCameraV1[] | undefined;
   if (resolved.zooms.some((z) => z !== undefined)) {
@@ -274,6 +282,7 @@ export async function captureViewsViaPort(
     384,
     cameras,
     limits,
+    resolved.backdrop,
   );
   if (!result.ok) return result;
   try {

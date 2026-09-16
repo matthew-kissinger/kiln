@@ -10,7 +10,7 @@ Work from the saved program. A GLB alone does not contain editable Kiln JavaScri
 
 For a collection asset, first call `kiln_assets` with `action: "restore"`, `collection`, `assetId`, and `revisionId`. This imports its exact source into the current program store and returns a fresh `programRef`. A downloaded ZIP can be imported with `node kiln.mjs import bundle.zip`. A binary-only GLB has no source to restore.
 
-After reviewing the change, use `kiln_save` to create an immutable child revision with the new `programRef`, the original `assetId`, and `parentRevision` set to the exact revision you started from. Preserve the collection, name, relevant tags, and known model/harness attribution; describe the change. Never replace or delete the base: its prior revision remains intact, and concurrent children remain visible as branches. Return the new revision's download resources; copying to a different collection does not make a live link.
+After reviewing the change, use `kiln_save` to create an immutable child revision with the new `programRef`, the original `assetId`, and `parentRevision` set to the exact revision you started from. Preserve the collection, name, relevant tags, and known model/harness attribution; describe the change. Pass the `backdrop` the accepted sheet used when it was not the default, so the preview matches what you reviewed. Never replace or delete the base: its prior revision remains intact, and concurrent children remain visible as branches. Return the new revision's download resources; copying to a different collection does not make a live link.
 
 ## Read, change, compare
 
@@ -22,7 +22,7 @@ After saving the reviewed child revision, call `kiln_present` when available wit
 4. Apply related `{ oldString, newString }` replacements through `kiln_edit`. Keep the returned new reference. Shared constants and shared geometry can affect more than the selected part.
 5. Review the diff and returned images against the same question. Check `render.ok` independently of edit success. Repair a failed draft by its new reference rather than recreating the whole source.
 
-An edit renders by default and accepts the same `capture` object as `kiln_render`. Use `render: false` when no image is needed. A missing or ambiguous anchor changes nothing; expand the anchor or use `replaceAll: true` only when every match should change. Long diffs may set `diffTruncated`; read more source instead of requesting a full-program echo by habit.
+An edit renders by default and accepts the same `capture` object as `kiln_render`, including `backdrop` once a sheet on the default neutral grey has shown a part merging with it: `light` when that part is darker than the grey, `dark` when it is lighter. Use `render: false` when no image is needed. A missing or ambiguous anchor changes nothing; expand the anchor or use `replaceAll: true` only when every match should change. Long diffs may set `diffTruncated`; read more source instead of requesting a full-program echo by habit.
 
 ## Preserve intended structure
 

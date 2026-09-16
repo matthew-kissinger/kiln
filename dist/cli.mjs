@@ -21619,9 +21619,30 @@ var init_capture_limits = __esm(() => {
 });
 
 // src/views/background.ts
-var GRID_BACKGROUND_RGB, GRID_BACKGROUND_HEX = "#1a1a1a";
+function isBackdropId(value) {
+  return typeof value === "string" && BACKDROP_IDS.includes(value);
+}
+function resolveBackdrop(id) {
+  if (id === undefined)
+    return BACKDROPS[DEFAULT_BACKDROP_ID];
+  if (!isBackdropId(id))
+    throw new Error(`capture.backdrop must be one of ${BACKDROP_IDS.join(", ")} (got ${JSON.stringify(id)}).`);
+  return BACKDROPS[id];
+}
+var BACKDROP_IDS, DEFAULT_BACKDROP_ID = "neutral", define = (id, rgb) => Object.freeze({
+  id,
+  rgb: Object.freeze([...rgb]),
+  hex: `#${rgb.map((c) => c.toString(16).padStart(2, "0")).join("")}`
+}), BACKDROPS, GRID_BACKGROUND_RGB, GRID_BACKGROUND_HEX;
 var init_background = __esm(() => {
-  GRID_BACKGROUND_RGB = [26, 26, 26];
+  BACKDROP_IDS = ["neutral", "dark", "light"];
+  BACKDROPS = Object.freeze({
+    neutral: define("neutral", [170, 177, 188]),
+    dark: define("dark", [26, 26, 26]),
+    light: define("light", [223, 227, 232])
+  });
+  GRID_BACKGROUND_RGB = BACKDROPS[DEFAULT_BACKDROP_ID].rgb;
+  GRID_BACKGROUND_HEX = BACKDROPS[DEFAULT_BACKDROP_ID].hex;
 });
 
 // src/views/raster.ts
@@ -21754,6 +21775,7 @@ function linearToSrgb(c) {
 function rasterizeView(root, dir, opts = {}) {
   const size = opts.size ?? 256;
   const cull = opts.backfaceCull ?? true;
+  const BG = resolveBackdrop(opts.backdrop).rgb;
   const { tris, bbox } = collectTriangles(root);
   const out = new Uint8Array(size * size * 3);
   for (let i = 0;i < size * size; i++) {
@@ -21878,7 +21900,7 @@ function hideNodeInScene(root, match) {
   });
   return hidden;
 }
-var SIX_VIEWS, SIX_VIEWS_REAR_QUARTER, MIN_ELEVATION_DEG = -89, MAX_ELEVATION_DEG = 89, BG, AMBIENT = 0.25, KEY_INTENSITY = 1.1, KEY_DIR;
+var SIX_VIEWS, SIX_VIEWS_REAR_QUARTER, MIN_ELEVATION_DEG = -89, MAX_ELEVATION_DEG = 89, AMBIENT = 0.25, KEY_INTENSITY = 1.1, KEY_DIR;
 var init_raster = __esm(() => {
   init_background();
   SIX_VIEWS = [
@@ -21893,7 +21915,6 @@ var init_raster = __esm(() => {
     ...SIX_VIEWS.slice(0, 5),
     { name: "3/4 Rear", dir: [-0.7, 0.5, -0.7] }
   ];
-  BG = GRID_BACKGROUND_RGB;
   KEY_DIR = normalize3([1.5, 2, 1]);
 });
 
@@ -22147,14 +22168,15 @@ async function withCameraVisibility(root, shot, run) {
       node.visible = visible;
   }
 }
-function rasterizeCamera(root, input, size = 384, backfaceCull = true) {
+function rasterizeCamera(root, input, size = 384, backfaceCull = true, backdrop) {
   const camera = validateResolvedAssetCamera(input);
+  const bg = resolveBackdrop(backdrop).rgb;
   if (!Number.isInteger(size) || size < 1 || size > 2048)
     throw new Error("camera size must be an integer in 1..2048");
   const z = vec(camera.position).sub(vec(camera.target)).normalize(), x = vec(camera.up).cross(z).normalize(), y = z.clone().cross(x), position = vec(camera.position);
   const out = new Uint8Array(size * size * 3);
   for (let i = 0;i < size * size; i++)
-    out.set(GRID_BACKGROUND_RGB, i * 3);
+    out.set(bg, i * 3);
   const depth = new Float64Array(size * size).fill(Infinity);
   const clip = (points, plane, near) => {
     const result = [];
@@ -22245,6 +22267,11 @@ function validatePbrRenderRequest(input) {
     throw new TypeError("PbrRenderRequest.glb must be a non-empty Uint8Array");
   }
   const result = { glb: source.glb };
+  if (source.backdrop !== undefined) {
+    if (!isBackdropId(source.backdrop))
+      throw new TypeError(`PbrRenderRequest.backdrop must be one of ${BACKDROP_IDS.join(", ")}`);
+    result.backdrop = source.backdrop;
+  }
   if (source.viewDirs !== undefined) {
     if (!Array.isArray(source.viewDirs) || source.viewDirs.length < 1 || source.viewDirs.length > 12) {
       throw new TypeError("PbrRenderRequest.viewDirs must contain 1..12 directions");
@@ -22363,7 +22390,9 @@ var PBR_REQUEST_KEYS;
 var init_render_port = __esm(() => {
   init_camera();
   init_background();
+  init_background();
   PBR_REQUEST_KEYS = new Set([
+    "backdrop",
     "glb",
     "viewDirs",
     "size",
@@ -22489,7 +22518,8 @@ function createCachedRenderPort(port, options) {
       size: request.size,
       width: request.width,
       height: request.height,
-      lighting: request.lightingPresetId
+      lighting: request.lightingPresetId,
+      backdrop: request.backdrop
     })));
     const cells = [];
     const missing = [];
@@ -22588,92 +22618,29 @@ var init_capture_cache = __esm(() => {
   init_capture_limits();
 });
 
-// src/views/camera-capture.ts
-function validateAdvancedCapture(config) {
-  for (const key of Object.keys(config))
-    if (!["version", "shots", "cols", "size", "output"].includes(key))
-      throw new Error(`capture.${key} is unknown or incompatible with shots`);
-  if (config.version !== "kiln.capture.v1")
-    throw new Error("advanced capture requires version kiln.capture.v1");
-  if (!Array.isArray(config.shots) || config.shots.length < 1 || config.shots.length > 9)
-    throw new Error("capture.shots must contain 1..9 shots");
-  if (config.cols !== undefined && (!Number.isInteger(config.cols) || config.cols < 1 || config.cols > 3))
-    throw new Error("capture.cols must be 1..3");
-  if (config.size !== undefined && (!Number.isInteger(config.size) || config.size < 128 || config.size > 1024))
-    throw new Error("capture.size must be 128..1024");
-  if (config.output !== undefined && !["grid", "separate"].includes(config.output))
-    throw new Error("capture.output must be grid or separate");
-}
-async function renderCaptureGrid(root, config, render, limits) {
-  validateAdvancedCapture(config);
-  const shots = config.shots.map((s) => resolveAssetCamera(root, s));
-  const size = config.size ?? 384;
-  const cols = config.cols ?? Math.min(3, shots.length);
-  enforceCapturePixels(shots.length, size, cols, limits);
-  const cells = [];
-  const perFramePngs = [];
-  const derivativeReceipts = [];
-  for (const shot of shots) {
-    const dir = shot.camera.position.map((n, i) => n - shot.camera.target[i]);
-    const view = { name: shot.name, dir };
-    const png = await withCameraVisibility(root, shot, async () => {
-      if (render) {
-        const result = await render({ root, label: shot.name, view, size, camera: shot.camera });
-        derivativeReceipts.push(result.receipt);
-        return result.png;
-      }
-      return encodePng(rasterizeCamera(root, shot.camera, size), size, size);
-    });
-    const decoded = decodePng(png);
-    if (decoded.width !== size || decoded.height !== size)
-      throw new Error("capture cell dimensions do not match request");
-    annotateViewCell(decoded.rgb, size, view);
-    cells.push(decoded.rgb);
-    perFramePngs.push(encodePng(decoded.rgb, size, size));
-  }
-  const { rgb, width, height } = compositeCellGrid(cells, size, cols);
-  const png = encodePng(rgb, width, height);
-  enforceCaptureBytes(config.output === "separate" ? perFramePngs : [png], limits);
-  return {
-    png,
-    width,
-    height,
-    views: shots.map((s) => s.name),
-    capture: { preset: `${cols}x${Math.ceil(shots.length / cols)}`, cols, cells: shots.length },
-    cameraShots: shots,
-    perFramePngs,
-    derivativeReceipts,
-    ...derivativeReceipts.length ? {
-      captureCache: {
-        hit: derivativeReceipts.every((r) => r.captureCache?.hit),
-        reused: derivativeReceipts.filter((r) => r.captureCache?.hit).length,
-        total: derivativeReceipts.length
-      }
-    } : {}
-  };
-}
-var init_camera_capture = __esm(() => {
-  init_capture_limits();
-  init_camera();
-  init_png();
-  init_grid();
-  init_annotate();
-});
-
 // src/views/capture.ts
 function captureCellLabel(azimuthDeg, elevationDeg) {
   const az = Math.round((azimuthDeg % 360 + 360) % 360);
   const el = Math.round(elevationDeg);
   return `A${az} ${el < 0 ? "D" : "U"}${Math.abs(el)}`;
 }
+function resolveCaptureBackdrop(backdrop) {
+  if (backdrop === undefined)
+    return DEFAULT_BACKDROP_ID;
+  if (!isBackdropId(backdrop))
+    throw new CaptureConfigError(`capture.backdrop must be one of ${BACKDROP_IDS.join(", ")} (got ${JSON.stringify(backdrop)}).`);
+  return backdrop;
+}
 function resolveCapture(config) {
+  const backdrop = resolveCaptureBackdrop(config?.backdrop);
   if (!config || config.preset === undefined && config.cells === undefined) {
     return {
       preset: DEFAULT_CAPTURE_PRESET,
       views: PRESET_VIEWS[DEFAULT_CAPTURE_PRESET],
       cols: PRESET_COLS[DEFAULT_CAPTURE_PRESET],
       zooms: new Array(PRESET_CAPACITY[DEFAULT_CAPTURE_PRESET]).fill(undefined),
-      isDefault: true
+      isDefault: true,
+      backdrop
     };
   }
   const cells = config.cells;
@@ -22710,7 +22677,8 @@ function resolveCapture(config) {
       })),
       cols: PRESET_COLS[preset],
       zooms: cells.map((c) => c.zoom),
-      isDefault: false
+      isDefault: false,
+      backdrop
     };
   }
   const chosen = preset;
@@ -22719,7 +22687,8 @@ function resolveCapture(config) {
     views: PRESET_VIEWS[chosen],
     cols: PRESET_COLS[chosen],
     zooms: new Array(PRESET_VIEWS[chosen].length).fill(undefined),
-    isDefault: chosen === DEFAULT_CAPTURE_PRESET
+    isDefault: chosen === DEFAULT_CAPTURE_PRESET,
+    backdrop
   };
 }
 function resolveGridCapture(config, envVariant) {
@@ -22732,6 +22701,7 @@ function resolveGridCapture(config, envVariant) {
 var CAPTURE_PRESETS, DEFAULT_CAPTURE_PRESET = "3x2", MAX_CAPTURE_CELLS = 9, PRESET_COLS, PRESET_CAPACITY, BOTTOM, THREE_QUARTER_REAR, THREE_QUARTER_LOW, PRESET_VIEWS, CaptureConfigError;
 var init_capture = __esm(() => {
   init_raster();
+  init_background();
   CAPTURE_PRESETS = [
     "1x1",
     "1x2",
@@ -22773,6 +22743,93 @@ var init_capture = __esm(() => {
   };
   CaptureConfigError = class CaptureConfigError extends Error {
   };
+});
+
+// src/views/camera-capture.ts
+function validateAdvancedCapture(config) {
+  for (const key of Object.keys(config))
+    if (!["version", "shots", "cols", "size", "output", "backdrop"].includes(key))
+      throw new Error(`capture.${key} is unknown or incompatible with shots`);
+  if (config.version !== "kiln.capture.v1")
+    throw new Error("advanced capture requires version kiln.capture.v1");
+  if (!Array.isArray(config.shots) || config.shots.length < 1 || config.shots.length > 9)
+    throw new Error("capture.shots must contain 1..9 shots");
+  if (config.cols !== undefined && (!Number.isInteger(config.cols) || config.cols < 1 || config.cols > 3))
+    throw new Error("capture.cols must be 1..3");
+  if (config.size !== undefined && (!Number.isInteger(config.size) || config.size < 128 || config.size > 1024))
+    throw new Error("capture.size must be 128..1024");
+  if (config.output !== undefined && !["grid", "separate"].includes(config.output))
+    throw new Error("capture.output must be grid or separate");
+  resolveCaptureBackdrop(config.backdrop);
+}
+async function renderCaptureGrid(root, config, render, limits) {
+  validateAdvancedCapture(config);
+  const shots = config.shots.map((s) => resolveAssetCamera(root, s));
+  const size = config.size ?? 384;
+  const cols = config.cols ?? Math.min(3, shots.length);
+  const backdrop = resolveCaptureBackdrop(config.backdrop);
+  enforceCapturePixels(shots.length, size, cols, limits);
+  const cells = [];
+  const perFramePngs = [];
+  const derivativeReceipts = [];
+  for (const shot of shots) {
+    const dir = shot.camera.position.map((n, i) => n - shot.camera.target[i]);
+    const view = { name: shot.name, dir };
+    const png = await withCameraVisibility(root, shot, async () => {
+      if (render) {
+        const result = await render({
+          root,
+          label: shot.name,
+          view,
+          size,
+          camera: shot.camera,
+          backdrop
+        });
+        derivativeReceipts.push(result.receipt);
+        return result.png;
+      }
+      return encodePng(rasterizeCamera(root, shot.camera, size, true, backdrop), size, size);
+    });
+    const decoded = decodePng(png);
+    if (decoded.width !== size || decoded.height !== size)
+      throw new Error("capture cell dimensions do not match request");
+    annotateViewCell(decoded.rgb, size, view);
+    cells.push(decoded.rgb);
+    perFramePngs.push(encodePng(decoded.rgb, size, size));
+  }
+  const { rgb, width, height } = compositeCellGrid(cells, size, cols);
+  const png = encodePng(rgb, width, height);
+  enforceCaptureBytes(config.output === "separate" ? perFramePngs : [png], limits);
+  return {
+    png,
+    width,
+    height,
+    views: shots.map((s) => s.name),
+    capture: {
+      preset: `${cols}x${Math.ceil(shots.length / cols)}`,
+      cols,
+      cells: shots.length,
+      backdrop
+    },
+    cameraShots: shots,
+    perFramePngs,
+    derivativeReceipts,
+    ...derivativeReceipts.length ? {
+      captureCache: {
+        hit: derivativeReceipts.every((r) => r.captureCache?.hit),
+        reused: derivativeReceipts.filter((r) => r.captureCache?.hit).length,
+        total: derivativeReceipts.length
+      }
+    } : {}
+  };
+}
+var init_camera_capture = __esm(() => {
+  init_capture_limits();
+  init_camera();
+  init_capture();
+  init_png();
+  init_grid();
+  init_annotate();
 });
 
 // src/views/architecture.ts
@@ -23923,6 +23980,7 @@ async function renderViewGrid(root, opts = {}) {
     snapSceneToPalette(root, opts.snapPalette);
   const wantsZoom = resolved.zooms.some((z) => z !== undefined);
   const sceneBounds = wantsZoom ? measureBounds(root) : undefined;
+  const backdrop = opts.backdrop ?? resolved.backdrop;
   const cache = opts.snapPalette?.length ? undefined : opts.captureCache;
   let reused = 0;
   const cells = [];
@@ -23931,6 +23989,7 @@ async function renderViewGrid(root, opts = {}) {
     const rasterOptions = {
       size,
       backfaceCull: opts.backfaceCull,
+      backdrop,
       ...opts.frameBounds ? { frameBounds: opts.frameBounds } : {},
       ...sceneBounds && zoom !== undefined ? { frameBounds: expandFrameBounds(sceneBounds, zoom) } : {}
     };
@@ -23943,7 +24002,8 @@ async function renderViewGrid(root, opts = {}) {
         rendererId: `${CPU_RASTER_RENDERER_ID}/legacy-fit`,
         camera: camera2,
         size,
-        backfaceCull: opts.backfaceCull ?? true
+        backfaceCull: opts.backfaceCull ?? true,
+        backdrop
       }, async () => ({
         png: encodePng(rasterizeView(root, views[vi].dir, rasterOptions), size, size),
         width: size,
@@ -23969,7 +24029,7 @@ async function renderViewGrid(root, opts = {}) {
     width,
     height,
     views: views.map((v) => v.name),
-    capture: { preset: resolved.preset, cols, cells: views.length },
+    capture: { preset: resolved.preset, cols, cells: views.length, backdrop },
     ...cache && opts.artifactGlbSha256 ? { captureCache: { hit: reused === views.length, reused, total: views.length } } : {}
   };
 }
@@ -23982,8 +24042,9 @@ async function renderGlbViewCell(bytes, view, options = {}) {
   const exactBytes = Uint8Array.from(bytes);
   const loaded = await loadGlbGeometryFlatScene(exactBytes);
   const size = options.size ?? 256;
-  const rgb = options.camera ? rasterizeCamera(loaded.root, options.camera, size, options.backfaceCull) : rasterizeView(loaded.root, view.dir, {
+  const rgb = options.camera ? rasterizeCamera(loaded.root, options.camera, size, options.backfaceCull, options.backdrop) : rasterizeView(loaded.root, view.dir, {
     size,
+    ...options.backdrop ? { backdrop: options.backdrop } : {},
     ...options.backfaceCull !== undefined ? { backfaceCull: options.backfaceCull } : {},
     ...options.frameBounds ? { frameBounds: options.frameBounds } : {}
   });
@@ -24200,6 +24261,12 @@ async function renderInteriorGrid(root, opts = {}) {
     width,
     height,
     views: INTERIOR_VIEWS.map((v) => v.name),
+    capture: {
+      preset: "interior",
+      cols: INTERIOR_VIEWS.length,
+      cells: INTERIOR_VIEWS.length,
+      backdrop: DEFAULT_BACKDROP_ID
+    },
     roofsHidden,
     wallsHidden,
     ...derivativeReceipts.length ? { derivativeReceipts } : {}
@@ -24208,6 +24275,7 @@ async function renderInteriorGrid(root, opts = {}) {
 var ANIM_CAMERAS, ANIM_CAMERA_ALIASES, ROOM_WALL_NORMALS, INTERIOR_VIEWS;
 var init_views = __esm(() => {
   init_capture_limits();
+  init_background();
   init_capture_limits();
   init_capture_cache();
   init_camera();
@@ -26645,6 +26713,7 @@ function decodeAssetBundle(bytes) {
 }
 var ASSET_LIMIT, assetIdSchema, hash, assetManifestSchema, allowedFiles;
 var init_assets = __esm(() => {
+  init_background();
   ASSET_LIMIT = 64 * 1024 * 1024;
   assetIdSchema = z.string().regex(/^[a-z][a-z0-9_-]{0,79}$/);
   hash = z.string().regex(/^sha256:[a-f0-9]{64}$/);
@@ -26674,7 +26743,11 @@ var init_assets = __esm(() => {
       dependencies: z.array(z.unknown()).optional(),
       rebuild: z.enum(["engine-required", "external-dependencies-required"])
     }).optional(),
-    preview: z.object({ fidelity: z.unknown().optional(), error: z.string().optional() }).optional()
+    preview: z.object({
+      fidelity: z.unknown().optional(),
+      error: z.string().optional(),
+      backdrop: z.enum(BACKDROP_IDS).optional()
+    }).optional()
   });
   allowedFiles = new Set(["asset.glb", "source.kiln.js", "preview.png"]);
 });
@@ -27181,7 +27254,7 @@ async function sha256Bytes(bytes) {
   const digest = new Uint8Array(await globalThis.crypto.subtle.digest("SHA-256", input));
   return `sha256:${[...digest].map((byte) => byte.toString(16).padStart(2, "0")).join("")}`;
 }
-async function captureViewPngsViaPort(port, glb, timeoutMs, viewDirs, size, cameras, limits) {
+async function captureViewPngsViaPort(port, glb, timeoutMs, viewDirs, size, cameras, limits, backdrop) {
   let timer;
   try {
     const exactCameras = cameras?.map(validateResolvedAssetCamera);
@@ -27195,6 +27268,7 @@ async function captureViewPngsViaPort(port, glb, timeoutMs, viewDirs, size, came
     const result = await Promise.race([
       port({
         glb: requestGlb,
+        ...backdrop ? { backdrop } : {},
         ...exactCameras ? { cameras: exactCameras, width: size, height: size } : { viewDirs: viewDirs.map((dir) => [...dir]), size }
       }),
       deadline
@@ -27267,7 +27341,7 @@ async function captureViewsViaPort(port, glb, timeoutMs = DEFAULT_VIEW_RENDER_TI
         const derivative = await renderSceneToGLB(input.root, {
           derivative: true
         });
-        const result = await captureViewPngsViaPort(port, derivative.bytes, timeoutMs, [input.view.dir], input.size, [input.camera], limits);
+        const result = await captureViewPngsViaPort(port, derivative.bytes, timeoutMs, [input.view.dir], input.size, [input.camera], limits, input.backdrop);
         if (!result.ok)
           throw new Error(result.reason);
         if (!result.derivativeFidelityAttested || !result.inputGlbSha256)
@@ -27317,7 +27391,12 @@ async function captureViewsViaPort(port, glb, timeoutMs = DEFAULT_VIEW_RENDER_TI
     return { ok: false, reason: err instanceof Error ? err.message : String(err) };
   }
   const views = resolved.views;
-  const shape = { preset: resolved.preset, cols: resolved.cols, cells: views.length };
+  const shape = {
+    preset: resolved.preset,
+    cols: resolved.cols,
+    cells: views.length,
+    backdrop: resolved.backdrop
+  };
   let cameras;
   if (resolved.zooms.some((z) => z !== undefined)) {
     try {
@@ -27329,7 +27408,7 @@ async function captureViewsViaPort(port, glb, timeoutMs = DEFAULT_VIEW_RENDER_TI
       return { ok: false, reason: error instanceof Error ? error.message : String(error) };
     }
   }
-  const result = await captureViewPngsViaPort(port, glb, timeoutMs, views.map((view) => view.dir), 384, cameras, limits);
+  const result = await captureViewPngsViaPort(port, glb, timeoutMs, views.map((view) => view.dir), 384, cameras, limits, resolved.backdrop);
   if (!result.ok)
     return result;
   try {
@@ -27887,7 +27966,7 @@ async function renderDerivativeCell(input, context) {
   const derivativeReasonCodes = [];
   if (context.viewRenderPort) {
     await Promise.resolve().then(() => init_port());
-    const ported = await captureViewPngsViaPort(context.viewRenderPort, derivativeGlb, resolveInLoopViewRenderTimeoutMs(context, "derivative-cell"), [input.view.dir], input.size, [camera], context.captureLimits);
+    const ported = await captureViewPngsViaPort(context.viewRenderPort, derivativeGlb, resolveInLoopViewRenderTimeoutMs(context, "derivative-cell"), [input.view.dir], input.size, [camera], context.captureLimits, input.backdrop);
     if (ported.ok && ported.derivativeFidelityAttested) {
       if (ported.inputGlbSha256 !== inputGlbSha256) {
         throw new Error(`validated derivative receipt hash mismatch (${ported.inputGlbSha256} != ${inputGlbSha256})`);
@@ -27935,6 +28014,7 @@ async function renderDerivativeCell(input, context) {
   const produceFlat = async () => renderGlbViewCell(derivativeGlb, input.view, {
     size: input.size,
     camera,
+    ...input.backdrop ? { backdrop: input.backdrop } : {},
     ...input.backfaceCull !== undefined ? { backfaceCull: input.backfaceCull } : {},
     ...input.frameBounds ? { frameBounds: input.frameBounds } : {}
   });
@@ -27943,7 +28023,8 @@ async function renderDerivativeCell(input, context) {
     rendererId: CPU_RASTER_RENDERER_ID,
     camera,
     size: input.size,
-    backfaceCull: input.backfaceCull ?? true
+    backfaceCull: input.backfaceCull ?? true,
+    ...input.backdrop ? { backdrop: input.backdrop } : {}
   }, produceFlat) : await produceFlat();
   if (flat.inputGlbSha256 !== inputGlbSha256) {
     throw new Error(`derivative GLB fallback hash mismatch (${flat.inputGlbSha256} != ${inputGlbSha256})`);
@@ -28417,6 +28498,7 @@ async function runViewInterior(input, context) {
       gridWidth: grid.width,
       gridHeight: grid.height,
       ...grid.cameraShots ? { cameraShots: grid.cameraShots } : {},
+      ...grid.capture ? { capture: grid.capture } : {},
       roofsHidden: grid.roofsHidden,
       wallsHidden: grid.wallsHidden,
       ...input.capture?.output === "separate" && grid.perFramePngs ? { framesBase64: grid.perFramePngs.map((p) => p.toString("base64")) } : { pngBase64: grid.png.toString("base64") },
@@ -28770,7 +28852,8 @@ function createKilnAssetDefs(context) {
       model: z4.string().max(200).optional(),
       harness: z4.string().max(200).optional(),
       author: z4.string().max(200).optional()
-    }).optional()
+    }).optional(),
+    backdrop: z4.enum(BACKDROP_IDS).optional().describe("Preview backdrop: the one the reviewed sheet used.")
   });
   const assetsInput = z4.object({
     action: z4.enum(["collections", "list", "get", "restore"]).default("list"),
@@ -28792,24 +28875,27 @@ function createKilnAssetDefs(context) {
   return [
     {
       name: "kiln_save",
-      description: "Save a completed source revision into the user-requested collection, or project when no destination was requested. Persists its exact GLB, source, preview, and build record. Discover destinations with kiln_assets action=collections. Use programRef returned by render/edit. To revise an existing asset, supply its assetId and parentRevision; previous revisions remain intact. Returns downloadable resources. Draft renders do not populate collections.",
+      description: "Save a completed source revision into the user-requested collection, or project when none was requested. Persists exact GLB, source, preview and build record. Use programRef returned by render/edit. To revise an asset, pass assetId and parentRevision; earlier revisions stay intact. Returns downloadable resources; draft renders never populate collections.",
       inputSchema: saveInput,
       run: async (raw) => {
-        const input = saveInput.parse(raw);
+        const { backdrop, ...input } = saveInput.parse(raw);
         const target = library();
         const code = await context.programStore.get(input.programRef);
         const rendered = await evaluateGeneratedSource(code, context);
         let preview;
         let previewInfo;
         try {
-          const result = await runRenderViews({ code }, {
-            ...context,
-            evaluatorPort: { render: async () => rendered }
-          });
+          const result = await runRenderViews({
+            code,
+            ...backdrop ? { capture: { backdrop } } : {}
+          }, { ...context, evaluatorPort: { render: async () => rendered } });
           if (!result.ok || !result.pngBase64)
             throw new Error(result.error ?? "Preview unavailable");
           preview = Uint8Array.from(Buffer.from(result.pngBase64, "base64"));
-          previewInfo = { fidelity: result.viewFidelity };
+          previewInfo = {
+            fidelity: result.viewFidelity,
+            backdrop: result.capture?.backdrop ?? DEFAULT_BACKDROP_ID
+          };
         } catch (error) {
           previewInfo = {
             error: error instanceof Error ? error.message : String(error)
@@ -28966,7 +29052,7 @@ function createKilnAssetDefs(context) {
     }
   ];
 }
-var KILN_ASSET_WIDGET_URI = "ui://kiln/asset-v5.html", DEFAULT_INLOOP_VIEW_RENDER_TIMEOUT_MS = 6000, viewEvidenceHistoryByContext, VIEW_EVIDENCE_GUIDANCE = " viewEvidence.current describes ONLY this request. lastFaithful is older hash-only evidence for reference, not reused pixels and not current verification.", listPrimitivesInput, validateInput, renderInput, screenshotInput, legacyCaptureInput, cameraVec3Input, orbitCameraError = (issue) => {
+var KILN_ASSET_WIDGET_URI = "ui://kiln/asset-v5.html", DEFAULT_INLOOP_VIEW_RENDER_TIMEOUT_MS = 6000, viewEvidenceHistoryByContext, VIEW_EVIDENCE_GUIDANCE = " viewEvidence.current describes ONLY this request. lastFaithful is older hash-only evidence for reference, not reused pixels and not current verification.", listPrimitivesInput, validateInput, renderInput, screenshotInput, backdropInput, legacyCaptureInput, cameraVec3Input, orbitCameraError = (issue) => {
   if (issue.code === "unrecognized_keys" && issue.keys?.some((key) => key === "target" || key === "distance")) {
     return "Orbit cameras derive target and distance from the selected subject bounds; choose subject and padding, or use an explicit camera with position and target.";
   }
@@ -28993,6 +29079,7 @@ var init_registry2 = __esm(() => {
   init_edit_buffer();
   init_view_render_timeout();
   init_evidence_history();
+  init_background();
   viewEvidenceHistoryByContext = new WeakMap;
   listPrimitivesInput = z4.object({
     category: z4.string().optional().describe("Optional category filter: geometry, material, structure, animation, utility, instancing, csg, arrays, mesh-ops, curves, uv, textures.")
@@ -29006,6 +29093,7 @@ var init_registry2 = __esm(() => {
   screenshotInput = z4.object({
     code: z4.string().describe("Kiln source code to execute and render to a six-view image grid.")
   });
+  backdropInput = z4.enum(BACKDROP_IDS).optional().describe("Neutral grey unless a sheet shows merging: light if the part is darker, dark if lighter.");
   legacyCaptureInput = z4.object({
     preset: z4.enum(["1x1", "1x2", "2x1", "3x1", "2x2", "3x2", "3x3"]).optional().describe("Grid shape as COLSxROWS. Default 3x2. Choose fewer views for simple shapes, up to 3x3 for more angles."),
     cells: z4.array(z4.object({
@@ -29013,7 +29101,8 @@ var init_registry2 = __esm(() => {
       elevationDeg: z4.number().describe("0 = eye level, positive looks down, negative from below. Clamped to -89..89."),
       zoom: z4.number().optional().describe("Padding multiplier around the asset bounds for this cell only. Omit for the default framing; below 1 crops in, above 1 pulls back."),
       name: z4.string().optional().describe("Cell label. Auto-derived from the angles if omitted.")
-    })).optional().describe("One camera per cell, in row-major order. Omit to use the preset default cameras. Must not exceed the preset capacity (max 9 overall).")
+    })).optional().describe("One camera per cell, in row-major order. Omit to use the preset default cameras. Must not exceed the preset capacity (max 9 overall)."),
+    backdrop: backdropInput
   }).optional().describe("Optional. Choose the contact-sheet shape and cameras. Omit it entirely for the standard six-view 3x2 grid, which is the right default for most assets.");
   cameraVec3Input = z4.array(z4.number()).length(3);
   cameraShotInput = z4.object({
@@ -29056,7 +29145,8 @@ var init_registry2 = __esm(() => {
     shots: z4.array(cameraShotInput).min(1).max(9),
     cols: z4.number().int().min(1).max(3).optional(),
     size: z4.number().int().min(128).max(1024).optional(),
-    output: z4.enum(["grid", "separate"]).optional()
+    output: z4.enum(["grid", "separate"]).optional(),
+    backdrop: backdropInput
   }, { error: advancedCaptureError });
   captureInput = z4.union([
     advancedCaptureInput,
@@ -29256,10 +29346,9 @@ function makeRemoteRenderPort(url, token) {
       if (req.lightingPresetId)
         body["lighting_preset_id"] = req.lightingPresetId;
     }
-    if (req.viewDirs) {
+    if (req.viewDirs)
       body["views"] = req.viewDirs;
-      body["background"] = GRID_BACKGROUND_HEX;
-    }
+    body["backdrop"] = req.backdrop ?? DEFAULT_BACKDROP_ID;
     if (req.size !== undefined)
       body["size"] = req.size;
     if (req.beautySize !== undefined)
@@ -29777,7 +29866,8 @@ async function assetMain(argv) {
     "format",
     "profile",
     "port",
-    "render"
+    "render",
+    "backdrop"
   ]);
   for (let i = 1;i < argv.length; i++) {
     const arg = argv[i];
@@ -29850,7 +29940,8 @@ async function assetMain(argv) {
       parentRevision: flags.parent,
       description: flags.description,
       brief: flags.brief,
-      tags
+      tags,
+      backdrop: flags.backdrop
     }), null, 2));
   } else if (command === "asset" || command === "export") {
     const [assetId, revisionId] = positional;
@@ -29940,6 +30031,7 @@ var ASSET_USAGE = `
 ASSETS & VIEWER
   kiln save <source.js|programRef> --name <name> [--collection project]
        [--asset <id> --parent <revision>] [--description <text>] [--tag <tag>]
+       [--backdrop neutral|dark|light]   preview backdrop; the one the reviewed sheet used
   kiln collections                        list configured collection names
   kiln collections add <name> <directory>  remember another collection root
   kiln assets [--collection project]      list saved revisions (JSON)
@@ -29991,7 +30083,9 @@ function isDirectEntry(moduleUrl) {
 // src/cli.ts
 init_local_runtime();
 init_registry2();
+init_background();
 init_cli_render_mode();
+init_render_service_host();
 init_program_store_node();
 init_program_store();
 init_asset_cli();
@@ -30007,6 +30101,7 @@ OPTIONS
   --out <path>            GLB output path            (default: out.glb)
   --views <path>          contact sheet PNG path     (default: none)
   --capture <file.json>  camera recipe for --views  (grid output; max 1 MiB)
+  --backdrop <id>         neutral | dark | light     (default: neutral)
   --render <mode>         auto | cpu | gpu           (default: auto)
   --render-port <url>     remote GPU render service
   --model <id>            model id for generate      (default: env KILN_MODEL)
@@ -30019,6 +30114,7 @@ EXAMPLES
   kiln generate "a weathered wooden crate" --out crate.glb --views sheet.png
   kiln render examples/crate.kiln.js --render cpu --views sheet.png
   kiln render p_RETURNED_HANDLE --capture cameras.json --views chosen.png
+  kiln render examples/crate.kiln.js --views sheet.png --backdrop light
 `;
 function parseArgs(argv) {
   const args = {
@@ -30027,6 +30123,7 @@ function parseArgs(argv) {
     out: undefined,
     views: undefined,
     capture: undefined,
+    backdrop: undefined,
     render: "auto",
     renderPort: undefined,
     model: process.env["KILN_MODEL"],
@@ -30056,6 +30153,13 @@ function parseArgs(argv) {
       case "--capture":
         args.capture = next();
         break;
+      case "--backdrop": {
+        const id = next();
+        if (!isBackdropId(id))
+          throw new Error(`--backdrop must be one of ${BACKDROP_IDS.join(", ")} (got ${id})`);
+        args.backdrop = id;
+        break;
+      }
       case "--render":
         args.render = resolveRenderMode(next());
         break;
@@ -30117,6 +30221,16 @@ async function readCaptureRecipe(args) {
   if (capture?.output === "separate")
     throw new Error("--capture supports grid output only for one --views PNG. Set output to grid.");
   return capture;
+}
+function applyBackdrop(args) {
+  if (args.backdrop === undefined)
+    return args.captureRecipe;
+  if (!args.views)
+    throw new Error("--backdrop requires --views <output.png>.");
+  if (args.command !== "render" && args.command !== "generate")
+    throw new Error("--backdrop is supported by render and generate only.");
+  const recipe = args.captureRecipe ?? {};
+  return { ...recipe, backdrop: args.backdrop };
 }
 async function emit(code, args, context) {
   context.programStore ??= localProgramStore();
@@ -30259,7 +30373,7 @@ async function withProcessAlive(run) {
   }
 }
 function main(argv) {
-  return withProcessAlive(() => runMain(argv));
+  return withProcessAlive(() => runMain(argv)).finally(stopLocalRenderService);
 }
 async function runMain(argv) {
   if (["save", "collections", "assets", "asset", "export", "import", "view"].includes(argv[0] ?? "")) {
@@ -30284,6 +30398,7 @@ async function runMain(argv) {
   try {
     if (args.capture !== undefined)
       args.captureRecipe = await readCaptureRecipe(args);
+    args.captureRecipe = applyBackdrop(args);
     switch (args.command) {
       case "source":
         return await cmdSource(args);

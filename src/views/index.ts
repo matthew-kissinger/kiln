@@ -1,4 +1,5 @@
 import { enforceCapturePixels, enforceCaptureBytes, type CaptureLimits } from './capture-limits';
+import { DEFAULT_BACKDROP_ID } from './background';
 export { DEFAULT_CAPTURE_LIMITS, resolveCaptureLimits } from './capture-limits';
 export type { CaptureLimits } from './capture-limits';
 import { captureCpuCell, type CaptureCache } from './capture-cache';
@@ -82,7 +83,16 @@ export {
 } from './raster';
 export type { RasterOptions, ViewSpec, ViewGridVariant } from './raster';
 export { annotateViewCell, stampAxisGnomon } from './annotate';
-export { GRID_BACKGROUND_HEX, GRID_BACKGROUND_RGB } from './background';
+export {
+  BACKDROPS,
+  BACKDROP_IDS,
+  DEFAULT_BACKDROP_ID,
+  GRID_BACKGROUND_HEX,
+  GRID_BACKGROUND_RGB,
+  isBackdropId,
+  resolveBackdrop,
+} from './background';
+export type { Backdrop, BackdropId } from './background';
 export { encodePng, decodePng } from './png';
 export type { DecodedPng } from './png';
 export {
@@ -361,6 +371,9 @@ export async function renderViewGrid(
   // the byte-identity guarantee for the default grid.
   const wantsZoom = resolved.zooms.some((z) => z !== undefined);
   const sceneBounds = wantsZoom ? measureBounds(root) : undefined;
+  // An explicit raster option wins over the capture's backdrop, matching how
+  // `views`/`cols` already treat internal callers; both default to neutral.
+  const backdrop = opts.backdrop ?? resolved.backdrop;
 
   const cache = opts.snapPalette?.length ? undefined : opts.captureCache;
   let reused = 0;
@@ -370,6 +383,7 @@ export async function renderViewGrid(
     const rasterOptions = {
       size,
       backfaceCull: opts.backfaceCull,
+      backdrop,
       ...(opts.frameBounds ? { frameBounds: opts.frameBounds } : {}),
       ...(sceneBounds && zoom !== undefined
         ? { frameBounds: expandFrameBounds(sceneBounds, zoom) }
@@ -390,6 +404,7 @@ export async function renderViewGrid(
           camera,
           size,
           backfaceCull: opts.backfaceCull ?? true,
+          backdrop,
         },
         async () => ({
           png: encodePng(rasterizeView(root, views[vi]!.dir, rasterOptions), size, size),
@@ -417,7 +432,7 @@ export async function renderViewGrid(
     width,
     height,
     views: views.map((v) => v.name),
-    capture: { preset: resolved.preset, cols, cells: views.length },
+    capture: { preset: resolved.preset, cols, cells: views.length, backdrop },
     ...(cache && opts.artifactGlbSha256
       ? { captureCache: { hit: reused === views.length, reused, total: views.length } }
       : {}),
@@ -459,9 +474,10 @@ export async function renderGlbViewCell(
   const loaded = await loadGlbGeometryFlatScene(exactBytes);
   const size = options.size ?? 256;
   const rgb = options.camera
-    ? rasterizeCamera(loaded.root, options.camera, size, options.backfaceCull)
+    ? rasterizeCamera(loaded.root, options.camera, size, options.backfaceCull, options.backdrop)
     : rasterizeView(loaded.root, view.dir, {
         size,
+        ...(options.backdrop ? { backdrop: options.backdrop } : {}),
         ...(options.backfaceCull !== undefined ? { backfaceCull: options.backfaceCull } : {}),
         ...(options.frameBounds ? { frameBounds: options.frameBounds } : {}),
       });
@@ -591,6 +607,8 @@ export interface DerivativeCellRenderInput {
   size: number;
   backfaceCull?: boolean;
   frameBounds?: { min: [number, number, number]; max: [number, number, number] };
+  /** Backdrop the cell must be painted on, by either producer. */
+  backdrop?: import('./background').BackdropId;
   /** Stable reason to decline GPU when its auto-framing cannot honor this view. */
   gpuUnsupportedReasonCode?: 'DERIVATIVE_GPU_FRAMING_UNSUPPORTED';
 }
@@ -930,6 +948,14 @@ export async function renderInteriorGrid(
     width,
     height,
     views: INTERIOR_VIEWS.map((v) => v.name),
+    // The fixed interior row paints the default backdrop; echo it the way every
+    // other grid does, so a reader never has to guess what a silhouette sat on.
+    capture: {
+      preset: 'interior',
+      cols: INTERIOR_VIEWS.length,
+      cells: INTERIOR_VIEWS.length,
+      backdrop: DEFAULT_BACKDROP_ID,
+    },
     roofsHidden,
     wallsHidden,
     ...(derivativeReceipts.length ? { derivativeReceipts } : {}),

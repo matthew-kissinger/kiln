@@ -570,8 +570,13 @@ describe('generateKilnAsset viewRenderPort (B3b/B4)', () => {
       capture: { preset: '3x2' },
     });
     expect(Buffer.compare(explicit.views!, base.views!)).toBe(0);
-    expect(base.viewsCapture).toEqual({ preset: '3x2', cols: 3, cells: 6 });
-    expect(explicit.viewsCapture).toEqual({ preset: '3x2', cols: 3, cells: 6 });
+    expect(base.viewsCapture).toEqual({ preset: '3x2', cols: 3, cells: 6, backdrop: 'neutral' });
+    expect(explicit.viewsCapture).toEqual({
+      preset: '3x2',
+      cols: 3,
+      cells: 6,
+      backdrop: 'neutral',
+    });
   });
 
   test('T3.3: the port is asked for the requested cell count and composited at its columns', async () => {
@@ -591,7 +596,7 @@ describe('generateKilnAsset viewRenderPort (B3b/B4)', () => {
     // be a hard six).
     expect(requests[0]!.viewDirs).toHaveLength(9);
     expect(r.renderDegraded).toBe(false);
-    expect(r.viewsCapture).toEqual({ preset: '3x3', cols: 3, cells: 9 });
+    expect(r.viewsCapture).toEqual({ preset: '3x3', cols: 3, cells: 9, backdrop: 'neutral' });
     const { compositeViewPngGrid, resolveCapture } = await import('../views');
     const cells = resolveCapture({ preset: '3x3' }).views;
     expect(Buffer.compare(r.views!, compositeViewPngGrid(viewsPng, 3, cells).png)).toBe(0);
@@ -606,7 +611,7 @@ describe('generateKilnAsset viewRenderPort (B3b/B4)', () => {
       capture: { preset: '2x2' },
       viewRenderPort: async () => ({ ok: true, rendererId: 'gpu:test', viewsPng }),
     });
-    expect(r.viewsCapture).toEqual({ preset: '2x2', cols: 2, cells: 4 });
+    expect(r.viewsCapture).toEqual({ preset: '2x2', cols: 2, cells: 4, backdrop: 'neutral' });
     const { compositeViewPngGrid, resolveCapture } = await import('../views');
     const cells = resolveCapture({ preset: '2x2' }).views;
     // Same cells at 3 cols would be a different image; pin that it is not that.
@@ -626,7 +631,12 @@ describe('generateKilnAsset viewRenderPort (B3b/B4)', () => {
       },
     });
     expect(degraded.renderDegraded).toBe(true);
-    expect(degraded.viewsCapture).toEqual({ preset: '3x1', cols: 3, cells: 3 });
+    expect(degraded.viewsCapture).toEqual({
+      preset: '3x1',
+      cols: 3,
+      cells: 3,
+      backdrop: 'neutral',
+    });
 
     // The whole point: a GPU outage must not reshape the artifact. The degraded
     // sheet is exactly what the CPU path produces for the same request.
@@ -670,7 +680,7 @@ describe('generateKilnAsset viewRenderPort (B3b/B4)', () => {
       capture: { preset: '4x4' as never },
     });
     expect(r.views).toBeInstanceOf(Buffer);
-    expect(r.viewsCapture).toEqual({ preset: '3x2', cols: 3, cells: 6 });
+    expect(r.viewsCapture).toEqual({ preset: '3x2', cols: 3, cells: 6, backdrop: 'neutral' });
     expect(r.warnings.some((w) => w.includes('capture config ignored'))).toBe(true);
 
     const base = await generateKilnAsset({ prompt: 'a crate', captureViews: true });
@@ -693,7 +703,7 @@ describe('generateKilnAsset viewRenderPort (B3b/B4)', () => {
     // the rejected config and not skipped entirely.
     expect(portCalls).toBe(1);
     expect(r.renderDegraded).toBe(false);
-    expect(r.viewsCapture).toEqual({ preset: '3x2', cols: 3, cells: 6 });
+    expect(r.viewsCapture).toEqual({ preset: '3x2', cols: 3, cells: 6, backdrop: 'neutral' });
     expect(r.warnings.some((w) => w.includes('capture config ignored'))).toBe(true);
   });
 
@@ -747,7 +757,8 @@ describe('generateKilnAsset viewRenderPort (B3b/B4)', () => {
     );
     expect(seen).toEqual([2]);
     expect(out.ok).toBe(true);
-    if (out.ok) expect(out.capture).toEqual({ preset: '2x1', cols: 2, cells: 2 });
+    if (out.ok)
+      expect(out.capture).toEqual({ preset: '2x1', cols: 2, cells: 2, backdrop: 'neutral' });
 
     // Count mismatch now reports the REQUESTED count, not a hardcoded six.
     const short = await captureViewsViaPort(
