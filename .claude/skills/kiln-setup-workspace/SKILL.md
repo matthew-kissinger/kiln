@@ -50,7 +50,7 @@ That is the whole setup. Once installed, the MCP server starts the service on th
 
 ## Verify the loadout before authoring
 
-Accept the project and MCP trust prompts, then confirm the server is actually live rather than assuming it from configuration. Call `kiln_list_primitives` on `kiln_workspace` with `capabilities: true`; it returns the runtime, source, export and camera contract and proves the tools resolved. A server named `kiln` from a global installation is a different thing. Do not substitute it silently; report the setup problem instead.
+Accept the project and MCP trust prompts, then confirm the server is actually live rather than assuming it from configuration. Call `kiln_list_primitives` on `kiln_workspace` with `capabilities: true`; it returns the runtime, source, export and camera contract and proves the tools resolved. A server named `kiln` from a global installation is a different thing. Do not substitute it silently; report the setup problem instead. When another agent is to do the authoring, start it as a separate harness process in the workspace directory (for OpenCode, `opencode run --dir <workspace> "<brief>"`); a subagent of the current session inherits this session's tools and never sees the workspace's MCP server, so it would be left with the CLI alone.
 
 Confirm the installed skills are readable at `skills/` in the workspace, and read the relevant one from there rather than a global copy. Whether the harness also registers them natively depends on the harness.
 
