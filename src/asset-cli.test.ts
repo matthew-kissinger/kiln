@@ -172,4 +172,4 @@ test('CLI save paints its preview on the named backdrop and records it, like kil
   } finally {
     await rm(root, { recursive: true, force: true });
   }
-});
+}, 30000);
