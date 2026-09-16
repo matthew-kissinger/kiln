@@ -97,4 +97,5 @@ it('paints the CLI contact sheet on the named backdrop, with or without a captur
   } finally {
     await rm(directory, { recursive: true, force: true });
   }
-});
+  // Three cold CLI spawns, each with a CPU render: 4.8 s locally under load.
+}, 60_000);

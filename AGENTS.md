@@ -123,6 +123,12 @@ cache identity, contract and preset validation -- so none of them needs a GPU or
 build, which is why `--ignore-scripts` is enough. Run it whenever you change `render-service/`; CI
 requires it.
 
+The test scripts set `--timeout 20000`. Bun's 5 s default is below what a cold process spawn or a
+first native-library call costs on a loaded CI runner: tests that take under a second locally have
+timed out at 5 s on the Windows runner while passing on re-run. A test that legitimately needs more
+than 20 s names its own budget as the third argument to `test()`, with the measured duration in a
+comment; a real hang still fails, it just takes 20 s to.
+
 Tests and CI pin `KILN_RENDER=cpu`. The coverage ratchet must not vary by whether the runner has a
 GPU. It is measured over `src/` alone -- the shipped engine -- so nothing you change under
 `scripts/` can move it; those tests still run, and their correctness is their own assertions' job.
