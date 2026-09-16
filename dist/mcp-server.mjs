@@ -24542,6 +24542,12 @@ async function renderInteriorGrid(root, opts = {}) {
     width,
     height,
     views: INTERIOR_VIEWS.map((v) => v.name),
+    capture: {
+      preset: "interior",
+      cols: INTERIOR_VIEWS.length,
+      cells: INTERIOR_VIEWS.length,
+      backdrop: DEFAULT_BACKDROP_ID
+    },
     roofsHidden,
     wallsHidden,
     ...derivativeReceipts.length ? { derivativeReceipts } : {}
@@ -24550,6 +24556,7 @@ async function renderInteriorGrid(root, opts = {}) {
 var ANIM_CAMERAS, ANIM_CAMERA_ALIASES, ROOM_WALL_NORMALS, INTERIOR_VIEWS;
 var init_views = __esm(() => {
   init_capture_limits();
+  init_background();
   init_capture_limits();
   init_capture_cache();
   init_camera();
@@ -27681,7 +27688,7 @@ var renderInput = z4.object({
 var screenshotInput = z4.object({
   code: z4.string().describe("Kiln source code to execute and render to a six-view image grid.")
 });
-var backdropInput = z4.enum(BACKDROP_IDS).optional().describe("Omit for neutral grey. Use light (near-black asset) or dark only after a sheet shows it merging.");
+var backdropInput = z4.enum(BACKDROP_IDS).optional().describe("Omit for neutral grey. After a sheet shows merging: light if the part is darker, dark if lighter.");
 var legacyCaptureInput = z4.object({
   preset: z4.enum(["1x1", "1x2", "2x1", "3x1", "2x2", "3x2", "3x3"]).optional().describe("Grid shape as COLSxROWS. Default 3x2. Choose fewer views for simple shapes, up to 3x3 for more angles."),
   cells: z4.array(z4.object({
@@ -28188,6 +28195,7 @@ async function runViewInterior(input, context) {
       gridWidth: grid.width,
       gridHeight: grid.height,
       ...grid.cameraShots ? { cameraShots: grid.cameraShots } : {},
+      ...grid.capture ? { capture: grid.capture } : {},
       roofsHidden: grid.roofsHidden,
       wallsHidden: grid.wallsHidden,
       ...input.capture?.output === "separate" && grid.perFramePngs ? { framesBase64: grid.perFramePngs.map((p) => p.toString("base64")) } : { pngBase64: grid.png.toString("base64") },

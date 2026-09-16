@@ -1,4 +1,5 @@
 import { enforceCapturePixels, enforceCaptureBytes, type CaptureLimits } from './capture-limits';
+import { DEFAULT_BACKDROP_ID } from './background';
 export { DEFAULT_CAPTURE_LIMITS, resolveCaptureLimits } from './capture-limits';
 export type { CaptureLimits } from './capture-limits';
 import { captureCpuCell, type CaptureCache } from './capture-cache';
@@ -947,6 +948,14 @@ export async function renderInteriorGrid(
     width,
     height,
     views: INTERIOR_VIEWS.map((v) => v.name),
+    // The fixed interior row paints the default backdrop; echo it the way every
+    // other grid does, so a reader never has to guess what a silhouette sat on.
+    capture: {
+      preset: 'interior',
+      cols: INTERIOR_VIEWS.length,
+      cells: INTERIOR_VIEWS.length,
+      backdrop: DEFAULT_BACKDROP_ID,
+    },
     roofsHidden,
     wallsHidden,
     ...(derivativeReceipts.length ? { derivativeReceipts } : {}),

@@ -42,6 +42,10 @@ GitHub. The package is not published on the npm registry.
   For a batch of CLI renders, start the service once by hand so each command joins it.
 - Occupancy `coverage` takes the backdrop it should measure against. Sheets cached from earlier
   versions are keyed by the old request shape and are simply re-rendered once.
+- `kiln_view_interior` echoes `capture` too, so every image result now says which backdrop its
+  silhouettes sat on. The guidance in the schema and skills states one rule for every asset
+  colour: switch only after a sheet shows a part merging with the grey, to `light` when that part
+  is darker than the grey and to `dark` when it is lighter.
 
 ## Unreleased: Experimental community exporter and engine handoff
 

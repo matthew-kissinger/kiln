@@ -82,7 +82,8 @@ A plain `git clone` also works and gives you the whole history up front.
 
 This writes a GLB and a six-view image of an existing program. It makes no model call.
 Rendering uses the CPU unless a compatible local GPU service is available.
-Use `--render cpu` to select the CPU explicitly.
+Use `--render cpu` to select the CPU explicitly. Sheets sit on a neutral grey; add
+`--backdrop dark` or `--backdrop light` when an asset's silhouette merges with it.
 
 **Using assets in Blender or Unity?** Read the [handoff guide](docs/engine-handoff.md) for direct GLB import,
 materials, backfaces, named pivots and animation checks. The established exporter remains
@@ -272,7 +273,9 @@ kiln_render({ programRef, capture: {
 
 The close-up follows the part's local axes while retaining surrounding geometry.
 You can also set explicit camera positions, return separate images, or sample
-animation frames. [Camera controls](docs/cameras.md).
+animation frames. Either capture shape also takes `backdrop: 'neutral' | 'dark' |
+'light'`, and every result echoes the one used as `capture.backdrop`.
+[Camera controls](docs/cameras.md).
 
 ## Tool reference
 

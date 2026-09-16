@@ -19,6 +19,8 @@ Available layouts are `1x1`, `1x2`, `2x1`, `3x1`, `2x2`, `3x2`, and `3x3`. For c
 
 Kiln uses +X forward, +Y up and +Z right. Azimuth 0 looks from the front (+X), 90 from the right (+Z). Positive elevation looks down. Legacy `zoom` is a padding multiplier: larger values show more surrounding space.
 
+`backdrop` names the colour behind every cell: `neutral` grey by default, `dark` when a part that merges with the grey is lighter than it, `light` when it is darker. Choose it from a sheet you have seen, not from the brief. It is one of three fixed entries, never a free colour, so two sheets of one asset differ only where the asset does, and every result echoes the one used as `capture.backdrop`. It applies to both capture shapes, on `kiln_render`, `kiln_edit` and `kiln_view_interior`, and `--backdrop` sets it for a CLI `--views` sheet.
+
 ## Frame a part or place the camera
 
 The versioned capture format supports up to nine `shots`. Use the exact `parts[].path` or a unique `parts[].name` from a render result. These identify evaluated scene nodes, whose names can include generated prefixes. Duplicate names require a path.

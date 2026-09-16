@@ -640,7 +640,7 @@ const backdropInput = z
   .enum(BACKDROP_IDS as [BackdropId, ...BackdropId[]])
   .optional()
   .describe(
-    'Omit for neutral grey. Use light (near-black asset) or dark only after a sheet shows it merging.',
+    'Omit for neutral grey. After a sheet shows merging: light if the part is darker, dark if lighter.',
   );
 
 const legacyCaptureInput = z
@@ -1640,6 +1640,8 @@ export const kilnScreenshotAnimationDef: KilnToolDef = createKilnScreenshotAnima
 // =============================================================================
 
 export interface KilnViewInteriorResult {
+  /** Grid shape and backdrop actually rendered, echoed like every other image result. */
+  capture?: { preset: string; cols: number; cells: number; backdrop?: BackdropId };
   cameraShots?: import('../views').ResolvedCameraShotV1[];
   framesBase64?: string[];
   ok: boolean;
@@ -1708,6 +1710,7 @@ async function runViewInterior(
       gridWidth: grid.width,
       gridHeight: grid.height,
       ...(grid.cameraShots ? { cameraShots: grid.cameraShots } : {}),
+      ...(grid.capture ? { capture: grid.capture } : {}),
       roofsHidden: grid.roofsHidden,
       wallsHidden: grid.wallsHidden,
       ...(input.capture?.output === 'separate' && grid.perFramePngs

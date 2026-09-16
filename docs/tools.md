@@ -331,7 +331,7 @@ Build a program and return geometry metrics, exact part paths and images. Omit c
               ]
             },
             "backdrop": {
-              "description": "Omit for neutral grey. Use light (near-black asset) or dark only after a sheet shows it merging.",
+              "description": "Omit for neutral grey. After a sheet shows merging: light if the part is darker, dark if lighter.",
               "type": "string",
               "enum": [
                 "neutral",
@@ -393,7 +393,7 @@ Build a program and return geometry metrics, exact part paths and images. Omit c
               }
             },
             "backdrop": {
-              "description": "Omit for neutral grey. Use light (near-black asset) or dark only after a sheet shows it merging.",
+              "description": "Omit for neutral grey. After a sheet shows merging: light if the part is darker, dark if lighter.",
               "type": "string",
               "enum": [
                 "neutral",
@@ -884,7 +884,7 @@ Render roof-off floor-plan, dollhouse, and eye-level cutaway views. Optional ver
           ]
         },
         "backdrop": {
-          "description": "Omit for neutral grey. Use light (near-black asset) or dark only after a sheet shows it merging.",
+          "description": "Omit for neutral grey. After a sheet shows merging: light if the part is darker, dark if lighter.",
           "type": "string",
           "enum": [
             "neutral",
@@ -1480,7 +1480,7 @@ Apply exact-string replacements to a program revision and render the result (ren
               ]
             },
             "backdrop": {
-              "description": "Omit for neutral grey. Use light (near-black asset) or dark only after a sheet shows it merging.",
+              "description": "Omit for neutral grey. After a sheet shows merging: light if the part is darker, dark if lighter.",
               "type": "string",
               "enum": [
                 "neutral",
@@ -1542,7 +1542,7 @@ Apply exact-string replacements to a program revision and render the result (ren
               }
             },
             "backdrop": {
-              "description": "Omit for neutral grey. Use light (near-black asset) or dark only after a sheet shows it merging.",
+              "description": "Omit for neutral grey. After a sheet shows merging: light if the part is darker, dark if lighter.",
               "type": "string",
               "enum": [
                 "neutral",

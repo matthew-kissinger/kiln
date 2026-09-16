@@ -33,7 +33,7 @@ kiln_render({ programRef: REF, capture: {
 
 Versioned capture accepts 1–9 shots, 1–3 columns, and a square per-shot `size` from 128–1024. It does not accept `width`/`height`; those are returned dimensions. Set `output: 'separate'` when individual images better fit the harness. `visibility: 'isolate'` hides everything outside the selected subtree; context remains visible by default. Orbit `relativeTo` is `world`, `asset`, or `part`. Orbit cameras derive their target and distance from the selected subject bounds, so they accept `subject` and `padding`, not `target` or `distance`. Use an explicit camera when you need `position` and `target`.
 
-`backdrop` selects the colour behind every cell: `neutral` grey by default, `dark` for near-white or emissive assets, `light` for near-black ones. Choose it from a sheet you have seen, not from the brief: render on the default first and switch only when the silhouette merges with it. It is a fixed choice, not a free colour, and the result echoes it as `capture.backdrop`. Legacy `preset`/`cells` sheets accept it too.
+`backdrop` selects the colour behind every cell: `neutral` grey by default, `dark` when a part that merges with the grey is lighter than it (near-white, pale grey, emissive), `light` when it is darker (near-black, dark wood). Choose it from a sheet you have seen, not from the brief: render on the default first and switch only when a silhouette merges with it. It is a fixed choice, not a free colour, and the result echoes it as `capture.backdrop`. Legacy `preset`/`cells` sheets accept it too.
 
 The same capture object can accompany `kiln_edit` so the edited result answers the same visual question. It is a render request, not a source change.
 

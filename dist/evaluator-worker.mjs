@@ -22017,6 +22017,7 @@ async function renderClipAnimation(root, clips, opts = {}) {
 var ANIM_CAMERAS, ANIM_CAMERA_ALIASES;
 var init_views = __esm(() => {
   init_capture_limits();
+  init_background();
   init_capture_limits();
   init_capture_cache();
   init_camera();

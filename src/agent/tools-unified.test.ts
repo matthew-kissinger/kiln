@@ -468,6 +468,23 @@ describe('makeKilnUnifiedTools', () => {
     expect('pngBase64' in json).toBe(false); // image stripped by the media extractor
   });
 
+  test('kiln_view_interior echoes the backdrop it painted, like every other image result', async () => {
+    const sink: UnifiedSink = { edits: [] };
+    const tools = makeKilnUnifiedTools({ seedCode: BUILDING_CODE, sink });
+    const plain = (await findTool(tools, 'kiln_view_interior').invoke({})) as unknown[];
+    const plainJson = (plain[1] as JsonBlock).json as { capture?: { backdrop?: string } };
+    expect(plainJson.capture?.backdrop).toBe('neutral');
+    const dark = (await findTool(tools, 'kiln_view_interior').invoke({
+      capture: { version: 'kiln.capture.v1', backdrop: 'dark', shots: [{ name: 'Inside' }] },
+    })) as unknown[];
+    const darkJson = (dark[1] as JsonBlock).json as {
+      ok?: boolean;
+      capture?: { backdrop?: string };
+    };
+    expect(darkJson.ok).toBe(true);
+    expect(darkJson.capture?.backdrop).toBe('dark');
+  });
+
   test('kiln_view_interior on a broken buffer is image-free (plain JSON error)', async () => {
     const sink: UnifiedSink = { edits: [] };
     const tools = makeKilnUnifiedTools({ seedCode: 'not a kiln program (', sink });
