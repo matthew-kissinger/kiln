@@ -15,6 +15,7 @@ import {
   receiptPathReplacements,
   runProcess,
   sanitizeReceipt,
+  toolUsageFromEvents,
 } from './tier2-dogfood.mjs';
 
 const roots = [];
@@ -339,6 +340,57 @@ describe('Tier 2 blind dogfood driver', () => {
   test('Codex stdin progress notices are not failure evidence', () => {
     expect(evidenceFromTrace('', 'Reading prompt from stdin...\n')).toEqual([]);
     expect(evidenceFromTrace('', 'Reading additional input from stdin...\n')).toEqual([]);
+  });
+
+  test('the receipt says whether the workspace MCP server was exercised at all', () => {
+    // The blind OpenCode run of 2026-09-16 completed through the CLI alone: the
+    // outer agent dispatched an in-session subagent that never saw the
+    // workspace's MCP server. Nothing in the receipt said so.
+    const opencode = [
+      { type: 'tool_use', part: { type: 'tool', tool: 'bash', state: { status: 'completed' } } },
+      { type: 'tool_use', part: { type: 'tool', tool: 'read' } },
+      { type: 'tool_use', part: { type: 'tool', tool: 'bash' } },
+      { type: 'text', part: { text: 'kiln_render is a tool name in prose, not a call' } },
+    ];
+    expect(toolUsageFromEvents(opencode)).toEqual({
+      calls: { bash: 2, read: 1 },
+      total: 3,
+      mcpCalls: 0,
+      workspaceMcp: 'not-exercised',
+    });
+
+    const claude = [
+      {
+        type: 'assistant',
+        message: {
+          content: [
+            { type: 'text', text: 'rendering' },
+            { type: 'tool_use', name: 'mcp__kiln_workspace__kiln_render', input: {} },
+            { type: 'tool_use', name: 'Read', input: {} },
+          ],
+        },
+      },
+      { type: 'tool_use', part: { tool: 'kiln_workspace_kiln_save' } },
+    ];
+    expect(toolUsageFromEvents(claude)).toMatchObject({
+      total: 3,
+      mcpCalls: 2,
+      workspaceMcp: 'exercised',
+    });
+
+    const codex = [
+      { type: 'item.completed', item: { type: 'command_execution', command: 'ls' } },
+      {
+        type: 'item.completed',
+        item: { type: 'mcp_tool_call', server: 'kiln_workspace', tool: 'kiln_render' },
+      },
+    ];
+    expect(toolUsageFromEvents(codex)).toMatchObject({
+      calls: { command_execution: 1, kiln_workspace__kiln_render: 1 },
+      workspaceMcp: 'exercised',
+    });
+
+    expect(toolUsageFromEvents([{ type: 'text' }]).workspaceMcp).toBe('unknown');
   });
 
   test('a source and GLB are necessary but remain pending human quality review', () => {

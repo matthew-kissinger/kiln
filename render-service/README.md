@@ -48,10 +48,28 @@ will not start, never one that quietly renders on CPU while reporting success.
 
 | Route | Body | Returns |
 |---|---|---|
-| `GET /health` | -- | `{ok, rendererId, backend, adapter, capabilities, presentationProfile, lightingPresetIds}` |
+| `GET /health` | -- | `{ok, rendererId, backend, adapter, capabilities, presentationProfile, lightingPresetIds, instance}` |
 | `POST /render` (legacy) | `{glb_base64, size?=384, views?, beauty_size?, backdrop?}` | `{ok, rendererId, presentationProfile, timings, views[base64 png], beauty?}` |
 | `POST /render` (camera) | `{glb_base64, cameras, width, height, lighting_preset_id?, backdrop?}` | the above plus `{backend, cameras, width, height, lightingPresetId, viewSha256, outputSetSha256, cameraReceipts}` |
 | `POST /bake` | -- | 501 |
+
+`instance` is `{version, pid, ownerPid, startedAt, sourceDir, sourceFingerprint}`: who this process is,
+so the engine that finds it on the shared port can tell a current renderer from an orphan running
+older source (`src/instance.mjs`). `ownerPid` is the session that started it on demand, passed in as
+`RENDER_SERVICE_OWNER_PID`; the service watches that pid and exits when it is gone. A hand-started
+service has no owner and never exits on its own. `sourceFingerprint` hashes `src/` and nothing else,
+so `npm install` does not change it and an edit does.
+
+## Deploy it with the engine
+
+The engine and this service are one contract and ship from one commit. The engine sends every field
+it knows -- `backdrop`, `input_glb_sha256`, exact cameras -- and a service built before a field
+existed rejects the request with a 400, which the engine reports as a CPU degrade with the status in
+`degradeReason`. A local service is replaced or named automatically (see `instance` above); a hosted
+one is not, because the engine will not stop a process it did not start. When you update the engine
+behind `--render-port` or `KILN_RENDER_PORT_URL`, redeploy the service from the same commit, and
+compare `/health.instance.sourceFingerprint` against `bun run kiln service status` on a checkout of
+that commit if you need to prove which build is live.
 
 Auth, when `RENDER_SERVICE_TOKEN` is set, is the `x-render-token` header -- **not** `Authorization`,
 because serverless edge gateways routinely consume that one before it reaches the process.

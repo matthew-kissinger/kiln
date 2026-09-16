@@ -38,12 +38,16 @@ two lists match.
 
 The one name that differs is **`kiln_screenshot`, and it is merged rather than missing.** On
 the in-process surface `kiln_render` returns metrics only and `kiln_screenshot` carries the
-six-view grid -- two tools, so a cheap structural check need not pay for an image. On MCP
+image grid -- two tools, so a cheap structural check need not pay for an image. On MCP
 `kiln_render` is unified: it holds `media: screenshotMedia` and returns metrics, part paths
 and images together, with six views when `capture` is omitted. A separate `kiln_screenshot`
 there would be a second way to ask for the same grid. `src/mcp-parity.test.ts` asserts the
 MCP surface does not carry it, so the merge stays deliberate; no capability is absent from
-the MCP workflow.
+the MCP workflow. The two names share one implementation, `runRenderViews`: `kiln_screenshot`
+takes the same `capture` (grid shape, framing, backdrop), routes through the render port and
+reports `viewFidelity` exactly as `kiln_render` does. It used to be a frozen CPU-only copy
+kept as the control arm of a bench that no longer exists; do not freeze it again without a
+consumer that needs the freeze.
 
 Prefer an explicit terminal submit tool over `structuredOutputSchema` in the in-process loop: the
 latter's coexistence with a full tool set is provider-dependent, while a submit tool is unambiguous
@@ -80,6 +84,21 @@ two sheets of one GLB differ only because the asset does, and a backdrop close t
 hides the seams the model is meant to find. The chosen id is part of both capture-cache keys and is
 echoed as `capture.backdrop` in every render result. `kiln_save` paints its preview on the backdrop
 it is given and the manifest records it as `preview.backdrop`; a reader never guesses it.
+
+**One render service per machine, and the socket is its registry.** Every session finds the
+service on one shared port (8000, or `KILN_RENDER_SERVICE_PORT`); the first to need it starts
+it and the rest join. There is no lease file: `/health` reports `instance` -- pid, the owning
+session's pid, and a fingerprint of the service source -- and `src/render-service-host.ts`
+acts on that in exactly one way per case. A current service is joined whoever started it. A
+stale service (source fingerprint differs from `render-service/src` on disk) that is orphaned
+(its owner has exited) is replaced. A stale service still owned by a running session, or
+started by hand, is left alone and named, with `kiln service stop` as the way out. Something
+that is not a render service on the port is reported, never joined. An on-demand service
+watches its owner's pid and exits when it is gone, which is what makes a hard-killed host
+safe on Windows; a hand-started service has no owner and outlives sessions. The service and
+host fingerprint the source with two mirrored walks (`render-service/src/instance.mjs`,
+`renderServiceSourceFingerprint`), and `render-service-lifecycle.test.ts` fails if they drift.
+Do not add a second discovery path or a file that can outlive the process it describes.
 
 **The GPU is a view producer only, never gate evidence.** `QaContext` is deliberately image-free so a
 QA rule structurally cannot read a render buffer. Do not add pixels to it.
@@ -118,7 +137,7 @@ do not lower them without an explicit measured rationale. Live model tests are o
 
 `bun run test` is `bun test src scripts`, so it does **not** reach `render-service/`, which is a
 separate npm project. `bun run test:render-service` does; it needs `npm --prefix render-service ci
---ignore-scripts` once. All 49 of those tests are pure -- framing arithmetic, PNG readback packing,
+--ignore-scripts` once. All 54 of those tests are pure -- framing arithmetic, PNG readback packing,
 cache identity, contract and preset validation -- so none of them needs a GPU or the native Dawn
 build, which is why `--ignore-scripts` is enough. Run it whenever you change `render-service/`; CI
 requires it.

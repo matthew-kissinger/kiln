@@ -621,10 +621,6 @@ const renderInput = z.object({
   code: z.string().describe('Kiln source code to execute and render to an in-memory GLB.'),
 });
 
-const screenshotInput = z.object({
-  code: z.string().describe('Kiln source code to execute and render to a six-view image grid.'),
-});
-
 /**
  * `kiln_render` (unified surface only) additionally accepts a capture config.
  * Kept off the shared `renderInput` on purpose: the four-tool baseline's
@@ -1096,55 +1092,18 @@ async function runRender(
 // kiln_screenshot
 // =============================================================================
 
-export interface KilnScreenshotResult {
-  ok: boolean;
-  /** View names in grid order (row-major). Defaults to Front, Right, Back, Left, Top, 3/4. */
-  views?: string[];
-  /** Grid shape and backdrop actually rendered — echoes the capture config back, or `3x2` on neutral by default. */
-  capture?: { preset: string; cols: number; cells: number; backdrop?: BackdropId };
-  width?: number;
-  height?: number;
-  /** The 3x2 grid PNG, base64-encoded (transports with image support strip this and attach the bytes). */
-  pngBase64?: string;
-  warnings: string[];
-  error?: string;
-}
-
 /**
- * Execute Kiln code and rasterize it into the 3x2 six-view grid (pure CPU —
- * no browser, no GPU). Never throws — failures come back as { ok:false, error }.
- * The renderer is imported lazily so the views module (node:zlib) never enters
- * the browser bundle graph.
+ * `kiln_screenshot` is the unified view path under the in-process loop's name.
+ *
+ * It used to be a frozen copy: CPU-only, no capture config, no backdrop, while
+ * every other surface took all three and routed through the render port. The
+ * freeze protected a bench in which this tool was the control arm; that bench
+ * is gone, and what remained was a loop whose model could never see a
+ * material-faithful view even on a machine with a renderer. One implementation
+ * now serves both names, so a backdrop chosen on the CLI and one chosen here
+ * paint the same pixel, and `viewFidelity` tells the model which producer drew.
  */
-async function runScreenshot(
-  input: z.infer<typeof screenshotInput>,
-  context: KilnToolContext,
-): Promise<KilnScreenshotResult> {
-  try {
-    const { renderGlbViewGrid } = await import('../views');
-    const { root, rendered } = await loadEvaluatedReviewScene(input.code, context);
-    const warnings = inspectSceneStructure(root, {
-      category: trustedCategory(context),
-    });
-    // No capture config here on purpose: kiln_screenshot belongs to the frozen
-    // four-tool baseline, whose schemas stay byte-for-byte unchanged.
-    const grid = await renderGlbViewGrid(rendered.glb);
-    return {
-      ok: true,
-      views: grid.views,
-      width: grid.width,
-      height: grid.height,
-      pngBase64: grid.png.toString('base64'),
-      warnings,
-    };
-  } catch (err) {
-    return {
-      ok: false,
-      error: withSyntaxDetail(err instanceof Error ? err.message : String(err), input.code),
-      warnings: [],
-    };
-  }
-}
+export type KilnScreenshotResult = KilnRenderViewsResult;
 
 /** Shared media extractor for screenshot-shaped outputs (pngBase64 -> bytes + stripped JSON).
  *  Used by both `kiln_screenshot` and the unified `kilnRenderViewsDef` (both carry `pngBase64`). */
@@ -1218,6 +1177,7 @@ export interface KilnRenderViewsResult {
 async function runRenderViews(
   input: z.infer<typeof renderViewsInput>,
   context: KilnToolContext,
+  toolName: 'kiln_render' | 'kiln_screenshot' = 'kiln_render',
 ): Promise<KilnRenderViewsResult> {
   try {
     // `CPU_RASTER_RENDERER_ID` and `resolveGridCapture` come from this SAME lazy
@@ -1383,7 +1343,7 @@ async function runRenderViews(
       ...(drawnBy.degradedReason ? { degradeReason: drawnBy.degradedReason } : {}),
       reasonCodes: ['IN_LOOP_BUILD_NOT_PERSISTED'],
     };
-    const viewEvidence = context.viewEvidenceHistory?.record('kiln_render', viewFidelity);
+    const viewEvidence = context.viewEvidenceHistory?.record(toolName, viewFidelity);
 
     // A host bookkeeping hook must never be able to fail a render the model is
     // waiting on.
@@ -1442,9 +1402,10 @@ async function runRenderViews(
 
 /**
  * The unified-surface render tool: render + screenshot collapsed into one.
- * Exported separately and intentionally NOT part of `kilnToolRegistry` (which
- * stays the four-tool bench baseline). Shares `screenshotMedia` so transports
- * with image support attach the PNG bytes and strip the base64 from the JSON.
+ * Exported separately and intentionally NOT part of `kilnToolRegistry`, whose
+ * `kiln_screenshot` runs this same implementation under the in-process loop's
+ * name. Shares `screenshotMedia` so transports with image support attach the
+ * PNG bytes and strip the base64 from the JSON.
  */
 const KILN_RENDER_VIEWS_DESCRIPTION =
   'Build the current asset and return geometry metrics, exact part paths and images. Omit capture for six orthographic views. Choose preset/cells for a smaller orbit sheet, or version kiln.capture.v1 with shots for per-part framing, local axes, perspective and separate images. +X is forward, +Y up, +Z right. Review silhouette, attachments, proportion and ground contact. GPU PBR shading supports textured or metallic materials; a flat-shaded CPU render supports geometry review. Read viewFidelity; do not judge material fidelity from CPU views. Failed builds return errors without images.' +
@@ -2064,12 +2025,10 @@ export const kilnInspectDef: KilnToolDef = createKilnInspectDef();
 // and views: the loop is edit-then-look, and splitting it across two calls
 // doubles the round trips for no gain.
 //
-// Like `kilnRenderViewsDef`, this sits OUTSIDE `createKilnToolRegistry`. That
-// array is the frozen four-tool bench baseline and adding to it would silently
-// change what the benchmark measures. The in-process agent does not need this
-// def either -- it has a working buffer across turns and its own edit tools, so
-// `kiln_edit` is reached through `kilnMcpToolDefs()`, where the host holds the
-// program and nothing else does.
+// Like `kilnRenderViewsDef`, this sits OUTSIDE `createKilnToolRegistry`. The
+// in-process agent does not need this def -- it has a working buffer across
+// turns and its own edit tools, so `kiln_edit` is reached through
+// `kilnMcpToolDefs()`, where the host holds the program and nothing else does.
 
 const editOperationInput = z.object({
   oldString: z
@@ -2215,6 +2174,9 @@ export function createKilnEditDef(context: KilnToolContext = {}): KilnToolDef {
 export const kilnEditDef: KilnToolDef = createKilnEditDef();
 
 export function createKilnToolRegistry(context: KilnToolContext = {}): KilnToolDef[] {
+  // The view tool shares the unified implementation, which keeps a per-context
+  // evidence trail; the three text tools read the context as given.
+  const viewContext = withViewEvidenceHistory(context);
   return [
     {
       name: 'kiln_list_primitives',
@@ -2243,17 +2205,21 @@ export function createKilnToolRegistry(context: KilnToolContext = {}): KilnToolD
     {
       name: 'kiln_screenshot',
       description:
-        'Render Kiln code to a six-view image grid so you can SEE the asset: ' +
+        'Render Kiln code to an image grid so you can SEE the asset. Omit capture for six views: ' +
         'row 1 = Front (camera on +X, the nose/muzzle should face you), Right (+Z, the long profile), Back (-X); ' +
         'row 2 = Left (-Z), Top (+Y, check symmetry), 3/4 perspective (check part contact and overall read). ' +
         'Use it to verify orientation (+X forward), attachment (no floating parts), and silhouette before submitting. ' +
-        'If a view looks wrong, fix the code and screenshot again. Flat-shaded CPU render; does not write files.',
-      inputSchema: screenshotInput,
+        'If a view looks wrong, fix the code and screenshot again. capture selects a smaller orbit sheet, ' +
+        'per-part framing or a backdrop (neutral, dark, light). Textured or metallic materials draw through the GPU ' +
+        'render service when one is available; otherwise a flat-shaded CPU render supports geometry review only. ' +
+        'Read viewFidelity before judging materials. Does not write files.',
+      inputSchema: renderViewsInput,
       run: async (input) =>
-        guardCaptureBudget('kiln_screenshot', input, context, () =>
-          runScreenshot(screenshotInput.parse(input), context),
+        guardCaptureBudget('kiln_screenshot', input, viewContext, () =>
+          runRenderViews(renderViewsInput.parse(input), viewContext, 'kiln_screenshot'),
         ),
       media: screenshotMedia,
+      mediaMulti: screenshotAnimationMediaMulti,
     },
   ];
 }

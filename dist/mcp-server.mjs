@@ -27690,9 +27690,6 @@ var validateInput = z4.object({
 var renderInput = z4.object({
   code: z4.string().describe("Kiln source code to execute and render to an in-memory GLB.")
 });
-var screenshotInput = z4.object({
-  code: z4.string().describe("Kiln source code to execute and render to a six-view image grid.")
-});
 var backdropInput = z4.enum(BACKDROP_IDS).optional().describe("Neutral grey unless a sheet shows merging: light if the part is darker, dark if lighter.");
 var legacyCaptureInput = z4.object({
   preset: z4.enum(["1x1", "1x2", "2x1", "3x1", "2x2", "3x2", "3x3"]).optional().describe("Grid shape as COLSxROWS. Default 3x2. Choose fewer views for simple shapes, up to 3x3 for more angles."),
@@ -27897,30 +27894,6 @@ async function runRender(input, context) {
     };
   }
 }
-async function runScreenshot(input, context) {
-  try {
-    await Promise.resolve().then(() => init_views());
-    const { root, rendered } = await loadEvaluatedReviewScene(input.code, context);
-    const warnings = inspectSceneStructure(root, {
-      category: trustedCategory(context)
-    });
-    const grid = await renderGlbViewGrid(rendered.glb);
-    return {
-      ok: true,
-      views: grid.views,
-      width: grid.width,
-      height: grid.height,
-      pngBase64: grid.png.toString("base64"),
-      warnings
-    };
-  } catch (err) {
-    return {
-      ok: false,
-      error: withSyntaxDetail(err instanceof Error ? err.message : String(err), input.code),
-      warnings: []
-    };
-  }
-}
 function screenshotMedia(output) {
   const o = output;
   if (!o || typeof o.pngBase64 !== "string" || o.pngBase64.length === 0)
@@ -27928,7 +27901,7 @@ function screenshotMedia(output) {
   const { pngBase64: _png, ...json } = o;
   return { png: new Uint8Array(Buffer.from(o.pngBase64, "base64")), json };
 }
-async function runRenderViews(input, context) {
+async function runRenderViews(input, context, toolName = "kiln_render") {
   try {
     await Promise.resolve().then(() => init_views());
     const { root, rendered, reasonCodes } = await loadEvaluatedReviewScene(input.code, context);
@@ -28035,7 +28008,7 @@ async function runRenderViews(input, context) {
       ...drawnBy.degradedReason ? { degradeReason: drawnBy.degradedReason } : {},
       reasonCodes: ["IN_LOOP_BUILD_NOT_PERSISTED"]
     };
-    const viewEvidence = context.viewEvidenceHistory?.record("kiln_render", viewFidelity);
+    const viewEvidence = context.viewEvidenceHistory?.record(toolName, viewFidelity);
     try {
       context.onViewsRendered?.(drawnBy);
     } catch {}
@@ -28402,6 +28375,7 @@ function createKilnEditDef(context = {}) {
 }
 var kilnEditDef = createKilnEditDef();
 function createKilnToolRegistry(context = {}) {
+  const viewContext = withViewEvidenceHistory(context);
   return [
     {
       name: "kiln_list_primitives",
@@ -28424,10 +28398,11 @@ function createKilnToolRegistry(context = {}) {
     },
     {
       name: "kiln_screenshot",
-      description: "Render Kiln code to a six-view image grid so you can SEE the asset: row 1 = Front (camera on +X, the nose/muzzle should face you), Right (+Z, the long profile), Back (-X); row 2 = Left (-Z), Top (+Y, check symmetry), 3/4 perspective (check part contact and overall read). Use it to verify orientation (+X forward), attachment (no floating parts), and silhouette before submitting. If a view looks wrong, fix the code and screenshot again. Flat-shaded CPU render; does not write files.",
-      inputSchema: screenshotInput,
-      run: async (input) => guardCaptureBudget("kiln_screenshot", input, context, () => runScreenshot(screenshotInput.parse(input), context)),
-      media: screenshotMedia
+      description: "Render Kiln code to an image grid so you can SEE the asset. Omit capture for six views: row 1 = Front (camera on +X, the nose/muzzle should face you), Right (+Z, the long profile), Back (-X); row 2 = Left (-Z), Top (+Y, check symmetry), 3/4 perspective (check part contact and overall read). Use it to verify orientation (+X forward), attachment (no floating parts), and silhouette before submitting. If a view looks wrong, fix the code and screenshot again. capture selects a smaller orbit sheet, per-part framing or a backdrop (neutral, dark, light). Textured or metallic materials draw through the GPU render service when one is available; otherwise a flat-shaded CPU render supports geometry review only. Read viewFidelity before judging materials. Does not write files.",
+      inputSchema: renderViewsInput,
+      run: async (input) => guardCaptureBudget("kiln_screenshot", input, viewContext, () => runRenderViews(renderViewsInput.parse(input), viewContext, "kiln_screenshot")),
+      media: screenshotMedia,
+      mediaMulti: screenshotAnimationMediaMulti
     }
   ];
 }
@@ -28796,13 +28771,14 @@ function createKilnAssetDefs(context) {
 }
 
 // src/cli-render-mode.ts
-import { createHash as createHash8 } from "node:crypto";
+import { createHash as createHash9 } from "node:crypto";
 
 // src/render-service-host.ts
 import { spawn as spawn2 } from "node:child_process";
-import { existsSync as existsSync2 } from "node:fs";
+import { createHash as createHash8 } from "node:crypto";
+import { existsSync as existsSync2, readFileSync as readFileSync3, readdirSync, statSync } from "node:fs";
 import { fileURLToPath as fileURLToPath3, pathToFileURL } from "node:url";
-import { join as join3 } from "node:path";
+import { join as join3, relative as relative2 } from "node:path";
 var DEFAULT_LOCAL_RENDER_SERVICE_PORT = 8000;
 function localRenderServicePort() {
   const raw = Number(process.env["KILN_RENDER_SERVICE_PORT"]);
@@ -28846,6 +28822,96 @@ async function healthy(url, timeoutMs) {
     return false;
   }
 }
+function renderServiceSourceFingerprint(dir) {
+  const source = join3(dir, "src");
+  if (!existsSync2(source))
+    return;
+  const hash = createHash8("sha256");
+  hash.update("kiln.render-service-source.v1");
+  const visit = (path) => {
+    if (statSync(path).isDirectory()) {
+      for (const name of readdirSync(path).sort()) {
+        if (name === "node_modules")
+          continue;
+        visit(join3(path, name));
+      }
+      return;
+    }
+    const bytes = readFileSync3(path);
+    hash.update(JSON.stringify([relative2(source, path).replaceAll("\\", "/"), bytes.length]));
+    hash.update(bytes);
+  };
+  visit(source);
+  return `sha256:${hash.digest("hex")}`;
+}
+function processIsAlive(pid) {
+  try {
+    process.kill(pid, 0);
+    return true;
+  } catch (error) {
+    return error.code === "EPERM";
+  }
+}
+async function inspectLocalRenderService(url, dir = renderServiceDir(), timeoutMs = 1500) {
+  let body;
+  try {
+    const res = await fetch(new URL("/health", url), {
+      signal: AbortSignal.timeout(timeoutMs),
+      cache: "no-store"
+    });
+    if (!res.ok)
+      return { kind: "foreign" };
+    body = await res.json();
+  } catch (error) {
+    if (error instanceof Error && error.name === "TimeoutError")
+      return { kind: "busy" };
+    return error.name === "SyntaxError" ? { kind: "foreign" } : { kind: "absent" };
+  }
+  if (body?.ok !== true || typeof body.rendererId !== "string")
+    return { kind: "foreign" };
+  const raw = body.instance;
+  const instance = raw && raw.version === "kiln.render-service-instance.v1" && typeof raw.pid === "number" && typeof raw.sourceFingerprint === "string" ? {
+    version: raw.version,
+    pid: raw.pid,
+    ownerPid: typeof raw.ownerPid === "number" ? raw.ownerPid : null,
+    startedAt: typeof raw.startedAt === "string" ? raw.startedAt : "",
+    sourceDir: typeof raw.sourceDir === "string" ? raw.sourceDir : "",
+    sourceFingerprint: raw.sourceFingerprint
+  } : undefined;
+  const local = renderServiceSourceFingerprint(dir);
+  const stale = instance !== undefined && local !== undefined && instance.sourceFingerprint !== local;
+  const orphaned = instance !== undefined && instance.ownerPid !== null && !processIsAlive(instance.ownerPid);
+  return {
+    kind: "service",
+    rendererId: body.rendererId,
+    ...instance ? { instance } : {},
+    stale,
+    orphaned
+  };
+}
+function describeStaleService(url, probe) {
+  if (probe.kind !== "service" || !probe.instance)
+    return `the render service on ${url} is stale`;
+  const { pid, ownerPid } = probe.instance;
+  const who = ownerPid === null ? "started by hand" : probe.orphaned ? `started by session ${ownerPid}, which has exited` : `started by session ${ownerPid}, which is still running`;
+  return `the render service on ${url} (pid ${pid}, ${who}) runs older source than the render-service directory of this installation`;
+}
+async function terminateRenderService(url, probe, waitMs = 5000) {
+  if (probe.kind !== "service" || !probe.instance)
+    return false;
+  try {
+    process.kill(probe.instance.pid);
+  } catch {
+    return false;
+  }
+  const deadline = Date.now() + waitMs;
+  while (Date.now() < deadline) {
+    if ((await inspectLocalRenderService(url, undefined, 500)).kind === "absent")
+      return true;
+    await new Promise((done) => setTimeout(done, 100));
+  }
+  return false;
+}
 function nodeBinary() {
   const override = process.env["KILN_RENDER_SERVICE_NODE"];
   if (override)
@@ -28873,8 +28939,19 @@ function registerTeardown() {
 }
 async function startLocalRenderService(dir = renderServiceDir()) {
   const url = localRenderServiceUrl();
-  if (await healthy(url, 1500))
+  const probe = await inspectLocalRenderService(url, dir);
+  if (probe.kind === "busy")
     return url;
+  if (probe.kind === "foreign")
+    throw new Error(`port ${localRenderServicePort()} is in use by something that is not a render service; ` + "set KILN_RENDER_SERVICE_PORT to move the renderer");
+  if (probe.kind === "service") {
+    if (!probe.stale)
+      return url;
+    if (!probe.orphaned)
+      throw new Error(`${describeStaleService(url, probe)}; stop it with \`kiln service stop\` and it will be started again on demand`);
+    if (!await terminateRenderService(url, probe))
+      throw new Error(`${describeStaleService(url, probe)} and could not be stopped`);
+  }
   const state = localRenderServiceState(dir);
   if (state !== "ready")
     throw new Error(explainRenderServiceState(state, dir));
@@ -28885,6 +28962,7 @@ async function startLocalRenderService(dir = renderServiceDir()) {
     env: {
       ...process.env,
       PORT: String(localRenderServicePort()),
+      RENDER_SERVICE_OWNER_PID: String(process.pid),
       HOST: "127.0.0.1"
     },
     stdio: ["ignore", "ignore", "pipe"]
@@ -28924,7 +29002,7 @@ function makeRemoteRenderPort(url, token) {
     const body = {
       glb_base64: Buffer.from(req.glb).toString("base64")
     };
-    const inputGlbSha256 = `sha256:${createHash8("sha256").update(req.glb).digest("hex")}`;
+    const inputGlbSha256 = `sha256:${createHash9("sha256").update(req.glb).digest("hex")}`;
     body["input_glb_sha256"] = inputGlbSha256;
     if (req.cameras) {
       body["cameras"] = req.cameras;
@@ -28966,12 +29044,30 @@ function makeRemoteRenderPort(url, token) {
 }
 function makeLazyRenderPort(start, token) {
   let resolving;
+  const resolve = () => resolving ??= start().then((url) => ({ url, port: makeRemoteRenderPort(url, token) }), (err) => {
+    throw new Error(`render service could not start: ${err instanceof Error ? err.message : String(err)}`);
+  });
   return async (req) => {
-    resolving ??= start().then((url) => makeRemoteRenderPort(url, token), (err) => {
-      throw new Error(`render service could not start: ${err instanceof Error ? err.message : String(err)}`);
-    });
-    return (await resolving)(req);
+    const { url, port } = await resolve();
+    try {
+      return await port(req);
+    } catch (error) {
+      if (error instanceof Error && error.name === "TimeoutError")
+        throw error;
+      if (await listening(url))
+        throw error;
+      resolving = undefined;
+      return (await resolve()).port(req);
+    }
   };
+}
+async function listening(url) {
+  try {
+    const res = await fetch(new URL("/health", url), { signal: AbortSignal.timeout(1500) });
+    return res.ok;
+  } catch {
+    return false;
+  }
 }
 async function probeCaptureIdentity(url) {
   try {
@@ -28995,30 +29091,11 @@ async function probeCaptureIdentity(url) {
     return;
   }
 }
-async function probeOnce(url, timeoutMs) {
-  try {
-    const res = await fetch(new URL("/health", url), {
-      signal: AbortSignal.timeout(timeoutMs)
-    });
-    if (!res.ok)
-      return { kind: "absent" };
-    const json = await res.json();
-    if (!json.ok)
-      return { kind: "absent" };
-    return { kind: "ok", rendererId: json.rendererId ?? "unknown-renderer" };
-  } catch (err) {
-    const timedOut = err instanceof Error && err.name === "TimeoutError";
-    return timedOut ? { kind: "busy" } : { kind: "absent" };
-  }
-}
-async function probeRenderService(url) {
-  const first = await probeOnce(url, HEALTH_PROBE_TIMEOUT_MS);
-  if (first.kind === "ok")
-    return first.rendererId;
-  if (first.kind === "absent")
-    return;
-  const second = await probeOnce(url, HEALTH_PROBE_BUSY_TIMEOUT_MS);
-  return second.kind === "ok" ? second.rendererId : undefined;
+async function inspectWithPatience(url, dir) {
+  const first = await inspectLocalRenderService(url, dir, HEALTH_PROBE_TIMEOUT_MS);
+  if (first.kind !== "busy")
+    return first;
+  return inspectLocalRenderService(url, dir, HEALTH_PROBE_BUSY_TIMEOUT_MS);
 }
 var selected = new WeakMap;
 async function buildRenderPort(mode, portUrl, options) {
@@ -29053,11 +29130,35 @@ async function buildRenderPort(mode, portUrl, options) {
   if (envUrl)
     return attach(envUrl, `GPU service (${envUrl})`, explicitClientToken);
   const localUrl = localRenderServiceUrl();
-  const rendererId = await probeRenderService(localUrl);
-  if (rendererId)
-    return attach(localUrl, `GPU service (${rendererId})`, localClientToken);
+  const dir = options?.serviceDir ?? renderServiceDir();
+  const probe = await inspectWithPatience(localUrl, dir);
+  let pruned = "";
+  if (probe.kind === "service") {
+    if (!probe.stale)
+      return attach(localUrl, `GPU service (${probe.rendererId})`, localClientToken);
+    if (!probe.orphaned) {
+      const why = `${describeStaleService(localUrl, probe)}; stop it with \`kiln service stop\``;
+      if (mode === "gpu")
+        throw new Error(why);
+      selected.set(context, `cpu raster (${why})`);
+      return context;
+    }
+    pruned = await terminateRenderService(localUrl, probe) ? `stopped ${describeStaleService(localUrl, probe)}` : "";
+    if (!pruned) {
+      const why = `${describeStaleService(localUrl, probe)} and could not be stopped`;
+      if (mode === "gpu")
+        throw new Error(why);
+      selected.set(context, `cpu raster (${why})`);
+      return context;
+    }
+  } else if (probe.kind === "foreign") {
+    const why = `port ${localRenderServicePort()} is in use by something that is not a render service; set KILN_RENDER_SERVICE_PORT to move the renderer`;
+    if (mode === "gpu")
+      throw new Error(why);
+    selected.set(context, `cpu raster (${why})`);
+    return context;
+  }
   if (options?.autoSpawn || mode === "gpu") {
-    const dir = options?.serviceDir ?? renderServiceDir();
     const state = options?.start ? "ready" : localRenderServiceState(dir);
     if (state === "ready") {
       const start = options?.start ?? (() => startLocalRenderService(dir));
@@ -29067,7 +29168,7 @@ async function buildRenderPort(mode, portUrl, options) {
       throw new Error(`no GPU render service is reachable at ${localUrl}, and ${explainRenderServiceState(state, dir)}.
 ` + "Set --render-port or KILN_RENDER_PORT_URL to point at one elsewhere, or use " + "--render auto to fall back to the CPU rasterizer.");
   }
-  selected.set(context, "cpu raster (no GPU service found)");
+  selected.set(context, pruned ? `cpu raster (${pruned}; none started for a one-shot render)` : "cpu raster (no GPU service found)");
   return context;
 }
 
@@ -29342,7 +29443,7 @@ init_community_exporter();
 
 // src/build-cache-node.ts
 init_protocol();
-import { createHash as createHash9, randomUUID as randomUUID4 } from "node:crypto";
+import { createHash as createHash10, randomUUID as randomUUID4 } from "node:crypto";
 import {
   mkdir as mkdir4,
   readFile as readFile4,
@@ -29356,7 +29457,7 @@ import {
 import { join as join6, resolve as resolve5 } from "node:path";
 var keyPattern = /^sha256:[a-f0-9]{64}$/;
 var filePattern = /^[a-f0-9]{64}\.json$/;
-var digest3 = (text) => createHash9("sha256").update(text).digest("hex");
+var digest3 = (text) => createHash10("sha256").update(text).digest("hex");
 
 class FileBuildCache {
   maxBytes;
@@ -29430,11 +29531,11 @@ class FileBuildCache {
 }
 
 // src/runtime-identity.ts
-import { createHash as createHash10 } from "node:crypto";
+import { createHash as createHash11 } from "node:crypto";
 import { readFile as readFile5, readdir as readdir5, realpath as realpath2, stat as stat4 } from "node:fs/promises";
 import { createRequire } from "node:module";
-import { dirname as dirname2, join as join7, relative as relative2 } from "node:path";
-var digest4 = (bytes) => createHash10("sha256").update(bytes).digest("hex");
+import { dirname as dirname2, join as join7, relative as relative3 } from "node:path";
+var digest4 = (bytes) => createHash11("sha256").update(bytes).digest("hex");
 var compare = (a, b) => a < b ? -1 : a > b ? 1 : 0;
 async function installedRuntimeIdentity(root, limits = {}) {
   let bytes = 0;
@@ -29518,7 +29619,7 @@ async function installedRuntimeIdentity(root, limits = {}) {
         if (entry.isDirectory())
           return tree(path, base);
         if (entry.isFile())
-          return [[relative2(base, path).replaceAll("\\", "/"), digest4(await read(path))]];
+          return [[relative3(base, path).replaceAll("\\", "/"), digest4(await read(path))]];
         throw new Error("Dependency contains a non-file runtime input.");
       }))).flat();
     }

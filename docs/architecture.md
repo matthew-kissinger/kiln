@@ -27,7 +27,7 @@ See [package.json](../package.json) for all exports.
 
 ## Tool surfaces
 
-[src/tools/registry.ts](../src/tools/registry.ts) defines the tools. `createKilnToolRegistry` preserves the original in-process baseline. `createKilnProgramToolRegistry` adds saved-source references and combines build metrics with rendered views for the current MCP surface. The two surfaces share implementations but intentionally differ in their available tools.
+[src/tools/registry.ts](../src/tools/registry.ts) defines the tools. `createKilnToolRegistry` is the in-process loop's four tools; its `kiln_screenshot` runs the same implementation as the unified `kiln_render`. `createKilnProgramToolRegistry` adds saved-source references and combines build metrics with rendered views for the current MCP surface. The two surfaces share implementations but intentionally differ in their available tools.
 
 An embedded host can inject a `ProgramStore`. The default registry store is in memory; the stdio server and CLI use a local file store. [Program revisions](programs.md) describes the contract and lifecycle.
 

@@ -21,9 +21,10 @@
  * one flag and never starts anything locally.
  */
 import { spawn, type ChildProcess } from 'node:child_process';
-import { existsSync } from 'node:fs';
+import { createHash } from 'node:crypto';
+import { existsSync, readFileSync, readdirSync, statSync } from 'node:fs';
 import { fileURLToPath, pathToFileURL } from 'node:url';
-import { join } from 'node:path';
+import { join, relative } from 'node:path';
 
 /**
  * The port a locally started service listens on -- deliberately the SAME port the
@@ -118,6 +119,178 @@ async function healthy(url: string, timeoutMs: number): Promise<boolean> {
   }
 }
 
+// -----------------------------------------------------------------------------
+// Who is listening on the shared port
+// -----------------------------------------------------------------------------
+//
+// The socket is the registry. A service reports its pid, the session that
+// started it and a fingerprint of the source it runs (`render-service/src/
+// instance.mjs`), and the host reads those instead of guessing from a port
+// number. A lease file would be a second source of truth that can outlive the
+// process it describes; `/health` cannot.
+
+/** The `instance` block of the service's `/health`. */
+export interface RenderServiceInstance {
+  version: 'kiln.render-service-instance.v1';
+  pid: number;
+  /** The session that started it on demand; null when started by hand. */
+  ownerPid: number | null;
+  startedAt: string;
+  sourceDir: string;
+  sourceFingerprint: string;
+}
+
+/**
+ * The same walk as `fingerprintSourceDir` in `render-service/src/instance.mjs`,
+ * over `<dir>/src`, so the host can compare what is on disk with what a running
+ * service reports. A test imports the service's implementation and checks the
+ * two agree on one directory; keep them in step.
+ */
+export function renderServiceSourceFingerprint(dir: string): string | undefined {
+  const source = join(dir, 'src');
+  if (!existsSync(source)) return undefined;
+  const hash = createHash('sha256');
+  hash.update('kiln.render-service-source.v1');
+  const visit = (path: string): void => {
+    if (statSync(path).isDirectory()) {
+      for (const name of readdirSync(path).sort()) {
+        if (name === 'node_modules') continue;
+        visit(join(path, name));
+      }
+      return;
+    }
+    const bytes = readFileSync(path);
+    hash.update(JSON.stringify([relative(source, path).replaceAll('\\', '/'), bytes.length]));
+    hash.update(bytes);
+  };
+  visit(source);
+  return `sha256:${hash.digest('hex')}`;
+}
+
+/** Whether `pid` is a live process. EPERM means it exists and is not ours to signal. */
+export function processIsAlive(pid: number): boolean {
+  try {
+    process.kill(pid, 0);
+    return true;
+  } catch (error) {
+    return (error as { code?: string }).code === 'EPERM';
+  }
+}
+
+export type LocalRenderServiceProbe =
+  /** Nothing accepted the connection. */
+  | { kind: 'absent' }
+  /** The socket was accepted and then went quiet: a renderer busy on another frame. */
+  | { kind: 'busy' }
+  /** Something answered, and it is not a render service. */
+  | { kind: 'foreign' }
+  | {
+      kind: 'service';
+      rendererId: string;
+      /** Absent on a service from before instance reporting. */
+      instance?: RenderServiceInstance;
+      /** Runs source that differs from `<dir>/src`. Never true when it cannot be told. */
+      stale: boolean;
+      /** Started on demand by a session that no longer exists. */
+      orphaned: boolean;
+    };
+
+/**
+ * Ask the shared port who is there. Never throws: every answer is a state the
+ * caller has a policy for.
+ */
+export async function inspectLocalRenderService(
+  url: string,
+  dir = renderServiceDir(),
+  timeoutMs = 1_500,
+): Promise<LocalRenderServiceProbe> {
+  let body: {
+    ok?: boolean;
+    rendererId?: string;
+    instance?: Partial<RenderServiceInstance>;
+  };
+  try {
+    const res = await fetch(new URL('/health', url), {
+      signal: AbortSignal.timeout(timeoutMs),
+      cache: 'no-store',
+    });
+    if (!res.ok) return { kind: 'foreign' };
+    body = (await res.json()) as typeof body;
+  } catch (error) {
+    // `AbortSignal.timeout` rejects with a TimeoutError; a refused connection
+    // is a fetch failure; a listening socket whose body is not JSON is
+    // somebody else's server on our port.
+    if (error instanceof Error && error.name === 'TimeoutError') return { kind: 'busy' };
+    return (error as { name?: string }).name === 'SyntaxError'
+      ? { kind: 'foreign' }
+      : { kind: 'absent' };
+  }
+  if (body?.ok !== true || typeof body.rendererId !== 'string') return { kind: 'foreign' };
+  const raw = body.instance;
+  const instance: RenderServiceInstance | undefined =
+    raw &&
+    raw.version === 'kiln.render-service-instance.v1' &&
+    typeof raw.pid === 'number' &&
+    typeof raw.sourceFingerprint === 'string'
+      ? {
+          version: raw.version,
+          pid: raw.pid,
+          ownerPid: typeof raw.ownerPid === 'number' ? raw.ownerPid : null,
+          startedAt: typeof raw.startedAt === 'string' ? raw.startedAt : '',
+          sourceDir: typeof raw.sourceDir === 'string' ? raw.sourceDir : '',
+          sourceFingerprint: raw.sourceFingerprint,
+        }
+      : undefined;
+  const local = renderServiceSourceFingerprint(dir);
+  const stale =
+    instance !== undefined && local !== undefined && instance.sourceFingerprint !== local;
+  const orphaned =
+    instance !== undefined && instance.ownerPid !== null && !processIsAlive(instance.ownerPid);
+  return {
+    kind: 'service',
+    rendererId: body.rendererId,
+    ...(instance ? { instance } : {}),
+    stale,
+    orphaned,
+  };
+}
+
+/** How a stale service is described to whoever has to act on it. */
+export function describeStaleService(url: string, probe: LocalRenderServiceProbe): string {
+  if (probe.kind !== 'service' || !probe.instance) return `the render service on ${url} is stale`;
+  const { pid, ownerPid } = probe.instance;
+  const who =
+    ownerPid === null
+      ? 'started by hand'
+      : probe.orphaned
+        ? `started by session ${ownerPid}, which has exited`
+        : `started by session ${ownerPid}, which is still running`;
+  return `the render service on ${url} (pid ${pid}, ${who}) runs older source than the render-service directory of this installation`;
+}
+
+/**
+ * Stop the service `probe` describes and wait for its port to come free.
+ * Returns false when it could not be stopped in time.
+ */
+export async function terminateRenderService(
+  url: string,
+  probe: LocalRenderServiceProbe,
+  waitMs = 5_000,
+): Promise<boolean> {
+  if (probe.kind !== 'service' || !probe.instance) return false;
+  try {
+    process.kill(probe.instance.pid);
+  } catch {
+    return false;
+  }
+  const deadline = Date.now() + waitMs;
+  while (Date.now() < deadline) {
+    if ((await inspectLocalRenderService(url, undefined, 500)).kind === 'absent') return true;
+    await new Promise((done) => setTimeout(done, 100));
+  }
+  return false;
+}
+
 /**
  * The Node binary to run the service with.
  *
@@ -174,7 +347,27 @@ export async function startLocalRenderService(dir = renderServiceDir()): Promise
   // this branch is also what keeps `stopLocalRenderService` honest: `child` stays
   // undefined, so leaving this process never takes down a service it found. A
   // batch of dispatched agents sharing one GPU depends on exactly that.
-  if (await healthy(url, 1_500)) return url;
+  //
+  // Unless it runs older source than this installation ships. Then joining it
+  // is the confusing state this module exists to remove -- a 400 for a field
+  // the old build never heard of, reported as a degrade -- so an orphan is
+  // replaced and anything still owned or hand-started is named and left alone.
+  const probe = await inspectLocalRenderService(url, dir);
+  if (probe.kind === 'busy') return url;
+  if (probe.kind === 'foreign')
+    throw new Error(
+      `port ${localRenderServicePort()} is in use by something that is not a render service; ` +
+        'set KILN_RENDER_SERVICE_PORT to move the renderer',
+    );
+  if (probe.kind === 'service') {
+    if (!probe.stale) return url;
+    if (!probe.orphaned)
+      throw new Error(
+        `${describeStaleService(url, probe)}; stop it with \`kiln service stop\` and it will be started again on demand`,
+      );
+    if (!(await terminateRenderService(url, probe)))
+      throw new Error(`${describeStaleService(url, probe)} and could not be stopped`);
+  }
 
   const state = localRenderServiceState(dir);
   if (state !== 'ready') throw new Error(explainRenderServiceState(state, dir));
@@ -186,6 +379,10 @@ export async function startLocalRenderService(dir = renderServiceDir()): Promise
     env: {
       ...process.env,
       PORT: String(localRenderServicePort()),
+      // The lease. The service watches this pid and exits when it is gone, which
+      // is what makes an on-demand start safe on a host that is hard-killed; and
+      // a later session reads it to tell an orphan from a renderer in use.
+      RENDER_SERVICE_OWNER_PID: String(process.pid),
       // Loopback, where the documented manual start binds every interface. We
       // are choosing on the user's behalf here, so the narrow choice is the
       // right one; the Docker deployment sets its own HOST and is unaffected.

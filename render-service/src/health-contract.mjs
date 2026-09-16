@@ -18,10 +18,13 @@ export const RENDER_CAPABILITIES = Object.freeze([
   'auth.x-render-token',
 ]);
 
-export function buildHealthDocument(gpuState, authRequired) {
+export function buildHealthDocument(gpuState, authRequired, instance) {
   return {
     ok: true,
     ...(gpuState.captureIdentity ? { captureIdentity: gpuState.captureIdentity } : {}),
+    // Who is listening: pid, owner lease and source fingerprint, so a host can
+    // tell a current shared renderer from a stale orphan. See instance.mjs.
+    ...(instance ? { instance } : {}),
     rendererId: gpuState.rendererId,
     backend: gpuState.backend,
     adapter: gpuState.summary,

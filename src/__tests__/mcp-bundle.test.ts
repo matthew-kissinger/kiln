@@ -70,11 +70,11 @@ describe('mcp server bundle', () => {
    */
   it('serves the full tool surface when launched with node', async () => {
     // Compare against the MCP surface, not `createKilnToolRegistry()`. Those
-    // are deliberately different: the registry is the frozen four-tool bench
-    // baseline whose `kiln_screenshot` is CPU-only by construction, and the MCP
-    // server publishes the unified six, including the render-port-backed
-    // `kiln_render`. `src/mcp-parity.test.ts` owns that distinction; this test
-    // only has to prove the bundle publishes whatever the server says it does.
+    // are deliberately different: the registry is the in-process loop's four
+    // tools, and the MCP server publishes the unified surface, where one
+    // `kiln_render` carries the image. `src/mcp-parity.test.ts` owns that
+    // distinction; this test only has to prove the bundle publishes whatever
+    // the server says it does.
     const expected = kilnMcpToolDefs()
       .map((t) => t.name)
       .sort();

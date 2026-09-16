@@ -209,6 +209,7 @@ export interface DerivativeReviewFidelityV1 {
 
 export type ViewEvidenceSurface =
   | 'kiln_render'
+  | 'kiln_screenshot'
   | 'kiln_inspect'
   | 'kiln_screenshot_animation'
   | 'kiln_view_interior'

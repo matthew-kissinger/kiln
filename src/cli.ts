@@ -18,6 +18,7 @@ import type { RenderMode } from './cli-render-mode';
 import { localProgramStore } from './program-store-node';
 import { retainProgram, programRefPattern } from './program-store';
 import { ASSET_USAGE } from './asset-cli';
+import { SERVICE_USAGE } from './service-cli';
 
 const USAGE = `kiln — vision-in-the-loop 3D asset generation
 
@@ -26,6 +27,7 @@ USAGE
   kiln generate "<prompt>"  [options]    author a program with a model, then render
   kiln source <file.js>                 save a source snapshot and print its programRef
   kiln source <programRef> --out file.js export a revision without model transcription
+  kiln service status|stop|prune        the shared GPU render service (see below)
 
 OPTIONS
   --out <path>            GLB output path            (default: out.glb)
@@ -219,8 +221,8 @@ async function emit(code: string, args: Args, context: KilnToolContext): Promise
 
   if (args.views) {
     // The SAME def the MCP surface serves, so the CLI cannot render views through
-    // a path the agent never takes — and so `--render-port` actually fires, which
-    // the frozen baseline's CPU-only kiln_screenshot would silently ignore.
+    // a path the agent never takes, and `--render-port` fires exactly as it does
+    // for a host agent.
     // This call already built the exact source above. Review the same artifact.
     const def = createKilnProgramToolRegistry({
       ...context,
@@ -387,6 +389,7 @@ export function main(argv: readonly string[]): Promise<number> {
 }
 
 async function runMain(argv: readonly string[]): Promise<number> {
+  if (argv[0] === 'service') return (await import('./service-cli')).serviceMain(argv.slice(1));
   if (
     ['save', 'collections', 'assets', 'asset', 'export', 'import', 'view'].includes(argv[0] ?? '')
   ) {
@@ -405,7 +408,7 @@ async function runMain(argv: readonly string[]): Promise<number> {
     return 2;
   }
   if (args.help || !args.command) {
-    console.log(USAGE + ASSET_USAGE);
+    console.log(USAGE + ASSET_USAGE + SERVICE_USAGE);
     return args.help ? 0 : 2;
   }
   try {
