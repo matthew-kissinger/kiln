@@ -1,4 +1,5 @@
 import { validateResolvedAssetCamera, type ResolvedAssetCameraV1 } from '../views/camera';
+import { isBackdropId, BACKDROP_IDS, type BackdropId } from '../views/background';
 /**
  * SceneRenderPort — the host-supplied seam that lets the composer SEE the scene
  * without the engine importing THREE. The engine defines this interface and the
@@ -279,9 +280,16 @@ export interface PbrRenderRequest {
   height?: number;
   /** Host-owned lighting preset identity applied to the perspective render. */
   lightingPresetId?: string;
+  /**
+   * Named backdrop behind every view, from the engine's fixed table. Omitted
+   * means the default. A host paints the matching colour so a GPU sheet and a
+   * CPU fallback sheet of the same request share one backdrop.
+   */
+  backdrop?: BackdropId;
 }
 
 const PBR_REQUEST_KEYS = new Set([
+  'backdrop',
   'glb',
   'viewDirs',
   'size',
@@ -322,6 +330,11 @@ export function validatePbrRenderRequest(input: unknown): PbrRenderRequest {
     throw new TypeError('PbrRenderRequest.glb must be a non-empty Uint8Array');
   }
   const result: PbrRenderRequest = { glb: source.glb };
+  if (source.backdrop !== undefined) {
+    if (!isBackdropId(source.backdrop))
+      throw new TypeError(`PbrRenderRequest.backdrop must be one of ${BACKDROP_IDS.join(', ')}`);
+    result.backdrop = source.backdrop;
+  }
   if (source.viewDirs !== undefined) {
     if (
       !Array.isArray(source.viewDirs) ||
@@ -456,7 +469,15 @@ export function validatePbrRenderRequest(input: unknown): PbrRenderRequest {
  * the rasterizer's own leaf constant) because the host implementing this port
  * has no reason to import the rasterizer.
  */
-export { GRID_BACKGROUND_HEX, GRID_BACKGROUND_RGB } from '../views/background';
+export {
+  BACKDROPS,
+  BACKDROP_IDS,
+  DEFAULT_BACKDROP_ID,
+  GRID_BACKGROUND_HEX,
+  GRID_BACKGROUND_RGB,
+  resolveBackdrop,
+} from '../views/background';
+export type { Backdrop, BackdropId } from '../views/background';
 
 export interface PbrRenderResult {
   captureCache?: { hit: boolean; reused: number; total: number };

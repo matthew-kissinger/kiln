@@ -329,6 +329,15 @@ Build a program and return geometry metrics, exact part paths and images. Omit c
                 "grid",
                 "separate"
               ]
+            },
+            "backdrop": {
+              "description": "Omit for neutral grey. Use light (near-black asset) or dark only after a sheet shows it merging.",
+              "type": "string",
+              "enum": [
+                "neutral",
+                "dark",
+                "light"
+              ]
             }
           },
           "required": [
@@ -382,6 +391,15 @@ Build a program and return geometry metrics, exact part paths and images. Omit c
                 ],
                 "additionalProperties": false
               }
+            },
+            "backdrop": {
+              "description": "Omit for neutral grey. Use light (near-black asset) or dark only after a sheet shows it merging.",
+              "type": "string",
+              "enum": [
+                "neutral",
+                "dark",
+                "light"
+              ]
             }
           },
           "additionalProperties": false
@@ -863,6 +881,15 @@ Render roof-off floor-plan, dollhouse, and eye-level cutaway views. Optional ver
           "enum": [
             "grid",
             "separate"
+          ]
+        },
+        "backdrop": {
+          "description": "Omit for neutral grey. Use light (near-black asset) or dark only after a sheet shows it merging.",
+          "type": "string",
+          "enum": [
+            "neutral",
+            "dark",
+            "light"
           ]
         }
       },
@@ -1451,6 +1478,15 @@ Apply exact-string replacements to a program revision and render the result (ren
                 "grid",
                 "separate"
               ]
+            },
+            "backdrop": {
+              "description": "Omit for neutral grey. Use light (near-black asset) or dark only after a sheet shows it merging.",
+              "type": "string",
+              "enum": [
+                "neutral",
+                "dark",
+                "light"
+              ]
             }
           },
           "required": [
@@ -1504,6 +1540,15 @@ Apply exact-string replacements to a program revision and render the result (ren
                 ],
                 "additionalProperties": false
               }
+            },
+            "backdrop": {
+              "description": "Omit for neutral grey. Use light (near-black asset) or dark only after a sheet shows it merging.",
+              "type": "string",
+              "enum": [
+                "neutral",
+                "dark",
+                "light"
+              ]
             }
           },
           "additionalProperties": false

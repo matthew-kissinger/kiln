@@ -12,6 +12,8 @@ import {
   snapSceneToPalette,
 } from '../index';
 import { encodePng } from '../png';
+import { GRID_BACKGROUND_RGB } from '../background';
+const BG = GRID_BACKGROUND_RGB;
 import { executeKilnCode } from '../../render';
 import { GENERAL_RENDER_PALETTE, paletteToSnapSlots } from '../../palette';
 import { hexToLinearRgb } from '../../palette-snap';
@@ -80,7 +82,7 @@ describe('rasterizeView', () => {
     const reds = new Set<number>();
     for (let i = 0; i < 128 * 128; i++) {
       const r = rgb[i * 3]!;
-      if (r !== 26) reds.add(r); // skip background
+      if (r !== GRID_BACKGROUND_RGB[0]) reds.add(r); // skip background
     }
     expect(reds.size).toBeGreaterThanOrEqual(2);
   });
@@ -99,7 +101,7 @@ describe('rasterizeView', () => {
       for (let y = 0; y < size; y++) {
         for (let x = 0; x < size; x++) {
           const i = (y * size + x) * 3;
-          if (rgb[i] !== 26 || rgb[i + 1] !== 26 || rgb[i + 2] !== 26) {
+          if (rgb[i] !== BG[0] || rgb[i + 1] !== BG[1] || rgb[i + 2] !== BG[2]) {
             if (x < minX) minX = x;
             if (x > maxX) maxX = x;
             if (y < minY) minY = y;
@@ -172,7 +174,7 @@ describe('rasterizeView', () => {
       const r = rgb[i * 3]!;
       const g = rgb[i * 3 + 1]!;
       const b = rgb[i * 3 + 2]!;
-      if (r === 26 && g === 26 && b === 26) continue; // background
+      if (r === BG[0] && g === BG[1] && b === BG[2]) continue; // background
       if (r > 100 && b < 60) redPixels++;
       if (b > 100 && r < 60) bluePixels++;
     }
@@ -206,7 +208,7 @@ describe('rasterizeView', () => {
     for (let i = 0; i < 32 * 32; i++) {
       const r = rgb[i * 3]!;
       const b = rgb[i * 3 + 2]!;
-      if (r === 26 && rgb[i * 3 + 1] === 26 && b === 26) continue;
+      if (r === BG[0] && rgb[i * 3 + 1] === BG[1] && b === BG[2]) continue;
       if (r > 100 && b < 60) redPixels++;
       if (b > 100 && r < 60) bluePixels++;
     }

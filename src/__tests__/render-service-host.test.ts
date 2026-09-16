@@ -99,13 +99,22 @@ it('passes the Node import hook as a file URL on every platform', () => {
 
 describe('buildRenderPort with autoSpawn', () => {
   it('attaches nothing when the renderer is not installed, so a CPU-only machine reads as ordinary', async () => {
-    const context = await buildRenderPort('auto', undefined, {
-      autoSpawn: true,
-      serviceDir: join(await scratch(), 'nothing-here'),
-    });
-    // Not merely "renders on the CPU" -- `viewRenderPort` must be ABSENT, because
-    // that absence is what `describeDrawnBy` reads to call a CPU view ordinary.
-    expect(context.viewRenderPort).toBeUndefined();
+    // Pin a dead port: the host joins a listening service before it looks at the
+    // install, so this test would attach one that happens to be running on 8000.
+    const previous = process.env['KILN_RENDER_SERVICE_PORT'];
+    process.env['KILN_RENDER_SERVICE_PORT'] = '1';
+    try {
+      const context = await buildRenderPort('auto', undefined, {
+        autoSpawn: true,
+        serviceDir: join(await scratch(), 'nothing-here'),
+      });
+      // Not merely "renders on the CPU" -- `viewRenderPort` must be ABSENT, because
+      // that absence is what `describeDrawnBy` reads to call a CPU view ordinary.
+      expect(context.viewRenderPort).toBeUndefined();
+    } finally {
+      if (previous === undefined) delete process.env['KILN_RENDER_SERVICE_PORT'];
+      else process.env['KILN_RENDER_SERVICE_PORT'] = previous;
+    }
   });
 
   it('leaves an explicit URL alone rather than starting anything', async () => {

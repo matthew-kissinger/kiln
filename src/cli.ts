@@ -11,7 +11,9 @@ import { prepareDestination, writeDestinationAtomic } from './cli-output';
 import { isDirectEntry } from './direct-entry';
 import { createPackagedLocalToolContext } from './local-runtime';
 import { createKilnProgramToolRegistry, type KilnToolContext } from './tools/registry';
+import { BACKDROP_IDS, isBackdropId, type BackdropId } from './views/background';
 import { resolveRenderMode, buildRenderPort, describeDrawnBy } from './cli-render-mode';
+import { stopLocalRenderService } from './render-service-host';
 import type { RenderMode } from './cli-render-mode';
 import { localProgramStore } from './program-store-node';
 import { retainProgram, programRefPattern } from './program-store';
@@ -29,6 +31,7 @@ OPTIONS
   --out <path>            GLB output path            (default: out.glb)
   --views <path>          contact sheet PNG path     (default: none)
   --capture <file.json>  camera recipe for --views  (grid output; max 1 MiB)
+  --backdrop <id>         neutral | dark | light     (default: neutral)
   --render <mode>         auto | cpu | gpu           (default: auto)
   --render-port <url>     remote GPU render service
   --model <id>            model id for generate      (default: env KILN_MODEL)
@@ -41,6 +44,7 @@ EXAMPLES
   kiln generate "a weathered wooden crate" --out crate.glb --views sheet.png
   kiln render examples/crate.kiln.js --render cpu --views sheet.png
   kiln render p_RETURNED_HANDLE --capture cameras.json --views chosen.png
+  kiln render examples/crate.kiln.js --views sheet.png --backdrop light
 `;
 
 interface Args {
@@ -50,6 +54,7 @@ interface Args {
   views: string | undefined;
   capture: string | undefined;
   captureRecipe?: unknown;
+  backdrop: BackdropId | undefined;
   render: RenderMode;
   renderPort: string | undefined;
   model: string | undefined;
@@ -65,6 +70,7 @@ export function parseArgs(argv: readonly string[]): Args {
     out: undefined,
     views: undefined,
     capture: undefined,
+    backdrop: undefined,
     render: 'auto',
     renderPort: undefined,
     model: process.env['KILN_MODEL'],
@@ -93,6 +99,13 @@ export function parseArgs(argv: readonly string[]): Args {
       case '--capture':
         args.capture = next();
         break;
+      case '--backdrop': {
+        const id = next();
+        if (!isBackdropId(id))
+          throw new Error(`--backdrop must be one of ${BACKDROP_IDS.join(', ')} (got ${id})`);
+        args.backdrop = id;
+        break;
+      }
       case '--render':
         args.render = resolveRenderMode(next());
         break;
@@ -154,6 +167,22 @@ async function readCaptureRecipe(args: Args): Promise<unknown> {
   if ((capture as { output?: unknown } | null)?.output === 'separate')
     throw new Error('--capture supports grid output only for one --views PNG. Set output to grid.');
   return capture;
+}
+
+/**
+ * `--backdrop` is the one capture field worth a flag of its own: it is the
+ * question "same sheet, other backdrop", which should not require writing a
+ * recipe file. It rides in the same `capture` object every surface takes, so
+ * the CLI, MCP and API resolve it through one path, and it overrides a recipe's
+ * own `backdrop` so a shared recipe can be re-run on another backdrop unedited.
+ */
+function applyBackdrop(args: Args): unknown {
+  if (args.backdrop === undefined) return args.captureRecipe;
+  if (!args.views) throw new Error('--backdrop requires --views <output.png>.');
+  if (args.command !== 'render' && args.command !== 'generate')
+    throw new Error('--backdrop is supported by render and generate only.');
+  const recipe = (args.captureRecipe ?? {}) as Record<string, unknown>;
+  return { ...recipe, backdrop: args.backdrop };
 }
 
 /**
@@ -343,8 +372,18 @@ export async function withProcessAlive<T>(run: () => Promise<T>): Promise<T> {
   }
 }
 
+/**
+ * A one-shot command that had to start the GPU render service must also stop it
+ * when the command settles. The host module kills a service it started from an
+ * `exit` hook, which suits the long-lived MCP server; here it was a deadlock by
+ * construction, because the child's piped stderr kept the loop alive, so the
+ * process never reached `exit`, so the hook never ran, and `--render gpu` hung
+ * after finishing its work with a GPU process orphaned behind it. A service the
+ * command merely found is left alone: `stopLocalRenderService` only kills what
+ * this process spawned.
+ */
 export function main(argv: readonly string[]): Promise<number> {
-  return withProcessAlive(() => runMain(argv));
+  return withProcessAlive(() => runMain(argv)).finally(stopLocalRenderService);
 }
 
 async function runMain(argv: readonly string[]): Promise<number> {
@@ -371,6 +410,7 @@ async function runMain(argv: readonly string[]): Promise<number> {
   }
   try {
     if (args.capture !== undefined) args.captureRecipe = await readCaptureRecipe(args);
+    args.captureRecipe = applyBackdrop(args);
     switch (args.command) {
       case 'source':
         return await cmdSource(args);

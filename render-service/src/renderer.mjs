@@ -18,6 +18,8 @@ import {
   SHADOW_FILTERS,
   getPresentationPreset,
 } from './presentation-presets.mjs';
+import { BACKDROP_HEX } from './backdrops.mjs';
+import { backdropClearColor } from './display-transform.mjs';
 
 export { MAX_VIEW_DIRS, validateViewDirs } from './contract.mjs';
 import { beautyCameraSpec, orthoDepth, orthoHalfExtent } from './framing.mjs';
@@ -48,7 +50,6 @@ export const PRESENTATION_PROFILE_ID = DEFAULT_PRESENTATION_PRESET_ID;
 const defaultPresentation = getPresentationPreset(PRESENTATION_PROFILE_ID);
 // Compatibility exports retain their exact shapes/values while the renderer
 // itself now consumes the registry definition below.
-export const PRESENTATION_BACKGROUND = defaultPresentation.background;
 export const PRESENTATION_EXPOSURE = defaultPresentation.exposure;
 export const PRESENTATION_LIGHTS = Object.freeze({
   hemisphere: Object.freeze({
@@ -221,11 +222,18 @@ for (const name of SHADOW_FILTERS) {
   }
 }
 
-function applyPresentationPreset(renderer, scene, root, preset, environment) {
+function applyPresentationPreset(renderer, scene, root, preset, environment, backdrop) {
   renderer.toneMappingExposure = preset.exposure;
   renderer.shadowMap.enabled = preset.shadows.enabled;
   if (preset.shadows.enabled) renderer.shadowMap.type = SHADOW_MAP_TYPES[preset.shadows.type];
-  scene.background = new THREE.Color(preset.background);
+  // The backdrop is cleared into the HDR framebuffer and tone-mapped with the
+  // asset, so it is set as the linear colour that comes out of that pass as
+  // exactly the table's bytes -- the value the CPU rasterizer paints. Reflections
+  // come from `environment`, never from the backdrop.
+  scene.background = new THREE.Color().setRGB(
+    ...backdropClearColor(BACKDROP_HEX[backdrop], preset.exposure),
+    THREE.LinearSRGBColorSpace,
+  );
   scene.environment = environment;
 
   const ambient = preset.ambient;
@@ -303,7 +311,7 @@ async function readPng(renderer, rt, w, h) {
 /**
  * Render a GLB into PNG views.
  * @param {Buffer} glbBytes
- * @param {{size?: number, viewDirs?: number[][], beautySize?: number, background?: string,
+ * @param {{size?: number, viewDirs?: number[][], beautySize?: number, backdrop?: string,
  *   cameras?: object[], width?: number, height?: number, lightingPresetId?: string}} opts
  * @returns {Promise<{views: Buffer[], beauty: Buffer|null, timings: object,
  *   cameras?: object[], width?: number, height?: number, lightingPresetId?: string}>}
@@ -318,7 +326,7 @@ export async function renderGlb(glbBytes, opts = {}) {
     views: opts.viewDirs,
     size: opts.size,
     beauty_size: opts.beautySize,
-    background: opts.background,
+    backdrop: opts.backdrop,
   });
   // Snapped, not clamped: pooled render targets are keyed by size and never
   // evicted, so an unbounded key space is a caller-controlled VRAM leak. The
@@ -350,12 +358,8 @@ export async function renderGlb(glbBytes, opts = {}) {
       gltf.scene,
       presentation,
       environments.get(presentationPresetId),
+      renderMode.backdrop,
     );
-    // Legacy callers retain their historical escape hatch. Exact camera mode is
-    // preset-ID-only and validateRenderMode rejects a background field.
-    if (renderMode.mode === 'legacy' && opts.background !== undefined) {
-      scene.background = new THREE.Color(opts.background);
-    }
     scene.add(gltf.scene);
 
     if (renderMode.mode === 'camera') {

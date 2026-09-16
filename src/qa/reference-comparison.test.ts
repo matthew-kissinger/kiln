@@ -23,6 +23,7 @@ import {
 } from './reference-comparison';
 import type { QaContext } from './types';
 import { createAssetIntentV1 } from '../contracts';
+import { GRID_BACKGROUND_RGB } from '../views/background';
 
 const SIZE = 128;
 
@@ -68,9 +69,9 @@ function studioReference(withShadow = true): RgbRasterV1 {
   return raster;
 }
 
-/** A Kiln view: near-black background, the same box, no shadow. */
+/** A Kiln view: the neutral grey view backdrop, the same box, no shadow. */
 function renderedView(rgb: [number, number, number] = [150, 40, 40]): RgbRasterV1 {
-  const raster = blank(SIZE, SIZE, [26, 26, 26]);
+  const raster = blank(SIZE, SIZE, [...GRID_BACKGROUND_RGB]);
   fillRect(raster, 44, 36, 84, 84, rgb);
   return raster;
 }
@@ -115,11 +116,16 @@ describe('segmentation', () => {
     const grey = segmentSubject(
       resampleRgb(studioReference(false), REFERENCE_COMPARISON_WORK_SIZE),
     );
-    const dark = segmentSubject(resampleRgb(renderedView(), REFERENCE_COMPARISON_WORK_SIZE));
+    const view = segmentSubject(resampleRgb(renderedView(), REFERENCE_COMPARISON_WORK_SIZE));
+    const dark = segmentSubject(
+      resampleRgb(blank(SIZE, SIZE, [26, 26, 26]), REFERENCE_COMPARISON_WORK_SIZE),
+    );
 
     expect(grey.side.backdrop[0]).toBe(128);
-    // The same code has to work on a photographic mid-grey and on Kiln's own
-    // near-black view background; a constant would only ever fit one of them.
+    // The same code has to work on a photographic mid-grey, on Kiln's own
+    // neutral grey view backdrop and on the older near-black one; a constant
+    // would only ever fit one of them.
+    expect(view.side.backdrop[0]).toBe(GRID_BACKGROUND_RGB[0]);
     expect(dark.side.backdrop[0]).toBe(26);
   });
 
@@ -225,7 +231,7 @@ describe('cropGridCell', () => {
     // Six copies of the subject plus five gutters is a different shape from one
     // subject, so the sheet scores badly against its own reference.
     const cell = renderedView();
-    const sheet = blank(SIZE * 3, SIZE * 2, [26, 26, 26]);
+    const sheet = blank(SIZE * 3, SIZE * 2, [...GRID_BACKGROUND_RGB]);
     for (let r = 0; r < 2; r++) {
       for (let c = 0; c < 3; c++) {
         for (let y = 0; y < SIZE; y++) {

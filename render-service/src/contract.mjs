@@ -4,6 +4,7 @@ import {
   PRESENTATION_PRESET_IDS,
   isPresentationPresetId,
 } from './presentation-presets.mjs';
+import { DEFAULT_BACKDROP_ID, backdropMessage, isBackdropId } from './backdrops.mjs';
 
 // Singular export retained for existing Engine/Studio callers. The plural list
 // is the registry-backed source of truth for strict ID validation and discovery.
@@ -326,12 +327,15 @@ export function validateRenderMode(body) {
   if (!body || typeof body !== 'object' || Array.isArray(body)) {
     throw badRequest('render body must be an object');
   }
+  // The legacy free-hex `background` is gone from both modes: a colour the
+  // engine's CPU rasterizer would not also paint breaks the agreement the named
+  // backdrop table exists for. Both modes take `backdrop`; omitted is neutral.
+  if (body.background !== undefined) {
+    throw badRequest('background is not accepted; name a backdrop instead: neutral, dark, light');
+  }
   if (body.cameras !== undefined) {
     if (body.views !== undefined || body.size !== undefined || body.beauty_size !== undefined) {
       throw badRequest('camera mode is mutually exclusive with views, size, and beauty_size');
-    }
-    if (body.background !== undefined) {
-      throw badRequest('camera mode cannot override the neutral-studio-v1 background');
     }
     const allowed = new Set([
       'glb_base64',
@@ -340,6 +344,7 @@ export function validateRenderMode(body) {
       'width',
       'height',
       'lighting_preset_id',
+      'backdrop',
     ]);
     for (const key of Object.keys(body)) {
       if (body[key] !== undefined && !allowed.has(key)) {
@@ -352,7 +357,7 @@ export function validateRenderMode(body) {
       height: body.height,
       lightingPresetId: body.lighting_preset_id,
     });
-    return { mode: 'camera', ...camera };
+    return { mode: 'camera', ...camera, backdrop: validateBackdrop(body.backdrop) };
   }
   if (
     body.width !== undefined ||
@@ -366,8 +371,19 @@ export function validateRenderMode(body) {
     viewDirs: validateViewDirs(body.views),
     size: body.size,
     beautySize: body.beauty_size,
-    background: body.background,
+    backdrop: validateBackdrop(body.backdrop),
   };
+}
+
+/**
+ * A named backdrop from the shared table, accepted in both modes. It cannot name
+ * a colour the engine's CPU rasterizer would not also paint, so it is safe in
+ * exact camera mode too. Omitted means the neutral entry.
+ */
+function validateBackdrop(value) {
+  if (value === undefined) return DEFAULT_BACKDROP_ID;
+  if (!isBackdropId(value)) throw badRequest(backdropMessage('backdrop'));
+  return value;
 }
 
 export function sha256(bytes) {

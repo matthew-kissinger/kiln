@@ -46,6 +46,7 @@ import {
   type ViewRenderTimeoutResolver,
 } from '../agent/view-render-timeout';
 import { ViewEvidenceHistoryStore } from '../views/evidence-history';
+import { BACKDROP_IDS, type BackdropId } from '../views/background';
 import type { TextureUsage } from '../textures';
 
 // =============================================================================
@@ -457,6 +458,7 @@ async function renderDerivativeCell(
       input.size,
       [camera],
       context.captureLimits,
+      input.backdrop,
     );
     if (ported.ok && ported.derivativeFidelityAttested) {
       if (ported.inputGlbSha256 !== inputGlbSha256) {
@@ -510,6 +512,7 @@ async function renderDerivativeCell(
     renderGlbViewCell(derivativeGlb, input.view, {
       size: input.size,
       camera,
+      ...(input.backdrop ? { backdrop: input.backdrop } : {}),
       ...(input.backfaceCull !== undefined ? { backfaceCull: input.backfaceCull } : {}),
       ...(input.frameBounds ? { frameBounds: input.frameBounds } : {}),
     });
@@ -524,6 +527,7 @@ async function renderDerivativeCell(
           camera,
           size: input.size,
           backfaceCull: input.backfaceCull ?? true,
+          ...(input.backdrop ? { backdrop: input.backdrop } : {}),
         },
         produceFlat,
       )
@@ -627,6 +631,18 @@ const screenshotInput = z.object({
  * metrics-only `kiln_render` produces no image, so a grid shape would be a
  * meaningless argument there and would change that schema for no reason.
  */
+/**
+ * A named backdrop, never a free colour: sheets must stay comparable across
+ * runs, and a backdrop tuned to the asset colour hides the seams the model is
+ * meant to find. Neutral is the measured default; see `views/background.ts`.
+ */
+const backdropInput = z
+  .enum(BACKDROP_IDS as [BackdropId, ...BackdropId[]])
+  .optional()
+  .describe(
+    'Omit for neutral grey. Use light (near-black asset) or dark only after a sheet shows it merging.',
+  );
+
 const legacyCaptureInput = z
   .object({
     preset: z
@@ -662,6 +678,7 @@ const legacyCaptureInput = z
         'One camera per cell, in row-major order. Omit to use the preset default cameras. ' +
           'Must not exceed the preset capacity (max 9 overall).',
       ),
+    backdrop: backdropInput,
   })
   .optional()
   .describe(
@@ -774,6 +791,7 @@ const advancedCaptureInput = z.strictObject(
     cols: z.number().int().min(1).max(3).optional(),
     size: z.number().int().min(128).max(1024).optional(),
     output: z.enum(['grid', 'separate']).optional(),
+    backdrop: backdropInput,
   },
   { error: advancedCaptureError },
 );
@@ -1082,8 +1100,8 @@ export interface KilnScreenshotResult {
   ok: boolean;
   /** View names in grid order (row-major). Defaults to Front, Right, Back, Left, Top, 3/4. */
   views?: string[];
-  /** Grid shape actually rendered — echoes the capture config back, or `3x2` by default. */
-  capture?: { preset: string; cols: number; cells: number };
+  /** Grid shape and backdrop actually rendered — echoes the capture config back, or `3x2` on neutral by default. */
+  capture?: { preset: string; cols: number; cells: number; backdrop?: BackdropId };
   width?: number;
   height?: number;
   /** The 3x2 grid PNG, base64-encoded (transports with image support strip this and attach the bytes). */
@@ -1174,8 +1192,8 @@ export interface KilnRenderViewsResult {
   materialContract?: ProceduralTextureMaterialContract;
   /** View names in grid order (row-major). Defaults to Front, Right, Back, Left, Top, 3/4. */
   views?: string[];
-  /** Grid shape actually rendered — echoes the capture config back, or `3x2` by default. */
-  capture?: { preset: string; cols: number; cells: number };
+  /** Grid shape and backdrop actually rendered — echoes the capture config back, or `3x2` on neutral by default. */
+  capture?: { preset: string; cols: number; cells: number; backdrop?: BackdropId };
   gridWidth?: number;
   gridHeight?: number;
   /** The 3x2 grid PNG, base64-encoded (transports with image support strip this and attach the bytes). */

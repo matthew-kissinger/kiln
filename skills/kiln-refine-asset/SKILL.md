@@ -22,7 +22,7 @@ After saving the reviewed child revision, call `kiln_present` when available wit
 4. Apply related `{ oldString, newString }` replacements through `kiln_edit`. Keep the returned new reference. Shared constants and shared geometry can affect more than the selected part.
 5. Review the diff and returned images against the same question. Check `render.ok` independently of edit success. Repair a failed draft by its new reference rather than recreating the whole source.
 
-An edit renders by default and accepts the same `capture` object as `kiln_render`. Use `render: false` when no image is needed. A missing or ambiguous anchor changes nothing; expand the anchor or use `replaceAll: true` only when every match should change. Long diffs may set `diffTruncated`; read more source instead of requesting a full-program echo by habit.
+An edit renders by default and accepts the same `capture` object as `kiln_render`, including `backdrop` once a sheet on the default neutral grey has shown a very dark or very light part merging with it. Use `render: false` when no image is needed. A missing or ambiguous anchor changes nothing; expand the anchor or use `replaceAll: true` only when every match should change. Long diffs may set `diffTruncated`; read more source instead of requesting a full-program echo by habit.
 
 ## Preserve intended structure
 

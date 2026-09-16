@@ -22,7 +22,7 @@ Submit `code` once to `kiln_render` or `kiln_validate`, then retain its `program
 
 Choose views that answer a question. A broad sheet can establish shape; a part-local view can reveal a seam, underside, or hidden attachment. Use the [camera recipes](references/camera-recipes.md) for image count, exact part framing, explicit cameras, and separate images. Read returned part paths instead of constructing them.
 
-Inspect the actual images. Check silhouette, proportion, orientation, attachment, and ground contact. If the request calls for a finished asset, repair concrete gaps visible at its intended viewing distance rather than stopping at a blockout. Do not repeat the same render without a new question or change.
+Inspect the actual images. Render on the default neutral grey backdrop first. Only when a sheet you have seen shows the silhouette merging with it, add `backdrop: 'light'` (near-black asset) or `backdrop: 'dark'` (near-white or emissive asset) to `capture`, and read the echoed `capture.backdrop`. Check silhouette, proportion, orientation, attachment, and ground contact. If the request calls for a finished asset, repair concrete gaps visible at its intended viewing distance rather than stopping at a blockout. Do not repeat the same render without a new question or change.
 
 `viewFidelity.materialFaithful: false` means geometry evidence, not verified PBR appearance. Check camera/fallback receipts too. A GPU connection alone is not evidence that the requested view was used. Animation needs intermediate-pose review; interiors may need cutaway views.
 
@@ -45,6 +45,6 @@ node kiln.mjs render RETURNED_REF --out asset-v1.glb --views asset-v1.png
 
 Replace `RETURNED_REF` with the final reference returned by Kiln. Keep `.kiln/programs`, including its mappings, while using saved references.
 
-To save a chosen camera view, write the `capture` object itself to `cameras.json` and run `node kiln.mjs render RETURNED_REF --capture cameras.json --views hero.png`. This uses the same camera schema and render pipeline as MCP. CLI image export supports grid output; use one shot for a single hero PNG. Do not copy image base64 into shell commands. The [camera recipes](references/camera-recipes.md) include a complete file example.
+To save a chosen camera view, write the `capture` object itself to `cameras.json` and run `node kiln.mjs render RETURNED_REF --capture cameras.json --views hero.png`. This uses the same camera schema and render pipeline as MCP. CLI image export supports grid output; use one shot for a single hero PNG. Add `--backdrop light` or `--backdrop dark` to any `--views` command when the neutral grey hides the silhouette. Do not copy image base64 into shell commands. The [camera recipes](references/camera-recipes.md) include a complete file example.
 
 Source export refuses to overwrite a file. Report the source and GLB, important design choices, what you reviewed, and any unresolved limitation. Validation does not establish visual quality or destination-runtime performance. There is no default triangle target; measure geometry, draw calls, textures, and loading against the user's actual constraints.

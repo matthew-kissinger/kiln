@@ -20730,9 +20730,30 @@ var init_capture_limits = __esm(() => {
 });
 
 // src/views/background.ts
-var GRID_BACKGROUND_RGB;
+function isBackdropId(value) {
+  return typeof value === "string" && BACKDROP_IDS.includes(value);
+}
+function resolveBackdrop(id) {
+  if (id === undefined)
+    return BACKDROPS[DEFAULT_BACKDROP_ID];
+  if (!isBackdropId(id))
+    throw new Error(`capture.backdrop must be one of ${BACKDROP_IDS.join(", ")} (got ${JSON.stringify(id)}).`);
+  return BACKDROPS[id];
+}
+var BACKDROP_IDS, DEFAULT_BACKDROP_ID = "neutral", define = (id, rgb) => Object.freeze({
+  id,
+  rgb: Object.freeze([...rgb]),
+  hex: `#${rgb.map((c) => c.toString(16).padStart(2, "0")).join("")}`
+}), BACKDROPS, GRID_BACKGROUND_RGB, GRID_BACKGROUND_HEX;
 var init_background = __esm(() => {
-  GRID_BACKGROUND_RGB = [26, 26, 26];
+  BACKDROP_IDS = ["neutral", "dark", "light"];
+  BACKDROPS = Object.freeze({
+    neutral: define("neutral", [170, 177, 188]),
+    dark: define("dark", [26, 26, 26]),
+    light: define("light", [223, 227, 232])
+  });
+  GRID_BACKGROUND_RGB = BACKDROPS[DEFAULT_BACKDROP_ID].rgb;
+  GRID_BACKGROUND_HEX = BACKDROPS[DEFAULT_BACKDROP_ID].hex;
 });
 
 // src/views/raster.ts
@@ -20854,6 +20875,7 @@ function linearToSrgb(c) {
 function rasterizeView(root, dir, opts = {}) {
   const size = opts.size ?? 256;
   const cull = opts.backfaceCull ?? true;
+  const BG = resolveBackdrop(opts.backdrop).rgb;
   const { tris, bbox } = collectTriangles(root);
   const out = new Uint8Array(size * size * 3);
   for (let i = 0;i < size * size; i++) {
@@ -20959,7 +20981,7 @@ function measureBounds(root) {
   const { bbox } = collectTriangles(root);
   return { min: [...bbox.min], max: [...bbox.max] };
 }
-var SIX_VIEWS, SIX_VIEWS_REAR_QUARTER, MIN_ELEVATION_DEG = -89, MAX_ELEVATION_DEG = 89, BG, AMBIENT = 0.25, KEY_INTENSITY = 1.1, KEY_DIR;
+var SIX_VIEWS, SIX_VIEWS_REAR_QUARTER, MIN_ELEVATION_DEG = -89, MAX_ELEVATION_DEG = 89, AMBIENT = 0.25, KEY_INTENSITY = 1.1, KEY_DIR;
 var init_raster = __esm(() => {
   init_background();
   SIX_VIEWS = [
@@ -20974,7 +20996,6 @@ var init_raster = __esm(() => {
     ...SIX_VIEWS.slice(0, 5),
     { name: "3/4 Rear", dir: [-0.7, 0.5, -0.7] }
   ];
-  BG = GRID_BACKGROUND_RGB;
   KEY_DIR = normalize3([1.5, 2, 1]);
 });
 
@@ -21228,14 +21249,15 @@ async function withCameraVisibility(root, shot, run) {
       node.visible = visible;
   }
 }
-function rasterizeCamera(root, input, size = 384, backfaceCull = true) {
+function rasterizeCamera(root, input, size = 384, backfaceCull = true, backdrop) {
   const camera = validateResolvedAssetCamera(input);
+  const bg = resolveBackdrop(backdrop).rgb;
   if (!Number.isInteger(size) || size < 1 || size > 2048)
     throw new Error("camera size must be an integer in 1..2048");
   const z = vec(camera.position).sub(vec(camera.target)).normalize(), x = vec(camera.up).cross(z).normalize(), y = z.clone().cross(x), position = vec(camera.position);
   const out = new Uint8Array(size * size * 3);
   for (let i = 0;i < size * size; i++)
-    out.set(GRID_BACKGROUND_RGB, i * 3);
+    out.set(bg, i * 3);
   const depth = new Float64Array(size * size).fill(Infinity);
   const clip = (points, plane, near) => {
     const result = [];
@@ -21306,7 +21328,9 @@ var PBR_REQUEST_KEYS;
 var init_render_port = __esm(() => {
   init_camera();
   init_background();
+  init_background();
   PBR_REQUEST_KEYS = new Set([
+    "backdrop",
     "glb",
     "viewDirs",
     "size",
@@ -21325,19 +21349,11 @@ var init_capture_cache = __esm(() => {
   init_capture_limits();
 });
 
-// src/views/camera-capture.ts
-var init_camera_capture = __esm(() => {
-  init_capture_limits();
-  init_camera();
-  init_png();
-  init_grid();
-  init_annotate();
-});
-
 // src/views/capture.ts
 var BOTTOM, THREE_QUARTER_REAR, THREE_QUARTER_LOW, PRESET_VIEWS;
 var init_capture = __esm(() => {
   init_raster();
+  init_background();
   BOTTOM = { name: "BOTTOM", dir: [0, -1, 0.0001] };
   THREE_QUARTER_REAR = { name: "REAR 34", dir: [-0.7, 0.5, -0.7] };
   THREE_QUARTER_LOW = { name: "LOW 34", dir: [0.7, -0.35, 0.7] };
@@ -21350,6 +21366,16 @@ var init_capture = __esm(() => {
     "3x2": SIX_VIEWS,
     "3x3": [...SIX_VIEWS, BOTTOM, THREE_QUARTER_REAR, THREE_QUARTER_LOW]
   };
+});
+
+// src/views/camera-capture.ts
+var init_camera_capture = __esm(() => {
+  init_capture_limits();
+  init_camera();
+  init_capture();
+  init_png();
+  init_grid();
+  init_annotate();
 });
 
 // src/views/architecture.ts

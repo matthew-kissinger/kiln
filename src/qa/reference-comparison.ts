@@ -34,7 +34,8 @@
  * A soft shadow is near-neutral and mildly darker, so it lands in the band. A
  * genuinely dark object is either much darker or carries chroma, so it does
  * not. The fraction is relative rather than absolute so the same rule works on
- * a mid-grey photographic backdrop and on Kiln's near-black view background.
+ * a mid-grey photographic backdrop and on Kiln's neutral grey view backdrop
+ * (re-measured when the backdrop moved from near-black to `#aab1bc`).
  *
  * ## Determinism
  *

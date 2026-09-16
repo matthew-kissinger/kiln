@@ -184,9 +184,9 @@ describe('resolveGridCapture', () => {
 
 describe('grid background', () => {
   it('the hex and rgb forms are the same color', () => {
-    // The GPU render port sends the hex; the rasterizer clears to the rgb. They
-    // drifted once (#202225 vs #1a1a1a) and the sheet's backdrop depended on
-    // whether a serverless worker was warm.
+    // The GPU render port and the rasterizer resolve one named backdrop to one
+    // colour. They drifted once (#202225 vs #1a1a1a) and the sheet's backdrop
+    // depended on whether a serverless worker was warm.
     const [r, g, b] = GRID_BACKGROUND_RGB;
     expect(GRID_BACKGROUND_HEX).toBe(
       `#${[r, g, b].map((c) => c.toString(16).padStart(2, '0')).join('')}`,
@@ -229,7 +229,7 @@ describe('renderViewGrid capture', () => {
     expect(Buffer.from(explicitDefault.png).equals(Buffer.from(base.png))).toBe(true);
     expect(Buffer.from(explicit3x2.png).equals(Buffer.from(base.png))).toBe(true);
     expect(base.views).toEqual(['Front', 'Right', 'Back', 'Left', 'Top', '3/4']);
-    expect(base.capture).toEqual({ preset: '3x2', cols: 3, cells: 6 });
+    expect(base.capture).toEqual({ preset: '3x2', cols: 3, cells: 6, backdrop: 'neutral' });
   });
 
   it('each preset composites to the right pixel dimensions', async () => {

@@ -251,9 +251,9 @@ describe('makeKilnUnifiedTools', () => {
     const render = findTool(tools, 'kiln_render');
     const out = (await render.invoke({ capture: { preset: '1x1' } })) as unknown[];
     const json = (out[1] as JsonBlock).json as {
-      capture?: { preset?: string; cols?: number; cells?: number };
+      capture?: { preset?: string; cols?: number; cells?: number; backdrop?: string };
     };
-    expect(json.capture).toEqual({ preset: '1x1', cols: 1, cells: 1 });
+    expect(json.capture).toEqual({ preset: '1x1', cols: 1, cells: 1, backdrop: 'neutral' });
     expect(sink.rendered).toBe(true);
     expect(sink.capture).toEqual({ preset: '1x1' });
 

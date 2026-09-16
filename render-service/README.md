@@ -49,8 +49,8 @@ will not start, never one that quietly renders on CPU while reporting success.
 | Route | Body | Returns |
 |---|---|---|
 | `GET /health` | -- | `{ok, rendererId, backend, adapter, capabilities, presentationProfile, lightingPresetIds}` |
-| `POST /render` (legacy) | `{glb_base64, size?=384, views?, beauty_size?, background?}` | `{ok, rendererId, presentationProfile, timings, views[base64 png], beauty?}` |
-| `POST /render` (camera) | `{glb_base64, cameras, width, height, lighting_preset_id?}` | the above plus `{backend, cameras, width, height, lightingPresetId, viewSha256, outputSetSha256, cameraReceipts}` |
+| `POST /render` (legacy) | `{glb_base64, size?=384, views?, beauty_size?, backdrop?}` | `{ok, rendererId, presentationProfile, timings, views[base64 png], beauty?}` |
+| `POST /render` (camera) | `{glb_base64, cameras, width, height, lighting_preset_id?, backdrop?}` | the above plus `{backend, cameras, width, height, lightingPresetId, viewSha256, outputSetSha256, cameraReceipts}` |
 | `POST /bake` | -- | 501 |
 
 Auth, when `RENDER_SERVICE_TOKEN` is set, is the `x-render-token` header -- **not** `Authorization`,
@@ -70,6 +70,14 @@ Camera mode is additive and exact: 1-12 perspective cameras with `position`, `ta
 16,777,216 total pixels, and every camera aspect must equal `width / height`. It is mutually
 exclusive with `views`, `size`, and `beauty_size`. The only lighting identity is `neutral-studio-v1`;
 `/health.lightingPresetIds` advertises the registry.
+
+`backdrop` names one of `neutral`, `dark` or `light` from `src/backdrops.mjs`, the same table the
+engine's CPU rasterizer paints from, and is accepted in both modes; omitted means `neutral`. The
+backdrop is cleared into the HDR framebuffer and tone-mapped with the asset, so the service sets it
+as the linear colour that comes out of the output pass as exactly the table's bytes
+(`src/display-transform.mjs`), and a GPU sheet and a CPU sheet agree pixel for pixel on it. The old
+free-hex `background` field is rejected in both modes: a colour the engine would not also paint
+breaks the agreement the named table exists for.
 
 ## Docker
 

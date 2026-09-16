@@ -24,6 +24,7 @@
  */
 
 import { SIX_VIEWS, type ViewSpec, orbitAnglesOf, orbitDir, resolveGridViews } from './raster';
+import { BACKDROP_IDS, DEFAULT_BACKDROP_ID, isBackdropId, type BackdropId } from './background';
 
 /** Grid shapes the model may ask for. `COLS x ROWS`. */
 export type CapturePreset = '1x1' | '1x2' | '2x1' | '3x1' | '2x2' | '3x2' | '3x3';
@@ -62,6 +63,12 @@ export interface CaptureConfig {
   output?: 'grid' | 'separate';
   preset?: CapturePreset;
   cells?: CaptureCell[];
+  /**
+   * Named backdrop behind every cell. Omit for the default. One of three fixed
+   * colours rather than a free hex, so sheets stay comparable across runs and a
+   * backdrop can never be tuned to hide a seam. See `views/background.ts`.
+   */
+  backdrop?: BackdropId;
 }
 
 /** Columns for each preset. Rows follow from the cell count. */
@@ -130,6 +137,8 @@ export interface ResolvedCapture {
   zooms: Array<number | undefined>;
   /** True when the result is the untouched shipped default. */
   isDefault: boolean;
+  /** The backdrop every cell is painted on. */
+  backdrop: BackdropId;
 }
 
 /**
@@ -142,9 +151,21 @@ export interface CaptureShape {
   preset: string;
   cols: number;
   cells: number;
+  /** Echoed so the model never has to guess what colour it is looking at. */
+  backdrop?: BackdropId;
 }
 
 export class CaptureConfigError extends Error {}
+
+/** Validate an optional backdrop id, naming the choices on a miss. */
+export function resolveCaptureBackdrop(backdrop: unknown): BackdropId {
+  if (backdrop === undefined) return DEFAULT_BACKDROP_ID;
+  if (!isBackdropId(backdrop))
+    throw new CaptureConfigError(
+      `capture.backdrop must be one of ${BACKDROP_IDS.join(', ')} (got ${JSON.stringify(backdrop)}).`,
+    );
+  return backdrop;
+}
 
 /**
  * Resolve a capture config into the view list, column count and per-cell zooms
@@ -155,6 +176,7 @@ export class CaptureConfigError extends Error {}
  * the model's only feedback channel.
  */
 export function resolveCapture(config?: CaptureConfig): ResolvedCapture {
+  const backdrop = resolveCaptureBackdrop(config?.backdrop);
   if (!config || (config.preset === undefined && config.cells === undefined)) {
     return {
       preset: DEFAULT_CAPTURE_PRESET,
@@ -162,6 +184,7 @@ export function resolveCapture(config?: CaptureConfig): ResolvedCapture {
       cols: PRESET_COLS[DEFAULT_CAPTURE_PRESET],
       zooms: new Array(PRESET_CAPACITY[DEFAULT_CAPTURE_PRESET]).fill(undefined),
       isDefault: true,
+      backdrop,
     };
   }
 
@@ -217,6 +240,7 @@ export function resolveCapture(config?: CaptureConfig): ResolvedCapture {
       cols: PRESET_COLS[preset],
       zooms: cells.map((c) => c.zoom),
       isDefault: false,
+      backdrop,
     };
   }
 
@@ -228,6 +252,7 @@ export function resolveCapture(config?: CaptureConfig): ResolvedCapture {
     cols: PRESET_COLS[chosen],
     zooms: new Array(PRESET_VIEWS[chosen].length).fill(undefined),
     isDefault: chosen === DEFAULT_CAPTURE_PRESET,
+    backdrop,
   };
 }
 
