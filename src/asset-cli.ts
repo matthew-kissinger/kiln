@@ -17,6 +17,7 @@ export const ASSET_USAGE = `
 ASSETS & VIEWER
   kiln save <source.js|programRef> --name <name> [--collection project]
        [--asset <id> --parent <revision>] [--description <text>] [--tag <tag>]
+       [--backdrop neutral|dark|light]   preview backdrop; the one the reviewed sheet used
   kiln collections                        list configured collection names
   kiln collections add <name> <directory>  remember another collection root
   kiln assets [--collection project]      list saved revisions (JSON)
@@ -51,6 +52,7 @@ export async function assetMain(argv: readonly string[]): Promise<number> {
     'profile',
     'port',
     'render',
+    'backdrop',
   ]);
   for (let i = 1; i < argv.length; i++) {
     const arg = argv[i]!;
@@ -128,6 +130,7 @@ export async function assetMain(argv: readonly string[]): Promise<number> {
           description: flags.description,
           brief: flags.brief,
           tags,
+          backdrop: flags.backdrop,
         }),
         null,
         2,

@@ -26,6 +26,33 @@ var __esm = (fn, res, err) => () => {
   return res;
 };
 
+// src/views/background.ts
+function isBackdropId(value) {
+  return typeof value === "string" && BACKDROP_IDS.includes(value);
+}
+function resolveBackdrop(id) {
+  if (id === undefined)
+    return BACKDROPS[DEFAULT_BACKDROP_ID];
+  if (!isBackdropId(id))
+    throw new Error(`capture.backdrop must be one of ${BACKDROP_IDS.join(", ")} (got ${JSON.stringify(id)}).`);
+  return BACKDROPS[id];
+}
+var BACKDROP_IDS, DEFAULT_BACKDROP_ID = "neutral", define = (id, rgb) => Object.freeze({
+  id,
+  rgb: Object.freeze([...rgb]),
+  hex: `#${rgb.map((c) => c.toString(16).padStart(2, "0")).join("")}`
+}), BACKDROPS, GRID_BACKGROUND_RGB, GRID_BACKGROUND_HEX;
+var init_background = __esm(() => {
+  BACKDROP_IDS = ["neutral", "dark", "light"];
+  BACKDROPS = Object.freeze({
+    neutral: define("neutral", [170, 177, 188]),
+    dark: define("dark", [26, 26, 26]),
+    light: define("light", [223, 227, 232])
+  });
+  GRID_BACKGROUND_RGB = BACKDROPS[DEFAULT_BACKDROP_ID].rgb;
+  GRID_BACKGROUND_HEX = BACKDROPS[DEFAULT_BACKDROP_ID].hex;
+});
+
 // src/assets.ts
 import { z } from "zod";
 import { zipSync, unzipSync } from "three/addons/libs/fflate.module.js";
@@ -83,6 +110,7 @@ function encodeAssetBundle(records) {
 }
 var ASSET_LIMIT, assetIdSchema, hash, assetManifestSchema, allowedFiles;
 var init_assets = __esm(() => {
+  init_background();
   ASSET_LIMIT = 64 * 1024 * 1024;
   assetIdSchema = z.string().regex(/^[a-z][a-z0-9_-]{0,79}$/);
   hash = z.string().regex(/^sha256:[a-f0-9]{64}$/);
@@ -112,7 +140,11 @@ var init_assets = __esm(() => {
       dependencies: z.array(z.unknown()).optional(),
       rebuild: z.enum(["engine-required", "external-dependencies-required"])
     }).optional(),
-    preview: z.object({ fidelity: z.unknown().optional(), error: z.string().optional() }).optional()
+    preview: z.object({
+      fidelity: z.unknown().optional(),
+      error: z.string().optional(),
+      backdrop: z.enum(BACKDROP_IDS).optional()
+    }).optional()
   });
   allowedFiles = new Set(["asset.glb", "source.kiln.js", "preview.png"]);
 });
@@ -210,33 +242,6 @@ var init_asset_export = __esm(() => {
   init_assets();
   encoder = new TextEncoder;
   decoder = new TextDecoder;
-});
-
-// src/views/background.ts
-function isBackdropId(value) {
-  return typeof value === "string" && BACKDROP_IDS.includes(value);
-}
-function resolveBackdrop(id) {
-  if (id === undefined)
-    return BACKDROPS[DEFAULT_BACKDROP_ID];
-  if (!isBackdropId(id))
-    throw new Error(`capture.backdrop must be one of ${BACKDROP_IDS.join(", ")} (got ${JSON.stringify(id)}).`);
-  return BACKDROPS[id];
-}
-var BACKDROP_IDS, DEFAULT_BACKDROP_ID = "neutral", define = (id, rgb) => Object.freeze({
-  id,
-  rgb: Object.freeze([...rgb]),
-  hex: `#${rgb.map((c) => c.toString(16).padStart(2, "0")).join("")}`
-}), BACKDROPS, GRID_BACKGROUND_RGB, GRID_BACKGROUND_HEX;
-var init_background = __esm(() => {
-  BACKDROP_IDS = ["neutral", "dark", "light"];
-  BACKDROPS = Object.freeze({
-    neutral: define("neutral", [170, 177, 188]),
-    dark: define("dark", [26, 26, 26]),
-    light: define("light", [223, 227, 232])
-  });
-  GRID_BACKGROUND_RGB = BACKDROPS[DEFAULT_BACKDROP_ID].rgb;
-  GRID_BACKGROUND_HEX = BACKDROPS[DEFAULT_BACKDROP_ID].hex;
 });
 
 // src/views/raster.ts
@@ -27688,7 +27693,7 @@ var renderInput = z4.object({
 var screenshotInput = z4.object({
   code: z4.string().describe("Kiln source code to execute and render to a six-view image grid.")
 });
-var backdropInput = z4.enum(BACKDROP_IDS).optional().describe("Omit for neutral grey. After a sheet shows merging: light if the part is darker, dark if lighter.");
+var backdropInput = z4.enum(BACKDROP_IDS).optional().describe("Neutral grey unless a sheet shows merging: light if the part is darker, dark if lighter.");
 var legacyCaptureInput = z4.object({
   preset: z4.enum(["1x1", "1x2", "2x1", "3x1", "2x2", "3x2", "3x3"]).optional().describe("Grid shape as COLSxROWS. Default 3x2. Choose fewer views for simple shapes, up to 3x3 for more angles."),
   cells: z4.array(z4.object({
@@ -28589,7 +28594,8 @@ function createKilnAssetDefs(context) {
       model: z4.string().max(200).optional(),
       harness: z4.string().max(200).optional(),
       author: z4.string().max(200).optional()
-    }).optional()
+    }).optional(),
+    backdrop: z4.enum(BACKDROP_IDS).optional().describe("Preview backdrop: the one the reviewed sheet used.")
   });
   const assetsInput = z4.object({
     action: z4.enum(["collections", "list", "get", "restore"]).default("list"),
@@ -28611,24 +28617,27 @@ function createKilnAssetDefs(context) {
   return [
     {
       name: "kiln_save",
-      description: "Save a completed source revision into the user-requested collection, or project when no destination was requested. Persists its exact GLB, source, preview, and build record. Discover destinations with kiln_assets action=collections. Use programRef returned by render/edit. To revise an existing asset, supply its assetId and parentRevision; previous revisions remain intact. Returns downloadable resources. Draft renders do not populate collections.",
+      description: "Save a completed source revision into the user-requested collection, or project when none was requested. Persists exact GLB, source, preview and build record. Use programRef returned by render/edit. To revise an asset, pass assetId and parentRevision; earlier revisions stay intact. Returns downloadable resources; draft renders never populate collections.",
       inputSchema: saveInput,
       run: async (raw) => {
-        const input = saveInput.parse(raw);
+        const { backdrop, ...input } = saveInput.parse(raw);
         const target = library();
         const code = await context.programStore.get(input.programRef);
         const rendered = await evaluateGeneratedSource(code, context);
         let preview;
         let previewInfo;
         try {
-          const result = await runRenderViews({ code }, {
-            ...context,
-            evaluatorPort: { render: async () => rendered }
-          });
+          const result = await runRenderViews({
+            code,
+            ...backdrop ? { capture: { backdrop } } : {}
+          }, { ...context, evaluatorPort: { render: async () => rendered } });
           if (!result.ok || !result.pngBase64)
             throw new Error(result.error ?? "Preview unavailable");
           preview = Uint8Array.from(Buffer.from(result.pngBase64, "base64"));
-          previewInfo = { fidelity: result.viewFidelity };
+          previewInfo = {
+            fidelity: result.viewFidelity,
+            backdrop: result.capture?.backdrop ?? DEFAULT_BACKDROP_ID
+          };
         } catch (error) {
           previewInfo = {
             error: error instanceof Error ? error.message : String(error)

@@ -46,6 +46,10 @@ GitHub. The package is not published on the npm registry.
   silhouettes sat on. The guidance in the schema and skills states one rule for every asset
   colour: switch only after a sheet shows a part merging with the grey, to `light` when that part
   is darker than the grey and to `dark` when it is lighter.
+- **`kiln_save` takes the same `backdrop` for the preview it stores**, as does the CLI's
+  `kiln save --backdrop <id>`, and the manifest records the one used as `preview.backdrop`. A
+  preview used to be painted on the default whatever sheet had been accepted, so a grey asset
+  reviewed on `dark` was stored merging with the grey it had just been moved off.
 
 ## Unreleased: Experimental community exporter and engine handoff
 

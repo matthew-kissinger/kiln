@@ -1,5 +1,6 @@
 /** Portable asset records. No filesystem, renderer, or server dependencies. */
 import { z } from 'zod';
+import { BACKDROP_IDS, type BackdropId } from './views/background';
 import { zipSync, unzipSync } from 'three/addons/libs/fflate.module.js';
 
 export const ASSET_LIMIT = 64 * 1024 * 1024;
@@ -38,7 +39,14 @@ export const assetManifestSchema = z.object({
       rebuild: z.enum(['engine-required', 'external-dependencies-required']),
     })
     .optional(),
-  preview: z.object({ fidelity: z.unknown().optional(), error: z.string().optional() }).optional(),
+  preview: z
+    .object({
+      fidelity: z.unknown().optional(),
+      error: z.string().optional(),
+      /** The named backdrop the preview was painted on; a reader must never guess it. */
+      backdrop: z.enum(BACKDROP_IDS as [BackdropId, ...BackdropId[]]).optional(),
+    })
+    .optional(),
 });
 export type AssetManifest = z.infer<typeof assetManifestSchema>;
 export interface AssetRecord {

@@ -8184,6 +8184,7 @@ import { z } from "zod";
 import { zipSync, unzipSync } from "three/addons/libs/fflate.module.js";
 var ASSET_LIMIT, assetIdSchema, hash, assetManifestSchema, allowedFiles;
 var init_assets = __esm(() => {
+  init_background();
   ASSET_LIMIT = 64 * 1024 * 1024;
   assetIdSchema = z.string().regex(/^[a-z][a-z0-9_-]{0,79}$/);
   hash = z.string().regex(/^sha256:[a-f0-9]{64}$/);
@@ -8213,7 +8214,11 @@ var init_assets = __esm(() => {
       dependencies: z.array(z.unknown()).optional(),
       rebuild: z.enum(["engine-required", "external-dependencies-required"])
     }).optional(),
-    preview: z.object({ fidelity: z.unknown().optional(), error: z.string().optional() }).optional()
+    preview: z.object({
+      fidelity: z.unknown().optional(),
+      error: z.string().optional(),
+      backdrop: z.enum(BACKDROP_IDS).optional()
+    }).optional()
   });
   allowedFiles = new Set(["asset.glb", "source.kiln.js", "preview.png"]);
 });
@@ -27606,7 +27611,7 @@ var renderInput = z4.object({
 var screenshotInput = z4.object({
   code: z4.string().describe("Kiln source code to execute and render to a six-view image grid.")
 });
-var backdropInput = z4.enum(BACKDROP_IDS).optional().describe("Omit for neutral grey. After a sheet shows merging: light if the part is darker, dark if lighter.");
+var backdropInput = z4.enum(BACKDROP_IDS).optional().describe("Neutral grey unless a sheet shows merging: light if the part is darker, dark if lighter.");
 var legacyCaptureInput = z4.object({
   preset: z4.enum(["1x1", "1x2", "2x1", "3x1", "2x2", "3x2", "3x3"]).optional().describe("Grid shape as COLSxROWS. Default 3x2. Choose fewer views for simple shapes, up to 3x3 for more angles."),
   cells: z4.array(z4.object({

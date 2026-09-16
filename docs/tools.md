@@ -331,7 +331,7 @@ Build a program and return geometry metrics, exact part paths and images. Omit c
               ]
             },
             "backdrop": {
-              "description": "Omit for neutral grey. After a sheet shows merging: light if the part is darker, dark if lighter.",
+              "description": "Neutral grey unless a sheet shows merging: light if the part is darker, dark if lighter.",
               "type": "string",
               "enum": [
                 "neutral",
@@ -393,7 +393,7 @@ Build a program and return geometry metrics, exact part paths and images. Omit c
               }
             },
             "backdrop": {
-              "description": "Omit for neutral grey. After a sheet shows merging: light if the part is darker, dark if lighter.",
+              "description": "Neutral grey unless a sheet shows merging: light if the part is darker, dark if lighter.",
               "type": "string",
               "enum": [
                 "neutral",
@@ -884,7 +884,7 @@ Render roof-off floor-plan, dollhouse, and eye-level cutaway views. Optional ver
           ]
         },
         "backdrop": {
-          "description": "Omit for neutral grey. After a sheet shows merging: light if the part is darker, dark if lighter.",
+          "description": "Neutral grey unless a sheet shows merging: light if the part is darker, dark if lighter.",
           "type": "string",
           "enum": [
             "neutral",
@@ -1480,7 +1480,7 @@ Apply exact-string replacements to a program revision and render the result (ren
               ]
             },
             "backdrop": {
-              "description": "Omit for neutral grey. After a sheet shows merging: light if the part is darker, dark if lighter.",
+              "description": "Neutral grey unless a sheet shows merging: light if the part is darker, dark if lighter.",
               "type": "string",
               "enum": [
                 "neutral",
@@ -1542,7 +1542,7 @@ Apply exact-string replacements to a program revision and render the result (ren
               }
             },
             "backdrop": {
-              "description": "Omit for neutral grey. After a sheet shows merging: light if the part is darker, dark if lighter.",
+              "description": "Neutral grey unless a sheet shows merging: light if the part is darker, dark if lighter.",
               "type": "string",
               "enum": [
                 "neutral",
@@ -1626,7 +1626,7 @@ Read a saved program revision without changing it. Returns exact source text in 
 
 ## kiln_save
 
-Save a completed source revision into the user-requested collection, or project when no destination was requested. Persists its exact GLB, source, preview, and build record. Discover destinations with kiln_assets action=collections. Use programRef returned by render/edit. To revise an existing asset, supply its assetId and parentRevision; previous revisions remain intact. Returns downloadable resources. Draft renders do not populate collections.
+Save a completed source revision into the user-requested collection, or project when none was requested. Persists exact GLB, source, preview and build record. Use programRef returned by render/edit. To revise an asset, pass assetId and parentRevision; earlier revisions stay intact. Returns downloadable resources; draft renders never populate collections.
 
 <details>
 <summary>Input JSON Schema</summary>
@@ -1692,6 +1692,15 @@ Save a completed source revision into the user-requested collection, or project 
         }
       },
       "additionalProperties": false
+    },
+    "backdrop": {
+      "description": "Preview backdrop: the one the reviewed sheet used.",
+      "type": "string",
+      "enum": [
+        "neutral",
+        "dark",
+        "light"
+      ]
     }
   },
   "required": [

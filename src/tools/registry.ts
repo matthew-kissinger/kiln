@@ -46,7 +46,7 @@ import {
   type ViewRenderTimeoutResolver,
 } from '../agent/view-render-timeout';
 import { ViewEvidenceHistoryStore } from '../views/evidence-history';
-import { BACKDROP_IDS, type BackdropId } from '../views/background';
+import { BACKDROP_IDS, DEFAULT_BACKDROP_ID, type BackdropId } from '../views/background';
 import type { TextureUsage } from '../textures';
 
 // =============================================================================
@@ -640,7 +640,7 @@ const backdropInput = z
   .enum(BACKDROP_IDS as [BackdropId, ...BackdropId[]])
   .optional()
   .describe(
-    'Omit for neutral grey. After a sheet shows merging: light if the part is darker, dark if lighter.',
+    'Neutral grey unless a sheet shows merging: light if the part is darker, dark if lighter.',
   );
 
 const legacyCaptureInput = z
@@ -2477,6 +2477,10 @@ export function createKilnAssetDefs(context: KilnToolContext): KilnToolDef[] {
         author: z.string().max(200).optional(),
       })
       .optional(),
+    backdrop: z
+      .enum(BACKDROP_IDS as [BackdropId, ...BackdropId[]])
+      .optional()
+      .describe('Preview backdrop: the one the reviewed sheet used.'),
   });
   const assetsInput = z.object({
     action: z.enum(['collections', 'list', 'get', 'restore']).default('list'),
@@ -2504,24 +2508,33 @@ export function createKilnAssetDefs(context: KilnToolContext): KilnToolDef[] {
     {
       name: 'kiln_save',
       description:
-        'Save a completed source revision into the user-requested collection, or project when no destination was requested. Persists its exact GLB, source, preview, and build record. Discover destinations with kiln_assets action=collections. Use programRef returned by render/edit. To revise an existing asset, supply its assetId and parentRevision; previous revisions remain intact. Returns downloadable resources. Draft renders do not populate collections.',
+        'Save a completed source revision into the user-requested collection, or project when none was requested. Persists exact GLB, source, preview and build record. Use programRef returned by render/edit. To revise an asset, pass assetId and parentRevision; earlier revisions stay intact. Returns downloadable resources; draft renders never populate collections.',
       inputSchema: saveInput,
       run: async (raw) => {
-        const input = saveInput.parse(raw);
+        const { backdrop, ...input } = saveInput.parse(raw);
         const target = library();
         const code = await context.programStore!.get(input.programRef);
         const rendered = await evaluateGeneratedSource(code, context);
         let preview: Uint8Array | undefined;
         let previewInfo: import('../assets').AssetManifest['preview'];
         try {
-          const result = await runRenderViews({ code } as z.infer<typeof renderViewsInput>, {
-            ...context,
-            evaluatorPort: { render: async () => rendered },
-          });
+          // The preview is the default six-view sheet on the named backdrop, and
+          // the manifest records the one actually painted, so a preview reviewed
+          // on `dark` ships on `dark` and a reader never has to guess.
+          const result = await runRenderViews(
+            {
+              code,
+              ...(backdrop ? { capture: { backdrop } } : {}),
+            } as z.infer<typeof renderViewsInput>,
+            { ...context, evaluatorPort: { render: async () => rendered } },
+          );
           if (!result.ok || !result.pngBase64)
             throw new Error(result.error ?? 'Preview unavailable');
           preview = Uint8Array.from(Buffer.from(result.pngBase64, 'base64'));
-          previewInfo = { fidelity: result.viewFidelity };
+          previewInfo = {
+            fidelity: result.viewFidelity,
+            backdrop: result.capture?.backdrop ?? DEFAULT_BACKDROP_ID,
+          };
         } catch (error) {
           previewInfo = {
             error: error instanceof Error ? error.message : String(error),

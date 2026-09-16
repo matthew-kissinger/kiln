@@ -78,7 +78,8 @@ a GPU sheet share the backdrop pixel for pixel. A capture may name `neutral`, `d
 free colour, because comparability across runs (arena, capture cache, reference comparison) assumes
 two sheets of one GLB differ only because the asset does, and a backdrop close to the asset colour
 hides the seams the model is meant to find. The chosen id is part of both capture-cache keys and is
-echoed as `capture.backdrop` in every render result.
+echoed as `capture.backdrop` in every render result. `kiln_save` paints its preview on the backdrop
+it is given and the manifest records it as `preview.backdrop`; a reader never guesses it.
 
 **The GPU is a view producer only, never gate evidence.** `QaContext` is deliberately image-free so a
 QA rule structurally cannot read a render buffer. Do not add pixels to it.

@@ -10,6 +10,9 @@ import { MemoryProgramStore, retainProgram } from './program-store';
 import { createKilnProgramToolRegistry } from './tools/registry';
 import { decodeWidgetAsset } from './widget-transfer';
 import { readAssetResource } from './assets-resources';
+import { BACKDROPS } from './views/background';
+import { PAD } from './views/grid';
+import { decodePng } from './views/png';
 
 test('MCP saves an editable revision, exposes exact downloadable bytes, and restores source in a new session', async () => {
   const root = await mkdtemp(join(tmpdir(), 'kiln-asset-tools-'));
@@ -272,6 +275,54 @@ test('the default MCP transport keeps artifact URIs readable without resource-li
     );
     const read = await client.readResource({ uri: source.uri });
     expect('text' in read.contents[0]! ? read.contents[0].text : undefined).toBe(code);
+  } finally {
+    await client.close();
+    await server.close();
+    await rm(root, { recursive: true, force: true });
+  }
+});
+
+/**
+ * A saved preview is a render like any other, so it takes the same named backdrop
+ * and the manifest records which one it was painted on. Without that, the model
+ * could review a grey asset on `dark` and then ship a preview where it vanishes
+ * into the neutral grey, and nothing downstream could tell.
+ */
+test('kiln_save paints its preview on the named backdrop and records it in the manifest', async () => {
+  const root = await mkdtemp(join(tmpdir(), 'kiln-save-backdrop-'));
+  const assetLibrary = new FileAssetLibrary({ project: root });
+  const programStore = new MemoryProgramStore();
+  const programRef = await retainProgram(
+    programStore,
+    "const meta = { name: 'Box', category: 'prop' }; function build() { const root = createRoot('Box'); createPart('Body', boxGeo(1,1,1), gameMaterial(0x88aa66), {parent: root, position: [0,0.5,0]}); return root; }",
+  );
+  const server = createKilnMcpServer({ programStore, assetLibrary });
+  const client = new Client({ name: 'save-backdrop-test', version: '1' });
+  const [ct, st] = InMemoryTransport.createLinkedPair();
+  await Promise.all([client.connect(ct), server.connect(st)]);
+  const corner = (png: Uint8Array) => {
+    const decoded = decodePng(png);
+    const at = ((PAD + 1) * decoded.width + (decoded.width - PAD - 2)) * 3;
+    return [...decoded.rgb.subarray(at, at + 3)];
+  };
+  try {
+    for (const [args, expected] of [
+      [{ programRef, name: 'Box' }, 'neutral'],
+      [{ programRef, name: 'Box on dark', backdrop: 'dark' }, 'dark'],
+    ] as const) {
+      const saved = await client.callTool({ name: 'kiln_save', arguments: { ...args } });
+      const blocks = saved.content as { type: string; text?: string }[];
+      const data = JSON.parse(blocks.find((block) => block.type === 'text')!.text!);
+      expect(data.ok).toBe(true);
+      const record = await assetLibrary.read('project', data.asset.assetId, data.asset.revisionId);
+      expect(record.manifest.preview?.backdrop).toBe(expected);
+      expect(corner(record.files['preview.png']!)).toEqual([...BACKDROPS[expected].rgb]);
+    }
+    const bad = await client.callTool({
+      name: 'kiln_save',
+      arguments: { programRef, name: 'Box', backdrop: '#000000' },
+    });
+    expect(bad.isError).toBe(true);
   } finally {
     await client.close();
     await server.close();

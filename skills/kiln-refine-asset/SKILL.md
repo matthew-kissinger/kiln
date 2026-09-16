@@ -10,7 +10,7 @@ Work from the saved program. A GLB alone does not contain editable Kiln JavaScri
 
 For a collection asset, first call `kiln_assets` with `action: "restore"`, `collection`, `assetId`, and `revisionId`. This imports its exact source into the current program store and returns a fresh `programRef`. A downloaded ZIP can be imported with `node kiln.mjs import bundle.zip`. A binary-only GLB has no source to restore.
 
-After reviewing the change, use `kiln_save` to create an immutable child revision with the new `programRef`, the original `assetId`, and `parentRevision` set to the exact revision you started from. Preserve the collection, name, relevant tags, and known model/harness attribution; describe the change. Never replace or delete the base: its prior revision remains intact, and concurrent children remain visible as branches. Return the new revision's download resources; copying to a different collection does not make a live link.
+After reviewing the change, use `kiln_save` to create an immutable child revision with the new `programRef`, the original `assetId`, and `parentRevision` set to the exact revision you started from. Preserve the collection, name, relevant tags, and known model/harness attribution; describe the change. Pass the `backdrop` the accepted sheet used when it was not the default, so the preview matches what you reviewed. Never replace or delete the base: its prior revision remains intact, and concurrent children remain visible as branches. Return the new revision's download resources; copying to a different collection does not make a live link.
 
 ## Read, change, compare
 

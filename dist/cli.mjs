@@ -26713,6 +26713,7 @@ function decodeAssetBundle(bytes) {
 }
 var ASSET_LIMIT, assetIdSchema, hash, assetManifestSchema, allowedFiles;
 var init_assets = __esm(() => {
+  init_background();
   ASSET_LIMIT = 64 * 1024 * 1024;
   assetIdSchema = z.string().regex(/^[a-z][a-z0-9_-]{0,79}$/);
   hash = z.string().regex(/^sha256:[a-f0-9]{64}$/);
@@ -26742,7 +26743,11 @@ var init_assets = __esm(() => {
       dependencies: z.array(z.unknown()).optional(),
       rebuild: z.enum(["engine-required", "external-dependencies-required"])
     }).optional(),
-    preview: z.object({ fidelity: z.unknown().optional(), error: z.string().optional() }).optional()
+    preview: z.object({
+      fidelity: z.unknown().optional(),
+      error: z.string().optional(),
+      backdrop: z.enum(BACKDROP_IDS).optional()
+    }).optional()
   });
   allowedFiles = new Set(["asset.glb", "source.kiln.js", "preview.png"]);
 });
@@ -28847,7 +28852,8 @@ function createKilnAssetDefs(context) {
       model: z4.string().max(200).optional(),
       harness: z4.string().max(200).optional(),
       author: z4.string().max(200).optional()
-    }).optional()
+    }).optional(),
+    backdrop: z4.enum(BACKDROP_IDS).optional().describe("Preview backdrop: the one the reviewed sheet used.")
   });
   const assetsInput = z4.object({
     action: z4.enum(["collections", "list", "get", "restore"]).default("list"),
@@ -28869,24 +28875,27 @@ function createKilnAssetDefs(context) {
   return [
     {
       name: "kiln_save",
-      description: "Save a completed source revision into the user-requested collection, or project when no destination was requested. Persists its exact GLB, source, preview, and build record. Discover destinations with kiln_assets action=collections. Use programRef returned by render/edit. To revise an existing asset, supply its assetId and parentRevision; previous revisions remain intact. Returns downloadable resources. Draft renders do not populate collections.",
+      description: "Save a completed source revision into the user-requested collection, or project when none was requested. Persists exact GLB, source, preview and build record. Use programRef returned by render/edit. To revise an asset, pass assetId and parentRevision; earlier revisions stay intact. Returns downloadable resources; draft renders never populate collections.",
       inputSchema: saveInput,
       run: async (raw) => {
-        const input = saveInput.parse(raw);
+        const { backdrop, ...input } = saveInput.parse(raw);
         const target = library();
         const code = await context.programStore.get(input.programRef);
         const rendered = await evaluateGeneratedSource(code, context);
         let preview;
         let previewInfo;
         try {
-          const result = await runRenderViews({ code }, {
-            ...context,
-            evaluatorPort: { render: async () => rendered }
-          });
+          const result = await runRenderViews({
+            code,
+            ...backdrop ? { capture: { backdrop } } : {}
+          }, { ...context, evaluatorPort: { render: async () => rendered } });
           if (!result.ok || !result.pngBase64)
             throw new Error(result.error ?? "Preview unavailable");
           preview = Uint8Array.from(Buffer.from(result.pngBase64, "base64"));
-          previewInfo = { fidelity: result.viewFidelity };
+          previewInfo = {
+            fidelity: result.viewFidelity,
+            backdrop: result.capture?.backdrop ?? DEFAULT_BACKDROP_ID
+          };
         } catch (error) {
           previewInfo = {
             error: error instanceof Error ? error.message : String(error)
@@ -29084,7 +29093,7 @@ var init_registry2 = __esm(() => {
   screenshotInput = z4.object({
     code: z4.string().describe("Kiln source code to execute and render to a six-view image grid.")
   });
-  backdropInput = z4.enum(BACKDROP_IDS).optional().describe("Omit for neutral grey. After a sheet shows merging: light if the part is darker, dark if lighter.");
+  backdropInput = z4.enum(BACKDROP_IDS).optional().describe("Neutral grey unless a sheet shows merging: light if the part is darker, dark if lighter.");
   legacyCaptureInput = z4.object({
     preset: z4.enum(["1x1", "1x2", "2x1", "3x1", "2x2", "3x2", "3x3"]).optional().describe("Grid shape as COLSxROWS. Default 3x2. Choose fewer views for simple shapes, up to 3x3 for more angles."),
     cells: z4.array(z4.object({
@@ -29857,7 +29866,8 @@ async function assetMain(argv) {
     "format",
     "profile",
     "port",
-    "render"
+    "render",
+    "backdrop"
   ]);
   for (let i = 1;i < argv.length; i++) {
     const arg = argv[i];
@@ -29930,7 +29940,8 @@ async function assetMain(argv) {
       parentRevision: flags.parent,
       description: flags.description,
       brief: flags.brief,
-      tags
+      tags,
+      backdrop: flags.backdrop
     }), null, 2));
   } else if (command === "asset" || command === "export") {
     const [assetId, revisionId] = positional;
@@ -30020,6 +30031,7 @@ var ASSET_USAGE = `
 ASSETS & VIEWER
   kiln save <source.js|programRef> --name <name> [--collection project]
        [--asset <id> --parent <revision>] [--description <text>] [--tag <tag>]
+       [--backdrop neutral|dark|light]   preview backdrop; the one the reviewed sheet used
   kiln collections                        list configured collection names
   kiln collections add <name> <directory>  remember another collection root
   kiln assets [--collection project]      list saved revisions (JSON)
