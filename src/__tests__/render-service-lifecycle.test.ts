@@ -23,7 +23,7 @@
 import type { ChildProcess } from 'node:child_process';
 import { createServer, type Server } from 'node:http';
 import type { AddressInfo } from 'node:net';
-import { mkdir, mkdtemp, rm, writeFile } from 'node:fs/promises';
+import { mkdir, mkdtemp, writeFile } from 'node:fs/promises';
 import { join, resolve } from 'node:path';
 
 import { afterEach, describe, expect, it } from 'bun:test';
@@ -41,6 +41,7 @@ import {
   deadPid,
   exited,
   freePort,
+  removeDirectory,
   spawnFakeRenderService,
   writeFakeRenderService,
 } from './helpers/fake-render-service';
@@ -52,15 +53,16 @@ const savedPort = process.env['KILN_RENDER_SERVICE_PORT'];
 
 afterEach(async () => {
   stopLocalRenderService();
-  for (const child of children.splice(0)) if (child.exitCode === null) child.kill();
+  await Promise.all(
+    children.splice(0).map(async (child) => {
+      if (child.exitCode === null && child.signalCode === null) child.kill();
+      await exited(child);
+    }),
+  );
   await Promise.all(
     servers.splice(0).map((s) => new Promise<void>((done) => s.close(() => done()))),
   );
-  await Promise.all(
-    directories
-      .splice(0)
-      .map((d) => rm(d, { recursive: true, force: true, maxRetries: 10, retryDelay: 100 })),
-  );
+  await Promise.all(directories.splice(0).map((d) => removeDirectory(d)));
   if (savedPort === undefined) delete process.env['KILN_RENDER_SERVICE_PORT'];
   else process.env['KILN_RENDER_SERVICE_PORT'] = savedPort;
 });

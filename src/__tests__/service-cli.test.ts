@@ -10,7 +10,7 @@
 import { createServer, type Server } from 'node:http';
 import type { AddressInfo } from 'node:net';
 import type { ChildProcess } from 'node:child_process';
-import { mkdir, mkdtemp, rm } from 'node:fs/promises';
+import { mkdir, mkdtemp } from 'node:fs/promises';
 import { join, resolve } from 'node:path';
 
 import { afterEach, describe, expect, it } from 'bun:test';
@@ -19,7 +19,9 @@ import { serviceMain } from '../service-cli';
 import { renderServiceSourceFingerprint } from '../render-service-host';
 import {
   deadPid,
+  exited,
   freePort,
+  removeDirectory,
   spawnFakeRenderService,
   writeFakeRenderService,
 } from './helpers/fake-render-service';
@@ -33,15 +35,16 @@ const saved = {
 };
 
 afterEach(async () => {
-  for (const child of children.splice(0)) if (child.exitCode === null) child.kill();
+  await Promise.all(
+    children.splice(0).map(async (child) => {
+      if (child.exitCode === null && child.signalCode === null) child.kill();
+      await exited(child);
+    }),
+  );
   await Promise.all(
     servers.splice(0).map((s) => new Promise<void>((done) => s.close(() => done()))),
   );
-  await Promise.all(
-    directories
-      .splice(0)
-      .map((d) => rm(d, { recursive: true, force: true, maxRetries: 10, retryDelay: 100 })),
-  );
+  await Promise.all(directories.splice(0).map((d) => removeDirectory(d)));
   for (const [key, value] of [
     ['KILN_RENDER_SERVICE_PORT', saved.port],
     ['KILN_RENDER_SERVICE_DIR', saved.dir],
