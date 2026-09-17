@@ -13,7 +13,7 @@ import {
   writeFile,
 } from 'node:fs/promises';
 import { createHash } from 'node:crypto';
-import { realpathSync } from 'node:fs';
+import { existsSync, realpathSync } from 'node:fs';
 import { spawnSync } from 'node:child_process';
 import { dirname, join, resolve, relative, isAbsolute, sep } from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
@@ -248,6 +248,23 @@ async function fileHashes(directory, prefix = '') {
 }
 
 /** Preflight first; create a complete project in a staging directory before installing it. */
+/**
+ * The GPU render service ships as source in `render-service/` and is a separate
+ * npm project with a native dependency, so installing the engine does not
+ * install it. A fresh clone has the source and no `node_modules`; without a
+ * word at setup, the first authoring session gets CPU views and cannot confirm
+ * a material. Mirrors `localRenderServiceState` in src/render-service-host.ts:
+ * `webgpu` is the install that costs something, `three` catches a half-finished one.
+ */
+export function renderServiceNotice(runtime) {
+  const dir = join(runtime, 'render-service');
+  if (!existsSync(join(dir, 'src/server.mjs')) || !existsSync(join(dir, 'package.json')))
+    return undefined;
+  if (existsSync(join(dir, 'node_modules/webgpu')) && existsSync(join(dir, 'node_modules/three')))
+    return undefined;
+  return `The GPU render service at ${dir} is present but not installed, so every render will be a CPU view and nothing can confirm a material. Run \`npm install\` in that directory before the first authoring session, or continue on CPU views.`;
+}
+
 export async function createWorkspace(directory, harness = 'claude', options = {}) {
   const root = resolve(directory);
   // Version managers can expose Node through a directory link lasting only one shell.
@@ -449,6 +466,8 @@ if (isDirectSetupEntry()) {
       if (options.repair && options.skills)
         throw new Error('--repair does not change installed skills.');
       console.log(quote(await createWorkspace(directory, harness, options)));
+      const notice = renderServiceNotice(await realpath(resolve(installation)));
+      if (notice) console.error(notice);
     }
   } catch (error) {
     console.error(error.message);
