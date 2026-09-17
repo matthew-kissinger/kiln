@@ -40,7 +40,7 @@ Hermes needs one user-level registration for the MCP server, because it has no p
 
 Setup asks for render mode `auto`: a GPU service when one answers on port 8000, CPU views otherwise. CPU views are honest about silhouette, proportion and contact and say nothing about colour, metalness or roughness, so without the service no render can confirm a material.
 
-Offer to run its install. It lives in the engine installation rather than the workspace, and it is a separate package with a native dependency, so its install is its own step and is not covered by installing the engine.
+Run its install unless the user declines; in a headless session, where there is nobody to ask, install it without asking, because a session that starts without it stays on CPU views for its lifetime. It lives in the engine installation rather than the workspace, and it is a separate package with a native dependency, so its install is its own step and is not covered by installing the engine. Setup prints a notice when the service shipped but was never installed.
 
 ```bash
 cd render-service && npm install
