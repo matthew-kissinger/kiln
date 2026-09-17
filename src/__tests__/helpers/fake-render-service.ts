@@ -11,7 +11,7 @@
  * make the process look current or stale without editing files.
  */
 import { spawn, spawnSync, type ChildProcess } from 'node:child_process';
-import { mkdir, writeFile } from 'node:fs/promises';
+import { mkdir, rm, writeFile } from 'node:fs/promises';
 import { createServer } from 'node:http';
 import type { AddressInfo } from 'node:net';
 import { join } from 'node:path';
@@ -135,4 +135,25 @@ export async function writeFakeRenderService(dir: string): Promise<string> {
   await writeFile(join(dir, 'src/register-hooks.mjs'), 'export {};');
   await writeFile(join(dir, 'src/server.mjs'), FAKE_SERVER);
   return dir;
+}
+
+/**
+ * Remove a directory a fake service ran in. On Windows the directory stays
+ * locked (EBUSY) until the process that had it as its cwd has fully exited,
+ * which happens some milliseconds after `kill()` returns; so retry for a while
+ * instead of failing the teardown of a test that already passed.
+ */
+export async function removeDirectory(dir: string, timeoutMs = 10_000): Promise<void> {
+  const deadline = Date.now() + timeoutMs;
+  for (;;) {
+    try {
+      await rm(dir, { recursive: true, force: true });
+      return;
+    } catch (error) {
+      const code = (error as NodeJS.ErrnoException).code;
+      const retryable = code === 'EBUSY' || code === 'EPERM' || code === 'ENOTEMPTY';
+      if (!retryable || Date.now() >= deadline) throw error;
+      await new Promise((r) => setTimeout(r, 100));
+    }
+  }
 }
