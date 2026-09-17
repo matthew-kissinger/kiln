@@ -34,6 +34,12 @@ first authoring session. CPU views are sufficient for shape and contact, but not
 The MCP server probes renderer availability when its session starts; installing the renderer
 afterward requires restarting that agent session before it can use the new service.
 
+The MCP server is loaded by the harness process that runs in the workspace directory, and only
+by that process. An agent that hands the authoring to a subagent of its own session gives it the
+outer session's tools, not the workspace's; start a nested author as a separate harness process in
+the workspace (for OpenCode, `opencode run --dir <workspace> "<brief>"`) or it will have the CLI
+alone.
+
 If paths move, use the [repair command](install.md#move-or-repair-an-installation).
 Repair preserves instruction/skill copies; new evaluations require fresh workspaces,
 not repaired old instructions.

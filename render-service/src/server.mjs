@@ -24,7 +24,16 @@
 // bind-policy.mjs, which refuses the boot rather than warning about it.
 // Renders are serialized: one GPU, one queue.
 import { createServer } from 'node:http';
+import { realpathSync } from 'node:fs';
+import { dirname } from 'node:path';
+import { fileURLToPath } from 'node:url';
 import { PRESENTATION_PROFILE_ID, initRenderer, renderGlb } from './renderer.mjs';
+import {
+  describeInstance,
+  fingerprintSourceDir,
+  parseOwnerPid,
+  startOwnerWatch,
+} from './instance.mjs';
 import { acquireGpu } from './gpu.mjs';
 import { buildHealthDocument } from './health-contract.mjs';
 import { describeBind, resolveBindPolicy } from './bind-policy.mjs';
@@ -42,6 +51,18 @@ import {
 
 const PROCESS_STARTED_AT = performance.now();
 const PORT = Number(process.env.PORT ?? 8000);
+// Who this process is, answered on /health so the host that finds it can tell a
+// current shared renderer from a stale orphan. The owner is the host that
+// started it on demand; a hand-started service has none and outlives sessions.
+const SOURCE_DIR = fileURLToPath(new URL('.', import.meta.url));
+const OWNER_PID = parseOwnerPid(process.env.RENDER_SERVICE_OWNER_PID);
+const INSTANCE = describeInstance({
+  pid: process.pid,
+  ownerPid: OWNER_PID,
+  startedAt: new Date().toISOString(),
+  sourceDir: realpathSync(dirname(SOURCE_DIR)),
+  sourceFingerprint: fingerprintSourceDir(SOURCE_DIR),
+});
 const TOKEN = process.env.RENDER_SERVICE_TOKEN ?? '';
 // Unset now means loopback, and a wider bind has to say so AND carry a token.
 // `bind-policy.mjs` owns that rule and the reasoning; the container sets
@@ -153,7 +174,7 @@ const server = createServer(async (req, res) => {
       // no commit stamp, so this is the only way a caller can tell WHICH build is
       // live before depending on a feature. The pure builder is contract-tested
       // without booting a GPU and advertises every registry ID explicitly.
-      return done(200, buildHealthDocument(gpuState, Boolean(TOKEN)));
+      return done(200, buildHealthDocument(gpuState, Boolean(TOKEN), INSTANCE));
     }
     if (req.method === 'POST' && (req.url === '/render' || req.url === '/bake')) {
       if (TOKEN) {
@@ -320,6 +341,19 @@ const server = createServer(async (req, res) => {
     done(e.status ?? 500, { ok: false, error: String(e.message ?? e) });
   }
 });
+
+// A host that dies without running its exit hook -- a hard kill, which is the
+// only kind Windows has -- would otherwise leave this process holding the GPU
+// on the shared port forever. Watching the owner is what makes an on-demand
+// start safe to forget about.
+if (OWNER_PID !== undefined)
+  startOwnerWatch({
+    ownerPid: OWNER_PID,
+    onOrphaned: (pid) => {
+      console.error(`owner process ${pid} is gone; exiting`);
+      process.exit(0);
+    },
+  });
 
 server.listen(PORT, bind.host, () =>
   console.log(

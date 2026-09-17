@@ -28199,30 +28199,6 @@ async function runRender(input, context) {
     };
   }
 }
-async function runScreenshot(input, context) {
-  try {
-    await Promise.resolve().then(() => init_views());
-    const { root, rendered } = await loadEvaluatedReviewScene(input.code, context);
-    const warnings = inspectSceneStructure(root, {
-      category: trustedCategory(context)
-    });
-    const grid = await renderGlbViewGrid(rendered.glb);
-    return {
-      ok: true,
-      views: grid.views,
-      width: grid.width,
-      height: grid.height,
-      pngBase64: grid.png.toString("base64"),
-      warnings
-    };
-  } catch (err) {
-    return {
-      ok: false,
-      error: withSyntaxDetail(err instanceof Error ? err.message : String(err), input.code),
-      warnings: []
-    };
-  }
-}
 function screenshotMedia(output) {
   const o = output;
   if (!o || typeof o.pngBase64 !== "string" || o.pngBase64.length === 0)
@@ -28230,7 +28206,7 @@ function screenshotMedia(output) {
   const { pngBase64: _png, ...json } = o;
   return { png: new Uint8Array(Buffer.from(o.pngBase64, "base64")), json };
 }
-async function runRenderViews(input, context) {
+async function runRenderViews(input, context, toolName = "kiln_render") {
   try {
     await Promise.resolve().then(() => init_views());
     const { root, rendered, reasonCodes } = await loadEvaluatedReviewScene(input.code, context);
@@ -28337,7 +28313,7 @@ async function runRenderViews(input, context) {
       ...drawnBy.degradedReason ? { degradeReason: drawnBy.degradedReason } : {},
       reasonCodes: ["IN_LOOP_BUILD_NOT_PERSISTED"]
     };
-    const viewEvidence = context.viewEvidenceHistory?.record("kiln_render", viewFidelity);
+    const viewEvidence = context.viewEvidenceHistory?.record(toolName, viewFidelity);
     try {
       context.onViewsRendered?.(drawnBy);
     } catch {}
@@ -28667,6 +28643,7 @@ function createKilnEditDef(context = {}) {
   };
 }
 function createKilnToolRegistry(context = {}) {
+  const viewContext = withViewEvidenceHistory(context);
   return [
     {
       name: "kiln_list_primitives",
@@ -28689,10 +28666,11 @@ function createKilnToolRegistry(context = {}) {
     },
     {
       name: "kiln_screenshot",
-      description: "Render Kiln code to a six-view image grid so you can SEE the asset: row 1 = Front (camera on +X, the nose/muzzle should face you), Right (+Z, the long profile), Back (-X); row 2 = Left (-Z), Top (+Y, check symmetry), 3/4 perspective (check part contact and overall read). Use it to verify orientation (+X forward), attachment (no floating parts), and silhouette before submitting. If a view looks wrong, fix the code and screenshot again. Flat-shaded CPU render; does not write files.",
-      inputSchema: screenshotInput,
-      run: async (input) => guardCaptureBudget("kiln_screenshot", input, context, () => runScreenshot(screenshotInput.parse(input), context)),
-      media: screenshotMedia
+      description: "Render Kiln code to an image grid so you can SEE the asset. Omit capture for six views: row 1 = Front (camera on +X, the nose/muzzle should face you), Right (+Z, the long profile), Back (-X); row 2 = Left (-Z), Top (+Y, check symmetry), 3/4 perspective (check part contact and overall read). Use it to verify orientation (+X forward), attachment (no floating parts), and silhouette before submitting. If a view looks wrong, fix the code and screenshot again. capture selects a smaller orbit sheet, per-part framing or a backdrop (neutral, dark, light). Textured or metallic materials draw through the GPU render service when one is available; otherwise a flat-shaded CPU render supports geometry review only. Read viewFidelity before judging materials. Does not write files.",
+      inputSchema: renderViewsInput,
+      run: async (input) => guardCaptureBudget("kiln_screenshot", input, viewContext, () => runRenderViews(renderViewsInput.parse(input), viewContext, "kiln_screenshot")),
+      media: screenshotMedia,
+      mediaMulti: screenshotAnimationMediaMulti
     }
   ];
 }
@@ -29052,7 +29030,7 @@ function createKilnAssetDefs(context) {
     }
   ];
 }
-var KILN_ASSET_WIDGET_URI = "ui://kiln/asset-v5.html", DEFAULT_INLOOP_VIEW_RENDER_TIMEOUT_MS = 6000, viewEvidenceHistoryByContext, VIEW_EVIDENCE_GUIDANCE = " viewEvidence.current describes ONLY this request. lastFaithful is older hash-only evidence for reference, not reused pixels and not current verification.", listPrimitivesInput, validateInput, renderInput, screenshotInput, backdropInput, legacyCaptureInput, cameraVec3Input, orbitCameraError = (issue) => {
+var KILN_ASSET_WIDGET_URI = "ui://kiln/asset-v5.html", DEFAULT_INLOOP_VIEW_RENDER_TIMEOUT_MS = 6000, viewEvidenceHistoryByContext, VIEW_EVIDENCE_GUIDANCE = " viewEvidence.current describes ONLY this request. lastFaithful is older hash-only evidence for reference, not reused pixels and not current verification.", listPrimitivesInput, validateInput, renderInput, backdropInput, legacyCaptureInput, cameraVec3Input, orbitCameraError = (issue) => {
   if (issue.code === "unrecognized_keys" && issue.keys?.some((key) => key === "target" || key === "distance")) {
     return "Orbit cameras derive target and distance from the selected subject bounds; choose subject and padding, or use an explicit camera with position and target.";
   }
@@ -29089,9 +29067,6 @@ var init_registry2 = __esm(() => {
   });
   renderInput = z4.object({
     code: z4.string().describe("Kiln source code to execute and render to an in-memory GLB.")
-  });
-  screenshotInput = z4.object({
-    code: z4.string().describe("Kiln source code to execute and render to a six-view image grid.")
   });
   backdropInput = z4.enum(BACKDROP_IDS).optional().describe("Neutral grey unless a sheet shows merging: light if the part is darker, dark if lighter.");
   legacyCaptureInput = z4.object({
@@ -29217,9 +29192,10 @@ var init_registry2 = __esm(() => {
 
 // src/render-service-host.ts
 import { spawn as spawn2 } from "node:child_process";
-import { existsSync as existsSync2 } from "node:fs";
+import { createHash as createHash9 } from "node:crypto";
+import { existsSync as existsSync2, readFileSync as readFileSync2, readdirSync, statSync } from "node:fs";
 import { fileURLToPath as fileURLToPath5, pathToFileURL } from "node:url";
-import { join as join7 } from "node:path";
+import { join as join7, relative as relative2 } from "node:path";
 function localRenderServicePort() {
   const raw = Number(process.env["KILN_RENDER_SERVICE_PORT"]);
   return Number.isInteger(raw) && raw > 0 && raw < 65536 ? raw : DEFAULT_LOCAL_RENDER_SERVICE_PORT;
@@ -29260,6 +29236,96 @@ async function healthy(url, timeoutMs) {
     return false;
   }
 }
+function renderServiceSourceFingerprint(dir) {
+  const source = join7(dir, "src");
+  if (!existsSync2(source))
+    return;
+  const hash = createHash9("sha256");
+  hash.update("kiln.render-service-source.v1");
+  const visit = (path) => {
+    if (statSync(path).isDirectory()) {
+      for (const name of readdirSync(path).sort()) {
+        if (name === "node_modules")
+          continue;
+        visit(join7(path, name));
+      }
+      return;
+    }
+    const bytes = readFileSync2(path);
+    hash.update(JSON.stringify([relative2(source, path).replaceAll("\\", "/"), bytes.length]));
+    hash.update(bytes);
+  };
+  visit(source);
+  return `sha256:${hash.digest("hex")}`;
+}
+function processIsAlive(pid) {
+  try {
+    process.kill(pid, 0);
+    return true;
+  } catch (error) {
+    return error.code === "EPERM";
+  }
+}
+async function inspectLocalRenderService(url, dir = renderServiceDir(), timeoutMs = 1500) {
+  let body;
+  try {
+    const res = await fetch(new URL("/health", url), {
+      signal: AbortSignal.timeout(timeoutMs),
+      cache: "no-store"
+    });
+    if (!res.ok)
+      return { kind: "foreign" };
+    body = await res.json();
+  } catch (error) {
+    if (error instanceof Error && error.name === "TimeoutError")
+      return { kind: "busy" };
+    return error.name === "SyntaxError" ? { kind: "foreign" } : { kind: "absent" };
+  }
+  if (body?.ok !== true || typeof body.rendererId !== "string")
+    return { kind: "foreign" };
+  const raw = body.instance;
+  const instance = raw && raw.version === "kiln.render-service-instance.v1" && typeof raw.pid === "number" && typeof raw.sourceFingerprint === "string" ? {
+    version: raw.version,
+    pid: raw.pid,
+    ownerPid: typeof raw.ownerPid === "number" ? raw.ownerPid : null,
+    startedAt: typeof raw.startedAt === "string" ? raw.startedAt : "",
+    sourceDir: typeof raw.sourceDir === "string" ? raw.sourceDir : "",
+    sourceFingerprint: raw.sourceFingerprint
+  } : undefined;
+  const local = renderServiceSourceFingerprint(dir);
+  const stale = instance !== undefined && local !== undefined && instance.sourceFingerprint !== local;
+  const orphaned = instance !== undefined && instance.ownerPid !== null && !processIsAlive(instance.ownerPid);
+  return {
+    kind: "service",
+    rendererId: body.rendererId,
+    ...instance ? { instance } : {},
+    stale,
+    orphaned
+  };
+}
+function describeStaleService(url, probe) {
+  if (probe.kind !== "service" || !probe.instance)
+    return `the render service on ${url} is stale`;
+  const { pid, ownerPid } = probe.instance;
+  const who = ownerPid === null ? "started by hand" : probe.orphaned ? `started by session ${ownerPid}, which has exited` : `started by session ${ownerPid}, which is still running`;
+  return `the render service on ${url} (pid ${pid}, ${who}) runs older source than the render-service directory of this installation`;
+}
+async function terminateRenderService(url, probe, waitMs = 5000) {
+  if (probe.kind !== "service" || !probe.instance)
+    return false;
+  try {
+    process.kill(probe.instance.pid);
+  } catch {
+    return false;
+  }
+  const deadline = Date.now() + waitMs;
+  while (Date.now() < deadline) {
+    if ((await inspectLocalRenderService(url, undefined, 500)).kind === "absent")
+      return true;
+    await new Promise((done) => setTimeout(done, 100));
+  }
+  return false;
+}
 function nodeBinary() {
   const override = process.env["KILN_RENDER_SERVICE_NODE"];
   if (override)
@@ -29285,8 +29351,19 @@ function registerTeardown() {
 }
 async function startLocalRenderService(dir = renderServiceDir()) {
   const url = localRenderServiceUrl();
-  if (await healthy(url, 1500))
+  const probe = await inspectLocalRenderService(url, dir);
+  if (probe.kind === "busy")
     return url;
+  if (probe.kind === "foreign")
+    throw new Error(`port ${localRenderServicePort()} is in use by something that is not a render service; ` + "set KILN_RENDER_SERVICE_PORT to move the renderer");
+  if (probe.kind === "service") {
+    if (!probe.stale)
+      return url;
+    if (!probe.orphaned)
+      throw new Error(`${describeStaleService(url, probe)}; stop it with \`kiln service stop\` and it will be started again on demand`);
+    if (!await terminateRenderService(url, probe))
+      throw new Error(`${describeStaleService(url, probe)} and could not be stopped`);
+  }
   const state = localRenderServiceState(dir);
   if (state !== "ready")
     throw new Error(explainRenderServiceState(state, dir));
@@ -29297,6 +29374,7 @@ async function startLocalRenderService(dir = renderServiceDir()) {
     env: {
       ...process.env,
       PORT: String(localRenderServicePort()),
+      RENDER_SERVICE_OWNER_PID: String(process.pid),
       HOST: "127.0.0.1"
     },
     stdio: ["ignore", "ignore", "pipe"]
@@ -29326,7 +29404,7 @@ var init_render_service_host = __esm(() => {
 });
 
 // src/cli-render-mode.ts
-import { createHash as createHash9 } from "node:crypto";
+import { createHash as createHash10 } from "node:crypto";
 function resolveRenderMode(value) {
   if (value === "auto" || value === "cpu" || value === "gpu")
     return value;
@@ -29337,7 +29415,7 @@ function makeRemoteRenderPort(url, token) {
     const body = {
       glb_base64: Buffer.from(req.glb).toString("base64")
     };
-    const inputGlbSha256 = `sha256:${createHash9("sha256").update(req.glb).digest("hex")}`;
+    const inputGlbSha256 = `sha256:${createHash10("sha256").update(req.glb).digest("hex")}`;
     body["input_glb_sha256"] = inputGlbSha256;
     if (req.cameras) {
       body["cameras"] = req.cameras;
@@ -29379,12 +29457,30 @@ function makeRemoteRenderPort(url, token) {
 }
 function makeLazyRenderPort(start, token) {
   let resolving;
+  const resolve = () => resolving ??= start().then((url) => ({ url, port: makeRemoteRenderPort(url, token) }), (err) => {
+    throw new Error(`render service could not start: ${err instanceof Error ? err.message : String(err)}`);
+  });
   return async (req) => {
-    resolving ??= start().then((url) => makeRemoteRenderPort(url, token), (err) => {
-      throw new Error(`render service could not start: ${err instanceof Error ? err.message : String(err)}`);
-    });
-    return (await resolving)(req);
+    const { url, port } = await resolve();
+    try {
+      return await port(req);
+    } catch (error) {
+      if (error instanceof Error && error.name === "TimeoutError")
+        throw error;
+      if (await listening(url))
+        throw error;
+      resolving = undefined;
+      return (await resolve()).port(req);
+    }
   };
+}
+async function listening(url) {
+  try {
+    const res = await fetch(new URL("/health", url), { signal: AbortSignal.timeout(1500) });
+    return res.ok;
+  } catch {
+    return false;
+  }
 }
 async function probeCaptureIdentity(url) {
   try {
@@ -29408,30 +29504,11 @@ async function probeCaptureIdentity(url) {
     return;
   }
 }
-async function probeOnce(url, timeoutMs) {
-  try {
-    const res = await fetch(new URL("/health", url), {
-      signal: AbortSignal.timeout(timeoutMs)
-    });
-    if (!res.ok)
-      return { kind: "absent" };
-    const json = await res.json();
-    if (!json.ok)
-      return { kind: "absent" };
-    return { kind: "ok", rendererId: json.rendererId ?? "unknown-renderer" };
-  } catch (err) {
-    const timedOut = err instanceof Error && err.name === "TimeoutError";
-    return timedOut ? { kind: "busy" } : { kind: "absent" };
-  }
-}
-async function probeRenderService(url) {
-  const first = await probeOnce(url, HEALTH_PROBE_TIMEOUT_MS);
-  if (first.kind === "ok")
-    return first.rendererId;
-  if (first.kind === "absent")
-    return;
-  const second = await probeOnce(url, HEALTH_PROBE_BUSY_TIMEOUT_MS);
-  return second.kind === "ok" ? second.rendererId : undefined;
+async function inspectWithPatience(url, dir) {
+  const first = await inspectLocalRenderService(url, dir, HEALTH_PROBE_TIMEOUT_MS);
+  if (first.kind !== "busy")
+    return first;
+  return inspectLocalRenderService(url, dir, HEALTH_PROBE_BUSY_TIMEOUT_MS);
 }
 function describeRenderMode(context) {
   return selected.get(context) ?? "cpu raster";
@@ -29482,11 +29559,35 @@ async function buildRenderPort(mode, portUrl, options) {
   if (envUrl)
     return attach(envUrl, `GPU service (${envUrl})`, explicitClientToken);
   const localUrl = localRenderServiceUrl();
-  const rendererId = await probeRenderService(localUrl);
-  if (rendererId)
-    return attach(localUrl, `GPU service (${rendererId})`, localClientToken);
+  const dir = options?.serviceDir ?? renderServiceDir();
+  const probe = await inspectWithPatience(localUrl, dir);
+  let pruned = "";
+  if (probe.kind === "service") {
+    if (!probe.stale)
+      return attach(localUrl, `GPU service (${probe.rendererId})`, localClientToken);
+    if (!probe.orphaned) {
+      const why = `${describeStaleService(localUrl, probe)}; stop it with \`kiln service stop\``;
+      if (mode === "gpu")
+        throw new Error(why);
+      selected.set(context, `cpu raster (${why})`);
+      return context;
+    }
+    pruned = await terminateRenderService(localUrl, probe) ? `stopped ${describeStaleService(localUrl, probe)}` : "";
+    if (!pruned) {
+      const why = `${describeStaleService(localUrl, probe)} and could not be stopped`;
+      if (mode === "gpu")
+        throw new Error(why);
+      selected.set(context, `cpu raster (${why})`);
+      return context;
+    }
+  } else if (probe.kind === "foreign") {
+    const why = `port ${localRenderServicePort()} is in use by something that is not a render service; set KILN_RENDER_SERVICE_PORT to move the renderer`;
+    if (mode === "gpu")
+      throw new Error(why);
+    selected.set(context, `cpu raster (${why})`);
+    return context;
+  }
   if (options?.autoSpawn || mode === "gpu") {
-    const dir = options?.serviceDir ?? renderServiceDir();
     const state = options?.start ? "ready" : localRenderServiceState(dir);
     if (state === "ready") {
       const start = options?.start ?? (() => startLocalRenderService(dir));
@@ -29496,7 +29597,7 @@ async function buildRenderPort(mode, portUrl, options) {
       throw new Error(`no GPU render service is reachable at ${localUrl}, and ${explainRenderServiceState(state, dir)}.
 ` + "Set --render-port or KILN_RENDER_PORT_URL to point at one elsewhere, or use " + "--render auto to fall back to the CPU rasterizer.");
   }
-  selected.set(context, "cpu raster (no GPU service found)");
+  selected.set(context, pruned ? `cpu raster (${pruned}; none started for a one-shot render)` : "cpu raster (no GPU service found)");
   return context;
 }
 var HEALTH_PROBE_TIMEOUT_MS = 1500, HEALTH_PROBE_BUSY_TIMEOUT_MS = 8000, CLI_VIEW_RENDER_TIMEOUT_MS = 20000, selected;
@@ -29507,11 +29608,11 @@ var init_cli_render_mode = __esm(() => {
 });
 
 // src/assets-node.ts
-import { createHash as createHash10, randomUUID as randomUUID4 } from "node:crypto";
-import { readFileSync as readFileSync2 } from "node:fs";
+import { createHash as createHash11, randomUUID as randomUUID4 } from "node:crypto";
+import { readFileSync as readFileSync3 } from "node:fs";
 import { lstat as lstat3, mkdir as mkdir4, readFile as readFile4, readdir as readdir4, realpath as realpath3, rename as rename3, rm, writeFile as writeFile4 } from "node:fs/promises";
 import { homedir, platform } from "node:os";
-import { dirname as dirname4, join as join8, relative as relative2, resolve as resolve6, sep } from "node:path";
+import { dirname as dirname4, join as join8, relative as relative3, resolve as resolve6, sep } from "node:path";
 async function verifyAssetRecord(record) {
   for (const [name, info] of Object.entries(record.manifest.files)) {
     const bytes = record.files[name];
@@ -29552,7 +29653,7 @@ class FileAssetLibrary {
         const entry = await lstat3(path);
         if (entry.isSymbolicLink())
           throw new Error("Collection symlinks are not supported");
-        const rel = relative2(canonical, await realpath3(path));
+        const rel = relative3(canonical, await realpath3(path));
         if (rel === ".." || rel.startsWith(`..${sep}`))
           throw new Error("Collection path escapes root");
       } catch (error) {
@@ -29702,7 +29803,7 @@ function localAssetLibrary(env = process.env) {
   }
   const config = collectionConfigPath(env);
   try {
-    const text = readFileSync2(config, "utf8");
+    const text = readFileSync3(config, "utf8");
     if (!text.trim())
       throw new Error("Collection configuration is empty");
     return localAssetLibrary({ ...env, KILN_COLLECTIONS: text });
@@ -29716,7 +29817,7 @@ function localAssetLibrary(env = process.env) {
     library: defaultUserLibraryRoot(env)
   });
 }
-var digest4 = (bytes) => `sha256:${createHash10("sha256").update(bytes).digest("hex")}`;
+var digest4 = (bytes) => `sha256:${createHash11("sha256").update(bytes).digest("hex")}`;
 var init_assets_node = __esm(() => {
   init_assets();
 });
@@ -30061,6 +30162,113 @@ var init_asset_cli = __esm(() => {
   init_deep_link();
 });
 
+// src/service-cli.ts
+var exports_service_cli = {};
+__export(exports_service_cli, {
+  SERVICE_USAGE: () => SERVICE_USAGE,
+  serviceMain: () => serviceMain
+});
+function describeProcess(probe) {
+  if (probe.kind !== "service")
+    return "";
+  if (!probe.instance)
+    return "unknown (this service predates instance reporting)";
+  const { pid, ownerPid } = probe.instance;
+  if (ownerPid === null)
+    return `pid ${pid}, started by hand`;
+  return `pid ${pid}, started by session ${ownerPid} (${processIsAlive(ownerPid) ? "running" : "exited"})`;
+}
+function describeSource(probe, dir) {
+  if (probe.kind !== "service")
+    return "";
+  if (!probe.instance)
+    return "unknown (this service predates instance reporting)";
+  return probe.stale ? `stale (older than ${dir})` : "current";
+}
+async function serviceMain(argv, io = { log: console.log, error: console.error }) {
+  const command = argv[0];
+  if (command === undefined || command === "--help" || command === "-h") {
+    io.log(SERVICE_USAGE);
+    return command === undefined ? 2 : 0;
+  }
+  if (command !== "status" && command !== "stop" && command !== "prune") {
+    io.error(`unknown service command: ${command}
+${SERVICE_USAGE}`);
+    return 2;
+  }
+  const url = localRenderServiceUrl();
+  const dir = renderServiceDir();
+  const state = localRenderServiceState(dir);
+  const probe = await inspectLocalRenderService(url, dir);
+  if (command === "status") {
+    io.log(`render service   ${url}`);
+    io.log(`installation     ${state === "ready" ? `ready (${dir})` : explainRenderServiceState(state, dir)}`);
+    switch (probe.kind) {
+      case "absent":
+        io.log("listening        no");
+        break;
+      case "busy":
+        io.log("listening        yes, busy rendering (did not answer in time)");
+        break;
+      case "foreign":
+        io.log(`listening        something that is not a render service holds port ${localRenderServicePort()}; set KILN_RENDER_SERVICE_PORT to move the renderer`);
+        break;
+      case "service":
+        io.log(`listening        yes  ${probe.rendererId}`);
+        io.log(`process          ${describeProcess(probe)}`);
+        io.log(`source           ${describeSource(probe, dir)}`);
+        break;
+    }
+    return 0;
+  }
+  if (probe.kind === "absent") {
+    io.log(`nothing is listening on ${url}`);
+    return 0;
+  }
+  if (probe.kind === "busy") {
+    io.error(`the render service on ${url} is busy rendering and did not answer; try again`);
+    return 1;
+  }
+  if (probe.kind === "foreign") {
+    io.error(`port ${localRenderServicePort()} is in use by something that is not a render service; nothing was stopped. Set KILN_RENDER_SERVICE_PORT to move the renderer.`);
+    return 1;
+  }
+  if (!probe.instance) {
+    io.error(`the render service on ${url} predates instance reporting and does not say its pid; stop it by hand and start it again from ${dir}`);
+    return 1;
+  }
+  if (command === "prune") {
+    if (!probe.stale) {
+      io.log(`kept: the render service on ${url} (pid ${probe.instance.pid}) is current`);
+      return 0;
+    }
+    if (!probe.orphaned) {
+      io.log(`kept: ${describeStaleService(url, probe)}; \`kiln service stop\` stops it anyway`);
+      return 0;
+    }
+  }
+  const stopped = await terminateRenderService(url, probe);
+  if (!stopped) {
+    io.error(`could not stop the render service on ${url} (pid ${probe.instance.pid})`);
+    return 1;
+  }
+  io.log(command === "prune" ? `stopped: ${describeStaleService(url, probe)}` : `stopped the render service on ${url} (pid ${probe.instance.pid}); the next view that needs it starts a new one`);
+  return 0;
+}
+var SERVICE_USAGE = `
+RENDER SERVICE
+  kiln service status     who is listening on the shared port, and whether it is current
+  kiln service stop       stop the render service on the shared port, whoever started it
+  kiln service prune      stop it only when it is an orphan running older source
+
+The port is 8000 unless KILN_RENDER_SERVICE_PORT says otherwise. A session starts the
+service on demand and stops it on exit; \`kiln service\` is for the one it will not decide
+for you: a stale service started by hand or still owned by another session.
+`;
+var init_service_cli = __esm(() => {
+  init_render_service_host();
+});
+
 // src/cli.ts
 init_cli_output();
 import { open as open2, readFile as readFile7, writeFile as writeFile6 } from "node:fs/promises";
@@ -30089,6 +30297,7 @@ init_render_service_host();
 init_program_store_node();
 init_program_store();
 init_asset_cli();
+init_service_cli();
 var USAGE = `kiln — vision-in-the-loop 3D asset generation
 
 USAGE
@@ -30096,6 +30305,7 @@ USAGE
   kiln generate "<prompt>"  [options]    author a program with a model, then render
   kiln source <file.js>                 save a source snapshot and print its programRef
   kiln source <programRef> --out file.js export a revision without model transcription
+  kiln service status|stop|prune        the shared GPU render service (see below)
 
 OPTIONS
   --out <path>            GLB output path            (default: out.glb)
@@ -30376,6 +30586,8 @@ function main(argv) {
   return withProcessAlive(() => runMain(argv)).finally(stopLocalRenderService);
 }
 async function runMain(argv) {
+  if (argv[0] === "service")
+    return (await Promise.resolve().then(() => (init_service_cli(), exports_service_cli))).serviceMain(argv.slice(1));
   if (["save", "collections", "assets", "asset", "export", "import", "view"].includes(argv[0] ?? "")) {
     try {
       return await (await Promise.resolve().then(() => (init_asset_cli(), exports_asset_cli))).assetMain(argv);
@@ -30392,7 +30604,7 @@ async function runMain(argv) {
     return 2;
   }
   if (args.help || !args.command) {
-    console.log(USAGE + ASSET_USAGE);
+    console.log(USAGE + ASSET_USAGE + SERVICE_USAGE);
     return args.help ? 0 : 2;
   }
   try {

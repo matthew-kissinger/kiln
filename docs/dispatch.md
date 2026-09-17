@@ -20,4 +20,6 @@ Keep the brief, supplied files, renderer, and time allowance consistent. Record 
 
 Review silhouette, construction, attachments, ground contact, and requested detail. Judge materials only from material-faithful images. A valid GLB, a high triangle count, or the model's own success message does not establish that the brief was met.
 
+An agent that delegates the authoring to a nested agent must start that agent as a separate harness process in the workspace directory (for OpenCode, `opencode run --dir <workspace> "<brief>"`). A subagent of the outer session inherits the outer session's tools and never loads the workspace's MCP configuration, so it is left with the CLI alone. The tier-2 driver's receipt records this as `toolUsage.workspaceMcp`: `exercised`, `not-exercised` or `unknown`.
+
 Use separate workspaces for independent runs and choose concurrency within the available budget. Keep interrupted artifacts, but mark them as partial when they do not satisfy the request. See the batch-dispatch skill for collection and provenance guidance.

@@ -3,6 +3,38 @@
 Changes to `@kiln/engine`. Source and installable packages are distributed through
 GitHub. The package is not published on the npm registry.
 
+## Unreleased: The render service knows who it is, and `kiln_screenshot` sees what `kiln_render` sees
+
+- **The shared render-service port is no longer a guess.** `/health` now carries `instance`: the
+  service's pid, the session that started it on demand, and a fingerprint of the source it runs.
+  The host reads that before joining. A current service is joined whoever started it. A service
+  running older source than `render-service/src` -- the renderer from before a `git pull`, still
+  up -- is replaced when its owning session has exited, and left alone but named when another
+  session still owns it or it was started by hand. Before this, a stale orphan was joined by
+  every session and the engine's newer request fields came back as a 400 that the sheet reported
+  as a CPU degrade with nothing saying why.
+- **An on-demand service exits when the session that started it is gone.** The host passes
+  `RENDER_SERVICE_OWNER_PID`; the service polls it and exits on its own, so a hard-killed MCP
+  server on Windows, which never runs its exit hook, no longer leaves a GPU process on port 8000
+  for the rest of the day. A hand-started service has no owner and outlives sessions as before.
+- **A session that joined a renderer which then went away starts again on the next view** instead
+  of reporting connection refused as a degrade for the rest of its life.
+- **`kiln service status | stop | prune`.** `status` prints the facts the host acts on: the URL,
+  whether the service is installed, who is listening, its owner and whether its source is current.
+  `prune` stops a stale orphan and nothing else. `stop` stops the service whoever started it, for
+  the one case the host will not decide for you. Something that is not a render service on the
+  port is reported with the variable that moves the renderer, never joined.
+- **`kiln_screenshot` on the in-process loop is the same implementation as the unified
+  `kiln_render`.** It takes the same `capture` config (grid shape, per-part framing, backdrop),
+  routes textured and metallic scenes through the render port, and reports `viewFidelity`. It
+  had been a frozen CPU-only copy kept as the control arm of a bench that no longer exists, which
+  meant `kiln generate --render gpu` could never show its model a material-faithful view.
+- **The tier-2 dogfood receipt says whether the workspace MCP server was exercised.** `toolUsage`
+  counts every tool call in the trace and classifies the run as `exercised`, `not-exercised` or
+  `unknown`, so a run that completed through the CLI alone -- an outer agent that dispatched an
+  in-session subagent, as the blind OpenCode run did -- is visible in the receipt rather than
+  only to someone reading the trace.
+
 ## Unreleased: Test suite holds under a loaded runner
 
 - The test scripts and CI set a 20 s per-test budget instead of Bun's 5 s default. Tests that take

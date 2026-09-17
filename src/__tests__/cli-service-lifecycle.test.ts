@@ -15,6 +15,8 @@ import type { AddressInfo } from 'node:net';
 import { mkdir, mkdtemp, readdir, rm, writeFile } from 'node:fs/promises';
 import { join, resolve } from 'node:path';
 
+import { writeFakeRenderService } from './helpers/fake-render-service';
+
 /** A port nothing is listening on right now. */
 async function freePort(): Promise<number> {
   const server = createServer();
@@ -35,59 +37,6 @@ async function listening(port: number): Promise<boolean> {
   }
 }
 
-/**
- * A stand-in for render-service/: what `localRenderServiceState` needs to call
- * it ready, plus a server that answers `/health` and `/render` with one flat PNG
- * per requested view. `gpu` mode requires the GPU render to succeed, so the
- * answer has to pass the port's PNG validation; the pixels do not matter, the
- * process does.
- */
-const FAKE_SERVER = `
-import { createServer } from 'node:http';
-import { crc32, deflateSync } from 'node:zlib';
-const chunk = (type, data) => {
-  const length = Buffer.alloc(4);
-  length.writeUInt32BE(data.length);
-  const body = Buffer.concat([Buffer.from(type), data]);
-  const crc = Buffer.alloc(4);
-  crc.writeUInt32BE(crc32(body));
-  return Buffer.concat([length, body, crc]);
-};
-const png = (size) => {
-  const ihdr = Buffer.alloc(13);
-  ihdr.writeUInt32BE(size, 0);
-  ihdr.writeUInt32BE(size, 4);
-  ihdr[8] = 8;
-  ihdr[9] = 2;
-  const raw = Buffer.alloc(size * (1 + size * 3), 0x80);
-  for (let y = 0; y < size; y++) raw[y * (1 + size * 3)] = 0;
-  return Buffer.concat([
-    Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]),
-    chunk('IHDR', ihdr),
-    chunk('IDAT', deflateSync(raw)),
-    chunk('IEND', Buffer.alloc(0)),
-  ]);
-};
-createServer((req, res) => {
-  let body = '';
-  req.on('data', (piece) => {
-    body += piece;
-  });
-  req.on('end', () => {
-    res.writeHead(200, { 'content-type': 'application/json' });
-    if (req.url === '/health') {
-      res.end(JSON.stringify({ ok: true, rendererId: 'fake-renderer' }));
-      return;
-    }
-    const request = body ? JSON.parse(body) : {};
-    const count = (request.views ?? request.cameras ?? []).length;
-    const size = request.size ?? request.width ?? 384;
-    const views = Array.from({ length: count }, () => png(size).toString('base64'));
-    res.end(JSON.stringify({ ok: true, rendererId: 'fake-renderer', views }));
-  });
-}).listen(Number(process.env.PORT), process.env.HOST ?? '127.0.0.1');
-`;
-
 it('stops a render service the CLI started once the command settles, instead of hanging on it', async () => {
   const base = resolve(import.meta.dir, '../../tmp');
   await mkdir(base, { recursive: true });
@@ -102,13 +51,7 @@ it('stops a render service the CLI started once the command settles, instead of 
     });
     expect(built.success).toBe(true);
 
-    const service = join(directory, 'render-service');
-    await mkdir(join(service, 'src'), { recursive: true });
-    await mkdir(join(service, 'node_modules/webgpu'), { recursive: true });
-    await mkdir(join(service, 'node_modules/three'), { recursive: true });
-    await writeFile(join(service, 'package.json'), '{"name":"fake-render-service"}');
-    await writeFile(join(service, 'src/register-hooks.mjs'), 'export {};');
-    await writeFile(join(service, 'src/server.mjs'), FAKE_SERVER);
+    const service = await writeFakeRenderService(join(directory, 'render-service'));
     const port = await freePort();
     expect(await listening(port)).toBe(false);
 

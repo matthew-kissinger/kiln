@@ -341,11 +341,16 @@ export function makeKilnEditTools(
   const screenshotTool: Tool = tool({
     name: 'kiln_screenshot',
     description: `${screenshotDef.description} Omit code to screenshot the current working buffer.`,
-    inputSchema: bufferCodeInput,
+    // The registry schema minus the required `code`, so the capture contract
+    // (grid shape, framing, backdrop) reaches the edit loop unchanged.
+    inputSchema: (screenshotDef.inputSchema as z.ZodObject).extend(bufferCodeInput.shape),
     callback: async (input) =>
       toCallbackResult(
         screenshotDef,
-        await screenshotDef.run({ code: (input as { code?: string }).code ?? buffer.code }),
+        await screenshotDef.run({
+          ...(input as Record<string, unknown>),
+          code: (input as { code?: string }).code ?? buffer.code,
+        }),
         opts,
       ),
   });

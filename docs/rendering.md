@@ -38,6 +38,24 @@ Either way the service listens on port 8000, where `auto` looks by default, and 
 claim the port wins: a service already listening is joined rather than replaced, and a session that
 merely found one does not stop it on exit. Set `KILN_RENDER_SERVICE_PORT` to move it.
 
+**The socket is the registry.** `/health` reports the process behind the port: its pid, the session
+that started it on demand (none when started by hand) and a fingerprint of the source it runs. A
+session reads that before joining. A service running the source that is on disk is joined, whoever
+started it. One running older source -- you pulled, and a renderer from before the pull is still up --
+is replaced when nobody owns it any more, and left alone but named when another session still owns it
+or when it was started by hand, because stopping somebody's renderer mid-batch is worse than a stale
+one. An on-demand service watches the session that started it and exits when that session is gone,
+even when the session was killed without running its exit hook.
+
+```bash
+bun run kiln service status   # who is listening, its owner, and whether its source is current
+bun run kiln service prune    # stop it only if it is an orphan running older source
+bun run kiln service stop     # stop it whoever started it; the next view that needs it starts a new one
+```
+
+`status` shows the facts the host acts on. `prune` is safe to run at any time. `stop` is for the case
+the host will not decide for you: a stale service you started by hand or that another session owns.
+
 **Either way it binds loopback, and widening that costs a token.** `POST /render` takes a 48 MB GLB
 and renders it on the GPU one frame at a time, so an exposed bind with no auth hands any caller on
 that network both your GPU and a binary-asset parser. `HOST` widens the bind and a bind wider than

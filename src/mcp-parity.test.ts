@@ -82,11 +82,11 @@ describe('tool surface parity across transports', () => {
     }
   });
 
-  it('the MCP surface is composed for GPU capability, not the frozen baseline', () => {
-    // The baseline's kiln_screenshot never consults viewRenderPort, so shipping it
-    // over MCP would mean shipping a surface the render port can never reach. This
-    // pins the deliberate substitution: unified kiln_render instead of the
-    // baseline's metrics-only kiln_render plus CPU-only kiln_screenshot.
+  it('the MCP surface carries one unified kiln_render, not the in-process pair', () => {
+    // In-process, `kiln_render` is metrics-only and `kiln_screenshot` carries the
+    // image (the same implementation as the unified def, under the loop's name).
+    // Over MCP one tool does both, and a second way to ask for the same grid
+    // would only cost a model a choice. This pins that composition.
     expect(kilnMcpToolDefs().map((d) => d.name)).toEqual([
       'kiln_list_primitives',
       'kiln_validate',

@@ -441,6 +441,76 @@ async function evidenceFromFiles(stdoutPath, stderrPath) {
   return evidence;
 }
 
+/** The workspace MCP tools, by their unprefixed names; a harness adds its own prefix. */
+const KILN_MCP_TOOL =
+  /kiln_(?:list_primitives|validate|render|screenshot_animation|view_interior|inspect|edit|source|save|assets|present|export|import)\b/u;
+
+/**
+ * Every tool call in a trace, counted by name, and whether any of them reached the
+ * workspace MCP server. The receipt needs this because a run can succeed without
+ * it: an outer agent that dispatches an in-session subagent never loads the
+ * workspace's MCP configuration, and the child then works through the CLI alone.
+ * That is a finding about the MCP path, not a failure, and it was invisible until
+ * someone read the trace by hand.
+ *
+ * Shapes recognised: OpenCode (`{type:'tool_use', part:{tool}}`), Claude stream
+ * JSON (`{type:'tool_use', name}` inside message content), Codex JSONL
+ * (`{type:'mcp_tool_call', server, tool}` and `command_execution` items). Anything
+ * else counts as no tool calls, which the receipt reports as `unknown` rather than
+ * as `not-exercised`.
+ */
+export function toolUsageFromEvents(events) {
+  const calls = {};
+  const record = (name) => {
+    if (typeof name !== 'string' || !name) return;
+    calls[name] = (calls[name] ?? 0) + 1;
+  };
+  const visit = (node) => {
+    if (Array.isArray(node)) {
+      for (const item of node) visit(item);
+      return;
+    }
+    if (!node || typeof node !== 'object') return;
+    if (node.type === 'tool_use') {
+      record(node.name ?? node.tool ?? node.part?.tool);
+      return;
+    }
+    if (node.type === 'mcp_tool_call') {
+      record(`${node.server ?? 'mcp'}__${node.tool ?? 'unknown'}`);
+      return;
+    }
+    if (node.type === 'command_execution') {
+      record('command_execution');
+      return;
+    }
+    for (const value of Object.values(node)) if (value && typeof value === 'object') visit(value);
+  };
+  for (const event of events) visit(event);
+  const total = Object.values(calls).reduce((sum, count) => sum + count, 0);
+  const mcpCalls = Object.entries(calls)
+    .filter(([name]) => KILN_MCP_TOOL.test(name))
+    .reduce((sum, [, count]) => sum + count, 0);
+  return {
+    calls,
+    total,
+    mcpCalls,
+    workspaceMcp: total === 0 ? 'unknown' : mcpCalls > 0 ? 'exercised' : 'not-exercised',
+  };
+}
+
+async function toolUsageFromFile(stdoutPath) {
+  const events = [];
+  const stdout = createInterface({ input: createReadStream(stdoutPath), crlfDelay: Infinity });
+  for await (const line of stdout) {
+    try {
+      events.push(JSON.parse(line));
+    } catch {
+      // Prose, not an event.
+    }
+  }
+  return toolUsageFromEvents(events);
+}
+
 function killProcessTree(child, signal = 'SIGTERM') {
   if (!child.pid) return;
   if (process.platform === 'win32') {
@@ -872,6 +942,7 @@ async function main(argv) {
         signal: abort.signal,
       });
       const evidence = await evidenceFromFiles(stdoutPath, stderrPath);
+      const toolUsage = await toolUsageFromFile(stdoutPath);
       const artifacts = discoverArtifacts(workspaceRoot).filter(
         (artifact) =>
           !artifactsBefore.has(`${artifact.kind}\0${artifact.path}\0${artifact.sha256}`),
@@ -909,6 +980,7 @@ async function main(argv) {
           rawTraceDirectory: rawDir,
           isolation: plan.invocation.isolation,
           failureEvidence: evidence.slice(0, 20),
+          toolUsage,
           artifactCandidates: artifacts,
           localGallery: galleryCapture
             ? {

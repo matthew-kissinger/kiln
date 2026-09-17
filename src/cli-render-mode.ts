@@ -23,11 +23,16 @@ import { createHash } from 'node:crypto';
  */
 import type { PbrRenderPort, PbrRenderResult } from './composer/render-port';
 import {
+  describeStaleService,
   explainRenderServiceState,
+  inspectLocalRenderService,
+  localRenderServicePort,
   localRenderServiceState,
   localRenderServiceUrl,
   renderServiceDir,
   startLocalRenderService,
+  terminateRenderService,
+  type LocalRenderServiceProbe,
 } from './render-service-host';
 import type { KilnToolContext } from './tools/registry';
 import { DEFAULT_BACKDROP_ID } from './views/background';
@@ -149,18 +154,43 @@ export function makeRemoteRenderPort(url: string, token?: string): PbrRenderPort
  * stall the loop this exists to serve.
  */
 export function makeLazyRenderPort(start: () => Promise<string>, token?: string): PbrRenderPort {
-  let resolving: Promise<PbrRenderPort> | undefined;
-  return async (req) => {
-    resolving ??= start().then(
-      (url) => makeRemoteRenderPort(url, token),
+  let resolving: Promise<{ url: string; port: PbrRenderPort }> | undefined;
+  const resolve = (): Promise<{ url: string; port: PbrRenderPort }> =>
+    (resolving ??= start().then(
+      (url) => ({ url, port: makeRemoteRenderPort(url, token) }),
       (err: unknown) => {
         throw new Error(
           `render service could not start: ${err instanceof Error ? err.message : String(err)}`,
         );
       },
-    );
-    return (await resolving)(req);
+    ));
+  return async (req) => {
+    const { url, port } = await resolve();
+    try {
+      return await port(req);
+    } catch (error) {
+      // A renderer that answered before and does not answer now has gone away:
+      // the session that started it exited, or it was replaced. That is not a
+      // render failure, so it is not cached as one. Ask `/health` once rather
+      // than reading the error, because "connection refused" is spelled
+      // differently under Node and Bun; then start again -- which joins a
+      // replacement if one is already up -- and retry this request once.
+      if (error instanceof Error && error.name === 'TimeoutError') throw error;
+      if (await listening(url)) throw error;
+      resolving = undefined;
+      return (await resolve()).port(req);
+    }
   };
+}
+
+/** Whether anything at all answers `/health` there. */
+async function listening(url: string): Promise<boolean> {
+  try {
+    const res = await fetch(new URL('/health', url), { signal: AbortSignal.timeout(1_500) });
+    return res.ok;
+  } catch {
+    return false;
+  }
 }
 
 /** Fresh attestation per capture; unknown/older/unreachable services bypass cell reuse. */
@@ -245,6 +275,17 @@ export async function probeRenderService(url: string): Promise<string | undefine
   if (first.kind === 'absent') return undefined;
   const second = await probeOnce(url, HEALTH_PROBE_BUSY_TIMEOUT_MS);
   return second.kind === 'ok' ? second.rendererId : undefined;
+}
+
+/**
+ * The same patience as {@link probeRenderService}, answering the fuller question
+ * the host acts on: not just whether a renderer is there, but whether it runs
+ * the source on disk and whether anyone still owns it.
+ */
+async function inspectWithPatience(url: string, dir: string): Promise<LocalRenderServiceProbe> {
+  const first = await inspectLocalRenderService(url, dir, HEALTH_PROBE_TIMEOUT_MS);
+  if (first.kind !== 'busy') return first;
+  return inspectLocalRenderService(url, dir, HEALTH_PROBE_BUSY_TIMEOUT_MS);
 }
 
 /** What actually got selected, for honest CLI reporting. */
@@ -367,12 +408,44 @@ export async function buildRenderPort(
   if (envUrl) return attach(envUrl, `GPU service (${envUrl})`, explicitClientToken);
 
   const localUrl = localRenderServiceUrl();
-  const rendererId = await probeRenderService(localUrl);
-  if (rendererId) return attach(localUrl, `GPU service (${rendererId})`, localClientToken);
+  // `options` is optional and `gpu` reaches here without it, so every read is
+  // guarded -- this branch used to be entered only by a caller that passed one.
+  const dir = options?.serviceDir ?? renderServiceDir();
+  const probe = await inspectWithPatience(localUrl, dir);
+  let pruned = '';
+  if (probe.kind === 'service') {
+    if (!probe.stale)
+      return attach(localUrl, `GPU service (${probe.rendererId})`, localClientToken);
+    // Stale. An orphan is nobody's and runs old code, so it goes; anything
+    // still owned or hand-started is left where it is and named, because the
+    // silent alternative -- joining it and reporting its 400 as a degrade --
+    // is the confusing state this exists to remove.
+    if (!probe.orphaned) {
+      const why = `${describeStaleService(localUrl, probe)}; stop it with \`kiln service stop\``;
+      if (mode === 'gpu') throw new Error(why);
+      selected.set(context, `cpu raster (${why})`);
+      return context;
+    }
+    pruned = (await terminateRenderService(localUrl, probe))
+      ? `stopped ${describeStaleService(localUrl, probe)}`
+      : '';
+    if (!pruned) {
+      const why = `${describeStaleService(localUrl, probe)} and could not be stopped`;
+      if (mode === 'gpu') throw new Error(why);
+      selected.set(context, `cpu raster (${why})`);
+      return context;
+    }
+  } else if (probe.kind === 'foreign') {
+    const why = `port ${localRenderServicePort()} is in use by something that is not a render service; set KILN_RENDER_SERVICE_PORT to move the renderer`;
+    if (mode === 'gpu') throw new Error(why);
+    selected.set(context, `cpu raster (${why})`);
+    return context;
+  }
 
-  // Nothing is listening. If this installation can start one, hand back a port
-  // that will -- lazily, so a session that never renders a material never pays
-  // for a GPU process, and so the start is not in front of the first connection.
+  // Nothing usable is listening. If this installation can start one, hand back
+  // a port that will -- lazily, so a session that never renders a material
+  // never pays for a GPU process, and so the start is not in front of the first
+  // connection.
   //
   // `gpu` implies it. That mode means "I asked for a guarantee and would rather
   // know than be quietly downgraded", and refusing while a renderer this
@@ -380,9 +453,6 @@ export async function buildRenderPort(
   // stays OFF for `auto`, which is a one-shot CLI sheet's default and should not
   // pay a GPU process's startup to draw it.
   if (options?.autoSpawn || mode === 'gpu') {
-    // `options` is optional and `gpu` reaches here without it, so every read is
-    // guarded -- this branch used to be entered only by a caller that passed one.
-    const dir = options?.serviceDir ?? renderServiceDir();
     const state = options?.start ? 'ready' : localRenderServiceState(dir);
     if (state === 'ready') {
       const start = options?.start ?? (() => startLocalRenderService(dir));
@@ -400,6 +470,11 @@ export async function buildRenderPort(
       );
   }
 
-  selected.set(context, 'cpu raster (no GPU service found)');
+  selected.set(
+    context,
+    pruned
+      ? `cpu raster (${pruned}; none started for a one-shot render)`
+      : 'cpu raster (no GPU service found)',
+  );
   return context;
 }
