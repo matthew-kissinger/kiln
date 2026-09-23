@@ -1,14 +1,25 @@
 import { expect, it } from 'bun:test';
 import { spawnSync } from 'node:child_process';
-import { mkdir, mkdtemp, readFile, readdir, rename, rm, writeFile } from 'node:fs/promises';
+import { mkdir, mkdtemp, readFile, readdir, rename, rm, stat, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
-import { join, resolve } from 'node:path';
+import { basename, dirname, isAbsolute, join, resolve } from 'node:path';
 import { pathToFileURL } from 'node:url';
 
 const repo = resolve(import.meta.dir, '../..');
 const setup = join(repo, 'scripts/create-workspace.mjs');
 const run = (args: string[], cwd: string) =>
   spawnSync('node', [setup, ...args], { cwd, encoding: 'utf8' });
+
+async function expectSameDirectory(actual: string, expected: string) {
+  // Node expands Windows 8.3 aliases; Bun may retain them. Require an absolute
+  // path to the same real directory instead of one platform-specific spelling.
+  expect(isAbsolute(actual)).toBe(true);
+  const a = await stat(actual, { bigint: true });
+  const b = await stat(expected, { bigint: true });
+  expect(a.isDirectory()).toBe(true);
+  expect(a.ino).toBeGreaterThan(0n);
+  expect([a.dev, a.ino]).toEqual([b.dev, b.ino]);
+}
 
 it('registers the existing local skill tree for OpenCode and preserves edits when repairing paths', async () => {
   const root = await mkdtemp(join(tmpdir(), 'kiln-opencode-skills-'));
@@ -17,7 +28,8 @@ it('registers the existing local skill tree for OpenCode and preserves edits whe
     const after = join(root, 'moved');
     expect(run([before, '--harness', 'opencode', '--skills', 'compose'], root).status).toBe(0);
     const config = JSON.parse(await readFile(join(before, 'opencode.json'), 'utf8'));
-    expect(config.skills?.paths).toEqual([join(before, 'skills')]);
+    expect(config.skills?.paths).toHaveLength(1);
+    await expectSameDirectory(config.skills.paths[0], join(before, 'skills'));
     const reference = join('skills', 'kiln-author-asset', 'references', 'program-contract.md');
     expect(await readFile(join(before, reference), 'utf8')).toBe(
       await readFile(join(repo, reference), 'utf8'),
@@ -28,9 +40,9 @@ it('registers the existing local skill tree for OpenCode and preserves edits whe
     await writeFile(join(before, reference), '# owner-edited reference');
     await rename(before, after);
     expect(run([after, '--repair'], root).status).toBe(0);
-    expect(JSON.parse(await readFile(join(after, 'opencode.json'), 'utf8')).skills.paths).toEqual([
-      join(after, 'skills'),
-    ]);
+    const repaired = JSON.parse(await readFile(join(after, 'opencode.json'), 'utf8'));
+    expect(repaired.skills.paths).toHaveLength(1);
+    await expectSameDirectory(repaired.skills.paths[0], join(after, 'skills'));
     expect(await readFile(join(after, author), 'utf8')).toBe('# owner-edited skill');
     expect(await readFile(join(after, reference), 'utf8')).toBe('# owner-edited reference');
   } finally {
@@ -74,9 +86,9 @@ it('repairs a moved workspace without replacing assets or silently overwriting e
     await rename(before, after);
     expect(run([after, '--repair'], root).status).toBe(0);
     const config = JSON.parse(await readFile(join(after, 'opencode.json'), 'utf8'));
-    expect(config.mcp.kiln_workspace.environment.KILN_PROGRAM_STORE).toBe(
-      join(after, '.kiln/programs'),
-    );
+    const store = config.mcp.kiln_workspace.environment.KILN_PROGRAM_STORE;
+    expect(basename(store)).toBe('programs');
+    await expectSameDirectory(dirname(store), join(after, '.kiln'));
     expect(await readFile(join(after, 'keep.kiln.js'), 'utf8')).toBe('// authored source');
     await writeFile(join(after, 'opencode.json'), '{"custom":true}');
     expect(run([after, '--repair'], root).status).toBe(1);

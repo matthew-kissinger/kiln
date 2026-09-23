@@ -1,6 +1,6 @@
 import { expect, test } from 'bun:test';
 import { spawnSync } from 'node:child_process';
-import { copyFileSync, mkdirSync, mkdtempSync, realpathSync, rmSync, writeFileSync } from 'node:fs';
+import { copyFileSync, mkdirSync, mkdtempSync, rmSync, statSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join, resolve } from 'node:path';
 import { HARNESSES, resolveBin } from './harness.mjs';
@@ -36,8 +36,7 @@ test.skipIf(process.platform !== 'win32')(
 test.skipIf(process.platform !== 'win32')(
   'Windows resolution preserves PATH precedence when a later executable shadows a command shim',
   () => {
-    // Windows runner TEMP may use an 8.3 alias; compare the actual target.
-    const root = realpathSync(mkdtempSync(join(tmpdir(), 'kiln-harness-resolution-')));
+    const root = mkdtempSync(join(tmpdir(), 'kiln-harness-resolution-'));
     try {
       const first = join(root, 'current');
       const second = join(root, 'old');
@@ -57,7 +56,14 @@ test.skipIf(process.platform !== 'win32')(
         windowsHide: true,
       });
       expect(result.status).toBe(0);
-      expect(JSON.parse(result.stdout)).toEqual({ cmd: join(first, `${name}.cmd`), shell: true });
+      const resolved = JSON.parse(result.stdout);
+      expect(resolved.shell).toBe(true);
+      // where.exe expands 8.3 paths that Bun's realpath may retain. PATH
+      // precedence is about the selected file, not its equivalent spelling.
+      const actual = statSync(resolved.cmd, { bigint: true });
+      const expected = statSync(join(first, `${name}.cmd`), { bigint: true });
+      expect(actual.ino).toBeGreaterThan(0n);
+      expect([actual.dev, actual.ino]).toEqual([expected.dev, expected.ino]);
     } finally {
       rmSync(root, { recursive: true, force: true });
     }
