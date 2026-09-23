@@ -41,6 +41,7 @@ describe('kilnScreenshotAnimationDef', () => {
     expect(out.clip).toBe('walk');
     expect(out.camera).toBe('Right'); // default camera
     expect(out.frames).toBe(6);
+    expect(out.loopClosure?.status).toBe('closed');
     expect(typeof out.pngBase64).toBe('string');
     expect(out.pngBase64!.length).toBeGreaterThan(0);
     expect(out.framesBase64).toBeUndefined();

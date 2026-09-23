@@ -1,0 +1,1401 @@
+{
+  "version": "kiln.discovery-production-experiment.v1",
+  "runtime": {
+    "node": "26.3.0",
+    "bun": "1.4.2",
+    "boringssl": "41bf9b59c2ebf277a7aa427e1ecad5cc80dd4d4f",
+    "openssl": "1.1.0",
+    "llhttp": "9.3.0",
+    "libarchive": "ded82291ab41d5e355831b96b0e1ff49e24d8939",
+    "mimalloc": "6a64e1ba7f5b2130d4efccb67ec87fd0003f0f6a",
+    "picohttpparser": "066d2b1e9ab820703db0837a7255d92d30f0c9f5",
+    "uwebsockets": "744846f844374847c902b5e7fd59b4342a51ef99",
+    "webkit": "2e2aa2290fac856d6f451ceacb58f7f5b44dd057",
+    "zig": "04e7f6ac1e009525bc00934f20199c68f04e0a24",
+    "zlib": "12731092979c6d07f42da27da673a9f6c7b13586",
+    "tinycc": "05f0fafaa3be31e31d7b4b5c17dc60f62c991171",
+    "lolhtml": "725ce499aa9b71e38b7a2d0a9fbb6d7294a4079e",
+    "ares": "c7a3138dcfe3bb0eaaf10c0c24c36dc66dc790ab",
+    "libdeflate": "c8c56a20f8f621e6a966b716b31f1dedab6a41e3",
+    "usockets": "744846f844374847c902b5e7fd59b4342a51ef99",
+    "lshpack": "8905c024b6d052f083a3d11d0a169b3c2735c8a1",
+    "zstd": "f8745da6ff1ad1e7bab384bd1f9d742439278e99",
+    "v8": "14.6.202.34-node.20",
+    "uv": "1.51.1-dev",
+    "napi": "10",
+    "icu": "78.3",
+    "unicode": "17.0",
+    "sqlite": "3.53.2",
+    "modules": "147"
+  },
+  "cpu": "AMD Ryzen 7 3700X 8-Core Processor             ",
+  "platform": "win32",
+  "arch": "x64",
+  "catalogSha256": "0e529d8b651ba52def8a3db9782dcd72f94b9f55381400eb62e7f8cb061656e1",
+  "catalogEntries": 103,
+  "gcAvailable": false,
+  "summary": [
+    {
+      "split": "development",
+      "recallAt5": 0.9875,
+      "mrrAt5": 0.96875,
+      "unsupportedWithCandidates": 0,
+      "maxResponseBytes": 4646
+    },
+    {
+      "split": "heldout",
+      "recallAt5": 0.9666666666666666,
+      "mrrAt5": 0.9333333333333332,
+      "unsupportedWithCandidates": 1,
+      "maxResponseBytes": 4489
+    },
+    {
+      "split": "independent-observed",
+      "recallAt5": 0.9396551724137931,
+      "mrrAt5": 0.8908045977011495,
+      "unsupportedWithCandidates": 5,
+      "maxResponseBytes": 4609
+    }
+  ],
+  "scalabilityReceipt": "results-scale-bun.json",
+  "rows": [
+    {
+      "split": "development",
+      "type": "exact",
+      "query": "arrayRadial",
+      "relevant": [
+        "arrayRadial"
+      ],
+      "found": [
+        "arrayRadial",
+        "arrayLinear",
+        "lathe",
+        "revolveGeo",
+        "mirror"
+      ],
+      "recallAt5": 1,
+      "reciprocalRank": 1,
+      "firstMs": 3.439700000000002,
+      "warmP95Ms": 0.3515000000000015,
+      "responseBytes": 4158
+    },
+    {
+      "split": "development",
+      "type": "intent",
+      "query": "put supports evenly around a circle",
+      "relevant": [
+        "arrayRadial"
+      ],
+      "found": [
+        "arrayRadial",
+        "circleProfile",
+        "createLadder",
+        "createVehicleFrame",
+        "curveToMesh"
+      ],
+      "recallAt5": 1,
+      "reciprocalRank": 1,
+      "firstMs": 0.41499999999999204,
+      "warmP95Ms": 0.4159999999999968,
+      "responseBytes": 3951
+    },
+    {
+      "split": "development",
+      "type": "intent",
+      "query": "cut windows into a wall",
+      "relevant": [
+        "wallWithOpening",
+        "room",
+        "boolDiff"
+      ],
+      "found": [
+        "wallWithOpening",
+        "boolDiff",
+        "room",
+        "createGableEndPanel",
+        "createRoofPlanes"
+      ],
+      "recallAt5": 1,
+      "reciprocalRank": 1,
+      "firstMs": 0.2744,
+      "warmP95Ms": 0.4317999999999955,
+      "responseBytes": 3518
+    },
+    {
+      "split": "development",
+      "type": "intent",
+      "query": "tube along a curved path",
+      "relevant": [
+        "pipeAlongPath",
+        "sweepProfile",
+        "curveToMesh"
+      ],
+      "found": [
+        "pipeAlongPath",
+        "curveToMesh",
+        "sweepProfile",
+        "bezierCurve",
+        "revolveGeo"
+      ],
+      "recallAt5": 1,
+      "reciprocalRank": 1,
+      "firstMs": 0.30879999999999086,
+      "warmP95Ms": 0.23470000000000368,
+      "responseBytes": 3993
+    },
+    {
+      "split": "development",
+      "type": "ownership",
+      "query": "edit a geometry copy independently",
+      "relevant": [
+        "copyGeometry"
+      ],
+      "found": [
+        "copyGeometry",
+        "copyMaterial",
+        "createWheelGeometrySet",
+        "createInstance",
+        "geometryDiagnostics"
+      ],
+      "recallAt5": 1,
+      "reciprocalRank": 1,
+      "firstMs": 0.41610000000000014,
+      "warmP95Ms": 0.30700000000000216,
+      "responseBytes": 3005
+    },
+    {
+      "split": "development",
+      "type": "ownership",
+      "query": "change copied material without changing original",
+      "relevant": [
+        "copyMaterial"
+      ],
+      "found": [
+        "copyMaterial",
+        "copyGeometry",
+        "materialBudgetAdvisory",
+        "countMaterials",
+        "materialRecipe"
+      ],
+      "recallAt5": 1,
+      "reciprocalRank": 1,
+      "firstMs": 0.24890000000000612,
+      "warmP95Ms": 0.35010000000001185,
+      "responseBytes": 3374
+    },
+    {
+      "split": "development",
+      "type": "typo",
+      "query": "cylindr",
+      "relevant": [
+        "cylinderGeo",
+        "cylinderOnAxis",
+        "cylinderYGeo",
+        "cylinderXGeo",
+        "cylinderZGeo"
+      ],
+      "found": [
+        "cylinderUnwrap",
+        "cylinderOnAxis",
+        "cylinderYGeo",
+        "cylinderGeo",
+        "cylinderZGeo"
+      ],
+      "recallAt5": 0.8,
+      "reciprocalRank": 0.5,
+      "firstMs": 0.2201999999999913,
+      "warmP95Ms": 0.2453999999999894,
+      "responseBytes": 3143
+    },
+    {
+      "split": "development",
+      "type": "intent",
+      "query": "reflect across a plane",
+      "relevant": [
+        "mirror"
+      ],
+      "found": [
+        "mirror",
+        "planeUnwrap",
+        "createRoofPlanes",
+        "loftProfiles",
+        "planeGeo"
+      ],
+      "recallAt5": 1,
+      "reciprocalRank": 1,
+      "firstMs": 0.2933000000000021,
+      "warmP95Ms": 0.36780000000000257,
+      "responseBytes": 3730
+    },
+    {
+      "split": "development",
+      "type": "intent",
+      "query": "smooth normals while retaining sharp edges",
+      "relevant": [
+        "creaseNormals"
+      ],
+      "found": [
+        "creaseNormals",
+        "normalMapFromHeight",
+        "subdivide",
+        "roundedBoxGeo",
+        "boolUnion"
+      ],
+      "recallAt5": 1,
+      "reciprocalRank": 1,
+      "firstMs": 0.35729999999999507,
+      "warmP95Ms": 0.30409999999999116,
+      "responseBytes": 4128
+    },
+    {
+      "split": "development",
+      "type": "intent",
+      "query": "subtract one solid from another",
+      "relevant": [
+        "boolDiff"
+      ],
+      "found": [
+        "boolDiff",
+        "boolUnion",
+        "extrudeProfile",
+        "revolveProfile",
+        "normalMapFromHeight"
+      ],
+      "recallAt5": 1,
+      "reciprocalRank": 1,
+      "firstMs": 0.2353999999999985,
+      "warmP95Ms": 0.4672999999999945,
+      "responseBytes": 3597
+    },
+    {
+      "split": "development",
+      "type": "intent",
+      "query": "join overlapping solid shapes",
+      "relevant": [
+        "boolUnion"
+      ],
+      "found": [
+        "boolUnion",
+        "loftProfiles",
+        "boolIntersect",
+        "boolDiff",
+        "revolveProfile"
+      ],
+      "recallAt5": 1,
+      "reciprocalRank": 1,
+      "firstMs": 0.20109999999999673,
+      "warmP95Ms": 0.2161999999999864,
+      "responseBytes": 3022
+    },
+    {
+      "split": "development",
+      "type": "intent",
+      "query": "repeat beams in a straight row",
+      "relevant": [
+        "arrayLinear"
+      ],
+      "found": [
+        "arrayLinear",
+        "beamBetween",
+        "arrayRadial",
+        "proceduralTexture",
+        "createStairs"
+      ],
+      "recallAt5": 1,
+      "reciprocalRank": 1,
+      "firstMs": 0.21109999999998763,
+      "warmP95Ms": 0.2837999999999852,
+      "responseBytes": 4448
+    },
+    {
+      "split": "development",
+      "type": "compound",
+      "query": "stairs and door opening",
+      "relevant": [
+        "createStairs",
+        "wallWithOpening"
+      ],
+      "found": [
+        "wallWithOpening",
+        "createStairs",
+        "room",
+        "createGableShell",
+        "createGableEndPanel"
+      ],
+      "recallAt5": 1,
+      "reciprocalRank": 1,
+      "firstMs": 0.14780000000001792,
+      "warmP95Ms": 0.32210000000000605,
+      "responseBytes": 3576
+    },
+    {
+      "split": "development",
+      "type": "intent",
+      "query": "unfold a mesh for texture coordinates",
+      "relevant": [
+        "autoUnwrap"
+      ],
+      "found": [
+        "autoUnwrap",
+        "remapUV",
+        "cylinderUnwrap",
+        "proceduralTexture",
+        "loadApprovedTexture"
+      ],
+      "recallAt5": 1,
+      "reciprocalRank": 1,
+      "firstMs": 0.49620000000001596,
+      "warmP95Ms": 0.3335999999999899,
+      "responseBytes": 4646
+    },
+    {
+      "split": "development",
+      "type": "rare",
+      "query": "implicit signed distance surface",
+      "relevant": [
+        "implicitSurface"
+      ],
+      "found": [
+        "implicitSurface",
+        "revolveGeo",
+        "parametricSurface",
+        "lathe",
+        "createRoofSurfaceLayout"
+      ],
+      "recallAt5": 1,
+      "reciprocalRank": 1,
+      "firstMs": 0.3217999999999961,
+      "warmP95Ms": 0.29699999999999704,
+      "responseBytes": 3795
+    },
+    {
+      "split": "development",
+      "type": "unsupported",
+      "query": "speech recognition",
+      "relevant": [],
+      "found": [],
+      "recallAt5": null,
+      "reciprocalRank": 0,
+      "firstMs": 0.10849999999999227,
+      "warmP95Ms": 0.07179999999999609,
+      "responseBytes": 211
+    },
+    {
+      "split": "development",
+      "type": "unsupported",
+      "query": "inverse kinematics solver",
+      "relevant": [],
+      "found": [],
+      "recallAt5": null,
+      "reciprocalRank": 0,
+      "firstMs": 0.08910000000000196,
+      "warmP95Ms": 0.09279999999998267,
+      "responseBytes": 211
+    },
+    {
+      "split": "development",
+      "type": "ambiguous",
+      "query": "wheel",
+      "relevant": [
+        "createWheelAssembly",
+        "createWheelGeometrySet"
+      ],
+      "found": [
+        "createWheelAssembly",
+        "createWheelGeometrySet",
+        "gearGeo",
+        "lathe",
+        "createInstance"
+      ],
+      "recallAt5": 1,
+      "reciprocalRank": 1,
+      "firstMs": 0.11050000000000182,
+      "warmP95Ms": 0.09649999999999181,
+      "responseBytes": 3155
+    },
+    {
+      "split": "heldout",
+      "type": "intent",
+      "query": "arrange pillars in a ring",
+      "relevant": [
+        "arrayRadial"
+      ],
+      "found": [
+        "torusGeo",
+        "wingGeo",
+        "arrayRadial",
+        "createWingPair",
+        "createJointChain"
+      ],
+      "recallAt5": 1,
+      "reciprocalRank": 0.3333333333333333,
+      "firstMs": 0.1706000000000074,
+      "warmP95Ms": 0.13450000000000273,
+      "responseBytes": 3392
+    },
+    {
+      "split": "heldout",
+      "type": "intent",
+      "query": "hollow enclosure with a doorway",
+      "relevant": [
+        "room",
+        "wallWithOpening",
+        "createGableShell"
+      ],
+      "found": [
+        "room",
+        "wallWithOpening",
+        "createGableShell"
+      ],
+      "recallAt5": 1,
+      "reciprocalRank": 1,
+      "firstMs": 0.12919999999999732,
+      "warmP95Ms": 0.09659999999999513,
+      "responseBytes": 2223
+    },
+    {
+      "split": "heldout",
+      "type": "intent",
+      "query": "a hose that follows several bends",
+      "relevant": [
+        "pipeAlongPath",
+        "curveToMesh",
+        "sweepProfile"
+      ],
+      "found": [
+        "pipeAlongPath",
+        "bend",
+        "curveToMesh",
+        "rotationTrack",
+        "arrayRadial"
+      ],
+      "recallAt5": 0.6666666666666666,
+      "reciprocalRank": 1,
+      "firstMs": 0.18309999999999604,
+      "warmP95Ms": 0.21829999999999927,
+      "responseBytes": 4489
+    },
+    {
+      "split": "heldout",
+      "type": "typo",
+      "query": "miror",
+      "relevant": [
+        "mirror"
+      ],
+      "found": [
+        "mirror",
+        "remapUV",
+        "planeUnwrap",
+        "copyGeometry"
+      ],
+      "recallAt5": 1,
+      "reciprocalRank": 1,
+      "firstMs": 0.08310000000000173,
+      "warmP95Ms": 0.06850000000000023,
+      "responseBytes": 3124
+    },
+    {
+      "split": "heldout",
+      "type": "typo",
+      "query": "loftProfles",
+      "relevant": [
+        "loftProfiles"
+      ],
+      "found": [
+        "loftProfiles",
+        "createRoofPlanes",
+        "sweepProfile",
+        "createGableRoof"
+      ],
+      "recallAt5": 1,
+      "reciprocalRank": 1,
+      "firstMs": 0.14459999999999695,
+      "warmP95Ms": 0.10810000000000741,
+      "responseBytes": 3392
+    },
+    {
+      "split": "heldout",
+      "type": "rare",
+      "query": "join cross sections of changing size",
+      "relevant": [
+        "loftProfiles"
+      ],
+      "found": [
+        "loftProfiles",
+        "extrudeProfile",
+        "sweepProfile",
+        "crossedQuadsGeo",
+        "getJointNames"
+      ],
+      "recallAt5": 1,
+      "reciprocalRank": 1,
+      "firstMs": 0.24399999999999977,
+      "warmP95Ms": 0.1910000000000025,
+      "responseBytes": 3556
+    },
+    {
+      "split": "heldout",
+      "type": "long",
+      "query": "I need a bar between these two points and I want its length and direction to follow the endpoints",
+      "relevant": [
+        "beamBetween"
+      ],
+      "found": [
+        "beamBetween",
+        "coneZGeo",
+        "coneXGeo",
+        "cylinderOnAxis",
+        "bladeGeo"
+      ],
+      "recallAt5": 1,
+      "reciprocalRank": 1,
+      "firstMs": 0.43209999999999127,
+      "warmP95Ms": 0.32869999999999777,
+      "responseBytes": 2926
+    },
+    {
+      "split": "heldout",
+      "type": "intent",
+      "query": "arena seating steps",
+      "relevant": [
+        "createStairs",
+        "arrayRadial"
+      ],
+      "found": [
+        "createStairs",
+        "arrayRadial",
+        "rotationTrack"
+      ],
+      "recallAt5": 1,
+      "reciprocalRank": 1,
+      "firstMs": 0.13400000000001455,
+      "warmP95Ms": 0.10779999999999745,
+      "responseBytes": 2779
+    },
+    {
+      "split": "heldout",
+      "type": "ownership",
+      "query": "independent duplicate of mesh vertices",
+      "relevant": [
+        "copyGeometry"
+      ],
+      "found": [
+        "copyGeometry",
+        "mergeVertices",
+        "createInstance",
+        "meshGeo",
+        "displace"
+      ],
+      "recallAt5": 1,
+      "reciprocalRank": 1,
+      "firstMs": 0.198599999999999,
+      "warmP95Ms": 0.4211999999999989,
+      "responseBytes": 3827
+    },
+    {
+      "split": "heldout",
+      "type": "near-miss",
+      "query": "cloneGeometry",
+      "relevant": [],
+      "note": "Retired identity alias must not be presented as independently editable geometry.",
+      "found": [
+        "copyGeometry",
+        "geometryDiagnostics",
+        "createWheelGeometrySet",
+        "coneYGeo",
+        "coneGeo"
+      ],
+      "recallAt5": null,
+      "reciprocalRank": 0,
+      "firstMs": 0.38820000000001187,
+      "warmP95Ms": 0.1699999999999875,
+      "responseBytes": 2522
+    },
+    {
+      "split": "heldout",
+      "type": "unsupported",
+      "query": "simulate smoke fluid dynamics",
+      "relevant": [],
+      "found": [],
+      "recallAt5": null,
+      "reciprocalRank": 0,
+      "firstMs": 0.17310000000000514,
+      "warmP95Ms": 0.16970000000000596,
+      "responseBytes": 211
+    },
+    {
+      "split": "heldout",
+      "type": "intent",
+      "query": "texture on a thin leaf cutout",
+      "relevant": [
+        "foliageCardGeo",
+        "foliageMaterial"
+      ],
+      "found": [
+        "foliageMaterial",
+        "foliageCardGeo",
+        "proceduralTexture",
+        "decalBox",
+        "loadApprovedTexture"
+      ],
+      "recallAt5": 1,
+      "reciprocalRank": 1,
+      "firstMs": 0.33379999999999654,
+      "warmP95Ms": 0.25190000000000623,
+      "responseBytes": 3864
+    },
+    {
+      "id": "independent-01",
+      "kind": "direct",
+      "query": "creaseNormals",
+      "relevant": [
+        "creaseNormals"
+      ],
+      "rationale": "Exact current helper name should resolve without unrelated smoothing operations outranking it.",
+      "split": "independent-observed",
+      "found": [
+        "creaseNormals",
+        "normalMapFromHeight",
+        "createGableRoof",
+        "createJointChain",
+        "circleProfile"
+      ],
+      "recallAt5": 1,
+      "reciprocalRank": 1,
+      "firstMs": 0.18610000000001037,
+      "warmP95Ms": 0.19360000000000355,
+      "responseBytes": 3487
+    },
+    {
+      "id": "independent-02",
+      "kind": "direct",
+      "query": "createJointChain local bend axis end effector",
+      "relevant": [
+        "createJointChain"
+      ],
+      "rationale": "The named chain helper owns the rest-frame, axis and end-effector descriptors requested.",
+      "split": "independent-observed",
+      "found": [
+        "createJointChain",
+        "createGableEndPanel",
+        "bend",
+        "taperConeGeo",
+        "createPivot"
+      ],
+      "recallAt5": 1,
+      "reciprocalRank": 1,
+      "firstMs": 0.4771000000000072,
+      "warmP95Ms": 0.8172999999999888,
+      "responseBytes": 3363
+    },
+    {
+      "id": "independent-03",
+      "kind": "direct",
+      "query": "normalMapFromHeight strength",
+      "relevant": [
+        "normalMapFromHeight"
+      ],
+      "rationale": "Exact helper lookup with an actual option; material factories do not derive the normal pixels.",
+      "split": "independent-observed",
+      "found": [
+        "normalMapFromHeight",
+        "creaseNormals",
+        "planeUnwrap",
+        "boolDiff",
+        "materialRecipe"
+      ],
+      "recallAt5": 1,
+      "reciprocalRank": 1,
+      "firstMs": 0.24780000000001223,
+      "warmP95Ms": 0.16870000000000118,
+      "responseBytes": 3574
+    },
+    {
+      "id": "independent-04",
+      "kind": "paraphrase",
+      "query": "Keep the lip sharp but shade the sides smoothly without losing texture corners",
+      "relevant": [
+        "creaseNormals"
+      ],
+      "rationale": "Angle-limited normals preserve sharp transitions and UV corners without changing the shape through subdivision.",
+      "split": "independent-observed",
+      "found": [
+        "proceduralTexture",
+        "creaseNormals",
+        "loadApprovedTexture",
+        "pbrMaterial",
+        "autoUnwrap"
+      ],
+      "recallAt5": 1,
+      "reciprocalRank": 0.5,
+      "firstMs": 0.33449999999999136,
+      "warmP95Ms": 0.4527000000000214,
+      "responseBytes": 4352
+    },
+    {
+      "id": "independent-05",
+      "kind": "paraphrase",
+      "query": "A stretched pill lying front to back, with hemispherical ends",
+      "relevant": [
+        "capsuleXGeo"
+      ],
+      "rationale": "Kiln's forward axis is X, and this capsule has the requested rounded caps in that orientation.",
+      "split": "independent-observed",
+      "found": [
+        "capsuleGeo",
+        "capsuleXGeo",
+        "capsuleYGeo",
+        "capsuleZGeo",
+        "createGableEndPanel"
+      ],
+      "recallAt5": 1,
+      "reciprocalRank": 0.5,
+      "firstMs": 0.21920000000000073,
+      "warmP95Ms": 0.42029999999999745,
+      "responseBytes": 2460
+    },
+    {
+      "id": "independent-06",
+      "kind": "paraphrase",
+      "query": "A tyre and hub that turn together at the axle while the whole wheel can steer",
+      "relevant": [
+        "createWheelAssembly"
+      ],
+      "rationale": "The assembly supplies concentric wheel parts, an axle spin pivot and an optional steering pivot. A geometry-only wheel set does not supply that behavior.",
+      "split": "independent-observed",
+      "found": [
+        "createWheelAssembly",
+        "createWheelGeometrySet",
+        "revolveProfile",
+        "lathe",
+        "boxUnwrap"
+      ],
+      "recallAt5": 1,
+      "reciprocalRank": 1,
+      "firstMs": 0.3037999999999954,
+      "warmP95Ms": 0.3102000000000089,
+      "responseBytes": 3007
+    },
+    {
+      "id": "independent-07",
+      "kind": "paraphrase",
+      "query": "Lay corrugated strips down the direction rain runs on either side of a pitched roof",
+      "relevant": [
+        "createRoofSurfaceLayout",
+        "createGableRoof"
+      ],
+      "rationale": "The layout consumes a roof face's downhill frame; the gable-roof helper is the direct source of those frames.",
+      "split": "independent-observed",
+      "found": [
+        "createRoofSurfaceLayout",
+        "createGableRoof",
+        "createRoofPlanes",
+        "createGableEndPanel",
+        "createGableShell"
+      ],
+      "recallAt5": 1,
+      "reciprocalRank": 1,
+      "firstMs": 0.5578000000000145,
+      "warmP95Ms": 0.40979999999998995,
+      "responseBytes": 3832
+    },
+    {
+      "id": "independent-08",
+      "kind": "paraphrase",
+      "query": "Turn a bottle outline into a closed volume that I can subtract another solid from",
+      "relevant": [
+        "revolveProfile"
+      ],
+      "rationale": "Solid revolution meets the closed-volume requirement. Surface-only lathe/revolve helpers do not guarantee a boolean-ready solid.",
+      "split": "independent-observed",
+      "found": [
+        "revolveProfile",
+        "boolDiff",
+        "extrudeProfile",
+        "boolUnion",
+        "boolIntersect"
+      ],
+      "recallAt5": 1,
+      "reciprocalRank": 1,
+      "firstMs": 0.41509999999999536,
+      "warmP95Ms": 0.3803999999999803,
+      "responseBytes": 3049
+    },
+    {
+      "id": "independent-09",
+      "kind": "paraphrase",
+      "query": "Carry an L-shaped cross section around a bent handrail route",
+      "relevant": [
+        "sweepProfile"
+      ],
+      "rationale": "A noncircular profile swept along path stations is the supported operation. Circular tube helpers discard the specified section.",
+      "split": "independent-observed",
+      "found": [
+        "loftProfiles",
+        "sweepProfile",
+        "extrudeProfile",
+        "crossedQuadsGeo",
+        "twist"
+      ],
+      "recallAt5": 1,
+      "reciprocalRank": 0.5,
+      "firstMs": 0.37129999999999086,
+      "warmP95Ms": 0.3182999999999936,
+      "responseBytes": 3798
+    },
+    {
+      "id": "independent-10",
+      "kind": "paraphrase",
+      "query": "Bridge several matching polygon outlines at different positions into one capped transition",
+      "relevant": [
+        "loftProfiles"
+      ],
+      "rationale": "Corresponding equal-count profiles with explicit frames are the loft contract. The wording deliberately supplies correspondence.",
+      "split": "independent-observed",
+      "found": [
+        "loftProfiles",
+        "createWheelGeometrySet",
+        "createClip",
+        "createRoofPlanes",
+        "revolveProfile"
+      ],
+      "recallAt5": 1,
+      "reciprocalRank": 1,
+      "firstMs": 0.3674000000000035,
+      "warmP95Ms": 0.5583999999999776,
+      "responseBytes": 3591
+    },
+    {
+      "id": "independent-11",
+      "kind": "paraphrase",
+      "query": "I have an equation mapping two parameters to xyz and want a sampled surface with texture coordinates",
+      "relevant": [
+        "parametricSurface"
+      ],
+      "rationale": "The two-parameter sampler produces positions and UVs; an implicit scalar-field extractor is a different input contract.",
+      "split": "independent-observed",
+      "found": [
+        "parametricSurface",
+        "remapUV",
+        "cylinderUnwrap",
+        "boxUnwrap",
+        "proceduralTexture"
+      ],
+      "recallAt5": 1,
+      "reciprocalRank": 1,
+      "firstMs": 0.31970000000001164,
+      "warmP95Ms": 0.4067000000000007,
+      "responseBytes": 4185
+    },
+    {
+      "id": "independent-12",
+      "kind": "typo",
+      "query": "qadratic bezeir control ponts to sampled path",
+      "relevant": [
+        "bezierCurve"
+      ],
+      "rationale": "Misspelled quadratic Bezier terminology should retrieve the control-point-to-path sampler.",
+      "split": "independent-observed",
+      "found": [
+        "bezierCurve",
+        "pipeAlongPath",
+        "sweepProfile",
+        "curveToMesh",
+        "implicitSurface"
+      ],
+      "recallAt5": 1,
+      "reciprocalRank": 1,
+      "firstMs": 0.2185000000000059,
+      "warmP95Ms": 0.31380000000001473,
+      "responseBytes": 4035
+    },
+    {
+      "id": "independent-13",
+      "kind": "typo",
+      "query": "extrdue profle with interor cutout",
+      "relevant": [
+        "extrudeProfile"
+      ],
+      "rationale": "The intended solid extrusion supports interior holes despite three common spelling errors.",
+      "split": "independent-observed",
+      "found": [
+        "foliageMaterial",
+        "foliageCardGeo",
+        "extrudeProfile",
+        "circleProfile",
+        "sweepProfile"
+      ],
+      "recallAt5": 1,
+      "reciprocalRank": 0.3333333333333333,
+      "firstMs": 0.280399999999986,
+      "warmP95Ms": 0.28369999999995343,
+      "responseBytes": 3274
+    },
+    {
+      "id": "independent-14",
+      "kind": "typo",
+      "query": "unlit materal ignores scene ligths",
+      "relevant": [
+        "basicMaterial"
+      ],
+      "rationale": "The request is unlit shading, not an emissive PBR surface still affected by other lighting terms.",
+      "split": "independent-observed",
+      "found": [
+        "basicMaterial",
+        "countMaterials",
+        "copyMaterial",
+        "materialRecipe",
+        "pbrMaterial"
+      ],
+      "recallAt5": 1,
+      "reciprocalRank": 1,
+      "firstMs": 0.18400000000002592,
+      "warmP95Ms": 0.30649999999997135,
+      "responseBytes": 3075
+    },
+    {
+      "id": "independent-15",
+      "kind": "typo",
+      "query": "booleen intersecion keep only overlapping volume",
+      "relevant": [
+        "boolIntersect"
+      ],
+      "rationale": "The retained region is explicitly the intersection, not a union or subtraction.",
+      "split": "independent-observed",
+      "found": [
+        "boolIntersect",
+        "boolUnion",
+        "boolDiff",
+        "boxUnwrap",
+        "creaseNormals"
+      ],
+      "recallAt5": 1,
+      "reciprocalRank": 1,
+      "firstMs": 0.2248000000000161,
+      "warmP95Ms": 0.2877000000000294,
+      "responseBytes": 2940
+    },
+    {
+      "id": "independent-16",
+      "kind": "rare",
+      "query": "Count boundary and nonmanifold edges after matching duplicated seam positions",
+      "relevant": [
+        "geometryDiagnostics"
+      ],
+      "rationale": "Topology diagnostics use position-based seam matching. This asks for counts, not an unsupported proof of a valid solid.",
+      "split": "independent-observed",
+      "found": [
+        "geometryDiagnostics",
+        "creaseNormals",
+        "mergeVertices",
+        "countMaterials",
+        "countTriangles"
+      ],
+      "recallAt5": 1,
+      "reciprocalRank": 1,
+      "firstMs": 0.299699999999973,
+      "warmP95Ms": 0.38220000000001164,
+      "responseBytes": 3232
+    },
+    {
+      "id": "independent-17",
+      "kind": "rare",
+      "query": "Declare support and propulsion sockets for a boat with no wheels",
+      "relevant": [
+        "createVehicleFrame"
+      ],
+      "rationale": "The semantic frame supports non-wheeled vehicles through declared support and propulsion sockets.",
+      "split": "independent-observed",
+      "found": [
+        "createVehicleFrame",
+        "createWheelAssembly",
+        "createWheelGeometrySet",
+        "gearGeo",
+        "arrayRadial"
+      ],
+      "recallAt5": 1,
+      "reciprocalRank": 1,
+      "firstMs": 0.20690000000001874,
+      "warmP95Ms": 0.2506000000000199,
+      "responseBytes": 3808
+    },
+    {
+      "id": "independent-18",
+      "kind": "rare",
+      "query": "Extract a level set from a positive-inside gyroid scalar field in a finite box",
+      "relevant": [
+        "implicitSurface"
+      ],
+      "rationale": "Positive-inside signed sampling with explicit spatial bounds is the implicit-surface contract; a parametric UV sampler is different.",
+      "split": "independent-observed",
+      "found": [
+        "implicitSurface",
+        "boxUnwrap",
+        "snapTo",
+        "roundedBoxGeo",
+        "normalMapFromHeight"
+      ],
+      "recallAt5": 1,
+      "reciprocalRank": 1,
+      "firstMs": 0.3280000000000314,
+      "warmP95Ms": 0.4275000000000091,
+      "responseBytes": 4231
+    },
+    {
+      "id": "independent-19",
+      "kind": "rare",
+      "query": "Impostor atlas quad whose shader chooses the view-dependent tile",
+      "relevant": [
+        "octaGridPlane"
+      ],
+      "rationale": "This quad pre-scales UVs to one atlas tile and expects the consuming shader to offset them. It does not itself implement view selection.",
+      "split": "independent-observed",
+      "found": [
+        "octaGridPlane",
+        "autoUnwrap",
+        "planeGeo",
+        "mirror",
+        "remapUV"
+      ],
+      "recallAt5": 1,
+      "reciprocalRank": 1,
+      "firstMs": 0.3482000000000198,
+      "warmP95Ms": 0.39510000000001355,
+      "responseBytes": 4070
+    },
+    {
+      "id": "independent-20",
+      "kind": "compound",
+      "query": "Drill recesses into a painted body while retaining its existing UV and material attributes",
+      "relevant": [
+        "boolDiff"
+      ],
+      "rationale": "Subtraction with attribute preservation is the direct operation. Re-atlasing is not an equivalent way to retain the existing UVs.",
+      "split": "independent-observed",
+      "found": [
+        "remapUV",
+        "boxUnwrap",
+        "materialRecipe",
+        "countMaterials",
+        "copyMaterial"
+      ],
+      "recallAt5": 0,
+      "reciprocalRank": 0,
+      "firstMs": 0.5035000000000309,
+      "warmP95Ms": 0.5149999999999864,
+      "responseBytes": 3561
+    },
+    {
+      "id": "independent-21",
+      "kind": "compound",
+      "query": "Generate seamless brick pixels and derive a tiling tangent-space bump normal from their brightness",
+      "relevant": [
+        "proceduralTexture",
+        "normalMapFromHeight"
+      ],
+      "rationale": "The layer generator supplies deterministic tiling brick pixels; the height-to-normal helper supplies the separate normal map.",
+      "split": "independent-observed",
+      "found": [
+        "normalMapFromHeight",
+        "creaseNormals",
+        "proceduralTexture",
+        "createGableRoof",
+        "boolDiff"
+      ],
+      "recallAt5": 1,
+      "reciprocalRank": 1,
+      "firstMs": 0.42619999999999436,
+      "warmP95Ms": 0.39150000000000773,
+      "responseBytes": 3721
+    },
+    {
+      "id": "independent-22",
+      "kind": "compound",
+      "query": "Cheap crossed leaf cards with alpha cutouts visible from both sides",
+      "relevant": [
+        "crossedQuadsGeo",
+        "foliageMaterial"
+      ],
+      "rationale": "Crossed quads supply the explicit card arrangement and the foliage material supplies MASK alpha and double-sided shading.",
+      "split": "independent-observed",
+      "found": [
+        "foliageMaterial",
+        "foliageCardGeo",
+        "crossedQuadsGeo",
+        "normalMapFromHeight",
+        "materialRecipe"
+      ],
+      "recallAt5": 1,
+      "reciprocalRank": 1,
+      "firstMs": 1.6965999999999894,
+      "warmP95Ms": 0.5290999999999713,
+      "responseBytes": 3411
+    },
+    {
+      "id": "independent-23",
+      "kind": "compound",
+      "query": "Package translation and degree-based joint rotation keyframes into a named animation",
+      "relevant": [
+        "positionTrack",
+        "rotationTrack",
+        "createClip"
+      ],
+      "rationale": "The two track helpers express the channels and the clip helper packages them. A fixed spin or bob preset is not sufficient for authored keyframes.",
+      "split": "independent-observed",
+      "found": [
+        "rotationTrack",
+        "getJointNames",
+        "createClip",
+        "spinAnimation",
+        "positionTrack"
+      ],
+      "recallAt5": 1,
+      "reciprocalRank": 1,
+      "firstMs": 0.3713999999999942,
+      "warmP95Ms": 0.6106999999999516,
+      "responseBytes": 2908
+    },
+    {
+      "id": "independent-24",
+      "kind": "ambiguous",
+      "query": "ring",
+      "relevant": [
+        "torusGeo",
+        "circleProfile"
+      ],
+      "rationale": "A ring can reasonably mean a three-dimensional donut or a circular two-dimensional outline. No solid/open-profile constraint was provided.",
+      "split": "independent-observed",
+      "found": [
+        "torusGeo",
+        "wingGeo",
+        "arrayRadial",
+        "createWingPair",
+        "createJointChain"
+      ],
+      "recallAt5": 0.5,
+      "reciprocalRank": 1,
+      "firstMs": 0.11480000000000246,
+      "warmP95Ms": 0.08980000000002519,
+      "responseBytes": 3392
+    },
+    {
+      "id": "independent-25",
+      "kind": "ambiguous",
+      "query": "spin around an axis",
+      "relevant": [
+        "spinAnimation",
+        "lathe",
+        "revolveGeo",
+        "revolveProfile"
+      ],
+      "rationale": "The short phrase could mean animate rotation or construct a surface/solid of revolution. Relevant alternatives should expose that distinction.",
+      "split": "independent-observed",
+      "found": [
+        "spinAnimation",
+        "revolveGeo",
+        "cylinderUnwrap",
+        "lathe",
+        "cylinderOnAxis"
+      ],
+      "recallAt5": 0.75,
+      "reciprocalRank": 1,
+      "firstMs": 0.25679999999999836,
+      "warmP95Ms": 0.17590000000001282,
+      "responseBytes": 3435
+    },
+    {
+      "id": "independent-26",
+      "kind": "near-miss",
+      "query": "Change one part's roughness without changing the other parts, but keep the image maps shared",
+      "relevant": [
+        "copyMaterial"
+      ],
+      "rationale": "An owned material copy with shared texture references meets the request. Geometry copying and the retired identity alias do not.",
+      "split": "independent-observed",
+      "found": [
+        "copyMaterial",
+        "copyGeometry",
+        "createPart",
+        "planeUnwrap",
+        "arrayLinear"
+      ],
+      "recallAt5": 1,
+      "reciprocalRank": 1,
+      "firstMs": 0.4046000000000163,
+      "warmP95Ms": 0.63250000000005,
+      "responseBytes": 3453
+    },
+    {
+      "id": "independent-27",
+      "kind": "near-miss",
+      "query": "Pack arbitrary mesh islands for a non-repeating baked texture; chart rotation is fine",
+      "relevant": [
+        "autoUnwrap"
+      ],
+      "rationale": "This specifically permits an atlas for a baked image. Directional primitive UV preservation and planar projection are not equivalent.",
+      "split": "independent-observed",
+      "found": [
+        "autoUnwrap",
+        "proceduralTexture",
+        "createInstance",
+        "rotationTrack",
+        "arrayLinear"
+      ],
+      "recallAt5": 1,
+      "reciprocalRank": 1,
+      "firstMs": 0.40449999999998454,
+      "warmP95Ms": 0.5909000000000333,
+      "responseBytes": 4390
+    },
+    {
+      "id": "independent-28",
+      "kind": "unsupported",
+      "query": "Bevel only the selected edges of my existing arbitrary triangle mesh",
+      "relevant": [],
+      "rationale": "Current rounded-box and profile-bevel constructors do not bevel selected edges of arbitrary existing meshes; subdivision is smoothing, not this operation.",
+      "split": "independent-observed",
+      "found": [
+        "subdivide",
+        "meshGeo",
+        "countTriangles",
+        "geometryDiagnostics",
+        "bend"
+      ],
+      "recallAt5": null,
+      "reciprocalRank": 0,
+      "firstMs": 0.3229999999999791,
+      "warmP95Ms": 0.24610000000001264,
+      "responseBytes": 3469
+    },
+    {
+      "id": "independent-29",
+      "kind": "unsupported",
+      "query": "Solve inverse kinematics so an articulated foot follows a moving ground target",
+      "relevant": [],
+      "rationale": "The catalog supplies joint graphs and keyframe construction, not an IK solver or target-following controller.",
+      "split": "independent-observed",
+      "found": [
+        "createPivot",
+        "createJointChain",
+        "createWheelAssembly",
+        "arrayRadial",
+        "createRoot"
+      ],
+      "recallAt5": null,
+      "reciprocalRank": 0,
+      "firstMs": 0.2658000000000129,
+      "warmP95Ms": 0.3976999999999862,
+      "responseBytes": 3332
+    },
+    {
+      "id": "independent-30",
+      "kind": "unsupported",
+      "query": "Certify that an arbitrary mesh has absolutely no self intersections",
+      "relevant": [],
+      "rationale": "The current diagnostics explicitly do not certify self-intersection freedom; closed edges alone are insufficient.",
+      "split": "independent-observed",
+      "found": [
+        "geometryDiagnostics",
+        "meshGeo",
+        "createInstance",
+        "implicitSurface",
+        "autoUnwrap"
+      ],
+      "recallAt5": null,
+      "reciprocalRank": 0,
+      "firstMs": 0.27010000000001355,
+      "warmP95Ms": 0.26600000000001955,
+      "responseBytes": 4031
+    },
+    {
+      "id": "independent-31",
+      "kind": "unsupported",
+      "query": "Load a texture straight from any HTTPS image URL inside build",
+      "relevant": [],
+      "rationale": "Sandbox texture loading accepts approved resource IDs, not arbitrary URLs. Returning that restricted loader as satisfying this request would hide a contract mismatch.",
+      "split": "independent-observed",
+      "found": [
+        "proceduralTexture",
+        "loadApprovedTexture",
+        "normalMapFromHeight",
+        "createStairs",
+        "extrudeProfile"
+      ],
+      "recallAt5": null,
+      "reciprocalRank": 0,
+      "firstMs": 0.28530000000000655,
+      "warmP95Ms": 0.36419999999998254,
+      "responseBytes": 4472
+    },
+    {
+      "id": "independent-32",
+      "kind": "unsupported",
+      "query": "Measure the actual GPU draw calls by counting unique material objects",
+      "relevant": [],
+      "rationale": "Unique material count is not a draw-call measurement. No listed helper provides the requested actual GPU measurement through that method.",
+      "split": "independent-observed",
+      "found": [
+        "countMaterials",
+        "materialBudgetAdvisory",
+        "compilePortableMaterialSpecV2",
+        "gameMaterial",
+        "copyMaterial"
+      ],
+      "recallAt5": null,
+      "reciprocalRank": 0,
+      "firstMs": 0.33339999999998327,
+      "warmP95Ms": 0.4001999999999839,
+      "responseBytes": 3331
+    },
+    {
+      "id": "independent-33",
+      "kind": "paraphrase",
+      "query": "Repeat tilted slats in a straight row, nine total including the one already placed",
+      "relevant": [
+        "arrayLinear"
+      ],
+      "rationale": "Linear repetition preserves orientation and counts the unchanged source as the first of nine.",
+      "split": "independent-observed",
+      "found": [
+        "arrayLinear",
+        "arrayRadial",
+        "createStairs",
+        "createRoofSurfaceLayout",
+        "createPart"
+      ],
+      "recallAt5": 1,
+      "reciprocalRank": 1,
+      "firstMs": 0.3926000000000158,
+      "warmP95Ms": 0.3897000000000048,
+      "responseBytes": 4609
+    },
+    {
+      "id": "independent-34",
+      "kind": "rare",
+      "query": "A tight convex envelope enclosing several pieces for a faceted collision proxy",
+      "relevant": [
+        "hull"
+      ],
+      "rationale": "The convex hull encloses all input geometry; a boolean union follows concavities and is not a convex envelope.",
+      "split": "independent-observed",
+      "found": [
+        "hull",
+        "cylinderGeo",
+        "createVehicleFrame",
+        "geometryDiagnostics",
+        "autoUnwrap"
+      ],
+      "recallAt5": 1,
+      "reciprocalRank": 1,
+      "firstMs": 0.2902000000000271,
+      "warmP95Ms": 0.40229999999996835,
+      "responseBytes": 3517
+    }
+  ],
+  "limitations": [
+    "All judgments were observed before this integration; this is regression evidence, not a fresh holdout.",
+    "Growth entries are synthetic copies and say nothing about relevance as the catalog expands.",
+    "Index timings exclude module imports and whole CLI startup.",
+    "One desktop CPU host, not low-power or cross-platform qualification."
+  ]
+}

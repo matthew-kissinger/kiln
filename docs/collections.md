@@ -118,7 +118,8 @@ writes a standalone GLB plus `workbench-runtime.kiln-metadata.json`, moving only
 Kiln's animation review extras into a hash-linked sidecar. Native playback needs no
 sidecar. It does not reduce geometry or draw calls, and it never changes the canonical
 revision. See [export profiles](export-profiles.md) for CLI/MCP/library usage, provenance,
-paired-write behavior and limitations. Viewer download buttons retain editable behavior.
+paired-write behavior and limitations. The local viewer offers Original GLB and Runtime GLB,
+with a companion Runtime metadata download. Keep the editable bundle for source and build records.
 
 Imports preserve original IDs and parent references, even when an ancestor was not
 included. Importing the same revision twice is harmless; a conflicting identity is

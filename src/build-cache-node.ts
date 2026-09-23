@@ -12,7 +12,7 @@ import {
 import { join, resolve } from 'node:path';
 import type { BuildCache } from './build-cache';
 import type { RenderResult } from './render';
-import { decodeEvaluatorResultV1, encodeRenderResultV1 } from './evaluator/protocol';
+import { decodeEvaluatorResultV2, encodeRenderResultV2 } from './evaluator/protocol';
 
 const keyPattern = /^sha256:[a-f0-9]{64}$/;
 const filePattern = /^[a-f0-9]{64}\.json$/;
@@ -51,7 +51,7 @@ export class FileBuildCache implements BuildCache {
         envelope.checksum !== digest(envelope.payload)
       )
         return undefined;
-      const decoded = decodeEvaluatorResultV1(envelope.payload, 64 * 1024 * 1024);
+      const decoded = decodeEvaluatorResultV2(envelope.payload, 64 * 1024 * 1024);
       if (!decoded.ok) return undefined;
       // Host cache bookkeeping only; timestamps never enter geometry or identity.
       const now = new Date();
@@ -63,7 +63,7 @@ export class FileBuildCache implements BuildCache {
   }
   async put(key: string, result: RenderResult): Promise<void> {
     const path = this.path(key);
-    const payload = JSON.stringify(encodeRenderResultV1('cached-build', result));
+    const payload = JSON.stringify(encodeRenderResultV2('cached-build', result));
     const bytes = JSON.stringify({ version: 1, key, payload, checksum: digest(payload) });
     if (Buffer.byteLength(bytes) > Math.min(this.maxBytes, 96 * 1024 * 1024)) return;
     await mkdir(this.directory, { recursive: true });

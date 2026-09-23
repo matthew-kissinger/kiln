@@ -1,0 +1,26 @@
+{
+  "boundary": "child IPC",
+  "node": "v22.23.2",
+  "parentGpuGlobalBefore": false,
+  "ready": {
+    "ready": true,
+    "rendererId": "dawn-d3d12:nvidia-geforce-rtx-3070:D3D12 driver version 32.0.16.1074"
+  },
+  "readyMs": 636.6263,
+  "renders": [
+    {
+      "pngBytes": 26705,
+      "pngSha256": "bd6c0164d3ff2d69d19a8eefadd85869bff9a530b9402d917bcc5ff309f99920",
+      "peakRssKiB": 253444,
+      "ms": 1837.9991999999997
+    },
+    {
+      "pngBytes": 26705,
+      "pngSha256": "bd6c0164d3ff2d69d19a8eefadd85869bff9a530b9402d917bcc5ff309f99920",
+      "peakRssKiB": 289116,
+      "ms": 1145.6467000000002
+    }
+  ],
+  "parentGpuGlobalAfter": false,
+  "stderr": ""
+}

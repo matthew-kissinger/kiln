@@ -451,6 +451,12 @@ export function measureBounds(root: unknown): {
   return { min: [...bbox.min], max: [...bbox.max] };
 }
 
+/** Unlike camera framing, an empty part has no measurable geometry bounds. */
+export function measurePartBounds(root: unknown): ReturnType<typeof measureBounds> | null {
+  const { tris, bbox } = collectTriangles(root as DuckObject3D);
+  return tris.length ? { min: [...bbox.min], max: [...bbox.max] } : null;
+}
+
 /**
  * Fraction of non-background pixels — used by tests and occupancy checks. The
  * raster must be measured against the backdrop it was painted with, so pass the

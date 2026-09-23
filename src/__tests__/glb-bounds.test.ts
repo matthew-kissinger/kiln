@@ -6,12 +6,11 @@
  */
 import { describe, expect, test } from 'bun:test';
 
-import { createAssetIntentV1 } from '../contracts';
 import { executeKilnCode, measureGlbBounds, renderGLB } from '../render';
 import { measureBounds } from '../views';
 
 const OFFSET_CODE = `
-const meta = { name: 'BoundsProbe', category: 'prop' };
+const meta = { name: 'BoundsProbe', labels: ['prop'] };
 function build() {
   const root = createRoot('BoundsProbe');
   createPart('Body', boxGeo(2, 1, 0.5), gameMaterial(0x8B4513), { position: [0.5, 0.5, -0.25], parent: root });
@@ -23,8 +22,7 @@ function build() {
 
 describe('measureGlbBounds', () => {
   test('matches the live-scene bounds for a rendered program', async () => {
-    const intent = createAssetIntentV1({ category: 'prop' });
-    const rendered = await renderGLB(OFFSET_CODE, { intent });
+    const rendered = await renderGLB(OFFSET_CODE);
     const fromBytes = await measureGlbBounds(rendered.glb);
     expect(fromBytes).toBeDefined();
 
@@ -37,7 +35,6 @@ describe('measureGlbBounds', () => {
   });
 
   test('returns undefined for bytes with no measurable geometry', async () => {
-    const intent = createAssetIntentV1({ category: 'prop' });
     // Render something valid, then strip it to an empty document via a re-read
     // is overkill — an asset whose only node is empty is not producible through
     // renderGLB (QA blocks it), so probe the guard directly with a minimal
@@ -48,7 +45,7 @@ describe('measureGlbBounds', () => {
     const bytes = await new WebIO().writeBinary(doc);
     expect(await measureGlbBounds(bytes)).toBeUndefined();
     // And the happy path still stands on the same IO round-trip.
-    const rendered = await renderGLB(OFFSET_CODE, { intent });
+    const rendered = await renderGLB(OFFSET_CODE);
     expect(await measureGlbBounds(rendered.glb)).toBeDefined();
   });
 });

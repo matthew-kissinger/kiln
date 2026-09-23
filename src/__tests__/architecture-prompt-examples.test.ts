@@ -1,8 +1,12 @@
+import { bindLegacyFixtureRequirements } from './helpers/requirements-fixture';
 import { describe, expect, test } from 'bun:test';
 
 import { createAssetIntentV1 } from '../contracts';
-import { ARCHITECTURE_RIDGE_X_SCAFFOLD, ARCHITECTURE_RIDGE_Z_SCAFFOLD } from '../prompt';
-import type { AssetQaReportV1 } from '../qa/types';
+import {
+  ARCHITECTURE_RIDGE_X_SCAFFOLD,
+  ARCHITECTURE_RIDGE_Z_SCAFFOLD,
+} from './helpers/architecture-fixtures';
+import type { AssetRequirementsQaReportV2 } from '../qa/requirements-report';
 import { renderGLB } from '../render';
 
 const CANONICAL_ARCHITECTURE_CODES = new Set([
@@ -49,7 +53,7 @@ function architectureIntent(
   });
 }
 
-describe('ARCH-017 executable architecture prompt scaffolds', () => {
+describe('ARCH-017 historical executable roof fixtures', () => {
   for (const fixture of [
     {
       name: 'ridge +X',
@@ -63,10 +67,17 @@ describe('ARCH-017 executable architecture prompt scaffolds', () => {
     },
   ]) {
     test(`${fixture.name} compiles, renders, and passes exact architecture QA`, async () => {
-      const rendered = await renderGLB(fixture.code, { intent: fixture.intent });
+      const rendered = await renderGLB(fixture.code, {
+        requirements: bindLegacyFixtureRequirements(fixture.intent),
+      });
       expect(rendered.glb.subarray(0, 4).toString()).toBe('glTF');
-      const report = rendered.meta.qaReport as AssetQaReportV1;
-      expect(report.disposition).toBe('pass');
+      const report = rendered.meta.qaReport as AssetRequirementsQaReportV2;
+      expect(report.rules.find((rule) => rule.id === 'ARCHITECTURE_PROFILE')?.status).toBe(
+        'evaluated',
+      );
+      expect(report.dimensions.exportIntegrity.status).toBe('pass');
+      // Historical briefs include obligations beyond the measured roof checks.
+      expect(report.acceptance).toBe('incomplete');
       expect(report.dimensions.exportIntegrity.metrics?.['gltfErrors']).toBe(0);
       const canonicalFindings = Object.values(report.dimensions)
         .flatMap((dimension) => dimension.findings)

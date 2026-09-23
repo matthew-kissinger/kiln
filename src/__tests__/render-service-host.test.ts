@@ -1,26 +1,7 @@
-/**
- * Starting the GPU render service that ships beside this package.
- *
- * Before this existed, `buildRenderPort` probed port 8000 exactly once, before
- * the MCP server's first connection, and a service started one second later was
- * invisible until the session restarted (ledger 9.7). The documented cure was an
- * ordering instruction -- start the renderer BEFORE the harness starts the
- * server -- which is unfollowable when the harness owns the server's lifecycle.
- *
- * Two contracts matter here and they pull in opposite directions.
- *
- * The first: a machine that cannot run the renderer must behave EXACTLY as it
- * did before. `describeDrawnBy` reads `context.viewRenderPort` to decide whether
- * a CPU view is ordinary or an incident, so attaching a hopeful port on a
- * machine with no renderer installed would make every ordinary render report
- * itself as a degrade. That is the Phase 9 defect class -- a review surface that
- * misreports a correct result -- and it is worse than the problem being fixed.
- *
- * The second: where the renderer IS installed, a render that needs PBR should
- * get it without anyone having sequenced two processes by hand.
- */
+/** Offline installation resolution and lazy verified transport behavior. */
 import { createServer, type Server } from 'node:http';
 import type { AddressInfo } from 'node:net';
+import { tmpdir } from 'node:os';
 import { mkdir, mkdtemp, rm, writeFile } from 'node:fs/promises';
 import { join, resolve } from 'node:path';
 
@@ -30,9 +11,9 @@ import {
   localRenderServiceState,
   renderServiceNodeArguments,
   startLocalRenderService,
-  stopLocalRenderService,
 } from '../render-service-host';
 import { buildRenderPort, makeLazyRenderPort } from '../cli-render-mode';
+import { fakeRenderHealth, freePort, writeFakeRenderService } from './helpers/fake-render-service';
 
 const servers: Server[] = [];
 const directories: string[] = [];
@@ -49,7 +30,7 @@ function serve(): Promise<string> {
   const server = createServer((req, res) => {
     res.writeHead(200, { 'content-type': 'application/json' });
     if (req.url === '/health') {
-      res.end(JSON.stringify({ ok: true, rendererId: 'test-renderer' }));
+      res.end(JSON.stringify(fakeRenderHealth()));
       return;
     }
     res.end(JSON.stringify({ ok: true, rendererId: 'test-renderer', views: [] }));
@@ -63,9 +44,8 @@ function serve(): Promise<string> {
 }
 
 async function scratch(): Promise<string> {
-  const base = resolve(import.meta.dir, '../../tmp');
-  await mkdir(base, { recursive: true });
-  const dir = await mkdtemp(join(base, 'render-service-'));
+  // An installation fixture must not inherit this checkout's hoisted renderer packages.
+  const dir = await mkdtemp(join(tmpdir(), 'kiln-render-service-'));
   directories.push(dir);
   return dir;
 }
@@ -79,13 +59,31 @@ describe('localRenderServiceState', () => {
     await mkdir(join(shipped, 'src'), { recursive: true });
     await writeFile(join(shipped, 'src/server.mjs'), '// server\n');
     await writeFile(join(shipped, 'package.json'), '{"name":"kiln-render-service"}\n');
-    // The 94 MB of native WebGPU dependencies are a deliberate opt-in install.
-    // Shipping the source without them is the normal state of a fresh package.
+    // Missing optional native dependencies are distinct from an incompatible install.
     expect(localRenderServiceState(shipped)).toBe('dependencies-missing');
 
-    await mkdir(join(shipped, 'node_modules/webgpu'), { recursive: true });
-    await mkdir(join(shipped, 'node_modules/three'), { recursive: true });
+    await writeFakeRenderService(shipped);
     expect(localRenderServiceState(shipped)).toBe('ready');
+  });
+
+  it('finds hoisted packages and rejects their actual installed version after a change', async () => {
+    const installation = await scratch();
+    await writeFakeRenderService(installation);
+    const nested = join(installation, 'renderer');
+    await mkdir(join(nested, 'src'), { recursive: true });
+    await writeFile(join(nested, 'src/server.mjs'), '// fixture');
+    await writeFile(join(nested, 'package.json'), '{}');
+    expect(localRenderServiceState(nested)).toBe('ready');
+    await writeFile(
+      join(installation, 'node_modules/webgpu/package.json'),
+      JSON.stringify({ name: 'webgpu', version: '0.4.0', main: 'index.js' }),
+    );
+    expect(localRenderServiceState(nested)).toBe('dependencies-incompatible');
+    await writeFile(
+      join(installation, 'node_modules/webgpu/package.json'),
+      JSON.stringify({ name: 'webgpu', version: '0.6.1', main: 'index.js' }),
+    );
+    expect(localRenderServiceState(nested)).toBe('ready');
   });
 });
 
@@ -102,7 +100,7 @@ describe('buildRenderPort with autoSpawn', () => {
     // Pin a dead port: the host joins a listening service before it looks at the
     // install, so this test would attach one that happens to be running on 8000.
     const previous = process.env['KILN_RENDER_SERVICE_PORT'];
-    process.env['KILN_RENDER_SERVICE_PORT'] = '1';
+    process.env['KILN_RENDER_SERVICE_PORT'] = String(await freePort());
     try {
       const context = await buildRenderPort('auto', undefined, {
         autoSpawn: true,
@@ -185,10 +183,9 @@ describe('startLocalRenderService', () => {
     try {
       // A directory with no renderer in it: if this returns, it joined rather
       // than started, because starting from here is impossible.
-      const empty = join(await scratch(), 'nothing-here');
+      const empty = resolve(import.meta.dir, '../../render-service');
       expect(await startLocalRenderService(empty)).toBe(`http://127.0.0.1:${port}`);
 
-      stopLocalRenderService();
       const after = await fetch(new URL('/health', url));
       expect(((await after.json()) as { ok?: boolean }).ok).toBe(true);
     } finally {
@@ -200,13 +197,15 @@ describe('startLocalRenderService', () => {
   it('refuses to start what this installation cannot run, and says which of the two it is', async () => {
     const previous = process.env['KILN_RENDER_SERVICE_PORT'];
     // A port nothing is on, so the join probe fails and the install check decides.
-    process.env['KILN_RENDER_SERVICE_PORT'] = '1';
+    process.env['KILN_RENDER_SERVICE_PORT'] = String(await freePort());
     try {
       const shipped = await scratch();
       await mkdir(join(shipped, 'src'), { recursive: true });
       await writeFile(join(shipped, 'src/server.mjs'), '// server\n');
       await writeFile(join(shipped, 'package.json'), '{}\n');
-      expect(startLocalRenderService(shipped)).rejects.toThrow(/npm install/);
+      expect(startLocalRenderService(shipped)).rejects.toThrow(
+        /reinstall the official Kiln package/,
+      );
       expect(startLocalRenderService(join(shipped, 'absent'))).rejects.toThrow(/does not ship/);
     } finally {
       if (previous === undefined) delete process.env['KILN_RENDER_SERVICE_PORT'];

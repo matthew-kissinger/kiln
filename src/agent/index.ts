@@ -10,21 +10,17 @@
  * - {@link generateKilnAsset} — model id -> tool loop -> rendered GLB (the default codegen engine)
  * - {@link makeKilnModel}     — agnostic Strands model factory (native + OpenRouter)
  * - {@link resolveKilnAgentModel} — model-id string -> Strands provider descriptor
- * - {@link makeKilnTools}     — in-process tool skin over the shared registry
- * - {@link makeKilnEditTools} — surgical edit-tool skin for refining an existing asset
- * - {@link makeKilnUnifiedTools} — buffer-based unified surface (KILN_TOOL_SURFACE='unified')
+ * - {@link makeKilnNativeTools} — native skin over shared reference tools and terminal completion
  * - {@link unifiedDiff}       — dependency-free unified diff (the refine patch artifact)
  * - {@link ensureStreamStart} — the OpenRouter/Vercel-bridge stream fix
  * - {@link makeOpenRouterModel} — build an OpenRouter Strands model with the fix
  * - {@link MetricsCollector}  — per-loop tool/step/usage metrics via hooks
  * - {@link installRenderImageCompaction} — prune superseded render images from the transcript
- * - {@link assessProgramGrade} / {@link shouldGradeRefine} — M1b grade-aware refine helpers
  */
 export { runKilnAgent } from './run';
 export type { RunKilnAgentOptions, RunKilnAgentResult, KilnKnowhow, KilnInputImage } from './run';
 
-export { resolveToolSurface, buildAgentTools } from './surface';
-export type { KilnToolSurface, RefineMode } from './surface';
+export type { RefineMode } from './run';
 
 export { DEFAULT_INLOOP_VIEW_RENDER_TIMEOUT_MS } from '../tools/registry';
 export type {
@@ -47,23 +43,9 @@ export type {
   PortViewsOutcome,
 } from './generate';
 
-export {
-  makeKilnTools,
-  makeKilnProgramTools,
-  makeKilnEditTools,
-  makeKilnUnifiedTools,
-  KilnDraftBuffer,
-  KilnEditBuffer,
-  KILN_SUBMIT_TOOL_NAME,
-} from './tools';
-export type {
-  SubmitSink,
-  EditSink,
-  UnifiedSink,
-  EditRecord,
-  EditResult,
-  KilnRenderCandidate,
-} from './tools';
+export { makeKilnNativeTools } from './tools';
+export type { EditRecord, EditResult, KilnRenderCandidate } from './tools';
+export type { ProgramArtifact, NativeCompletion } from '../tools/program-artifacts';
 
 export { unifiedDiff } from './diff';
 export type { UnifiedDiffOptions } from './diff';
@@ -80,27 +62,6 @@ export type {
   ModelCallStat,
   GenerationCounters,
 } from './compaction';
-
-export {
-  installMutatorBatchGuard,
-  rejectMixedMutatorBatch,
-  toolNamesInBatch,
-  KILN_MUTATOR_TOOLS,
-} from './concurrency';
-
-export {
-  assessProgramGrade,
-  shouldGradeRefine,
-  buildGradeRefineMessage,
-  gradeRank,
-  GRADE_REFINE_TARGET,
-  GRADE_REFINE_MIN_HEADROOM,
-} from './grade-refine';
-export type {
-  ProgramGradeAssessment,
-  GradeRefineTrigger,
-  GradeRefineMessageArgs,
-} from './grade-refine';
 
 export { ensureStreamStart } from './stream-start';
 

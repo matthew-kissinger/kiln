@@ -15,12 +15,67 @@ import { mkdir, rm, writeFile } from 'node:fs/promises';
 import { createServer } from 'node:http';
 import type { AddressInfo } from 'node:net';
 import { join } from 'node:path';
+import { pathToFileURL } from 'node:url';
+import {
+  compatibilityFingerprint,
+  RENDER_SERVICE_DEPENDENCIES,
+  RENDER_SERVICE_PROTOCOL,
+  REQUIRED_RENDER_CAPABILITIES,
+} from '../../../render-service/src/build-identity.mjs';
+import {
+  packagedRendererSourceFingerprint,
+  type RenderServiceHealth,
+} from '../../render-service-client';
+
+/** One current protocol fixture for every host transport test. */
+export function fakeRenderHealth(
+  overrides: Partial<RenderServiceHealth> = {},
+): RenderServiceHealth {
+  const sourceFingerprint =
+    overrides.instance?.sourceFingerprint ?? packagedRendererSourceFingerprint()!;
+  const compatibility = {
+    version: 'kiln.render-service-build.v1' as const,
+    sourceFingerprint,
+    dependencies: { ...RENDER_SERVICE_DEPENDENCIES },
+    fingerprint: compatibilityFingerprint({
+      sourceFingerprint,
+      dependencies: RENDER_SERVICE_DEPENDENCIES,
+    }),
+  };
+  return {
+    ok: true,
+    authRequired: false,
+    protocol: RENDER_SERVICE_PROTOCOL,
+    rendererId: 'test-renderer',
+    instance: {
+      version: 'kiln.render-service-instance.v2',
+      pid: process.pid,
+      ownerPid: null,
+      startedAt: '2026-09-21T00:00:00.000Z',
+      sourceDir: '/fixture/render-service',
+      sourceFingerprint,
+      mode: 'manual',
+      idleTimeoutMs: null,
+    },
+    compatibility,
+    capabilities: [...REQUIRED_RENDER_CAPABILITIES],
+    captureIdentity: {
+      version: 'kiln.capture-producer.v1',
+      fingerprint: compatibility.fingerprint,
+      instanceId: 'fixture-one',
+    },
+    ...overrides,
+  };
+}
 
 export const FAKE_RENDERER_ID = 'fake-renderer';
 
 export const FAKE_SERVER = `
 import { createServer } from 'node:http';
 import { crc32, deflateSync } from 'node:zlib';
+import { compatibilityFingerprint, RENDER_SERVICE_DEPENDENCIES, RENDER_SERVICE_PROTOCOL, REQUIRED_RENDER_CAPABILITIES } from ${JSON.stringify(pathToFileURL(join(import.meta.dir, '../../../render-service/src/build-identity.mjs')).href)};
+import { fingerprintSourceDir } from ${JSON.stringify(pathToFileURL(join(import.meta.dir, '../../../render-service/src/instance.mjs')).href)};
+import { join } from 'node:path';
 const chunk = (type, data) => {
   const length = Buffer.alloc(4);
   length.writeUInt32BE(data.length);
@@ -46,13 +101,17 @@ const png = (size) => {
 };
 const ownerPid = Number(process.env.RENDER_SERVICE_OWNER_PID);
 const instance = {
-  version: 'kiln.render-service-instance.v1',
+  version: 'kiln.render-service-instance.v2',
   pid: process.pid,
   ownerPid: Number.isInteger(ownerPid) && ownerPid > 0 ? ownerPid : null,
   startedAt: new Date().toISOString(),
   sourceDir: process.env.FAKE_SOURCE_DIR ?? process.cwd(),
-  sourceFingerprint: process.env.FAKE_SOURCE_FINGERPRINT ?? 'sha256:' + 'f'.repeat(64),
+  sourceFingerprint: process.env.FAKE_SOURCE_FINGERPRINT ?? fingerprintSourceDir(join(process.cwd(), 'src')),
+  mode: process.env.RENDER_SERVICE_MODE ?? (ownerPid ? 'managed' : 'manual'),
+  idleTimeoutMs: (process.env.RENDER_SERVICE_MODE === 'managed' || ownerPid) ? 300000 : null,
 };
+const compatibility = { version: 'kiln.render-service-build.v1', sourceFingerprint: instance.sourceFingerprint, dependencies: RENDER_SERVICE_DEPENDENCIES,
+  fingerprint: compatibilityFingerprint({ sourceFingerprint: instance.sourceFingerprint, dependencies: RENDER_SERVICE_DEPENDENCIES }) };
 createServer((req, res) => {
   let body = '';
   req.on('data', (piece) => {
@@ -61,7 +120,8 @@ createServer((req, res) => {
   req.on('end', () => {
     res.writeHead(200, { 'content-type': 'application/json' });
     if (req.url === '/health') {
-      res.end(JSON.stringify({ ok: true, rendererId: '${FAKE_RENDERER_ID}', instance }));
+      res.end(JSON.stringify({ ok: true, authRequired: false, rendererId: '${FAKE_RENDERER_ID}', instance, protocol: RENDER_SERVICE_PROTOCOL,
+        compatibility, capabilities: REQUIRED_RENDER_CAPABILITIES, captureIdentity: { version: 'kiln.capture-producer.v1', fingerprint: compatibility.fingerprint, instanceId: String(process.pid) } }));
       return;
     }
     const request = body ? JSON.parse(body) : {};
@@ -129,8 +189,12 @@ export function exited(child: ChildProcess, timeoutMs = 5_000): Promise<boolean>
 /** Lay the fake service out under `dir` so the host reads it as installed. */
 export async function writeFakeRenderService(dir: string): Promise<string> {
   await mkdir(join(dir, 'src'), { recursive: true });
-  await mkdir(join(dir, 'node_modules/webgpu'), { recursive: true });
-  await mkdir(join(dir, 'node_modules/three'), { recursive: true });
+  for (const [name, version] of Object.entries(RENDER_SERVICE_DEPENDENCIES)) {
+    const pkg = join(dir, 'node_modules', name);
+    await mkdir(pkg, { recursive: true });
+    await writeFile(join(pkg, 'package.json'), JSON.stringify({ name, version, main: 'index.js' }));
+    await writeFile(join(pkg, 'index.js'), 'module.exports = {};');
+  }
   await writeFile(join(dir, 'package.json'), '{"name":"fake-render-service"}');
   await writeFile(join(dir, 'src/register-hooks.mjs'), 'export {};');
   await writeFile(join(dir, 'src/server.mjs'), FAKE_SERVER);

@@ -1,22 +1,16 @@
 /**
- * Model-facing renderings of the Kiln primitive catalog.
+ * Catalog text formatters for integrations that explicitly need a full reference.
  *
- * `list-primitives.ts` is the single source of truth for what the sandbox
- * exposes; this module turns that catalog into the three places models read
- * it: the system prompt's <api> section, the kiln-glb skill's primitives
- * reference, and the SKILL.md quick-reference block. All three are generated
- * at load time (core has no build step; rendering is ~1ms and deterministic),
- * so adding a primitive to the catalog automatically updates every surface.
- *
- * Hand-written pedagogy (usage idioms, attachment rules, worked examples)
- * stays hand-authored in prompt.ts AROUND the generated enumeration — this
- * module only renders what the catalog knows.
+ * `discovery/helper-specs.ts` is the single source of truth for what the sandbox
+ * exposes. These pure formatters do not write skill files or configure an agent.
+ * The native harness uses its compact bootstrap and lazy Discovery; maintained
+ * skills live in skills/. No full reference is injected into the native prompt.
  */
 
-import type { PrimitiveSpec } from './list-primitives';
+import type { HelperSpec } from './discovery/helper-specs';
 
 /** Display order + comment header for each catalog category in the prompt. */
-const CATEGORY_HEADERS: Array<[PrimitiveSpec['category'], string]> = [
+const CATEGORY_HEADERS: Array<[HelperSpec['category'], string]> = [
   ['structure', '// Scene & structure (globals — no imports needed)'],
   ['geometry', '// Geometry (returns BufferGeometry)'],
   ['material', '// Materials'],
@@ -42,12 +36,14 @@ const CATEGORY_HEADERS: Array<[PrimitiveSpec['category'], string]> = [
  * Per-entry `promptNotes` stays the right home for anything that distinguishes
  * one primitive from its neighbours.
  */
-const CATEGORY_NOTES: Partial<Record<PrimitiveSpec['category'], string>> = {
+const CATEGORY_NOTES: Partial<Record<HelperSpec['category'], string>> = {
   csg:
     'For textured or multi-material booleans, pass { preserveAttributes: true } as the final options argument. ' +
     'This preserves UV0 and source materials through actual operand runs; exposed cut faces inherit the cutter material and UVs. ' +
     'Legacy calls omit that option and discard UVs, so unwrap their result afterward: `mesh.geometry = await autoUnwrap(mesh.geometry)`. ' +
-    'Tangents are regenerated when needed. Empty operands/results fail with a named cause. Convex hull faces are newly generated and have no original-face provenance.',
+    'Tangents are regenerated when needed. Empty operands/results fail with a named cause. Convex hull faces are newly generated and have no original-face provenance. ' +
+    'Use static meshes: bake instances and poses first. Colors, secondary UVs, custom attributes and morph targets do not survive CSG; inspect the reported losses. ' +
+    'Keep the returned mesh transform: its position is the first contributing mesh world origin, with world-aligned geometry local to that origin. All operands use one shared computation frame; geometry alone does not include world translation.',
 };
 
 const WRAP = 96;
@@ -69,7 +65,7 @@ function wrapComment(text: string, indent: string): string[] {
   return lines;
 }
 
-function renderPrimitiveLines(p: PrimitiveSpec, includeExamples = false): string[] {
+function renderPrimitiveLines(p: HelperSpec, includeExamples = false): string[] {
   const oneLiner = `${p.signature}  // ${p.description}`;
   const lines: string[] = [];
   if (oneLiner.length <= WRAP + 20 && !p.description.includes('\n')) {
@@ -82,8 +78,7 @@ function renderPrimitiveLines(p: PrimitiveSpec, includeExamples = false): string
     lines.push(...wrapComment(`NOTE: ${p.promptNotes}`, '  '));
   }
   if (includeExamples && p.example) {
-    // Fold the per-primitive example into the <api> (replaces the dropped
-    // kiln_list_primitives tool's only extra signal). Collapse internal newlines
+    // Optionally fold the per-primitive example into the reference. Collapse internal newlines
     // in multi-line examples (snapTo/createPart) to one logical line so the
     // section stays scannable; wrapComment re-wraps long ones at WRAP columns.
     const collapsed = p.example
@@ -101,16 +96,15 @@ function renderPrimitiveLines(p: PrimitiveSpec, includeExamples = false): string
  * a wrapped description comment and any promptNotes). Order is the canonical
  * category order, primitives in catalog order within each category.
  *
- * `includeExamples` (default false → byte-identical to today) appends each
- * primitive's collapsed example, used by the unified tool surface to fold in the
- * signal the dropped kiln_list_primitives tool used to carry.
+ * `includeExamples` (default false) appends each primitive's collapsed example.
+ * This is a text formatter, not an alternative tool surface.
  */
 export function renderApiSection(
-  primitives: PrimitiveSpec[],
+  primitives: HelperSpec[],
   opts: { includeExamples?: boolean } = {},
 ): string {
   const includeExamples = opts.includeExamples ?? false;
-  const byCategory = new Map<string, PrimitiveSpec[]>();
+  const byCategory = new Map<string, HelperSpec[]>();
   for (const p of primitives) {
     const list = byCategory.get(p.category) ?? [];
     list.push(p);
@@ -131,7 +125,7 @@ export function renderApiSection(
   // Catch categories the header table does not know yet — never drop entries.
   const known = new Set(CATEGORY_HEADERS.map(([c]) => c));
   for (const [category, list] of byCategory) {
-    if (known.has(category as PrimitiveSpec['category'])) continue;
+    if (known.has(category as HelperSpec['category'])) continue;
     const lines = [`// ${category}`];
     for (const p of list) lines.push(...renderPrimitiveLines(p, includeExamples));
     blocks.push(lines.join('\n'));
@@ -141,12 +135,11 @@ export function renderApiSection(
 }
 
 /**
- * Render the full markdown primitives reference for the kiln-glb skill
- * (`references/primitives.md`). One section per category, one subsection per
+ * Render a full markdown primitives reference. One section per category, one subsection per
  * primitive with signature, returns, description, notes, and example.
  */
-export function renderPrimitivesMarkdown(primitives: PrimitiveSpec[]): string {
-  const byCategory = new Map<string, PrimitiveSpec[]>();
+export function renderPrimitivesMarkdown(primitives: HelperSpec[]): string {
+  const byCategory = new Map<string, HelperSpec[]>();
   for (const p of primitives) {
     const list = byCategory.get(p.category) ?? [];
     list.push(p);
@@ -172,16 +165,15 @@ export function renderPrimitivesMarkdown(primitives: PrimitiveSpec[]): string {
     '# Kiln Primitives Reference',
     '',
     '<!-- GENERATED FILE — do not edit by hand. -->',
-    '<!-- Source: packages/core/src/kiln/list-primitives.ts -->',
-    '<!-- Regenerate: bun run kiln:gen-skill -->',
+    '<!-- Source: src/discovery/helper-specs.ts; formatter: renderPrimitivesMarkdown -->',
     '',
     `Every helper the Kiln sandbox exposes to generated code (${primitives.length} primitives). No imports needed — all are globals inside build()/animate().`,
   ];
 
   const order = [...CATEGORY_HEADERS.map(([c]) => c)];
   for (const [category] of byCategory) {
-    if (!order.includes(category as PrimitiveSpec['category'])) {
-      order.push(category as PrimitiveSpec['category']);
+    if (!order.includes(category as HelperSpec['category'])) {
+      order.push(category as HelperSpec['category']);
     }
   }
 
@@ -189,7 +181,7 @@ export function renderPrimitivesMarkdown(primitives: PrimitiveSpec[]): string {
     const list = byCategory.get(category);
     if (!list || list.length === 0) continue;
     parts.push('', `## ${titles[category] ?? category}`);
-    const categoryNote = CATEGORY_NOTES[category as PrimitiveSpec['category']];
+    const categoryNote = CATEGORY_NOTES[category as HelperSpec['category']];
     if (categoryNote) parts.push('', `**Applies to every ${category} helper:** ${categoryNote}`);
     for (const p of list) {
       parts.push('', `### ${p.name}`, '', '```typescript', p.signature, '```', '');
@@ -208,8 +200,8 @@ export function renderPrimitivesMarkdown(primitives: PrimitiveSpec[]): string {
  * BEGIN/END GENERATED PRIMITIVES markers): per-category signature lists only,
  * pointing at references/primitives.md for detail.
  */
-export function renderSkillQuickReference(primitives: PrimitiveSpec[]): string {
-  const byCategory = new Map<string, PrimitiveSpec[]>();
+export function renderSkillQuickReference(primitives: HelperSpec[]): string {
+  const byCategory = new Map<string, HelperSpec[]>();
   for (const p of primitives) {
     const list = byCategory.get(p.category) ?? [];
     list.push(p);

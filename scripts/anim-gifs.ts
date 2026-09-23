@@ -32,7 +32,7 @@ import sharp from 'sharp';
 import { orthoHalfExtent, viewBasis } from '../render-service/src/framing.mjs';
 import { captureViewPngsViaPort } from '../src/agent/generate';
 import { buildRenderPort } from '../src/cli-render-mode';
-import { resolveEvaluatorPortV1 } from '../src/evaluator/protocol';
+import { resolveEvaluatorPortV2 } from '../src/evaluator/protocol';
 import { renderSceneToGLB } from '../src/render';
 import { loadGlbReviewScene } from '../src/views';
 import { poseSceneAtTime, prepareClip } from '../src/views/pose';
@@ -175,7 +175,7 @@ async function main(): Promise<void> {
   if (!context.viewRenderPort) {
     throw new Error('no GPU render port — a geometry-flat GIF is not worth publishing');
   }
-  const evaluator = resolveEvaluatorPortV1(undefined, 'trusted-local');
+  const evaluator = resolveEvaluatorPortV2(undefined, 'trusted-local');
 
   for (const { name, clip: wanted } of chosen) {
     const code = await readFile(join(EXAMPLES, `${name}.kiln.js`), 'utf8');

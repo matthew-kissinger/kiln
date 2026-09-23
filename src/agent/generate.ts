@@ -2,12 +2,9 @@ import { DEFAULT_VIEW_RENDER_TIMEOUT_MS, captureViewsViaPort, sha256Bytes } from
 /**
  * `generateKilnAsset` — the core-owned "agent loop + render" engine.
  *
- * Resolve a model id -> Strands `Model` -> drive the kiln tool loop
- * (`runKilnAgent`: list_primitives / validate / render / submit, self-correcting
- * on real render metrics) -> render the submitted program to GLB bytes. This is
- * the DEFAULT codegen path for `kiln.generate()` (primitives), the CLI / MCP
- * (runs), and the batch harness — the legacy single-shot paths stay reachable via
- * `KILN_CODEGEN=single-shot`.
+ * Resolve a model id to a Strands Model, run the shared reference tools, and
+ * deliver the exact artifact selected by kiln_finish. No second evaluation or
+ * post-finish repair occurs. CLI/MCP authoring tools do not require this harness.
  *
  * Promoted from Kiln Studio's in-process generator so CLI / batch / server share
  * one engine instead of each re-implementing buildModel -> runKilnAgent ->
@@ -16,11 +13,7 @@ import { DEFAULT_VIEW_RENDER_TIMEOUT_MS, captureViewsViaPort, sha256Bytes } from
  * `@strands-agents/sdk` dependency never enters the browser/editor bundle graph.
  */
 import type { KilnCodeMeta, RenderResult } from '../render';
-import {
-  resolveEvaluatorPortV1,
-  type EvaluatorExecutionProfileV1,
-  type EvaluatorPortV1,
-} from '../evaluator';
+import type { EvaluatorExecutionProfileV2, EvaluatorPortV2 } from '../evaluator';
 import type { PbrRenderPort, ViewFidelityV1 } from '../composer/render-port';
 import {
   CaptureConfigError,
@@ -28,8 +21,8 @@ import {
   type CaptureConfig,
   type CaptureShape,
 } from '../views/capture';
-import type { AssetStyle } from '../prompt';
-import { createAssetIntentV1, type AssetCategory, type AssetIntentV1 } from '../contracts';
+import type { AssetStyle } from '../authoring-style';
+import type { AssetCategory, AssetIntentV1 } from '../contracts';
 import { runKilnAgent, type RefineMode, type KilnKnowhow, type KilnInputImage } from './run';
 import {
   makeKilnModel,
@@ -38,6 +31,9 @@ import {
   type KilnModelDescriptor,
 } from './providers';
 import type { EditRecord } from './tools';
+import type { RunKilnAgentOptions } from './run';
+import { assertNoLegacyRuntimePolicy, resolveRequirementsContext } from '../requirements-context';
+import type { RequirementsBinding } from '../requirements-store';
 import type { AgentUsage } from './hooks';
 import {
   resolveViewRenderTimeoutMs,
@@ -46,28 +42,29 @@ import {
 } from './view-render-timeout';
 
 /**
- * The hardcoded default Kiln agent model — the verified standout for GLB codegen.
- * A per-run `model` opt, or `KILN_MODEL` / `PIXEL_FORGE_MODEL` in the env (both
- * read at call time, not import time), overrides it.
+ * Existing default model route. A per-run `model` or KILN_MODEL overrides it;
+ * provider qualification and comparative quality are separate from this default.
  */
 export const DEFAULT_KILN_AGENT_MODEL = 'google:gemini-3.5-flash';
 
-export interface GenerateKilnAssetOptions {
+export interface GenerateKilnAssetOptions extends Omit<RunKilnAgentOptions, 'model'> {
+  /** In-loop deadline; independent of viewRenderTimeoutMs for the final sheet. */
+  inLoopViewRenderTimeoutMs?: number;
   /** Natural-language description of the asset to build. */
   prompt: string;
   /** Model id (registry-style `google:gemini-3.5-flash` or bare). Defaults to {@link DEFAULT_KILN_AGENT_MODEL}. */
   model?: string;
   /** BYOK / shared key override; falls back to provider env vars. */
   apiKey?: string;
-  /** Asset category (drives prompt framing). Default 'prop'. */
+  /** Rejection-only migration field. Use host-bound requirements; no category default exists. */
   category?: AssetCategory;
-  /** Full closure-owned intent. Authoritative over category when supplied. */
+  /** Rejection-only migration field. Convert legacy intent explicitly before execution. */
   intent?: AssetIntentV1;
   /** Optional style template (low-poly / stylized / voxel / detailed / realistic). */
   style?: AssetStyle;
   /** Ask the model for an animate() function too. Default false (static). */
   includeAnimation?: boolean;
-  /** Know-how source: inline system prompt (default) or the kiln-glb skill. */
+  /** Compact native bootstrap (default), optionally augmented by current AgentSkills. */
   knowhow?: KilnKnowhow;
   /** Absolute path to a SKILL.md dir, required when knowhow='skill'. */
   skillDir?: string;
@@ -107,11 +104,16 @@ export interface GenerateKilnAssetOptions {
   inputImage?: KilnInputImage;
   /** Generated-source execution boundary. Production must inject the port and
    * select `evaluator-required`; trusted local/test remains compatible. */
-  evaluatorPort?: EvaluatorPortV1;
-  evaluatorProfile?: EvaluatorExecutionProfileV1;
+  evaluatorPort?: EvaluatorPortV2;
+  evaluatorProfile?: EvaluatorExecutionProfileV2;
 }
 
 export interface GenerateKilnAssetResult {
+  completion: 'finished' | 'partial';
+  stopReason?: import('./run').RunKilnAgentResult['stopReason'];
+  programRef: string;
+  requirements: RenderResult['requirements'];
+  qaReport: RenderResult['meta']['qaReport'];
   /** The final Kiln program. */
   code: string;
   /** Rendered GLB, ready to write to disk. */
@@ -176,6 +178,7 @@ export interface GenerateKilnAssetResult {
  */
 export async function generateKilnCodeAgent(opts: {
   prompt: string;
+  requirements?: RequirementsBinding;
   category?: AssetCategory;
   intent?: AssetIntentV1;
   style?: AssetStyle;
@@ -186,8 +189,8 @@ export async function generateKilnCodeAgent(opts: {
   inputImage?: KilnInputImage;
   /** Strands model id; defaults like {@link generateKilnAsset}. */
   model?: string;
-  evaluatorPort?: EvaluatorPortV1;
-  evaluatorProfile?: EvaluatorExecutionProfileV1;
+  evaluatorPort?: EvaluatorPortV2;
+  evaluatorProfile?: EvaluatorExecutionProfileV2;
 }): Promise<{
   success: boolean;
   code?: string;
@@ -196,30 +199,16 @@ export async function generateKilnCodeAgent(opts: {
   provider?: KilnAgentProvider;
   model?: string;
 }> {
-  const modelId =
-    opts.model ??
-    process.env['KILN_MODEL'] ??
-    process.env['PIXEL_FORGE_MODEL'] ??
-    DEFAULT_KILN_AGENT_MODEL;
+  assertNoLegacyRuntimePolicy(opts);
+  const active = resolveRequirementsContext(opts.requirements);
+  const modelId = opts.model ?? process.env['KILN_MODEL'] ?? DEFAULT_KILN_AGENT_MODEL;
+  if (process.env['PIXEL_FORGE_MODEL'] !== undefined)
+    throw new Error('PIXEL_FORGE_MODEL was removed. Set KILN_MODEL or pass model explicitly.');
   const desc = resolveKilnAgentModel(modelId);
-  const model = makeKilnModel(desc);
-  const intent = opts.intent ?? createAssetIntentV1({ category: opts.category ?? 'prop' });
+  const model = await makeKilnModel(desc);
+  const agent = await runKilnAgent({ ...opts, model, requirements: active.binding });
 
-  const agent = await runKilnAgent({
-    model,
-    prompt: opts.prompt,
-    category: intent.category,
-    intent,
-    includeAnimation: opts.includeAnimation ?? false,
-    ...(opts.style ? { style: opts.style } : {}),
-    ...(opts.existingCode ? { existingCode: opts.existingCode } : {}),
-    ...(opts.originalPrompt ? { originalPrompt: opts.originalPrompt } : {}),
-    ...(opts.inputImage ? { inputImage: opts.inputImage } : {}),
-    ...(opts.evaluatorPort ? { evaluatorPort: opts.evaluatorPort } : {}),
-    ...(opts.evaluatorProfile ? { evaluatorProfile: opts.evaluatorProfile } : {}),
-  });
-
-  if (agent.error || !agent.code) {
+  if (agent.completion !== 'finished' || !agent.code) {
     return { success: false, error: agent.error ?? 'agent produced no code' };
   }
   return {
@@ -249,46 +238,31 @@ export type { PortViewPngsOutcome, PortViewsOutcome } from '../views/port';
 export async function generateKilnAsset(
   opts: GenerateKilnAssetOptions,
 ): Promise<GenerateKilnAssetResult> {
-  const modelId =
-    opts.model ??
-    process.env['KILN_MODEL'] ??
-    process.env['PIXEL_FORGE_MODEL'] ??
-    DEFAULT_KILN_AGENT_MODEL;
+  assertNoLegacyRuntimePolicy(opts);
+  const active = resolveRequirementsContext(opts.requirements);
+  if (process.env['PIXEL_FORGE_MODEL'] !== undefined)
+    throw new Error('PIXEL_FORGE_MODEL was removed. Set KILN_MODEL or pass model explicitly.');
+  const modelId = opts.model ?? process.env['KILN_MODEL'] ?? DEFAULT_KILN_AGENT_MODEL;
   const desc: KilnModelDescriptor = resolveKilnAgentModel(modelId);
-  const model = makeKilnModel(desc, opts.apiKey ? { apiKey: opts.apiKey } : {});
-  const intent = opts.intent ?? createAssetIntentV1({ category: opts.category ?? 'prop' });
-
+  const model = await makeKilnModel(desc, opts.apiKey ? { apiKey: opts.apiKey } : {});
   const agent = await runKilnAgent({
+    ...opts,
     model,
-    prompt: opts.prompt,
-    category: intent.category,
-    intent,
-    knowhow: opts.knowhow ?? 'inline',
-    includeAnimation: opts.includeAnimation ?? false,
-    ...(opts.style ? { style: opts.style } : {}),
-    ...(opts.skillDir ? { skillDir: opts.skillDir } : {}),
-    ...(opts.existingCode ? { existingCode: opts.existingCode } : {}),
-    ...(opts.originalPrompt ? { originalPrompt: opts.originalPrompt } : {}),
-    ...(opts.existingCode && opts.refineMode ? { refineMode: opts.refineMode } : {}),
-    ...(opts.agentName ? { agentName: opts.agentName } : {}),
-    ...(opts.exemplarCode ? { exemplarCode: opts.exemplarCode } : {}),
-    ...(opts.inputImage ? { inputImage: opts.inputImage } : {}),
-    ...(opts.evaluatorPort ? { evaluatorPort: opts.evaluatorPort } : {}),
-    ...(opts.evaluatorProfile ? { evaluatorProfile: opts.evaluatorProfile } : {}),
+    requirements: active.binding,
+    viewRenderTimeoutMs: opts.inLoopViewRenderTimeoutMs,
   });
-
-  // A salvaged run carries BOTH code and the original error (H-10) — only a
-  // run with no renderable program (or an unsalvaged failure) is fatal.
-  if (!agent.code || (agent.error && !agent.salvaged)) {
-    throw new Error(`Kiln agent generation failed: ${agent.error ?? 'agent produced no code'}`);
+  if (
+    !agent.code ||
+    !agent.artifact ||
+    (agent.completion !== 'finished' && agent.completion !== 'partial')
+  ) {
+    throw new Error(
+      `Kiln agent generation failed: ${agent.error ?? 'agent produced no code or reviewed artifact'}`,
+    );
   }
-
-  // Grade-aware consolidation by default: lifts material-sprawl heroes from
-  // grade C/D/F to A/B, byte-stable on already-lean assets (M1a, plan/05 §3.1).
-  const render = await resolveEvaluatorPortV1(
-    opts.evaluatorPort,
-    opts.evaluatorProfile ?? 'trusted-local',
-  ).render(agent.code, { optimize: 'auto', intent });
+  // Completion is a selection of already evaluated bytes. Never run a hidden
+  // optimization or a second source evaluation after the model reviewed them.
+  const render = agent.artifact.rendered;
 
   // Best-effort views artifact: what the vision loop / review UIs show.
   // Never fails the run — a rasterizer error just drops the sidecar.
@@ -300,13 +274,16 @@ export async function generateKilnAsset(
   let viewsFidelity: ViewFidelityV1 | undefined;
   const captureWarnings: string[] = [];
   if (opts.captureViews) {
+    const viewRenderPort = opts.viewRenderState
+      ? opts.viewRenderState().viewRenderPort
+      : opts.viewRenderPort;
     const inputGlbSha256 = await sha256Bytes(render.glb);
     // T3.3: validate the requested layout ONCE, up front. A malformed config is
     // a caller bug, not a render hazard, so it must not reach two producers and
     // be reported differently by each. It also must not fail the run: the views
     // artifact is best-effort by contract, so a bad config degrades to the
     // shipped default and says so in `warnings`.
-    let capture = opts.capture;
+    let capture = opts.capture ?? agent.captureSelection?.capture;
     if (capture) {
       try {
         resolveGridCapture(capture, process.env['KILN_GRID_VARIANT']);
@@ -322,9 +299,9 @@ export async function generateKilnAsset(
     // B3b: an injected host PBR renderer sees the already-produced GLB bytes
     // (never re-executes the program). B4: ANY port failure degrades to the CPU
     // rasterizer below — the GPU being unavailable can never fail a generation.
-    if (opts.viewRenderPort) {
+    if (viewRenderPort) {
       const port = await captureViewsViaPort(
-        opts.viewRenderPort,
+        viewRenderPort,
         render.glb,
         resolveViewRenderTimeoutMs({
           requestKind: 'final-grid',
@@ -379,7 +356,7 @@ export async function generateKilnAsset(
         viewsCapture = grid.capture;
         // Honest producer provenance, but only on the port-enabled path — the
         // port-absent path stays byte-identical to the historical result shape.
-        if (opts.viewRenderPort) viewsRendererId = CPU_RASTER_RENDERER_ID;
+        if (viewRenderPort) viewsRendererId = CPU_RASTER_RENDERER_ID;
         const degradeReason =
           renderDegradedReason ?? 'material-faithful view render port unavailable';
         viewsFidelity = {
@@ -432,6 +409,11 @@ export async function generateKilnAsset(
   }
 
   return {
+    completion: agent.completion,
+    ...(agent.stopReason ? { stopReason: agent.stopReason } : {}),
+    programRef: agent.artifact.programRef,
+    requirements: render.requirements,
+    qaReport: render.meta.qaReport,
     code: agent.code,
     glb: render.glb,
     artifactGlbSha256: render.artifactGlbSha256,

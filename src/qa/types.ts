@@ -178,3 +178,8 @@ export function createAssetQaReportV1(
     dimensions,
   };
 }
+
+/** Historical V1 reports remain readable; current render execution emits V2. */
+export type AssetQaReport =
+  | AssetQaReportV1
+  | import('./requirements-report').AssetRequirementsQaReportV2;

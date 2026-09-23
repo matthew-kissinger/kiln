@@ -1,14 +1,9 @@
 /**
- * kiln_screenshot registry tool: six-view grid output + the `media` contract
+ * kiln_render registry tool: six-view grid output + the `media` contract
  * transports use to attach the PNG as a real image block.
  */
 import { describe, expect, test } from 'bun:test';
-import {
-  createKilnToolRegistry,
-  kilnRenderViewsDef,
-  kilnToolRegistry,
-  type KilnScreenshotResult,
-} from '../registry';
+import { createKilnProgramToolRegistry, type KilnScreenshotResult } from '../registry';
 import type { PbrRenderPort, PbrRenderRequest } from '../../composer/render-port';
 import { BACKDROPS } from '../../views/background';
 import { decodePng } from '../../views/png';
@@ -45,14 +40,16 @@ function stubViewPngs(size = 384): Uint8Array[] {
 }
 
 function screenshotDef() {
-  const def = kilnToolRegistry.find((d) => d.name === 'kiln_screenshot');
-  if (!def) throw new Error('kiln_screenshot missing from registry');
+  const def = createKilnProgramToolRegistry().find((d) => d.name === 'kiln_render');
+  if (!def) throw new Error('kiln_render missing from registry');
   return def;
 }
 
-describe('kiln_screenshot', () => {
+describe('kiln_render', () => {
   test('renders valid code to a six-view grid PNG', async () => {
-    const out = (await screenshotDef().run({ code: BOX_CODE })) as KilnScreenshotResult;
+    const out = (await screenshotDef().run({
+      code: BOX_CODE,
+    })) as KilnScreenshotResult;
     expect(out.ok).toBe(true);
     expect(out.views).toEqual(['Front', 'Right', 'Back', 'Left', 'Top', '3/4']);
     expect(out.gridWidth).toBeGreaterThan(0);
@@ -89,14 +86,13 @@ describe('kiln_screenshot', () => {
     expect(def.media!(out)).toBeUndefined();
   });
 
-  /**
-   * The in-process loop's view tool was a frozen copy: CPU-only, no capture
-   * config, no backdrop, while every other surface took all three. Nothing
-   * consumed that freeze -- the bench it was a control arm for no longer exists
-   * -- so the four-tool loop now sees exactly what the MCP surface sees.
-   */
-  test('takes the same capture config as kiln_render and paints the named backdrop', async () => {
-    expect(screenshotDef().inputSchema).toBe(kilnRenderViewsDef.inputSchema);
+  test('accepts capture configuration and paints the named backdrop', async () => {
+    expect(
+      screenshotDef().inputSchema.safeParse({
+        code: BOX_CODE,
+        capture: { backdrop: 'dark' },
+      }).success,
+    ).toBe(true);
     const out = (await screenshotDef().run({
       code: BOX_CODE,
       capture: { backdrop: 'dark' },
@@ -110,14 +106,18 @@ describe('kiln_screenshot', () => {
     expect(out.viewFidelity?.version).toBe('kiln.view-fidelity.v1');
   });
 
-  test('routes a metallic scene through the injected render port, like kiln_render', async () => {
+  test('routes a metallic scene through the injected render port', async () => {
     const requests: PbrRenderRequest[] = [];
     const port: PbrRenderPort = async (req) => {
       requests.push(req);
-      return { ok: true, rendererId: 'dawn-vulkan:test-gpu:1.0', viewsPng: stubViewPngs() };
+      return {
+        ok: true,
+        rendererId: 'dawn-vulkan:test-gpu:1.0',
+        viewsPng: stubViewPngs(),
+      };
     };
-    const def = createKilnToolRegistry({ viewRenderPort: port }).find(
-      (d) => d.name === 'kiln_screenshot',
+    const def = createKilnProgramToolRegistry({ viewRenderPort: port }).find(
+      (d) => d.name === 'kiln_render',
     )!;
     const out = (await def.run({ code: METAL_CODE })) as KilnScreenshotResult;
     expect(out.ok).toBe(true);
@@ -128,7 +128,7 @@ describe('kiln_screenshot', () => {
       degraded: false,
     });
     // The evidence trail names the tool the model actually called.
-    expect(JSON.stringify(out.viewEvidence ?? {})).not.toContain('"kiln_render"');
+    expect(JSON.stringify(out.viewEvidence ?? {})).toContain('"kiln_render"');
   });
 
   test('says what it can and cannot show, instead of calling itself flat-shaded', () => {

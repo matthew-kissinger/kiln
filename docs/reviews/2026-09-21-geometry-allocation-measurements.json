@@ -1,0 +1,67 @@
+{
+  "runtime": "bun@1.4.2",
+  "bun": "1.4.2",
+  "platform": "win32",
+  "architecture": "x64",
+  "sourceIdentity": "sha256:ac390b7f5f4ab6181300c88ae38ff2870ae5288e856aac45a8561b4dd0954758",
+  "limits": {
+    "parametricSamples": 262144,
+    "subdivisionTriangles": 1000000,
+    "subdivisionAttributeBytes": 134217728,
+    "subdivisionIterations": 10,
+    "repeatedMeshes": 10000
+  },
+  "results": [
+    {
+      "name": "parametric ordinary 80x80",
+      "milliseconds": 12.3,
+      "vertices": 6561,
+      "triangles": 12800
+    },
+    {
+      "name": "parametric admitted boundary 511x511",
+      "milliseconds": 299.94,
+      "vertices": 262144,
+      "triangles": 522242
+    },
+    {
+      "name": "subdivide box 3",
+      "milliseconds": 21.61,
+      "vertices": 4608,
+      "triangles": 1536
+    },
+    {
+      "name": "subdivide box 5",
+      "milliseconds": 257.01,
+      "vertices": 73728,
+      "triangles": 24576
+    },
+    {
+      "name": "linear 1000",
+      "milliseconds": 4.67,
+      "copies": 999,
+      "sharedGeometry": true
+    },
+    {
+      "name": "radial 1000",
+      "milliseconds": 3.24,
+      "copies": 999,
+      "sharedGeometry": true
+    },
+    {
+      "name": "linear 10000",
+      "milliseconds": 20.64,
+      "copies": 9999,
+      "sharedGeometry": true
+    },
+    {
+      "name": "radial 10000",
+      "milliseconds": 21.23,
+      "copies": 9999,
+      "sharedGeometry": true
+    }
+  ],
+  "processMaxRssKiB": 281368,
+  "limitation": "Single warm process on this workstation; timings and process RSS are observations, not peak-memory or cross-platform guarantees.",
+  "nodeCompatibilityVersion": "v26.3.0"
+}

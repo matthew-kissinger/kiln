@@ -1,3 +1,4 @@
+import { bindLegacyFixtureRequirements } from '../__tests__/helpers/requirements-fixture';
 import { createHash } from 'node:crypto';
 
 import { WebIO, type Document } from '@gltf-transform/core';
@@ -219,11 +220,11 @@ async function artifactMetrics(mode: 'baseline' | 'visible' | 'hidden') {
   const firstScene = buildScene(mode);
   const repeatScene = buildScene(mode);
   const first = await renderSceneToGLB(firstScene.root, {
-    intent: firstScene.intent,
+    requirements: bindLegacyFixtureRequirements(firstScene.intent),
     optimize: 'off',
   });
   const repeat = await renderSceneToGLB(repeatScene.root, {
-    intent: repeatScene.intent,
+    requirements: bindLegacyFixtureRequirements(repeatScene.intent),
     optimize: 'off',
   });
   const document = await new WebIO().readBinary(first.bytes);

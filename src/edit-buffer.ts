@@ -28,7 +28,7 @@ export type EditResult =
 
 /**
  * A mutable sink the edit tools write into. Create one per run with `edits: []`,
- * pass it to {@link makeKilnEditTools}, and after invoke read `.code` (the final
+ * apply edits locally, and read `.code` (the final
  * working buffer) and `.edits` (the applied edit trace).
  */
 export interface EditSink {
@@ -101,7 +101,7 @@ export class KilnDraftBuffer {
       return {
         ok: false,
         error: 'oldString was not found in the current code.',
-        hint: 'Call kiln_view and copy an exact span (including whitespace and indentation) to edit.',
+        hint: 'Call kiln_source and copy an exact span (including whitespace and indentation) to edit.',
       };
     }
     if (occurrences > 1 && !replaceAll) {

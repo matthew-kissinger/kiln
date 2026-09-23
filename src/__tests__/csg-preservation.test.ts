@@ -89,49 +89,56 @@ it('exports material groups into GLB primitives with correct triangle coverage',
 import { boolIntersect, hull } from '../solids';
 
 it('retained UV coordinates agree with source-face interpolation, including cut faces', async () => {
-  const body = box('Body', 2, 0xff0000),
-    cutter = box('Cutter', 1, 0x0000ff, 0.8);
-  cutter.rotation.z = 0.2;
-  const result = await boolDiff('Carved', body, cutter, { preserveAttributes: true });
-  const output = result.geometry,
-    p = output.getAttribute('position'),
-    uv = output.getAttribute('uv');
-  for (const run of output.userData.kilnCsgProvenance.runs) {
-    const source = run.sourceName === 'Body' ? body : cutter;
-    source.updateWorldMatrix(true, false);
-    const sp = source.geometry.getAttribute('position'),
-      su = source.geometry.getAttribute('uv'),
-      si = source.geometry.index!;
-    for (let v = run.start * 3; v < (run.start + run.count) * 3; v++) {
-      const point = new THREE.Vector3().fromBufferAttribute(p, v);
-      let matched = false;
-      for (let t = 0; t < si.count; t += 3) {
-        const vertices = [0, 1, 2].map((k) =>
-          new THREE.Vector3()
-            .fromBufferAttribute(sp, si.getX(t + k))
-            .applyMatrix4(source.matrixWorld),
-        );
-        const triangle = new THREE.Triangle(vertices[0]!, vertices[1]!, vertices[2]!);
-        const bary = triangle.getBarycoord(point, new THREE.Vector3());
-        if (
-          !bary ||
-          Math.min(bary.x, bary.y, bary.z) < -1e-5 ||
-          triangle.closestPointToPoint(point, new THREE.Vector3()).distanceTo(point) > 1e-5
-        )
-          continue;
-        const weights = [bary.x, bary.y, bary.z];
-        const expectedUV = [0, 1].map((component) =>
-          weights.reduce((sum, w, k) => sum + w * su.getComponent(si.getX(t + k), component), 0),
-        );
-        if (
-          Math.abs(expectedUV[0]! - uv.getX(v)) < 1e-5 &&
-          Math.abs(expectedUV[1]! - uv.getY(v)) < 1e-5
-        ) {
-          matched = true;
-          break;
+  for (const origin of [0, 1e8]) {
+    const body = box('Body', 2, 0xff0000),
+      cutter = box('Cutter', 1, 0x0000ff, 0.8);
+    cutter.rotation.z = 0.2;
+    body.position.x += origin;
+    cutter.position.x += origin;
+    const result = await boolDiff('Carved', body, cutter, { preserveAttributes: true });
+    result.updateWorldMatrix(true, false);
+    const output = result.geometry,
+      p = output.getAttribute('position'),
+      uv = output.getAttribute('uv');
+    for (const run of output.userData.kilnCsgProvenance.runs) {
+      const source = run.sourceName === 'Body' ? body : cutter;
+      source.updateWorldMatrix(true, false);
+      const sp = source.geometry.getAttribute('position'),
+        su = source.geometry.getAttribute('uv'),
+        si = source.geometry.index!;
+      for (let v = run.start * 3; v < (run.start + run.count) * 3; v++) {
+        const point = new THREE.Vector3()
+          .fromBufferAttribute(p, v)
+          .applyMatrix4(result.matrixWorld);
+        let matched = false;
+        for (let t = 0; t < si.count; t += 3) {
+          const vertices = [0, 1, 2].map((k) =>
+            new THREE.Vector3()
+              .fromBufferAttribute(sp, si.getX(t + k))
+              .applyMatrix4(source.matrixWorld),
+          );
+          const triangle = new THREE.Triangle(vertices[0]!, vertices[1]!, vertices[2]!);
+          const bary = triangle.getBarycoord(point, new THREE.Vector3());
+          if (
+            !bary ||
+            Math.min(bary.x, bary.y, bary.z) < -1e-5 ||
+            triangle.closestPointToPoint(point, new THREE.Vector3()).distanceTo(point) > 1e-5
+          )
+            continue;
+          const weights = [bary.x, bary.y, bary.z];
+          const expectedUV = [0, 1].map((component) =>
+            weights.reduce((sum, w, k) => sum + w * su.getComponent(si.getX(t + k), component), 0),
+          );
+          if (
+            Math.abs(expectedUV[0]! - uv.getX(v)) < 1e-5 &&
+            Math.abs(expectedUV[1]! - uv.getY(v)) < 1e-5
+          ) {
+            matched = true;
+            break;
+          }
         }
+        expect(matched).toBe(true);
       }
-      expect(matched).toBe(true);
     }
   }
 });
@@ -148,7 +155,7 @@ it('supports reflected parent transforms and reports missing UVs and generated h
     preserveAttributes: true,
     smooth: true,
   });
-  expect(result.geometry.boundingBox!.min.x).toBeGreaterThan(2);
+  expect(new THREE.Box3().setFromObject(result).min.x).toBeGreaterThan(2);
   expect(result.geometry.userData.kilnAttributeWarnings[0].code).toBe('CSG_UV_MISSING');
   const wrapped = await hull('Wrap', body, cutter, { preserveAttributes: true });
   expect(wrapped.geometry.getAttribute('uv')).toBeUndefined();

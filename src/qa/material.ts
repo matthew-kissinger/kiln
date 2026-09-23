@@ -259,11 +259,13 @@ function validateMaterial(
   return findings;
 }
 
-export function inspectSceneMaterials(context: QaContext): QaFinding[] {
-  const root = context.scene as THREE.Object3D | undefined;
+export function inspectPortableSceneMaterials(
+  scene: unknown,
+  requiresPrecomputedTangents = false,
+): QaFinding[] {
+  const root = scene as THREE.Object3D | undefined;
   if (!root?.traverse) return [];
   const findings: QaFinding[] = [];
-  const requiresPrecomputedTangents = context.intent.capabilities.includes('precomputedTangents');
   root.traverse((node) => {
     const mesh = node as THREE.Mesh;
     if (!mesh.isMesh || !mesh.geometry) return;
@@ -275,6 +277,13 @@ export function inspectSceneMaterials(context: QaContext): QaFinding[] {
     }
   });
   return findings;
+}
+
+export function inspectSceneMaterials(context: QaContext): QaFinding[] {
+  return inspectPortableSceneMaterials(
+    context.scene,
+    context.intent.capabilities.includes('precomputedTangents'),
+  );
 }
 
 export const MATERIAL_QA_RULE: QaRule = {

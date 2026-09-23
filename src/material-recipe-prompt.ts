@@ -67,6 +67,8 @@ export function buildMaterialRecipePromptContextV1(
 Use ${MATERIAL_RECIPE_HELPER_SIGNATURE}. Recipe IDs are versioned and executable; do not invent an
 ID or pass a host path. Available IDs: ${MATERIAL_RECIPE_IDS.join(', ')}. Recipes export through core
 glTF pbrMetallicRoughness. Leaf uses MASK (not BLEND); glass is the explicit blended recipe.
+Numeric recipe overrides, including emissiveIntensity, are finite 0..1; emission is baked into
+the core glTF factor. The portable V2 compiler has a separate emissiveIntensity range of 0..64.
 
 For authored maps, use proceduralTexture({ schemaVersion: 2, ... }). It is a strict finite DSL:
 callbacks, shader source, URLs, filesystem paths, prototype keys, and unknown fields are rejected.

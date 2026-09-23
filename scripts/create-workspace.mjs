@@ -17,6 +17,7 @@ import { existsSync, realpathSync } from 'node:fs';
 import { spawnSync } from 'node:child_process';
 import { dirname, join, resolve, relative, isAbsolute, sep } from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
+import { assertNodeRuntime } from '../src/runtime-support.mjs';
 
 const installation = resolve(dirname(fileURLToPath(import.meta.url)), '..');
 const quote = JSON.stringify;
@@ -31,9 +32,8 @@ const inside = (parent, child) => {
   return !rel || (!isAbsolute(rel) && rel !== '..' && !rel.startsWith(`..${sep}`));
 };
 
-export async function preflightRuntime(runtime, skills) {
-  if (Number(process.versions.node.split('.')[0]) < 22)
-    throw new Error('Kiln requires Node.js 22 or later.');
+export async function preflightRuntime(runtime, skills, probeDependencies = true) {
+  assertNodeRuntime();
   let pkg;
   try {
     pkg = JSON.parse(await readFile(join(runtime, 'package.json'), 'utf8'));
@@ -66,6 +66,7 @@ export async function preflightRuntime(runtime, skills) {
       { cause: error },
     );
   }
+  if (!probeDependencies) return pkg;
   const probe = spawnSync(
     process.execPath,
     [
@@ -89,10 +90,10 @@ function managedFiles(root, runtime, harness, nodeExecutable) {
   const mcp = {
     command: nodeExecutable,
     args: [server],
-    env: { KILN_PROGRAM_STORE: store, KILN_RENDER: 'auto' },
+    env: { KILN_PROGRAM_STORE: store, KILN_RENDER: 'auto', KILN_WORKSPACE: root },
   };
   const files = {
-    'kiln.mjs': `// Generated runtime launcher. Repair paths with kiln-init <workspace> --repair.\nimport { dirname, join } from 'node:path';\nimport { fileURLToPath } from 'node:url';\nprocess.env.KILN_PROGRAM_STORE = join(dirname(fileURLToPath(import.meta.url)), '.kiln', 'programs');\ntry {\n  const { main } = await import(${quote(pathToFileURL(join(runtime, 'dist/cli.mjs')).href)});\n  process.exitCode = await main(process.argv.slice(2));\n} catch (error) {\n  console.error(error.message + '\\nIf the installation moved, run kiln-init <workspace> --repair from the current Kiln installation.');\n  process.exitCode = 1;\n}\n`,
+    'kiln.mjs': `// Generated runtime launcher. Repair paths with kiln-init <workspace> --repair.\nimport { dirname, join } from 'node:path';\nimport { fileURLToPath } from 'node:url';\nprocess.env.KILN_PROGRAM_STORE = join(dirname(fileURLToPath(import.meta.url)), '.kiln', 'programs');\ntry {\n  const { assertWorkspaceCurrent } = await import(${quote(pathToFileURL(join(runtime, 'scripts/create-workspace.mjs')).href)});\n  await assertWorkspaceCurrent(dirname(fileURLToPath(import.meta.url)), ${quote(runtime)});\n  const { main } = await import(${quote(pathToFileURL(join(runtime, 'dist/cli.mjs')).href)});\n  process.exitCode = await main(process.argv.slice(2));\n} catch (error) {\n  console.error(error.message + '\\nIf the installation moved, run kiln-init <workspace> --repair from the current Kiln installation.');\n  process.exitCode = 1;\n}\n`,
   };
   if (harness === 'claude') files['.mcp.json'] = quote({ mcpServers: { kiln_workspace: mcp } });
   if (harness === 'codex') {
@@ -104,7 +105,7 @@ function managedFiles(root, runtime, harness, nodeExecutable) {
     // server. It stays because a reader looking for the workspace's MCP wiring
     // looks here first, and finding nothing is worse than finding a pointer.
     files['.codex/config.toml'] =
-      `# Codex does not read a project-local config. This file records what the\n# workspace registers; \`node codex.mjs\` is what actually applies it, passing\n# these values as -c overrides per invocation.\n[mcp_servers.kiln_workspace]\ncommand = ${quote(mcp.command)}\nargs = [${quote(server)}]\n[mcp_servers.kiln_workspace.env]\nKILN_PROGRAM_STORE = ${quote(store)}\nKILN_RENDER = "auto"\n`;
+      `# Codex does not read a project-local config. This file records what the\n# workspace registers; \`node codex.mjs\` is what actually applies it, passing\n# these values as -c overrides per invocation.\n[mcp_servers.kiln_workspace]\ncommand = ${quote(mcp.command)}\nargs = [${quote(server)}]\n[mcp_servers.kiln_workspace.env]\nKILN_PROGRAM_STORE = ${quote(store)}\nKILN_RENDER = "auto"\nKILN_WORKSPACE = ${quote(root)}\n`;
     // Per-invocation `-c` overrides are the whole fix. They add the server to
     // this one run and write nothing anywhere: $CODEX_HOME keeps its own config
     // and, critically, its authentication. That is the rule a workspace has to
@@ -115,7 +116,7 @@ function managedFiles(root, runtime, harness, nodeExecutable) {
     // `--cd` sets the project directory; a workspace is deliberately not a git
     // checkout, so `--skip-git-repo-check` is required rather than optional.
     files['codex.mjs'] =
-      `import { spawn } from 'node:child_process';\nimport { dirname } from 'node:path';\nimport { fileURLToPath } from 'node:url';\nconst root = dirname(fileURLToPath(import.meta.url));\nconst overrides = [\n  ['mcp_servers.kiln_workspace.command', ${quote(mcp.command)}],\n  ['mcp_servers.kiln_workspace.args', [${quote(server)}]],\n  ['mcp_servers.kiln_workspace.env.KILN_PROGRAM_STORE', ${quote(store)}],\n  ['mcp_servers.kiln_workspace.env.KILN_RENDER', 'auto'],\n].flatMap(([key, value]) => ['-c', key + '=' + JSON.stringify(value)]);\nconst args = process.argv.slice(2);\nconst sub = args.find(arg => !arg.startsWith('-'));\nconst rest = sub === 'exec' ? args : ['exec', ...args];\nconst executable = process.platform === 'win32' ? 'codex.cmd' : 'codex';\nconst child = spawn(executable, [...rest.slice(0, 1), ...overrides, '--cd', root, '--skip-git-repo-check', ...rest.slice(1)], { cwd: root, stdio: 'inherit', windowsHide: true });\nchild.on('error', error => { console.error(error.message); process.exitCode = 1; });\nchild.on('exit', code => { process.exitCode = code ?? 1; });\n`;
+      `import { spawn } from 'node:child_process';\nimport { dirname } from 'node:path';\nimport { fileURLToPath } from 'node:url';\nconst root = dirname(fileURLToPath(import.meta.url));\nconst overrides = [\n  ['mcp_servers.kiln_workspace.command', ${quote(mcp.command)}],\n  ['mcp_servers.kiln_workspace.args', [${quote(server)}]],\n  ['mcp_servers.kiln_workspace.env.KILN_PROGRAM_STORE', ${quote(store)}],\n  ['mcp_servers.kiln_workspace.env.KILN_RENDER', 'auto'],\n  ['mcp_servers.kiln_workspace.env.KILN_WORKSPACE', root],\n].flatMap(([key, value]) => ['-c', key + '=' + JSON.stringify(value)]);\nconst args = process.argv.slice(2);\nconst sub = args.find(arg => !arg.startsWith('-'));\nconst rest = sub === 'exec' ? args : ['exec', ...args];\nconst executable = process.platform === 'win32' ? 'codex.cmd' : 'codex';\nconst child = spawn(executable, [...rest.slice(0, 1), ...overrides, '--cd', root, '--skip-git-repo-check', ...rest.slice(1)], { cwd: root, stdio: 'inherit', windowsHide: true });\nchild.on('error', error => { console.error(error.message); process.exitCode = 1; });\nchild.on('exit', code => { process.exitCode = code ?? 1; });\n`;
   }
   if (harness === 'agy') {
     files['.agents/mcp_config.json'] = quote({ mcpServers: { kiln_workspace: mcp } });
@@ -186,24 +187,41 @@ function managedFiles(root, runtime, harness, nodeExecutable) {
     // inherits this one -- so a user-level registration gets retargeted at this
     // workspace's store without anything being written outside it.
     files['hermes.mjs'] =
-      `import { spawn } from 'node:child_process';\nimport { dirname, join } from 'node:path';\nimport { fileURLToPath } from 'node:url';\nconst root = dirname(fileURLToPath(import.meta.url));\nconst args = process.argv.slice(2);\nconst has = names => args.some(arg => names.some(name => arg === name || arg.startsWith(name + '=')));\nif (!has(['--in'])) args.unshift('--in', root);\nconst child = spawn('hermes', args, { cwd: root, stdio: 'inherit', windowsHide: true, env: { ...process.env, KILN_PROGRAM_STORE: join(root, '.kiln', 'programs'), KILN_RENDER: 'auto', TERMINAL_CWD: root } });\nchild.on('error', (error) => { console.error(error.message); process.exitCode = 1; });\nchild.on('exit', (code) => { process.exitCode = code ?? 1; });\n`;
+      `import { spawn } from 'node:child_process';\nimport { dirname, join } from 'node:path';\nimport { fileURLToPath } from 'node:url';\nconst root = dirname(fileURLToPath(import.meta.url));\nconst args = process.argv.slice(2);\nconst has = names => args.some(arg => names.some(name => arg === name || arg.startsWith(name + '=')));\nif (!has(['--in'])) args.unshift('--in', root);\nconst child = spawn('hermes', args, { cwd: root, stdio: 'inherit', windowsHide: true, env: { ...process.env, KILN_PROGRAM_STORE: join(root, '.kiln', 'programs'), KILN_RENDER: 'auto', KILN_WORKSPACE: root, TERMINAL_CWD: root } });\nchild.on('error', (error) => { console.error(error.message); process.exitCode = 1; });\nchild.on('exit', (code) => { process.exitCode = code ?? 1; });\n`;
   }
   return { files, store, server };
+}
+
+function startGuide(root, runtime, harness, nodeExecutable, server) {
+  const launchers = { agy: 'node agy.mjs', codex: 'node codex.mjs', hermes: 'node hermes.mjs' };
+  const command = launchers[harness] ?? harness;
+  const launch =
+    harness === 'hermes'
+      ? `Hermes keeps configuration in $HERMES_HOME and has no project-local equivalent, so the launcher supplies this workspace's directory, skills and program store per invocation and leaves your provider and credentials exactly as they are. Registering the server itself is the one user-level step; run it once:\n\n\`\`\`bash\nhermes mcp add kiln_workspace --command ${nodeExecutable} --env KILN_RENDER=auto --args ${server}\n\`\`\`\n\nVerify with \`hermes mcp list\`. The launcher retargets the program store at this workspace through the environment, so one registration serves every workspace. Skills reach the agent through this directory's AGENTS.md and \`skills/\`; to have hermes register them as skills too, add \`skills.external_dirs\` pointing at ${join(root, '.agents', 'skills')} to your own config once. Pass \`--ignore-rules\` only when you want to suppress AGENTS.md along with your user-level rules.`
+      : harness === 'agy'
+        ? 'The launcher supplies the absolute project directory. For headless runs, use node agy.mjs --model MODEL --print="Read AGENTS.md and the project skills. Use only kiln_workspace MCP tools. YOUR TASK.". The attached `--print=TEXT` spelling is required; a separated value is parsed incorrectly. Print mode disables automatic slash-command/skill expansion to avoid automatic expansion of a global skill. Use absolute task-file paths in headless prompts and verify that tool calls use kiln_workspace; global configuration and authentication remain unchanged.'
+        : harness === 'codex'
+          ? 'Codex keeps configuration in $CODEX_HOME and has no project-local equivalent, so `node codex.mjs` passes this workspace\'s server, program store and directory as per-invocation `-c` overrides. It writes nothing outside this directory and leaves your $CODEX_HOME and its authentication untouched. Running bare `codex` here reaches no Kiln tools. For headless runs, add the prompt: node codex.mjs "Read AGENTS.md and the project skills, then YOUR TASK.".'
+          : `This directory is configured for ${harness}.`;
+  return `# Start making assets\n\n\`\`\`bash\ncd ${root}\n${command}\n\`\`\`\n\n${launch} Accept the project/MCP trust prompts. Ask the agent to read AGENTS.md and create an asset. Kiln needs no separate model key.\n\nCore author/refine/QA skills are installed and registered for this harness. Optional compose/batch skills are selected at setup with --skills compose,batch.\n\nThese are shared CLI/MCP skills for your chosen harness. The optional built-in Strands agent adds its workflow internally; do not copy its prompt or native workflow into this workspace.\n\nLong-running and headless sessions may compact context automatically. AGENTS.md describes the harness-neutral KILN_PROGRESS.md handoff that preserves the current programRef and next action across compaction. Harness-specific thresholds are documented in Kiln's docs/harnesses.md; leave native automatic compaction enabled when the active model's context size is unknown.\n\nKeep assets here and engine source outside. This separates task context, not operating-system permissions. User instructions and authentication can still apply.\n\nRun repair after anything that invalidates the generated absolute paths: moving this workspace, moving or reinstalling the runtime, or removing the Node executable that setup recorded. The manifest pins the exact interpreter the preflight check validated. Invoking the CLI with another supported Node does not require repair while the recorded executable remains available.\n\n\`\`\`bash\nnode ${join(runtime, 'scripts/create-workspace.mjs')} ${root} --repair\n\`\`\`\n\nThat path is where the installation was at setup. If the installation itself moved, run the same command from its current location; \`runtime\` in .kiln/workspace.json records where this workspace last expected it.\n\nRepair updates generated runtime paths only and refuses edited configuration. For a runtime or skill update, stop the harness/MCP session, run kiln-init on this directory with --check and then --upgrade, and restart the session. Upgrade refreshes unchanged managed configuration, instructions and all skill copies; conflicting edits stop it before writing. Preserve and resolve the named files explicitly. Assets and saved revisions remain in place.\n`;
 }
 
 const guide = `# Kiln asset workspace
 
 Author and refine assets in this directory. The engine is installed separately. Do not read its implementation or example collection to solve an asset task.
 
-Two surfaces drive the same engine and share .kiln/programs, so either is fine and you can mix them freely. The kiln_workspace MCP server returns each render as an image in your context. The node kiln.mjs CLI writes renders to disk, so read the PNG back before judging anything visual. A server named kiln may be a different installation; do not substitute it silently, and report the setup problem instead. To check, call kiln_list_primitives with capabilities true and compare capabilities.engine.installUrl against runtime in .kiln/workspace.json.
+Two surfaces drive the same engine and share .kiln/programs, so either is fine and you can mix them freely. The kiln_workspace MCP server returns each render as an image in your context. The node kiln.mjs CLI writes renders to disk, so read the PNG back before judging anything visual. A server named kiln may be a different installation; do not substitute it silently, and report the setup problem instead. To check, call kiln_discover with { capabilities: true } and compare capabilities.engine.installUrl against runtime in .kiln/workspace.json.
 
-Read the skill for your task from skills/ in this directory, never a global plugin copy. The maintained copies are there, mirrored into .claude/skills/ and .agents/skills/ because harnesses scan different directories. Use kiln_list_primitives for API signatures.
+Read the skill for your task from skills/ in this directory, never a global plugin copy. The maintained copies are there, mirrored into .claude/skills/ and .agents/skills/ because harnesses scan different directories. Use kiln_discover with no arguments for a compact overview and starting createRoot/createPart signatures. Search in ordinary modeling language with { query: "curved hollow tube" }; fetch complete contracts with { ids: ["sweepProfile"] }. Search and overview return six summaries by default, with current family/kind/tags filters and offset/limit pagination. Exact ids accepts up to six distinct IDs or executable names. Recipes are optional guidance, and no asset-category selection or separate search model is required. CLI equivalents are node kiln.mjs discover --query "curved hollow tube" and node kiln.mjs discover --id sweepProfile --json.
+
+Managed CLI/MCP startup checks runtime and copied-skill versions. If they differ, stop this session and run kiln-init on this directory with --check and --upgrade from the desired installation. Conflicting local edits require an explicit merge; do not overwrite them to clear a diagnostic. Restart the session after upgrading.
 
 ## The loop
 
 1. Draft. Pass code once to kiln_render or kiln_validate, or import a file with node kiln.mjs source asset.kiln.js. Either returns a programRef, normally a short immutable p_ handle. Keep it even when validation fails. Copy it exactly; never construct, expand or shorten one, and do not retransmit the program.
 2. Render. kiln_render, or node kiln.mjs render PROGRAM_REF --views sheet.png.
 3. Review. Look at the image. Check viewFidelity before judging materials: a CPU view is honest about silhouette, proportion and contact, and says nothing about colour, metalness or roughness.
+   For animation, use kiln_screenshot_animation or node kiln.mjs animation PROGRAM_REF --clip CLIP_NAME --phases 0,0.25,0.5,0.75,1 --views motion.png --json. Phases are fractions of clip duration. Add --render gpu for material review, read the PNG and check attachments in intermediate poses; do not replace clip sampling with source edits that bake a rest pose.
 4. Edit. Read exact anchors with kiln_source and a literal query, following nextOffset for more context, then call kiln_edit with programRef and edits. Each edit returns a new programRef; use that one from then on. Rewriting the whole file through the CLI works, but it loses the anchored diff and the revision lineage.
 5. Save. The user chooses a named destination; discover configured collections when needed and otherwise default to project. Use kiln_save, or node kiln.mjs save. Keep the exact asset and revision IDs. Save refinements as child revisions rather than replacing their parent. When the user wants to see the result, call kiln_present; if the host cannot render it, launch node kiln.mjs view yourself and provide its loopback URL.
 
@@ -211,9 +229,13 @@ Export at any point. Source is node kiln.mjs source PROGRAM_REF --out revised.ki
 
 ## Material-faithful views
 
-This workspace asks for render mode auto: a GPU service when one answers on port 8000, CPU views otherwise. Without that service every render reports viewFidelity.materialFaithful false, and nothing rendered here can confirm a material.
+This workspace asks for render mode auto. Textured or metallic scenes use a verified compatible GPU service, starting one lazily when local dependencies are available. Ordinary untextured scenes with zero metalness and no advanced material extensions use CPU geometry views; this does not indicate renderer failure. CPU views report viewFidelity.materialFaithful false and cannot confirm PBR appearance. Use CLI --render gpu when GPU material review is required, including roughness on nonmetallic surfaces.
 
-To start it, read runtime from .kiln/workspace.json and run npm install && npm start in render-service/ under that path. It is a separate package with a native dependency, so the install is its own step and can take a while. Start it at any time; the CLI picks it up on the next call, and MCP starts one itself on the first render that needs it. The one case that needs a restart is installing it AFTER this session began: the MCP server checks at startup whether a renderer could run here, and a session that began before the install stays on CPU for its lifetime.
+The render-service code is included with Kiln, with its native GPU dependency optional at the Kiln package root. Check node kiln.mjs service status first. If dependencies are missing or incompatible, reinstall the official Kiln package with optional dependencies enabled; read runtime from .kiln/workspace.json to identify the installation. A source checkout uses bun install --frozen-lockfile at that root. CLI and MCP start the managed service when needed; compatible clients share it until five minutes pass without admitted work. From the installation root, node --import ./render-service/src/register-hooks.mjs render-service/src/server.mjs starts a manual service that remains running while idle. Unknown or incompatible listeners are reported and left in place.
+
+After dependency repair or a cached startup failure, call kiln_renderer with {action:"reprobe"} in this MCP session. It refreshes the existing route without installing dependencies or starting a renderer; the next view starts one if needed. CLI service reprobe checks only its own process. Restart the session after changing Kiln, environment variables or credentials.
+
+For a renderer on another device, configure this MCP server process with KILN_RENDER_PORT_URL and, when required, KILN_RENDER_TOKEN through the harness's environment settings. CLI commands accept --render-port URL and read KILN_RENDER_TOKEN. Run a compatible Kiln renderer on that device; a bind beyond loopback requires service-side RENDER_SERVICE_TOKEN unless an authenticated proxy is explicitly configured. A remote service is managed on its own device. Check capabilities for the selected route and an actual viewFidelity receipt for successful material rendering.
 
 For a task about appearance, say so rather than silently accepting CPU views.
 
@@ -230,7 +252,7 @@ Keep .kiln/programs while working. Source files are portable; references resolve
 
 async function readManifest(root) {
   try {
-    return JSON.parse(await readFile(join(root, '.kiln/workspace.json'), 'utf8'));
+    return JSON.parse((await workspaceFile(root, '.kiln/workspace.json')).toString('utf8'));
   } catch {
     throw new Error('This is not a managed Kiln workspace. Existing files were not changed.');
   }
@@ -247,30 +269,222 @@ async function fileHashes(directory, prefix = '') {
   return hashes;
 }
 
-/** Preflight first; create a complete project in a staging directory before installing it. */
-/**
- * The GPU render service ships as source in `render-service/` and is a separate
- * npm project with a native dependency, so installing the engine does not
- * install it. A fresh clone has the source and no `node_modules`; without a
- * word at setup, the first authoring session gets CPU views and cannot confirm
- * a material. Mirrors `localRenderServiceState` in src/render-service-host.ts:
- * `webgpu` is the install that costs something, `three` catches a half-finished one.
- */
-export function renderServiceNotice(runtime) {
+async function workspaceFile(root, name) {
+  let path = root;
+  for (const segment of name.split('/')) {
+    path = join(path, segment);
+    try {
+      if ((await lstat(path)).isSymbolicLink())
+        throw new Error(`Refusing symbolic link in managed path: ${name}`);
+    } catch (error) {
+      if (error.code === 'ENOENT') return undefined;
+      throw error;
+    }
+  }
+  return readFile(path);
+}
+
+function safeManagedName(name, skills, generatedNames) {
+  const segments = name.split('/');
+  const prefix = ['skills/', '.agents/skills/', '.claude/skills/'].find((p) => name.startsWith(p));
+  if (
+    name.includes('\\') ||
+    name.includes(':') ||
+    segments.some((s) => !s || s === '.' || s === '..') ||
+    !(
+      generatedNames.has(name) ||
+      ['AGENTS.md', 'CLAUDE.md', 'START.md'].includes(name) ||
+      (prefix && skills.includes(name.slice(prefix.length).split('/')[0]))
+    )
+  )
+    throw new Error(`Unsafe managed path: ${name}`);
+}
+
+async function managedHashes(root, manifest, files) {
+  const hashes = Object.fromEntries(
+    Object.entries(files).map(([name, body]) => [name, hash(body)]),
+  );
+  for (const name of ['AGENTS.md', 'CLAUDE.md', 'START.md'])
+    hashes[name] = hash(await readFile(join(root, name)));
+  for (const folder of ['skills', ...skillRegistries])
+    for (const [name, digest] of Object.entries(manifest.skillHashes))
+      hashes[`${folder}/${name}`] = digest;
+  return hashes;
+}
+
+/** Explicit update: compare original, local and current bytes before writing any file. */
+async function upgradeWorkspace(root, runtime, previous, manifest, files, check) {
+  if (previous.schemaVersion !== 1) throw new Error('Unsupported workspace manifest version.');
+  const desired = {
+    ...files,
+    'AGENTS.md': guide,
+    'CLAUDE.md': guide,
+    'START.md': startGuide(
+      root,
+      runtime,
+      manifest.harness,
+      manifest.node,
+      join(runtime, 'dist/mcp-server.mjs'),
+    ),
+  };
+  const skillHashes = {};
+  for (const skill of manifest.skills) {
+    for (const [name, digest] of Object.entries(await fileHashes(join(runtime, 'skills', skill)))) {
+      const relativeName = `${skill}/${name}`;
+      skillHashes[relativeName] = digest;
+      const body = await readFile(join(runtime, 'skills', relativeName));
+      for (const folder of ['skills', ...skillRegistries])
+        desired[`${folder}/${relativeName}`] = body;
+    }
+  }
+  const knownNames = new Set(
+    harnesses.flatMap((h) => Object.keys(managedFiles(root, runtime, h, manifest.node).files)),
+  );
+  const originalHashes = { ...previous.generated };
+  for (const folder of ['skills', ...skillRegistries])
+    for (const [name, digest] of Object.entries(previous.skillHashes ?? {})) {
+      safeManagedName(`${folder}/${name}`, manifest.skills, knownNames);
+      originalHashes[`${folder}/${name}`] = digest;
+    }
+  Object.assign(originalHashes, previous.managedHashes);
+  const entries = [],
+    originals = new Map();
+  for (const name of new Set([...Object.keys(originalHashes), ...Object.keys(desired)])) {
+    safeManagedName(name, manifest.skills, knownNames);
+    const body = await workspaceFile(root, name);
+    originals.set(name, body);
+    const local = body === undefined ? undefined : hash(body);
+    const current = desired[name] === undefined ? undefined : hash(desired[name]);
+    const original = originalHashes[name];
+    const status =
+      local === current
+        ? 'current'
+        : local === undefined
+          ? 'missing'
+          : local === original
+            ? current === undefined
+              ? 'retired'
+              : 'outdated'
+            : original === current && current !== undefined
+              ? 'customized'
+              : 'conflict';
+    entries.push({ path: name, status });
+  }
+  const runtimeChanged =
+    previous.runtime !== runtime ||
+    previous.node !== manifest.node ||
+    previous.runtimeVersion !== manifest.runtimeVersion ||
+    previous.runtimeIdentity !== manifest.runtimeIdentity ||
+    JSON.stringify(previous.runtimeHashes) !== JSON.stringify(manifest.runtimeHashes);
+  const changes = entries.filter((e) => !['current', 'customized'].includes(e.status));
+  const conflicts = entries.filter((e) => e.status === 'conflict');
+  const report = {
+    root,
+    runtime,
+    status: runtimeChanged || changes.length ? 'update-required' : 'current',
+    runtimeChanged,
+    files: entries.filter((e) => e.status !== 'current'),
+    next: `Stop the workspace's harness/MCP session. Run kiln-init ${quote(root)} --upgrade from the desired installation, then restart the session.`,
+  };
+  if (check) return report;
+  if (conflicts.length)
+    throw new Error(
+      `Workspace upgrade has conflicts; no files were changed: ${conflicts.map((e) => e.path).join(', ')}. ` +
+        'Preserve these customized or untracked files, compare with the current installation, and move them aside or replace them with the current versions before retrying. Reapply compatible customizations after upgrading.',
+    );
+  const oldManifest = await workspaceFile(root, '.kiln/workspace.json');
+  // Recheck snapshots before mutation, including directories that could have become links.
+  for (const [name, original] of originals) {
+    const current = await workspaceFile(root, name);
+    if (
+      (current === undefined) !== (original === undefined) ||
+      (current && original && !current.equals(original))
+    )
+      throw new Error(`Workspace changed during upgrade: ${name}`);
+  }
+  if (!(await workspaceFile(root, '.kiln/workspace.json'))?.equals(oldManifest))
+    throw new Error('Workspace manifest changed during upgrade.');
+  const touched = [];
+  try {
+    for (const { path: name } of changes) {
+      touched.push(name);
+      if (desired[name] === undefined) await rm(join(root, name), { force: true });
+      else {
+        await mkdir(dirname(join(root, name)), { recursive: true });
+        await writeFile(join(root, name), desired[name]);
+      }
+    }
+    manifest.skillHashes = skillHashes;
+    manifest.managedHashes = Object.fromEntries(
+      Object.entries(desired).map(([name, body]) => [name, hash(body)]),
+    );
+    await writeFile(join(root, '.kiln/workspace.json'), quote(manifest));
+  } catch (error) {
+    for (const name of touched.reverse()) {
+      const original = originals.get(name);
+      if (original === undefined) await rm(join(root, name), { force: true });
+      else await writeFile(join(root, name), original);
+    }
+    await writeFile(join(root, '.kiln/workspace.json'), oldManifest);
+    throw error;
+  }
+  return {
+    ...report,
+    status: 'current',
+    upgraded: true,
+    changed: changes.map((e) => e.path),
+    next: 'Restart the harness/MCP session to refresh cached tools and instructions.',
+  };
+}
+
+/** Called by generated CLI launchers and opted-in MCP workspaces before serving tools. */
+export async function assertWorkspaceCurrent(root, runtime = installation) {
+  const report = await createWorkspace(root, 'claude', { installation: runtime, check: true });
+  if (report.status !== 'current')
+    throw new Error(
+      `Kiln workspace is out of date${report.runtimeChanged ? ' (runtime changed)' : ''}: ` +
+        `${report.files
+          .filter((e) => e.status !== 'customized')
+          .map((e) => e.path)
+          .join(', ')}. ` +
+        `Run kiln-init ${quote(root)} --check and --upgrade from ${runtime}; restart the harness/MCP session afterward.`,
+    );
+}
+
+/** Resolve hoisted or nested packages without loading native code or claiming GPU readiness. */
+export async function renderServiceNotice(runtime) {
   const dir = join(runtime, 'render-service');
   if (!existsSync(join(dir, 'src/server.mjs')) || !existsSync(join(dir, 'package.json')))
     return undefined;
-  if (existsSync(join(dir, 'node_modules/webgpu')) && existsSync(join(dir, 'node_modules/three')))
+  try {
+    const { resolvedRendererDependencies } = await import(
+      '../render-service/src/build-identity.mjs'
+    );
+    resolvedRendererDependencies(pathToFileURL(join(dir, 'src/server.mjs')).href);
     return undefined;
-  return `The GPU render service at ${dir} is present but not installed, so every render will be a CPU view and nothing can confirm a material. Run \`npm install\` in that directory before the first authoring session, or continue on CPU views.`;
+  } catch (error) {
+    return `The local GPU renderer at ${dir} is unavailable: ${error.message}. Reinstall the official Kiln package at ${runtime} with optional dependencies enabled. CPU views remain available for geometry; they cannot confirm materials. A separately configured compatible renderer can provide material views.`;
+  }
 }
 
+/** Preflight first; create a complete project in a staging directory before installing it. */
 export async function createWorkspace(directory, harness = 'claude', options = {}) {
   const root = resolve(directory);
-  // Version managers can expose Node through a directory link lasting only one shell.
-  const nodeExecutable = realpathSync(process.execPath);
   const runtime = await realpath(resolve(options.installation ?? installation));
-  const previous = options.repair ? await readManifest(root) : undefined;
+  if ([options.repair, options.upgrade, options.check].filter(Boolean).length > 1)
+    throw new Error('Choose only one of --repair, --upgrade or --check.');
+  if ((options.repair || options.upgrade || options.check) && options.skills)
+    throw new Error('Maintenance does not change the installed skill selection.');
+  const previous =
+    options.repair || options.upgrade || options.check ? await readManifest(root) : undefined;
+  // A read-only check validates the configured interpreter, not whichever supported
+  // Node the caller's shell selected. Setup/repair/upgrade deliberately repin it.
+  // A missing recorded executable remains drift; do not silently accept that case.
+  // Resolve new pins through version-manager links that may last only one shell.
+  const nodeExecutable =
+    options.check && typeof previous?.node === 'string' && existsSync(previous.node)
+      ? previous.node
+      : realpathSync(process.execPath);
   if (previous) harness = previous.harness;
   if (!harnesses.includes(harness)) throw new Error(`Choose ${harnesses.join(', ')}.`);
   const extras = options.skills ?? [];
@@ -282,7 +496,7 @@ export async function createWorkspace(directory, harness = 'claude', options = {
     skills.some((name) => ![...core, ...Object.values(optional)].includes(name))
   )
     throw new Error('Invalid workspace skill manifest.');
-  const pkg = await preflightRuntime(runtime, skills);
+  const pkg = await preflightRuntime(runtime, skills, !options.check);
   let exists = false;
   try {
     const info = await lstat(root);
@@ -317,15 +531,26 @@ export async function createWorkspace(directory, harness = 'claude', options = {
     harness,
     runtime,
     runtimeVersion: pkg.version,
+    runtimeIdentity: JSON.parse(await readFile(join(runtime, 'dist/build.json'), 'utf8')).entries
+      .cli.identity,
     runtimeHashes: {
       cli: hash(await readFile(join(runtime, 'dist/cli.mjs'))),
       mcp: hash(await readFile(join(runtime, 'dist/mcp-server.mjs'))),
+      worker: hash(await readFile(join(runtime, 'dist/evaluator-worker.mjs'))),
     },
     node: nodeExecutable,
     skills,
     skillHashes: previous?.skillHashes,
+    managedHashes: previous?.managedHashes
+      ? {
+          ...previous.managedHashes,
+          ...Object.fromEntries(Object.entries(files).map(([name, body]) => [name, hash(body)])),
+        }
+      : undefined,
     generated: Object.fromEntries(Object.entries(files).map(([name, body]) => [name, hash(body)])),
   };
+  if (previous && (options.upgrade || options.check))
+    return upgradeWorkspace(root, runtime, previous, manifest, files, options.check);
   if (previous) {
     if (previous.schemaVersion !== 1) throw new Error('Unsupported workspace manifest version.');
     const originals = {};
@@ -391,20 +616,12 @@ export async function createWorkspace(directory, harness = 'claude', options = {
     // START.md told the reader to run bare `codex` -- which reads no
     // project-local config at all, and is exactly the invocation that cannot see
     // the tools.
-    const launchers = { agy: 'node agy.mjs', codex: 'node codex.mjs', hermes: 'node hermes.mjs' };
-    const command = launchers[harness] ?? harness;
-    const launch =
-      harness === 'hermes'
-        ? `Hermes keeps configuration in $HERMES_HOME and has no project-local equivalent, so the launcher supplies this workspace's directory, skills and program store per invocation and leaves your provider and credentials exactly as they are. Registering the server itself is the one user-level step; run it once:\n\n\`\`\`bash\nhermes mcp add kiln_workspace --command ${nodeExecutable} --env KILN_RENDER=auto --args ${server}\n\`\`\`\n\nVerify with \`hermes mcp list\`. The launcher retargets the program store at this workspace through the environment, so one registration serves every workspace. Skills reach the agent through this directory's AGENTS.md and \`skills/\`; to have hermes register them as skills too, add \`skills.external_dirs\` pointing at ${join(root, '.agents', 'skills')} to your own config once. Pass \`--ignore-rules\` only when you want to suppress AGENTS.md along with your user-level rules.`
-        : harness === 'agy'
-          ? 'The launcher supplies the absolute project directory. For headless runs, use node agy.mjs --model MODEL --print="Read AGENTS.md and the project skills. Use only kiln_workspace MCP tools. YOUR TASK.". The attached `--print=TEXT` spelling is required; a separated value is parsed incorrectly. Print mode disables automatic slash-command/skill expansion to avoid automatic expansion of a global skill. Use absolute task-file paths in headless prompts and verify that tool calls use kiln_workspace; global configuration and authentication remain unchanged.'
-          : harness === 'codex'
-            ? 'Codex keeps configuration in $CODEX_HOME and has no project-local equivalent, so `node codex.mjs` passes this workspace\'s server, program store and directory as per-invocation `-c` overrides. It writes nothing outside this directory and leaves your $CODEX_HOME and its authentication untouched. Running bare `codex` here reaches no Kiln tools. For headless runs, add the prompt: node codex.mjs "Read AGENTS.md and the project skills, then YOUR TASK.".'
-            : `This directory is configured for ${harness}.`;
     await writeFile(
       join(stage, 'START.md'),
-      `# Start making assets\n\n\`\`\`bash\ncd ${root}\n${command}\n\`\`\`\n\n${launch} Accept the project/MCP trust prompts. Ask the agent to read AGENTS.md and create an asset. Kiln needs no separate model key.\n\nCore author/refine/QA skills are installed and registered for this harness. Optional compose/batch skills are selected at setup with --skills compose,batch.\n\nLong-running and headless sessions may compact context automatically. AGENTS.md describes the harness-neutral KILN_PROGRESS.md handoff that preserves the current programRef and next action across compaction. Harness-specific thresholds are documented in Kiln's docs/harnesses.md; leave native automatic compaction enabled when the active model's context size is unknown.\n\nKeep assets here and engine source outside. This separates task context, not operating-system permissions. User instructions and authentication can still apply.\n\nRun repair after anything that invalidates the generated absolute paths: moving this workspace, moving or reinstalling the runtime, or replacing the Node that setup recorded -- an nvm switch or uninstall does that, because the manifest pins the exact interpreter the preflight check validated.\n\n\`\`\`bash\nnode ${join(runtime, 'scripts/create-workspace.mjs')} ${root} --repair\n\`\`\`\n\nThat path is where the installation was at setup. If the installation itself moved, run the same command from its current location; \`runtime\` in .kiln/workspace.json records where this workspace last expected it.\n\nRepair updates generated runtime paths only and refuses edited configuration; it preserves skills, assets, and saved revisions.\n`,
+      startGuide(root, runtime, harness, nodeExecutable, server),
     );
+    manifest.managedHashes = await managedHashes(stage, manifest, files);
+    await writeFile(join(stage, '.kiln/workspace.json'), quote(manifest));
     if (exists) {
       // Windows cannot remove the caller's current directory, even when empty.
       // Move only staged entries and track them so a failed install rolls back.
@@ -445,7 +662,7 @@ if (isDirectSetupEntry()) {
     const args = process.argv.slice(2);
     if (args.includes('--help') || args.includes('-h')) {
       console.log(
-        'Usage: kiln-init <empty-directory> [--harness claude|codex|opencode|hermes|agy] [--skills compose,batch]\n       kiln-init <managed-workspace> --repair',
+        'Usage: kiln-init <empty-directory> [--harness claude|codex|opencode|hermes|agy] [--skills compose,batch]\n       kiln-init <managed-workspace> --repair|--check|--upgrade',
       );
     } else {
       const directory = args.shift();
@@ -456,6 +673,8 @@ if (isDirectSetupEntry()) {
       while (args.length) {
         const flag = args.shift();
         if (flag === '--repair') options.repair = true;
+        else if (flag === '--upgrade') options.upgrade = true;
+        else if (flag === '--check') options.check = true;
         else if (flag === '--harness' || flag === '--skills') {
           const value = args.shift();
           if (!value || value.startsWith('--')) throw new Error(`${flag} requires a value.`);
@@ -465,8 +684,10 @@ if (isDirectSetupEntry()) {
       }
       if (options.repair && options.skills)
         throw new Error('--repair does not change installed skills.');
-      console.log(quote(await createWorkspace(directory, harness, options)));
-      const notice = renderServiceNotice(await realpath(resolve(installation)));
+      const result = await createWorkspace(directory, harness, options);
+      console.log(quote(result));
+      if (options.check && result.status !== 'current') process.exitCode = 1;
+      const notice = await renderServiceNotice(await realpath(resolve(installation)));
       if (notice) console.error(notice);
     }
   } catch (error) {

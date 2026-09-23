@@ -1,0 +1,35 @@
+{
+  "scope": "injected WebGPU provider, unchanged service source",
+  "failures": [
+    {
+      "scenario": "no-adapter",
+      "simulated": true,
+      "code": 1,
+      "signal": null,
+      "ms": 251.18580000000003,
+      "stdout": "",
+      "stderr": "FATAL: no WebGPU adapter: no usable Vulkan/D3D12/Metal device visible to Dawn\n",
+      "neverListened": true
+    },
+    {
+      "scenario": "software-adapter",
+      "simulated": true,
+      "code": 1,
+      "signal": null,
+      "ms": 257.1661,
+      "stdout": "",
+      "stderr": "FATAL: software adapter refused (fail closed): Microsoft Basic Render Driver. On Linux this usually means the NVIDIA Vulkan ICD failed to init - check GLVND libs (libegl1/libgl1/libglvnd0).\n",
+      "neverListened": true
+    },
+    {
+      "scenario": "request-device-rejected",
+      "simulated": true,
+      "code": 1,
+      "signal": null,
+      "ms": 267.03919999999994,
+      "stdout": "",
+      "stderr": "FATAL: injected driver initialization failure\n",
+      "neverListened": true
+    }
+  ]
+}

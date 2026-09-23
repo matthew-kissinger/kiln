@@ -67,30 +67,46 @@ export async function captureViewPngsViaPort(
   cameras?: readonly ResolvedAssetCameraV1[],
   limits?: CaptureLimits,
   backdrop?: import('./background').BackdropId,
+  execution?: { signal?: AbortSignal },
 ): Promise<PortViewPngsOutcome> {
   let timer: ReturnType<typeof setTimeout> | undefined;
+  const controller = new AbortController();
+  let abort: (() => void) | undefined;
   try {
+    execution?.signal?.throwIfAborted();
     const exactCameras = cameras?.map(validateResolvedAssetCamera);
     if (exactCameras && exactCameras.length !== viewDirs.length)
       throw new Error('camera and view count mismatch');
     const requestGlb = Uint8Array.from(glb);
     const inputGlbSha256 = await sha256Bytes(requestGlb);
+    execution?.signal?.throwIfAborted();
     const deadline = new Promise<never>((_, reject) => {
-      timer = setTimeout(
-        () => reject(new Error(`view render port timed out after ${timeoutMs}ms`)),
-        timeoutMs,
-      );
+      abort = () => {
+        const error = execution?.signal?.reason ?? new Error('View request cancelled.');
+        reject(error);
+        controller.abort(error);
+      };
+      execution?.signal?.addEventListener('abort', abort, { once: true });
+      timer = setTimeout(() => {
+        const error = new Error(`view render port timed out after ${timeoutMs}ms`);
+        reject(error);
+        controller.abort(error);
+      }, timeoutMs);
     });
     const result = await Promise.race([
-      port({
-        glb: requestGlb,
-        ...(backdrop ? { backdrop } : {}),
-        ...(exactCameras
-          ? { cameras: exactCameras, width: size, height: size }
-          : { viewDirs: viewDirs.map((dir) => [...dir] as [number, number, number]), size }),
-      }),
+      port(
+        {
+          glb: requestGlb,
+          ...(backdrop ? { backdrop } : {}),
+          ...(exactCameras
+            ? { cameras: exactCameras, width: size, height: size }
+            : { viewDirs: viewDirs.map((dir) => [...dir] as [number, number, number]), size }),
+        },
+        { signal: controller.signal },
+      ),
       deadline,
     ]);
+    execution?.signal?.throwIfAborted();
     if (!result?.ok) {
       return { ok: false, reason: result?.error ?? 'view render port returned ok: false' };
     }
@@ -152,6 +168,7 @@ export async function captureViewPngsViaPort(
     return { ok: false, reason: err instanceof Error ? err.message : String(err) };
   } finally {
     if (timer !== undefined) clearTimeout(timer);
+    if (abort) execution?.signal?.removeEventListener('abort', abort);
   }
 }
 
@@ -180,9 +197,11 @@ export async function captureViewsViaPort(
   timeoutMs: number = DEFAULT_VIEW_RENDER_TIMEOUT_MS,
   capture?: CaptureConfig,
   limits?: CaptureLimits,
+  execution?: { signal?: AbortSignal },
 ): Promise<PortViewsOutcome> {
   if (capture?.shots || capture?.version) {
     try {
+      execution?.signal?.throwIfAborted();
       const { loadGlbReviewScene } = await import('./index');
       const { renderCaptureGrid } = await import('./camera-capture');
       const { renderSceneToGLB } = await import('../render');
@@ -192,6 +211,7 @@ export async function captureViewsViaPort(
         loaded.root,
         capture,
         async (input) => {
+          execution?.signal?.throwIfAborted();
           const derivative = await renderSceneToGLB(input.root as import('three').Object3D, {
             derivative: true,
           });
@@ -204,6 +224,7 @@ export async function captureViewsViaPort(
             [input.camera!],
             limits,
             input.backdrop,
+            execution,
           );
           if (!result.ok) throw new Error(result.reason);
           if (!result.derivativeFidelityAttested || !result.inputGlbSha256)
@@ -249,6 +270,7 @@ export async function captureViewsViaPort(
   }
   let resolved: ResolvedCapture;
   try {
+    execution?.signal?.throwIfAborted();
     resolved = resolveGridCapture(capture, process.env['KILN_GRID_VARIANT']);
     enforceCapturePixels(resolved.views.length, 384, resolved.cols, limits);
   } catch (err) {
@@ -283,6 +305,7 @@ export async function captureViewsViaPort(
     cameras,
     limits,
     resolved.backdrop,
+    execution,
   );
   if (!result.ok) return result;
   try {

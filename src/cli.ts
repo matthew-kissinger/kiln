@@ -5,7 +5,7 @@
  * shares one evaluation through the program-aware registry.
  */
 import { open, readFile, writeFile } from 'node:fs/promises';
-import { resolve as resolvePath } from 'node:path';
+import { resolve as resolvePath, extname } from 'node:path';
 
 import { prepareDestination, writeDestinationAtomic } from './cli-output';
 import { isDirectEntry } from './direct-entry';
@@ -13,12 +13,20 @@ import { createPackagedLocalToolContext } from './local-runtime';
 import { createKilnProgramToolRegistry, type KilnToolContext } from './tools/registry';
 import { BACKDROP_IDS, isBackdropId, type BackdropId } from './views/background';
 import { resolveRenderMode, buildRenderPort, describeDrawnBy } from './cli-render-mode';
-import { stopLocalRenderService } from './render-service-host';
 import type { RenderMode } from './cli-render-mode';
 import { localProgramStore } from './program-store-node';
 import { retainProgram, programRefPattern } from './program-store';
 import { ASSET_USAGE } from './asset-cli';
 import { SERVICE_USAGE } from './service-cli';
+import { DISCOVERY_USAGE } from './discovery-cli';
+import { ANIMATION_USAGE } from './animation-cli';
+import { EDIT_USAGE } from './edit-cli';
+import { INSPECT_USAGE } from './inspect-cli';
+import { CATEGORY_MIGRATION_MESSAGE, readHostRequirementsFile } from './requirements-file';
+import type { RequirementsBinding } from './requirements-store';
+import type { RenderResult } from './render';
+import { createGenerationCallBudget } from './agent/call-budget';
+import { assertNodeRuntime } from './runtime-support.mjs';
 
 const USAGE = `kiln — vision-in-the-loop 3D asset generation
 
@@ -27,7 +35,12 @@ USAGE
   kiln generate "<prompt>"  [options]    author a program with a model, then render
   kiln source <file.js>                 save a source snapshot and print its programRef
   kiln source <programRef> --out file.js export a revision without model transcription
-  kiln service status|stop|prune        the shared GPU render service (see below)
+  kiln edit <programRef> --edits <json>  anchored source edits; returns a new revision
+  kiln discover [options]               ranked helpers, recipes and host capabilities
+  kiln migrate intent|manifest <file>   explicit legacy conversion review (see --help)
+  kiln animation <program.js|ref> [options]  review sampled motion of an exported clip
+  kiln inspect <program.js|ref> [options]    close-up views and surface/anchor measurements
+  kiln service status|stop|reprobe        the shared GPU render service (see below)
 
 OPTIONS
   --out <path>            GLB output path            (default: out.glb)
@@ -38,7 +51,8 @@ OPTIONS
   --render-port <url>     remote GPU render service
   --model <id>            model id for generate      (default: env KILN_MODEL)
   --max-steps <n>         agent step cap, 0 = off    (default: 0)
-  --category <name>       prop | vehicle | character | architecture | vegetation
+  --requirements <json>  explicit host binding (optional; default neutral)
+  --json                 render: one JSON receipt, no embedded image or GLB bytes
   -h, --help              this message
 
 EXAMPLES
@@ -61,8 +75,10 @@ interface Args {
   renderPort: string | undefined;
   model: string | undefined;
   maxSteps: number;
-  category: string | undefined;
+  requirementsFile?: string;
+  requirements?: RequirementsBinding;
   help: boolean;
+  json: boolean;
 }
 
 export function parseArgs(argv: readonly string[]): Args {
@@ -77,8 +93,8 @@ export function parseArgs(argv: readonly string[]): Args {
     renderPort: undefined,
     model: process.env['KILN_MODEL'],
     maxSteps: 0,
-    category: undefined,
     help: false,
+    json: false,
   };
   for (let i = 0; i < argv.length; i++) {
     const a = argv[i]!;
@@ -94,6 +110,9 @@ export function parseArgs(argv: readonly string[]): Args {
         break;
       case '--out':
         args.out = next();
+        break;
+      case '--json':
+        args.json = true;
         break;
       case '--views':
         args.views = next();
@@ -118,7 +137,9 @@ export function parseArgs(argv: readonly string[]): Args {
         args.model = next();
         break;
       case '--category':
-        args.category = next();
+        throw new Error(CATEGORY_MIGRATION_MESSAGE);
+      case '--requirements':
+        args.requirementsFile = next();
         break;
       case '--max-steps': {
         const n = Number(next());
@@ -131,6 +152,7 @@ export function parseArgs(argv: readonly string[]): Args {
         break;
       }
       default:
+        if (a.startsWith('--category=')) throw new Error(CATEGORY_MIGRATION_MESSAGE);
         if (a.startsWith('-')) throw new Error(`unknown option: ${a}`);
         if (args.command === undefined) args.command = a;
         else args.positional.push(a);
@@ -191,33 +213,76 @@ function applyBackdrop(args: Args): unknown {
  * Render one program to GLB bytes plus, optionally, the contact sheet.
  * Shared by both commands so `generate` and `render` cannot diverge in output.
  */
-async function emit(code: string, args: Args, context: KilnToolContext): Promise<void> {
+interface RenderCliReceipt extends Record<string, unknown> {
+  programRef?: string;
+  files: { kind: 'glb' | 'image'; path: string; bytes: number }[];
+}
+
+function jsonRenderFailure(error: unknown, receipt: RenderCliReceipt = { files: [] }): void {
+  console.log(
+    JSON.stringify({
+      ...receipt,
+      ok: false,
+      error: (error instanceof Error ? error.message : String(error)).slice(0, 2048),
+    }),
+  );
+}
+
+async function emit(
+  code: string,
+  args: Args,
+  context: KilnToolContext,
+  reviewed?: RenderResult,
+  receipt: RenderCliReceipt = { files: [] },
+): Promise<void> {
+  const log = (message: string) => {
+    if (!args.json) console.log(message);
+  };
   context.programStore ??= localProgramStore();
   const programRef = await retainProgram(context.programStore, code);
-  console.log(`  programRef ${programRef}`);
-  const result = await context.evaluatorPort!.render(code, {
-    optimize: 'off',
-    ...(args.category ? { category: args.category as never } : {}),
+  receipt.programRef = programRef;
+  log(`  programRef ${programRef}`);
+  const result =
+    reviewed ??
+    (await context.evaluatorPort!.render(code, {
+      optimize: 'off',
+      requirements: context.requirements,
+    }));
+  Object.assign(receipt, {
+    requirements: result.requirements,
+    ...(result.buildCache ? { buildCache: result.buildCache } : {}),
+    tris: result.tris,
+    bounds: result.integrationManifest.bounds,
+    artifactGlbSha256: result.artifactGlbSha256,
+    glbBytes: result.glb.length,
+    warnings: result.warnings,
+    qaReport: result.meta.qaReport,
   });
+  log(
+    `  requirements ${result.requirements.policyHash}${result.requirements.binding ? ` (${result.requirements.binding.taskId}/${result.requirements.binding.lineageId}, revision ${result.requirements.binding.revision})` : ' (neutral)'}`,
+  );
+  const qa = result.meta.qaReport;
+  if (qa && typeof qa === 'object' && 'acceptance' in qa) log(`  QA ${qa.acceptance}`);
   if (result.buildCache)
-    console.log(`  build ${result.buildCache.hit ? 'reused' : 'created'} ${result.buildCache.key}`);
+    log(`  build ${result.buildCache.hit ? 'reused' : 'created'} ${result.buildCache.key}`);
   // Only write a GLB when one was asked for, or when it is the sole output —
   // `--views sheet.png` alone should not litter the working directory.
   const out = args.out ?? (args.views ? undefined : 'out.glb');
   if (out) {
     await writeDestinationAtomic(resolvePath(out), result.glb);
-    console.log(`  ${out}  ${result.tris} tris  ${(result.glb.length / 1024).toFixed(1)} KB`);
+    receipt.files.push({ kind: 'glb', path: resolvePath(out), bytes: result.glb.length });
+    log(`  ${out}  ${result.tris} tris  ${(result.glb.length / 1024).toFixed(1)} KB`);
   } else {
-    console.log(`  ${result.tris} tris  ${(result.glb.length / 1024).toFixed(1)} KB`);
+    log(`  ${result.tris} tris  ${(result.glb.length / 1024).toFixed(1)} KB`);
   }
   const bounds = result.integrationManifest.bounds;
   if (bounds) {
     const size = bounds.size ?? bounds.max;
     if (Array.isArray(size)) {
-      console.log(`  bounds  ${size.map((n) => Number(n).toFixed(2)).join(' x ')} m`);
+      log(`  bounds  ${size.map((n) => Number(n).toFixed(2)).join(' x ')} m`);
     }
   }
-  for (const w of result.warnings) console.log(`  warning: ${w}`);
+  for (const w of result.warnings) log(`  warning: ${w}`);
 
   if (args.views) {
     // The SAME def the MCP surface serves, so the CLI cannot render views through
@@ -240,33 +305,48 @@ async function emit(code: string, args: Args, context: KilnToolContext): Promise
     const media = def.media?.(output);
     if (!media) throw new Error('kiln_render returned no image');
     await writeDestinationAtomic(resolvePath(args.views), media.png);
+    Object.assign(receipt, media.json);
+    receipt.files.push({ kind: 'image', path: resolvePath(args.views), bytes: media.png.length });
     // Report what actually drew the pixels, not what was configured. The engine
     // routes to the port only when the scene needs PBR shading, so a GPU that was
     // available and correctly skipped must not be reported as if it had drawn.
-    console.log(`  ${args.views}  (${describeDrawnBy(output, context)})`);
+    log(`  ${args.views}  (${describeDrawnBy(output, context)})`);
   }
+  if (args.json) console.log(JSON.stringify({ ...receipt, ok: true }));
 }
 
 async function cmdRender(args: Args): Promise<number> {
   const file = args.positional[0] ?? undefined;
   if (!file) {
-    console.error('render requires a program path\n');
-    console.error(USAGE);
+    if (args.json) jsonRenderFailure('render requires a program path or reference');
+    else {
+      console.error('render requires a program path\n');
+      console.error(USAGE);
+    }
     return 2;
   }
-  const code =
-    file.startsWith('sha256:') || programRefPattern.test(file)
-      ? await localProgramStore().get(file)
-      : await readFile(resolvePath(file), 'utf8');
-  const context = await createPackagedLocalToolContext(
-    await buildRenderPort(args.render, args.renderPort),
-  );
-  console.log(`rendering ${file}`);
-  await emit(code, args, context);
-  return 0;
+  const receipt: RenderCliReceipt = { files: [] };
+  try {
+    const code =
+      file.startsWith('sha256:') || programRefPattern.test(file)
+        ? await localProgramStore().get(file)
+        : await readFile(resolvePath(file), 'utf8');
+    const context = await createPackagedLocalToolContext({
+      ...(await buildRenderPort(args.render, args.renderPort)),
+      requirements: args.requirements,
+    });
+    if (!args.json) console.log(`rendering ${file}`);
+    await emit(code, args, context, undefined, receipt);
+    return 0;
+  } catch (error) {
+    if (!args.json) throw error;
+    jsonRenderFailure(error, receipt);
+    return 1;
+  }
 }
 
 async function cmdGenerate(args: Args): Promise<number> {
+  assertNodeRuntime('agent');
   const prompt = args.positional.join(' ').trim();
   if (!prompt) {
     console.error('generate requires a prompt\n');
@@ -296,11 +376,12 @@ async function cmdGenerate(args: Args): Promise<number> {
   }
   const [{ runKilnAgent }, { makeKilnModel, resolveKilnAgentModel }] = generation;
 
-  const context = await createPackagedLocalToolContext(
-    await buildRenderPort(args.render, args.renderPort),
-  );
+  const context = await createPackagedLocalToolContext({
+    ...(await buildRenderPort(args.render, args.renderPort)),
+    requirements: args.requirements,
+  });
   const descriptor = resolveKilnAgentModel(args.model);
-  const model = makeKilnModel(descriptor);
+  const model = await makeKilnModel(descriptor);
 
   console.log(`generating "${prompt}"`);
   console.log(`  model ${args.model}  max-steps ${args.maxSteps}  render ${args.render}`);
@@ -308,26 +389,36 @@ async function cmdGenerate(args: Args): Promise<number> {
   const run = await runKilnAgent({
     model,
     prompt,
-    maxSteps: args.maxSteps,
-    ...(args.category ? { category: args.category as never } : {}),
     ...context,
-  } as never);
+    generationCallBudget: createGenerationCallBudget(args.maxSteps),
+  });
 
-  if (!run.code) {
-    console.error('the agent finished without submitting a program');
+  if (!run.code || !run.artifact) {
+    console.error(run.error ?? 'the agent stopped without a reviewed artifact');
     if (run.lastText) console.error(`  last message: ${run.lastText.slice(0, 400)}`);
     return 1;
   }
   console.log(`  ${run.steps} steps, ${run.toolCalls.length} tool calls`);
   // `generate` always writes the GLB: producing an asset is the point of the
   // command, unlike `render`, where `--views` alone is a legitimate request.
-  const outPath = args.out ?? 'out.glb';
-  await emit(run.code, { ...args, out: outPath }, context);
+  const requestedPath = args.out ?? 'out.glb';
+  const partial = run.completion !== 'finished';
+  const outPath = partial ? requestedPath.replace(/(?:\.glb)?$/i, '.partial.glb') : requestedPath;
+  if (partial) console.error(`partial result: ${run.error ?? 'kiln_finish was not called'}`);
+  const views =
+    partial && args.views
+      ? args.views.slice(0, args.views.length - extname(args.views).length) +
+        '.partial' +
+        (extname(args.views) || '.png')
+      : args.views;
+  await emit(run.code, { ...args, out: outPath, views }, context, run.artifact.rendered);
 
-  const source = outPath.replace(/\.glb$/i, '.kiln.js');
+  const source = /\.glb$/i.test(outPath)
+    ? outPath.replace(/\.glb$/i, '.kiln.js')
+    : `${outPath}.kiln.js`;
   await writeDestinationAtomic(resolvePath(source), run.code);
   console.log(`  ${source}  (the program — edit and re-render it)`);
-  return 0;
+  return partial ? 2 : 0;
 }
 
 async function cmdSource(args: Args): Promise<number> {
@@ -374,21 +465,24 @@ export async function withProcessAlive<T>(run: () => Promise<T>): Promise<T> {
   }
 }
 
-/**
- * A one-shot command that had to start the GPU render service must also stop it
- * when the command settles. The host module kills a service it started from an
- * `exit` hook, which suits the long-lived MCP server; here it was a deadlock by
- * construction, because the child's piped stderr kept the loop alive, so the
- * process never reached `exit`, so the hook never ran, and `--render gpu` hung
- * after finishing its work with a GPU process orphaned behind it. A service the
- * command merely found is left alone: `stopLocalRenderService` only kills what
- * this process spawned.
- */
+/** Managed renderer processes have their own idle lifetime and detached handles. */
 export function main(argv: readonly string[]): Promise<number> {
-  return withProcessAlive(() => runMain(argv)).finally(stopLocalRenderService);
+  return withProcessAlive(() => runMain(argv));
 }
 
 async function runMain(argv: readonly string[]): Promise<number> {
+  try {
+    assertNodeRuntime();
+  } catch (error) {
+    console.error(error instanceof Error ? error.message : String(error));
+    return 1;
+  }
+  if (argv[0] === 'edit') return (await import('./edit-cli')).editMain(argv.slice(1));
+  if (argv[0] === 'migrate') return (await import('./migration-cli')).migrationMain(argv.slice(1));
+  if (argv[0] === 'animation')
+    return (await import('./animation-cli')).animationMain(argv.slice(1));
+  if (argv[0] === 'inspect') return (await import('./inspect-cli')).inspectMain(argv.slice(1));
+  if (argv[0] === 'discover') return (await import('./discovery-cli')).discoveryMain(argv.slice(1));
   if (argv[0] === 'service') return (await import('./service-cli')).serviceMain(argv.slice(1));
   if (
     ['save', 'collections', 'assets', 'asset', 'export', 'import', 'view'].includes(argv[0] ?? '')
@@ -404,14 +498,32 @@ async function runMain(argv: readonly string[]): Promise<number> {
   try {
     args = parseArgs(argv);
   } catch (err) {
-    console.error(err instanceof Error ? err.message : String(err));
+    if (argv[0] === 'render' && argv.includes('--json')) jsonRenderFailure(err);
+    else console.error(err instanceof Error ? err.message : String(err));
     return 2;
   }
   if (args.help || !args.command) {
-    console.log(USAGE + ASSET_USAGE + SERVICE_USAGE);
+    console.log(
+      USAGE +
+        DISCOVERY_USAGE +
+        EDIT_USAGE +
+        ANIMATION_USAGE +
+        INSPECT_USAGE +
+        ASSET_USAGE +
+        SERVICE_USAGE,
+    );
     return args.help ? 0 : 2;
   }
   try {
+    if (args.json && args.command !== 'render')
+      throw new Error(
+        "--json is supported by render here; use each other command's documented output options.",
+      );
+    if (args.requirementsFile !== undefined) {
+      if (args.command !== 'render' && args.command !== 'generate')
+        throw new Error('--requirements is supported by render and generate only.');
+      args.requirements = await readHostRequirementsFile(args.requirementsFile);
+    }
     if (args.capture !== undefined) args.captureRecipe = await readCaptureRecipe(args);
     args.captureRecipe = applyBackdrop(args);
     switch (args.command) {
@@ -427,6 +539,10 @@ async function runMain(argv: readonly string[]): Promise<number> {
         return 2;
     }
   } catch (err) {
+    if (args.json && args.command === 'render') {
+      jsonRenderFailure(err);
+      return 1;
+    }
     // Expected operator errors — an unreachable GPU, an unreadable program — are
     // messages, not stack traces. KILN_DEBUG=1 restores the trace for real bugs.
     if (process.env['KILN_DEBUG'] && err instanceof Error && err.stack) {

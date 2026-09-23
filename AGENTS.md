@@ -11,6 +11,11 @@ Read [README.md](./README.md) before changing exports or package contents. Runti
 `scripts/`. The package intentionally ships TypeScript source through the explicit `files` and
 `exports` lists in `package.json`.
 
+The active V1 initiative's current goal, exact validation state and resume action
+are in [the progress checkpoint](docs/plans/2026-09-22-progress-checkpoint.md).
+Use it with the linked task ledger; dated audit/run reports retain historical
+facts and must not override the current checkpoint or imply release acceptance.
+
 ## Authoring an asset is a different task from changing the engine
 
 This guide covers changing the engine. Authoring an asset does not happen here: it happens in a
@@ -23,6 +28,12 @@ workspace first. It is registered for a bare clone at `.claude/skills/` and `.ag
 the maintained copy is `skills/kiln-setup-workspace/`. Everything else in this file assumes you are
 working on the engine itself.
 
+## Historical gallery assets
+
+Gallery assets are unvetted historical showcases, not golden outputs. Regression
+comparisons do not establish their quality. Repairing or replacing them is outside
+the V1 goal; qualify the upgrade through fresh dogfooding and shared defect fixes.
+
 ## The tool registry is the single source of truth
 
 `src/tools/registry.ts` owns tool names, descriptions, and schemas. Two skins consume it: the
@@ -30,30 +41,40 @@ in-process Strands tools (`src/agent/tools.ts`) and the stdio MCP server. **Both
 registry** -- never hand-write a tool definition in a skin, or the transports drift apart and the
 repo's central claim stops being true. There is a test that asserts name parity; keep it passing.
 
-One file, but **two surfaces, deliberately different sizes.** `kilnToolRegistry` is the
-in-process agent loop's four tools; `createKilnProgramToolRegistry` is the host-agent MCP
-surface of thirteen, which is what `docs/tools.md` documents and what a published release
-advertises. "Both iterate the registry" means the definitions live in one file, not that the
-two lists match.
+`createKilnProgramToolRegistry` supplies the fourteen MCP tools.
+`createKilnNativeToolRegistry` uses those same definitions and adds `kiln_finish`.
+The native default is ten tools: nine authoring/reference tools and completion.
+Injecting an `assetLibrary` enables the five delivery tools as well, for fifteen.
+A configured skill-resource reader adds `kiln_skill_resource` to either native set.
+Unavailable host services must not become advertised tools that always fail.
 
-The one name that differs is **`kiln_screenshot`, and it is merged rather than missing.** On
-the in-process surface `kiln_render` returns metrics only and `kiln_screenshot` carries the
-image grid -- two tools, so a cheap structural check need not pay for an image. On MCP
-`kiln_render` is unified: it holds `media: screenshotMedia` and returns metrics, part paths
-and images together, with six views when `capture` is omitted. A separate `kiln_screenshot`
-there would be a second way to ask for the same grid. `src/mcp-parity.test.ts` asserts the
-MCP surface does not carry it, so the merge stays deliberate; no capability is absent from
-the MCP workflow. The two names share one implementation, `runRenderViews`: `kiln_screenshot`
-takes the same `capture` (grid shape, framing, backdrop), routes through the render port and
-reports `viewFidelity` exactly as `kiln_render` does. It used to be a frozen CPU-only copy
-kept as the control arm of a bench that no longer exists; do not freeze it again without a
-consumer that needs the freeze.
+Both skins use unified `kiln_render`: metrics, part paths, QA, images and fidelity
+share one evaluation. `kiln_screenshot`, the mutable-buffer factories and surface
+selector are retired. `kiln_validate` provides the image-free syntax check.
 
-Prefer an explicit terminal submit tool over `structuredOutputSchema` in the in-process loop: the
-latter's coexistence with a full tool set is provider-dependent, while a submit tool is unambiguous
-everywhere. The MCP surface has no submit tool, because there the host agent writes the file itself.
+Native completion uses `kiln_finish({programRef})`, defined in the registry rather
+than the Strands skin. It selects an exact retained reviewed artifact without
+re-evaluation. Completion and QA acceptance remain separate. A completion call
+must run alone; immutable edits and reads may run concurrently. The MCP surface
+has no terminal action because its host owns the outer loop and delivery.
+Do not restore the old submit/finalize factories or silently route old selectors.
+
+Strands harness guidance is registered programmatically by
+`src/agent/native-workflow.ts`, outside the shared `skills/` tree. Keep its native
+completion/recovery protocol out of CLI/MCP setup, generated workspace instructions,
+Discovery and shared skills. Geometry, materials and inspection contracts stay
+shared through explicitly selected technical references; do not load workspace
+workflow instructions in Strands or duplicate the contracts. See
+[the native workflow boundary](docs/runtime.md#optional-native-strands-workflow).
 
 ## Host-injected render and cache boundaries
+
+Kiln Discovery is `kiln_discover` / `kiln discover`. The internal helper specs and typed
+catalog live under `src/discovery/`; `./discovery` is the public package entrypoint.
+The old discovery tool, selectors and `./list-primitives` export are removed. Search is
+ranked local text retrieval with reviewed metadata, without models, network access,
+provider keys or a GPU. Any future optional semantic enhancement requires an explicit
+adoption decision and cannot weaken the independently supported offline baseline.
 
 The engine defines the host-injected `PbrRenderPort`. Exported `captureViewsViaPort` is the **single
 owner** of the deadline, renderer/PNG validation, grid composition, and never-throw CPU fallback. Do
@@ -73,32 +94,34 @@ are indistinguishable after construction. Host telemetry rides `onViewsRendered`
 be treated as material evidence. Keep the input schema stable unless the active change explicitly
 versions it -- the tool definition is cached, and changing it invalidates that cache.
 
-Both producers paint one backdrop from one table. `src/views/background.ts` owns the three named
-backdrops and `render-service/src/backdrops.mjs` mirrors them; `backdrop.test.ts` fails if they
-drift. The default is the neutral studio grey, chosen by measuring silhouette-edge contrast over
-the whole example set. The GPU service clears to the linear colour that its tone mapping turns
-into exactly that value (`render-service/src/display-transform.mjs`), so a CPU fallback sheet and
-a GPU sheet share the backdrop pixel for pixel. A capture may name `neutral`, `dark` or `light`; it may never pass a
-free colour, because comparability across runs (arena, capture cache, reference comparison) assumes
-two sheets of one GLB differ only because the asset does, and a backdrop close to the asset colour
-hides the seams the model is meant to find. The chosen id is part of both capture-cache keys and is
-echoed as `capture.backdrop` in every render result. `kiln_save` paints its preview on the backdrop
-it is given and the manifest records it as `preview.backdrop`; a reader never guesses it.
+`src/views/background.ts` owns the named backdrops; `render-service/src/backdrops.mjs`
+mirrors them, guarded by `backdrop.test.ts`. Neutral studio grey is the default.
+`render-service/src/display-transform.mjs` makes GPU and CPU backdrop pixels match.
+Captures accept only `neutral`, `dark` or `light`, never free colours: comparable
+views must not hide seams through arbitrary backdrop choices. Both capture-cache
+keys include the id; results echo `capture.backdrop`. `kiln_save` uses the supplied
+backdrop and records `preview.backdrop` in the manifest.
 
-**One render service per machine, and the socket is its registry.** Every session finds the
-service on one shared port (8000, or `KILN_RENDER_SERVICE_PORT`); the first to need it starts
-it and the rest join. There is no lease file: `/health` reports `instance` -- pid, the owning
-session's pid, and a fingerprint of the service source -- and `src/render-service-host.ts`
-acts on that in exactly one way per case. A current service is joined whoever started it. A
-stale service (source fingerprint differs from `render-service/src` on disk) that is orphaned
-(its owner has exited) is replaced. A stale service still owned by a running session, or
-started by hand, is left alone and named, with `kiln service stop` as the way out. Something
-that is not a render service on the port is reported, never joined. An on-demand service
-watches its owner's pid and exits when it is gone, which is what makes a hard-killed host
-safe on Windows; a hand-started service has no owner and outlives sessions. The service and
-host fingerprint the source with two mirrored walks (`render-service/src/instance.mjs`,
-`renderServiceSourceFingerprint`), and `render-service-lifecycle.test.ts` fails if they drift.
-Do not add a second discovery path or a file that can outlive the process it describes.
+**One render service per machine, and the socket is its registry.** Sessions share port
+8000 (or `KILN_RENDER_SERVICE_PORT`). Join only a validated compatible protocol, instance,
+build, dependency and capture identity. A timed-out listener is unknown, not a verified busy
+renderer. Stale, incompatible and foreign listeners are reported without replacement;
+`kiln service stop` is the explicit action. The old orphan-based `service prune` is removed.
+
+Managed services have a bounded idle lifetime (five minutes by default), protected by all
+admitted upload, queued and active work. The initiating PID is provenance only. Host exit
+must not kill a shared service or another client's work. Manual services remain long-lived.
+The service and host share `render-service/src/build-identity.mjs` and its source fingerprint
+implementation; exact resolved dependency pins count. Do not add lease files or another
+discovery path. CLI status/reprobe checks its own process. In-session `kiln_renderer`
+reprobe refreshes availability for the existing route; restart after runtime,
+environment or credential changes. Reprobe does not install dependencies.
+
+Render requests are self-contained GLBs. Admission, upload time, decoded PNG allocations,
+geometry and scene depth are bounded before loading. Cancellation removes queued work;
+already submitted native GPU work may finish before its result is discarded. Propagate the
+optional second-argument execution signal through every `PbrRenderPort` wrapper, including
+capture caches, while keeping deadline and CPU degradation ownership in `captureViewsViaPort`.
 
 **The GPU is a view producer only, never gate evidence.** `QaContext` is deliberately image-free so a
 QA rule structurally cannot read a render buffer. Do not add pixels to it.
@@ -115,7 +138,9 @@ Preserve that distinction and the provider usage fields when changing model rout
 
 ## Toolchain and validation
 
-Supported toolchain: Bun `1.4.2`; Node `22.23.2`; npm `12.0.2`. Do not use a Bun canary or implicit
+Maintainer toolchain: Bun `1.4.2`; Node `22.23.2`; npm `12.0.2`, pinned in `toolchain.json`.
+Consumer Node compatibility is defined separately in `src/runtime-support.mjs` and `engines.node`;
+do not add Bun or npm maintainer pins to end-user `engines`. Do not use a Bun canary or implicit
 latest for a release gate.
 
 ```bash
@@ -129,18 +154,21 @@ bun run test:render-service
 bun run test:coverage
 ```
 
+`bun run build` is a typecheck only. After runtime source changes, rebuild the Node bundles with
+`node scripts/build-runtime.mjs all` before CLI/MCP dogfood and full gates; use `bun run build:runtime`
+when viewer assets also changed. A successful typecheck does not refresh `dist/` or its build identity.
+
 Fast change loop: run the nearest test file first, then `bun run typecheck && bun run lint && bun run
 test`. Full offline gate: also run `bun run test:coverage`; it emits text plus `coverage/lcov.info`
 and enforces the checked-in line/function ratchet in `bunfig.toml`. Raise thresholds when practical;
 do not lower them without an explicit measured rationale. Live model tests are opt-in only via
 `bun run test:live` and may spend money.
 
-`bun run test` is `bun test src scripts`, so it does **not** reach `render-service/`, which is a
-separate npm project. `bun run test:render-service` does; it needs `npm --prefix render-service ci
---ignore-scripts` once. All 54 of those tests are pure -- framing arithmetic, PNG readback packing,
-cache identity, contract and preset validation -- so none of them needs a GPU or the native Dawn
-build, which is why `--ignore-scripts` is enough. Run it whenever you change `render-service/`; CI
-requires it.
+`bun run test` is `bun test src scripts`, so it does **not** reach `render-service/`.
+`bun run test:render-service` runs that suite. Its framing, PNG, identity, input and HTTP
+lifecycle fixtures need no GPU or loaded Dawn library; native work is simulated where required.
+Runtime dependencies can resolve from the root installation. Run it whenever you change
+`render-service/`; CI requires it. Real GPU and installed-package checks remain separate gates.
 
 The test scripts set `--timeout 20000`. Bun's 5 s default is below what a cold process spawn or a
 first native-library call costs on a loaded CI runner: tests that take under a second locally have

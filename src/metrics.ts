@@ -24,12 +24,16 @@ import type { Document } from '@gltf-transform/core';
  * Document — i.e. the GLB the runtime actually loads.
  */
 export interface InstanceabilityMetrics {
-  /** Distinct primitive geometries uploaded to the GPU (shared meshes count once). */
+  /** Distinct glTF primitive identities referenced by scenes. Not GPU buffer-allocation count. */
   uniqueGeometries: number;
   /** Distinct materials after dedup(). The "expensive axis" to collapse. */
   uniqueMaterials: number;
+  /** Mesh-bearing node placements across all document scenes. */
+  meshNodes: number;
+  /** Placed mesh copies, including EXT_mesh_gpu_instancing multiplicity. */
+  meshInstances: number;
   /**
-   * Naive three.js draw-call count for a single placement: for every node that
+   * Estimated single-pass draws across all scenes: for every node that
    * references a mesh, the count of that mesh's primitives. Shared meshes
    * referenced by N nodes contribute N times (each node is its own draw).
    */
@@ -40,7 +44,7 @@ export interface InstanceabilityMetrics {
   skinned: boolean;
   /** Count of materials with a blended alpha mode (force per-object sort). */
   transparentMaterials: number;
-  /** Triangle total (carried through from the render pass). */
+  /** Placed triangle count, including instance multiplicity; excludes point/line primitives. */
   triangles: number;
 }
 
@@ -70,12 +74,20 @@ export function collectGlbMetrics(doc: Document, triangles?: number): Instanceab
   const matSet = new Set<object>();
   let drawCalls = 0;
   let derivedTris = 0;
+  let meshNodes = 0;
+  let meshInstances = 0;
 
   const primTris = (prim: import('@gltf-transform/core').Primitive): number => {
-    const idx = prim.getIndices();
-    if (idx) return Math.floor(idx.getCount() / 3);
-    const pos = prim.getAttribute('POSITION');
-    return pos ? Math.floor(pos.getCount() / 3) : 0;
+    const count = prim.getIndices()?.getCount() ?? prim.getAttribute('POSITION')?.getCount() ?? 0;
+    switch (prim.getMode()) {
+      case 4:
+        return Math.floor(count / 3); // TRIANGLES
+      case 5: // TRIANGLE_STRIP
+      case 6:
+        return Math.max(0, count - 2); // TRIANGLE_FAN
+      default:
+        return 0; // points and lines are not triangles
+    }
   };
 
   // Walk every node in every scene; a node referencing a mesh issues one draw
@@ -101,6 +113,8 @@ export function collectGlbMetrics(doc: Document, triangles?: number): Instanceab
     const mesh = node.getMesh();
     if (mesh) {
       const copies = instanceCopies(node);
+      meshNodes += 1;
+      meshInstances += copies;
       for (const prim of mesh.listPrimitives()) {
         drawCalls += 1;
         geomSet.add(prim);
@@ -122,6 +136,8 @@ export function collectGlbMetrics(doc: Document, triangles?: number): Instanceab
   return {
     uniqueGeometries: geomSet.size,
     uniqueMaterials: matSet.size,
+    meshNodes,
+    meshInstances,
     drawCalls,
     textureCount: root.listTextures().length,
     skinned: root.listSkins().length > 0,

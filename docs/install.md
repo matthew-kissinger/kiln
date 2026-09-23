@@ -1,5 +1,33 @@
 # Install Kiln for your coding agent
 
+Version **0.8.0** is being distributed as a source update first. No 0.8.0 package
+has been published. GitHub Releases still supplies the earlier packaged version;
+it does not acquire Discovery or the migration changes by using newer docs.
+The [qualification report](reviews/2026-09-23-v08-candidate.md) distinguishes current
+local checks, CI and remaining GPU/provider limits.
+
+## Use the 0.8 source release
+
+The `v0.8.0` tag identifies the verified main commit. This route builds from source
+and needs Bun 1.4.2; the installed CLI/MCP runtime itself needs only supported Node.
+
+```sh
+git clone --branch v0.8.0 --single-branch https://github.com/matthew-kissinger/kiln.git
+cd kiln
+bun install --frozen-lockfile
+bun run build:runtime
+node scripts/create-workspace.mjs ../my-assets --harness opencode
+cd ../my-assets
+# Follow START.md for your harness
+```
+
+Choose your harness from the setup guide. Existing users should read
+[migration notes](migration.md), then run the newer installation's `kiln-init --check`
+and `--upgrade` as described below to refresh managed workspace skills and launchers.
+Do not point an old package at new documentation and assume its tools have changed.
+
+## Use an earlier published package
+
 Use a built Kiln package with Node.js and your existing coding agent. You do not
 need Bun, a source checkout, or a separate model API key to use the CLI/MCP tools.
 Bun is needed only when building Kiln itself.
@@ -7,8 +35,9 @@ Bun is needed only when building Kiln itself.
 Download the `.tgz` package from [GitHub Releases](https://github.com/matthew-kissinger/kiln/releases),
 or build one using the contributor steps below. npm registry publication is separate;
 do not run an unpublished registry command.
-Windows, Linux, and hosted Apple Silicon/Intel Mac package checks pass; see the
-[platform receipts](evaluation/platform-matrix.md). Community reports on local
+Earlier released-package checks cover Windows, Linux, and hosted Apple
+Silicon/Intel Mac; see the [dated platform receipts](evaluation/platform-matrix.md).
+Those results do not qualify this unification checkout. Community reports on local
 Mac installations are still welcome. CPU package setup and optional GPU support
 are separate checks.
 
@@ -34,8 +63,9 @@ Install the [latest release](https://github.com/matthew-kissinger/kiln/releases/
 It carries the full tool set, including `kiln_save`, `kiln_assets`, `kiln_export`,
 `kiln_present` and `kiln_import` -- the five that the earlier `oss-2026-09-05` package
 predated, which is why that one needed a checkout instead. The
-[generated tool reference](tools.md) is the list the release actually advertises; a test
-fails if the two drift apart, so it does not need repeating here.
+[generated tool reference](tools.md) describes this checkout. When installing an
+older release, use the documentation and receipt attached to that release;
+0.8 Discovery and migration changes are not retroactively available there.
 
 Every release attaches a per-platform package receipt (Linux, Windows, macOS arm64,
 macOS x64) and `SHA256SUMS.txt`. Each receipt records the sha256 of the tarball beside
@@ -48,9 +78,13 @@ package is distributed through GitHub and is deliberately not published to npm.
 
 ## Start on a Mac with a local package
 
-Install Node.js from the [official download page](https://nodejs.org/en/download).
-The pinned package-test runtime is Node **22.23.2**. Use native ARM64 Node on Apple
-Silicon, or x64 Node on an Intel Mac. Check what this terminal is running:
+The compiled CLI and MCP runtime contract is Node **20.15.0+ on the 20.x line**, or
+**22.2.0 and later**. Bun and a particular npm version are not end-user requirements.
+For a new installation, use a maintained Node 22 or 24 LTS release from the
+[official download page](https://nodejs.org/en/download). Node 20 compatibility
+allows distribution-managed installations; Node 20 itself is
+[upstream EOL](https://nodejs.org/en/about/previous-releases).
+Use native ARM64 Node on Apple Silicon, or x64 Node on an Intel Mac. Check what this terminal is running:
 
 ```sh
 node --version
@@ -61,6 +95,28 @@ node -p "process.platform + ' ' + process.arch"
 The last line should say `darwin arm64` or `darwin x64`. The npm supplied with Node
 can install the package; contributor CI pins npm 12.0.2 for reproducible receipts.
 You do not need to change global npm or install Homebrew for this workflow.
+
+The optional built-in Strands agent requires Node **22.2.0+** and its optional SDK
+and provider dependencies. Using Kiln from Cline or another MCP/CLI agent does not
+require Strands or its model-provider packages. TypeScript library exports require
+a TypeScript-capable loader or build system; the installed commands are compiled.
+Maintainer release checks still use the exact versions in the source repository's
+`toolchain.json`. Current Node 20/22-minimum/24 evidence is from
+fresh Windows package installations (Node 20.15.0 and 22.23.2); Linux floor and
+macOS package jobs qualify the current release through CI. Physical GPU coverage
+and distribution-specific Debian/Cline setup remain separate checks.
+
+Cline CLI 3.0.64 and VS Code 4.1.20 Next/SDK have a known MCP-to-model limitation:
+image responses become text, with larger results also truncated. The tested
+Legacy extension preserves images. Until the affected path is fixed and verified,
+use Kiln CLI exports and Cline's native image-file reader for visual review; see
+the [setup instructions](harnesses.md#cline-cli-and-next-image-review) and
+[upstream issue #14421](https://github.com/cline/cline/issues/14421).
+Kiln's standard MCP output is unchanged.
+
+This separation follows feedback from a Cline user recommending Kiln for programming
+and game-development classes, who reported needing to install Node 22 on Debian.
+The reporter's name and exact Debian/Node versions were not supplied.
 
 Choose a permanent installation directory and use the real tarball filename:
 
@@ -76,6 +132,10 @@ node kiln.mjs --help
 
 Choose your harness from the table below, then follow `START.md` in the new
 workspace. The setup creates project-local configuration and copies the skills.
+These authoring skills support external CLI/MCP harnesses. Strands-specific
+workflow guidance stays inside the optional built-in agent and is not installed
+into CLI/MCP workspaces. Do not copy its native finish protocol into your harness;
+see [the workflow boundary](runtime.md#optional-native-strands-workflow).
 Your source and revisions live in `my-assets`; the installed engine stays in
 `kiln-install`. No global skills or agent configuration are changed. Keep the
 installation in place while using its workspaces.
@@ -176,9 +236,13 @@ absolute task-file paths. See [clean-room setup](clean-room.md) for evaluation c
 ## Verify the connection
 
 OpenCode workspaces register their local `skills/` directory using the supported
-`skills.paths` configuration. Run `opencode debug skill` from the workspace to
-inspect native discovery without a model request. Author, refine and QA entries
-should point into that workspace. See the [OpenCode configuration schema](https://opencode.ai/config.json).
+`skills.paths` configuration. With OpenCode 2, run `opencode debug config` from
+the workspace to inspect configuration and `opencode mcp list` to check the server
+connection. These are optional OpenCode diagnostics, not Kiln requirements. Start
+a fresh session in that directory and verify that it reads the workspace's author,
+refine and QA skills and calls `kiln_workspace`; configuration alone does not prove
+that the running session loaded them. The older `opencode debug skill` command is
+not available in OpenCode 2. See the [OpenCode configuration schema](https://opencode.ai/config.json).
 
 ### Fetching the skills by URL instead
 
@@ -232,9 +296,32 @@ updates generated launchers/configuration. It preserves source revisions, asset
 files, instructions and skill copies. It refuses to replace configuration you edited;
 update those paths manually while preserving your changes. Restart the harness.
 
-Repair does not upgrade the copied skills. For an evaluation of a new Kiln version,
-create a fresh workspace from that candidate so instructions and tools match. Keep
-exported `.kiln.js` files as portable checkpoints even when retaining the source store.
+Repair does not upgrade copied skills. To update an existing workspace, stop its
+harness/MCP session and run from the desired installation:
+
+```sh
+node /current/kiln/scripts/create-workspace.mjs /absolute/my-assets --check
+node /current/kiln/scripts/create-workspace.mjs /absolute/my-assets --upgrade
+```
+
+`--check` is read-only JSON; it exits 1 when an update is required. It compares
+runtime identity and bundle bytes, generated configuration, instructions and all
+three skill locations. `--upgrade` refreshes unchanged managed files and removes
+unchanged retired skill resources. Assets, source stores and other user files are
+left in place. Existing customizations remain when the corresponding upstream
+file has not changed. If both changed, or an older manifest cannot establish who
+owns an instruction file, the whole upgrade stops and lists the conflicts before
+writing anything. Preserve those files separately, compare with a fresh temporary
+workspace from the desired installation, and resolve them before retrying. Reapply
+compatible customizations afterward; no automatic content merge is attempted.
+
+Restart the harness/MCP session after upgrading. Newly generated CLI launchers
+and MCP configurations reject stale managed workspaces before starting tools.
+Older launchers need an explicit `--check`/`--upgrade` first. Hand-wired MCP setups
+are outside this managed-workspace check. Customizations are reported by `--check`;
+their compatibility remains the owner's responsibility. Keep exported `.kiln.js`
+files as portable checkpoints even when retaining the source store. Use fresh
+workspaces for independent model evaluations.
 
 ## Manual MCP configuration
 
@@ -259,6 +346,12 @@ an explicit store shared with your CLI:
 The table above names each client's native configuration location; their JSON/TOML
 shapes differ. Prefer generated configuration. Without an explicit store, the server
 uses `.kiln/programs` beneath its process working directory.
+
+For an explicitly bound asset brief, append `"--requirements"` and the absolute
+path to a host-binding JSON file to `args`. This optional policy is fixed for the
+server session; changing the file requires a new session. The default remains
+neutral authoring. See [host requirements](migration.md#migrate-evaluator-integrations-together)
+for the binding format and task/asset lineage boundary.
 
 The Claude plugin manifest also launches the Node bundle. A plugin clone alone does
 not establish that its runtime dependencies were installed: verify tool discovery
@@ -291,6 +384,15 @@ retained receipts include the tarball hash, native architecture and completed
 checks. These versioned runner labels follow [GitHub's runner catalog](https://docs.github.com/en/actions/reference/runners/github-hosted-runners);
 GitHub maintains the underlying images, so the labels are not immutable OS images.
 Both architectures passed all 16 package checks in [CI run 33996715717](https://github.com/matthew-kissinger/kiln/actions/runs/33996715717). The retained receipts are linked in the platform matrix.
+
+The v0.8 candidate adds Linux package jobs at Node 20.15.0, 22.2.0 and
+24.20.0 using each distribution's npm. The release build retains its pinned
+maintainer toolchain. A separate Ubuntu 24.04 job selects Mesa software Vulkan
+and exercises textured renderer readback from the installed tarball, recording
+the adapter class and PNGs. This probe explicitly permits a software adapter;
+normal Kiln GPU rendering continues to require hardware. These new jobs are
+prepared but have not run for this unpushed candidate. They cannot qualify
+physical AMD, Intel or Apple GPU behavior.
 
 ## Embed the tools
 

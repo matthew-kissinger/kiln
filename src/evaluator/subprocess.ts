@@ -3,12 +3,14 @@ import { spawn, type SpawnOptions } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
 import type { RenderGlbOptions, RenderResult } from '../render';
 import { AssetQaBlockedError } from '../qa/run';
+import { assertNoLegacyRuntimePolicy, resolveRequirementsContext } from '../requirements-context';
 import {
-  decodeEvaluatorResultV1,
+  decodeEvaluatorResultV2,
+  assertEvaluatorResultRequirements,
   evaluatorOutcomeMessage,
   EVALUATOR_REQUEST_VERSION,
   type EvaluatorOutcomeCode,
-  type EvaluatorRequestV1,
+  type EvaluatorRequestV2,
   MAX_EVALUATOR_REQUEST_BYTES,
 } from './protocol';
 
@@ -85,6 +87,8 @@ export async function renderGLBViaProcessLaunch(
   if (controls.signal?.aborted) {
     throw new EvaluatorSubprocessError('CANCELLED', 'Evaluator request was cancelled.');
   }
+  assertNoLegacyRuntimePolicy(options);
+  const requirements = resolveRequirementsContext(options.requirements);
   if (options.textureResolver) {
     throw new EvaluatorSubprocessError(
       'INPUT_INVALID',
@@ -98,7 +102,7 @@ export async function renderGLBViaProcessLaunch(
     DEFAULT_MAX_RESPONSE_BYTES,
     96 * 1024 * 1024,
   );
-  const request: EvaluatorRequestV1 = {
+  const request: EvaluatorRequestV2 = {
     version: EVALUATOR_REQUEST_VERSION,
     requestId: 'render-1',
     operation: 'execute-export-glb',
@@ -228,7 +232,12 @@ export async function renderGLBViaProcessLaunch(
         return;
       }
       try {
-        const result = decodeEvaluatorResultV1(Buffer.concat(chunks).toString('utf8'), maxGlbBytes);
+        const result = decodeEvaluatorResultV2(
+          Buffer.concat(chunks).toString('utf8'),
+          maxGlbBytes,
+          request.requestId,
+        );
+        assertEvaluatorResultRequirements(result, requirements);
         if (!result.ok) {
           if (result.error.code === 'QA_BLOCKED' && result.error.qa) {
             finish(

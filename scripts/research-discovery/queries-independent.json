@@ -1,0 +1,240 @@
+[
+  {
+    "id": "independent-01",
+    "kind": "direct",
+    "query": "creaseNormals",
+    "relevant": ["creaseNormals"],
+    "rationale": "Exact current helper name should resolve without unrelated smoothing operations outranking it."
+  },
+  {
+    "id": "independent-02",
+    "kind": "direct",
+    "query": "createJointChain local bend axis end effector",
+    "relevant": ["createJointChain"],
+    "rationale": "The named chain helper owns the rest-frame, axis and end-effector descriptors requested."
+  },
+  {
+    "id": "independent-03",
+    "kind": "direct",
+    "query": "normalMapFromHeight strength",
+    "relevant": ["normalMapFromHeight"],
+    "rationale": "Exact helper lookup with an actual option; material factories do not derive the normal pixels."
+  },
+  {
+    "id": "independent-04",
+    "kind": "paraphrase",
+    "query": "Keep the lip sharp but shade the sides smoothly without losing texture corners",
+    "relevant": ["creaseNormals"],
+    "rationale": "Angle-limited normals preserve sharp transitions and UV corners without changing the shape through subdivision."
+  },
+  {
+    "id": "independent-05",
+    "kind": "paraphrase",
+    "query": "A stretched pill lying front to back, with hemispherical ends",
+    "relevant": ["capsuleXGeo"],
+    "rationale": "Kiln's forward axis is X, and this capsule has the requested rounded caps in that orientation."
+  },
+  {
+    "id": "independent-06",
+    "kind": "paraphrase",
+    "query": "A tyre and hub that turn together at the axle while the whole wheel can steer",
+    "relevant": ["createWheelAssembly"],
+    "rationale": "The assembly supplies concentric wheel parts, an axle spin pivot and an optional steering pivot. A geometry-only wheel set does not supply that behavior."
+  },
+  {
+    "id": "independent-07",
+    "kind": "paraphrase",
+    "query": "Lay corrugated strips down the direction rain runs on either side of a pitched roof",
+    "relevant": ["createRoofSurfaceLayout", "createGableRoof"],
+    "rationale": "The layout consumes a roof face's downhill frame; the gable-roof helper is the direct source of those frames."
+  },
+  {
+    "id": "independent-08",
+    "kind": "paraphrase",
+    "query": "Turn a bottle outline into a closed volume that I can subtract another solid from",
+    "relevant": ["revolveProfile"],
+    "rationale": "Solid revolution meets the closed-volume requirement. Surface-only lathe/revolve helpers do not guarantee a boolean-ready solid."
+  },
+  {
+    "id": "independent-09",
+    "kind": "paraphrase",
+    "query": "Carry an L-shaped cross section around a bent handrail route",
+    "relevant": ["sweepProfile"],
+    "rationale": "A noncircular profile swept along path stations is the supported operation. Circular tube helpers discard the specified section."
+  },
+  {
+    "id": "independent-10",
+    "kind": "paraphrase",
+    "query": "Bridge several matching polygon outlines at different positions into one capped transition",
+    "relevant": ["loftProfiles"],
+    "rationale": "Corresponding equal-count profiles with explicit frames are the loft contract. The wording deliberately supplies correspondence."
+  },
+  {
+    "id": "independent-11",
+    "kind": "paraphrase",
+    "query": "I have an equation mapping two parameters to xyz and want a sampled surface with texture coordinates",
+    "relevant": ["parametricSurface"],
+    "rationale": "The two-parameter sampler produces positions and UVs; an implicit scalar-field extractor is a different input contract."
+  },
+  {
+    "id": "independent-12",
+    "kind": "typo",
+    "query": "qadratic bezeir control ponts to sampled path",
+    "relevant": ["bezierCurve"],
+    "rationale": "Misspelled quadratic Bezier terminology should retrieve the control-point-to-path sampler."
+  },
+  {
+    "id": "independent-13",
+    "kind": "typo",
+    "query": "extrdue profle with interor cutout",
+    "relevant": ["extrudeProfile"],
+    "rationale": "The intended solid extrusion supports interior holes despite three common spelling errors."
+  },
+  {
+    "id": "independent-14",
+    "kind": "typo",
+    "query": "unlit materal ignores scene ligths",
+    "relevant": ["basicMaterial"],
+    "rationale": "The request is unlit shading, not an emissive PBR surface still affected by other lighting terms."
+  },
+  {
+    "id": "independent-15",
+    "kind": "typo",
+    "query": "booleen intersecion keep only overlapping volume",
+    "relevant": ["boolIntersect"],
+    "rationale": "The retained region is explicitly the intersection, not a union or subtraction."
+  },
+  {
+    "id": "independent-16",
+    "kind": "rare",
+    "query": "Count boundary and nonmanifold edges after matching duplicated seam positions",
+    "relevant": ["geometryDiagnostics"],
+    "rationale": "Topology diagnostics use position-based seam matching. This asks for counts, not an unsupported proof of a valid solid."
+  },
+  {
+    "id": "independent-17",
+    "kind": "rare",
+    "query": "Declare support and propulsion sockets for a boat with no wheels",
+    "relevant": ["createVehicleFrame"],
+    "rationale": "The semantic frame supports non-wheeled vehicles through declared support and propulsion sockets."
+  },
+  {
+    "id": "independent-18",
+    "kind": "rare",
+    "query": "Extract a level set from a positive-inside gyroid scalar field in a finite box",
+    "relevant": ["implicitSurface"],
+    "rationale": "Positive-inside signed sampling with explicit spatial bounds is the implicit-surface contract; a parametric UV sampler is different."
+  },
+  {
+    "id": "independent-19",
+    "kind": "rare",
+    "query": "Impostor atlas quad whose shader chooses the view-dependent tile",
+    "relevant": ["octaGridPlane"],
+    "rationale": "This quad pre-scales UVs to one atlas tile and expects the consuming shader to offset them. It does not itself implement view selection."
+  },
+  {
+    "id": "independent-20",
+    "kind": "compound",
+    "query": "Drill recesses into a painted body while retaining its existing UV and material attributes",
+    "relevant": ["boolDiff"],
+    "rationale": "Subtraction with attribute preservation is the direct operation. Re-atlasing is not an equivalent way to retain the existing UVs."
+  },
+  {
+    "id": "independent-21",
+    "kind": "compound",
+    "query": "Generate seamless brick pixels and derive a tiling tangent-space bump normal from their brightness",
+    "relevant": ["proceduralTexture", "normalMapFromHeight"],
+    "rationale": "The layer generator supplies deterministic tiling brick pixels; the height-to-normal helper supplies the separate normal map."
+  },
+  {
+    "id": "independent-22",
+    "kind": "compound",
+    "query": "Cheap crossed leaf cards with alpha cutouts visible from both sides",
+    "relevant": ["crossedQuadsGeo", "foliageMaterial"],
+    "rationale": "Crossed quads supply the explicit card arrangement and the foliage material supplies MASK alpha and double-sided shading."
+  },
+  {
+    "id": "independent-23",
+    "kind": "compound",
+    "query": "Package translation and degree-based joint rotation keyframes into a named animation",
+    "relevant": ["positionTrack", "rotationTrack", "createClip"],
+    "rationale": "The two track helpers express the channels and the clip helper packages them. A fixed spin or bob preset is not sufficient for authored keyframes."
+  },
+  {
+    "id": "independent-24",
+    "kind": "ambiguous",
+    "query": "ring",
+    "relevant": ["torusGeo", "circleProfile"],
+    "rationale": "A ring can reasonably mean a three-dimensional donut or a circular two-dimensional outline. No solid/open-profile constraint was provided."
+  },
+  {
+    "id": "independent-25",
+    "kind": "ambiguous",
+    "query": "spin around an axis",
+    "relevant": ["spinAnimation", "lathe", "revolveGeo", "revolveProfile"],
+    "rationale": "The short phrase could mean animate rotation or construct a surface/solid of revolution. Relevant alternatives should expose that distinction."
+  },
+  {
+    "id": "independent-26",
+    "kind": "near-miss",
+    "query": "Change one part's roughness without changing the other parts, but keep the image maps shared",
+    "relevant": ["copyMaterial"],
+    "rationale": "An owned material copy with shared texture references meets the request. Geometry copying and the retired identity alias do not."
+  },
+  {
+    "id": "independent-27",
+    "kind": "near-miss",
+    "query": "Pack arbitrary mesh islands for a non-repeating baked texture; chart rotation is fine",
+    "relevant": ["autoUnwrap"],
+    "rationale": "This specifically permits an atlas for a baked image. Directional primitive UV preservation and planar projection are not equivalent."
+  },
+  {
+    "id": "independent-28",
+    "kind": "unsupported",
+    "query": "Bevel only the selected edges of my existing arbitrary triangle mesh",
+    "relevant": [],
+    "rationale": "Current rounded-box and profile-bevel constructors do not bevel selected edges of arbitrary existing meshes; subdivision is smoothing, not this operation."
+  },
+  {
+    "id": "independent-29",
+    "kind": "unsupported",
+    "query": "Solve inverse kinematics so an articulated foot follows a moving ground target",
+    "relevant": [],
+    "rationale": "The catalog supplies joint graphs and keyframe construction, not an IK solver or target-following controller."
+  },
+  {
+    "id": "independent-30",
+    "kind": "unsupported",
+    "query": "Certify that an arbitrary mesh has absolutely no self intersections",
+    "relevant": [],
+    "rationale": "The current diagnostics explicitly do not certify self-intersection freedom; closed edges alone are insufficient."
+  },
+  {
+    "id": "independent-31",
+    "kind": "unsupported",
+    "query": "Load a texture straight from any HTTPS image URL inside build",
+    "relevant": [],
+    "rationale": "Sandbox texture loading accepts approved resource IDs, not arbitrary URLs. Returning that restricted loader as satisfying this request would hide a contract mismatch."
+  },
+  {
+    "id": "independent-32",
+    "kind": "unsupported",
+    "query": "Measure the actual GPU draw calls by counting unique material objects",
+    "relevant": [],
+    "rationale": "Unique material count is not a draw-call measurement. No listed helper provides the requested actual GPU measurement through that method."
+  },
+  {
+    "id": "independent-33",
+    "kind": "paraphrase",
+    "query": "Repeat tilted slats in a straight row, nine total including the one already placed",
+    "relevant": ["arrayLinear"],
+    "rationale": "Linear repetition preserves orientation and counts the unchanged source as the first of nine."
+  },
+  {
+    "id": "independent-34",
+    "kind": "rare",
+    "query": "A tight convex envelope enclosing several pieces for a faceted collision proxy",
+    "relevant": ["hull"],
+    "rationale": "The convex hull encloses all input geometry; a boolean union follows concavities and is not a convex envelope."
+  }
+]

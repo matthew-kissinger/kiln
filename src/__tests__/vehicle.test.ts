@@ -56,6 +56,61 @@ function layout(count: 2 | 4 | 6, transformed = false) {
 }
 
 describe('vehicle frame and wheel assembly', () => {
+  test('centerline wheels retain honest roles, independent axle identity and transformed spin frames', () => {
+    const root = new THREE.Group();
+    root.position.set(3, 2, -1);
+    root.rotation.set(0.1, 0.6, -0.2);
+    for (const [index, x] of [
+      ['front', 0.7],
+      ['rear', -0.7],
+    ] as const) {
+      const wheel = createWheelAssembly(
+        'Inline',
+        { tire, rim: metal },
+        {
+          radius: 0.3,
+          width: 0.1,
+          side: 'center',
+          index,
+          position: [x, 0.3, 0],
+          steering: index === 'front',
+          parent: root,
+        },
+      );
+      expect(wheel.side).toBe('center');
+      expect(readSemanticMetadataV1(wheel.spinPivot)?.roles).toContain(
+        `wheel.assembly.center.${index}`,
+      );
+    }
+    const wheels = resolveVehicleWheelAssemblies(root);
+    expect(wheels.map((w) => [w.side, w.index])).toEqual([
+      ['center', 'front'],
+      ['center', 'rear'],
+    ]);
+    expect(wheels[0]!.steeringPivot).toBeDefined();
+    expect(wheels[1]!.steeringPivot).toBeUndefined();
+    for (const wheel of wheels) {
+      expect(wheel.centerWorld.distanceTo(wheel.pivotCenterWorld)).toBeCloseTo(0, 6);
+      expect(
+        wheel.spinAxisWorld.distanceTo(
+          new THREE.Vector3(0, 0, 1).transformDirection(root.matrixWorld),
+        ),
+      ).toBeCloseTo(0, 6);
+    }
+    expect(() =>
+      createWheelAssembly(
+        'Invalid',
+        { tire, rim: metal },
+        {
+          radius: 0.3,
+          width: 0.1,
+          side: 'front' as 'center',
+          index: 0,
+        },
+      ),
+    ).toThrow('side');
+  });
+
   test('owns the canonical +X/+Y/+Z frame and all typed socket families', () => {
     const { frame } = layout(4);
     expect(VEHICLE_AXES).toEqual({

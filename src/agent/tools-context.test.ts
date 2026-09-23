@@ -1,8 +1,9 @@
-import { describe, expect, test } from 'bun:test';
-import type { JsonBlock } from '@strands-agents/sdk';
-
-import { createAssetIntentV1 } from '../contracts';
-import { buildAgentTools, type AgentSinks } from './surface';
+import { expect, test } from 'bun:test';
+import { JsonBlock } from '@strands-agents/sdk';
+import { makeKilnNativeTools } from './tools';
+import { MemoryProgramStore } from '../program-store';
+import { createAssetRequirementsV1 } from '../contracts/requirements';
+import { createAssetRequirementsStore } from '../requirements-store';
 
 const SIDEWAYS_FALSE_PROP_CODE = `
 const meta = { name: 'sideways', category: 'prop' };
@@ -36,55 +37,49 @@ function build() {
 }
 `;
 
-const sinks = (): AgentSinks => ({
-  sink: {},
-  editSink: { edits: [] },
-  unifiedSink: { edits: [] },
-});
-
-function findTool(tools: ReturnType<typeof buildAgentTools>, name: string) {
-  const found = tools.find((tool) => tool.name === name) as
-    | { invoke(input: unknown): Promise<unknown> }
-    | undefined;
-  if (!found) throw new Error(`Missing agent tool ${name}`);
-  return found;
+// Preserve the orientation obligation from the old category-context tests. This
+// now checks the structured neutral rule and its evidence mode.
+for (const operation of ['source', 'reference', 'edit'] as const) {
+  test(`native ${operation} preserves host mobility requirements despite false source labels`, async () => {
+    const requirements = createAssetRequirementsStore().host.bind(
+      { taskId: 'mobility', lineageId: operation },
+      createAssetRequirementsV1({
+        requirements: {
+          mobility: {
+            state: 'requested',
+            value: { wheelCount: 4, axleCount: 2, supportPolicy: 'grounded' },
+          },
+        },
+      }),
+      { actor: 'owner', reason: 'Requested wheeled vehicle', source: 'brief' },
+    );
+    const programStore = new MemoryProgramStore();
+    const programRef = await programStore.put(SIDEWAYS_FALSE_PROP_CODE);
+    const tools = makeKilnNativeTools({}, { requirements, programStore });
+    const name = operation === 'edit' ? 'kiln_edit' : 'kiln_render';
+    const input =
+      operation === 'source'
+        ? { code: SIDEWAYS_FALSE_PROP_CODE }
+        : operation === 'reference'
+          ? { programRef }
+          : { programRef, edits: [{ oldString: '#aa3333', newString: '#bb4444' }] };
+    const tool = tools.find((t) => t.name === name)! as unknown as {
+      invoke(input: unknown): Promise<unknown>;
+    };
+    const result = (await tool.invoke(input)) as unknown[];
+    const payload = (result.find((b) => b instanceof JsonBlock) as JsonBlock).json as Record<
+      string,
+      unknown
+    >;
+    const json = (operation === 'edit' ? payload.render : payload) as unknown as {
+      requirements: { binding: unknown };
+      qaReport: {
+        dimensions: { requirementReadiness: { findings: { code: string; disposition: string }[] } };
+      };
+    };
+    expect(json.requirements.binding).toEqual(requirements);
+    expect(json.qaReport.dimensions.requirementReadiness.findings).toContainEqual(
+      expect.objectContaining({ code: 'VEH_ORIENTATION_SIDEWAYS', disposition: 'observe' }),
+    );
+  });
 }
-
-describe('agent trusted tool context', () => {
-  test('current surface binds requested category outside generated source', async () => {
-    const tools = buildAgentTools('current', { category: 'vehicle' }, sinks());
-    const output = (await findTool(tools, 'kiln_render').invoke({
-      code: SIDEWAYS_FALSE_PROP_CODE,
-    })) as { warnings: string[] };
-    expect(output.warnings.some((warning) => warning.includes('Orientation'))).toBe(true);
-  });
-
-  test('unified surface binds full intent and carries it into collapsed render', async () => {
-    const tools = buildAgentTools(
-      'unified',
-      {
-        existingCode: SIDEWAYS_FALSE_PROP_CODE,
-        intent: createAssetIntentV1({ category: 'vehicle' }),
-      },
-      sinks(),
-    );
-    const output = (await findTool(tools, 'kiln_render').invoke({})) as unknown[];
-    const json = (output[1] as JsonBlock).json as { warnings: string[] };
-    expect(json.warnings.some((warning) => warning.includes('Orientation'))).toBe(true);
-  });
-
-  test('edit surface preserves requested category for screenshot QA', async () => {
-    const tools = buildAgentTools(
-      'current',
-      {
-        existingCode: SIDEWAYS_FALSE_PROP_CODE,
-        refineMode: 'edit',
-        category: 'vehicle',
-      },
-      sinks(),
-    );
-    const output = (await findTool(tools, 'kiln_screenshot').invoke({})) as unknown[];
-    const json = (output[1] as JsonBlock).json as { warnings: string[] };
-    expect(json.warnings.some((warning) => warning.includes('Orientation'))).toBe(true);
-  });
-});

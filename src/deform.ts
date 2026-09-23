@@ -1,6 +1,7 @@
 /** Geometry deformations in a rigid local frame. These always return owned buffers. */
 import * as THREE from 'three';
 import type { Point3 } from './geometry';
+import { recomputeDeformedNormals } from './deformation-normals';
 
 export interface GeometryFrame {
   origin?: Point3;
@@ -43,8 +44,39 @@ function deform(
   map: (point: THREE.Vector3, t: number, low: number, length: number) => THREE.Vector3,
 ): THREE.BufferGeometry {
   const source = geometry.getAttribute('position');
-  if (source?.itemSize !== 3 || source.count === 0)
-    throw new Error('deformation requires nonempty xyz positions');
+  if (
+    source?.itemSize !== 3 ||
+    !Number.isSafeInteger(source.count) ||
+    source.count < 1 ||
+    source.count > 2_000_000
+  )
+    throw new Error('deformation requires 1..2000000 xyz positions');
+  if (Object.keys(geometry.morphAttributes).length)
+    throw new Error(
+      'deformation of morph targets needs a separate mapping contract; deform before creating morph targets.',
+    );
+  const index = geometry.index;
+  const corners = index?.count ?? source.count;
+  if (!Number.isSafeInteger(corners) || corners < 3 || corners % 3 || corners > 3_000_000)
+    throw new Error('deformation requires complete triangles and at most 3000000 corners');
+  if (index)
+    for (let i = 0; i < corners; i++) {
+      const vertex = index.getX(i);
+      if (!Number.isSafeInteger(vertex) || vertex < 0 || vertex >= source.count)
+        throw new Error('deformation index is invalid');
+    }
+  const authoredNormals = geometry.getAttribute('normal');
+  if (authoredNormals) {
+    if (authoredNormals.itemSize !== 3 || authoredNormals.count !== source.count)
+      throw new Error('deformation normals must match xyz positions');
+    for (let i = 0; i < source.count; i++)
+      if (
+        ![authoredNormals.getX(i), authoredNormals.getY(i), authoredNormals.getZ(i)].every(
+          Number.isFinite,
+        )
+      )
+        throw new Error('deformation normals must be finite');
+  }
   const matrix = geometryFrameMatrix(options.frame),
     inverse = matrix.clone().invert();
   const points = Array.from({ length: source.count }, (_, i) =>
@@ -69,13 +101,18 @@ function deform(
   }
   const length = high - low;
   const out = geometry.clone();
+  out.userData = structuredClone(geometry.userData);
   const position = out.getAttribute('position');
+  let changed = false;
+  const epsilon =
+    length > 0
+      ? Math.min(Math.max(Math.abs(low), Math.abs(high), length) * 1e-7, length * 1e-6)
+      : 0;
   for (let i = 0; i < points.length; i++) {
     const point = points[i]!;
     // Allow roundoff introduced by an explicitly rotated frame at either endpoint.
-    const epsilon = Math.max(1, Math.abs(low), Math.abs(high)) * 1e-7;
     if (point.y < low - epsilon || point.y > high + epsilon) continue;
-    const t = length > epsilon ? THREE.MathUtils.clamp((point.y - low) / length, 0, 1) : 0;
+    const t = length > 0 ? THREE.MathUtils.clamp((point.y - low) / length, 0, 1) : 0;
     const weight = options.falloff?.(t) ?? 1;
     if (!Number.isFinite(weight) || weight < 0 || weight > 1)
       throw new Error('deformation falloff must return a finite weight between 0 and 1');
@@ -86,10 +123,24 @@ function deform(
     if (![point.x, point.y, point.z].every((n) => Number.isFinite(Math.fround(n))))
       throw new Error('deformation output must fit finite Float32 coordinates');
     position.setXYZ(i, point.x, point.y, point.z);
+    changed ||=
+      position.getX(i) !== source.getX(i) ||
+      position.getY(i) !== source.getY(i) ||
+      position.getZ(i) !== source.getZ(i);
   }
   position.needsUpdate = true;
-  out.deleteAttribute('tangent');
-  out.computeVertexNormals();
+  if (out.hasAttribute('tangent')) {
+    out.deleteAttribute('tangent');
+    const previous = out.userData.kilnAttributeWarnings;
+    out.userData.kilnAttributeWarnings = [
+      ...(Array.isArray(previous) ? previous : []),
+      {
+        code: 'DEFORM_TANGENTS_DROPPED',
+        message: 'Deformation invalidated tangents; regenerate for normal mapping.',
+      },
+    ];
+  }
+  if (changed || !authoredNormals) recomputeDeformedNormals(geometry, out);
   out.computeBoundingBox();
   out.computeBoundingSphere();
   return out;

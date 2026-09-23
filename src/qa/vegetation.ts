@@ -5,9 +5,21 @@ import {
   type AssetIntentV1,
   type VegetationCanopyProfile,
 } from '../contracts';
+import type { AssetRequirementsV1 } from '../contracts/requirements';
 import { conformancePromotionAuthorization, KILN_ENGINE_QA_OWNER, type QaRule } from './registry';
 import type { QaContext, QaFinding } from './types';
 
+export type FoliageRequirements = Extract<
+  NonNullable<AssetRequirementsV1['requirements']['foliage']>,
+  { value: unknown }
+>['value'];
+export interface FoliageQaInput {
+  scene?: unknown;
+  profile?: string;
+  foliage?: FoliageRequirements;
+  materialMode?: AssetIntentV1['material']['mode'];
+  groundPlaneY?: number;
+}
 const PROFILE = 'vegetation.semantic';
 export const VEGETATION_CONTACT_TOLERANCE_METERS = 0.02;
 const RASTER_SIZE = 48;
@@ -125,14 +137,17 @@ function meshLocalBox(mesh: THREE.Mesh, rootInverse: THREE.Matrix4): THREE.Box3 
   mesh.geometry.computeBoundingBox();
   const source = mesh.geometry.boundingBox;
   if (!source || source.isEmpty()) return undefined;
-  const transform = rootInverse.clone().multiply(mesh.matrixWorld);
+  const base = rootInverse.clone().multiply(mesh.matrixWorld);
   const result = new THREE.Box3();
-  for (const x of [source.min.x, source.max.x]) {
-    for (const y of [source.min.y, source.max.y]) {
-      for (const z of [source.min.z, source.max.z]) {
-        result.expandByPoint(new THREE.Vector3(x, y, z).applyMatrix4(transform));
-      }
+  const count = mesh instanceof THREE.InstancedMesh ? mesh.count : 1;
+  for (let index = 0; index < count; index++) {
+    const transform = base.clone();
+    if (mesh instanceof THREE.InstancedMesh) {
+      const instance = new THREE.Matrix4();
+      mesh.getMatrixAt(index, instance);
+      transform.multiply(instance);
     }
+    result.union(source.clone().applyMatrix4(transform));
   }
   return result;
 }
@@ -151,8 +166,8 @@ function collectRenderableBounds(root: THREE.Object3D): LocalBounds[] {
   return values;
 }
 
-function finding(context: QaContext, value: Omit<QaFinding, 'profile'>): QaFinding {
-  return { ...value, profile: context.intent.qaProfile || PROFILE };
+function finding(context: FoliageQaInput, value: Omit<QaFinding, 'profile'>): QaFinding {
+  return { ...value, profile: context.profile || PROFILE };
 }
 
 function vegetationIntent(intent: AssetIntentV1) {
@@ -160,9 +175,10 @@ function vegetationIntent(intent: AssetIntentV1) {
 }
 
 /** Exact, trusted contact contract. Name/material inference never enters this blocker path. */
-export function evaluateVegetationContactQa(context: QaContext): readonly QaFinding[] {
-  const trusted = vegetationIntent(context.intent);
+export function inspectFoliageContact(context: FoliageQaInput): readonly QaFinding[] {
+  const trusted = context.foliage;
   if (!trusted?.grounded || !(context.scene instanceof THREE.Object3D)) return [];
+  const planeY = context.groundPlaneY ?? 0;
   const root = context.scene;
   root.updateWorldMatrix(true, true);
   const inverse = root.matrixWorld.clone().invert();
@@ -206,12 +222,11 @@ export function evaluateVegetationContactQa(context: QaContext): readonly QaFind
         code: 'VEG_CONTACT_MISSING',
         disposition: 'block',
         dimension: 'categoryReadiness',
-        message: 'Standalone grounded vegetation requires one semantic ground-contact marker.',
+        message: 'Grounded foliage requires one semantic ground-contact marker.',
         affected: { node: root.name || 'vegetation-root' },
         measurement: { name: 'groundContactCount', actual: 0, expected: '>=1' },
         viewHints: ['right', 'vegetation.base-contact'],
-        repairText:
-          'Add a vegetation.contact.ground semantic marker at asset-local Y=0 and seat the plant base on it.',
+        repairText: `Add a vegetation.contact.ground semantic marker at asset-local Y=${planeY} and seat the plant base on it.`,
       }),
     ];
   }
@@ -224,14 +239,15 @@ export function evaluateVegetationContactQa(context: QaContext): readonly QaFind
           .applyMatrix4(inverse)
       : localPoint(inverse, contact.node);
     const y = contactPoint.y;
-    if (Math.abs(y) <= VEGETATION_CONTACT_TOLERANCE_METERS) continue;
-    const floating = y > 0;
+    const offset = y - planeY;
+    if (Math.abs(offset) <= VEGETATION_CONTACT_TOLERANCE_METERS) continue;
+    const floating = offset > 0;
     findings.push(
       finding(context, {
         code: floating ? 'VEG_CONTACT_FLOATING' : 'VEG_CONTACT_BURIED',
         disposition: 'block',
         dimension: 'categoryReadiness',
-        message: `${contact.node.name || 'Vegetation contact'} is ${Math.abs(y).toFixed(6)} m ${floating ? 'above' : 'below'} asset-local ground.`,
+        message: `${contact.node.name || 'Vegetation contact'} is ${Math.abs(offset).toFixed(6)} m ${floating ? 'above' : 'below'} asset-local ground.`,
         affected: {
           node: contact.node.name || 'vegetation-contact',
           nodePath: pathOf(contact.node, root),
@@ -239,12 +255,12 @@ export function evaluateVegetationContactQa(context: QaContext): readonly QaFind
         measurement: {
           name: 'contactY',
           actual: stable(y),
-          expected: 0,
+          expected: planeY,
           threshold: VEGETATION_CONTACT_TOLERANCE_METERS,
           unit: 'm',
         },
         viewHints: ['right', 'vegetation.base-contact'],
-        repairText: `Move ${contact.node.name || 'the contact marker'} or its ground-contact frame to asset-local Y=0 without moving unrelated canopy parts.`,
+        repairText: `Move ${contact.node.name || 'the contact marker'} or its ground-contact frame to asset-local Y=${planeY} without moving unrelated canopy parts.`,
       }),
     );
   }
@@ -256,7 +272,8 @@ export function evaluateVegetationContactQa(context: QaContext): readonly QaFind
       const box = meshLocalBox(node, inverse);
       if (box) minimumY = Math.min(minimumY, box.min.y);
     });
-    if (!Number.isFinite(minimumY) || minimumY >= -VEGETATION_CONTACT_TOLERANCE_METERS) continue;
+    if (!Number.isFinite(minimumY) || minimumY >= planeY - VEGETATION_CONTACT_TOLERANCE_METERS)
+      continue;
     findings.push(
       finding(context, {
         code: 'VEG_MATERIAL_BURIED',
@@ -267,13 +284,12 @@ export function evaluateVegetationContactQa(context: QaContext): readonly QaFind
         measurement: {
           name: 'supportMinimumY',
           actual: stable(minimumY),
-          expected: 0,
+          expected: planeY,
           threshold: VEGETATION_CONTACT_TOLERANCE_METERS,
           unit: 'm',
         },
         viewHints: ['right', 'vegetation.base-contact'],
-        repairText:
-          'Raise or trim the declared trunk/stem/root support so its visible material stops at Y=0.',
+        repairText: `Raise or trim the declared trunk/stem/root support so its visible material stops at Y=${planeY}.`,
       }),
     );
   }
@@ -290,8 +306,8 @@ function materialNames(node: THREE.Object3D): string[] {
 }
 
 /** Heuristic scope evidence. It is intentionally advisory and never a hard failure alone. */
-export function evaluateVegetationScopeQa(context: QaContext): readonly QaFinding[] {
-  const trusted = vegetationIntent(context.intent);
+export function inspectFoliageScope(context: FoliageQaInput): readonly QaFinding[] {
+  const trusted = context.foliage;
   if (!trusted?.standalone || !(context.scene instanceof THREE.Object3D)) return [];
   const root = context.scene;
   const renderables = collectRenderableBounds(root);
@@ -312,7 +328,7 @@ export function evaluateVegetationScopeQa(context: QaContext): readonly QaFindin
     const flatEvidence =
       footprintRatio >= 0.35 &&
       size.y <= Math.max(0.08, overallSize.y * 0.08) &&
-      center.y <= VEGETATION_CONTACT_TOLERANCE_METERS + size.y;
+      center.y <= (context.groundPlaneY ?? 0) + VEGETATION_CONTACT_TOLERANCE_METERS + size.y;
     const evidence = [nameEvidence, roleEvidence, materialEvidence, flatEvidence].filter(Boolean);
     if (evidence.length < 2) continue;
     findings.push(
@@ -621,12 +637,15 @@ function growthNodeMeasurement(
   };
 }
 
-export function measureVegetationGrowth(
-  intent: AssetIntentV1,
+export function measureFoliageGrowth(
+  foliage: FoliageRequirements | undefined,
   root: THREE.Object3D,
 ): VegetationGrowthMeasurementsV1 {
-  const trusted = vegetationIntent(intent);
-  const subtype = trusted?.subtype ?? 'custom';
+  const requested = foliage?.subtype;
+  const subtype =
+    requested && Object.hasOwn(VEGETATION_GROWTH_BANDS_V1, requested)
+      ? (requested as keyof typeof VEGETATION_GROWTH_BANDS_V1)
+      : 'custom';
   const candidates = growthCandidates(root);
   const nodes = candidates
     .map((candidate) =>
@@ -643,10 +662,9 @@ export function measureVegetationGrowth(
   };
 }
 
-export function evaluateVegetationGrowthQa(context: QaContext): readonly QaFinding[] {
-  if (context.intent.category !== 'vegetation' || !(context.scene instanceof THREE.Object3D))
-    return [];
-  const measured = measureVegetationGrowth(context.intent, context.scene);
+export function inspectFoliageGrowth(context: FoliageQaInput): readonly QaFinding[] {
+  if (!context.foliage || !(context.scene instanceof THREE.Object3D)) return [];
+  const measured = measureFoliageGrowth(context.foliage, context.scene);
   const findings: QaFinding[] = [];
   for (const node of measured.nodes) {
     if (node.taperOutlier) {
@@ -733,9 +751,8 @@ export function measureVegetationFoliageAttachment(
   };
 }
 
-export function evaluateVegetationFoliageAttachmentQa(context: QaContext): readonly QaFinding[] {
-  if (context.intent.category !== 'vegetation' || !(context.scene instanceof THREE.Object3D))
-    return [];
+export function inspectFoliageAttachment(context: FoliageQaInput): readonly QaFinding[] {
+  if (!context.foliage || !(context.scene instanceof THREE.Object3D)) return [];
   return measureVegetationFoliageAttachment(context.scene)
     .clusters.filter((cluster) => cluster.detached)
     .map((cluster) =>
@@ -767,8 +784,8 @@ function relativeTransformSignature(root: THREE.Object3D, node: THREE.Object3D):
   return values.join(',');
 }
 
-export function measureVegetationRepetition(
-  intent: AssetIntentV1,
+export function measureFoliageRepetition(
+  requirements: FoliageRequirements | undefined,
   root: THREE.Object3D,
 ): VegetationRepetitionMeasurementsV1 {
   root.updateWorldMatrix(true, true);
@@ -822,7 +839,7 @@ export function measureVegetationRepetition(
     radialRadiusSpreadRatio = stable((Math.max(...radii) - Math.min(...radii)) / meanRadius);
     perfectRadialLockstep = radialGapRangeRadians <= 0.02 && radialRadiusSpreadRatio <= 0.02;
   }
-  const suppressedForTopiary = vegetationIntent(intent)?.canopyProfile === 'topiary';
+  const suppressedForTopiary = requirements?.canopyProfile === 'topiary';
   return {
     schemaVersion: 1,
     source: measurementSource(
@@ -839,10 +856,9 @@ export function measureVegetationRepetition(
   };
 }
 
-export function evaluateVegetationRepetitionQa(context: QaContext): readonly QaFinding[] {
-  if (context.intent.category !== 'vegetation' || !(context.scene instanceof THREE.Object3D))
-    return [];
-  const measured = measureVegetationRepetition(context.intent, context.scene);
+export function inspectFoliageRepetition(context: FoliageQaInput): readonly QaFinding[] {
+  if (!context.foliage || !(context.scene instanceof THREE.Object3D)) return [];
+  const measured = measureFoliageRepetition(context.foliage, context.scene);
   if (measured.suppressedForTopiary) return [];
   const findings: QaFinding[] = measured.identicalTransformGroups.map((group) =>
     finding(context, {
@@ -879,11 +895,10 @@ export function evaluateVegetationRepetitionQa(context: QaContext): readonly QaF
   return findings;
 }
 
-export function measureVegetationCanopy(
-  intent: AssetIntentV1,
+export function measureFoliageCanopy(
+  profile: VegetationCanopyProfile,
   root: THREE.Object3D,
 ): VegetationCanopyMeasurementsV1 {
-  const profile = vegetationIntent(intent)?.canopyProfile ?? 'broadleaf';
   const renderables = collectRenderableBounds(root);
   const canopy = renderables.filter((value) => matchesAny(value, CANOPY_PATTERNS));
   const trunk = renderables.filter((value) => matchesAny(value, TRUNK_PATTERNS));
@@ -932,10 +947,10 @@ const PROFILE_BANDS: Readonly<
   },
 });
 
-export function evaluateVegetationCanopyQa(context: QaContext): readonly QaFinding[] {
-  const trusted = vegetationIntent(context.intent);
-  if (!trusted || !(context.scene instanceof THREE.Object3D)) return [];
-  const measurements = measureVegetationCanopy(context.intent, context.scene);
+export function inspectFoliageCanopy(context: FoliageQaInput): readonly QaFinding[] {
+  const trusted = context.foliage;
+  if (!trusted?.canopyProfile || !(context.scene instanceof THREE.Object3D)) return [];
+  const measurements = measureFoliageCanopy(trusted.canopyProfile, context.scene);
   const bands = PROFILE_BANDS[measurements.profile];
   const sparseFactor = trusted.growthState === 'sparse' ? 0.55 : 1;
   const values = [
@@ -950,7 +965,7 @@ export function evaluateVegetationCanopyQa(context: QaContext): readonly QaFindi
         code: 'VEG_CANOPY_MISSING',
         disposition: 'warn',
         dimension: 'categoryReadiness',
-        message: `The ${trusted.subtype} profile resolved no semantic or inferred canopy renderables.`,
+        message: `The ${trusted.subtype ?? trusted.canopyProfile} profile resolved no semantic or inferred canopy renderables.`,
         measurement: { name: 'canopyNodeCount', actual: 0, expected: '>=1' },
         viewHints: ['front', 'right', 'top'],
       }),
@@ -965,7 +980,7 @@ export function evaluateVegetationCanopyQa(context: QaContext): readonly QaFindi
         code: `VEG_CANOPY_OCCUPANCY_${suffix}`,
         disposition: 'warn',
         dimension: 'categoryReadiness',
-        message: `${measurements.profile} ${name} is outside its measured ${trusted.growthState} profile band.`,
+        message: `${measurements.profile} ${name} is outside its measured ${trusted.growthState ?? 'default'} profile band.`,
         measurement: {
           name,
           actual,
@@ -1010,8 +1025,8 @@ function materialValue(material: THREE.Material): number | undefined {
   return 0.2126 * color.r + 0.7152 * color.g + 0.0722 * color.b;
 }
 
-export function measureVegetationFoliageMaterials(
-  intent: AssetIntentV1,
+export function measureFoliageMaterials(
+  mode: AssetIntentV1['material']['mode'],
   root: THREE.Object3D,
 ): VegetationFoliageMaterialMeasurementsV1 {
   const values: number[] = [];
@@ -1034,10 +1049,10 @@ export function measureVegetationFoliageMaterials(
   });
   const buckets = new Set(values.map((value) => Math.round(value * 20) / 20));
   const valueRange = values.length > 0 ? Math.max(...values) - Math.min(...values) : 0;
-  const optimized = intent.material.mode === 'flatOptimized';
+  const optimized = mode === 'flatOptimized';
   return {
     schemaVersion: 1,
-    mode: intent.material.mode,
+    mode,
     foliageNodeCount,
     valueRoleCount: buckets.size,
     valueRange: stable(valueRange),
@@ -1047,10 +1062,10 @@ export function measureVegetationFoliageMaterials(
   };
 }
 
-export function evaluateVegetationMaterialQa(context: QaContext): readonly QaFinding[] {
-  if (context.intent.category !== 'vegetation' || !(context.scene instanceof THREE.Object3D))
-    return [];
-  const measured = measureVegetationFoliageMaterials(context.intent, context.scene);
+export function inspectFoliageMaterial(context: FoliageQaInput): readonly QaFinding[] {
+  if (!context.foliage || !(context.scene instanceof THREE.Object3D)) return [];
+  if (!context.materialMode) return [];
+  const measured = measureFoliageMaterials(context.materialMode, context.scene);
   if (measured.foliageNodeCount === 0 || measured.coherent) return [];
   const optimized = measured.mode === 'flatOptimized';
   return [
@@ -1071,15 +1086,61 @@ export function evaluateVegetationMaterialQa(context: QaContext): readonly QaFin
   ];
 }
 
-export function evaluateVegetationAdvisoryQa(context: QaContext): readonly QaFinding[] {
+export function inspectFoliageAdvisory(context: FoliageQaInput): readonly QaFinding[] {
   return [
-    ...evaluateVegetationScopeQa(context),
-    ...evaluateVegetationGrowthQa(context),
-    ...evaluateVegetationCanopyQa(context),
-    ...evaluateVegetationFoliageAttachmentQa(context),
-    ...evaluateVegetationRepetitionQa(context),
-    ...evaluateVegetationMaterialQa(context),
+    ...inspectFoliageScope(context),
+    ...inspectFoliageGrowth(context),
+    ...inspectFoliageCanopy(context),
+    ...inspectFoliageAttachment(context),
+    ...inspectFoliageRepetition(context),
+    ...inspectFoliageMaterial(context),
   ];
+}
+
+/** Historical fixture adapters. Runtime selection uses explicit foliage requirements. */
+function fixtureInput(context: QaContext): FoliageQaInput {
+  return {
+    scene: context.scene,
+    profile: context.intent.qaProfile,
+    foliage: vegetationIntent(context.intent),
+    materialMode: context.intent.material.mode,
+  };
+}
+export function evaluateVegetationContactQa(context: QaContext): readonly QaFinding[] {
+  return inspectFoliageContact(fixtureInput(context));
+}
+export function evaluateVegetationScopeQa(context: QaContext): readonly QaFinding[] {
+  return inspectFoliageScope(fixtureInput(context));
+}
+export function evaluateVegetationGrowthQa(context: QaContext): readonly QaFinding[] {
+  return inspectFoliageGrowth(fixtureInput(context));
+}
+export function evaluateVegetationFoliageAttachmentQa(context: QaContext): readonly QaFinding[] {
+  return inspectFoliageAttachment(fixtureInput(context));
+}
+export function evaluateVegetationRepetitionQa(context: QaContext): readonly QaFinding[] {
+  return inspectFoliageRepetition(fixtureInput(context));
+}
+export function evaluateVegetationCanopyQa(context: QaContext): readonly QaFinding[] {
+  return inspectFoliageCanopy(fixtureInput(context));
+}
+export function evaluateVegetationMaterialQa(context: QaContext): readonly QaFinding[] {
+  return inspectFoliageMaterial(fixtureInput(context));
+}
+export function evaluateVegetationAdvisoryQa(context: QaContext): readonly QaFinding[] {
+  return inspectFoliageAdvisory(fixtureInput(context));
+}
+export function measureVegetationGrowth(intent: AssetIntentV1, root: THREE.Object3D) {
+  return measureFoliageGrowth(vegetationIntent(intent), root);
+}
+export function measureVegetationRepetition(intent: AssetIntentV1, root: THREE.Object3D) {
+  return measureFoliageRepetition(vegetationIntent(intent), root);
+}
+export function measureVegetationCanopy(intent: AssetIntentV1, root: THREE.Object3D) {
+  return measureFoliageCanopy(vegetationIntent(intent)?.canopyProfile ?? 'broadleaf', root);
+}
+export function measureVegetationFoliageMaterials(intent: AssetIntentV1, root: THREE.Object3D) {
+  return measureFoliageMaterials(intent.material.mode, root);
 }
 
 export const VEGETATION_CONTACT_QA_RULE: QaRule = {

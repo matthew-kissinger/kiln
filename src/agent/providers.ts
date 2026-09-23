@@ -10,17 +10,17 @@
  * Meta Model API is OpenAI-compatible, but stays its own provider family for
  * honest provenance and key/pricing separation.
  */
-import { VercelModel } from '@strands-agents/sdk/models/vercel';
-import { AnthropicModel } from '@strands-agents/sdk/models/anthropic';
-import { OpenAIModel } from '@strands-agents/sdk/models/openai';
-import { GoogleModel } from '@strands-agents/sdk/models/google';
-import { BedrockModel } from '@strands-agents/sdk/models/bedrock';
 import { CachePointBlock, TextBlock, type Model, type SystemPrompt } from '@strands-agents/sdk';
-import { createOpenRouter } from '@openrouter/ai-sdk-provider';
 import type { LanguageModelV3 } from '@ai-sdk/provider';
 
 import { ensureStreamStart } from './stream-start';
 import { splitToolResultImages } from './split-tool-result-images';
+
+const promptCacheSupport = new WeakMap<object, boolean>();
+function rememberPromptCache<T extends Model>(model: T, supported: boolean): T {
+  promptCacheSupport.set(model, supported);
+  return model;
+}
 
 /** OpenRouter's unified reasoning control (@openrouter/ai-sdk-provider chat setting):
  *  an effort keyword or a hard reasoning-token budget. Passed straight through to
@@ -33,17 +33,6 @@ export type OpenRouterReasoning =
 const OPENROUTER_EFFORTS = new Set(['xhigh', 'high', 'medium', 'low', 'minimal', 'none']);
 
 /**
- * OpenRouter's documented effort→budget translation for budget-based upstreams
- * (Anthropic et al.): xhigh/high ≈ 80% of max_tokens, medium ≈ 50%, low ≈ 20%.
- * At 80%, a 32K-budget model keeps only ~6.4K visible tokens per turn — below
- * what a first-turn Kiln program needs, which is how the cycle-2 OR twins died
- * at step 1 with "maximum token limit, unrecoverable" (2026-07-11 postmortem).
- * When the visible remainder under 'high' would fall below this floor, the
- * effort is downgraded to 'medium' (reasoning ≤ 50% of the completion budget).
- */
-const MIN_VISIBLE_OUTPUT_TOKENS = 8192;
-
-/**
  * Map the Kiln descriptor `thinking` control onto OpenRouter's reasoning setting.
  * Keywords pass through ('max' — an Anthropic-vocabulary level OpenRouter's type
  * doesn't carry — maps to 'xhigh'); positive numbers become a reasoning token
@@ -52,11 +41,9 @@ const MIN_VISIBLE_OUTPUT_TOKENS = 8192;
  * default applies — which for Claude Opus 4.8 means reasoning OFF, same as the
  * native path).
  *
- * When `maxTokens` (the completion budget) is known, reasoning is clamped so it
- * can never consume the whole turn: numeric budgets cap at 50% of maxTokens
- * (or are dropped entirely when even the 1024 floor would exceed that half),
- * and 'xhigh'/'high' downgrade to 'medium' when OpenRouter's ~80% translation
- * would leave fewer than {@link MIN_VISIBLE_OUTPUT_TOKENS} visible tokens.
+ * Numeric budgets retain their explicit token-budget normalization below. Effort
+ * keywords are passed through independently of maxTokens; provider-specific output
+ * allocation must not silently lower a user's requested reasoning effort.
  */
 export function resolveOpenRouterReasoning(
   thinking?: string | number,
@@ -78,17 +65,8 @@ export function resolveOpenRouterReasoning(
   }
   const raw = thinking.trim().toLowerCase();
   if (/^\d+$/.test(raw)) return resolveOpenRouterReasoning(Number.parseInt(raw, 10), maxTokens);
-  let effort = raw === 'max' ? 'xhigh' : raw;
+  const effort = raw === 'max' ? 'xhigh' : raw;
   if (!OPENROUTER_EFFORTS.has(effort)) return undefined;
-  if (
-    (effort === 'xhigh' || effort === 'high') &&
-    maxTokens != null &&
-    Number.isFinite(maxTokens) &&
-    maxTokens > 0 &&
-    maxTokens * 0.2 < MIN_VISIBLE_OUTPUT_TOKENS
-  ) {
-    effort = 'medium';
-  }
   return { effort: effort as Extract<OpenRouterReasoning, { effort: string }>['effort'] };
 }
 
@@ -129,7 +107,11 @@ export interface OpenRouterModelOptions {
  * Build a Strands `Model` for an OpenRouter model id, with the stream-start fix
  * applied so the Strands agent loop completes correctly.
  */
-export function makeOpenRouterModel(opts: OpenRouterModelOptions): Model {
+export async function makeOpenRouterModel(opts: OpenRouterModelOptions): Promise<Model> {
+  const [{ VercelModel }, { createOpenRouter }] = await Promise.all([
+    import('@strands-agents/sdk/models/vercel'),
+    import('@openrouter/ai-sdk-provider'),
+  ]);
   const openrouter = createOpenRouter({ apiKey: opts.apiKey ?? process.env['OPENROUTER_API_KEY'] });
   let provider = ensureStreamStart(
     openrouter.chat(opts.modelId, {
@@ -139,10 +121,13 @@ export function makeOpenRouterModel(opts: OpenRouterModelOptions): Model {
     }) as LanguageModelV3,
   );
   if (opts.splitToolResultImages) provider = splitToolResultImages(provider);
-  return new VercelModel({
-    provider,
-    ...(opts.maxTokens != null ? { maxTokens: opts.maxTokens } : {}),
-  });
+  return rememberPromptCache(
+    new VercelModel({
+      provider,
+      ...(opts.maxTokens != null ? { maxTokens: opts.maxTokens } : {}),
+    }),
+    false,
+  );
 }
 
 // =============================================================================
@@ -290,27 +275,40 @@ function resolveAnthropicThinking(
  * OpenRouter goes through the Vercel bridge ({@link makeOpenRouterModel} +
  * `ensureStreamStart`).
  */
-export function makeKilnModel(desc: KilnModelDescriptor, opts: MakeKilnModelOptions = {}): Model {
+export async function makeKilnModel(
+  desc: KilnModelDescriptor,
+  opts: MakeKilnModelOptions = {},
+): Promise<Model> {
   const maxTokens = desc.maxTokens;
   switch (desc.provider) {
     case 'anthropic': {
+      const { AnthropicModel } = await import('@strands-agents/sdk/models/anthropic');
       const thinking = resolveAnthropicThinking(desc.model, desc.thinking);
-      return new AnthropicModel({
-        modelId: desc.model,
-        ...(opts.apiKey ? { apiKey: opts.apiKey } : {}),
-        ...(maxTokens != null ? { maxTokens } : {}),
-        ...(thinking ? { params: thinking.params } : {}),
-        ...(thinking?.betas ? { betas: thinking.betas } : {}),
-      });
+      return rememberPromptCache(
+        new AnthropicModel({
+          modelId: desc.model,
+          ...(opts.apiKey ? { apiKey: opts.apiKey } : {}),
+          ...(maxTokens != null ? { maxTokens } : {}),
+          ...(thinking ? { params: thinking.params } : {}),
+          ...(thinking?.betas ? { betas: thinking.betas } : {}),
+        }),
+        true,
+      );
     }
-    case 'openai':
-      return new OpenAIModel({
-        api: 'chat',
-        modelId: desc.model,
-        ...(opts.apiKey ? { apiKey: opts.apiKey } : {}),
-        ...(maxTokens != null ? { maxTokens } : {}),
-      });
+    case 'openai': {
+      const { OpenAIModel } = await import('@strands-agents/sdk/models/openai');
+      return rememberPromptCache(
+        new OpenAIModel({
+          api: 'chat',
+          modelId: desc.model,
+          ...(opts.apiKey ? { apiKey: opts.apiKey } : {}),
+          ...(maxTokens != null ? { maxTokens } : {}),
+        }),
+        false,
+      );
+    }
     case 'google': {
+      const { GoogleModel } = await import('@strands-agents/sdk/models/google');
       // H-43/B1: forward the descriptor budget + thinking level into the Gemini
       // generationConfig (GoogleModel spreads `params` into the request config).
       // Only descriptor-explicit thinking applies — the KILN_THINKING env stays
@@ -320,35 +318,47 @@ export function makeKilnModel(desc: KilnModelDescriptor, opts: MakeKilnModelOpti
         ...(maxTokens != null ? { maxOutputTokens: maxTokens } : {}),
         ...(thinkingLevel ? { thinkingConfig: { thinkingLevel } } : {}),
       };
-      return new GoogleModel({
-        modelId: desc.model,
-        apiKey: opts.apiKey ?? trimmedEnv('GEMINI_API_KEY'),
-        ...(Object.keys(googleParams).length > 0 ? { params: googleParams } : {}),
-      });
+      return rememberPromptCache(
+        new GoogleModel({
+          modelId: desc.model,
+          apiKey: opts.apiKey ?? trimmedEnv('GEMINI_API_KEY'),
+          ...(Object.keys(googleParams).length > 0 ? { params: googleParams } : {}),
+        }),
+        false,
+      );
     }
-    case 'bedrock':
-      return new BedrockModel({
-        modelId: desc.model,
-        region: opts.region ?? trimmedEnv('AWS_REGION') ?? 'us-west-2',
-        ...(maxTokens != null ? { maxTokens } : {}),
-      });
+    case 'bedrock': {
+      const { BedrockModel } = await import('@strands-agents/sdk/models/bedrock');
+      return rememberPromptCache(
+        new BedrockModel({
+          modelId: desc.model,
+          region: opts.region ?? trimmedEnv('AWS_REGION') ?? 'us-west-2',
+          ...(maxTokens != null ? { maxTokens } : {}),
+        }),
+        true,
+      );
+    }
     case 'meta': {
+      const { OpenAIModel } = await import('@strands-agents/sdk/models/openai');
       const apiKey = metaApiKey(opts);
       if (!apiKey) {
         throw new Error(
           'Meta Model API key is required. Set MODEL_API_KEY, META_MODEL_API_KEY, or META_API_KEY.',
         );
       }
-      return new OpenAIModel({
-        modelId: desc.model,
-        apiKey,
-        clientConfig: { baseURL: META_MODEL_API_BASE_URL },
-        params: {
-          reasoning: { effort: trimmedEnv('KILN_META_REASONING') ?? 'low' },
-          parallel_tool_calls: false,
-        },
-        ...(maxTokens != null ? { maxTokens } : {}),
-      });
+      return rememberPromptCache(
+        new OpenAIModel({
+          modelId: desc.model,
+          apiKey,
+          clientConfig: { baseURL: META_MODEL_API_BASE_URL },
+          params: {
+            reasoning: { effort: trimmedEnv('KILN_META_REASONING') ?? 'low' },
+            parallel_tool_calls: false,
+          },
+          ...(maxTokens != null ? { maxTokens } : {}),
+        }),
+        false,
+      );
     }
     case 'openrouter': {
       // The same descriptor `thinking` control the anthropic case honors, mapped
@@ -358,7 +368,7 @@ export function makeKilnModel(desc: KilnModelDescriptor, opts: MakeKilnModelOpti
       // never start with a budget ≥ the completion budget (the cycle-2 step-1
       // MaxTokens deaths).
       const reasoning = resolveOpenRouterReasoning(desc.thinking, maxTokens);
-      return makeOpenRouterModel({
+      return await makeOpenRouterModel({
         modelId: desc.model,
         ...(opts.apiKey ? { apiKey: opts.apiKey } : {}),
         ...(maxTokens != null ? { maxTokens } : {}),
@@ -410,8 +420,28 @@ export function makeKilnModel(desc: KilnModelDescriptor, opts: MakeKilnModelOpti
  * today's silent no-op. OpenRouter gets caching through a different seam —
  * {@link OpenRouterModelOptions.promptCache}.
  */
-export function modelConsumesSystemPromptCachePoints(model: unknown): boolean {
-  return model instanceof AnthropicModel || model instanceof BedrockModel;
+export async function modelConsumesSystemPromptCachePoints(model: unknown): Promise<boolean> {
+  if (!model || typeof model !== 'object' || !('stream' in model)) return false;
+  const known = promptCacheSupport.get(model);
+  if (known !== undefined) return known;
+  // Hosts may inject a native model they constructed themselves. Check its real
+  // adapter class, without making either optional provider a required dependency.
+  const [anthropic, bedrock] = await Promise.allSettled([
+    import('@strands-agents/sdk/models/anthropic'),
+    import('@strands-agents/sdk/models/bedrock'),
+  ]);
+  for (const result of [anthropic, bedrock]) {
+    if (
+      result.status === 'rejected' &&
+      !['ERR_MODULE_NOT_FOUND', 'MODULE_NOT_FOUND'].includes(result.reason?.code)
+    )
+      throw result.reason;
+  }
+  const supported =
+    (anthropic.status === 'fulfilled' && model instanceof anthropic.value.AnthropicModel) ||
+    (bedrock.status === 'fulfilled' && model instanceof bedrock.value.BedrockModel);
+  promptCacheSupport.set(model, supported);
+  return supported;
 }
 
 /**
@@ -422,8 +452,8 @@ export function modelConsumesSystemPromptCachePoints(model: unknown): boolean {
  * refine/edit directive must already be prepended to `text` — it rides inside
  * the cached block, before the cache point.
  */
-export function toCachedSystemPrompt(text: string, model: unknown): SystemPrompt {
-  if (!modelConsumesSystemPromptCachePoints(model)) return text;
+export async function toCachedSystemPrompt(text: string, model: unknown): Promise<SystemPrompt> {
+  if (!(await modelConsumesSystemPromptCachePoints(model))) return text;
   return [new TextBlock(text), new CachePointBlock({ cacheType: 'default' })];
 }
 

@@ -58,14 +58,6 @@ export type KilnAgentEvent =
       messagesBefore: number;
       placements: number;
       overlaps: number;
-    }
-  | {
-      /** M1b: the finalized program graded below B for a consolidation-fixable
-       *  reason, and one bounded grade-refine turn is being fed back to the model. */
-      type: 'grade_refine';
-      step: number;
-      grade: string;
-      materials: number;
     };
 
 /** The agent-loop-derived metrics this collector produces. */

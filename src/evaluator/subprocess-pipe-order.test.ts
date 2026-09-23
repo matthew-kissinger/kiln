@@ -4,7 +4,7 @@ import { EventEmitter } from 'node:events';
 import { renderGLBViaProcessLaunch } from './subprocess';
 
 const envelope = JSON.stringify({
-  version: 'kiln.evaluator.result.v1',
+  version: 'kiln.evaluator.result.v2',
   requestId: 'render-1',
   ok: false,
   error: { code: 'EXECUTION_REJECTED', message: 'Generated asset execution was rejected.' },

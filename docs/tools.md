@@ -4,11 +4,13 @@ Generated from the public registry with `bun run docs:tools`. Change the registr
 
 Use these tools through your connected agent. Supply `code` once, then pass the returned `programRef` to later calls. References identify exact source revisions. [Source workflow](programs.md) · [Camera recipes](cameras.md) · [Geometry guide](geometry.md).
 
-Call `kiln_list_primitives({capabilities:true})` for the current host limits and export/camera support. The schema below describes inputs; actual image replies include fidelity and capture metadata. Source reads return exact text, edits return a new revision, and failed builds return their errors.
+Call `kiln_discover({capabilities:true})` for the current host limits and export/camera support. The schema below describes inputs; actual image replies include fidelity and capture metadata. Source reads return exact text, edits return a new revision, and failed builds return their errors.
 
-## kiln_list_primitives
+Renderer capabilities distinguish configured routing, dependency readiness, endpoint health and unverified authentication. Use kiln_renderer with action=reprobe after renderer setup or repair to refresh the current session. Material capabilities list approved texture IDs by allowed slot for the selected evaluator. Capability inspection never starts a renderer, requests an image or fetches texture bytes; ordinary catalog search is offline. See [renderer readiness and resources](rendering.md).
 
-Discover Kiln helpers and capabilities. No arguments returns a compact overview. Use names for up to six exact signatures/examples together, name for one, query for a modeling operation, or category to browse; detailed results are paged. Custom THREE.BufferGeometry and ordinary functions are available inside the retained program.
+## kiln_discover
+
+Discover Kiln operations, assemblies, recipes and current host capabilities. Omit arguments for a compact overview. Search with ordinary modeling language using query; refine with family, kind or tags. Fetch complete contracts/examples with ids (up to six exact IDs or executable names). Overview/search pages default to six summaries. Recipes guide construction without restricting the asset. Search runs locally without models or network calls.
 
 <details>
 <summary>Input JSON Schema</summary>
@@ -19,42 +21,51 @@ Discover Kiln helpers and capabilities. No arguments returns a compact overview.
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "type": "object",
   "properties": {
-    "names": {
-      "description": "Get up to six exact helper signatures together, in this order. Use without other selectors.",
+    "query": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 500
+    },
+    "ids": {
       "minItems": 1,
       "maxItems": 6,
       "type": "array",
       "items": {
         "type": "string",
         "minLength": 1,
-        "maxLength": 80
+        "maxLength": 120
       }
     },
-    "category": {
-      "description": "Category from the overview.",
-      "type": "string",
-      "minLength": 1,
-      "maxLength": 80
-    },
-    "name": {
-      "description": "Exact helper name; returns its signature and example.",
-      "type": "string",
-      "minLength": 1,
-      "maxLength": 80
-    },
-    "query": {
-      "description": "Words to find in helper names, descriptions and examples.",
-      "type": "string",
-      "minLength": 1,
-      "maxLength": 200
-    },
     "overview": {
-      "description": "Compact names by category. Default when no search or category is supplied.",
-      "type": "boolean"
+      "type": "boolean",
+      "const": true
     },
     "capabilities": {
-      "description": "Return only runtime, source, geometry export and camera capabilities.",
-      "type": "boolean"
+      "type": "boolean",
+      "const": true
+    },
+    "family": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 120
+    },
+    "kind": {
+      "type": "string",
+      "enum": [
+        "operation",
+        "assembly",
+        "recipe"
+      ]
+    },
+    "tags": {
+      "minItems": 1,
+      "maxItems": 8,
+      "type": "array",
+      "items": {
+        "type": "string",
+        "minLength": 1,
+        "maxLength": 120
+      }
     },
     "offset": {
       "type": "integer",
@@ -62,7 +73,6 @@ Discover Kiln helpers and capabilities. No arguments returns a compact overview.
       "maximum": 10000
     },
     "limit": {
-      "description": "Detailed results per page; default 6, maximum 12.",
       "type": "integer",
       "minimum": 1,
       "maximum": 12
@@ -74,9 +84,40 @@ Discover Kiln helpers and capabilities. No arguments returns a compact overview.
 
 </details>
 
+## kiln_renderer
+
+Inspect status, or reprobe after renderer setup/repair to refresh this session and reset failed starts. Never installs, starts, stops or renders. Preserves CPU/local/remote selection; environment/credential changes require a host restart. Read viewFidelity after rendering.
+
+<details>
+<summary>Input JSON Schema</summary>
+
+
+```json
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "type": "object",
+  "properties": {
+    "action": {
+      "default": "status",
+      "type": "string",
+      "enum": [
+        "status",
+        "reprobe"
+      ]
+    }
+  },
+  "required": [
+    "action"
+  ],
+  "additionalProperties": false
+}
+```
+
+</details>
+
 ## kiln_validate
 
-Check program syntax and sandbox rules before building. Returns validation findings; use kiln_render to evaluate geometry and see the asset. Supply code once or reuse programRef from an earlier result. Returns programRef even for an invalid draft. kiln_source reads that revision.
+Check program syntax, sandbox rules and retired globals before building. Returns findings with codes, lines and repair hints where available; use kiln_render to evaluate geometry and see the asset. Supply code OR a retained programRef. Even invalid drafts return a ref; read it with kiln_source.
 
 <details>
 <summary>Input JSON Schema</summary>
@@ -105,7 +146,7 @@ Check program syntax and sandbox rules before building. Returns validation findi
 
 ## kiln_render
 
-Build a program and return geometry metrics, exact part paths and images. Omit capture for six views; choose preset/cells for orbit grids or version kiln.capture.v1 plus shots for part-local framing, perspective and separate images. Check viewFidelity before judging materials. Failed builds return errors without an image. Supply code once or reuse programRef from an earlier result. Returns programRef even for an invalid draft. kiln_source reads that revision.
+Build a program and return geometry metrics, a bounded part-path preview and images. If partsTruncated, use kiln_inspect listParts for remaining paths. Omit capture for six views; choose preset/cells for orbit grids or version kiln.capture.v1 plus shots for part-local framing, perspective and separate images. Check viewFidelity before judging materials. Failed builds return errors without an image. Supply code OR a retained programRef. Even invalid drafts return a ref; read it with kiln_source.
 
 <details>
 <summary>Input JSON Schema</summary>
@@ -420,7 +461,7 @@ Build a program and return geometry metrics, exact part paths and images. Omit c
 
 ## kiln_screenshot_animation
 
-Render sampled animation frames to check motion and attachments. Use shot for the shared camera controls, frameTimes for selected phases, and framing locked (default) or follow. The program must define animate(). Check viewFidelity before judging materials. Supply code once or reuse programRef from an earlier result. Returns programRef even for an invalid draft. kiln_source reads that revision.
+Review animation images, poseBounds and loopClosure endpoint evidence. An open endpoint is valid for one-shot motion; closed endpoints do not prove smooth velocity. Check motion, attachments and requested clearance; sampled bounds do not certify continuous contact or collision safety. Use shot for camera/subject, frameTimes for phases, and framing locked (default) or follow. Add phases when symmetry hides motion. The program must define animate(). Check viewFidelity before judging materials. Supply code OR a retained programRef. Even invalid drafts return a ref; read it with kiln_source.
 
 <details>
 <summary>Input JSON Schema</summary>
@@ -609,6 +650,24 @@ Render sampled animation frames to check motion and attachments. Use shot for th
       },
       "additionalProperties": false
     },
+    "measureParts": {
+      "description": "Exact names or paths of subtrees measured together at each phase, independent of camera selection.",
+      "minItems": 1,
+      "maxItems": 16,
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "path": {
+            "type": "string"
+          },
+          "name": {
+            "type": "string"
+          }
+        },
+        "additionalProperties": false
+      }
+    },
     "frames": {
       "type": "integer",
       "minimum": 2,
@@ -665,7 +724,7 @@ Render sampled animation frames to check motion and attachments. Use shot for th
 
 ## kiln_view_interior
 
-Render roof-off floor-plan, dollhouse, and eye-level cutaway views. Optional versioned capture selects custom roof-off shots. Select a roof by nodeName or let Kiln resolve its role/name. Review roofsHidden and warnings for unresolved occlusion. Supply code once or reuse programRef from an earlier result. Returns programRef even for an invalid draft. kiln_source reads that revision.
+Render roof-off floor-plan, dollhouse, and eye-level cutaway views. Optional versioned capture selects custom roof-off shots. Select a roof by nodeName or let Kiln resolve its role/name. Review roofsHidden and warnings for unresolved occlusion. Supply code OR a retained programRef. Even invalid drafts return a ref; read it with kiln_source.
 
 <details>
 <summary>Input JSON Schema</summary>
@@ -921,7 +980,7 @@ Render roof-off floor-plan, dollhouse, and eye-level cutaway views. Optional ver
 
 ## kiln_inspect
 
-Inspect a part with context or isolation. Use legacy part/orbit controls or shot for exact paths, part-local axes and perspective. Use names from the source or render result; check viewFidelity before judging materials. Supply code once or reuse programRef from an earlier result. Returns programRef even for an invalid draft. kiln_source reads that revision.
+List part paths and inspect joints, clearances and edit preservation. listParts filters names/paths with query; follow partListing.nextOffset on the same programRef/query. measure/surfacePairs return distances, not fit certificates. compare reports static changes and separate animation channel changes; paths adds complete static subtree summaries. image:false skips rendering. Otherwise use part/orbit or exact shot; check viewFidelity for materials. Supply code OR a retained programRef. Even invalid drafts return a ref; read it with kiln_source.
 
 <details>
 <summary>Input JSON Schema</summary>
@@ -932,10 +991,92 @@ Inspect a part with context or isolation. Use legacy part/orbit controls or shot
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "type": "object",
   "properties": {
-    "measure": {
-      "description": "Straight-line distance between exact named node origins or subject-local points; asset units, not surface clearance.",
+    "image": {
+      "description": "False: requires listParts/measure/surfacePairs/compare; no image or camera controls. Default true.",
+      "type": "boolean"
+    },
+    "listParts": {
+      "description": "List exported-scene paths, including nested parts. Default 80, max 100 per page. Follow partListing.nextOffset with the same programRef/query. image:false avoids rendering.",
       "type": "object",
       "properties": {
+        "query": {
+          "description": "Case-insensitive substring of name or exact encoded path; not a regex.",
+          "type": "string",
+          "maxLength": 4096
+        },
+        "offset": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 9007199254740991
+        },
+        "limit": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 100
+        }
+      },
+      "additionalProperties": false
+    },
+    "surfacePairs": {
+      "description": "[fromPath,toPath] pairs; check surfaceMeasurements.status and each result.",
+      "minItems": 1,
+      "maxItems": 12,
+      "type": "array",
+      "items": {
+        "minItems": 2,
+        "maxItems": 2,
+        "type": "array",
+        "items": {
+          "type": "string",
+          "maxLength": 4096
+        }
+      }
+    },
+    "compare": {
+      "description": "Static geometry/material/transform/bounds under current host settings. Follow nextOffset; paths adds complete subtrees.",
+      "type": "object",
+      "properties": {
+        "programRef": {
+          "type": "string",
+          "pattern": "^(?:sha256:[a-f0-9]{64}|p_[a-f0-9]{12}(?:[a-f0-9]{4}){0,13})(?![\\s\\S])"
+        },
+        "offset": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 9007199254740991
+        },
+        "limit": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 100
+        },
+        "paths": {
+          "description": "Exact baseline node paths, scene-prefixed without primitive children. Complete subtree summaries.",
+          "minItems": 1,
+          "maxItems": 12,
+          "type": "array",
+          "items": {
+            "type": "string",
+            "maxLength": 4096
+          }
+        }
+      },
+      "required": [
+        "programRef"
+      ],
+      "additionalProperties": false
+    },
+    "measure": {
+      "description": "Default anchors: origin/local-point distance. Surface: disjoint mesh triangles, omit points. Rest pose, asset units. Check status/bounds; no solid clearance/attachment proof.",
+      "type": "object",
+      "properties": {
+        "mode": {
+          "type": "string",
+          "enum": [
+            "anchors",
+            "surface"
+          ]
+        },
         "from": {
           "type": "object",
           "properties": {
@@ -1002,7 +1143,7 @@ Inspect a part with context or isolation. Use legacy part/orbit controls or shot
       "additionalProperties": false
     },
     "shot": {
-      "description": "Exact framed shot; omit legacy part/view/orbit fields when using this.",
+      "description": "Exact shot; omit part/view/orbit controls.",
       "type": "object",
       "properties": {
         "name": {
@@ -1185,27 +1326,27 @@ Inspect a part with context or isolation. Use legacy part/orbit controls or shot
       "type": "string"
     },
     "part": {
-      "description": "The part to frame, by node name from your program (case-insensitive; substring match as a fallback). Omit to frame the whole asset.",
+      "description": "Frame named part and descendants (case-insensitive, substring fallback). Omit for whole asset.",
       "type": "string"
     },
     "view": {
-      "description": "Camera angle: front, right, back, left, top, or three-quarter (default). Ignored when azimuthDeg or elevationDeg is given.",
+      "description": "front/right/back/left/top/three-quarter (default). Orbit angles override.",
       "type": "string"
     },
     "azimuthDeg": {
-      "description": "Orbit the camera around the asset: 0 = front, 90 = right, 180 = back, 270 = left. Wraps, so 315 and -45 are the same. Use it to look between the named views — at a corner, a seam, or whatever angle the last render left ambiguous.",
+      "description": "Orbit degrees: 0 front, 90 right, 180 back, 270 left. Wraps.",
       "type": "number"
     },
     "elevationDeg": {
-      "description": "Orbit the camera up or down: 0 = eye level, positive looks down from above, negative from below. Clamped to -89..89. Combine with azimuthDeg for any three-quarter angle you want.",
+      "description": "Elevation degrees: 0 eye level, positive above. Clamped -89..89.",
       "type": "number"
     },
     "zoom": {
-      "description": "Padding multiplier around the part bounds, clamped to 1-4. Default 1.2; raise it to see more surrounding context.",
+      "description": "Bounds padding 1..4; default 1.2. Larger = more context.",
       "type": "number"
     },
     "isolate": {
-      "description": "Hide everything except the named part (and its descendants) so nothing can block the view. Use it when the part is buried inside or behind other geometry. Needs `part`; without one it does nothing. Default false — surrounding geometry stays visible for context.",
+      "description": "Hide surrounding geometry. Requires part; default false.",
       "type": "boolean"
     },
     "programRef": {
@@ -1222,7 +1363,7 @@ Inspect a part with context or isolation. Use legacy part/orbit controls or shot
 
 ## kiln_edit
 
-Apply exact-string replacements to a program revision and render the result (render:false skips images). Edits are ordered and atomic: missing or ambiguous matches fail without changing the base. Returns a new programRef, parentRef and diff; untouched text stays identical. Read anchors with kiln_source. Optional capture chooses the same cameras as kiln_render. Use includeCode only when full source is needed.
+Atomically apply ordered exact-string replacements and render. Copy anchors from kiln_source. Returns programRef, parentRef, diff and preservation comparing static data and animation channels. Review changes; use kiln_inspect compare for more pages or protected subtrees. Failed comparison preserves the repair; render:false leaves preservation not_assessed. capture selects cameras; includeCode returns full source.
 
 <details>
 <summary>Input JSON Schema</summary>

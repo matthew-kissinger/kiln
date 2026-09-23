@@ -308,9 +308,9 @@ export function buildInvocation({
     };
   }
   if (harness === 'opencode') {
-    const args = ['run', '--auto', '--pure', '--format', 'json', '--dir', workspace];
-    if (model) args.push('--model', model);
-    if (reasoning) args.push('--variant', reasoning);
+    if (reasoning && !model) throw new Error('OpenCode reasoning requires an explicit --model.');
+    const args = ['run', '--standalone', '--auto', '--format', 'json'];
+    if (model) args.push('--model', reasoning ? `${model.split('#')[0]}#${reasoning}` : model);
     args.push(prompt);
     return {
       bin: 'opencode',
@@ -318,8 +318,9 @@ export function buildInvocation({
       env: { XDG_CONFIG_HOME: join(workspace, '.outer-opencode-config') },
       isolation: [
         'fresh XDG configuration suppresses user-level MCP servers',
-        'external plugins disabled for the outer run',
+        'private V2 server avoids inherited background-service configuration',
         'provider authentication remains in the normal data home',
+        'home-level skills and instructions may remain; inspect the actual session loadout',
       ],
     };
   }

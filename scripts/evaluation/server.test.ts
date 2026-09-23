@@ -31,14 +31,14 @@ test('pilot host advertises a condition, delivers a real image and enforces the 
   await client.connect(transport);
   try {
     const listed = await client.listTools();
-    expect(listed.tools).toHaveLength(8);
+    expect(listed.tools).toHaveLength(9);
     const discovery = await client.callTool({
-      name: 'kiln_list_primitives',
+      name: 'kiln_discover',
       arguments: { category: 'geometry' },
     });
     expect(JSON.stringify(discovery)).not.toContain('parametricSurface');
     const invalid = await client.callTool({
-      name: 'kiln_list_primitives',
+      name: 'kiln_discover',
       arguments: { query: 'advanced lookup unavailable in A' },
     });
     expect(invalid.isError).toBe(true);
@@ -52,7 +52,7 @@ test('pilot host advertises a condition, delivers a real image and enforces the 
     expect(
       (rendered.content as Array<{ type: string }>).some((entry) => entry.type === 'image'),
     ).toBe(true);
-    const blocked = await client.callTool({ name: 'kiln_list_primitives', arguments: {} });
+    const blocked = await client.callTool({ name: 'kiln_discover', arguments: {} });
     expect(blocked.isError).toBe(true);
     expect(JSON.stringify(blocked)).toContain('budget-exhausted');
     const events = (await readFile(join(directory, 'result/events.jsonl'), 'utf8'))
@@ -97,14 +97,12 @@ test('explicit same-run restart retains consumed tool budget', async () => {
     return client;
   }
   const first = await connect();
-  expect((await first.callTool({ name: 'kiln_list_primitives', arguments: {} })).isError).not.toBe(
-    true,
-  );
+  expect((await first.callTool({ name: 'kiln_discover', arguments: {} })).isError).not.toBe(true);
   await first.close();
   const second = await connect();
   try {
     expect(
-      JSON.stringify(await second.callTool({ name: 'kiln_list_primitives', arguments: {} })),
+      JSON.stringify(await second.callTool({ name: 'kiln_discover', arguments: {} })),
     ).toContain('budget-exhausted');
   } finally {
     await second.close();
@@ -138,11 +136,11 @@ test('parallel requests consume one reservation each and preserve the cap', asyn
   );
   try {
     const results = await Promise.all(
-      [0, 1].map(() => client.callTool({ name: 'kiln_list_primitives', arguments: {} })),
+      [0, 1].map(() => client.callTool({ name: 'kiln_discover', arguments: {} })),
     );
     expect(results.every((result) => result.isError !== true)).toBe(true);
     expect(
-      JSON.stringify(await client.callTool({ name: 'kiln_list_primitives', arguments: {} })),
+      JSON.stringify(await client.callTool({ name: 'kiln_discover', arguments: {} })),
     ).toContain('budget-exhausted');
     const events = (await readFile(join(directory, 'result/events.jsonl'), 'utf8'))
       .trim()

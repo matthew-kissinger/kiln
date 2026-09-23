@@ -1,6 +1,7 @@
 import * as THREE from 'three';
 
-import { readSemanticMetadataV1, type VehicleIntentV1 } from '../contracts';
+import { readSemanticMetadataV1 } from '../contracts';
+import type { AssetRequirementsV1 } from '../contracts/requirements';
 import {
   hasCanonicalVehicleFront,
   resolveVehicleWheelAssemblies,
@@ -10,6 +11,17 @@ import { conformancePromotionAuthorization, KILN_ENGINE_QA_OWNER, type QaRule } 
 import type { QaContext, QaFinding } from './types';
 import { VEHICLE_W6_ADVISORY_QA_RULE } from './vehicle-advisory';
 
+export type MobilityRequirements = Extract<
+  NonNullable<AssetRequirementsV1['requirements']['mobility']>,
+  { value: unknown }
+>['value'];
+export interface MobilityQaInput {
+  scene?: unknown;
+  profile?: string;
+  mobility?: MobilityRequirements;
+  groundPlaneY?: number;
+}
+
 const PROFILE = 'vehicle.semantic';
 const CENTER_RATIO = 0.03;
 const CENTER_MINIMUM = 0.01;
@@ -17,10 +29,13 @@ const AXIS_TOLERANCE_DEGREES = 1;
 const PAIR_TOLERANCE = 0.015;
 const CONTACT_TOLERANCE = 0.02;
 
-function finding(context: QaContext, value: Omit<QaFinding, 'profile' | 'dimension'>): QaFinding {
+function finding(
+  context: MobilityQaInput,
+  value: Omit<QaFinding, 'profile' | 'dimension'>,
+): QaFinding {
   return {
     ...value,
-    profile: context.intent.qaProfile || PROFILE,
+    profile: context.profile ?? 'asset.requirements.v1',
     dimension: 'categoryReadiness',
     viewHints: value.viewHints ?? ['vehicle.underbody', 'vehicle.wheel-section'],
   };
@@ -55,12 +70,12 @@ function componentDisposition(wheel: ResolvedWheelAssembly): 'block' | 'warn' {
 }
 
 function wheelCountFindings(
-  context: QaContext,
-  intent: VehicleIntentV1,
+  context: MobilityQaInput,
+  intent: MobilityRequirements,
   wheels: readonly ResolvedWheelAssembly[],
 ): QaFinding[] {
   const findings: QaFinding[] = [];
-  if (wheels.length !== intent.wheelCount) {
+  if (intent.wheelCount !== undefined && wheels.length !== intent.wheelCount) {
     findings.push(
       finding(context, {
         code: 'VEH_WHEEL_COUNT',
@@ -78,7 +93,7 @@ function wheelCountFindings(
     );
   }
   const axleIds = new Set(wheels.map((wheel) => wheel.index).filter(Boolean));
-  if (intent.axleCount > 0 && axleIds.size !== intent.axleCount) {
+  if (intent.axleCount !== undefined && axleIds.size !== intent.axleCount) {
     findings.push(
       finding(context, {
         code: 'VEH_AXLE_COUNT',
@@ -97,7 +112,7 @@ function wheelCountFindings(
 }
 
 function wheelGeometryFindings(
-  context: QaContext,
+  context: MobilityQaInput,
   root: THREE.Object3D,
   wheels: readonly ResolvedWheelAssembly[],
 ): QaFinding[] {
@@ -212,7 +227,7 @@ function wheelGeometryFindings(
 }
 
 function axlePairFindings(
-  context: QaContext,
+  context: MobilityQaInput,
   root: THREE.Object3D,
   wheels: readonly ResolvedWheelAssembly[],
 ): QaFinding[] {
@@ -256,7 +271,7 @@ function axlePairFindings(
 }
 
 function duplicateAssemblyFindings(
-  context: QaContext,
+  context: MobilityQaInput,
   root: THREE.Object3D,
   wheels: readonly ResolvedWheelAssembly[],
 ): QaFinding[] {
@@ -308,9 +323,9 @@ function duplicateAssemblyFindings(
 }
 
 function contactFindings(
-  context: QaContext,
+  context: MobilityQaInput,
   root: THREE.Object3D,
-  intent: VehicleIntentV1,
+  intent: MobilityRequirements,
   wheels: readonly ResolvedWheelAssembly[],
 ): QaFinding[] {
   if (intent.supportPolicy !== 'grounded') return [];
@@ -320,21 +335,24 @@ function contactFindings(
   for (const wheel of wheels.filter((value) => value.loadBearing)) {
     const center = localPoint(inverse, wheel.centerWorld);
     const contactY = center.y - (wheel.radius ?? 0);
-    if (wheel.radius === undefined || Math.abs(contactY) > CONTACT_TOLERANCE) {
+    if (
+      wheel.radius === undefined ||
+      Math.abs(contactY - (context.groundPlaneY ?? 0)) > CONTACT_TOLERANCE
+    ) {
       findings.push(
         finding(context, {
           code: 'VEH_CONTACT_PLANE',
           disposition: componentDisposition(wheel),
-          message: `Load-bearing wheel ${wheel.id} must touch the shared ground plane Y=0 without floating or burial.`,
+          message: `Load-bearing wheel ${wheel.id} must touch the requested ground plane Y=${context.groundPlaneY ?? 0} without floating or burial.`,
           affected: { node: wheel.tire?.name ?? wheel.root.name },
           measurement: {
             name: 'tireContactY',
             actual: wheel.radius === undefined ? null : contactY,
-            expected: 0,
+            expected: context.groundPlaneY ?? 0,
             threshold: CONTACT_TOLERANCE,
             unit: 'm',
           },
-          repairText: `Set ${wheel.id} axle-center Y to its tire radius so its contact point is Y=0.`,
+          repairText: `Set ${wheel.id} axle-center Y to its tire radius plus ${context.groundPlaneY ?? 0} so its contact point meets the requested plane.`,
         }),
       );
     }
@@ -373,11 +391,10 @@ function renderableMinYInRoot(
 /** Minimal W4 support contact contract. Missing/stability-set policy remains VEH-022;
  *  any declared support/contact that is present must already honor canonical ground Y=0. */
 function supportContactFindings(
-  context: QaContext,
+  context: MobilityQaInput,
   root: THREE.Object3D,
-  intent: VehicleIntentV1,
+  intent: MobilityRequirements,
 ): QaFinding[] {
-  if (intent.supportPolicy !== 'grounded') return [];
   root.updateWorldMatrix(true, true);
   const inverse = root.matrixWorld.clone().invert();
   const explicitContacts: SupportContactMeasurement[] = [];
@@ -400,88 +417,90 @@ function supportContactFindings(
   });
   const measurements = explicitContacts.length > 0 ? explicitContacts : supports;
   const findings = measurements.flatMap((measurement) => {
-    if (Math.abs(measurement.contactY) <= CONTACT_TOLERANCE) return [];
+    if (
+      intent.supportPolicy !== 'grounded' ||
+      Math.abs(measurement.contactY - (context.groundPlaneY ?? 0)) <= CONTACT_TOLERANCE
+    )
+      return [];
     return [
       finding(context, {
         code: 'VEH_CONTACT_PLANE',
         disposition: 'block',
-        message: `Load-bearing ${measurement.source} ${measurement.node.name || '(unnamed)'} must touch the shared ground plane Y=0 without floating or burial.`,
+        message: `Load-bearing ${measurement.source} ${measurement.node.name || '(unnamed)'} must touch the requested ground plane Y=${context.groundPlaneY ?? 0} without floating or burial.`,
         affected: { node: measurement.node.name || 'vehicle-support' },
         measurement: {
           name: 'supportContactY',
           actual: measurement.contactY,
-          expected: 0,
+          expected: context.groundPlaneY ?? 0,
           threshold: CONTACT_TOLERANCE,
           unit: 'm',
         },
-        repairText: `Move ${measurement.node.name || 'the support'} so its declared contact rests at vehicle-local Y=0.`,
+        repairText: `Move ${measurement.node.name || 'the support'} so its declared contact rests at asset-local Y=${context.groundPlaneY ?? 0}.`,
       }),
     ];
   });
-  if (intent.wheelCount === 0) {
-    for (const expected of intent.supportAssemblies) {
-      const matches = [...explicitContacts, ...supports].filter((measurement) =>
-        (readSemanticMetadataV1(measurement.node)?.roles ?? []).some(
-          (role) =>
-            role === `support.${expected}` ||
-            role.startsWith(`support.${expected}.`) ||
-            role === `contact.${expected}` ||
-            role.startsWith(`contact.${expected}.`),
-        ),
-      );
-      if (matches.length > 0) continue;
+  for (const expected of intent.supportAssemblies ?? []) {
+    if (expected === 'wheel' && resolveVehicleWheelAssemblies(root).length > 0) continue;
+    const matches = [...explicitContacts, ...supports].filter((measurement) =>
+      (readSemanticMetadataV1(measurement.node)?.roles ?? []).some(
+        (role) =>
+          role === `support.${expected}` ||
+          role.startsWith(`support.${expected}.`) ||
+          role === `contact.${expected}` ||
+          role.startsWith(`contact.${expected}.`),
+      ),
+    );
+    if (matches.length > 0) continue;
+    findings.push(
+      finding(context, {
+        code: 'VEH_SUPPORT_SET_MISSING',
+        disposition: 'block',
+        message: `Requested mobility requires semantic ${expected} supports or contacts.`,
+        affected: { node: root.name || 'vehicle-root' },
+        measurement: {
+          name: `${expected}SupportCount`,
+          actual: 0,
+          expected: '>=1',
+          threshold: 1,
+        },
+        viewHints: ['vehicle.underbody', 'generic.front.depth-contact'],
+        repairText: `Add the requested semantic ${expected} support set.${intent.supportPolicy === 'grounded' ? ` Place its contacts at asset-local Y=${context.groundPlaneY ?? 0}.` : ''}`,
+      }),
+    );
+  }
+  if (intent.supportPolicy === 'grounded' && measurements.length > 1) {
+    const values = measurements.map((measurement) => measurement.contactY);
+    const range = Math.max(...values) - Math.min(...values);
+    if (range > CONTACT_TOLERANCE) {
       findings.push(
         finding(context, {
-          code: 'VEH_SUPPORT_SET_MISSING',
+          code: 'VEH_SUPPORT_PLANE',
           disposition: 'block',
-          message: `Trusted grounded ${intent.subtype} intent requires semantic ${expected} supports or contacts.`,
+          message: `Declared non-wheel supports do not share one stable vehicle-local contact plane.`,
           affected: { node: root.name || 'vehicle-root' },
           measurement: {
-            name: `${expected}SupportCount`,
-            actual: 0,
-            expected: '>=1',
-            threshold: 1,
+            name: 'supportContactPlaneRange',
+            actual: range,
+            expected: 0,
+            threshold: CONTACT_TOLERANCE,
+            unit: 'm',
           },
           viewHints: ['vehicle.underbody', 'generic.front.depth-contact'],
-          repairText: `Add only the declared ${expected} support set, tag each load-bearing part/contact semantically, and place every contact on vehicle-local Y=0.`,
+          repairText: `Move only the reported supports onto the requested asset-local Y=${context.groundPlaneY ?? 0} plane while preserving their stance.`,
         }),
       );
-    }
-    if (measurements.length > 1) {
-      const values = measurements.map((measurement) => measurement.contactY);
-      const range = Math.max(...values) - Math.min(...values);
-      if (range > CONTACT_TOLERANCE) {
-        findings.push(
-          finding(context, {
-            code: 'VEH_SUPPORT_PLANE',
-            disposition: 'block',
-            message: `Declared non-wheel supports do not share one stable vehicle-local contact plane.`,
-            affected: { node: root.name || 'vehicle-root' },
-            measurement: {
-              name: 'supportContactPlaneRange',
-              actual: range,
-              expected: 0,
-              threshold: CONTACT_TOLERANCE,
-              unit: 'm',
-            },
-            viewHints: ['vehicle.underbody', 'generic.front.depth-contact'],
-            repairText:
-              'Move only the reported skid, landing-gear, track, or other support contacts onto one vehicle-local Y=0 plane while preserving their stance.',
-          }),
-        );
-      }
     }
   }
   return findings;
 }
 
 function steeringFindings(
-  context: QaContext,
+  context: MobilityQaInput,
   root: THREE.Object3D,
-  intent: VehicleIntentV1,
+  intent: MobilityRequirements,
   wheels: readonly ResolvedWheelAssembly[],
 ): QaFinding[] {
-  if (intent.steering === 'none' || wheels.length === 0) return [];
+  if (intent.steering === undefined || intent.steering === 'none' || wheels.length === 0) return [];
   root.updateWorldMatrix(true, false);
   const inverse = root.matrixWorld.clone().invert();
   const expectedAxis = rootAxis(root, new THREE.Vector3(0, 1, 0));
@@ -553,11 +572,11 @@ interface PropulsionPart {
 }
 
 function propulsionFindings(
-  context: QaContext,
+  context: MobilityQaInput,
   root: THREE.Object3D,
-  intent: VehicleIntentV1,
+  intent: MobilityRequirements,
 ): QaFinding[] {
-  const expectedKinds = intent.propulsionAssemblies.filter(
+  const expectedKinds = (intent.propulsionAssemblies ?? []).filter(
     (value): value is 'rotor' | 'propeller' => value === 'rotor' || value === 'propeller',
   );
   if (expectedKinds.length === 0) return [];
@@ -658,16 +677,15 @@ function propulsionFindings(
   return findings;
 }
 
-export function evaluateVehicleQa(context: QaContext): readonly QaFinding[] {
-  if (context.intent.category !== 'vehicle' || !(context.scene instanceof THREE.Object3D))
-    return [];
-  const intent = context.intent.vehicle;
+export function inspectMobility(context: MobilityQaInput): readonly QaFinding[] {
+  if (!(context.scene instanceof THREE.Object3D)) return [];
+  const intent = context.mobility;
   if (!intent) return [];
   const root = context.scene;
   root.updateMatrixWorld(true);
   const wheels = resolveVehicleWheelAssemblies(root);
   const findings: QaFinding[] = [];
-  if (!hasCanonicalVehicleFront(root)) {
+  if (intent.frontFrame === '+X' && !hasCanonicalVehicleFront(root)) {
     findings.push(
       finding(context, {
         code: 'VEH_FRONT_AXIS',
@@ -680,7 +698,7 @@ export function evaluateVehicleQa(context: QaContext): readonly QaFinding[] {
       }),
     );
   }
-  if (intent.wheelCount > 0 || intent.subtype === 'wheeled') {
+  if (intent.wheelCount !== undefined || intent.axleCount !== undefined || wheels.length > 0) {
     findings.push(...wheelCountFindings(context, intent, wheels));
     findings.push(...wheelGeometryFindings(context, root, wheels));
     findings.push(...axlePairFindings(context, root, wheels));
@@ -693,6 +711,16 @@ export function evaluateVehicleQa(context: QaContext): readonly QaFinding[] {
   return findings;
 }
 
+/** Old-data conformance adapter; the neutral runner calls inspectMobility directly. */
+export function evaluateVehicleQa(context: QaContext): readonly QaFinding[] {
+  if (context.intent.category !== 'vehicle' || !context.intent.vehicle) return [];
+  return inspectMobility({
+    scene: context.scene,
+    profile: context.intent.qaProfile || PROFILE,
+    mobility: { ...context.intent.vehicle, frontFrame: '+X' },
+  });
+}
+
 export const VEHICLE_QA_RULE: QaRule = {
   id: 'VEHICLE_PROFILE',
   profile: PROFILE,
@@ -702,7 +730,7 @@ export const VEHICLE_QA_RULE: QaRule = {
   promotion: conformancePromotionAuthorization(
     'vehicle-qa-v1',
     'src/qa/vehicle.test.ts',
-    '4bffa0dff0ed33be2ce7003ee36ac33efc5b4900e57d390898e43551912e626b',
+    '3dfd250883b2605a4e8e4fded5ed8ded9e891680853af3fca3c5127771db47d7',
   ),
   defaultMode: 'enforce',
   evaluate: (context) =>

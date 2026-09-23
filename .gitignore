@@ -26,6 +26,9 @@ coverage/
 !.env.example
 .localdata/
 tmp/
+# Disposable Node bundle for the checked-in Discovery research source.
+/scripts/research-discovery/production-benchmark.mjs
+/scripts/research-discovery/production-scale.mjs
 
 # Dogfooding runs by dispatched CLI agents (scripts/dispatch-asset.mjs)
 .dogfood/

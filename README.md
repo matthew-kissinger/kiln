@@ -56,13 +56,24 @@ https://github.com/user-attachments/assets/375327bc-58bc-4344-bbb4-985d92c6f63a
 · [All examples and model credits](docs/examples.md)
 
 These are saved examples from different authoring runs, not a model ranking.
+They are historical showcases from earlier Kiln versions, with unvetted modeling
+issues; they are not golden outputs or reference solutions.
 [Credits, review conditions and build records](docs/example-provenance.md).
+
+Version **0.8.0** unifies authoring around Discovery and optional requirements,
+with updated geometry helpers, edit evidence and separate native-agent context.
+It is a source update; an official 0.8.0 package has not been published. Use the
+[versioned source installation](docs/install.md#use-the-08-source-release) for the
+new tools. The [qualification report](docs/reviews/2026-09-23-v08-candidate.md)
+records checks and support limits; the [progress checkpoint](docs/plans/2026-09-22-progress-checkpoint.md)
+retains the detailed work history.
 
 
 Start with the [installation guide](docs/install.md) for a built package on macOS,
 Windows, or Linux. It uses Node.js and creates a project-local agent setup.
-Package checks pass on Windows, Linux, and hosted macOS runners for Apple Silicon
-and Intel. See the [platform receipts](docs/evaluation/platform-matrix.md);
+Prior releases have package receipts on Windows, Linux, and hosted macOS runners
+for Apple Silicon and Intel. Those [platform receipts](docs/evaluation/platform-matrix.md)
+do not qualify the current candidate;
 real-world setup reports and GPU checks remain welcome from contributors.
 
 ## Run from a checkout
@@ -85,6 +96,13 @@ Rendering uses the CPU unless a compatible local GPU service is available.
 Use `--render cpu` to select the CPU explicitly. Sheets sit on a neutral grey; add
 `--backdrop dark` or `--backdrop light` when an asset's silhouette merges with it; `kiln save`
 takes the same flag for the preview it stores.
+
+For anchored CLI edits, import source with `kiln source asset.kiln.js`, then run
+`kiln edit RETURNED_REF --edits edits.json`. The file contains an array of
+`{ "oldString": "exact existing text", "newString": "replacement text" }` objects.
+The command returns a new immutable reference and diff without executing source;
+render that new reference to inspect the result. `kiln edit --help` describes
+batch limits and `replaceAll`.
 
 **Using assets in Blender or Unity?** Read the [handoff guide](docs/engine-handoff.md) for direct GLB import,
 materials, backfaces, named pivots and animation checks. The established exporter remains
@@ -134,12 +152,22 @@ cd ../my-assets
 
 Choose `claude`, `codex`, `opencode`, `hermes`, `agy`, `copilot`, or `cursor-agent` for `--harness`, then open that harness in the
 new directory using its generated START.md instructions and accept its project and MCP trust prompts. Sign in to your harness
-first. The MCP server and local CLI are tested on Node.js 22.23.2.
+first. The compiled MCP server and CLI accept Node.js 20.15.0+ on the 20.x line,
+or 22.2.0 and later. Bun is for building and testing the engine; installed commands
+do not require it. The optional native Strands agent requires Node 22.2.0+.
+See the [runtime requirements and qualification limits](docs/install.md).
 
 If the brief depends on textures, roughness, metalness, glass, or other material evidence,
-start the optional [GPU render service](docs/rendering.md#running-the-gpu-renderer) before
-the first authoring session. CPU views are useful for shape and contact, but not for judging
-materials; restart an already-open agent session after bringing the renderer online.
+check the optional [GPU renderer setup](docs/rendering.md#running-the-gpu-renderer) before
+the first authoring session. Auto mode starts a compatible local service lazily when its
+dependencies are available. CPU views are useful for shape and contact, but not for judging
+materials. After dependency repair or a failed startup, call
+`kiln_renderer({action:"reprobe"})` inside the MCP session to refresh its connection.
+Restart after changing Kiln, environment variables or credentials. A compatible
+renderer can also run on another device: configure the MCP server's
+`KILN_RENDER_PORT_URL` and `KILN_RENDER_TOKEN`, or use CLI `--render-port URL` with
+the token in its environment. The [rendering guide](docs/rendering.md#running-the-gpu-renderer)
+covers remote service authentication and lifecycle.
 
 **Follow START.md rather than launching the harness directly.** Some harnesses keep all
 configuration in a user-level home and read nothing from a project directory, so the workspace
@@ -154,6 +182,9 @@ Try: “Read AGENTS.md, then make a wooden workbench with a lower shelf. Render 
 review the result, and save the source and GLB.”
 
 Setup installs the core authoring, refinement and QA skills. Composition and batch workflows are opt-in.
+These skills work with your chosen harness through CLI/MCP. The optional built-in
+Strands agent adds its own workflow internally; do not copy that context into your
+harness. See [the workflow boundary](docs/runtime.md#optional-native-strands-workflow).
 
 The workspace contains your brief, assets, and skills. The engine source and example
 collection stay in the installation directory. See [clean-room setup](docs/clean-room.md)
@@ -281,7 +312,36 @@ same field for the preview it stores, and the manifest records it as `preview.ba
 
 ## Tool reference
 
-Use `kiln_list_primitives` to discover signatures and examples. The
+Use `kiln_discover` to find operations, assemblies and optional recipes in ordinary
+modeling language. An empty request returns a compact overview with starting
+signatures and six summaries. For example, search with `{ query: "curved hollow tube" }`,
+then request `{ ids: ["sweepProfile"] }` for a complete contract and example. Exact
+batches accept up to six distinct IDs or executable names. Search is local and needs
+no separate model, network call, or asset-category selection.
+
+The same workflow is available in the CLI:
+
+```sh
+bun run kiln discover --query "curved hollow tube"
+bun run kiln discover --id sweepProfile --id createPart --json
+bun run kiln discover --kind recipe
+bun run kiln discover --capabilities
+```
+
+Search and overview accept `family`, `kind`, `tags`, `offset` and `limit` (default six,
+maximum twelve). CLI uses `--family`, `--kind`, repeated `--tag`, `--offset` and `--limit`.
+Browse current filter labels in the overview. Search relevance does not certify that
+a helper supports the entire requested asset; read its limitations and exact contract.
+
+`kiln_list_primitives` and its `name`, `names`, and `category` selectors are removed,
+with no callable alias. Stop the harness/MCP session, then run `kiln-init WORKSPACE
+--check` and `kiln-init WORKSPACE --upgrade` from the updated installation. Upgrade
+preserves assets and refuses conflicting local changes; resolve those explicitly
+before retrying. Restart the session to load current schemas. A fresh workspace is
+also supported. `--repair` repairs paths without upgrading copied skills. Use
+`kiln migrate intent|manifest OLD.json --out REVIEW.json` for an explicit legacy-data
+review; unresolved obligations prevent activation. See [migration](docs/migration.md).
+The
 [generated tool reference](docs/tools.md) covers source editing, validation,
 rendering, part inspection, animation and interior views. The shared factory is
 `createKilnProgramToolRegistry` in `@kiln/engine/tools`.

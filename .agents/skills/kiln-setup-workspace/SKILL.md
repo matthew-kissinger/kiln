@@ -2,6 +2,8 @@
 name: kiln-setup-workspace
 description: Create and verify a Kiln asset workspace for a chosen coding-agent harness. Use before authoring when the current directory is the engine repository, an empty folder, or any project without a working kiln_workspace server.
 license: MIT
+metadata:
+  kiln-workflow: workspace
 ---
 
 # Set up a workspace for asset authoring
@@ -22,6 +24,8 @@ node scripts/create-workspace.mjs /absolute/empty-workspace --harness claude
 
 From an installed package, the equivalent is `kiln-init /absolute/empty-workspace --harness claude`. Author, refine and QA skills are installed by default; `--skills compose,batch` adds the optional scene-composition and trial-dispatch workflows. Ask the user which harness they use rather than assuming; the choice writes different configuration and cannot be changed afterwards without a fresh workspace.
 
+CLI/MCP workspaces use the shared skills under `skills/`. Kiln's optional built-in Strands agent adds its workflow internally, outside that directory. Do not copy its system prompt, native workflow skill or completion protocol into another harness's skills or instructions. This applies to manual setup and plugin installs too; the engine's `src/agent/` directory is not a skill source.
+
 | `--harness` | Launch from the workspace |
 | --- | --- |
 | `claude` | `claude` |
@@ -38,19 +42,21 @@ Hermes needs one user-level registration for the MCP server, because it has no p
 
 ## Start the GPU render service
 
-Setup asks for render mode `auto`: a GPU service when one answers on port 8000, CPU views otherwise. CPU views are honest about silhouette, proportion and contact and say nothing about colour, metalness or roughness, so without the service no render can confirm a material.
+Setup asks for render mode `auto`: textured or metallic scenes use a compatible GPU service, starting one lazily when available. Ordinary untextured scenes with zero metalness and no advanced material extensions use CPU views, even with a GPU available. CPU views support silhouette, proportion and contact review, but cannot confirm PBR appearance. Use CLI `--render gpu` when material review is required, including roughness on nonmetallic surfaces.
 
-Run its install unless the user declines; in a headless session, where there is nobody to ask, install it without asking, because a session that starts without it stays on CPU views for its lifetime. It lives in the engine installation rather than the workspace, and it is a separate package with a native dependency, so its install is its own step and is not covered by installing the engine. Setup prints a notice when the service shipped but was never installed.
+The renderer code is included with Kiln; its native GPU dependency is optional at the Kiln package root. For material-dependent tasks, check `node kiln.mjs service status` before starting the authoring session. If dependencies are missing or incompatible, reinstall the official Kiln package with optional dependencies enabled. Read `runtime` from `.kiln/workspace.json` to identify the installation. A source checkout uses `bun install --frozen-lockfile` at that root. Setup checks dependency resolution without loading native code; ready dependencies alone do not prove the device can render.
 
-```bash
-cd render-service && npm install
-```
+Once dependencies are available, local CLI/MCP auto mode starts a managed service lazily for a view that needs PBR shading. Compatible clients share it; it survives the initiating session and exits after five minutes without admitted uploads, queued jobs or active renders. From the installation root, `node --import ./render-service/src/register-hooks.mjs render-service/src/server.mjs` starts a manual service that remains running while idle. It binds loopback; widening `HOST` requires `RENDER_SERVICE_TOKEN`.
 
-That is the whole setup. Once installed, the MCP server starts the service on the first view that needs PBR shading and stops it when the session ends, so there is no terminal to leave running and no ordering to get right -- except one: install it *before* the session that will use it, because the server checks at startup whether a renderer could run here and a session older than the install stays on CPU for its lifetime. Add `npm start` only when the service should outlive a single session, such as one GPU shared by a batch of dispatched agents; it binds loopback, and widening that with `HOST` requires `RENDER_SERVICE_TOKEN`. If the machine has no usable GPU, report that and continue on CPU views; it is a limit to state, not a setup failure. `bun run kiln service status` in the engine checkout shows who is listening on the shared port and whether it runs current source; a renderer left over from before a pull is replaced automatically when nobody owns it, and `kiln service stop` clears one that is.
+`node kiln.mjs service status` reports installation, verified health and lifetime. After dependency repair or a cached startup failure, call `kiln_renderer({action:"reprobe"})` inside the MCP session to refresh its existing route. It neither installs dependencies nor starts a renderer; the next view starts one if needed. CLI `service reprobe` checks only its own process. Restart the session after changing Kiln, environment variables or credentials. Unknown or incompatible listeners are reported and left alone. `service stop` explicitly stops a verified local service. If no usable GPU is available, report the material-review limitation and continue on CPU views when that fits the task.
+
+For rendering on another device, configure the MCP server process's `KILN_RENDER_PORT_URL` and, when needed, `KILN_RENDER_TOKEN` through the chosen harness. CLI accepts `--render-port URL` and reads `KILN_RENDER_TOKEN`. Start a compatible Kiln renderer on that device; its wider bind requires `RENDER_SERVICE_TOKEN` unless an authenticated proxy is explicitly configured. Manage the remote service on its own device. Verify the selected route with capabilities and require an actual `viewFidelity` receipt for material evidence.
 
 ## Verify the loadout before authoring
 
-Accept the project and MCP trust prompts, then confirm the server is actually live rather than assuming it from configuration. Call `kiln_list_primitives` on `kiln_workspace` with `capabilities: true`; it returns the runtime, source, export and camera contract and proves the tools resolved. A server named `kiln` from a global installation is a different thing. Do not substitute it silently; report the setup problem instead. When another agent is to do the authoring, start it as a separate harness process in the workspace directory (for OpenCode, `opencode run --dir <workspace> "<brief>"`); a subagent of the current session inherits this session's tools and never sees the workspace's MCP server, so it would be left with the CLI alone.
+Accept the project and MCP trust prompts, then confirm the server is actually live rather than assuming it from configuration. Call `kiln_discover` on `kiln_workspace` with `{ capabilities: true }`; it returns the runtime, source, export and camera contract and proves the tools resolved. Compare `capabilities.engine.installUrl` with `runtime` in `.kiln/workspace.json`. A server named `kiln` from a global installation is a different thing. Do not substitute it silently; report the setup problem instead. When another agent is to do the authoring, start it as a separate harness process in the workspace directory (for OpenCode, `opencode run --standalone "<brief>"` after changing into the workspace); a subagent of the current session inherits this session's tools and never sees the workspace's MCP server, so it would be left with the CLI alone.
+
+For modeling, `kiln_discover({})` supplies a compact orientation and starting signatures. Use natural-language `query` for related operations, assemblies, and optional recipes; use exact `ids` for complete contracts. Discovery needs no separate search model or asset-category selection. The local equivalent is `node kiln.mjs discover --query "curved hollow tube"`, followed by `node kiln.mjs discover --id RETURNED_ID`.
 
 Confirm the installed skills are readable at `skills/` in the workspace, and read the relevant one from there rather than a global copy. Whether the harness also registers them natively depends on the harness.
 
@@ -70,7 +76,13 @@ Moving the workspace or the engine installation breaks the generated absolute pa
 node /current/kiln/scripts/create-workspace.mjs /absolute/empty-workspace --repair
 ```
 
-Repair rewrites generated runtime paths only. It preserves copied skills, saved revisions and assets, refuses configuration that was edited by hand, and does not upgrade the skills. To evaluate a different engine version, create a fresh workspace from that version so instructions and tools match.
+Repair rewrites generated runtime paths only. It preserves copied skills, saved revisions and assets, refuses configuration that was edited by hand, and does not upgrade the skills.
+
+For an existing workspace, stop its harness/MCP session and run setup from the desired installation with `--check`, then `--upgrade`. Check returns JSON and exits 1 when an update is required. Upgrade refreshes unchanged configuration, instructions and all registered skill copies while preserving assets and source stores. Conflicting local edits stop the whole upgrade before writing. Older instruction files without ownership hashes also require explicit resolution: preserve them separately, compare against a fresh temporary workspace, then move them aside or supply the current version before retrying. Reapply compatible customizations after upgrading. Do not overwrite an edited file merely to clear a conflict.
+
+New managed launchers reject runtime/skill mismatches before serving tools; older workspaces need this explicit check first. Restart the harness/MCP session after upgrading so cached tool schemas and instructions match. `--repair` alone does not refresh copied skills or a running session. For independent model evaluations, create a fresh workspace from the candidate.
+
+Discovery replaces the removed `kiln_list_primitives` tool; its old `name`, `names`, and `category` selectors have no alias. Update copied guidance through the explicit workspace upgrade, then verify Discovery against the installation as above.
 
 ## What isolation means
 

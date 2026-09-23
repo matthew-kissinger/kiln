@@ -12,6 +12,7 @@ import { packRgbaReadback } from './readback.mjs';
 import { PNG } from 'pngjs';
 import { acquireGpu } from './gpu.mjs';
 import { validateRenderMode } from './contract.mjs';
+import { selfContainedResourceUrl, validateSelfContainedGlb } from './glb-input.mjs';
 import {
   DEFAULT_PRESENTATION_PRESET_ID,
   PRESENTATION_PRESET_IDS,
@@ -28,7 +29,8 @@ globalThis.self = globalThis;
 globalThis.requestAnimationFrame = (cb) => setTimeout(() => cb(performance.now()), 16);
 globalThis.cancelAnimationFrame = (id) => clearTimeout(id);
 
-// PNG-only decode for GLB-embedded images; JPEG assets degrade to materials without maps.
+// PNG-only decode. Admission rejects other formats before GLTFLoader can
+// silently discard a map on decode failure.
 globalThis.createImageBitmap = async (blob) => {
   const buf = Buffer.from(await blob.arrayBuffer());
   if (buf[0] !== 0x89 || buf[1] !== 0x50) throw new Error('only PNG images supported in GLB');
@@ -137,6 +139,7 @@ export async function initRenderer(opts = {}) {
   const environment = environments.get(PRESENTATION_PROFILE_ID);
 
   const loader = new GLTFLoader();
+  loader.manager.setURLModifier(selfContainedResourceUrl);
   ctx = { renderer, environment, environments, loader, gpuState, device: gpuState.device };
   return ctx;
 }
@@ -317,6 +320,7 @@ async function readPng(renderer, rt, w, h) {
  *   cameras?: object[], width?: number, height?: number, lightingPresetId?: string}>}
  */
 export async function renderGlb(glbBytes, opts = {}) {
+  validateSelfContainedGlb(glbBytes);
   const { renderer, environments, loader } = await initRenderer();
   const renderMode = validateRenderMode({
     cameras: opts.cameras,

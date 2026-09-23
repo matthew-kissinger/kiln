@@ -16,6 +16,7 @@ import {
   revolveGeo,
   lathe,
   pipeAlongPath,
+  curveToMesh,
 } from '../ops';
 
 describe('mergeVertices', () => {
@@ -213,6 +214,20 @@ describe('revolveGeo', () => {
 });
 
 describe('pipeAlongPath', () => {
+  it('both tube helpers reject absent or invalid required radii instead of inheriting Three defaults', () => {
+    const points: [number, number, number][] = [
+      [0, 0, 0],
+      [0, 0.2, 0],
+    ];
+    for (const helper of [pipeAlongPath, curveToMesh]) {
+      for (const radius of [undefined, NaN, Infinity, 0, -0.1, 1e-50])
+        expect(() => helper(points, radius as number)).toThrow(/explicit.*radius/);
+      const result = helper(points, 0.0025);
+      result.computeBoundingBox();
+      expect(result.boundingBox!.max.x - result.boundingBox!.min.x).toBeCloseTo(0.005, 7);
+    }
+  });
+
   function bbox(geo: THREE.BufferGeometry): { x: number; y: number; z: number } {
     geo.computeBoundingBox();
     const size = new THREE.Vector3();

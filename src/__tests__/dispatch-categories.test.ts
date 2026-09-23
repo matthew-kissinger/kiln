@@ -1,54 +1,37 @@
-/**
- * The dispatcher's category list is a copy, and copies rot.
- *
- * `scripts/dispatch-asset.mjs` runs before anything is built -- it is the thing
- * that drives a foreign CLI at a clean sandbox -- so it cannot import this
- * package's TypeScript. It therefore keeps its own literal array of the seven
- * categories, and rejects anything outside it so a typo fails in the first
- * second instead of producing an asset filed under nothing. This test is the
- * seam that keeps that array honest.
- *
- * The flag exists because its absence was measurable: every asset the
- * dispatcher had ever produced came back `category: 'prop'`, because the brief
- * said so in a string literal. The engine has carried per-category guidance the
- * whole time and nothing was reaching it.
- */
-
 import { describe, expect, it } from 'bun:test';
-import { readFile } from 'node:fs/promises';
-import { join } from 'node:path';
+import { runInNewContext } from 'node:vm';
+import { composePrompt, parseArgs } from '../../scripts/dispatch-asset.mjs';
+import { BRIEF } from '../../scripts/harness-smoke.mjs';
+import { discoveryInputSchema } from '../discovery/query-schema';
 
-import { ASSET_CATEGORIES } from '../contracts';
-
-const script = readFile(join(import.meta.dir, '../../scripts/dispatch-asset.mjs'), 'utf8');
-
-describe('dispatch-asset.mjs category contract', () => {
-  it('mirrors ASSET_CATEGORIES exactly', async () => {
-    const src = await script;
-    const line = /const ASSET_CATEGORIES = \[([^\]]+)\]/.exec(src);
-    expect(line).not.toBeNull();
-    const mirrored = [...line![1]!.matchAll(/'([a-z]+)'/g)].map((m) => m[1]);
-    expect(mirrored).toEqual([...ASSET_CATEGORIES]);
+describe('dispatcher neutral authoring entry', () => {
+  it('rejects retired category selectors before creating a workspace or contacting a harness', () => {
+    expect(() => parseArgs(['--category', 'architecture', 'a coliseum'])).toThrow(
+      /--category.*removed.*brief/i,
+    );
+    expect(() => parseArgs(['--category=vehicle', 'a survey drone'])).toThrow(
+      /--category.*removed/i,
+    );
   });
 
-  it('has a brief for every category', async () => {
-    const src = await script;
-    const block = /const CATEGORY_BRIEF = \{([\s\S]*?)\n\};/.exec(src);
-    expect(block).not.toBeNull();
-    const keys = [...block![1]!.matchAll(/^ {2}([a-z]+):/gm)].map((m) => m[1]);
-    // `prop` is deliberately empty -- it is the default and the base skill
-    // already describes it -- but it still has to be present, so that adding a
-    // category to the contract without a brief fails here rather than silently
-    // dispatching with no guidance.
-    expect([...keys].sort()).toEqual([...ASSET_CATEGORIES].sort());
+  it('preserves an arbitrary asset brief without imposing a category or floor count', () => {
+    const subject = 'an open coliseum with six tiers and a removable floor';
+    const options = parseArgs(['--harness', 'opencode', '--name', 'coliseum', subject]);
+    const prompt = composePrompt({ ...options, file: '/trial/coliseum.kiln.js' });
+    expect(options.subject).toBe(subject);
+    expect(prompt).toContain(subject);
+    const metaLine = /const meta = \{[^\n]*?\};/.exec(prompt)?.[0];
+    expect(metaLine).toBeDefined();
+    const meta = runInNewContext(`${metaLine} meta;`) as Record<string, unknown>;
+    expect(meta).toEqual({ name: 'Coliseum' });
+    expect(prompt).not.toContain('This is ARCHITECTURE');
   });
 
-  it('puts the chosen category into the meta line it asks for', async () => {
-    const src = await script;
-    // Assembled rather than written out, because a literal `${...}` inside a
-    // plain string is exactly what the linter is right to be suspicious of.
-    const interpolated = ['category:', " '$", '{category}', "' };"].join('');
-    expect(src).toContain(interpolated);
-    expect(src).not.toContain("category: 'prop' };");
+  it('smoke prompt requests valid exact Discovery contracts instead of asking the agent to guess', () => {
+    const prompt = BRIEF('/trial/smoke.kiln.js');
+    const json = /Call kiln_discover with (\{[^\n]*?\})/.exec(prompt)?.[1];
+    expect(json).toBeDefined();
+    const input = discoveryInputSchema.parse(JSON.parse(json!));
+    expect(input.ids).toEqual(['createRoot', 'createPart', 'boxGeo', 'gameMaterial']);
   });
 });

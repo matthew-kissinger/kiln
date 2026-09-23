@@ -11,10 +11,10 @@
  * range it stops satisfying is a runtime failure in the loop, and the only suite
  * that drives the loop for real is `test:live` -- opt-in, billed, not in CI.
  *
- * Two live cases, both verified rather than hypothetical:
- *
- *  - One mismatch exists today and is accepted below with its reason.
- *  - The deferred `ai` 7 family would add a second. `@ai-sdk/provider@4.0.14`
+ * Runtime compatibility alone is insufficient: npm rejects mismatched optional
+ * peers even when dev dependencies are omitted. Do not waive a mismatch because
+ * an adapter's offline wire test passes.
+ * The deferred `ai` 7 family is another example: `@ai-sdk/provider@4.0.14`
  *    still exports `LanguageModelV3` alongside V4, so taking it typechecks
  *    clean; the break is a v4 model handed to a wrapper expecting v3, at
  *    runtime. This is the gate that names it at install time instead.
@@ -57,27 +57,8 @@ export function peerMismatches(declared, readManifest = installedManifest) {
   return mismatches;
 }
 
-/**
- * Mismatches this repository has looked at and decided to run anyway, each with
- * the evidence that the pairing works. A new entry is a deliberate decision, not
- * a lockfile refresh: that is the whole point of listing them.
- */
-const ACCEPTED = [
-  {
-    // Strands lags the Anthropic SDK's 0.x minors by a wide margin -- ^0.109.1
-    // resolves to >=0.109.1 <0.110.0 -- and 13.2 took 0.125.0 without anything
-    // noticing. Kept, because the surface Kiln depends on is `messages.stream`
-    // plus system-prompt formatting, and the cache breakpoint that rides on it
-    // is now asserted against the outgoing request body offline, in
-    // src/agent/providers.test.ts. If that pairing ever breaks, those tests fail
-    // in CI rather than the next live run failing in front of a user.
-    package: '@strands-agents/sdk',
-    wants: '@anthropic-ai/sdk',
-  },
-];
-
 describe('peer ranges', () => {
-  test('the installed tree has no unaccepted peer mismatch', () => {
+  test('the installed tree satisfies peer ranges without resolver bypasses', () => {
     const root = JSON.parse(readFileSync(join(repo, 'package.json'), 'utf8'));
     const declared = {
       ...root.dependencies,
@@ -85,19 +66,9 @@ describe('peer ranges', () => {
       ...root.peerDependencies,
     };
     const found = peerMismatches(declared);
-    const unaccepted = found.filter(
-      (m) => !ACCEPTED.some((a) => a.package === m.package && a.wants === m.wants),
-    );
     expect(
-      unaccepted.map((m) => `${m.package} wants ${m.wants}@${m.range}, installed ${m.installed}`),
+      found.map((m) => `${m.package} wants ${m.wants}@${m.range}, installed ${m.installed}`),
     ).toEqual([]);
-    // ...and an accepted entry that has stopped happening is stale bookkeeping.
-    for (const accepted of ACCEPTED) {
-      expect(
-        found.some((m) => m.package === accepted.package && m.wants === accepted.wants),
-        `${accepted.package} no longer mismatches ${accepted.wants}; drop it from ACCEPTED`,
-      ).toBe(true);
-    }
   });
 
   test('it names the Strands pin that blocks the deferred ai 7 family', () => {

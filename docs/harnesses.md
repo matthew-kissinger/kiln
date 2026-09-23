@@ -9,6 +9,63 @@ to compare runs fairly, see the `kiln-batch-dispatch` skill; for dated results, 
 The registry of record is [scripts/harness.mjs](../scripts/harness.mjs). Every flag below is
 there with the diagnosis that put it there. When the two disagree, that file is right.
 
+**September 23 qualification note:** OpenCode dispatch now targets V2 using the
+process working directory and a private server. Actual V2 CLI/MCP authorings and
+requested edits have completed with frozen checkout runtimes: 36 main authorings
+and 12 held-outs, each with two edits. Native13 also completed generation and two
+refinements through the official Google adapter. These are bounded checkout
+results; asset-quality defects, broader provider/platform support and installed
+qualification remain explicit. See the [native trace audit](reviews/2026-09-23-native-trace-audit.md),
+[campaign and trace review](reviews/2026-09-22-opencode-main-campaign.md) and
+[migration receipt](reviews/2026-09-22-linux-and-opencode-v2.md).
+Cline CLI 3.0.64 is an additional experimental route: Kiln CLI plus native image-file
+loading completed a correction, but Cline's MCP adapter serializes image results
+as text before inference. Do not treat those MCP results as visual review or
+increase text limits to carry base64. See the
+[reproduction and supported route](reviews/2026-09-22-cline-image-qualification.md).
+OpenCode 2.0.14 preserves standard MCP images in captured provider requests.
+Hermes 0.21.4 preserves MCP images as cached files; its vision tool can load them
+for the main model when that route supports images. Activated Cline VS Code 4.1.20
+tests preserve MCP images in Legacy and reproduce the CLI defect in Next/SDK.
+The shared SDK conversion is implicated, not every Cline implementation. See the
+[cross-harness evidence and limits](reviews/2026-09-22-mcp-image-cross-harness.md).
+
+## Cline CLI and Next: image review
+
+Cline CLI 3.0.64 and VS Code 4.1.20 Next/SDK lose MCP image typing before the
+model request. Track [Cline #14421](https://github.com/cline/cline/issues/14421).
+The tested Legacy extension preserves MCP images. Retest a future upstream fix
+with the retained reproduction before treating the affected path as qualified.
+
+For the affected clients, explicitly use Kiln's CLI for image-producing operations,
+then load the resulting PNG with Cline's native image reader (`read_files` in the
+tested CLI/Next implementation). In an existing Kiln asset workspace:
+
+```sh
+node kiln.mjs render asset.kiln.js --out asset.glb --views asset.png --render gpu --json
+```
+
+Ask Cline to read `asset.png` as an image before evaluating it. Read the command's
+`viewFidelity` receipt as well: GPU material fidelity and successful image delivery
+are separate checks. A shell command that prints PNG/base64 data is not image
+loading. CPU views remain useful for geometry but cannot confirm textured materials.
+
+MCP can still provide Discovery, source access, edits and saves. When combining it
+with CLI rendering, use the same workspace, installation, source/program revision
+and requirements binding. The CLI writes the PNG on the client machine even when
+the GPU renderer is remote. This workflow uses existing interfaces; Kiln has no
+Cline-specific response envelope, automatic client detection or silent fallback.
+No `--harness cline` bootstrap option is currently provided.
+
+## Shared tools versus the built-in agent
+
+For your own harness and model, use the generated workspace's CLI/MCP setup and
+shared skills. Strands is optional and adds no context to that workflow. Its
+`kiln-native-workflow` skill is registered only inside Kiln's built-in agent;
+workspace setup never installs it. Do not copy that skill or its `kiln_finish`
+protocol into an external harness. See [native workflow boundaries](runtime.md#optional-native-strands-workflow)
+when explicitly choosing built-in generation instead.
+
 ## One owner per tool
 
 The thing that makes updates flaky is not a missing package manager. It is two owners of one
@@ -49,7 +106,7 @@ Verified against the versions in the footer. The traps are not stylistic -- each
 | agy | `--print=TEXT` | **attached to the flag** | print mode | `--add-dir` |
 | claude | `-p` then `TEXT` | positional; `-p` selects print mode | `--permission-mode acceptEdits` + `--allowedTools` | `--add-dir` |
 | codex | `exec TEXT` | positional after `exec` | `--approve-for-me` | `--cd` |
-| opencode | `run TEXT` | positional | `--auto` | `--dir` |
+| opencode | `run --standalone TEXT` | positional | `--auto` | process CWD only |
 | copilot | `-p TEXT` | flag value | `--allow-all-tools` | `-C` and `--add-dir` |
 | cursor-agent | `-p` then `TEXT` | **positional; `-p` is a boolean** | `--force --approve-mcps --trust` | `--workspace` |
 | hermes | `-z TEXT` | flag value | none; `-z` resolves prompts | process CWD only |
@@ -175,7 +232,7 @@ Two on one development machine: `~/.cursor/mcp.json` named `kiln` and pointed at
 leftovers rather than anything this repository ships, but both answer tool calls without
 announcing what they are.
 
-Call `kiln_list_primitives` with `capabilities: true` and compare `capabilities.engine` --
+Call `kiln_discover` with `{ capabilities: true }` and compare `capabilities.engine` --
 `version` and `installUrl` -- against `runtime` in `.kiln/workspace.json`. Workspaces also
 register under their own `kiln_workspace` name. Report a mismatch rather than silently
 substituting it.

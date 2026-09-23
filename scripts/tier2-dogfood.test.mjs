@@ -28,6 +28,26 @@ afterEach(() => {
 });
 
 describe('Tier 2 blind dogfood driver', () => {
+  test('a native executable receives the full multiline brief without shell interpretation', async () => {
+    const root = mkdtempSync(join(tmpdir(), 'kiln argv roundtrip '));
+    roots.push(root);
+    const echo = join(root, 'echo.mjs');
+    writeFileSync(echo, 'process.stdout.write(JSON.stringify(process.argv.slice(2)));');
+    const brief =
+      'Use the workspace skills.\n\nBuild a "curved leaf" & preserve 30% width.\r\nSave the final artifact.';
+    const args = [echo, brief, 'literal %PATH% & ^ | < >'];
+    const stdoutPath = join(root, 'stdout.json');
+    const result = await runProcess(process.execPath.replaceAll('\\', '/'), args, {
+      cwd: root,
+      env: process.env,
+      stdoutPath,
+      stderrPath: join(root, 'stderr.log'),
+      timeoutMs: 10000,
+    });
+    expect(result.exitCode).toBe(0);
+    expect(JSON.parse(readFileSync(stdoutPath, 'utf8'))).toEqual(args.slice(1));
+  });
+
   test('the prompt contains only the public repository and outcome-shaped asset goal', () => {
     const prompt = composeBlindPrompt('a tide-powered cliffside signal station');
 
@@ -145,7 +165,9 @@ describe('Tier 2 blind dogfood driver', () => {
       provider: null,
       reasoning: null,
     });
-    expect(opencode.args).toContain('--pure');
+    expect(opencode.args).toContain('--standalone');
+    expect(opencode.args).not.toContain('--pure');
+    expect(opencode.args).not.toContain('--dir');
     expect(opencode.args).toContain('--auto');
     expect(opencode.env).toEqual({ XDG_CONFIG_HOME: join('/tmp/run', '.outer-opencode-config') });
 

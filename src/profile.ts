@@ -170,10 +170,7 @@ function bevelCrossSection(
   const eroded = cs.offset(-bevel, join, 2, segments);
   if (eroded.isEmpty()) {
     eroded.delete();
-    throw new Error(
-      `${label}: bevel ${bevel} is too large for this profile — eroding by it leaves nothing. ` +
-        `Use a bevel smaller than half the narrowest part of the outline.`,
-    );
+    throw new AuthoringDiagnosticError('PROFILE_BEVEL_COLLAPSE');
   }
   const dilated = eroded.offset(2 * bevel, join, 2, segments);
   const out = dilated.offset(-bevel, join, 2, segments);

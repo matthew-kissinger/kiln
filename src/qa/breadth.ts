@@ -4,6 +4,7 @@ import {
   validateModularKitContractV1,
   validateVfxIntentV1,
   type AssetScopeObservationV1,
+  type AssetScopeIntentV1,
   type ModularJoinObservationV1,
   type VfxAnimationIntentV1,
   type VfxFacingIntentV1,
@@ -13,6 +14,14 @@ import {
 } from '../contracts/breadth';
 import { KILN_ENGINE_QA_OWNER, conformancePromotionAuthorization, type QaRule } from './registry';
 import type { QaContext, QaFinding } from './types';
+
+export interface BreadthQaInput {
+  profile?: string;
+  effects?: VfxIntentV1;
+  scope?: AssetScopeIntentV1;
+  modularRequested?: boolean;
+  derivedEvidence?: QaContext['derivedEvidence'];
+}
 
 export interface VfxMaterialEvidenceV1 {
   id: string;
@@ -123,18 +132,18 @@ function validVfxArtifactEvidence(value: unknown): value is VfxArtifactEvidenceV
   );
 }
 
-function artifactEvidence(context: QaContext): VfxArtifactEvidenceV1 | undefined {
+function artifactEvidence(context: BreadthQaInput): VfxArtifactEvidenceV1 | undefined {
   if (context.derivedEvidence?.source !== 'engine-scene-analysis') return undefined;
   const candidate = context.derivedEvidence.vfxArtifact;
   return validVfxArtifactEvidence(candidate) ? candidate : undefined;
 }
 
 function finding(
-  context: QaContext,
+  context: BreadthQaInput,
   value: Omit<QaFinding, 'profile'>,
-  profile = 'vfx.w7',
+  profile = 'asset.requirements.v1',
 ): QaFinding {
-  return { ...value, profile: context.intent.qaProfile || profile };
+  return { ...value, profile: context.profile ?? profile };
 }
 
 export function measureVfxRuntimeCostV1(evidence: VfxArtifactEvidenceV1): VfxRuntimeCostV1 {
@@ -160,9 +169,9 @@ export function measureVfxRuntimeCostV1(evidence: VfxArtifactEvidenceV1): VfxRun
 }
 
 function exactVfxIntent(
-  context: QaContext,
+  context: BreadthQaInput,
 ): { intent: VfxIntentV1; evidence: VfxArtifactEvidenceV1 } | { findings: QaFinding[] } {
-  const candidate = context.intent.vfx;
+  const candidate = context.effects;
   const validated = validateVfxIntentV1(candidate);
   if (!validated.valid || !validated.value) {
     return {
@@ -206,8 +215,7 @@ function exactVfxIntent(
 }
 
 /** H/H* VFX contract checks. Only explicit trusted requirements can block. */
-export function evaluateVfxExactQa(context: QaContext): readonly QaFinding[] {
-  if (context.intent.category !== 'vfx') return [];
+export function inspectEffectsExact(context: BreadthQaInput): readonly QaFinding[] {
   const resolved = exactVfxIntent(context);
   if ('findings' in resolved) return resolved.findings;
   const { intent, evidence } = resolved;
@@ -442,9 +450,9 @@ export function evaluateVfxExactQa(context: QaContext): readonly QaFinding[] {
 }
 
 /** S-class VFX evidence. It reports cost and inferred-facing drift without blocking. */
-export function evaluateVfxAdvisoryQa(context: QaContext): readonly QaFinding[] {
-  if (context.intent.category !== 'vfx') return [];
-  const intent = context.intent.vfx;
+export function inspectEffectsAdvisory(context: BreadthQaInput): readonly QaFinding[] {
+  if (!context.effects) return [];
+  const intent = context.effects;
   const validated = validateVfxIntentV1(intent);
   const evidence = artifactEvidence(context);
   if (!validated.valid || !validated.value || !evidence) return [];
@@ -499,8 +507,8 @@ export function evaluateVfxAdvisoryQa(context: QaContext): readonly QaFinding[] 
 }
 
 /** MOD-001 applies only when trusted modular-kit data and a join observation are present. */
-export function evaluateModularJoinQa(context: QaContext): readonly QaFinding[] {
-  if (context.intent.scope.scope !== 'modularSet' || !context.intent.scope.explicit) return [];
+export function inspectModularJoin(context: BreadthQaInput): readonly QaFinding[] {
+  if (!context.modularRequested) return [];
   const modularKit = context.derivedEvidence?.modularKit;
   const modularJoin = context.derivedEvidence?.modularJoin;
   const validation = validateModularKitContractV1(modularKit);
@@ -548,8 +556,9 @@ export function evaluateModularJoinQa(context: QaContext): readonly QaFinding[] 
 }
 
 /** SCOPE-001 remains advisory under the owner-approved S-rule policy. */
-export function evaluateAssetScopeQa(context: QaContext): readonly QaFinding[] {
-  const scope = context.intent.scope;
+export function inspectAssetScope(context: BreadthQaInput): readonly QaFinding[] {
+  const scope = context.scope;
+  if (!scope) return [];
   const scopeObservation = context.derivedEvidence?.assetScope;
   if (
     context.derivedEvidence?.source !== 'engine-scene-analysis' ||
@@ -580,6 +589,46 @@ export function evaluateAssetScopeQa(context: QaContext): readonly QaFinding[] {
       'scope.w7',
     ),
   ];
+}
+
+/** Old-data conformance adapters; never used for neutral policy selection. */
+export function evaluateVfxExactQa(context: QaContext): readonly QaFinding[] {
+  if (context.intent.category !== 'vfx') return [];
+  return inspectEffectsExact({
+    profile: context.intent.qaProfile,
+    effects: context.intent.vfx,
+    scope: context.intent.scope,
+    modularRequested: context.intent.scope.scope === 'modularSet' && context.intent.scope.explicit,
+    derivedEvidence: context.derivedEvidence,
+  });
+}
+export function evaluateVfxAdvisoryQa(context: QaContext): readonly QaFinding[] {
+  if (context.intent.category !== 'vfx') return [];
+  return inspectEffectsAdvisory({
+    profile: context.intent.qaProfile,
+    effects: context.intent.vfx,
+    scope: context.intent.scope,
+    modularRequested: context.intent.scope.scope === 'modularSet' && context.intent.scope.explicit,
+    derivedEvidence: context.derivedEvidence,
+  });
+}
+export function evaluateModularJoinQa(context: QaContext): readonly QaFinding[] {
+  return inspectModularJoin({
+    profile: context.intent.qaProfile,
+    effects: context.intent.vfx,
+    scope: context.intent.scope,
+    modularRequested: context.intent.scope.scope === 'modularSet' && context.intent.scope.explicit,
+    derivedEvidence: context.derivedEvidence,
+  });
+}
+export function evaluateAssetScopeQa(context: QaContext): readonly QaFinding[] {
+  return inspectAssetScope({
+    profile: context.intent.qaProfile,
+    effects: context.intent.vfx,
+    scope: context.intent.scope,
+    modularRequested: context.intent.scope.scope === 'modularSet' && context.intent.scope.explicit,
+    derivedEvidence: context.derivedEvidence,
+  });
 }
 
 export const VFX_EXACT_QA_RULE: QaRule = {

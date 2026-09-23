@@ -6,8 +6,9 @@
  * so triplicating it means three chances to assert `darwin` on a Linux runner and have
  * the receipt pass anyway. A receipt that cannot fail is not evidence.
  *
- * The expected Node and npm versions are read from `engines` rather than written here,
- * so `check-toolchain.mjs` stays the single source for them. `engineVersion` is checked
+ * Exact qualification versions default to toolchain.json. Consumer matrix jobs
+ * explicitly select --node and --npm; these are exact versions, independently of the
+ * consumer-compatible engines range. `engineVersion` is checked
  * against `package.json` for the same reason a release attaches these files at all --
  * a receipt that does not name the version it exercised cannot be matched to a tarball.
  *
@@ -36,7 +37,7 @@ function option(argv, name) {
   return at === -1 ? undefined : argv[at + 1];
 }
 
-export function receiptProblems(receipt, { platform, arch, manifest }) {
+export function receiptProblems(receipt, { platform, arch, manifest, toolchain, node, npm }) {
   const problems = [];
   const mustBe = (actual, wanted, label) => {
     if (actual !== wanted) problems.push(`${label}: expected ${wanted}, receipt says ${actual}`);
@@ -45,9 +46,9 @@ export function receiptProblems(receipt, { platform, arch, manifest }) {
   mustBe(receipt.status, 'passed', 'status');
   mustBe(receipt.platform, platform, 'platform');
   mustBe(receipt.arch, arch, 'arch');
-  // `engines.node` is bare; the receipt records what `node --version` prints.
-  mustBe(receipt.node, `v${manifest.engines.node}`, 'node');
-  mustBe(receipt.npm, manifest.engines.npm, 'npm');
+  // A merely compatible version never substitutes for the selected qualification runtime.
+  mustBe(receipt.node, `v${node ?? toolchain.node}`, 'node');
+  mustBe(receipt.npm, npm ?? toolchain.npm, 'npm');
   mustBe(receipt.engineVersion, manifest.version, 'engineVersion');
 
   for (const check of REQUIRED_CHECKS) {
@@ -63,6 +64,14 @@ export async function verifyReceipt(argv, root) {
     throw new Error(`--platform must be one of ${[...PLATFORMS].join(', ')}; got ${platform}`);
   }
   if (!arch) throw new Error('--arch is required');
+  const node = option(argv, 'node');
+  const npm = option(argv, 'npm');
+  for (const [name, value] of [
+    ['node', node],
+    ['npm', npm],
+  ])
+    if (value !== undefined && !/^\d+\.\d+\.\d+$/.test(value))
+      throw new Error(`--${name} requires an exact numeric major.minor.patch version`);
 
   // `--receipt` is resolved against the working directory, not `root`. Those are the same
   // directory in the CI step, which is why the original resolved it against `root` and the
@@ -70,12 +79,13 @@ export async function verifyReceipt(argv, root) {
   // downloaded artifacts is the case that found it: the receipts sit in a staging
   // directory while `root` is the repository, and every path silently became
   // `<repo>/linux-package.json`. A path a person types on a command line belongs to where
-  // they typed it. `root` locates `package.json` and nothing else.
+  // they typed it. `root` locates package metadata and the maintainer toolchain.
   const receiptPath = option(argv, 'receipt') ?? 'package-smoke.json';
   const receipt = JSON.parse(await readFile(resolve(receiptPath), 'utf8'));
   const manifest = JSON.parse(await readFile(join(root, 'package.json'), 'utf8'));
+  const toolchain = JSON.parse(await readFile(join(root, 'toolchain.json'), 'utf8'));
 
-  const problems = receiptProblems(receipt, { platform, arch, manifest });
+  const problems = receiptProblems(receipt, { platform, arch, manifest, toolchain, node, npm });
 
   // Hashed last: it is the only check that reads a second file, and a receipt naming a
   // tarball that is gone should say so rather than crash before the cheap checks run.

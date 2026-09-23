@@ -264,17 +264,20 @@ jobs:
   # differences that matter (host assertion, receipt platform, artifact name) are exactly
   # the ones a shared action would hide behind inputs.
   linux-package:
-    name: Node package · Linux
+    name: Node package · Linux ${{ matrix.node }}
     needs: package-candidate
     timeout-minutes: 20
+    strategy:
+      fail-fast: false
+      matrix:
+        node: [20.15.0, 22.2.0, 24.20.0]
     runs-on: ubuntu-22.04
     steps:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
       # Consumers install only Node/npm. Bun builds the tarball in the separate producer job.
       - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
         with:
-          node-version: 22.23.2
-      - run: npm install --global npm@12.0.2
+          node-version: ${{ matrix.node }}
       - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4.3.0
         with:
           name: node-package-candidate
@@ -289,15 +292,30 @@ jobs:
           test "$#" -eq 1
           npm run --silent test:package -- --tarball "$1" | tee package-smoke.json
       - name: Verify the retained smoke receipt
-        run: node scripts/verify-package-receipt.mjs --platform linux --arch x64
+        run: node scripts/verify-package-receipt.mjs --platform linux --arch x64 --node ${{ matrix.node }} --npm "$(npm --version)"
       - name: Retain Linux package receipt
         if: always()
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
         with:
-          name: linux-package
+          name: linux-package-${{ matrix.node }}
           path: package-smoke.json
           if-no-files-found: warn
           retention-days: 14
+
+  # Preserve main's existing required context while requiring every expanded
+  # Linux floor and the new software-renderer probe to succeed. No protection
+  # setting needs to be removed or weakened during the cutover.
+  linux-package-gate:
+    name: Node package · Linux
+    needs: [linux-package, software-vulkan-package]
+    if: always()
+    runs-on: ubuntu-latest
+    steps:
+      - name: Require all Linux qualifications
+        env:
+          PACKAGES: ${{ needs.linux-package.result }}
+          RENDERER: ${{ needs.software-vulkan-package.result }}
+        run: test "$PACKAGES" = success && test "$RENDERER" = success
 
   windows-package:
     name: Node package · Windows
@@ -334,5 +352,50 @@ jobs:
         with:
           name: windows-package
           path: package-smoke.json
+          if-no-files-found: warn
+          retention-days: 14
+
+  software-vulkan-package:
+    name: Installed renderer · Linux software Vulkan
+    needs: package-candidate
+    timeout-minutes: 20
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
+        with:
+          node-version: 22.23.2
+      - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4.3.0
+        with:
+          name: node-package-candidate
+          path: candidate
+      - name: Install Mesa and the exact candidate
+        shell: bash
+        run: |
+          set -euo pipefail
+          sudo apt-get update
+          sudo apt-get install -y mesa-vulkan-drivers
+          set -- /usr/share/vulkan/icd.d/lvp_icd*.json
+          test "$#" -eq 1 && test -f "$1"
+          echo "VK_ICD_FILENAMES=$1" >> "$GITHUB_ENV"
+          mkdir installation
+          cd installation
+          npm init -y
+          set -- "$GITHUB_WORKSPACE"/candidate/*.tgz
+          test "$#" -eq 1
+          sha256sum "$1" > ../candidate-sha256.txt
+          npm install "$1" --omit=dev --no-audit --no-fund
+      # This explicit probe permits software adapters. Production rendering still
+      # rejects them; this tests native Vulkan plumbing, not physical GPU support.
+      - name: Exercise textured readback on software Vulkan
+        run: node scripts/smoke-renderer.mjs ./installation/node_modules/@kiln/engine renderer-receipt software
+      - name: Retain renderer identity and images
+        if: always()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: linux-software-vulkan
+          path: |
+            renderer-receipt/
+            candidate-sha256.txt
           if-no-files-found: warn
           retention-days: 14

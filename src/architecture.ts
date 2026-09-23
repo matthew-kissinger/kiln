@@ -1,5 +1,8 @@
 /** Correct-by-construction architecture scaffolds in Kiln's +X/+Y/+Z frame. */
 import * as THREE from 'three';
+import { buildWallPanels } from './wall-panels';
+import { assertDimension, assertRepetitionCount } from './geometry-budget';
+import { checkedTrs } from './assembly-transform';
 
 import {
   KILN_SEMANTIC_ROLES,
@@ -63,11 +66,11 @@ export interface GableRoofResult {
 }
 
 export interface RoofPlanesOptions {
-  /** Compatibility name for spanZ. */
+  /** Footprint extent along Z. */
   width: number;
-  /** Compatibility name for spanX. */
+  /** Footprint extent along X. */
   depth: number;
-  /** Compatibility rise from the outer eave to the ridge. */
+  /** Rise from the outer eave (Y=0) to the ridge. */
   height: number;
   overhang?: number;
   ridgeAxis?: RidgeAxis;
@@ -153,6 +156,8 @@ export interface RoofSurfaceLayoutOptions {
 export interface RoofSurfaceLayoutResult {
   root: THREE.Object3D;
   items: THREE.Object3D[];
+  /** Explicit box geometry cost; not an instancing or draw-call estimate. */
+  cost: { meshes: number; triangles: number };
 }
 
 const DEG = Math.PI / 180;
@@ -397,7 +402,7 @@ export function createGableRoof(
   return buildRoof(name, material, resolveRoofProfile(options), options.parent);
 }
 
-/** Tested compatibility wrapper: width maps to spanZ and depth maps to spanX. */
+/** Outer-eave datum roof: width spans Z, depth spans X, outer top eave at Y=0. */
 export function createRoofPlanes(
   name: string,
   material: THREE.Material,
@@ -418,7 +423,7 @@ export function createRoofPlanes(
     thickness: options.thickness,
     rise: Math.tan(pitchDegrees * DEG) * halfFoot,
   });
-  // Legacy API defined the outer eave at Y=0 and ridge at Y=height.
+  // This constructor uses the outer-eave datum; createGableRoof uses wall bearing.
   profile.ridgeY = height;
   profile.eaveY = 0;
   profile.pitchDegrees = pitchDegrees;
@@ -580,23 +585,10 @@ function createShellWall(
     ),
   );
 
-  const sorted = openings
-    .map((opening, index) => ({
-      ...opening,
-      id: opening.id ?? `${opening.kind ?? 'door'}-${index + 1}`,
-      kind: opening.kind ?? 'door',
-      offset: opening.offset ?? 0,
-      width: positive(opening.width ?? (opening.kind === 'window' ? 1 : 1.1), 'opening.width'),
-      height: positive(opening.height ?? (opening.kind === 'window' ? 1 : 2.1), 'opening.height'),
-      sill: opening.kind === 'window' ? nonNegative(opening.sill ?? 1, 'opening.sill') : 0,
-      depth: positive(opening.depth ?? thickness, 'opening.depth'),
-    }))
-    .sort((a, b) => a.offset - b.offset);
-  if (sorted.length > 1)
-    throw new RangeError('the minimal gable shell supports at most one opening per wall');
+  const built = buildWallPanels(length, height, thickness, openings);
 
   const panel = (suffix: string, lo: number, hi: number, y0: number, y1: number): void => {
-    if (hi - lo <= EPSILON || y1 - y0 <= EPSILON) return;
+    if (hi <= lo || y1 <= y0) return;
     const geometry =
       axis === 'x'
         ? new THREE.BoxGeometry(hi - lo, y1 - y0, thickness)
@@ -611,18 +603,23 @@ function createShellWall(
     root.add(mesh);
   };
   const markers: THREE.Object3D[] = [];
-  const opening = sorted[0];
-  if (!opening) panel('solid', -length / 2, length / 2, 0, height);
-  else {
-    const left = opening.offset - opening.width / 2;
-    const right = opening.offset + opening.width / 2;
-    const top = opening.sill + opening.height;
-    if (left <= -length / 2 || right >= length / 2 || top >= height)
-      throw new RangeError(`opening on wall.${wall} must fit strictly inside the wall boundary`);
-    panel('left', -length / 2, left, 0, height);
-    panel('right', right, length / 2, 0, height);
-    panel('lintel', left, right, top, height);
-    if (opening.sill > 0) panel('sill', left, right, 0, opening.sill);
+  const singleNames: Record<string, string> = {
+    '': 'solid',
+    _L: 'left',
+    _R: 'right',
+    _Lintel: 'lintel',
+    _Sill: 'sill',
+  };
+  for (const segment of built.panels) {
+    panel(
+      singleNames[segment.suffix] ?? segment.suffix.slice(1),
+      segment.left,
+      segment.right,
+      segment.bottom,
+      segment.top,
+    );
+  }
+  for (const opening of built.openings) {
     const marker = new THREE.Object3D();
     marker.name = `Opening_${wall}_${opening.id}`;
     marker.position.set(
@@ -673,7 +670,6 @@ export function createGableShell(
     options.openings ?? (enterable ? [{ wall: 'front' as const, kind: 'door' as const }] : []);
   const root = new THREE.Object3D();
   root.name = name;
-  if (options.parent) options.parent.add(root);
   stampSemanticMetadataV1(
     root,
     roleMetadata(
@@ -765,6 +761,7 @@ export function createGableShell(
     gables = [positiveEnd.root, negativeEnd.root];
     openingMarkers.push(...positiveEnd.openings, ...negativeEnd.openings);
   }
+  if (options.parent) options.parent.add(root);
   return { root, walls, floor, roof, gables, openings: openingMarkers };
 }
 
@@ -774,26 +771,27 @@ export function createRoofSurfaceLayout(
   material: THREE.Material,
   options: RoofSurfaceLayoutOptions,
 ): RoofSurfaceLayoutResult {
-  const parent = options.parent ?? options.face.roofRoot;
-  const root = new THREE.Object3D();
-  root.name = name;
-  parent.add(root);
-  stampSemanticMetadataV1(
-    root,
-    roleMetadata(
-      [`roof.surface.${options.kind}`],
-      [relationship('coverage-of', `roof.slope.${options.face.side}`)],
-    ),
-  );
-  root.updateWorldMatrix(true, false);
-  const faceToRoot = root.matrixWorld.clone().invert().multiply(options.face.localToWorld);
-  const thickness = positive(options.thickness ?? 0.025, 'thickness');
+  if (!['panels', 'shingles', 'seams', 'corrugations'].includes(options.kind))
+    throw new RangeError('createRoofSurfaceLayout: unknown kind.');
+  const thickness = options.thickness ?? 0.025;
   const along = options.face.dimensions.alongRidge;
   const downhill = options.face.dimensions.downhill;
+  for (const [key, value] of Object.entries({ thickness, alongRidge: along, downhill }))
+    assertDimension(`createRoofSurfaceLayout ${key}`, value);
+  const parent = options.parent ?? options.face.roofRoot;
+  parent.updateWorldMatrix(true, false);
+  if (!Number.isFinite(parent.matrixWorld.determinant()) || parent.matrixWorld.determinant() === 0)
+    throw new Error('createRoofSurfaceLayout: parent transform is singular or nonfinite.');
+  const faceToRoot = parent.matrixWorld.clone().invert().multiply(options.face.localToWorld);
+  // A separate parent can introduce shear that cannot survive editable TRS/export.
+  // The face's own roof root cancels inherited affine transforms losslessly.
+  checkedTrs(faceToRoot, 'createRoofSurfaceLayout (use face.roofRoot for inherited shear)');
   const specs: Array<{ width: number; length: number; x: number; z: number }> = [];
 
   if (options.kind === 'panels') {
-    const count = Math.max(1, Math.ceil(along / positive(options.panelWidth ?? 0.9, 'panelWidth')));
+    const panelWidth = positive(options.panelWidth ?? 0.9, 'panelWidth');
+    const count = Math.max(1, Math.ceil(along / panelWidth));
+    assertRepetitionCount('createRoofSurfaceLayout panels', count);
     const width = along / count;
     for (let i = 0; i < count; i++)
       specs.push({
@@ -806,34 +804,56 @@ export function createRoofSurfaceLayout(
     const rowHeight = positive(options.rowHeight ?? 0.32, 'rowHeight');
     const tileWidth = positive(options.panelWidth ?? 0.42, 'panelWidth');
     const rows = Math.max(1, Math.ceil(downhill / rowHeight));
-    const columns = Math.max(1, Math.ceil(along / tileWidth));
+    const evenColumns = Math.ceil(along / tileWidth);
+    const oddColumns = Math.ceil(along / tileWidth + 0.5);
+    assertRepetitionCount(
+      'createRoofSurfaceLayout shingles',
+      Math.ceil(rows / 2) * evenColumns + Math.floor(rows / 2) * oddColumns,
+    );
     for (let row = 0; row < rows; row++) {
-      const length = Math.min(rowHeight * 1.08, downhill);
+      const zMin = row * rowHeight;
+      const length = Math.min(rowHeight * 1.08, downhill - zMin);
+      const columns = row % 2 === 0 ? evenColumns : oddColumns;
+      const offset = row % 2 === 0 ? 0 : -tileWidth / 2;
       for (let column = 0; column < columns; column++) {
-        const offset = row % 2 === 0 ? 0 : tileWidth / 2;
-        const x = -along / 2 + tileWidth * (column + 0.5) + offset;
-        if (x + tileWidth / 2 <= along / 2 + EPSILON)
-          specs.push({
-            width: tileWidth * 0.96,
-            length,
-            x,
-            z: Math.min(downhill - length / 2, row * rowHeight + length / 2),
-          });
+        const start = offset + column * tileWidth;
+        const left = Math.max(0, start);
+        const right = Math.min(along, start + tileWidth);
+        if (right <= left) continue;
+        specs.push({
+          width: (right - left) * 0.96,
+          length,
+          x: -along / 2 + (left + right) / 2,
+          z: zMin + length / 2,
+        });
       }
     }
   } else {
     const spacing = positive(options.spacing ?? (options.kind === 'seams' ? 0.6 : 0.18), 'spacing');
-    const count = Math.max(2, Math.floor(along / spacing) + 1);
     const width = options.kind === 'seams' ? 0.025 : 0.018;
-    for (let i = 0; i < count; i++)
-      specs.push({
-        width,
-        length: downhill,
-        x: -along / 2 + (along * i) / (count - 1),
-        z: downhill / 2,
-      });
+    // A face narrower than one strip needs one clipped strip, not overlapping duplicates.
+    const count = along <= width ? 1 : Math.max(2, Math.floor(along / spacing) + 1);
+    assertRepetitionCount('createRoofSurfaceLayout strips', count);
+    for (let i = 0; i < count; i++) {
+      const center = count === 1 ? 0 : -along / 2 + (along * i) / (count - 1);
+      const left = Math.max(-along / 2, center - width / 2);
+      const right = Math.min(along / 2, center + width / 2);
+      specs.push({ width: right - left, length: downhill, x: (left + right) / 2, z: downhill / 2 });
+    }
   }
-
+  for (const spec of specs) {
+    assertDimension('createRoofSurfaceLayout generated width', spec.width);
+    assertDimension('createRoofSurfaceLayout generated length', spec.length);
+  }
+  const root = new THREE.Object3D();
+  root.name = name;
+  stampSemanticMetadataV1(
+    root,
+    roleMetadata(
+      [`roof.surface.${options.kind}`],
+      [relationship('coverage-of', `roof.slope.${options.face.side}`)],
+    ),
+  );
   const items = specs.map((spec, index) => {
     const mesh = new THREE.Mesh(
       new THREE.BoxGeometry(spec.width, thickness, spec.length),
@@ -845,5 +865,7 @@ export function createRoofSurfaceLayout(
     root.add(mesh);
     return mesh;
   });
-  return { root, items };
+  // No caller hierarchy mutation occurs until every validation and construction succeeds.
+  parent.add(root);
+  return { root, items, cost: { meshes: items.length, triangles: items.length * 12 } };
 }

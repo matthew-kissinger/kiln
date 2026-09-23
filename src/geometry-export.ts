@@ -8,6 +8,23 @@ export const EXPORTED_GEOMETRY_ATTRIBUTES: Readonly<Record<string, number>> = {
   tangent: 4,
 };
 
+const THREE_GEOMETRY_ATTRIBUTES = {
+  ...EXPORTED_GEOMETRY_ATTRIBUTES,
+  color: [3, 4],
+  uv1: 2,
+  uv2: 2,
+  uv3: 2,
+  skinIndex: 4,
+  skinWeight: 4,
+} as const;
+
+/** Shared by export validation and host capability discovery. */
+export function geometryExportAttributes(
+  exporter: 'legacy' | 'three',
+): Readonly<Record<string, number | readonly number[]>> {
+  return exporter === 'three' ? THREE_GEOMETRY_ATTRIBUTES : EXPORTED_GEOMETRY_ATTRIBUTES;
+}
+
 /** Both converters require a complete, non-overlapping triangle partition. */
 export function validateMaterialGroups(
   geometry: THREE.BufferGeometry,
@@ -61,6 +78,7 @@ export function inspectGeometryExport(
   exporter: 'legacy' | 'three' = 'legacy',
 ): string[] {
   const warnings: string[] = [];
+  const attributes = geometryExportAttributes(exporter);
   root.traverse((node) => {
     const mesh = node as THREE.Mesh;
     if (!mesh.isMesh) return;
@@ -74,27 +92,15 @@ export function inspectGeometryExport(
     const position = geometry.getAttribute('position');
     if (position?.itemSize !== 3) throw new TypeError(`${name}: position requires xyz vertices.`);
     for (const [key, attribute] of Object.entries(geometry.attributes)) {
-      const expected =
-        EXPORTED_GEOMETRY_ATTRIBUTES[key] ??
-        (exporter === 'three'
-          ? (
-              {
-                color: attribute.itemSize === 4 ? 4 : 3,
-                uv1: 2,
-                uv2: 2,
-                uv3: 2,
-                skinIndex: 4,
-                skinWeight: 4,
-              } as Record<string, number>
-            )[key]
-          : undefined);
+      const expected = attributes[key];
       if (expected === undefined) {
         unsupported(key);
         continue;
       }
-      if (attribute.itemSize !== expected || attribute.count !== position.count) {
+      const sizes = typeof expected === 'number' ? [expected] : expected;
+      if (!sizes.includes(attribute.itemSize) || attribute.count !== position.count) {
         throw new TypeError(
-          `${name}: ${key} requires ${position.count} vertices with ${expected} components each.`,
+          `${name}: ${key} requires ${position.count} vertices with ${sizes.join(' or ')} components each.`,
         );
       }
       for (let vertex = 0; vertex < attribute.count; vertex++) {

@@ -1,0 +1,13 @@
+{
+  "importsMs": 123.91740000000001,
+  "acquireMs": 375.99620000000004,
+  "initMs": 585.8756999999999,
+  "identityMs": 316.4655,
+  "totalMs": 1402.2548,
+  "identity": {
+    "version": "kiln.capture-producer.v1",
+    "fingerprint": "sha256:3486e34a454e6dbf90bc42b864ce691249fca4b160ccf0a9baf9abc3b59d1284",
+    "instanceId": "02031934-c122-4f96-80f0-81269c9a8f1a"
+  },
+  "peakRssKiB": 247440
+}

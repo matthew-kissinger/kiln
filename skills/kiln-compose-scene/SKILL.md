@@ -2,6 +2,8 @@
 name: kiln-compose-scene
 description: Arrange existing GLB assets into a scene with explicit placement, integration manifests, overlap checks, and a reviewed scene export.
 license: MIT
+metadata:
+  kiln-workflow: workspace
 ---
 
 # Compose a scene from existing assets

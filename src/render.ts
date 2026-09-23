@@ -1,3 +1,16 @@
+import type { DuckClip } from './views/pose';
+import {
+  assertNoLegacyRuntimePolicy,
+  resolveRequirementsContext,
+  type RequirementsContext,
+} from './requirements-context';
+import type { RequirementsBinding } from './requirements-store';
+import {
+  runRequirementsSceneQa,
+  collectRequirementsSceneEvidence,
+  appendRequirementsFinalQa,
+} from './qa/requirements-run';
+import type { AssetRequirementsQaReportV2 } from './qa/requirements-report';
 import { rethrowAuthoringError } from './evaluator/authoring-diagnostic';
 /**
  * Headless Kiln GLB Renderer
@@ -14,6 +27,7 @@ import { rethrowAuthoringError } from './evaluator/authoring-diagnostic';
 import * as THREE from 'three';
 import { createGltfIO } from './gltf-io';
 import { communitySceneDocument, resolveGltfExporter } from './community-exporter';
+import { rigExtrasForExport } from './rig-export';
 import {
   geometryAttributeValues,
   inspectGeometryExport,
@@ -41,7 +55,7 @@ import {
   type SnapPaletteSlot,
 } from './palette-snap';
 
-import { buildSandboxGlobals, countTriangles } from './primitives';
+import { buildSandboxGlobals, countTriangles, type DiagnosticConsole } from './primitives';
 import {
   collectGlbMetrics,
   gradeInstanceability,
@@ -51,9 +65,7 @@ import {
 } from './metrics';
 import {
   cloneSemanticMetadataV1,
-  createAssetIntentV1,
   createSemanticMetadataV1,
-  isAssetCategory,
   KILN_SEMANTIC_EXTRAS_KEY,
   validateSemanticMetadataV1,
   type AssetCategory,
@@ -67,21 +79,10 @@ import {
   validateFinalGlbBytes,
   type KhronosGltfValidationReport,
 } from './qa/gltf';
-import {
-  appendFinalGltfQa,
-  appendMaterialMetricsQa,
-  appendRuntimeCostQa,
-  AssetQaBlockedError,
-  qaBlockingEnabled,
-  qaPolicyFromEnv,
-  runDeterministicSceneQa,
-} from './qa/run';
-import { appendFinalVfxGlbQa } from './qa/breadth-final';
-import type { AssetQaReportV1 } from './qa/types';
+import { AssetQaBlockedError, qaBlockingEnabled, qaPolicyFromEnv } from './qa/run';
 import {
   collectMaterialMetricsV1,
   evaluateMaterialBudgetV1,
-  materialBudgetProfileForQaProfile,
   type MaterialMetricsV1,
 } from './material-metrics';
 import {
@@ -94,18 +95,14 @@ import {
 } from './material-resources';
 import { DEFAULT_TEXTURE_RESOLVER, type TextureResolver } from './texture-resolver';
 import { assertGeneratedSourceSafe } from './validation';
-import { analyzePartPenetration, type PartPenetrationEvidenceV1 } from './qa/self-intersection';
 import { applyKitContract, type KitPackOptions, type KitPackSummary } from './kit';
 import {
   type BakedTextureProvenanceV1,
   bakeSceneTextures,
   ensureNormalMapTangents,
 } from './texture-bake';
-import {
-  captureCharacterDiagnosticViews,
-  type CharacterCapturedDiagnosticV1,
-} from './views/character-capture';
-import { captureVehicleDiagnosticViews, type VehicleCapturedDiagnosticV1 } from './views/vehicle';
+import type { CharacterCapturedDiagnosticV1 } from './views/character-capture';
+import type { VehicleCapturedDiagnosticV1 } from './views/vehicle';
 
 export type CapturedDiagnosticV1 = CharacterCapturedDiagnosticV1 | VehicleCapturedDiagnosticV1;
 
@@ -326,6 +323,8 @@ export interface ExecuteKilnCodeOptions {
   /** Trusted host injection. Generated source receives only the closed
    *  loadApprovedTexture(resourceId) function. */
   textureResolver?: TextureResolver;
+  /** Trusted diagnostic sink, never a global console mutation. */
+  console?: DiagnosticConsole;
 }
 
 export async function executeKilnCode(
@@ -348,6 +347,7 @@ export async function executeKilnCode(
     const primitiveUsage: Record<string, number> = {};
     const globals = buildSandboxGlobals(primitiveUsage, {
       textureResolver: options.textureResolver ?? DEFAULT_TEXTURE_RESOLVER,
+      console: options.console,
     });
     const globalNames = Object.keys(globals);
     const globalValues = Object.values(globals);
@@ -662,12 +662,13 @@ function bridgeNode(
 ): GtNode {
   const gtNode = doc.createNode(threeObj.name || undefined);
 
-  // Only the versioned Kiln semantic payload is promoted from Three.js
+  // Only validated versioned Kiln semantic and rig payloads are promoted from Three.js
   // userData into glTF extras. Arbitrary userData can contain encoded textures
   // and other non-JSON values, so exporting it wholesale is intentionally
   // forbidden. A malformed reserved payload is an authoring error rather than
   // something the bridge may silently drop.
   const semanticValue = threeObj.userData[KILN_SEMANTIC_EXTRAS_KEY];
+  const extras = rigExtrasForExport(threeObj);
   let semanticForExport = semanticValue;
   if ((threeObj as THREE.Object3D & { isSprite?: boolean }).isSprite) {
     // glTF has no native Sprite primitive. The bridge emits a quad below and
@@ -706,10 +707,9 @@ function bridgeNode(
         `Invalid ${KILN_SEMANTIC_EXTRAS_KEY} on node ${threeObj.name || '<unnamed>'}: ${detail}`,
       );
     }
-    gtNode.setExtras({
-      [KILN_SEMANTIC_EXTRAS_KEY]: cloneSemanticMetadataV1(semantic.value),
-    });
+    extras[KILN_SEMANTIC_EXTRAS_KEY] = cloneSemanticMetadataV1(semantic.value);
   }
+  if (Object.keys(extras).length) gtNode.setExtras(extras);
 
   gtNode.setTranslation([threeObj.position.x, threeObj.position.y, threeObj.position.z]);
   gtNode.setRotation([
@@ -773,6 +773,32 @@ function bridgeNode(
   return gtNode;
 }
 
+function animationInterpolation(track: THREE.KeyframeTrack): 'LINEAR' | 'STEP' {
+  const mode = track.getInterpolation();
+  if (mode === THREE.InterpolateDiscrete) return 'STEP';
+  if (mode === THREE.InterpolateLinear) return 'LINEAR';
+  throw new Error(`Unsupported animation interpolation on ${track.name}; use LINEAR or STEP.`);
+}
+
+/** glTF derives duration from sampler times. Encode a trailing hold so an explicit
+ * clip duration survives either exporter, while review extras keep authored keys. */
+function clipsWithDurationSamples(clips: THREE.AnimationClip[]): THREE.AnimationClip[] {
+  return clips.map((clip) => {
+    const end = Math.fround(clip.duration);
+    const needsHold = (track: THREE.KeyframeTrack) =>
+      track.times.length > 0 && track.times[track.times.length - 1]! < end;
+    if (!clip.tracks.some(needsHold)) return clip;
+    const copied = clip.clone();
+    for (const track of copied.tracks) {
+      if (!needsHold(track)) continue;
+      const stride = track.getValueSize();
+      track.times = Float32Array.from([...track.times, end]);
+      track.values = Float32Array.from([...track.values, ...track.values.slice(-stride)]);
+    }
+    return copied;
+  });
+}
+
 function bridgeAnimations(
   doc: Document,
   buf: GtBuffer,
@@ -826,7 +852,7 @@ function bridgeAnimations(
         .createAnimationSampler()
         .setInput(inputAcc)
         .setOutput(outputAcc)
-        .setInterpolation('LINEAR');
+        .setInterpolation(animationInterpolation(track));
 
       const channel = doc
         .createAnimationChannel()
@@ -884,7 +910,7 @@ function reviewClipExtras(clips: THREE.AnimationClip[]): Record<string, unknown>
         if (!times.every(Number.isFinite) || !values.every(Number.isFinite)) {
           throw new Error('Animation review tracks must contain only finite values.');
         }
-        return { name: track.name, times, values };
+        return { name: track.name, times, values, interpolation: animationInterpolation(track) };
       }),
     })),
   };
@@ -895,6 +921,8 @@ function reviewClipExtras(clips: THREE.AnimationClip[]): Record<string, unknown>
 // =============================================================================
 
 export interface RenderResult {
+  /** Host requirements receipt; generated metadata cannot establish or replace it. */
+  requirements: RequirementsContext;
   /** Optional host cache receipt. This identifies evaluation reuse, not image fidelity. */
   buildCache?: { key: `sha256:${string}`; hit: boolean };
   glb: Buffer;
@@ -974,7 +1002,8 @@ export interface RenderSceneResult {
   /** Official Khronos report for these exact post-transform bytes. */
   gltfValidation: KhronosGltfValidationReport;
   /** Five-signal deterministic report for the exact scene and final bytes. */
-  qaReport: AssetQaReportV1;
+  qaReport: AssetRequirementsQaReportV2;
+  requirements: RequirementsContext;
   /** Post-dedup (and post-optimize, when enabled) instanceability report
    *  (informational). Undefined if it threw. */
   instanceability?: InstanceabilityReport;
@@ -1008,10 +1037,12 @@ export interface RenderSceneOptions {
    * to inspect raw bridge output for debugging.
    */
   dedup?: boolean;
-  /** Asset category, threaded into the instanceability grade context. */
+  /** Legacy argument accepted only to return an explicit migration-required error. */
   category?: string;
-  /** Full closure-owned intent. Authoritative over category when supplied. */
+  /** Legacy argument accepted only to return an explicit migration-required error. */
   intent?: AssetIntentV1;
+  /** Host established binding; never read from source metadata. */
+  requirements?: RequirementsBinding;
   /**
    * Opt-in material consolidation, applied after dedup. Defaults to the
    * `KILN_BAKE_OPTIMIZE` env (else `off`). `off` is byte-identical to today.
@@ -1308,18 +1339,14 @@ export async function renderSceneToGLB(
   root: THREE.Object3D,
   opts: RenderSceneOptions = {},
 ): Promise<RenderSceneResult> {
+  assertNoLegacyRuntimePolicy(opts);
+  const requirements = resolveRequirementsContext(opts.requirements);
   const clips = opts.clips ?? [];
   if (opts.geometryPolicy !== undefined && !['warn', 'strict'].includes(opts.geometryPolicy))
     throw new Error('geometryPolicy must be warn or strict');
   const exporter = resolveGltfExporter(opts.gltfExporter);
   const warnings = inspectGeometryExport(root, opts.geometryPolicy, exporter);
   const tris = countTriangles(root);
-  const intent =
-    opts.intent ??
-    createAssetIntentV1({
-      category: isAssetCategory(opts.category) ? opts.category : 'prop',
-    });
-  const trustedCategory = intent.category;
   const materialRecipeApplications = collectMaterialRecipeApplications(root);
   const materialResourceProvenance = collectMaterialResourceProvenance(root);
 
@@ -1331,7 +1358,7 @@ export async function renderSceneToGLB(
   // pivot" hint is first; the bridge also emits a briefer "target not
   // found - skipped" for each unresolved track (kept for compatibility).
   for (const w of inspectGeneratedAnimation(root, clips)) warnings.push(w);
-  for (const w of inspectSceneStructure(root, { category: trustedCategory })) warnings.push(w);
+  for (const w of inspectSceneStructure(root)) warnings.push(w);
 
   // T2.2 — encode in-memory textures to PNG BEFORE QA, so QA judges the file
   // that will actually be written. A procedural DataTexture used to reach the
@@ -1344,31 +1371,9 @@ export async function renderSceneToGLB(
   // changes the exported bytes.
   ensureNormalMapTangents(root, warnings);
 
-  // T4.1 — part-vs-part penetration. Async (manifold is WASM) and QA rules
-  // evaluate synchronously, so it runs here and reaches the rule through the
-  // derivedEvidence seam. A failure here must never lose the asset: the gate is
-  // in `observe`, and an analysis that could not run is reported as absent
-  // rather than as a clean result.
-  let partPenetration: PartPenetrationEvidenceV1 | undefined;
-  try {
-    partPenetration = await analyzePartPenetration(root);
-  } catch (err) {
-    warnings.push(
-      `self-intersection analysis failed: ${err instanceof Error ? err.message : String(err)}`,
-    );
-  }
-
-  const sceneQaReport = runDeterministicSceneQa(
-    {
-      intent,
-      scene: root,
-      clips,
-      ...(partPenetration
-        ? { derivedEvidence: { source: 'engine-scene-analysis' as const, partPenetration } }
-        : {}),
-    },
-    qaPolicyFromEnv(),
-  );
+  const qaPolicy = qaPolicyFromEnv();
+  const sceneEvidence = await collectRequirementsSceneEvidence(requirements, root, qaPolicy);
+  const sceneQaReport = runRequirementsSceneQa(requirements, root, clips, qaPolicy, sceneEvidence);
   // A derivative export withholds the throw without hiding the finding.
   const qaBlocks = qaBlockingEnabled() && opts.derivative !== true;
   const qaSuppressedBy = opts.derivative === true ? 'derivative re-serialization' : 'KILN_QA_MODE';
@@ -1378,11 +1383,12 @@ export async function renderSceneToGLB(
     warnings.push(`${blocked.message} — block suppressed by ${qaSuppressedBy}`);
   }
 
+  const nativeClips = clipsWithDurationSamples(clips);
   const doc =
     exporter === 'three'
       ? await communitySceneDocument(
           root,
-          clips,
+          nativeClips,
           (await import('./exporter-node')).nodeExportPlatform,
         )
       : new Document();
@@ -1409,7 +1415,7 @@ export async function renderSceneToGLB(
 
     if (clips.length > 0) {
       gltfScene.setExtras({ [REVIEW_CLIPS_EXTRAS_KEY]: reviewClipExtras(clips) });
-      bridgeAnimations(doc, buf, clips, nodeMap, warnings);
+      bridgeAnimations(doc, buf, nativeClips, nodeMap, warnings);
     }
   } else {
     const scene = doc.getRoot().getDefaultScene() ?? doc.getRoot().listScenes()[0];
@@ -1477,7 +1483,7 @@ export async function renderSceneToGLB(
       doc,
       optimize || instancing ? undefined : tris,
     );
-    instanceability = gradeInstanceability(metrics, { category: trustedCategory });
+    instanceability = gradeInstanceability(metrics);
   } catch (err) {
     metricsError = err instanceof Error ? err.message : String(err);
   }
@@ -1486,14 +1492,9 @@ export async function renderSceneToGLB(
   let materialBudgetWarnings = [] as ReturnType<typeof evaluateMaterialBudgetV1>;
   try {
     materialMetrics = collectMaterialMetricsV1(doc);
-    const tier = /(?:^|\.)hero(?:\.|$)/i.test(intent.qaProfile)
-      ? 'hero'
-      : /(?:^|\.)background(?:\.|$)/i.test(intent.qaProfile)
-        ? 'background'
-        : 'standard';
     materialBudgetWarnings = evaluateMaterialBudgetV1(materialMetrics, {
-      profile: materialBudgetProfileForQaProfile(intent.qaProfile),
-      tier,
+      profile: 'web.portable.v1',
+      tier: 'standard',
     });
   } catch (error) {
     warnings.push(
@@ -1510,17 +1511,16 @@ export async function renderSceneToGLB(
     artifactGlbSha256,
   }));
   const gltfValidation = await validateFinalGlbBytes(bytes);
-  const finalGltfReport = appendFinalGltfQa(intent, sceneQaReport, gltfValidation);
-  const runtimeQaReport = appendRuntimeCostQa(
-    intent,
-    finalGltfReport,
+  const qaReport = await appendRequirementsFinalQa(
+    requirements,
+    sceneQaReport,
+    gltfValidation,
+    bytes,
     instanceability,
     metricsError,
+    materialMetrics,
+    materialBudgetWarnings,
   );
-  const materialQaReport = materialMetrics
-    ? appendMaterialMetricsQa(intent, runtimeQaReport, materialMetrics, materialBudgetWarnings)
-    : runtimeQaReport;
-  const qaReport = await appendFinalVfxGlbQa(intent, materialQaReport, bytes);
   if (qaReport.disposition === 'block') {
     const blocked = new AssetQaBlockedError(qaReport, 'final-glb', gltfValidation);
     if (qaBlocks) throw blocked;
@@ -1539,35 +1539,27 @@ export async function renderSceneToGLB(
   });
   if (!integrationManifest) throw new Error('renderSceneToGLB: final GLB has no measurable scene');
 
-  let diagnosticViews: CapturedDiagnosticV1[] | undefined;
-  if (intent.category === 'character' && intent.character) {
-    try {
-      const findings = Object.values(qaReport.dimensions).flatMap(
-        (dimension) => dimension.findings,
-      );
-      diagnosticViews = await captureCharacterDiagnosticViews(
+  const diagnosticViews: CapturedDiagnosticV1[] = [];
+  const rig = requirements.requirements.requirements.rig;
+  if (rig?.state === 'requested') {
+    const { captureCharacterDiagnosticViews } = await import('./views/character-capture');
+    diagnosticViews.push(
+      ...(await captureCharacterDiagnosticViews(
         root,
-        clips,
-        intent.character,
-        findings,
-      );
-    } catch (error) {
-      warnings.push(
-        `character diagnostic capture failed: ${error instanceof Error ? error.message : String(error)}`,
-      );
-    }
-  } else if (intent.category === 'vehicle' && intent.vehicle) {
-    try {
-      diagnosticViews = captureVehicleDiagnosticViews(root, intent);
-    } catch (error) {
-      warnings.push(
-        `vehicle diagnostic capture failed: ${error instanceof Error ? error.message : String(error)}`,
-      );
-    }
+        clips as readonly DuckClip[],
+        rig.value,
+        Object.values(qaReport.dimensions).flatMap((d) => d.findings),
+      )),
+    );
+  }
+  if (requirements.requirements.requirements.mobility?.state === 'requested') {
+    const { captureVehicleDiagnosticViews } = await import('./views');
+    diagnosticViews.push(...captureVehicleDiagnosticViews(root));
   }
 
   return {
     bytes,
+    requirements,
     artifactGlbSha256,
     tris,
     warnings,
@@ -1577,12 +1569,12 @@ export async function renderSceneToGLB(
     metricsError,
     ...(optimize ? { optimize } : {}),
     ...(instancing ? { instancing } : {}),
-    ...(diagnosticViews ? { diagnosticViews } : {}),
     ...(materialMetrics ? { materialMetrics } : {}),
     ...(materialRecipeApplications.length ? { materialRecipeApplications } : {}),
     ...(materialResourceProvenance.length ? { materialResourceProvenance } : {}),
     ...(boundBakedTextures.length ? { bakedTextures: boundBakedTextures } : {}),
     integrationManifest,
+    ...(diagnosticViews.length ? { diagnosticViews } : {}),
   };
 }
 
@@ -1596,6 +1588,7 @@ export async function renderSceneToGLB(
  * Pure function: no file I/O, no globals, no WebGL.
  */
 export interface RenderGlbOptions {
+  requirements?: RequirementsBinding;
   /** Host-only migration option, transported explicitly to isolated workers. */
   gltfExporter?: 'legacy' | 'three';
   geometryPolicy?: GeometryExportPolicy;
@@ -1605,6 +1598,8 @@ export interface RenderGlbOptions {
   category?: AssetCategory;
   /** Trusted evaluator dependency; never derived from generated code. */
   textureResolver?: TextureResolver;
+  /** In-process host diagnostic sink; not serializable to evaluator workers. */
+  diagnosticConsole?: DiagnosticConsole;
 }
 
 /**
@@ -1617,33 +1612,42 @@ export async function renderGLBInProcess(
   code: string,
   opts: RenderGlbOptions = {},
 ): Promise<RenderResult> {
+  assertNoLegacyRuntimePolicy(opts);
+  const requirements = resolveRequirementsContext(opts.requirements);
   if (opts.geometryPolicy !== undefined && !['warn', 'strict'].includes(opts.geometryPolicy))
     throw new Error('geometryPolicy must be warn or strict');
   const { meta, root, clips, primitiveUsage } = await executeKilnCode(code, {
     textureResolver: opts.textureResolver ?? DEFAULT_TEXTURE_RESOLVER,
+    console: opts.diagnosticConsole,
   });
-  const requestedCategory = opts.intent?.category ?? opts.category;
   const scene = await renderSceneToGLB(root, {
     gltfExporter: opts.gltfExporter,
     sceneName: meta.name || 'Scene',
     geometryPolicy: opts.geometryPolicy,
     clips,
-    ...(requestedCategory ? { category: requestedCategory } : {}),
-    ...(opts.intent ? { intent: opts.intent } : {}),
+    requirements: requirements.binding,
     role: meta.role,
     ...(opts.optimize ? { optimize: opts.optimize } : {}),
     ...(opts.instance ? { instance: opts.instance } : {}),
   });
 
-  const { category: modelCategory, ...modelMeta } = meta;
+  const {
+    category: modelCategory,
+    requirements: _requirements,
+    intent: _intent,
+    policyHash: _policyHash,
+    adviceHash: _adviceHash,
+    binding: _binding,
+    ...modelMeta
+  } = meta;
   return {
     glb: Buffer.from(scene.bytes),
+    requirements: scene.requirements,
     artifactGlbSha256: scene.artifactGlbSha256,
     tris: scene.tris,
     meta: {
       ...modelMeta,
       ...(modelCategory !== undefined ? { modelCategory } : {}),
-      ...(requestedCategory ? { category: requestedCategory } : {}),
       tris: scene.tris,
       primitiveUsage,
       ...(scene.instanceability

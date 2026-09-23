@@ -1,13 +1,37 @@
 import * as THREE from 'three';
 
-import {
-  readSemanticMetadataV1FromExtras,
-  type ArchitectureIntentV1,
-  type SemanticRelationshipV1,
-} from '../contracts';
+import { readSemanticMetadataV1FromExtras, type SemanticRelationshipV1 } from '../contracts';
+import type { AssetRequirementsV1 } from '../contracts/requirements';
 import { withArchitectureRepair } from './architecture-repairs';
 import { conformancePromotionAuthorization, KILN_ENGINE_QA_OWNER, type QaRule } from './registry';
 import type { QaContext, QaFinding } from './types';
+
+export type StructureRequirements = Extract<
+  NonNullable<AssetRequirementsV1['requirements']['structure']>,
+  { value: unknown }
+>['value'];
+export interface StructureQaInput {
+  scene?: unknown;
+  profile?: string;
+  structure?: StructureRequirements;
+  opening?: boolean;
+}
+type MeasuredRoof = StructureRequirements & {
+  footprint: NonNullable<StructureRequirements['footprint']>;
+  roof: NonNullable<StructureRequirements['roof']> & {
+    ridgeAxis: 'x' | 'z';
+    rise: number;
+    overhang: number;
+  };
+};
+function hasRoofDimensions(value: StructureRequirements): value is MeasuredRoof {
+  return (
+    value.footprint !== undefined &&
+    value.roof?.ridgeAxis !== undefined &&
+    value.roof.rise !== undefined &&
+    value.roof.overhang !== undefined
+  );
+}
 
 type Axis = 'x' | 'y' | 'z';
 type HorizontalAxis = 'x' | 'z';
@@ -256,12 +280,12 @@ function aggregateRole(
 }
 
 function architectureFinding(
-  context: QaContext,
+  context: StructureQaInput,
   value: Omit<QaFinding, 'profile' | 'dimension'>,
 ): QaFinding {
   return withArchitectureRepair({
     ...value,
-    profile: context.intent.qaProfile,
+    profile: context.profile ?? 'asset.requirements.v1',
     dimension: 'categoryReadiness',
   });
 }
@@ -289,8 +313,8 @@ function intervalSeparation(aMin: number, aMax: number, bMin: number, bMax: numb
   return 0;
 }
 
-function requestedGable(architecture: ArchitectureIntentV1): boolean {
-  return architecture.roof.type === 'gable';
+function requestedGable(architecture: StructureRequirements): boolean {
+  return architecture.roof?.type === 'gable';
 }
 
 function taggedGable(evidence: ArchitectureSceneEvidence): boolean {
@@ -299,16 +323,6 @@ function taggedGable(evidence: ArchitectureSceneEvidence): boolean {
       role === 'architecture.shell.gable' ||
       role.startsWith('roof.slope.') ||
       role.startsWith('roof.gable.'),
-  );
-}
-
-function isOpenPavilion(
-  architecture: ArchitectureIntentV1,
-  evidence: ArchitectureSceneEvidence,
-): boolean {
-  return (
-    /(?:^|[. _-])(?:open[. _-])?pavilion(?:$|[. _-])/i.test(architecture.subtype) ||
-    evidence.semanticRoles.has('architecture.open-pavilion')
   );
 }
 
@@ -339,11 +353,11 @@ function ridgeCrossSectionDistance(
 }
 
 function roofFindings(
-  context: QaContext,
-  architecture: ArchitectureIntentV1,
+  context: StructureQaInput,
+  architecture: StructureRequirements,
   evidence: ArchitectureSceneEvidence,
 ): QaFinding[] {
-  if (!requestedGable(architecture) && !taggedGable(evidence)) return [];
+  if (!requestedGable(architecture)) return [];
   const positive = aggregateRole(evidence, 'roof.slope.positive');
   const negative = aggregateRole(evidence, 'roof.slope.negative');
   const tagged = taggedGable(evidence);
@@ -389,7 +403,7 @@ function roofFindings(
     return findings;
   }
 
-  if (!positive || !negative) return findings;
+  if (!positive || !negative || !hasRoofDimensions(architecture)) return findings;
 
   const ridgeAxis = architecture.roof.ridgeAxis;
   const lateralAxis: HorizontalAxis = ridgeAxis === 'x' ? 'z' : 'x';
@@ -535,11 +549,11 @@ function projectedGableArea(
 }
 
 function endFindings(
-  context: QaContext,
-  architecture: ArchitectureIntentV1,
+  context: StructureQaInput,
+  architecture: StructureRequirements,
   evidence: ArchitectureSceneEvidence,
 ): QaFinding[] {
-  if (!requestedGable(architecture) || isOpenPavilion(architecture, evidence)) return [];
+  if (!requestedGable(architecture) || !hasRoofDimensions(architecture)) return [];
   const closedEnds = architecture.roof.closedEnds;
   if (!closedEnds) return [];
 
@@ -691,11 +705,11 @@ function nearestRoofHeight(
 }
 
 function envelopeFindings(
-  context: QaContext,
-  architecture: ArchitectureIntentV1,
+  context: StructureQaInput,
+  architecture: StructureRequirements,
   evidence: ArchitectureSceneEvidence,
 ): QaFinding[] {
-  if (!requestedGable(architecture) || isOpenPavilion(architecture, evidence)) return [];
+  if (!requestedGable(architecture) || !hasRoofDimensions(architecture)) return [];
   const roof = aggregate(
     evidence.parts.filter(
       (part) =>
@@ -803,11 +817,16 @@ function portalRoleWall(roles: readonly string[]): string | undefined {
 }
 
 function portalFindings(
-  context: QaContext,
-  architecture: ArchitectureIntentV1,
+  context: StructureQaInput,
+  architecture: StructureRequirements,
   evidence: ArchitectureSceneEvidence,
 ): QaFinding[] {
-  if (!architecture.enterable && !context.intent.capabilities.includes('enterable')) return [];
+  if (
+    architecture.enterable !== true &&
+    architecture.interiorMode !== 'navigable' &&
+    !architecture.portal
+  )
+    return [];
   const requested = architecture.portal ?? { width: 1.1, height: 2.1, depth: 0.15 };
   const markers = evidence.parts.filter(
     (part) => !part.isMesh && portalRoleWall(part.directRoles) !== undefined,
@@ -888,7 +907,7 @@ function portalFindings(
         return false;
       }
       if (
-        context.intent.capabilities.includes('openable') &&
+        context.opening === true &&
         part.roles.some((role) => role === 'door.leaf' || role.startsWith('door.leaf.'))
       ) {
         return false;
@@ -959,19 +978,24 @@ function portalFindings(
 }
 
 function storeyFindings(
-  context: QaContext,
-  architecture: ArchitectureIntentV1,
+  context: StructureQaInput,
+  architecture: StructureRequirements,
   evidence: ArchitectureSceneEvidence,
 ): QaFinding[] {
-  const requested = architecture.storeyCount ?? 1;
+  const requested = architecture.storeyCount;
+  if (requested === undefined) return [];
   const indexes = new Set<number>();
   for (const role of evidence.semanticRoles) {
     const match = /^(?:architecture\.)?floor\.storey\.(\d+)$/.exec(role);
     if (match) indexes.add(Number(match[1]));
   }
-  // A single legacy floor remains a valid one-storey control. Exact counting is
-  // required once a multi-storey request is made or indexed floor evidence is claimed.
-  if (requested === 1 && indexes.size === 0) return [];
+  // An unindexed floor can substantiate one storey; absence of all floor evidence cannot.
+  if (
+    requested === 1 &&
+    indexes.size === 0 &&
+    evidence.parts.some((part) => part.isMesh && hasRole(part, 'floor'))
+  )
+    return [];
   const actual = indexes.size;
   if (actual === requested) return [];
   return [
@@ -988,17 +1012,18 @@ function storeyFindings(
       },
       viewHints: ['architecture.cutaway.dollhouse', 'generic.top.semantic-overlay'],
       repairText:
-        'Add or remove only the requested floor levels, stamp each level once as floor.storey.<1-5>, and keep stairs and clearances aligned between consecutive levels.',
+        'Add or remove only the requested floor levels, stamp each level once as floor.storey.<index>, and keep stairs and clearances aligned between consecutive levels.',
     }),
   ];
 }
 
 function interiorModeFindings(
-  context: QaContext,
-  architecture: ArchitectureIntentV1,
+  context: StructureQaInput,
+  architecture: StructureRequirements,
   evidence: ArchitectureSceneEvidence,
 ): QaFinding[] {
-  const mode = architecture.interiorMode ?? (architecture.enterable ? 'navigable' : 'none');
+  const mode = architecture.interiorMode;
+  if (mode === undefined) return [];
   const interiorEvidence = evidence.parts.filter((part) =>
     part.roles.some(
       (role) => role === 'architecture.interior.shell' || role.startsWith('interior.'),
@@ -1037,11 +1062,12 @@ function interiorModeFindings(
 }
 
 function roofModeFindings(
-  context: QaContext,
-  architecture: ArchitectureIntentV1,
+  context: StructureQaInput,
+  architecture: StructureRequirements,
   evidence: ArchitectureSceneEvidence,
 ): QaFinding[] {
-  const mode = architecture.roofMode ?? (architecture.roof.type === 'none' ? 'none' : 'auto');
+  const mode = architecture.roofMode ?? (architecture.roof?.type === 'none' ? 'none' : undefined);
+  if (mode === undefined) return [];
   if (mode === 'auto') return [];
   const roofParts = evidence.parts.filter((part) => hasRolePrefix(part, 'roof.'));
   const removableRelationships = roofParts.flatMap((part) =>
@@ -1087,14 +1113,16 @@ function roofModeFindings(
 }
 
 function domeFindings(
-  context: QaContext,
-  architecture: ArchitectureIntentV1,
+  context: StructureQaInput,
+  architecture: StructureRequirements,
   evidence: ArchitectureSceneEvidence,
 ): QaFinding[] {
-  const requested =
-    architecture.roof.type === 'dome' ||
-    /(?:^|[. _-])rotunda(?:$|[. _-])/i.test(architecture.subtype);
-  if (!requested) return [];
+  if (
+    architecture.roof?.type !== 'dome' ||
+    !architecture.footprint ||
+    architecture.roof.rise === undefined
+  )
+    return [];
   const dome = aggregate(
     evidence.parts.filter(
       (part) => part.isMesh && (hasRole(part, 'roof.dome') || hasRole(part, 'roof.surface.dome')),
@@ -1137,7 +1165,7 @@ interface ScaleBand {
   affected?: ArchitecturePart;
 }
 
-function scaleBandFinding(context: QaContext, band: ScaleBand): QaFinding | undefined {
+function scaleBandFinding(context: StructureQaInput, band: ScaleBand): QaFinding | undefined {
   if (band.actual >= band.minimum && band.actual <= band.maximum) return undefined;
   return architectureFinding(context, {
     code: band.code,
@@ -1160,38 +1188,28 @@ function scaleBandFinding(context: QaContext, band: ScaleBand): QaFinding | unde
 }
 
 function scaleFindings(
-  context: QaContext,
-  architecture: ArchitectureIntentV1,
+  context: StructureQaInput,
+  architecture: StructureRequirements,
   evidence: ArchitectureSceneEvidence,
 ): QaFinding[] {
-  if (architecture.scaleMode === 'stylized') return [];
+  if (architecture.scaleMode !== 'realistic') return [];
   const scaleBands = ARCHITECTURE_REALISTIC_SCALE_BANDS;
-  const bands: ScaleBand[] = [
-    {
+  const bands: ScaleBand[] = [];
+  if (architecture.wallHeight !== undefined)
+    bands.push({
       code: 'ARCH_SCALE_CEILING_HEIGHT',
       label: 'ceilingHeight',
       actual: architecture.wallHeight,
-      minimum: scaleBands.ceilingHeight.minimum,
-      maximum: scaleBands.ceilingHeight.maximum,
-      unit: 'm',
-    },
-    {
-      code: 'ARCH_SCALE_FOOTPRINT_X',
-      label: 'footprintSpanX',
-      actual: architecture.footprint.spanX,
-      minimum: scaleBands.footprint.minimum,
-      maximum: scaleBands.footprint.maximum,
-      unit: 'm',
-    },
-    {
-      code: 'ARCH_SCALE_FOOTPRINT_Z',
-      label: 'footprintSpanZ',
-      actual: architecture.footprint.spanZ,
-      minimum: scaleBands.footprint.minimum,
-      maximum: scaleBands.footprint.maximum,
-      unit: 'm',
-    },
-  ];
+      ...scaleBands.ceilingHeight,
+    });
+  if (architecture.footprint)
+    for (const axis of ['X', 'Z'] as const)
+      bands.push({
+        code: `ARCH_SCALE_FOOTPRINT_${axis}`,
+        label: `footprintSpan${axis}`,
+        actual: architecture.footprint[`span${axis}`],
+        ...scaleBands.footprint,
+      });
 
   const portal = evidence.parts.find(
     (part) => !part.isMesh && portalRoleWall(part.directRoles) !== undefined,
@@ -1269,10 +1287,10 @@ function scaleFindings(
   });
 }
 
-/** Deterministic architecture checks selected only by closure-owned intent. */
-export function evaluateArchitectureQa(context: QaContext): readonly QaFinding[] {
-  const architecture = context.intent.architecture;
-  if (!architecture || context.intent.category !== 'architecture') return [];
+/* Structural measurements consume explicit requests, independently of asset labels. */
+export function inspectStructure(context: StructureQaInput): readonly QaFinding[] {
+  const architecture = context.structure;
+  if (!architecture) return [];
   const evidence = collectArchitectureEvidence(context.scene);
   if (!evidence) return [];
   return [
@@ -1288,6 +1306,17 @@ export function evaluateArchitectureQa(context: QaContext): readonly QaFinding[]
   ];
 }
 
+/** Old-data conformance adapter; not used by the neutral runtime. */
+export function evaluateArchitectureQa(context: QaContext): readonly QaFinding[] {
+  if (context.intent.category !== 'architecture') return [];
+  return inspectStructure({
+    scene: context.scene,
+    profile: context.intent.qaProfile,
+    structure: context.intent.architecture,
+    opening: context.intent.capabilities.includes('openable'),
+  });
+}
+
 export const ARCHITECTURE_QA_RULE: QaRule = {
   id: PROFILE_RULE_ID,
   profile: 'architecture.default',
@@ -1297,7 +1326,7 @@ export const ARCHITECTURE_QA_RULE: QaRule = {
   promotion: conformancePromotionAuthorization(
     'architecture-qa-v1',
     'src/qa/architecture.test.ts',
-    'e5ad1245240f1244c592849df2977c74d26e535dffebc9ad5a2adf6db743d573',
+    'c3a3bdc764c62238cede39813995fcaa428131d0aa3774bcd86cfc8b60f36671',
   ),
   defaultMode: 'enforce',
   evaluate: (context) =>

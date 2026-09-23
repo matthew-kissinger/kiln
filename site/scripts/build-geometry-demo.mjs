@@ -3,7 +3,7 @@ import { join } from 'node:path';
 import { createHash } from 'node:crypto';
 import { MemoryProgramStore } from '../../src/program-store';
 import { createKilnProgramToolRegistry } from '../../src/tools/registry';
-import { resolveEvaluatorPortV1 } from '../../src/evaluator/protocol';
+import { resolveEvaluatorPortV2 } from '../../src/evaluator/protocol';
 export async function buildGeometryDemo(repo, out) {
   const code = await readFile(join(repo, 'site/examples/equation-canopy.kiln.js'), 'utf8');
   const registry = createKilnProgramToolRegistry({ programStore: new MemoryProgramStore() });
@@ -45,7 +45,7 @@ export async function buildGeometryDemo(repo, out) {
   if (!result.ok) throw Error(JSON.stringify(result));
   const png = tool.media(result)?.png;
   if (!png) throw Error('Teaching render has no image');
-  const asset = await resolveEvaluatorPortV1(undefined, 'trusted-local').render(code);
+  const asset = await resolveEvaluatorPortV2(undefined, 'trusted-local').render(code);
   const hash = (x) => createHash('sha256').update(x).digest('hex');
   await writeFile(join(out, 'equation-canopy.png'), png);
   await writeFile(join(out, 'equation-canopy.kiln.js'), code);

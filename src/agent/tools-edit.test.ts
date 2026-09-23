@@ -1,13 +1,6 @@
-/**
- * Unit tests for the surgical edit-tool skin (KilnEditBuffer + makeKilnEditTools).
- *
- * The buffer is the whole edit contract - pure string ops, no Strands / THREE -
- * so it is tested directly. The tool factory is checked for its wiring (the seven
- * tools and their names, plus the shared edit trace). The run-level gating (edit
- * mode only when refining) is exercised by the studio mock-adapter tests.
- */
-import { test, expect } from 'bun:test';
-import { KilnEditBuffer, makeKilnEditTools, type EditSink } from './tools';
+/** Pure edit-buffer behavior used by immutable program edits. */
+import { describe, test, expect } from 'bun:test';
+import { KilnDraftBuffer, KilnDraftBuffer as KilnEditBuffer } from '../edit-buffer';
 
 const SEED = `const meta = { name: 'crate' };
 function build() {
@@ -92,20 +85,27 @@ test('view returns the raw buffer and a line count that tracks edits', () => {
   expect(buf.view().lines).toBe(buf.code.split('\n').length);
 });
 
-test('makeKilnEditTools exposes the eight edit-mode tools and wires the edit trace', () => {
-  const sink: EditSink = { edits: [] };
-  const tools = makeKilnEditTools({ seedCode: SEED, sink });
-  expect(tools.map((t) => t.name)).toEqual([
-    'kiln_list_primitives',
-    'kiln_view',
-    'kiln_edit',
-    'kiln_validate',
-    'kiln_render',
-    'kiln_screenshot',
-    'kiln_screenshot_animation',
-    'kiln_submit',
-  ]);
-  // The sink's edit trace is the buffer's live array (shared reference).
-  expect(Array.isArray(sink.edits)).toBe(true);
-  expect(sink.edits).toHaveLength(0);
+describe('draft replacement primitive', () => {
+  test('seeds empty by default', () => {
+    const buf = new KilnDraftBuffer();
+    expect(buf.code).toBe('');
+    expect(buf.edits).toHaveLength(0);
+  });
+  test('draft replaces the whole buffer and is NOT recorded as an edit', () => {
+    const buf = new KilnDraftBuffer();
+    const r = buf.draft(SEED);
+    expect(r.ok).toBe(true);
+    expect(r.bytes).toBe(SEED.length);
+    expect(r.lines).toBe(SEED.split('\n').length);
+    expect(buf.code).toBe(SEED);
+    expect(buf.edits).toHaveLength(0); // drafting is authoring, not a diff step
+  });
+  test('draft then surgical edit: edit is recorded, draft is not', () => {
+    const buf = new KilnDraftBuffer();
+    buf.draft(SEED);
+    const r = buf.apply({ oldString: 'boxGeo(1, 1, 1)', newString: 'boxGeo(2, 1, 1)' });
+    expect(r.ok).toBe(true);
+    expect(buf.code).toContain('boxGeo(2, 1, 1)');
+    expect(buf.edits).toHaveLength(1);
+  });
 });

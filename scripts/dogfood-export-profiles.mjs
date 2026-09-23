@@ -274,9 +274,9 @@ try {
       return { text };
     }
   };
-  await call('kiln_list_primitives', { capabilities: true });
+  await call('kiln_discover', { capabilities: true });
   proof('fresh generated workspace reaches its built-runtime kiln_workspace MCP');
-  const source = `const meta = { name: 'Export Profile Demonstrator', category: 'prop' };
+  const source = `const meta = { name: 'Export Profile Demonstrator' };
 async function build() {
   const root = createRoot('Demonstrator');
   const map = proceduralTexture({schemaVersion:2,size:64,usage:'albedo',name:'Paint',layers:[{op:'solid',color:0x60758d},{op:'noise',colorA:0x475468,colorB:0x99a5b4,scale:12,octaves:2,seed:9,opacity:0.25,blend:'overlay'}]});

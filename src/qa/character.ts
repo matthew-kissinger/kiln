@@ -9,12 +9,8 @@ import {
   type CharacterJointDescriptorV1,
   type CharacterRigGraphV1,
 } from '../character';
-import {
-  readSemanticMetadataV1,
-  type AssetIntentV1,
-  type CharacterClipIntentV1,
-  type CharacterIntentV1,
-} from '../contracts';
+import { readSemanticMetadataV1, type CharacterClipIntentV1 } from '../contracts';
+import type { AssetRequirementsV1 } from '../contracts/requirements';
 import { withCharacterRepair } from './character-repairs';
 import { conformancePromotionAuthorization, KILN_ENGINE_QA_OWNER, type QaRule } from './registry';
 import type { QaContext, QaFinding } from './types';
@@ -32,6 +28,20 @@ interface CharacterIntentExtensions {
   rigGraph?: CharacterRigGraphV1;
   /** Optional tighter/looser asset-local contact tolerance in meters. */
   contactTolerance?: number;
+}
+
+export type RigRequirements = Extract<
+  NonNullable<AssetRequirementsV1['requirements']['rig']>,
+  { value: unknown }
+>['value'];
+export interface RigQaInput {
+  rig?: RigRequirements & CharacterIntentExtensions;
+  profile?: string;
+  scene?: unknown;
+  clips?: readonly unknown[];
+  groundPlaneY?: number;
+  /** Historical fixture controls only; current body-plan requests select their graph directly. */
+  checkBodyPlan?: boolean;
 }
 
 interface CharacterNodeEvidence {
@@ -97,14 +107,8 @@ function collectNodes(root: THREE.Object3D): CharacterNodeEvidence[] {
   return nodes;
 }
 
-function characterIntent(
-  intent: AssetIntentV1,
-): (CharacterIntentV1 & CharacterIntentExtensions) | undefined {
-  return intent.character as (CharacterIntentV1 & CharacterIntentExtensions) | undefined;
-}
-
 function block(
-  intent: AssetIntentV1,
+  input: RigQaInput,
   code: string,
   message: string,
   options: Pick<QaFinding, 'dimension' | 'affected' | 'measurement' | 'viewHints'>,
@@ -112,7 +116,7 @@ function block(
   return withCharacterRepair({
     code,
     disposition: 'block',
-    profile: intent.qaProfile,
+    profile: input.profile ?? 'asset.requirements.v1',
     message,
     ...options,
   });
@@ -145,7 +149,7 @@ function dedupeFindings(findings: readonly QaFinding[]): QaFinding[] {
 }
 
 function duplicateNameFindings(
-  intent: AssetIntentV1,
+  input: RigQaInput,
   nodes: readonly CharacterNodeEvidence[],
   clips: readonly ClipLike[],
 ): QaFinding[] {
@@ -167,7 +171,7 @@ function duplicateNameFindings(
     const paths = matches.map((match) => match.nodePath).sort();
     findings.push(
       block(
-        intent,
+        input,
         'CHAR_DUPLICATE_ANIMATED_NODE_NAME',
         `Animated node name ${JSON.stringify(name)} resolves to multiple exact paths: ${paths.join(', ')}.`,
         {
@@ -187,7 +191,7 @@ function duplicateNameFindings(
 }
 
 function parentAndRoleFindings(
-  intent: AssetIntentV1,
+  input: RigQaInput,
   root: THREE.Object3D,
 ): { findings: QaFinding[]; byRole: Map<string, ReturnType<typeof collectCharacterJointNodes>> } {
   const joints = collectCharacterJointNodes(root);
@@ -203,7 +207,7 @@ function parentAndRoleFindings(
     const paths = matches.map((match) => match.nodePath).sort();
     findings.push(
       block(
-        intent,
+        input,
         'CHAR_DUPLICATE_JOINT_ROLE',
         `Joint role ${role} is declared at ${paths.join(', ')}.`,
         {
@@ -225,7 +229,7 @@ function parentAndRoleFindings(
     if (actualDescriptor?.role === expected) continue;
     findings.push(
       block(
-        intent,
+        input,
         'CHAR_PARENT_EDGE',
         `Broken joint edge ${expected} -> ${joint.descriptor.role}: actual direct parent is ${actual}.`,
         {
@@ -241,7 +245,7 @@ function parentAndRoleFindings(
 }
 
 function requiredGraphFindings(
-  intent: AssetIntentV1,
+  input: RigQaInput,
   graph: CharacterRigGraphV1,
   actualByRole: Map<string, ReturnType<typeof collectCharacterJointNodes>>,
   code: 'CHAR_BIPED_REQUIRED_ROLE' | 'CHAR_QUADRUPED_REQUIRED_ROLE' | 'CHAR_CUSTOM_REQUIRED_ROLE',
@@ -252,7 +256,7 @@ function requiredGraphFindings(
     if (!actual) {
       findings.push(
         block(
-          intent,
+          input,
           code,
           `Explicit ${graph.bodyPlan} articulation is missing joint role ${expected.role}.`,
           {
@@ -268,7 +272,7 @@ function requiredGraphFindings(
     if (expected.parentRole && actual.descriptor.parentRole !== expected.parentRole) {
       findings.push(
         block(
-          intent,
+          input,
           'CHAR_PARENT_EDGE',
           `Role ${expected.role} declares parent ${actual.descriptor.parentRole ?? '(none)'}; ${expected.parentRole} is required by the ${graph.bodyPlan} graph.`,
           {
@@ -289,18 +293,18 @@ function requiredGraphFindings(
 }
 
 function rigProfileFindings(
-  intent: AssetIntentV1,
+  input: RigQaInput,
   root: THREE.Object3D,
   byRole: Map<string, ReturnType<typeof collectCharacterJointNodes>>,
 ): QaFinding[] {
-  const trusted = characterIntent(intent);
-  if (!trusted || !intent.capabilities.includes('articulated')) return [];
+  const trusted = input.rig;
+  if (!trusted?.bodyPlan || input.checkBodyPlan === false) return [];
   if (trusted.bodyPlan === 'biped') {
-    return requiredGraphFindings(intent, BIPED_RIG_PRESET_V1, byRole, 'CHAR_BIPED_REQUIRED_ROLE');
+    return requiredGraphFindings(input, BIPED_RIG_PRESET_V1, byRole, 'CHAR_BIPED_REQUIRED_ROLE');
   }
   if (trusted.bodyPlan === 'quadruped') {
     return requiredGraphFindings(
-      intent,
+      input,
       QUADRUPED_RIG_PRESET_V1,
       byRole,
       'CHAR_QUADRUPED_REQUIRED_ROLE',
@@ -310,7 +314,7 @@ function rigProfileFindings(
   if (!customGraph) {
     return [
       block(
-        intent,
+        input,
         'CHAR_CUSTOM_GRAPH_MISSING',
         `Explicit articulated ${trusted.bodyPlan} character requires its declared semantic rig graph; no biped fallback is allowed.`,
         {
@@ -322,14 +326,11 @@ function rigProfileFindings(
       ),
     ];
   }
-  return requiredGraphFindings(intent, customGraph, byRole, 'CHAR_CUSTOM_REQUIRED_ROLE');
+  return requiredGraphFindings(input, customGraph, byRole, 'CHAR_CUSTOM_REQUIRED_ROLE');
 }
 
-function heldItemFindings(
-  intent: AssetIntentV1,
-  nodes: readonly CharacterNodeEvidence[],
-): QaFinding[] {
-  const held = characterIntent(intent)?.heldItem;
+function heldItemFindings(input: RigQaInput, nodes: readonly CharacterNodeEvidence[]): QaFinding[] {
+  const held = input.rig?.heldItem;
   if (!held?.required) return [];
   const item = nodes.find((evidence) => {
     const roles = readSemanticMetadataV1(evidence.node)?.roles ?? [];
@@ -344,9 +345,9 @@ function heldItemFindings(
   if (!item) {
     return [
       block(
-        intent,
+        input,
         'CHAR_HELD_ITEM_MISSING',
-        'Trusted intent requires a held item, but none is declared.',
+        'Trusted input requires a held item, but none is declared.',
         {
           dimension: 'categoryReadiness',
           affected: { node: held.attachmentRole },
@@ -372,7 +373,7 @@ function heldItemFindings(
   if (attachment?.endEffector && roleMatches(attachment)) return [];
   return [
     block(
-      intent,
+      input,
       'CHAR_HELD_ITEM_ATTACHMENT',
       `Held item at ${item.nodePath} must be under ${held.attachmentRole} end effector; actual attachment is ${attachment?.role ?? '(non-joint)'}.`,
       {
@@ -389,13 +390,13 @@ function heldItemFindings(
   ];
 }
 
-function contactFindings(intent: AssetIntentV1, root: THREE.Object3D): QaFinding[] {
-  const trusted = characterIntent(intent);
+function contactFindings(input: RigQaInput, root: THREE.Object3D): QaFinding[] {
+  const trusted = input.rig;
   if (!trusted?.grounded) return [];
   const contacts = collectCharacterJointNodes(root).filter((joint) => joint.descriptor.contact);
   if (contacts.length === 0) {
     return [
-      block(intent, 'CHAR_CONTACT_MISSING', 'Grounded character declares no contact joint.', {
+      block(input, 'CHAR_CONTACT_MISSING', 'Grounded character declares no contact joint.', {
         dimension: 'categoryReadiness',
         affected: { node: root.name },
         measurement: { name: 'groundContactCount', actual: 0, expected: '>=1' },
@@ -409,22 +410,24 @@ function contactFindings(intent: AssetIntentV1, root: THREE.Object3D): QaFinding
     Number.isFinite(trusted.contactTolerance) && (trusted.contactTolerance ?? 0) >= 0
       ? trusted.contactTolerance!
       : CONTACT_TOLERANCE;
+  const planeY = input.groundPlaneY ?? 0;
   const findings: QaFinding[] = [];
   for (const contact of contacts) {
     const point = contact.node.getWorldPosition(new THREE.Vector3()).applyMatrix4(rootInverse);
-    if (point.y > tolerance) {
+    const offset = point.y - planeY;
+    if (offset > tolerance) {
       findings.push(
         block(
-          intent,
+          input,
           'CHAR_CONTACT_FLOATING',
-          `Ground contact ${contact.descriptor.role} is ${point.y.toFixed(6)} m above asset-local ground.`,
+          `Ground contact ${contact.descriptor.role} is ${offset.toFixed(6)} m above asset-local ground.`,
           {
             dimension: 'categoryReadiness',
             affected: { node: contact.node.name, nodePath: contact.nodePath },
             measurement: {
               name: 'contactY',
               actual: point.y,
-              expected: 0,
+              expected: planeY,
               threshold: tolerance,
               unit: 'm',
             },
@@ -432,19 +435,19 @@ function contactFindings(intent: AssetIntentV1, root: THREE.Object3D): QaFinding
           },
         ),
       );
-    } else if (point.y < -tolerance) {
+    } else if (offset < -tolerance) {
       findings.push(
         block(
-          intent,
+          input,
           'CHAR_CONTACT_BURIED',
-          `Ground contact ${contact.descriptor.role} is ${Math.abs(point.y).toFixed(6)} m below asset-local ground.`,
+          `Ground contact ${contact.descriptor.role} is ${Math.abs(offset).toFixed(6)} m below asset-local ground.`,
           {
             dimension: 'categoryReadiness',
             affected: { node: contact.node.name, nodePath: contact.nodePath },
             measurement: {
               name: 'contactY',
               actual: point.y,
-              expected: 0,
+              expected: planeY,
               threshold: tolerance,
               unit: 'm',
             },
@@ -458,7 +461,7 @@ function contactFindings(intent: AssetIntentV1, root: THREE.Object3D): QaFinding
 }
 
 function requestedClipFindings(
-  intent: AssetIntentV1,
+  input: RigQaInput,
   clips: readonly ClipLike[],
   requested: readonly CharacterClipIntentV1[],
 ): QaFinding[] {
@@ -469,7 +472,7 @@ function requestedClipFindings(
   for (const [name, count] of [...counts.entries()].sort(([a], [b]) => a.localeCompare(b))) {
     if (count < 2) continue;
     findings.push(
-      block(intent, 'CHAR_CLIP_DUPLICATE', `Clip ${name} appears ${count} times.`, {
+      block(input, 'CHAR_CLIP_DUPLICATE', `Clip ${name} appears ${count} times.`, {
         dimension: 'exportIntegrity',
         affected: { clip: name },
         measurement: { name: 'clipCount', actual: count, expected: 1 },
@@ -481,7 +484,7 @@ function requestedClipFindings(
     const count = counts.get(request.name) ?? 0;
     if (count === 0) {
       findings.push(
-        block(intent, 'CHAR_CLIP_MISSING', `Requested clip ${request.name} is missing.`, {
+        block(input, 'CHAR_CLIP_MISSING', `Requested clip ${request.name} is missing.`, {
           dimension: 'categoryReadiness',
           affected: { clip: request.name },
           measurement: { name: 'clipCount', actual: 0, expected: 1 },
@@ -493,7 +496,7 @@ function requestedClipFindings(
   for (const name of [...counts.keys()].sort()) {
     if (requestedNames.has(name)) continue;
     findings.push(
-      block(intent, 'CHAR_CLIP_UNEXPECTED', `Clip ${name} was not requested by trusted intent.`, {
+      block(input, 'CHAR_CLIP_UNEXPECTED', `Clip ${name} was not requested by trusted input.`, {
         dimension: 'categoryReadiness',
         affected: { clip: name },
         measurement: { name: 'requestedClip', actual: name, expected: 'absent' },
@@ -525,14 +528,14 @@ function endpointDelta(track: TrackLike, size: number): number {
 }
 
 function animationDataFindings(
-  intent: AssetIntentV1,
+  input: RigQaInput,
   clips: readonly ClipLike[],
   requested: readonly CharacterClipIntentV1[],
   root?: THREE.Object3D,
 ): QaFinding[] {
   const findings: QaFinding[] = [];
   const playback = new Map(requested.map((clip) => [clip.name, clip.playback]));
-  const trusted = characterIntent(intent);
+  const trusted = input.rig;
   const hipsName = root
     ? collectCharacterJointNodes(root).find((joint) => joint.descriptor.role === 'hips')?.node.name
     : undefined;
@@ -544,7 +547,7 @@ function animationDataFindings(
     if (!durationValid) {
       findings.push(
         block(
-          intent,
+          input,
           'CHAR_CLIP_DURATION',
           `Clip ${clip.name} duration must be finite and positive.`,
           {
@@ -564,7 +567,7 @@ function animationDataFindings(
       if (nonFiniteTime >= 0 || nonFiniteValue >= 0) {
         findings.push(
           block(
-            intent,
+            input,
             'CHAR_ANIMATION_NONFINITE',
             `Clip ${clip.name} track ${track.name} contains a non-finite ${nonFiniteTime >= 0 ? 'time' : 'value'}.`,
             {
@@ -584,7 +587,7 @@ function animationDataFindings(
       if (badOrder >= 0) {
         findings.push(
           block(
-            intent,
+            input,
             'CHAR_KEY_TIME_ORDER',
             `Clip ${clip.name} track ${track.name} key times must be strictly increasing and unique.`,
             {
@@ -607,7 +610,7 @@ function animationDataFindings(
         if (outside >= 0) {
           findings.push(
             block(
-              intent,
+              input,
               'CHAR_KEY_OUT_OF_RANGE',
               `Clip ${clip.name} track ${track.name} key ${outside} lies outside [0, ${clip.duration}].`,
               {
@@ -629,7 +632,7 @@ function animationDataFindings(
       if (!size || values.length !== times.length * size) {
         findings.push(
           block(
-            intent,
+            input,
             'CHAR_TRACK_VALUE_COUNT',
             `Clip ${clip.name} track ${track.name} does not contain one complete value per key time.`,
             {
@@ -658,7 +661,7 @@ function animationDataFindings(
         const delta = endpointDelta(track, size);
         findings.push(
           block(
-            intent,
+            input,
             'CHAR_LOOP_ENDPOINT',
             `Looping clip ${clip.name} track ${track.name} ends ${delta} away from its start pose.`,
             {
@@ -755,23 +758,25 @@ export function sampleCharacterAnimation(
   };
 }
 
-function locomotionClipNames(character: CharacterIntentV1): string[] {
-  const loopingMotion = character.clips
+function locomotionClipNames(character: RigRequirements): string[] {
+  const loopingMotion = (character.clips ?? [])
     .filter(
       (clip) =>
         clip.playback === 'loop' && /(?:walk|run|fly|swim|slither|roll|locom)/i.test(clip.name),
     )
     .map((clip) => clip.name);
   if (loopingMotion.length > 0) return loopingMotion;
-  return character.clips.filter((clip) => clip.playback === 'loop').map((clip) => clip.name);
+  return (character.clips ?? [])
+    .filter((clip) => clip.playback === 'loop')
+    .map((clip) => clip.name);
 }
 
 function rootMotionFindings(
-  intent: AssetIntentV1,
+  input: RigQaInput,
   root: THREE.Object3D,
   clips: readonly ClipLike[],
 ): QaFinding[] {
-  const trusted = characterIntent(intent);
+  const trusted = input.rig;
   if (trusted?.rootMotion !== 'forward') return [];
   const names = new Set(locomotionClipNames(trusted));
   const findings: QaFinding[] = [];
@@ -793,7 +798,7 @@ function rootMotionFindings(
     if (dx < -ROOT_MOTION_TOLERANCE) {
       findings.push(
         block(
-          intent,
+          input,
           'CHAR_ROOT_MOTION_BACKWARD',
           `Forward locomotion clip ${clip.name} travels ${dx.toFixed(6)} m along X.`,
           {
@@ -817,7 +822,7 @@ function rootMotionFindings(
     ) {
       findings.push(
         block(
-          intent,
+          input,
           'CHAR_ROOT_MOTION_LATERAL',
           `Forward locomotion clip ${clip.name} is Z-dominant (dx=${dx.toFixed(6)}, dz=${dz.toFixed(6)}).`,
           {
@@ -867,11 +872,11 @@ function characterJointScale(root: THREE.Object3D): number {
 
 /** Explicit declared grip relationships are deterministic contracts, not anatomy heuristics. */
 function heldItemMotionFindings(
-  intent: AssetIntentV1,
+  input: RigQaInput,
   root: THREE.Object3D,
   clips: readonly ClipLike[],
 ): QaFinding[] {
-  const held = characterIntent(intent)?.heldItem;
+  const held = input.rig?.heldItem;
   if (!held?.required || clips.length === 0) return [];
   const item = declaredHeldItem(collectNodes(root));
   if (!item) return [];
@@ -912,7 +917,7 @@ function heldItemMotionFindings(
     if (maximumDrift <= tolerance) continue;
     findings.push(
       block(
-        intent,
+        input,
         'CHAR_HELD_ITEM_GRIP_BREAK',
         `Held item ${item.node.name} breaks its declared ${attachment.role} grip relationship in ${clip.name} at phase ${maximumFraction}.`,
         {
@@ -937,26 +942,38 @@ function heldItemMotionFindings(
   return findings;
 }
 
-export function evaluateCharacterQa(context: QaContext): QaFinding[] {
-  if (context.intent.category !== 'character') return [];
+export function inspectRig(context: RigQaInput): QaFinding[] {
+  if (!context.rig) return [];
   const root = context.scene instanceof THREE.Object3D ? context.scene : undefined;
   const clips = (context.clips ?? []).filter(isClipLike);
   const findings: QaFinding[] = [];
   if (root) {
     const nodes = collectNodes(root);
-    findings.push(...duplicateNameFindings(context.intent, nodes, clips));
-    const rig = parentAndRoleFindings(context.intent, root);
+    findings.push(...duplicateNameFindings(context, nodes, clips));
+    const rig = parentAndRoleFindings(context, root);
     findings.push(...rig.findings);
-    findings.push(...rigProfileFindings(context.intent, root, rig.byRole));
-    findings.push(...heldItemFindings(context.intent, nodes));
-    findings.push(...contactFindings(context.intent, root));
-    findings.push(...rootMotionFindings(context.intent, root, clips));
-    findings.push(...heldItemMotionFindings(context.intent, root, clips));
+    findings.push(...rigProfileFindings(context, root, rig.byRole));
+    findings.push(...heldItemFindings(context, nodes));
+    findings.push(...contactFindings(context, root));
+    findings.push(...rootMotionFindings(context, root, clips));
+    findings.push(...heldItemMotionFindings(context, root, clips));
   }
-  const requested = characterIntent(context.intent)?.clips ?? [];
-  findings.push(...requestedClipFindings(context.intent, clips, requested));
-  findings.push(...animationDataFindings(context.intent, clips, requested, root));
+  const requested = context.rig?.clips ?? [];
+  if (context.rig.clips !== undefined)
+    findings.push(...requestedClipFindings(context, clips, requested));
+  findings.push(...animationDataFindings(context, clips, requested, root));
   return dedupeFindings(findings);
+}
+
+/** Historical conformance adapter; current runtime receives RigQaInput directly. */
+export function evaluateCharacterQa(context: QaContext): QaFinding[] {
+  return inspectRig({
+    scene: context.scene,
+    clips: context.clips,
+    profile: context.intent.qaProfile,
+    rig: context.intent.category === 'character' ? context.intent.character : undefined,
+    checkBodyPlan: context.intent.capabilities.includes('articulated'),
+  });
 }
 
 export const CHARACTER_QA_RULE: QaRule = Object.freeze({

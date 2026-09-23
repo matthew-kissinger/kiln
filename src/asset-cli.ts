@@ -12,6 +12,7 @@ import { createPackagedLocalToolContext } from './local-runtime';
 import { buildRenderPort, resolveRenderMode } from './cli-render-mode';
 import { startAssetViewer } from './asset-viewer';
 import { assetViewerHref } from './viewer/deep-link';
+import { CATEGORY_MIGRATION_MESSAGE, readHostRequirementsFile } from './requirements-file';
 
 export const ASSET_USAGE = `
 ASSETS & VIEWER
@@ -20,6 +21,7 @@ ASSETS & VIEWER
        [--backdrop neutral|dark|light]   preview backdrop; the one the reviewed sheet used
   kiln collections                        list configured collection names
   kiln collections add <name> <directory>  remember another collection root
+  --requirements <host-binding.json>      optional host policy for save or asset --restore
   kiln assets [--collection project]      list saved revisions (JSON)
   kiln asset <id> <revision> [--collection project] [--restore]
   kiln export <id> <revision> --out asset.zip [--format bundle|glb|source]
@@ -53,6 +55,7 @@ export async function assetMain(argv: readonly string[]): Promise<number> {
     'port',
     'render',
     'backdrop',
+    'requirements',
   ]);
   for (let i = 1; i < argv.length; i++) {
     const arg = argv[i]!;
@@ -60,6 +63,8 @@ export async function assetMain(argv: readonly string[]): Promise<number> {
       console.log(ASSET_USAGE);
       return 0;
     }
+    if (arg === '--category' || arg.startsWith('--category='))
+      throw new Error(CATEGORY_MIGRATION_MESSAGE);
     if (arg === '--restore') {
       flags.restore = 'true';
       continue;
@@ -72,6 +77,11 @@ export async function assetMain(argv: readonly string[]): Promise<number> {
       else flags[key] = value;
     } else positional.push(arg);
   }
+  if (flags.requirements && command !== 'save' && !(command === 'asset' && flags.restore))
+    throw new Error('--requirements is supported by save and asset --restore only.');
+  const requirements = flags.requirements
+    ? await readHostRequirementsFile(flags.requirements)
+    : undefined;
   const library = localAssetLibrary();
   const collection = flags.collection ?? 'project';
   const fileBytes = async (path: string) => {
@@ -116,6 +126,7 @@ export async function assetMain(argv: readonly string[]): Promise<number> {
     );
     const def = createKilnProgramToolRegistry({
       ...context,
+      requirements,
       assetLibrary: library,
       programStore: store,
     }).find((d) => d.name === 'kiln_save')!;
@@ -142,17 +153,19 @@ export async function assetMain(argv: readonly string[]): Promise<number> {
     const record = await library.read(collection, assetId, revisionId);
     if (command === 'asset') {
       if (flags.restore) {
-        const source = record.files['source.kiln.js'];
-        if (!source) throw new Error('Source unavailable');
+        const restore = createKilnProgramToolRegistry({
+          assetLibrary: library,
+          programStore: localProgramStore(),
+          requirements,
+        }).find((def) => def.name === 'kiln_assets')!;
         console.log(
           JSON.stringify(
-            {
-              asset: record.manifest,
-              programRef: await retainProgram(
-                localProgramStore(),
-                new TextDecoder().decode(source),
-              ),
-            },
+            await restore.run({
+              action: 'restore',
+              collection,
+              assetId,
+              revisionId,
+            }),
             null,
             2,
           ),

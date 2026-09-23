@@ -7,6 +7,7 @@
 
 import * as THREE from 'three';
 import { AuthoringDiagnosticError } from './evaluator/authoring-diagnostic';
+import { assertDimension, assertPrimitiveSegments } from './geometry-budget';
 
 // =============================================================================
 // gearGeo
@@ -55,7 +56,13 @@ export function gearGeo(opts: GearOptions = {}): THREE.BufferGeometry {
     toothWidthFrac = 0.5,
   } = opts;
 
-  if (teeth < 3) throw new Error('gearGeo: teeth must be >= 3');
+  assertPrimitiveSegments('gearGeo teeth', teeth, 3);
+  assertDimension('gearGeo rootRadius', rootRadius);
+  assertDimension('gearGeo tipRadius', tipRadius);
+  assertDimension('gearGeo boreRadius', boreRadius, true);
+  assertDimension('gearGeo height', height);
+  if (!Number.isFinite(toothWidthFrac) || toothWidthFrac <= 0 || toothWidthFrac >= 1)
+    throw new RangeError('gearGeo toothWidthFrac must be strictly between 0 and 1.');
   if (tipRadius <= rootRadius || boreRadius >= rootRadius) {
     throw new AuthoringDiagnosticError('GEAR_RADII_ORDER');
   }
@@ -224,9 +231,11 @@ export function bladeGeo(opts: BladeOptions = {}): THREE.BufferGeometry {
     edgeBevel = 0,
   } = opts;
 
-  if (length <= 0 || baseWidth <= 0 || thickness <= 0) {
-    throw new Error('bladeGeo: length, baseWidth, thickness must all be > 0');
-  }
+  for (const [name, value] of Object.entries({ length, baseWidth, thickness }))
+    assertDimension(`bladeGeo ${name}`, value);
+  assertDimension('bladeGeo tipLength', tipLength, true);
+  if (!Number.isFinite(edgeBevel) || edgeBevel < 0 || edgeBevel > 1)
+    throw new RangeError('bladeGeo edgeBevel must be between 0 and 1.');
   if (tipLength >= length) {
     throw new Error('bladeGeo: tipLength must be less than length');
   }
@@ -279,68 +288,39 @@ export function bladeGeo(opts: BladeOptions = {}): THREE.BufferGeometry {
       indices.push(tA, bB, tB);
     }
   } else {
-    // ----- Bevelled (diamond) profile -----
-    // For each outline vert, build 4 ring verts:
-    //   top-flat  at (x, y, ht)
-    //   top-ridge at (x*(1-b), y, ht*(1-b))   // pinched toward centerline
-    //     Actually simpler: keep (x, y) path, bevel on z-axis:
-    //     flat verts at z = ±ht and ridge verts at z = 0 along the blade edge.
-    // Scheme: at each outline vert i, emit
-    //   ring[i][0] = top-flat (+z)
-    //   ring[i][1] = ridge-front (z = +ht * (1 - edgeBevel))
-    //   ring[i][2] = ridge-back  (z = -ht * (1 - edgeBevel))
-    //   ring[i][3] = bottom-flat (-z)
-    // edgeBevel=1 pinches ridge to z=0 (true diamond).
-    const zFlat = ht;
-    const zRidge = ht * (1 - edgeBevel);
-    const vertsPerRing = 4;
-    for (const [x, y] of outline) {
-      positions.push(x, y, zFlat);
-      positions.push(x, y, zRidge);
-      positions.push(x, y, -zRidge);
-      positions.push(x, y, -zFlat);
-    }
-
-    const ringIdx = (i: number, k: number) => i * vertsPerRing + k;
-
-    // Cap at base (y=0, i=0 and i=1 are the two base corners) — simplest
-    // to triangulate as a quad between [0,1] ring verts. But a quick hack:
-    // triangulate the base edge (between outline[0] and outline[1]) as a
-    // rectangular end-cap.
-    // Actually the "profile extrusion" approach doesn't have a flat base
-    // plane naturally — we fan-cap both outline polygons on each z-layer.
-    // For bevelled, do fan-cap on top (zFlat) and bottom (-zFlat) flats,
-    // then connect the 4 longitudinal strips.
-
-    // Top-flat cap fan (ring[*][0])
-    for (let i = 1; i < n - 1; i++) {
-      indices.push(ringIdx(0, 0), ringIdx(i, 0), ringIdx(i + 1, 0));
-    }
-    // Bottom-flat cap fan (ring[*][3]) — reversed winding
-    for (let i = 1; i < n - 1; i++) {
-      indices.push(ringIdx(0, 3), ringIdx(i + 1, 3), ringIdx(i, 3));
-    }
-
-    // Longitudinal side strips: for each outline edge (i, j=i+1), connect
-    // corresponding k-layer pairs into quads.
-    // Layers: 0 (top-flat) ↔ 1 (ridge-front) ↔ 3 (bottom-flat, skipping 2 of opposite face? Actually face layers on +z side are 0→1, and on -z are 3→2.)
-    // Simpler: treat the 4 ring layers as a tube with quads (0,1), (1,2), (2,3), (3,0).
-    const layerPairs: Array<[number, number]> = [
-      [0, 1],
-      [1, 2],
-      [2, 3],
-      [3, 0],
-    ];
-    for (const [kA, kB] of layerPairs) {
-      for (let i = 0; i < n; i++) {
-        const j = (i + 1) % n;
-        const a = ringIdx(i, kA);
-        const b = ringIdx(j, kA);
-        const c = ringIdx(j, kB);
-        const d = ringIdx(i, kB);
-        indices.push(a, d, c);
-        indices.push(a, c, b);
-      }
+    // A convex XZ section at base and shoulder, joined to one sharp tip.
+    // edgeBevel controls edge thickness; the center ridge stays at +/-ht.
+    // Full diamond sections have four distinct corners, partial bevels six.
+    const edge = ht * (1 - edgeBevel);
+    const section: Array<[number, number]> =
+      edgeBevel === 1
+        ? [
+            [-hw, 0],
+            [0, -ht],
+            [hw, 0],
+            [0, ht],
+          ]
+        : [
+            [-hw, -edge],
+            [0, -ht],
+            [hw, -edge],
+            [hw, edge],
+            [0, ht],
+            [-hw, edge],
+          ];
+    const count = section.length;
+    for (const y of [0, shoulderY]) for (const [x, z] of section) positions.push(x, y, z);
+    const baseCenter = positions.length / 3;
+    positions.push(0, 0, 0);
+    const tip = positions.length / 3;
+    positions.push(0, length, 0);
+    for (let i = 0; i < count; i++) {
+      const j = (i + 1) % count;
+      // XZ section winding gives -Y at the base. Side and taper faces
+      // consistently face outward; no closing strip overlaps the sides.
+      indices.push(baseCenter, i, j);
+      indices.push(i, count + j, j, i, count + i, count + j);
+      indices.push(count + i, tip, count + j);
     }
   }
 

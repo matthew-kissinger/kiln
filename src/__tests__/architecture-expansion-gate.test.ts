@@ -1,3 +1,4 @@
+import { bindLegacyFixtureRequirements } from './helpers/requirements-fixture';
 /**
  * W8 G-ROOF-EXPAND provider-free ablation.
  *
@@ -865,8 +866,14 @@ function structurePass(arm: BuiltRoofArm, armName: Arm): boolean {
 
 async function measureRoofArm(spec: RoofGateCase, armName: Arm): Promise<ArmMeasurement> {
   const arm = buildRoofArm(spec, armName);
-  const first = await renderSceneToGLB(arm.root, { intent: arm.intent, optimize: 'off' });
-  const repeat = await renderSceneToGLB(arm.root, { intent: arm.intent, optimize: 'off' });
+  const first = await renderSceneToGLB(arm.root, {
+    requirements: bindLegacyFixtureRequirements(arm.intent),
+    optimize: 'off',
+  });
+  const repeat = await renderSceneToGLB(arm.root, {
+    requirements: bindLegacyFixtureRequirements(arm.intent),
+    optimize: 'off',
+  });
   const document = await new WebIO().readBinary(first.bytes);
   const exportedFaces = document
     .getRoot()
@@ -1055,7 +1062,10 @@ async function measureUvCase(
       },
     },
   });
-  const initial = await renderSceneToGLB(shell.root, { intent, optimize: 'off' });
+  const initial = await renderSceneToGLB(shell.root, {
+    requirements: bindLegacyFixtureRequirements(intent),
+    optimize: 'off',
+  });
   const rebaked = await optimizeGlbBytes(initial.bytes, {
     mode: 'palette',
     category: 'architecture',

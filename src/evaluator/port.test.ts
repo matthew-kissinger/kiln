@@ -1,9 +1,9 @@
 import { expect, test } from 'bun:test';
 
-import { createEvaluatorPortV1, resolveEvaluatorPortV1 } from './index';
+import { createEvaluatorPortV2, resolveEvaluatorPortV2 } from './index';
 
 test('production profile requires an injected evaluator with no fallback', async () => {
-  expect(() => resolveEvaluatorPortV1(undefined, 'evaluator-required')).toThrow(
+  expect(() => resolveEvaluatorPortV2(undefined, 'evaluator-required')).toThrow(
     'Evaluator port is required',
   );
   const calls: string[] = [];
@@ -13,8 +13,8 @@ test('production profile requires an injected evaluator with no fallback', async
       return {} as never;
     },
   };
-  expect(resolveEvaluatorPortV1(injected, 'evaluator-required')).toBe(injected);
-  await resolveEvaluatorPortV1(injected, 'evaluator-required').render('source');
+  expect(resolveEvaluatorPortV2(injected, 'evaluator-required')).toBe(injected);
+  await resolveEvaluatorPortV2(injected, 'evaluator-required').render('source');
   expect(calls).toEqual(['source']);
 });
 
@@ -23,7 +23,7 @@ test('cancels transport work through a host signal without putting it on the wir
   let calls = 0;
   let observed: AbortSignal | undefined;
   let wire = '';
-  const port = createEvaluatorPortV1(async (json, controls) => {
+  const port = createEvaluatorPortV2(async (json, controls) => {
     calls++;
     observed = controls.signal;
     wire = json;

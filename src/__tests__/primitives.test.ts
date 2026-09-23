@@ -12,7 +12,7 @@
  *   - animation track helpers produce KeyframeTrack instances with the
  *     right shape
  *   - the analysis helpers (countTriangles, countMaterials, getJointNames,
- *     validateAsset) compute correct numbers on a small built scene
+ *     materialBudgetAdvisory) compute correct numbers on a small built scene
  */
 
 import { describe, expect, test } from 'bun:test';
@@ -65,7 +65,7 @@ import {
   countTriangles,
   countMaterials,
   getJointNames,
-  validateAsset,
+  materialBudgetAdvisory,
   buildSandboxGlobals,
 } from '../primitives';
 
@@ -194,7 +194,8 @@ describe('attachment helpers', () => {
       'Mesh_TowerLadderRung3',
       'Mesh_TowerLadderRung4',
     ]);
-    expect(root.children.length).toBe(6);
+    expect(root.children).toEqual([ladder.root]);
+    expect(ladder.root.children.length).toBe(6);
   });
 
   test('createWingPair attaches mirrored wing roots at +/-rootZ', () => {
@@ -310,15 +311,19 @@ describe('building helpers', () => {
       ridgeAxis: 'x',
     });
     expect(root.name).toBe('Roof');
-    expect(slopes[0].name).toBe('Mesh_RoofA');
-    expect(slopes[1].name).toBe('Mesh_RoofB');
-    // Opposite tilt (NOT mirrored the same way) — the anti-defect invariant.
-    expect(slopes[0].rotation.x).not.toBeCloseTo(0);
-    expect(slopes[0].rotation.x).toBeCloseTo(-slopes[1].rotation.x);
+    expect(slopes[0].name).toBe('Mesh_Roof_positive');
+    expect(slopes[1].name).toBe('Mesh_Roof_negative');
+    // Physical slope normals, independent of equivalent Euler representations.
+    const normals = slopes.map((slope) =>
+      new THREE.Vector3(0, 1, 0).applyQuaternion(slope.quaternion),
+    );
+    expect(normals[0]!.y).toBeGreaterThan(0);
+    expect(normals[0]!.z).toBeCloseTo(-normals[1]!.z);
+    expect(normals[0]!.z).toBeGreaterThan(0);
     // Slopes drop toward opposite Z sides; ridge centered above the eaves.
     expect(Math.sign(slopes[0].position.z)).toBe(1);
     expect(Math.sign(slopes[1].position.z)).toBe(-1);
-    expect(slopes[0].position.y).toBeCloseTo(0.8); // height/2
+    expect(slopes[0].position.y + normals[0]!.y * 0.04).toBeCloseTo(0.8); // top surface midpoint
   });
 
   test('createStairs: named treads climb up and along; risers included', () => {
@@ -834,57 +839,39 @@ describe('countTriangles / countMaterials / getJointNames', () => {
 });
 
 // =============================================================================
-// validateAsset advisory
+// materialBudgetAdvisory advisory
 // =============================================================================
 
-describe('validateAsset advisories', () => {
-  test('returns valid=true with no warnings for a tiny prop', () => {
+describe('materialBudgetAdvisory counts', () => {
+  test('returns counts without declaring validity or supplying a category budget', () => {
     const root = createRoot('Tiny');
-    createPart('Body', boxGeo(1, 1, 1), gameMaterial(0xff0000), {
-      parent: root,
+    createPart('Body', boxGeo(1, 1, 1), gameMaterial(0xff0000), { parent: root });
+    expect(materialBudgetAdvisory(root)).toEqual({
+      materialCount: 1,
+      maxMaterials: null,
+      exceeded: null,
+      warnings: [],
     });
-    const r = validateAsset(root, 'prop');
-    expect(r.valid).toBe(true);
-    expect(r.warnings).toEqual([]);
-    expect(r.errors).toEqual([]);
   });
 
-  test('never warns on triangle count, however dense', () => {
-    // A sphere(2, 64, 64) is ~8192 tris. Under the old `suggestedTris` table a
-    // prop was scolded at 3,001 — and a model iterating with this function in
-    // hand reads that as an instruction to delete detail. Triangles are not a
-    // draw-call cost, so the advisory was removed. Do not reinstate it.
-    const root = createRoot('Heavy');
-    createPart('Big', sphereGeo(2, 64, 64), gameMaterial(0x00ff00), {
-      parent: root,
-    });
-    const r = validateAsset(root, 'prop');
-    expect(r.valid).toBe(true);
-    expect(r.warnings).toEqual([]);
-  });
-
-  test('triangle count stays measurable even though nothing judges it', () => {
+  test('does not convert triangle density into an asset or runtime verdict', () => {
     const root = createRoot('Heavy');
     createPart('Big', sphereGeo(2, 64, 64), gameMaterial(0x00ff00), { parent: root });
     expect(countTriangles(root)).toBeGreaterThan(3000);
-    expect(validateAsset(root, 'prop').warnings).toEqual([]);
+    expect(materialBudgetAdvisory(root, { maxMaterials: 1 }).warnings).toEqual([]);
   });
 
-  test('warns when material budget is exceeded', () => {
+  test('warns only against the explicit requested material count', () => {
     const root = createRoot('ManyMats');
-    // 20 distinct materials; vfx category limit = 4.
-    for (let i = 0; i < 20; i++) {
+    for (let i = 0; i < 20; i++)
       createPart(`P${i}`, boxGeo(1, 1, 1), gameMaterial(i), { parent: root });
-    }
-    const r = validateAsset(root, 'vfx');
-    expect(r.warnings.some((w) => w.startsWith('High material count'))).toBe(true);
-  });
-
-  test('character / environment categories use their own material limits', () => {
-    // Drive both branches of the guidelines lookup.
-    const root = createRoot('R');
-    expect(validateAsset(root, 'character').valid).toBe(true);
-    expect(validateAsset(root, 'environment').valid).toBe(true);
+    expect(materialBudgetAdvisory(root).warnings).toEqual([]);
+    expect(materialBudgetAdvisory(root, { maxMaterials: 4 })).toMatchObject({
+      materialCount: 20,
+      maxMaterials: 4,
+      exceeded: true,
+    });
+    expect(materialBudgetAdvisory(root, { maxMaterials: 4 }).warnings.length).toBe(1);
   });
 });
 
@@ -930,7 +917,7 @@ describe('buildSandboxGlobals', () => {
       'countTriangles',
       'countMaterials',
       'getJointNames',
-      'validateAsset',
+      'materialBudgetAdvisory',
       'Math',
       'console',
     ];

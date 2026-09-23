@@ -1,12 +1,13 @@
 import { describe, expect, test } from 'bun:test';
 
-import { createAssetIntentV1 } from '../../contracts';
+import { createAssetRequirementsV1 } from '../../contracts/requirements';
+import { createAssetRequirementsStore } from '../../requirements-store';
+import type { AssetRequirementsQaReportV2 } from '../../qa/requirements-report';
 import {
   createKilnRenderViewsDef,
   createKilnScreenshotAnimationDef,
-  createKilnToolRegistry,
+  createKilnProgramToolRegistry,
   createKilnViewInteriorDef,
-  kilnToolRegistry,
 } from '../registry';
 
 const SIDEWAYS_FALSE_PROP_CODE = `
@@ -50,7 +51,7 @@ function build() {
 }
 `;
 
-const find = (registry: ReturnType<typeof createKilnToolRegistry>, name: string) => {
+const find = (registry: ReturnType<typeof createKilnProgramToolRegistry>, name: string) => {
   const def = registry.find((candidate) => candidate.name === name);
   if (!def) throw new Error(`Missing tool ${name}`);
   return def;
@@ -59,56 +60,75 @@ const find = (registry: ReturnType<typeof createKilnToolRegistry>, name: string)
 const warningStrings = (output: unknown): string[] =>
   ((output as { warnings?: string[] }).warnings ?? []).map(String);
 
-describe('trusted tool context', () => {
-  test('a dense asset draws no size advisory under any trusted category', async () => {
-    // This used to assert that a trusted `prop` context produced a triangle
-    // advisory the model's own false `meta.category` could not dodge. The
-    // advisory is gone on purpose — it taught models to stop at the blockout
-    // stage — so what is worth pinning now is the inverse: no category, trusted
-    // or claimed, turns a heavy asset into a warning.
-    const contexts = [
-      find(createKilnToolRegistry({ category: 'vehicle' }), 'kiln_validate'),
-      find(createKilnToolRegistry({ category: 'prop' }), 'kiln_validate'),
-      find(createKilnToolRegistry(), 'kiln_validate'),
-    ];
+function binding(label: string, mobility = false) {
+  return createAssetRequirementsStore().host.bind(
+    { taskId: 'context', lineageId: label },
+    createAssetRequirementsV1({
+      labels: [label],
+      requirements: mobility
+        ? {
+            mobility: {
+              state: 'requested',
+              value: { wheelCount: 4, axleCount: 2, supportPolicy: 'grounded' },
+            },
+          }
+        : {},
+    }),
+    { actor: 'owner', reason: 'Requested fixture', source: 'brief' },
+  );
+}
+const orientation = (output: unknown) => {
+  const result = output as { qaReport: AssetRequirementsQaReportV2 };
+  return result.qaReport.dimensions.requirementReadiness.findings.find(
+    (f) => f.code === 'VEH_ORIENTATION_SIDEWAYS',
+  );
+};
 
-    for (const def of contexts) {
+describe('trusted neutral tool context', () => {
+  test('a dense asset draws no triangle budget warning regardless of descriptive labels', async () => {
+    for (const requirements of [binding('vehicle'), binding('prop'), undefined]) {
+      const def = find(createKilnProgramToolRegistry({ requirements }), 'kiln_validate');
       const warnings = warningStrings(await def.run({ code: FALSE_PROP_BUDGET_CODE }));
       expect(warnings.some((warning) => warning.includes('TRI_BUDGET'))).toBe(false);
       expect(warnings.some((warning) => /triangle/i.test(warning))).toBe(false);
     }
   });
 
-  test('intent is authoritative and render/screenshot paths receive vehicle context', async () => {
-    const intent = createAssetIntentV1({ category: 'vehicle' });
-    const registry = createKilnToolRegistry({ intent, category: 'prop' });
-
-    for (const name of ['kiln_render', 'kiln_screenshot']) {
-      const output = await find(registry, name).run({ code: SIDEWAYS_FALSE_PROP_CODE });
-      expect(warningStrings(output).some((warning) => warning.includes('Orientation'))).toBe(true);
+  test('shared source render paths use host mobility requirements despite false source labels', async () => {
+    const registry = createKilnProgramToolRegistry({
+      requirements: binding('mobility', true),
+    });
+    for (const name of ['kiln_render']) {
+      const output = await find(registry, name).run({
+        code: SIDEWAYS_FALSE_PROP_CODE,
+      });
+      expect(orientation(output)).toMatchObject({
+        disposition: 'observe',
+        measurement: { name: 'boundsSpanZToSpanX' },
+      });
     }
   });
 
-  test('collapsed render and dedicated view definitions share the closure context', async () => {
-    const context = { intent: createAssetIntentV1({ category: 'vehicle' }) };
+  test('render, animation and interior definitions retain the same requested measurement evidence', async () => {
+    const context = { requirements: binding('mobility', true) };
     const outputs = await Promise.all([
       createKilnRenderViewsDef(context).run({ code: SIDEWAYS_FALSE_PROP_CODE }),
       createKilnScreenshotAnimationDef(context).run({
         code: SIDEWAYS_FALSE_PROP_CODE,
         clip: 'missing',
       }),
-      createKilnViewInteriorDef(context).run({ code: SIDEWAYS_FALSE_PROP_CODE }),
+      createKilnViewInteriorDef(context).run({
+        code: SIDEWAYS_FALSE_PROP_CODE,
+      }),
     ]);
-
-    for (const output of outputs) {
-      expect(warningStrings(output).some((warning) => warning.includes('Orientation'))).toBe(true);
-    }
+    for (const output of outputs)
+      expect(orientation(output)).toMatchObject({ disposition: 'observe' });
   });
 
-  test('legacy registry export is neutral and never trusts source metadata', async () => {
-    const output = await find(kilnToolRegistry, 'kiln_render').run({
+  test('unbound source registry remains neutral regardless of source metadata', async () => {
+    const output = await find(createKilnProgramToolRegistry(), 'kiln_render').run({
       code: SIDEWAYS_FALSE_PROP_CODE.replace("category: 'prop'", "category: 'vehicle'"),
     });
-    expect(warningStrings(output).some((warning) => warning.includes('Orientation'))).toBe(false);
+    expect(orientation(output)).toBeUndefined();
   });
 });

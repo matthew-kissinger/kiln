@@ -3,23 +3,23 @@ import type { RenderGlbOptions, RenderResult } from '../render';
 import { renderGLBInProcess } from '../render';
 import { AssetQaBlockedError } from '../qa/run';
 import {
-  decodeEvaluatorRequestV1,
+  decodeEvaluatorRequestV2,
   DEFAULT_EVALUATOR_MAX_RESPONSE_BYTES,
   DEFAULT_EVALUATOR_DEADLINE_MS,
-  encodeRenderResultV1,
+  encodeRenderResultV2,
   evaluatorOutcomeMessage,
   EVALUATOR_RESULT_VERSION,
   EvaluatorPortError,
   type EvaluatorOutcomeCode,
-  type EvaluatorRequestV1,
-  type WireEvaluatorResultV1,
+  type EvaluatorRequestV2,
+  type WireEvaluatorResultV2,
 } from './protocol';
 
-export interface EvaluatorHandlerDependenciesV1 {
+export interface EvaluatorHandlerDependenciesV2 {
   render?(code: string, options: RenderGlbOptions): Promise<RenderResult>;
 }
 
-export interface EvaluatorHandlerControlsV1 {
+export interface EvaluatorHandlerControlsV2 {
   maxResponseBytes?: number;
   deadlineMs?: number;
 }
@@ -28,8 +28,8 @@ function failure(
   requestId: string,
   code: EvaluatorOutcomeCode,
   diagnostic?: AuthoringDiagnostic,
-  qa?: Extract<WireEvaluatorResultV1, { ok: false }>['error']['qa'],
-): Extract<WireEvaluatorResultV1, { ok: false }> {
+  qa?: Extract<WireEvaluatorResultV2, { ok: false }>['error']['qa'],
+): Extract<WireEvaluatorResultV2, { ok: false }> {
   return {
     version: EVALUATOR_RESULT_VERSION,
     requestId,
@@ -64,20 +64,20 @@ function boundedDeadlineMs(value: number | undefined): number {
  * HTTP/AgentCore entrypoint. It accepts and emits only canonical v1 JSON. No
  * network, environment, path, resolver, or AWS capability enters this seam.
  */
-export async function evaluateEvaluatorRequestV1(
+export async function evaluateEvaluatorRequestV2(
   requestJson: string,
-  dependencies: EvaluatorHandlerDependenciesV1 = {},
-  controls: EvaluatorHandlerControlsV1 = {},
+  dependencies: EvaluatorHandlerDependenciesV2 = {},
+  controls: EvaluatorHandlerControlsV2 = {},
 ): Promise<string> {
   const maxResponseBytes = boundedMaxResponseBytes(controls.maxResponseBytes);
   const deadlineMs = boundedDeadlineMs(controls.deadlineMs);
-  let request: EvaluatorRequestV1;
+  let request: EvaluatorRequestV2;
   try {
-    request = decodeEvaluatorRequestV1(requestJson);
+    request = decodeEvaluatorRequestV2(requestJson);
   } catch {
     return JSON.stringify(failure('invalid', 'INPUT_INVALID'));
   }
-  let wire: WireEvaluatorResultV1;
+  let wire: WireEvaluatorResultV2;
   let timer: ReturnType<typeof setTimeout> | undefined;
   try {
     const render = await Promise.race([
@@ -89,7 +89,7 @@ export async function evaluateEvaluatorRequestV1(
     if (render.glb.byteLength > request.limits.maxGlbBytes) {
       wire = failure(request.requestId, 'OUTPUT_LIMIT_EXCEEDED');
     } else {
-      wire = encodeRenderResultV1(request.requestId, render);
+      wire = encodeRenderResultV2(request.requestId, render);
     }
   } catch (error) {
     if (error instanceof AssetQaBlockedError) {

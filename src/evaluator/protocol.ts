@@ -1,12 +1,20 @@
 import { authoringDiagnosticAdvice, type AuthoringDiagnostic } from './authoring-diagnostic';
 import { createHash } from 'node:crypto';
-import { isAssetCategory, validateAssetIntentV1, type AssetIntentV1 } from '../contracts';
+import {
+  assertNoLegacyRuntimePolicy,
+  validateRequirementsBinding,
+  validateRequirementsContext,
+  resolveRequirementsContext,
+  requirementsContextsEqual,
+  type RequirementsContext,
+} from '../requirements-context';
+import type { AssetQaReport } from '../qa/types';
+import { validateRequirementsQaReport } from '../qa/requirements-report';
 import type { RenderGlbOptions, RenderResult } from '../render';
 import type { KhronosGltfValidationReport } from '../qa/gltf';
-import { isQaFinding, QA_DIMENSIONS, type AssetQaReportV1 } from '../qa/types';
 
-export const EVALUATOR_REQUEST_VERSION = 'kiln.evaluator.request.v1' as const;
-export const EVALUATOR_RESULT_VERSION = 'kiln.evaluator.result.v1' as const;
+export const EVALUATOR_REQUEST_VERSION = 'kiln.evaluator.request.v2' as const;
+export const EVALUATOR_RESULT_VERSION = 'kiln.evaluator.result.v2' as const;
 export const MAX_EVALUATOR_CODE_BYTES = 512 * 1024;
 export const MAX_EVALUATOR_REQUEST_BYTES = 1024 * 1024;
 export const DEFAULT_EVALUATOR_DEADLINE_MS = 60_000;
@@ -25,7 +33,8 @@ export type EvaluatorOutcomeCode =
   | 'PROTOCOL_ERROR';
 
 const EVALUATOR_OUTCOME_MESSAGES: Record<EvaluatorOutcomeCode, string> = {
-  INPUT_INVALID: 'Evaluator request was invalid.',
+  INPUT_INVALID:
+    'Evaluator request was invalid. Use kiln.evaluator.request.v2 and update the host and worker together. Retired category/intent options require explicit requirements migration; see docs/migration.md.',
   EXECUTION_REJECTED: 'Generated asset execution was rejected.',
   QA_BLOCKED: 'Generated asset did not pass quality checks.',
   DEADLINE_EXCEEDED: 'Evaluator deadline exceeded.',
@@ -40,59 +49,59 @@ export function evaluatorOutcomeMessage(code: EvaluatorOutcomeCode): string {
   return EVALUATOR_OUTCOME_MESSAGES[code];
 }
 
-export interface EvaluatorRequestV1 {
+export interface EvaluatorRequestV2 {
   version: typeof EVALUATOR_REQUEST_VERSION;
   requestId: string;
   operation: 'execute-export-glb';
   code: string;
-  options: Omit<RenderGlbOptions, 'textureResolver'>;
+  options: Omit<RenderGlbOptions, 'textureResolver' | 'diagnosticConsole'>;
   limits: { maxGlbBytes: number };
 }
 
-export interface CreateEvaluatorRequestV1Input {
+export interface CreateEvaluatorRequestV2Input {
   requestId: string;
   code: string;
   options?: RenderGlbOptions;
   maxGlbBytes?: number;
 }
 
-export interface EvaluatorTransportControlsV1 {
+export interface EvaluatorTransportControlsV2 {
   deadlineMs: number;
   maxResponseBytes: number;
   signal?: AbortSignal;
 }
 
-export type EvaluatorTransportV1 = (
+export type EvaluatorTransportV2 = (
   requestJson: string,
-  controls: Readonly<EvaluatorTransportControlsV1>,
+  controls: Readonly<EvaluatorTransportControlsV2>,
 ) => Promise<string>;
 
-export interface EvaluatorPortCallControlsV1 {
+export interface EvaluatorPortCallControlsV2 {
   deadlineMs?: number;
   maxGlbBytes?: number;
   maxResponseBytes?: number;
   signal?: AbortSignal;
 }
 
-export interface EvaluatorPortV1 {
+export interface EvaluatorPortV2 {
   render(
     code: string,
     options?: RenderGlbOptions,
-    controls?: EvaluatorPortCallControlsV1,
+    controls?: EvaluatorPortCallControlsV2,
   ): Promise<RenderResult>;
 }
 
-export type EvaluatorExecutionProfileV1 = 'trusted-local' | 'evaluator-required';
+export type EvaluatorExecutionProfileV2 = 'trusted-local' | 'evaluator-required';
 
-export function resolveEvaluatorPortV1(
-  port: EvaluatorPortV1 | undefined,
-  profile: EvaluatorExecutionProfileV1,
-): EvaluatorPortV1 {
+export function resolveEvaluatorPortV2(
+  port: EvaluatorPortV2 | undefined,
+  profile: EvaluatorExecutionProfileV2,
+): EvaluatorPortV2 {
   if (port) return port;
   if (profile === 'evaluator-required') {
     throw new EvaluatorPortError('ISOLATION_UNAVAILABLE', 'Evaluator port is required.');
   }
-  return trustedInProcessEvaluatorPortV1;
+  return trustedInProcessEvaluatorPortV2;
 }
 
 export class EvaluatorPortError extends Error {
@@ -116,7 +125,7 @@ interface WireRenderResult extends Omit<RenderResult, 'glb' | 'diagnosticViews'>
   diagnosticViews?: WireDiagnosticView[];
 }
 
-export type EvaluatorResultV1 =
+export type EvaluatorResultV2 =
   | {
       version: typeof EVALUATOR_RESULT_VERSION;
       requestId: string;
@@ -132,16 +141,16 @@ export type EvaluatorResultV1 =
         message: string;
         diagnostic?: AuthoringDiagnostic;
         qa?: {
-          report: AssetQaReportV1;
+          report: AssetQaReport;
           stage: 'scene' | 'final-glb';
           gltfValidation?: KhronosGltfValidationReport;
         };
       };
     };
 
-export type WireEvaluatorResultV1 =
-  | (Omit<Extract<EvaluatorResultV1, { ok: true }>, 'render'> & { render: WireRenderResult })
-  | Extract<EvaluatorResultV1, { ok: false }>;
+export type WireEvaluatorResultV2 =
+  | (Omit<Extract<EvaluatorResultV2, { ok: true }>, 'render'> & { render: WireRenderResult })
+  | Extract<EvaluatorResultV2, { ok: false }>;
 
 function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === 'object' && value !== null && !Array.isArray(value);
@@ -163,37 +172,13 @@ function validInteger(value: unknown, min: number, max: number): value is number
   return Number.isInteger(value) && Number(value) >= min && Number(value) <= max;
 }
 
-function validQaReport(value: unknown): value is AssetQaReportV1 {
-  const dimensions = isRecord(value) && isRecord(value.dimensions) ? value.dimensions : undefined;
-  if (
-    !isRecord(value) ||
-    !hasExactKeys(value, ['schemaVersion', 'category', 'qaProfile', 'disposition', 'dimensions']) ||
-    value.schemaVersion !== 1 ||
-    !isAssetCategory(value.category) ||
-    typeof value.qaProfile !== 'string' ||
-    value.qaProfile.length < 1 ||
-    value.qaProfile.length > 128 ||
-    !['pass', 'warn', 'block', 'notEvaluated', 'legacy-unassessed'].includes(
-      String(value.disposition),
-    ) ||
-    !dimensions ||
-    !hasExactKeys(dimensions, QA_DIMENSIONS) ||
-    !QA_DIMENSIONS.every((dimension) => dimension in dimensions)
-  ) {
+function validRequirementsQaReport(value: unknown): boolean {
+  try {
+    validateRequirementsQaReport(value);
+    return true;
+  } catch {
     return false;
   }
-  return QA_DIMENSIONS.every((dimension) => {
-    const result = dimensions[dimension];
-    return (
-      isRecord(result) &&
-      hasExactKeys(result, ['status', 'findings', 'metrics']) &&
-      ['pass', 'warn', 'block', 'notEvaluated'].includes(String(result.status)) &&
-      Array.isArray(result.findings) &&
-      result.findings.length <= 1_000 &&
-      result.findings.every(isQaFinding) &&
-      (result.metrics === undefined || isRecord(result.metrics))
-    );
-  });
 }
 
 function validGltfValidation(value: unknown): value is KhronosGltfValidationReport {
@@ -225,8 +210,8 @@ function boundedControl(value: number | undefined, fallback: number, max: number
   return resolved;
 }
 
-export function createEvaluatorRequestV1(input: CreateEvaluatorRequestV1Input): {
-  request: EvaluatorRequestV1;
+export function createEvaluatorRequestV2(input: CreateEvaluatorRequestV2Input): {
+  request: EvaluatorRequestV2;
   json: string;
 } {
   if (input.options?.textureResolver) {
@@ -235,13 +220,19 @@ export function createEvaluatorRequestV1(input: CreateEvaluatorRequestV1Input): 
       'Evaluator requests do not accept a host resolver capability.',
     );
   }
+  if (input.options?.diagnosticConsole) {
+    throw new EvaluatorPortError(
+      'INPUT_INVALID',
+      'Evaluator requests do not accept a host console capability.',
+    );
+  }
   const maxGlbBytes = boundedControl(
     input.maxGlbBytes,
     DEFAULT_EVALUATOR_MAX_GLB_BYTES,
     64 * 1024 * 1024,
   );
-  const { textureResolver: _, ...options } = input.options ?? {};
-  const request: EvaluatorRequestV1 = {
+  const { textureResolver: _, diagnosticConsole: _console, ...options } = input.options ?? {};
+  const request: EvaluatorRequestV2 = {
     version: EVALUATOR_REQUEST_VERSION,
     requestId: input.requestId,
     operation: 'execute-export-glb',
@@ -252,11 +243,13 @@ export function createEvaluatorRequestV1(input: CreateEvaluatorRequestV1Input): 
   const json = JSON.stringify(request);
   // Reuse the strict decoder as the single authority for ids, source, options,
   // prototype-key rejection, and request budgets.
-  const decoded = decodeEvaluatorRequestV1(json);
+  const decoded = decodeEvaluatorRequestV2(json);
   return { request: decoded, json };
 }
 
-function parseOptions(value: unknown): Omit<RenderGlbOptions, 'textureResolver'> {
+function parseOptions(
+  value: unknown,
+): Omit<RenderGlbOptions, 'textureResolver' | 'diagnosticConsole'> {
   if (
     !isRecord(value) ||
     !hasExactKeys(value, [
@@ -264,13 +257,14 @@ function parseOptions(value: unknown): Omit<RenderGlbOptions, 'textureResolver'>
       'instance',
       'intent',
       'category',
+      'requirements',
       'geometryPolicy',
       'gltfExporter',
     ])
   ) {
     return fail('request');
   }
-  const options: Omit<RenderGlbOptions, 'textureResolver'> = {};
+  const options: Omit<RenderGlbOptions, 'textureResolver' | 'diagnosticConsole'> = {};
   if (value.gltfExporter !== undefined) {
     if (value.gltfExporter !== 'legacy' && value.gltfExporter !== 'three') fail('request');
     options.gltfExporter = value.gltfExporter;
@@ -287,19 +281,13 @@ function parseOptions(value: unknown): Omit<RenderGlbOptions, 'textureResolver'>
     if (!['off', 'auto', 'on'].includes(String(value.instance))) fail('request');
     options.instance = value.instance as NonNullable<RenderGlbOptions['instance']>;
   }
-  if (value.category !== undefined) {
-    if (!isAssetCategory(value.category)) fail('request');
-    options.category = value.category;
-  }
-  if (value.intent !== undefined) {
-    const result = validateAssetIntentV1(value.intent);
-    if (!result.valid) fail('request');
-    options.intent = result.value as AssetIntentV1;
-  }
+  assertNoLegacyRuntimePolicy(value);
+  if (value.requirements !== undefined)
+    options.requirements = validateRequirementsBinding(value.requirements);
   return options;
 }
 
-export function decodeEvaluatorRequestV1(json: string): EvaluatorRequestV1 {
+export function decodeEvaluatorRequestV2(json: string): EvaluatorRequestV2 {
   if (Buffer.byteLength(json, 'utf8') > MAX_EVALUATOR_REQUEST_BYTES) fail('request');
   let value: unknown;
   try {
@@ -331,10 +319,10 @@ export function decodeEvaluatorRequestV1(json: string): EvaluatorRequestV1 {
   };
 }
 
-export function encodeRenderResultV1(
+export function encodeRenderResultV2(
   requestId: string,
   render: RenderResult,
-): WireEvaluatorResultV1 {
+): WireEvaluatorResultV2 {
   const { glb, diagnosticViews, buildCache: _hostCacheReceipt, ...rest } = render;
   return {
     version: EVALUATOR_RESULT_VERSION,
@@ -359,11 +347,11 @@ function isSha256(value: unknown): value is `sha256:${string}` {
   return typeof value === 'string' && /^sha256:[a-f0-9]{64}$/.test(value);
 }
 
-export function decodeEvaluatorResultV1(
+export function decodeEvaluatorResultV2(
   json: string,
   maxGlbBytes: number,
   expectedRequestId?: string,
-): EvaluatorResultV1 {
+): EvaluatorResultV2 {
   let value: unknown;
   try {
     value = JSON.parse(json);
@@ -413,7 +401,26 @@ export function decodeEvaluatorResultV1(
           value.error.diagnostic !== 'GEAR_RADII_ORDER' &&
           value.error.diagnostic !== 'ROUNDED_BOX_RADIUS' &&
           value.error.diagnostic !== 'PROCEDURAL_TEXTURE_UNKNOWN_KEY' &&
-          value.error.diagnostic !== 'PARAMETRIC_PERIODIC_ENDPOINT'))
+          value.error.diagnostic !== 'PROCEDURAL_TEXTURE_BLEND' &&
+          value.error.diagnostic !== 'MATERIAL_FRACTION_RANGE' &&
+          value.error.diagnostic !== 'MATERIAL_RECIPE_TEXTURE_BINDING' &&
+          value.error.diagnostic !== 'PORTABLE_TEXTURE_REFERENCE' &&
+          value.error.diagnostic !== 'PORTABLE_COLOR_ARGUMENT' &&
+          value.error.diagnostic !== 'PARAMETRIC_PERIODIC_ENDPOINT' &&
+          value.error.diagnostic !== 'PROFILE_HOLES_UNSUPPORTED' &&
+          value.error.diagnostic !== 'PROFILE_BEVEL_COLLAPSE' &&
+          value.error.diagnostic !== 'PROFILE_CORRESPONDENCE_COLLAPSE' &&
+          value.error.diagnostic !== 'REMOVED_HELPER' &&
+          value.error.diagnostic !== 'TUBE_RADIUS' &&
+          value.error.diagnostic !== 'TAPER_CONE_AXIS' &&
+          value.error.diagnostic !== 'SOLID_FLOAT32_COLLAPSE' &&
+          value.error.diagnostic !== 'MESH_DATA_NONFINITE' &&
+          value.error.diagnostic !== 'MATERIAL_ALPHA_MODE' &&
+          value.error.diagnostic !== 'MATERIAL_COLOR_ARGUMENT' &&
+          value.error.diagnostic !== 'PART_NAME_ARGUMENT' &&
+          value.error.diagnostic !== 'PART_GEOMETRY_ARGUMENT' &&
+          value.error.diagnostic !== 'PART_MATERIAL_ARGUMENT' &&
+          value.error.diagnostic !== 'MATERIAL_PACKED_CHANNELS'))
     )
       return fail('result');
     if (value.error.qa !== undefined) {
@@ -421,7 +428,7 @@ export function decodeEvaluatorResultV1(
         value.error.code !== 'QA_BLOCKED' ||
         !isRecord(value.error.qa) ||
         !hasExactKeys(value.error.qa, ['report', 'stage', 'gltfValidation']) ||
-        !validQaReport(value.error.qa.report) ||
+        !validRequirementsQaReport(value.error.qa.report) ||
         !['scene', 'final-glb'].includes(String(value.error.qa.stage)) ||
         (value.error.qa.gltfValidation !== undefined &&
           !validGltfValidation(value.error.qa.gltfValidation))
@@ -431,7 +438,7 @@ export function decodeEvaluatorResultV1(
     } else if (value.error.code === 'QA_BLOCKED') {
       return fail('result');
     }
-    return value as unknown as Extract<EvaluatorResultV1, { ok: false }>;
+    return value as unknown as Extract<EvaluatorResultV2, { ok: false }>;
   }
   if (value.error !== undefined || !isRecord(value.render)) fail('result');
   const renderKeys = [
@@ -446,6 +453,7 @@ export function decodeEvaluatorResultV1(
     'materialResourceProvenance',
     'bakedTextures',
     'integrationManifest',
+    'requirements',
   ] as const;
   if (
     !hasExactKeys(value.render, renderKeys) ||
@@ -457,6 +465,13 @@ export function decodeEvaluatorResultV1(
     !isRecord(value.render.integrationManifest)
   ) {
     fail('result');
+  }
+  let requirements: RequirementsContext;
+  try {
+    requirements = validateRequirementsContext(value.render.requirements);
+    validateRequirementsQaReport(value.render.meta.qaReport, requirements);
+  } catch {
+    return fail('result');
   }
   const glb = Buffer.from(value.render.glbBase64, 'base64');
   if (glb.byteLength > maxGlbBytes || glb.toString('base64') !== value.render.glbBase64)
@@ -486,10 +501,10 @@ export function decodeEvaluatorResultV1(
   };
 }
 
-export function createEvaluatorPortV1(
-  transport: EvaluatorTransportV1,
-  defaults: EvaluatorPortCallControlsV1 = {},
-): EvaluatorPortV1 {
+export function createEvaluatorPortV2(
+  transport: EvaluatorTransportV2,
+  defaults: EvaluatorPortCallControlsV2 = {},
+): EvaluatorPortV2 {
   let sequence = 0;
   return {
     async render(code, options = {}, controls = {}) {
@@ -511,7 +526,7 @@ export function createEvaluatorPortV1(
         96 * 1024 * 1024,
       );
       const requestId = `eval-${++sequence}`;
-      const built = createEvaluatorRequestV1({ requestId, code, options, maxGlbBytes });
+      const built = createEvaluatorRequestV2({ requestId, code, options, maxGlbBytes });
       let timer: ReturnType<typeof setTimeout> | undefined;
       let response: string;
       const transportController = new AbortController();
@@ -550,12 +565,16 @@ export function createEvaluatorPortV1(
       if (Buffer.byteLength(response, 'utf8') > maxResponseBytes) {
         throw new EvaluatorPortError('OUTPUT_LIMIT_EXCEEDED');
       }
-      let result: EvaluatorResultV1;
+      let result: EvaluatorResultV2;
       try {
-        result = decodeEvaluatorResultV1(response, maxGlbBytes, requestId);
+        result = decodeEvaluatorResultV2(response, maxGlbBytes, requestId);
       } catch {
         throw new EvaluatorPortError('PROTOCOL_ERROR');
       }
+      assertEvaluatorResultRequirements(
+        result,
+        resolveRequirementsContext(built.request.options.requirements),
+      );
       if (!result.ok) {
         if (result.error.code === 'QA_BLOCKED' && result.error.qa) {
           const { AssetQaBlockedError } = await import('../qa/run');
@@ -572,9 +591,29 @@ export function createEvaluatorPortV1(
   };
 }
 
+/** All transports bind decoded acceptance evidence to the same current-host snapshot. */
+export function assertEvaluatorResultRequirements(
+  result: EvaluatorResultV2,
+  expected: RequirementsContext,
+): void {
+  try {
+    if (result.ok) {
+      if (!requirementsContextsEqual(result.render.requirements, expected))
+        throw new Error('Requirements mismatch.');
+    } else if (result.error.code === 'QA_BLOCKED' && result.error.qa) {
+      validateRequirementsQaReport(result.error.qa.report, expected);
+    }
+  } catch {
+    throw new EvaluatorPortError(
+      'PROTOCOL_ERROR',
+      'Evaluator requirements context differs from the host request.',
+    );
+  }
+}
+
 /** Explicit trusted/test compatibility port. Production hosts must inject a
  * transport-backed port and select `evaluator-required`; there is no fallback. */
-export const trustedInProcessEvaluatorPortV1: EvaluatorPortV1 = {
+export const trustedInProcessEvaluatorPortV2: EvaluatorPortV2 = {
   async render(code, options = {}, controls = {}) {
     if (controls.signal?.aborted) throw new EvaluatorPortError('CANCELLED');
     const { renderGLBInProcess } = await import('../render');

@@ -17,13 +17,15 @@
  */
 
 import * as THREE from 'three';
+import type { RequirementsBinding } from './requirements-store';
+import type { RequirementsContext } from './requirements-context';
 
 import { inspectGeneratedAnimation } from './render';
-import { listPrimitives } from './list-primitives';
+import { listHelperSpecs } from './discovery/helper-specs';
 import {
-  resolveEvaluatorPortV1,
-  type EvaluatorExecutionProfileV1,
-  type EvaluatorPortV1,
+  resolveEvaluatorPortV2,
+  type EvaluatorExecutionProfileV2,
+  type EvaluatorPortV2,
 } from './evaluator';
 import { loadGlbReviewScene } from './views/glb';
 
@@ -60,6 +62,7 @@ export interface InspectBoundingBox {
 }
 
 export interface InspectResult {
+  requirements: RequirementsContext;
   /** Total triangle count across every mesh in the scene graph. */
   triangles: number;
   /** Unique material count (by reference equality). */
@@ -84,11 +87,11 @@ export interface InspectResult {
 
 /**
  * Names of every primitive helper exposed in the Kiln sandbox, derived from
- * the canonical catalog (list-primitives.ts) so this detector can never drift
+ * the canonical catalog (discovery/helper-specs.ts) so this detector can never drift
  * from the real surface — the catalog itself is parity-tested against
  * `buildSandboxGlobals` in `__tests__/list-primitives.test.ts`.
  */
-const KNOWN_PRIMITIVE_NAMES: readonly string[] = listPrimitives().map((p) => p.name);
+const KNOWN_PRIMITIVE_NAMES: readonly string[] = listHelperSpecs().map((p) => p.name);
 
 function detectPrimitivesUsed(code: string): string[] {
   const seen = new Set<string>();
@@ -247,14 +250,15 @@ function collectAnimationTracks(
 export async function inspect(
   code: string,
   options: {
-    evaluatorPort?: EvaluatorPortV1;
-    evaluatorProfile?: EvaluatorExecutionProfileV1;
+    requirements?: RequirementsBinding;
+    evaluatorPort?: EvaluatorPortV2;
+    evaluatorProfile?: EvaluatorExecutionProfileV2;
   } = {},
 ): Promise<InspectResult> {
-  const rendered = await resolveEvaluatorPortV1(
+  const rendered = await resolveEvaluatorPortV2(
     options.evaluatorPort,
     options.evaluatorProfile ?? 'trusted-local',
-  ).render(code);
+  ).render(code, { requirements: options.requirements });
   const { root, clips } = await loadGlbReviewScene(rendered.glb);
 
   const primitivesUsed = detectPrimitivesUsed(code);
@@ -266,6 +270,7 @@ export async function inspect(
   const warnings = [...rendered.warnings, ...inspectGeneratedAnimation(root, clips)];
 
   return {
+    requirements: rendered.requirements,
     triangles,
     materials,
     boundingBox,

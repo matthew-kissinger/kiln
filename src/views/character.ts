@@ -5,7 +5,7 @@ import {
   type CharacterJointDescriptorV1,
   type CharacterVector3,
 } from '../character';
-import type { CharacterIntentV1 } from '../contracts';
+import type { RigRequirements } from '../qa/character';
 import type { QaFinding } from '../qa/types';
 
 const CHAIN_COLORS = Object.freeze([
@@ -95,7 +95,7 @@ function colorFor(value: string): string {
  */
 export function buildCharacterDiagnosticDescriptor(
   root: THREE.Object3D,
-  findings: readonly QaFinding[] = [],
+  findings: readonly Pick<QaFinding, 'code' | 'affected'>[] = [],
 ): CharacterDiagnosticDescriptorV1 {
   root.updateMatrixWorld(true);
   const rootInverse = root.matrixWorld.clone().invert();
@@ -210,7 +210,7 @@ function safeClipId(name: string): string {
 /** Automatically request both skeleton elevations and fixed-phase strips for
  *  the resolved locomotion and primary one-shot action clips. */
 export function planCharacterDiagnosticRequests(
-  intent: CharacterIntentV1,
+  requirements: RigRequirements,
 ): readonly CharacterDiagnosticRequestV1[] {
   const requests: CharacterDiagnosticRequestV1[] = [
     diagnosticRequest({
@@ -233,14 +233,15 @@ export function planCharacterDiagnosticRequests(
     }),
   ];
   const locomotion =
-    intent.clips.find(
+    (requirements.clips ?? []).find(
       (clip) =>
         clip.playback === 'loop' &&
-        new RegExp(intent.locomotion === 'stationary' ? 'idle' : intent.locomotion, 'i').test(
-          clip.name,
-        ),
-    ) ?? intent.clips.find((clip) => clip.playback === 'loop');
-  const action = intent.clips.find((clip) => clip.playback === 'oneShot');
+        new RegExp(
+          requirements.locomotion === 'stationary' ? 'idle' : (requirements.locomotion ?? ''),
+          'i',
+        ).test(clip.name),
+    ) ?? (requirements.clips ?? []).find((clip) => clip.playback === 'loop');
+  const action = (requirements.clips ?? []).find((clip) => clip.playback === 'oneShot');
   const selected = [locomotion, action].filter(
     (clip, index, values): clip is NonNullable<typeof clip> =>
       Boolean(clip) && values.findIndex((candidate) => candidate?.name === clip?.name) === index,

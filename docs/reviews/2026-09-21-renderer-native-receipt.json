@@ -1,0 +1,99 @@
+{
+  "package": "webgpu",
+  "version": "0.6.1",
+  "gitHead": "f2585d1b386b0f8df63b3d080131e35ab448a9bb",
+  "metadataLicense": "MIT",
+  "includedLicenseText": "Copyright 2017-2025 The Dawn & Tint Authors\n\nRedistribution and use in source and binary forms, with or without\nmodification, are permitted provided that the following conditions are met:\n\n1. Redistributions of source code must retain the above copyright notice, this\n   list of conditions and the following disclaimer.\n\n2. Redistributions in binary form must reproduce the above copyright notice,\n   this list of conditions and the following disclaimer in the documentation\n   and/or other materials provided with the distribution.\n\n3. Neither the name of the copyright holder nor the names of its\n   contributors may be used to endorse or promote products derived from\n   this software without specific prior written permission.\n\nTHIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS \"AS IS\"\nAND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE\nIMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE ARE\nDISCLAIMED. IN NO EVENT SHALL THE COPYRIGHT HOLDER OR CONTRIBUTORS BE LIABLE\nFOR ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR CONSEQUENTIAL\nDAMAGES (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR\nSERVICES; LOSS OF USE, DATA, OR PROFITS; OR BUSINESS INTERRUPTION) HOWEVER\nCAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY,\nOR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE\nOF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.\n",
+  "compressedBytes": 34393751,
+  "unpackedBytes": 94898547,
+  "integrity": "sha512-T+B65/j2jhyFjbWHsVZ4TJw0nk0RVT27lG+nL3V5IIYMsvuVYKYOUli/yJhMpwvXAwqVPZehakWvTjxk+mK8LQ==",
+  "tarballIntegrityVerified": true,
+  "signaturesPresent": true,
+  "provenancePublished": {
+    "url": "https://registry.npmjs.org/-/npm/v1/attestations/webgpu@0.6.1",
+    "provenance": {
+      "predicateType": "https://slsa.dev/provenance/v1"
+    }
+  },
+  "provenanceCryptographicallyVerified": false,
+  "binaryFiles": [
+    {
+      "path": "dist/darwin-universal/dawn.node",
+      "bytes": 21194632,
+      "sha256": "5761a41fdfaa2bbd86ed542faee9e6a8bebbe0fa67c5ae4ae4c2f3efe81920f5"
+    },
+    {
+      "path": "dist/linux-arm64/dawn.node",
+      "bytes": 17366632,
+      "sha256": "f33ebba4692b15356c406e52be9a33e957a9501180147ff2ad988b226b966561"
+    },
+    {
+      "path": "dist/linux-x64/dawn.node",
+      "bytes": 19003456,
+      "sha256": "df769e842f9bdc9f7b5cae5e7c5e808c2f3bae50d1addea471c05b34b8dc563e"
+    },
+    {
+      "path": "dist/win32-arm64/d3dcompiler_47.dll",
+      "bytes": 8140752,
+      "sha256": "3cdd009ee909bb2e5123990f7d4ea690a1e968202c3adba861eda69f5e672752"
+    },
+    {
+      "path": "dist/win32-arm64/dawn.node",
+      "bytes": 12426752,
+      "sha256": "8f261ecb62e98be155bbfa65bfd44f3f9022920c3260cc82ab23e099e86f6ed6"
+    },
+    {
+      "path": "dist/win32-x64/d3dcompiler_47.dll",
+      "bytes": 4916728,
+      "sha256": "289767b49dc8525bce262ea06fee4ef9fced2e131a55b25654ce871c1f0498b2"
+    },
+    {
+      "path": "dist/win32-x64/dawn.node",
+      "bytes": 11816448,
+      "sha256": "9e3e701c92de64e46a897a54aec6a1f09edcd57594cf399f12a31848255bbbb3"
+    }
+  ],
+  "postinstall": "import child_process from 'node:child_process';\n\nimport DEBUG from 'debug';\n\nimport {execute} from './execute.js';\nimport {isMac} from './constants.js';\nimport {exists} from './utils.js';\n\nconst debug = DEBUG('postinstall');\n\nasync function main() {\n  if (isMac) {\n    const dawnNode = 'dist/darwin-universal/dawn.node';\n    const attribute = 'com.apple.quarantine'\n    if (!exists(dawnNode)) {\n      debug(`${dawnNode} does not exist`);\n      return;\n    }\n\n    const result = child_process.execFileSync('xattr', ['-l', dawnNode], {encoding: 'utf8'});\n    if (!result.includes(attribute)) {\n      debug(`${dawnNode} does not have attribute: ${attribute}`);\n      return;\n    }\n\n    // The user has already indicated they trust this by installing it,\n    // This executable can not do anything a JavaScript node script couldn't also do.\n    await execute('xattr', ['-d', attribute, dawnNode]);\n    debug(`removed attribute: ${attribute}`);\n  }\n}\n\nmain();\n",
+  "recentPublicationTimes": [
+    [
+      "0.3.5",
+      "2025-09-23T22:54:49.491Z"
+    ],
+    [
+      "0.3.6",
+      "2025-09-24T08:15:42.266Z"
+    ],
+    [
+      "0.3.7",
+      "2025-09-24T09:36:13.826Z"
+    ],
+    [
+      "0.3.8",
+      "2025-09-25T05:30:23.174Z"
+    ],
+    [
+      "0.3.9",
+      "2026-03-18T21:20:17.912Z"
+    ],
+    [
+      "0.3.10",
+      "2026-03-19T00:30:06.563Z"
+    ],
+    [
+      "0.4.0",
+      "2026-03-27T00:36:14.112Z"
+    ],
+    [
+      "0.5.0",
+      "2026-08-28T16:04:35.023Z"
+    ],
+    [
+      "0.6.0",
+      "2026-08-28T18:06:23.449Z"
+    ],
+    [
+      "0.6.1",
+      "2026-09-12T10:25:12.216Z"
+    ]
+  ]
+}

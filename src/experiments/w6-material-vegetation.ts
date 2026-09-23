@@ -1,3 +1,4 @@
+import { bindLegacyFixtureRequirements } from '../__tests__/helpers/requirements-fixture';
 /**
  * Deterministic, provider-free W6 experiment harness.
  *
@@ -209,8 +210,14 @@ function runtimeMetrics(
 
 async function artifactMetrics(scene: StructuralScene): Promise<RuntimeArtifactMetricsV1> {
   const metrics = runtimeMetrics(scene.root);
-  const first = await renderSceneToGLB(scene.root, { intent: scene.intent, optimize: 'off' });
-  const repeat = await renderSceneToGLB(scene.root, { intent: scene.intent, optimize: 'off' });
+  const first = await renderSceneToGLB(scene.root, {
+    requirements: bindLegacyFixtureRequirements(scene.intent),
+    optimize: 'off',
+  });
+  const repeat = await renderSceneToGLB(scene.root, {
+    requirements: bindLegacyFixtureRequirements(scene.intent),
+    optimize: 'off',
+  });
   const firstSha = sha256(first.bytes);
   const repeatSha = sha256(repeat.bytes);
   const document = await new WebIO().readBinary(first.bytes);

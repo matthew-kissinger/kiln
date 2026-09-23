@@ -1,0 +1,1480 @@
+{
+  "version": "kiln.retrieval-benchmark.v1",
+  "split": "development",
+  "runtime": {
+    "node": "26.3.0",
+    "bun": "1.4.2",
+    "boringssl": "41bf9b59c2ebf277a7aa427e1ecad5cc80dd4d4f",
+    "openssl": "1.1.0",
+    "llhttp": "9.3.0",
+    "libarchive": "ded82291ab41d5e355831b96b0e1ff49e24d8939",
+    "mimalloc": "6a64e1ba7f5b2130d4efccb67ec87fd0003f0f6a",
+    "picohttpparser": "066d2b1e9ab820703db0837a7255d92d30f0c9f5",
+    "uwebsockets": "744846f844374847c902b5e7fd59b4342a51ef99",
+    "webkit": "2e2aa2290fac856d6f451ceacb58f7f5b44dd057",
+    "zig": "04e7f6ac1e009525bc00934f20199c68f04e0a24",
+    "zlib": "12731092979c6d07f42da27da673a9f6c7b13586",
+    "tinycc": "05f0fafaa3be31e31d7b4b5c17dc60f62c991171",
+    "lolhtml": "725ce499aa9b71e38b7a2d0a9fbb6d7294a4079e",
+    "ares": "c7a3138dcfe3bb0eaaf10c0c24c36dc66dc790ab",
+    "libdeflate": "c8c56a20f8f621e6a966b716b31f1dedab6a41e3",
+    "usockets": "744846f844374847c902b5e7fd59b4342a51ef99",
+    "lshpack": "8905c024b6d052f083a3d11d0a169b3c2735c8a1",
+    "zstd": "f8745da6ff1ad1e7bab384bd1f9d742439278e99",
+    "v8": "14.6.202.34-node.20",
+    "uv": "1.51.1-dev",
+    "napi": "10",
+    "icu": "78.3",
+    "unicode": "17.0",
+    "sqlite": "3.53.2",
+    "modules": "147"
+  },
+  "platform": "win32",
+  "catalogSize": 101,
+  "judgmentsSha256": "5f2dcd6343b90df14a484ca004ed3641bba14ac74566b4fc0b91039be3a4bfd7",
+  "documentsSha256": "44ad07beb55136e6fb89be17eae70ffd115a13d319d4d07e5afddfe777f861eb",
+  "limitations": [
+    "Single Windows host; first query excludes module import cost.",
+    "Shared preprocessing/weights, native matching differs. FlexSearch combines field ranks with weighted RRF.",
+    "No unsupported-query abstention layer or exact lookup bypass. These are candidate retrievers, not finished Discovery.",
+    "Neural challengers and independently judged blind queries remain unrun. No default selected."
+  ],
+  "rows": [
+    {
+      "name": "current-substring-baseline",
+      "initializeMs": 0,
+      "recallAt5": 0.1875,
+      "mrrAt5": 0.15625,
+      "unsupportedQueriesReturningResults": 0,
+      "results": [
+        {
+          "split": "development",
+          "type": "exact",
+          "query": "arrayRadial",
+          "relevant": [
+            "arrayRadial"
+          ],
+          "found": [
+            "arrayRadial"
+          ],
+          "recallAt5": 1,
+          "reciprocalRank": 1,
+          "unsupportedReturned": false,
+          "firstQueryMs": 0.5126999999999953,
+          "medianWarmMs": 0.1349000000000018,
+          "responseBytes": 15
+        },
+        {
+          "split": "development",
+          "type": "intent",
+          "query": "put supports evenly around a circle",
+          "relevant": [
+            "arrayRadial"
+          ],
+          "found": [],
+          "recallAt5": 0,
+          "reciprocalRank": 0,
+          "unsupportedReturned": false,
+          "firstQueryMs": 0.14230000000000587,
+          "medianWarmMs": 0.14799999999999613,
+          "responseBytes": 2
+        },
+        {
+          "split": "development",
+          "type": "intent",
+          "query": "cut windows into a wall",
+          "relevant": [
+            "wallWithOpening",
+            "room",
+            "boolDiff"
+          ],
+          "found": [],
+          "recallAt5": 0,
+          "reciprocalRank": 0,
+          "unsupportedReturned": false,
+          "firstQueryMs": 0.1401000000000039,
+          "medianWarmMs": 0.12890000000000157,
+          "responseBytes": 2
+        },
+        {
+          "split": "development",
+          "type": "intent",
+          "query": "tube along a curved path",
+          "relevant": [
+            "pipeAlongPath",
+            "sweepProfile",
+            "curveToMesh"
+          ],
+          "found": [],
+          "recallAt5": 0,
+          "reciprocalRank": 0,
+          "unsupportedReturned": false,
+          "firstQueryMs": 0.11899999999999977,
+          "medianWarmMs": 0.11110000000000753,
+          "responseBytes": 2
+        },
+        {
+          "split": "development",
+          "type": "ownership",
+          "query": "edit a geometry copy independently",
+          "relevant": [
+            "copyGeometry"
+          ],
+          "found": [],
+          "recallAt5": 0,
+          "reciprocalRank": 0,
+          "unsupportedReturned": false,
+          "firstQueryMs": 0.11249999999999716,
+          "medianWarmMs": 0.1203999999999894,
+          "responseBytes": 2
+        },
+        {
+          "split": "development",
+          "type": "ownership",
+          "query": "change copied material without changing original",
+          "relevant": [
+            "copyMaterial"
+          ],
+          "found": [],
+          "recallAt5": 0,
+          "reciprocalRank": 0,
+          "unsupportedReturned": false,
+          "firstQueryMs": 0.12099999999999511,
+          "medianWarmMs": 0.1127999999999929,
+          "responseBytes": 2
+        },
+        {
+          "split": "development",
+          "type": "typo",
+          "query": "cylindr",
+          "relevant": [
+            "cylinderGeo",
+            "cylinderOnAxis",
+            "cylinderYGeo",
+            "cylinderXGeo",
+            "cylinderZGeo"
+          ],
+          "found": [
+            "beamBetween"
+          ],
+          "recallAt5": 0,
+          "reciprocalRank": 0,
+          "unsupportedReturned": false,
+          "firstQueryMs": 0.1641999999999939,
+          "medianWarmMs": 0.10250000000000625,
+          "responseBytes": 15
+        },
+        {
+          "split": "development",
+          "type": "intent",
+          "query": "reflect across a plane",
+          "relevant": [
+            "mirror"
+          ],
+          "found": [
+            "mirror"
+          ],
+          "recallAt5": 1,
+          "reciprocalRank": 1,
+          "unsupportedReturned": false,
+          "firstQueryMs": 0.11690000000000111,
+          "medianWarmMs": 0.10170000000000812,
+          "responseBytes": 10
+        },
+        {
+          "split": "development",
+          "type": "intent",
+          "query": "smooth normals while retaining sharp edges",
+          "relevant": [
+            "creaseNormals"
+          ],
+          "found": [],
+          "recallAt5": 0,
+          "reciprocalRank": 0,
+          "unsupportedReturned": false,
+          "firstQueryMs": 0.11469999999999914,
+          "medianWarmMs": 0.12860000000000582,
+          "responseBytes": 2
+        },
+        {
+          "split": "development",
+          "type": "intent",
+          "query": "subtract one solid from another",
+          "relevant": [
+            "boolDiff"
+          ],
+          "found": [],
+          "recallAt5": 0,
+          "reciprocalRank": 0,
+          "unsupportedReturned": false,
+          "firstQueryMs": 0.1051000000000073,
+          "medianWarmMs": 0.10250000000000625,
+          "responseBytes": 2
+        },
+        {
+          "split": "development",
+          "type": "intent",
+          "query": "join overlapping solid shapes",
+          "relevant": [
+            "boolUnion"
+          ],
+          "found": [],
+          "recallAt5": 0,
+          "reciprocalRank": 0,
+          "unsupportedReturned": false,
+          "firstQueryMs": 0.10240000000000293,
+          "medianWarmMs": 0.10039999999999338,
+          "responseBytes": 2
+        },
+        {
+          "split": "development",
+          "type": "intent",
+          "query": "repeat beams in a straight row",
+          "relevant": [
+            "arrayLinear"
+          ],
+          "found": [],
+          "recallAt5": 0,
+          "reciprocalRank": 0,
+          "unsupportedReturned": false,
+          "firstQueryMs": 1.0741000000000014,
+          "medianWarmMs": 0.11110000000000753,
+          "responseBytes": 2
+        },
+        {
+          "split": "development",
+          "type": "compound",
+          "query": "stairs and door opening",
+          "relevant": [
+            "createStairs",
+            "wallWithOpening"
+          ],
+          "found": [],
+          "recallAt5": 0,
+          "reciprocalRank": 0,
+          "unsupportedReturned": false,
+          "firstQueryMs": 0.0999000000000052,
+          "medianWarmMs": 0.09679999999998756,
+          "responseBytes": 2
+        },
+        {
+          "split": "development",
+          "type": "intent",
+          "query": "unfold a mesh for texture coordinates",
+          "relevant": [
+            "autoUnwrap"
+          ],
+          "found": [],
+          "recallAt5": 0,
+          "reciprocalRank": 0,
+          "unsupportedReturned": false,
+          "firstQueryMs": 0.09279999999999688,
+          "medianWarmMs": 0.09320000000001016,
+          "responseBytes": 2
+        },
+        {
+          "split": "development",
+          "type": "rare",
+          "query": "implicit signed distance surface",
+          "relevant": [
+            "implicitSurface"
+          ],
+          "found": [],
+          "recallAt5": 0,
+          "reciprocalRank": 0,
+          "unsupportedReturned": false,
+          "firstQueryMs": 0.09480000000000643,
+          "medianWarmMs": 0.11759999999999593,
+          "responseBytes": 2
+        },
+        {
+          "split": "development",
+          "type": "unsupported",
+          "query": "speech recognition",
+          "relevant": [],
+          "found": [],
+          "recallAt5": null,
+          "reciprocalRank": 0,
+          "unsupportedReturned": false,
+          "firstQueryMs": 0.11599999999999966,
+          "medianWarmMs": 0.09820000000000562,
+          "responseBytes": 2
+        },
+        {
+          "split": "development",
+          "type": "unsupported",
+          "query": "inverse kinematics solver",
+          "relevant": [],
+          "found": [],
+          "recallAt5": null,
+          "reciprocalRank": 0,
+          "unsupportedReturned": false,
+          "firstQueryMs": 0.10730000000000928,
+          "medianWarmMs": 0.09759999999999991,
+          "responseBytes": 2
+        },
+        {
+          "split": "development",
+          "type": "ambiguous",
+          "query": "wheel",
+          "relevant": [
+            "createWheelAssembly",
+            "createWheelGeometrySet"
+          ],
+          "found": [
+            "createVehicleFrame",
+            "createWheelGeometrySet",
+            "createWheelAssembly",
+            "createInstance",
+            "revolveProfile"
+          ],
+          "recallAt5": 1,
+          "reciprocalRank": 0.5,
+          "unsupportedReturned": false,
+          "firstQueryMs": 0.14679999999999893,
+          "medianWarmMs": 0.11129999999999995,
+          "responseBytes": 103
+        }
+      ]
+    },
+    {
+      "name": "orama-3.1.18",
+      "initializeMs": 9.013800000000003,
+      "recallAt5": 0.925,
+      "mrrAt5": 0.73125,
+      "unsupportedQueriesReturningResults": 0,
+      "results": [
+        {
+          "split": "development",
+          "type": "exact",
+          "query": "arrayRadial",
+          "relevant": [
+            "arrayRadial"
+          ],
+          "found": [
+            "arrayRadial",
+            "arrayLinear",
+            "mirror",
+            "meshGeo",
+            "revolveGeo"
+          ],
+          "recallAt5": 1,
+          "reciprocalRank": 1,
+          "unsupportedReturned": false,
+          "firstQueryMs": 3.4133000000000067,
+          "medianWarmMs": 0.4274999999999949,
+          "responseBytes": 61
+        },
+        {
+          "split": "development",
+          "type": "intent",
+          "query": "put supports evenly around a circle",
+          "relevant": [
+            "arrayRadial"
+          ],
+          "found": [
+            "circleProfile",
+            "boolDiff",
+            "arrayRadial",
+            "spinAnimation",
+            "createLadder"
+          ],
+          "recallAt5": 1,
+          "reciprocalRank": 0.3333333333333333,
+          "unsupportedReturned": false,
+          "firstQueryMs": 1.1801000000000101,
+          "medianWarmMs": 0.7045999999999992,
+          "responseBytes": 73
+        },
+        {
+          "split": "development",
+          "type": "intent",
+          "query": "cut windows into a wall",
+          "relevant": [
+            "wallWithOpening",
+            "room",
+            "boolDiff"
+          ],
+          "found": [
+            "wallWithOpening",
+            "boolDiff",
+            "room",
+            "foliageMaterial",
+            "planeGeo"
+          ],
+          "recallAt5": 1,
+          "reciprocalRank": 1,
+          "unsupportedReturned": false,
+          "firstQueryMs": 1.8366999999999791,
+          "medianWarmMs": 0.3994000000000142,
+          "responseBytes": 66
+        },
+        {
+          "split": "development",
+          "type": "intent",
+          "query": "tube along a curved path",
+          "relevant": [
+            "pipeAlongPath",
+            "sweepProfile",
+            "curveToMesh"
+          ],
+          "found": [
+            "pipeAlongPath",
+            "curveToMesh",
+            "bezierCurve",
+            "sweepProfile",
+            "cylinderXGeo"
+          ],
+          "recallAt5": 1,
+          "reciprocalRank": 1,
+          "unsupportedReturned": false,
+          "firstQueryMs": 0.5653999999999826,
+          "medianWarmMs": 0.3810000000000002,
+          "responseBytes": 75
+        },
+        {
+          "split": "development",
+          "type": "ownership",
+          "query": "edit a geometry copy independently",
+          "relevant": [
+            "copyGeometry"
+          ],
+          "found": [
+            "copyGeometry",
+            "copyMaterial",
+            "geometryDiagnostics",
+            "createWheelGeometrySet",
+            "boxGeo"
+          ],
+          "recallAt5": 1,
+          "reciprocalRank": 1,
+          "unsupportedReturned": false,
+          "firstQueryMs": 1.6123999999999796,
+          "medianWarmMs": 0.31490000000002283,
+          "responseBytes": 87
+        },
+        {
+          "split": "development",
+          "type": "ownership",
+          "query": "change copied material without changing original",
+          "relevant": [
+            "copyMaterial"
+          ],
+          "found": [
+            "copyMaterial",
+            "basicMaterial",
+            "gameMaterial",
+            "glassMaterial",
+            "lambertMaterial"
+          ],
+          "recallAt5": 1,
+          "reciprocalRank": 1,
+          "unsupportedReturned": false,
+          "firstQueryMs": 1.6482000000000028,
+          "medianWarmMs": 0.4621999999999957,
+          "responseBytes": 81
+        },
+        {
+          "split": "development",
+          "type": "typo",
+          "query": "cylindr",
+          "relevant": [
+            "cylinderGeo",
+            "cylinderOnAxis",
+            "cylinderYGeo",
+            "cylinderXGeo",
+            "cylinderZGeo"
+          ],
+          "found": [
+            "cylinderGeo",
+            "cylinderZGeo",
+            "cylinderXGeo",
+            "cylinderYGeo",
+            "cylinderUnwrap"
+          ],
+          "recallAt5": 0.8,
+          "reciprocalRank": 1,
+          "unsupportedReturned": false,
+          "firstQueryMs": 0.1617999999999995,
+          "medianWarmMs": 0.08619999999999095,
+          "responseBytes": 77
+        },
+        {
+          "split": "development",
+          "type": "intent",
+          "query": "reflect across a plane",
+          "relevant": [
+            "mirror"
+          ],
+          "found": [
+            "planeGeo",
+            "planeUnwrap",
+            "mirror",
+            "createRoofPlanes",
+            "octaGridPlane"
+          ],
+          "recallAt5": 1,
+          "reciprocalRank": 0.3333333333333333,
+          "unsupportedReturned": false,
+          "firstQueryMs": 0.41159999999999286,
+          "medianWarmMs": 0.2685000000000173,
+          "responseBytes": 70
+        },
+        {
+          "split": "development",
+          "type": "intent",
+          "query": "smooth normals while retaining sharp edges",
+          "relevant": [
+            "creaseNormals"
+          ],
+          "found": [
+            "creaseNormals",
+            "normalMapFromHeight",
+            "sphereGeo",
+            "boolUnion",
+            "boolDiff"
+          ],
+          "recallAt5": 1,
+          "reciprocalRank": 1,
+          "unsupportedReturned": false,
+          "firstQueryMs": 0.6403000000000247,
+          "medianWarmMs": 0.49160000000000537,
+          "responseBytes": 74
+        },
+        {
+          "split": "development",
+          "type": "intent",
+          "query": "subtract one solid from another",
+          "relevant": [
+            "boolDiff"
+          ],
+          "found": [
+            "coneGeo",
+            "coneYGeo",
+            "coneZGeo",
+            "coneXGeo",
+            "normalMapFromHeight"
+          ],
+          "recallAt5": 0,
+          "reciprocalRank": 0,
+          "unsupportedReturned": false,
+          "firstQueryMs": 0.5334000000000003,
+          "medianWarmMs": 0.41689999999999827,
+          "responseBytes": 66
+        },
+        {
+          "split": "development",
+          "type": "intent",
+          "query": "join overlapping solid shapes",
+          "relevant": [
+            "boolUnion"
+          ],
+          "found": [
+            "getJointNames",
+            "createJointChain",
+            "boolUnion",
+            "boolIntersect",
+            "loftProfiles"
+          ],
+          "recallAt5": 1,
+          "reciprocalRank": 0.3333333333333333,
+          "unsupportedReturned": false,
+          "firstQueryMs": 0.4498999999999853,
+          "medianWarmMs": 0.30579999999997654,
+          "responseBytes": 79
+        },
+        {
+          "split": "development",
+          "type": "intent",
+          "query": "repeat beams in a straight row",
+          "relevant": [
+            "arrayLinear"
+          ],
+          "found": [
+            "beamBetween",
+            "arrayLinear",
+            "gameMaterial",
+            "proceduralTexture",
+            "pipeAlongPath"
+          ],
+          "recallAt5": 1,
+          "reciprocalRank": 0.5,
+          "unsupportedReturned": false,
+          "firstQueryMs": 0.44310000000001537,
+          "medianWarmMs": 0.33729999999999905,
+          "responseBytes": 80
+        },
+        {
+          "split": "development",
+          "type": "compound",
+          "query": "stairs and door opening",
+          "relevant": [
+            "createStairs",
+            "wallWithOpening"
+          ],
+          "found": [
+            "wallWithOpening",
+            "createStairs",
+            "createGableShell",
+            "room",
+            "createGableEndPanel"
+          ],
+          "recallAt5": 1,
+          "reciprocalRank": 1,
+          "unsupportedReturned": false,
+          "firstQueryMs": 1.5896999999999935,
+          "medianWarmMs": 0.25799999999998136,
+          "responseBytes": 82
+        },
+        {
+          "split": "development",
+          "type": "intent",
+          "query": "unfold a mesh for texture coordinates",
+          "relevant": [
+            "autoUnwrap"
+          ],
+          "found": [
+            "proceduralTexture",
+            "curveToMesh",
+            "meshGeo",
+            "loadApprovedTexture",
+            "autoUnwrap"
+          ],
+          "recallAt5": 1,
+          "reciprocalRank": 0.2,
+          "unsupportedReturned": false,
+          "firstQueryMs": 0.4285000000000423,
+          "medianWarmMs": 0.3019999999999641,
+          "responseBytes": 80
+        },
+        {
+          "split": "development",
+          "type": "rare",
+          "query": "implicit signed distance surface",
+          "relevant": [
+            "implicitSurface"
+          ],
+          "found": [
+            "implicitSurface",
+            "parametricSurface",
+            "createRoofSurfaceLayout",
+            "revolveGeo",
+            "creaseNormals"
+          ],
+          "recallAt5": 1,
+          "reciprocalRank": 1,
+          "unsupportedReturned": false,
+          "firstQueryMs": 0.3609000000000151,
+          "medianWarmMs": 0.30009999999998627,
+          "responseBytes": 94
+        },
+        {
+          "split": "development",
+          "type": "unsupported",
+          "query": "speech recognition",
+          "relevant": [],
+          "found": [],
+          "recallAt5": null,
+          "reciprocalRank": 0,
+          "unsupportedReturned": false,
+          "firstQueryMs": 0.21529999999995653,
+          "medianWarmMs": 0.15289999999998827,
+          "responseBytes": 2
+        },
+        {
+          "split": "development",
+          "type": "unsupported",
+          "query": "inverse kinematics solver",
+          "relevant": [],
+          "found": [],
+          "recallAt5": null,
+          "reciprocalRank": 0,
+          "unsupportedReturned": false,
+          "firstQueryMs": 0.248299999999972,
+          "medianWarmMs": 0.21440000000001191,
+          "responseBytes": 2
+        },
+        {
+          "split": "development",
+          "type": "ambiguous",
+          "query": "wheel",
+          "relevant": [
+            "createWheelAssembly",
+            "createWheelGeometrySet"
+          ],
+          "found": [
+            "createWheelAssembly",
+            "createWheelGeometrySet",
+            "lathe",
+            "createInstance",
+            "revolveProfile"
+          ],
+          "recallAt5": 1,
+          "reciprocalRank": 1,
+          "unsupportedReturned": false,
+          "firstQueryMs": 0.14470000000000027,
+          "medianWarmMs": 0.07609999999999673,
+          "responseBytes": 90
+        }
+      ]
+    },
+    {
+      "name": "minisearch-7.2.0",
+      "initializeMs": 3.768499999999996,
+      "recallAt5": 0.9875,
+      "mrrAt5": 1,
+      "unsupportedQueriesReturningResults": 0,
+      "results": [
+        {
+          "split": "development",
+          "type": "exact",
+          "query": "arrayRadial",
+          "relevant": [
+            "arrayRadial"
+          ],
+          "found": [
+            "arrayRadial",
+            "arrayLinear",
+            "revolveGeo",
+            "meshGeo",
+            "loadApprovedTexture"
+          ],
+          "recallAt5": 1,
+          "reciprocalRank": 1,
+          "unsupportedReturned": false,
+          "firstQueryMs": 1.7070999999999685,
+          "medianWarmMs": 0.10850000000004911,
+          "responseBytes": 74
+        },
+        {
+          "split": "development",
+          "type": "intent",
+          "query": "put supports evenly around a circle",
+          "relevant": [
+            "arrayRadial"
+          ],
+          "found": [
+            "arrayRadial",
+            "circleProfile",
+            "cylinderUnwrap",
+            "boolDiff",
+            "createLadder"
+          ],
+          "recallAt5": 1,
+          "reciprocalRank": 1,
+          "unsupportedReturned": false,
+          "firstQueryMs": 0.2956999999999539,
+          "medianWarmMs": 0.1594000000000051,
+          "responseBytes": 74
+        },
+        {
+          "split": "development",
+          "type": "intent",
+          "query": "cut windows into a wall",
+          "relevant": [
+            "wallWithOpening",
+            "room",
+            "boolDiff"
+          ],
+          "found": [
+            "wallWithOpening",
+            "room",
+            "boolDiff",
+            "planeGeo",
+            "createGableEndPanel"
+          ],
+          "recallAt5": 1,
+          "reciprocalRank": 1,
+          "unsupportedReturned": false,
+          "firstQueryMs": 0.22109999999997854,
+          "medianWarmMs": 0.140199999999993,
+          "responseBytes": 70
+        },
+        {
+          "split": "development",
+          "type": "intent",
+          "query": "tube along a curved path",
+          "relevant": [
+            "pipeAlongPath",
+            "sweepProfile",
+            "curveToMesh"
+          ],
+          "found": [
+            "pipeAlongPath",
+            "curveToMesh",
+            "sweepProfile",
+            "cylinderXGeo",
+            "bezierCurve"
+          ],
+          "recallAt5": 1,
+          "reciprocalRank": 1,
+          "unsupportedReturned": false,
+          "firstQueryMs": 0.196899999999971,
+          "medianWarmMs": 0.12409999999999854,
+          "responseBytes": 75
+        },
+        {
+          "split": "development",
+          "type": "ownership",
+          "query": "edit a geometry copy independently",
+          "relevant": [
+            "copyGeometry"
+          ],
+          "found": [
+            "copyGeometry",
+            "copyMaterial",
+            "geometryDiagnostics",
+            "createWheelGeometrySet",
+            "arrayLinear"
+          ],
+          "recallAt5": 1,
+          "reciprocalRank": 1,
+          "unsupportedReturned": false,
+          "firstQueryMs": 0.40960000000001173,
+          "medianWarmMs": 0.3014999999999759,
+          "responseBytes": 92
+        },
+        {
+          "split": "development",
+          "type": "ownership",
+          "query": "change copied material without changing original",
+          "relevant": [
+            "copyMaterial"
+          ],
+          "found": [
+            "copyMaterial",
+            "copyGeometry",
+            "basicMaterial",
+            "gameMaterial",
+            "glassMaterial"
+          ],
+          "recallAt5": 1,
+          "reciprocalRank": 1,
+          "unsupportedReturned": false,
+          "firstQueryMs": 0.3590000000000373,
+          "medianWarmMs": 0.27899999999999636,
+          "responseBytes": 78
+        },
+        {
+          "split": "development",
+          "type": "typo",
+          "query": "cylindr",
+          "relevant": [
+            "cylinderGeo",
+            "cylinderOnAxis",
+            "cylinderYGeo",
+            "cylinderXGeo",
+            "cylinderZGeo"
+          ],
+          "found": [
+            "cylinderYGeo",
+            "cylinderOnAxis",
+            "cylinderUnwrap",
+            "cylinderGeo",
+            "cylinderZGeo"
+          ],
+          "recallAt5": 0.8,
+          "reciprocalRank": 1,
+          "unsupportedReturned": false,
+          "firstQueryMs": 0.07260000000002265,
+          "medianWarmMs": 0.02549999999996544,
+          "responseBytes": 79
+        },
+        {
+          "split": "development",
+          "type": "intent",
+          "query": "reflect across a plane",
+          "relevant": [
+            "mirror"
+          ],
+          "found": [
+            "mirror",
+            "planeGeo",
+            "planeUnwrap",
+            "octaGridPlane",
+            "loftProfiles"
+          ],
+          "recallAt5": 1,
+          "reciprocalRank": 1,
+          "unsupportedReturned": false,
+          "firstQueryMs": 0.10110000000003083,
+          "medianWarmMs": 0.07800000000003138,
+          "responseBytes": 66
+        },
+        {
+          "split": "development",
+          "type": "intent",
+          "query": "smooth normals while retaining sharp edges",
+          "relevant": [
+            "creaseNormals"
+          ],
+          "found": [
+            "creaseNormals",
+            "normalMapFromHeight",
+            "boolUnion",
+            "boolDiff",
+            "roundedBoxGeo"
+          ],
+          "recallAt5": 1,
+          "reciprocalRank": 1,
+          "unsupportedReturned": false,
+          "firstQueryMs": 0.24450000000001637,
+          "medianWarmMs": 0.18990000000002283,
+          "responseBytes": 78
+        },
+        {
+          "split": "development",
+          "type": "intent",
+          "query": "subtract one solid from another",
+          "relevant": [
+            "boolDiff"
+          ],
+          "found": [
+            "boolDiff",
+            "boolUnion",
+            "normalMapFromHeight",
+            "wallWithOpening",
+            "boolIntersect"
+          ],
+          "recallAt5": 1,
+          "reciprocalRank": 1,
+          "unsupportedReturned": false,
+          "firstQueryMs": 0.20289999999999964,
+          "medianWarmMs": 0.17700000000002092,
+          "responseBytes": 80
+        },
+        {
+          "split": "development",
+          "type": "intent",
+          "query": "join overlapping solid shapes",
+          "relevant": [
+            "boolUnion"
+          ],
+          "found": [
+            "boolUnion",
+            "boolIntersect",
+            "boolDiff",
+            "loftProfiles",
+            "getJointNames"
+          ],
+          "recallAt5": 1,
+          "reciprocalRank": 1,
+          "unsupportedReturned": false,
+          "firstQueryMs": 0.1903000000000361,
+          "medianWarmMs": 0.14960000000002083,
+          "responseBytes": 71
+        },
+        {
+          "split": "development",
+          "type": "intent",
+          "query": "repeat beams in a straight row",
+          "relevant": [
+            "arrayLinear"
+          ],
+          "found": [
+            "arrayLinear",
+            "beamBetween",
+            "pipeAlongPath",
+            "arrayRadial",
+            "proceduralTexture"
+          ],
+          "recallAt5": 1,
+          "reciprocalRank": 1,
+          "unsupportedReturned": false,
+          "firstQueryMs": 0.22820000000001528,
+          "medianWarmMs": 0.143100000000004,
+          "responseBytes": 79
+        },
+        {
+          "split": "development",
+          "type": "compound",
+          "query": "stairs and door opening",
+          "relevant": [
+            "createStairs",
+            "wallWithOpening"
+          ],
+          "found": [
+            "wallWithOpening",
+            "createStairs",
+            "room",
+            "createGableShell",
+            "createGableEndPanel"
+          ],
+          "recallAt5": 1,
+          "reciprocalRank": 1,
+          "unsupportedReturned": false,
+          "firstQueryMs": 0.09030000000001337,
+          "medianWarmMs": 0.06589999999999918,
+          "responseBytes": 82
+        },
+        {
+          "split": "development",
+          "type": "intent",
+          "query": "unfold a mesh for texture coordinates",
+          "relevant": [
+            "autoUnwrap"
+          ],
+          "found": [
+            "autoUnwrap",
+            "proceduralTexture",
+            "curveToMesh",
+            "meshGeo",
+            "loadApprovedTexture"
+          ],
+          "recallAt5": 1,
+          "reciprocalRank": 1,
+          "unsupportedReturned": false,
+          "firstQueryMs": 0.17590000000001282,
+          "medianWarmMs": 0.13849999999996498,
+          "responseBytes": 80
+        },
+        {
+          "split": "development",
+          "type": "rare",
+          "query": "implicit signed distance surface",
+          "relevant": [
+            "implicitSurface"
+          ],
+          "found": [
+            "implicitSurface",
+            "revolveGeo",
+            "parametricSurface",
+            "createRoofSurfaceLayout",
+            "creaseNormals"
+          ],
+          "recallAt5": 1,
+          "reciprocalRank": 1,
+          "unsupportedReturned": false,
+          "firstQueryMs": 0.20150000000001,
+          "medianWarmMs": 0.15739999999999554,
+          "responseBytes": 94
+        },
+        {
+          "split": "development",
+          "type": "unsupported",
+          "query": "speech recognition",
+          "relevant": [],
+          "found": [],
+          "recallAt5": null,
+          "reciprocalRank": 0,
+          "unsupportedReturned": false,
+          "firstQueryMs": 0.10359999999997171,
+          "medianWarmMs": 0.07789999999999964,
+          "responseBytes": 2
+        },
+        {
+          "split": "development",
+          "type": "unsupported",
+          "query": "inverse kinematics solver",
+          "relevant": [],
+          "found": [],
+          "recallAt5": null,
+          "reciprocalRank": 0,
+          "unsupportedReturned": false,
+          "firstQueryMs": 0.10330000000004702,
+          "medianWarmMs": 0.08719999999999573,
+          "responseBytes": 2
+        },
+        {
+          "split": "development",
+          "type": "ambiguous",
+          "query": "wheel",
+          "relevant": [
+            "createWheelAssembly",
+            "createWheelGeometrySet"
+          ],
+          "found": [
+            "createWheelAssembly",
+            "createWheelGeometrySet",
+            "lathe",
+            "createInstance",
+            "revolveProfile"
+          ],
+          "recallAt5": 1,
+          "reciprocalRank": 1,
+          "unsupportedReturned": false,
+          "firstQueryMs": 0.04370000000000118,
+          "medianWarmMs": 0.017699999999990723,
+          "responseBytes": 90
+        }
+      ]
+    },
+    {
+      "name": "flexsearch-0.8.212-weighted-rrf",
+      "initializeMs": 14.687100000000001,
+      "recallAt5": 0.9375,
+      "mrrAt5": 0.715625,
+      "unsupportedQueriesReturningResults": 0,
+      "results": [
+        {
+          "split": "development",
+          "type": "exact",
+          "query": "arrayRadial",
+          "relevant": [
+            "arrayRadial"
+          ],
+          "found": [
+            "arrayRadial",
+            "arrayLinear",
+            "meshGeo",
+            "loadApprovedTexture",
+            "revolveGeo"
+          ],
+          "recallAt5": 1,
+          "reciprocalRank": 1,
+          "unsupportedReturned": false,
+          "firstQueryMs": 1.0387000000000057,
+          "medianWarmMs": 0.028300000000001546,
+          "responseBytes": 74
+        },
+        {
+          "split": "development",
+          "type": "intent",
+          "query": "put supports evenly around a circle",
+          "relevant": [
+            "arrayRadial"
+          ],
+          "found": [
+            "circleProfile",
+            "arrayRadial",
+            "cylinderUnwrap",
+            "pipeAlongPath",
+            "twist"
+          ],
+          "recallAt5": 1,
+          "reciprocalRank": 0.5,
+          "unsupportedReturned": false,
+          "firstQueryMs": 0.09789999999998145,
+          "medianWarmMs": 0.022199999999998,
+          "responseBytes": 72
+        },
+        {
+          "split": "development",
+          "type": "intent",
+          "query": "cut windows into a wall",
+          "relevant": [
+            "wallWithOpening",
+            "room",
+            "boolDiff"
+          ],
+          "found": [
+            "wallWithOpening",
+            "room",
+            "boolDiff",
+            "foliageMaterial",
+            "foliageCardGeo"
+          ],
+          "recallAt5": 1,
+          "reciprocalRank": 1,
+          "unsupportedReturned": false,
+          "firstQueryMs": 0.10120000000000573,
+          "medianWarmMs": 0.022799999999961074,
+          "responseBytes": 72
+        },
+        {
+          "split": "development",
+          "type": "intent",
+          "query": "tube along a curved path",
+          "relevant": [
+            "pipeAlongPath",
+            "sweepProfile",
+            "curveToMesh"
+          ],
+          "found": [
+            "pipeAlongPath",
+            "curveToMesh",
+            "sweepProfile",
+            "arrayLinear",
+            "cylinderXGeo"
+          ],
+          "recallAt5": 1,
+          "reciprocalRank": 1,
+          "unsupportedReturned": false,
+          "firstQueryMs": 0.07320000000004256,
+          "medianWarmMs": 0.019900000000006912,
+          "responseBytes": 75
+        },
+        {
+          "split": "development",
+          "type": "ownership",
+          "query": "edit a geometry copy independently",
+          "relevant": [
+            "copyGeometry"
+          ],
+          "found": [
+            "copyGeometry",
+            "copyMaterial",
+            "createWheelGeometrySet",
+            "geometryDiagnostics",
+            "boxGeo"
+          ],
+          "recallAt5": 1,
+          "reciprocalRank": 1,
+          "unsupportedReturned": false,
+          "firstQueryMs": 0.0875000000000341,
+          "medianWarmMs": 0.03209999999995716,
+          "responseBytes": 87
+        },
+        {
+          "split": "development",
+          "type": "ownership",
+          "query": "change copied material without changing original",
+          "relevant": [
+            "copyMaterial"
+          ],
+          "found": [
+            "copyMaterial",
+            "gameMaterial",
+            "basicMaterial",
+            "glassMaterial",
+            "lambertMaterial"
+          ],
+          "recallAt5": 1,
+          "reciprocalRank": 1,
+          "unsupportedReturned": false,
+          "firstQueryMs": 0.10020000000002938,
+          "medianWarmMs": 0.025300000000015643,
+          "responseBytes": 81
+        },
+        {
+          "split": "development",
+          "type": "typo",
+          "query": "cylindr",
+          "relevant": [
+            "cylinderGeo",
+            "cylinderOnAxis",
+            "cylinderYGeo",
+            "cylinderXGeo",
+            "cylinderZGeo"
+          ],
+          "found": [
+            "beamBetween"
+          ],
+          "recallAt5": 0,
+          "reciprocalRank": 0,
+          "unsupportedReturned": false,
+          "firstQueryMs": 0.14240000000000919,
+          "medianWarmMs": 0.006100000000003547,
+          "responseBytes": 15
+        },
+        {
+          "split": "development",
+          "type": "intent",
+          "query": "reflect across a plane",
+          "relevant": [
+            "mirror"
+          ],
+          "found": [
+            "planeGeo",
+            "mirror",
+            "planeUnwrap",
+            "createRoofPlanes",
+            "octaGridPlane"
+          ],
+          "recallAt5": 1,
+          "reciprocalRank": 0.5,
+          "unsupportedReturned": false,
+          "firstQueryMs": 0.06280000000003838,
+          "medianWarmMs": 0.02039999999999509,
+          "responseBytes": 70
+        },
+        {
+          "split": "development",
+          "type": "intent",
+          "query": "smooth normals while retaining sharp edges",
+          "relevant": [
+            "creaseNormals"
+          ],
+          "found": [
+            "creaseNormals",
+            "normalMapFromHeight",
+            "boolUnion",
+            "roundedBoxGeo",
+            "boolDiff"
+          ],
+          "recallAt5": 1,
+          "reciprocalRank": 1,
+          "unsupportedReturned": false,
+          "firstQueryMs": 0.134900000000016,
+          "medianWarmMs": 0.021299999999996544,
+          "responseBytes": 78
+        },
+        {
+          "split": "development",
+          "type": "intent",
+          "query": "subtract one solid from another",
+          "relevant": [
+            "boolDiff"
+          ],
+          "found": [
+            "normalMapFromHeight",
+            "boolDiff",
+            "boolUnion",
+            "boolIntersect",
+            "wallWithOpening"
+          ],
+          "recallAt5": 1,
+          "reciprocalRank": 0.5,
+          "unsupportedReturned": false,
+          "firstQueryMs": 0.06929999999999836,
+          "medianWarmMs": 0.019000000000005457,
+          "responseBytes": 80
+        },
+        {
+          "split": "development",
+          "type": "intent",
+          "query": "join overlapping solid shapes",
+          "relevant": [
+            "boolUnion"
+          ],
+          "found": [
+            "createJointChain",
+            "getJointNames",
+            "loftProfiles",
+            "boolUnion",
+            "boolIntersect"
+          ],
+          "recallAt5": 1,
+          "reciprocalRank": 0.25,
+          "unsupportedReturned": false,
+          "firstQueryMs": 0.047300000000007,
+          "medianWarmMs": 0.017699999999990723,
+          "responseBytes": 79
+        },
+        {
+          "split": "development",
+          "type": "intent",
+          "query": "repeat beams in a straight row",
+          "relevant": [
+            "arrayLinear"
+          ],
+          "found": [
+            "beamBetween",
+            "arrayLinear",
+            "arrayRadial",
+            "createStairs",
+            "pipeAlongPath"
+          ],
+          "recallAt5": 1,
+          "reciprocalRank": 0.5,
+          "unsupportedReturned": false,
+          "firstQueryMs": 0.0372000000000412,
+          "medianWarmMs": 0.011700000000018917,
+          "responseBytes": 74
+        },
+        {
+          "split": "development",
+          "type": "compound",
+          "query": "stairs and door opening",
+          "relevant": [
+            "createStairs",
+            "wallWithOpening"
+          ],
+          "found": [
+            "wallWithOpening",
+            "createStairs",
+            "room",
+            "createGableShell",
+            "createGableEndPanel"
+          ],
+          "recallAt5": 1,
+          "reciprocalRank": 1,
+          "unsupportedReturned": false,
+          "firstQueryMs": 0.0473999999999819,
+          "medianWarmMs": 0.011399999999980537,
+          "responseBytes": 82
+        },
+        {
+          "split": "development",
+          "type": "intent",
+          "query": "unfold a mesh for texture coordinates",
+          "relevant": [
+            "autoUnwrap"
+          ],
+          "found": [
+            "proceduralTexture",
+            "loadApprovedTexture",
+            "meshGeo",
+            "curveToMesh",
+            "autoUnwrap"
+          ],
+          "recallAt5": 1,
+          "reciprocalRank": 0.2,
+          "unsupportedReturned": false,
+          "firstQueryMs": 0.10109999999997399,
+          "medianWarmMs": 0.030599999999992633,
+          "responseBytes": 80
+        },
+        {
+          "split": "development",
+          "type": "rare",
+          "query": "implicit signed distance surface",
+          "relevant": [
+            "implicitSurface"
+          ],
+          "found": [
+            "implicitSurface",
+            "parametricSurface",
+            "createRoofSurfaceLayout",
+            "creaseNormals",
+            "revolveGeo"
+          ],
+          "recallAt5": 1,
+          "reciprocalRank": 1,
+          "unsupportedReturned": false,
+          "firstQueryMs": 0.09099999999995134,
+          "medianWarmMs": 0.019900000000006912,
+          "responseBytes": 94
+        },
+        {
+          "split": "development",
+          "type": "unsupported",
+          "query": "speech recognition",
+          "relevant": [],
+          "found": [],
+          "recallAt5": null,
+          "reciprocalRank": 0,
+          "unsupportedReturned": false,
+          "firstQueryMs": 0.02909999999997126,
+          "medianWarmMs": 0.005599999999958527,
+          "responseBytes": 2
+        },
+        {
+          "split": "development",
+          "type": "unsupported",
+          "query": "inverse kinematics solver",
+          "relevant": [],
+          "found": [],
+          "recallAt5": null,
+          "reciprocalRank": 0,
+          "unsupportedReturned": false,
+          "firstQueryMs": 0.025000000000034106,
+          "medianWarmMs": 0.004200000000025739,
+          "responseBytes": 2
+        },
+        {
+          "split": "development",
+          "type": "ambiguous",
+          "query": "wheel",
+          "relevant": [
+            "createWheelAssembly",
+            "createWheelGeometrySet"
+          ],
+          "found": [
+            "createWheelGeometrySet",
+            "createWheelAssembly",
+            "createInstance",
+            "lathe",
+            "revolveProfile"
+          ],
+          "recallAt5": 1,
+          "reciprocalRank": 1,
+          "unsupportedReturned": false,
+          "firstQueryMs": 0.059799999999995634,
+          "medianWarmMs": 0.007000000000005002,
+          "responseBytes": 90
+        }
+      ]
+    }
+  ]
+}

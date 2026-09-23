@@ -5,6 +5,7 @@ import { Home } from './Home';
 import { PreviewBoundary } from './Hero';
 import { asset } from './repo';
 import type { Specimen } from './types';
+import { Downloads } from './Downloads';
 
 /**
  * Split, because three and drei are a megabyte and neither the front page nor
@@ -80,10 +81,7 @@ export function App() {
                 The asset could not load. You can still download it or return to the collection.
               </p>
               <p>
-                <a href={asset(current.file)} download>
-                  Download GLB
-                </a>{' '}
-                ·{' '}
+                <Downloads specimen={current} /> ·{' '}
                 {current.source && (
                   <a href={asset(current.source)} download>
                     Download source

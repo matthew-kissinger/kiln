@@ -10,8 +10,8 @@
 import { describe, expect, it } from 'bun:test';
 import { Client, InMemoryTransport } from '@modelcontextprotocol/client';
 
-import { createKilnToolRegistry, createKilnProgramToolRegistry } from './tools/registry';
-import { makeKilnTools, makeKilnProgramTools, KILN_SUBMIT_TOOL_NAME } from './agent/tools';
+import { createKilnNativeToolRegistry, createKilnProgramToolRegistry } from './tools/registry';
+import { makeKilnNativeTools } from './agent/tools';
 import { runTool, kilnMcpToolDefs, createKilnMcpServer } from './mcp-server';
 
 /**
@@ -47,14 +47,14 @@ describe('tool surface parity across transports', () => {
   it('advertises reads and immutable writes without destructive defaults', async () => {
     const tools = await listToolsOverMcp();
     for (const tool of tools) expect(tool.annotations?.destructiveHint).toBe(false);
-    for (const name of ['kiln_source', 'kiln_list_primitives', 'kiln_export'])
+    for (const name of ['kiln_source', 'kiln_discover', 'kiln_export'])
       expect(tools.find((t) => t.name === name)?.annotations?.readOnlyHint).toBe(true);
     expect(tools.find((t) => t.name === 'kiln_save')?.annotations?.readOnlyHint).toBe(false);
   });
-  it('the reference-based Strands skin shares every MCP definition plus terminal submit', () => {
-    expect(makeKilnProgramTools({}).map((t) => t.name)).toEqual([
+  it('the reference-based Strands skin shares every MCP definition plus terminal finish', () => {
+    expect(makeKilnNativeTools({}, { assetLibrary: {} as never }).map((t) => t.name)).toEqual([
       ...kilnMcpToolDefs().map((d) => d.name),
-      KILN_SUBMIT_TOOL_NAME,
+      'kiln_finish',
     ]);
   });
   it('the MCP skin advertises its defs verbatim', async () => {
@@ -82,22 +82,15 @@ describe('tool surface parity across transports', () => {
     }
   });
 
-  it('the MCP surface carries one unified kiln_render, not the in-process pair', () => {
-    // In-process, `kiln_render` is metrics-only and `kiln_screenshot` carries the
-    // image (the same implementation as the unified def, under the loop's name).
-    // Over MCP one tool does both, and a second way to ask for the same grid
-    // would only cost a model a choice. This pins that composition.
+  it('the MCP surface carries one unified kiln_render and no native terminal', () => {
     expect(kilnMcpToolDefs().map((d) => d.name)).toEqual([
-      'kiln_list_primitives',
+      'kiln_discover',
+      'kiln_renderer',
       'kiln_validate',
       'kiln_render',
       'kiln_screenshot_animation',
       'kiln_view_interior',
       'kiln_inspect',
-      // The refine verb. It is here rather than in-process-only because the
-      // in-process working buffer has no equivalent over MCP -- the host agent
-      // holds the program -- so without it, changing an existing asset meant
-      // re-emitting the whole file through kiln_render.
       'kiln_edit',
       'kiln_source',
       'kiln_save',
@@ -116,33 +109,30 @@ describe('tool surface parity across transports', () => {
     expect(kilnMcpToolDefs().map((d) => d.name)).not.toContain('kiln_screenshot');
   });
 
-  it('both skins share the list/validate defs verbatim', () => {
-    const registry = createKilnToolRegistry();
+  it('both skins share Discovery and validation definitions verbatim', () => {
+    const registry = createKilnProgramToolRegistry();
     const mcp = new Map(kilnMcpToolDefs().map((d) => [d.name, d.description]));
     const strands = new Map(
-      makeKilnTools({}, {}).map((t) => {
+      makeKilnNativeTools({}, {}).map((t) => {
         const tool = t as { name: string; description?: string };
         return [tool.name, tool.description];
       }),
     );
 
-    for (const name of ['kiln_list_primitives', 'kiln_validate']) {
+    for (const name of ['kiln_discover', 'kiln_validate']) {
       const def = registry.find((d) => d.name === name)!;
       expect(mcp.get(name)).toBeDefined();
       expect(strands.get(name)).toBe(def.description);
     }
   });
 
-  it('the in-process generate surface keeps the baseline plus a terminal submit', () => {
-    // Unchanged by the MCP recomposition: the engine's own loop still runs the
-    // frozen baseline, and still needs an unambiguous stopping action.
-    const baseline = new Set(createKilnToolRegistry().map((d) => d.name));
-    const names = makeKilnTools({}, {}).map((t) => (t as { name: string }).name);
-    for (const b of baseline) expect(names).toContain(b);
-    expect(names.filter((n) => !baseline.has(n)).sort()).toEqual([
-      'kiln_screenshot_animation',
-      KILN_SUBMIT_TOOL_NAME,
-    ]);
+  it('native availability follows the canonical registry and excludes unconfigured delivery tools', () => {
+    const canonical = createKilnNativeToolRegistry({}, {});
+    const actual = makeKilnNativeTools({}, {});
+    expect(actual.map((t) => t.name)).toEqual(canonical.map((d) => d.name));
+    for (const name of ['kiln_save', 'kiln_assets', 'kiln_present', 'kiln_export', 'kiln_import'])
+      expect(actual.map((t) => t.name)).not.toContain(name);
+    expect(actual.at(-1)?.name).toBe('kiln_finish');
   });
 
   it('every exposed schema reaches the client as usable JSON Schema', async () => {

@@ -66,7 +66,7 @@ export function httpRenderOutcomeCode({ method, path, status }) {
   if (status === 401) return 'auth_rejected';
   if (status === 501) return 'not_implemented';
   if (status === 404) return 'route_not_found';
-  if (status === 400 || status === 413) return 'request_rejected';
+  if ([400, 408, 413, 499, 503].includes(status)) return 'request_rejected';
   if (
     method === 'GET' &&
     (path === '/health' || path === '/ping') &&
@@ -132,50 +132,7 @@ export function buildRenderOperationalEvidenceV1(input) {
   };
 }
 
-/** Provider/GPU-free serial queue with explicit start evidence for every job. */
-export function createSerialRenderQueue(options = {}) {
-  const now = options.now ?? (() => performance.now());
-  if (typeof now !== 'function') throw badRequest('serial render queue now must be a function');
-  const processStartedAt = options.processStartedAt ?? now();
-  if (!Number.isFinite(processStartedAt)) {
-    throw badRequest('serial render queue processStartedAt must be finite');
-  }
-
-  let tail = Promise.resolve();
-  let queuedJobs = 0;
-  let activeJobs = 0;
-  let renderJobsStarted = 0;
-  return Object.freeze({
-    enqueue(job) {
-      if (typeof job !== 'function') throw badRequest('serial render queue job must be a function');
-      const enqueuedAt = now();
-      const queueDepthAtEnqueue = activeJobs + queuedJobs;
-      queuedJobs++;
-      const runJob = async () => {
-        queuedJobs--;
-        activeJobs++;
-        const firstRenderInProcess = renderJobsStarted === 0;
-        renderJobsStarted++;
-        const startedAt = now();
-        const start = {
-          queueWaitMs: startedAt - enqueuedAt,
-          queueDepthAtEnqueue,
-          concurrencyAtStart: activeJobs,
-          firstRenderInProcess,
-          workerAgeMsAtStart: startedAt - processStartedAt,
-        };
-        try {
-          return await job(start);
-        } finally {
-          activeJobs--;
-        }
-      };
-      const run = tail.then(runJob, runJob);
-      tail = run.catch(() => {});
-      return run;
-    },
-  });
-}
+export { createBoundedRenderQueue as createSerialRenderQueue } from './render-queue.mjs';
 
 function finiteTuple3(value, path) {
   if (!Array.isArray(value) || value.length !== 3 || !value.every(Number.isFinite)) {

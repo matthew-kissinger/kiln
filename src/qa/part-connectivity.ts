@@ -12,23 +12,19 @@
  *
  * This rule builds the adjacency graph and finds its connected components.
  * Anything not in the largest component is reported, with the parts it is
- * attached to, so the finding says "this subassembly is floating" rather than
- * "this part is alone" — which is both stronger and more useful, since a
- * detached cluster is usually one missing join rather than N misplaced parts.
+ * adjacent to. These are bounding-box components, not proof that every part
+ * should be attached or that overlapping boxes establish physical contact.
  *
  * ## Exemptions
  *
  * Some parts are legitimately separate and always will be:
  *
  * - **Foliage cards and decals** are meant to sit off the surface.
- * - **Wheels** contact an axle whose geometry may be inside the hub, and a
- *   detached-looking wheel is the vehicle rules' business, not this one.
  * - **Joint pivots** carry no geometry and never participate.
  *
- * Exemption is by declared role — the `Joint_`/`Mesh_` naming and the
- * category the intent already carries — not by guessing from shape. A rule that
- * inferred "this looks like foliage" would fail exactly when an asset is
- * unusual, which is when a QA gate matters most.
+ * Foliage/decal exemptions are historical name heuristics, not semantic role
+ * validation. No category or label selects this observation. Renaming geometry
+ * does not establish an attachment or justify changing the authored asset.
  *
  * ## Cost
  *
@@ -70,7 +66,7 @@ export interface DisconnectedGroupV1 {
 
 export interface PartConnectivityReportV1 {
   partsAnalyzed: number;
-  /** Size of the largest component — the body everything should hang off. */
+  /** Size of the largest bounding-box component; not a required attachment target. */
   mainComponentSize: number;
   exempt: string[];
   groups: DisconnectedGroupV1[];
@@ -192,6 +188,33 @@ export function analyzePartConnectivity(root: THREE.Object3D): PartConnectivityR
  * `exact` is reserved for rules already enforcing on frozen conformance
  * evidence, so a new gate is `heuristic` however precise its arithmetic.
  */
+export function inspectPartConnectivity(scene: unknown): readonly QaFinding[] {
+  if (!(scene instanceof THREE.Object3D)) return [];
+  const report = analyzePartConnectivity(scene);
+  return report.groups.map((group) => {
+    const listed = group.parts.map((p) => JSON.stringify(p)).join(', ');
+    const subject =
+      group.parts.length === 1
+        ? `Part ${listed} is`
+        : `A group of ${group.parts.length} parts (${listed}) is`;
+    return {
+      code: 'GEO_PART_CONNECTIVITY',
+      disposition: 'observe' as const,
+      dimension: 'visualQuality' as const,
+      profile: 'geometry.partConnectivity',
+      message: `${subject} separate from the largest component in the rest-pose bounding boxes; the nearest box gap is ${group.gap.toFixed(3)} m. This may be intentional. Box adjacency is not physical attachment evidence.`,
+      affected: { node: group.parts[0]! },
+      measurement: {
+        name: 'gapToMainComponent',
+        actual: group.gap,
+        expected: CONNECTIVITY_TOLERANCE,
+      },
+      repairText:
+        'Check whether the separation is intentional. If the brief requires attachment, inspect the named group and its intended interface before moving it. snapTo aligns bounding boxes; verify actual surfaces and required clearances afterward.',
+    };
+  });
+}
+
 export const PART_CONNECTIVITY_QA_RULE: QaRule = Object.freeze({
   id: 'GEO_PART_CONNECTIVITY',
   profile: 'geometry.partConnectivity',
@@ -200,34 +223,6 @@ export const PART_CONNECTIVITY_QA_RULE: QaRule = Object.freeze({
   owner: KILN_ENGINE_QA_OWNER,
   defaultMode: 'observe',
   evaluate(context: QaContext): readonly QaFinding[] {
-    if (!(context.scene instanceof THREE.Object3D)) return [];
-    const report = analyzePartConnectivity(context.scene);
-    if (report.groups.length === 0) return [];
-
-    return report.groups.map((group) => {
-      const listed = group.parts.map((p) => JSON.stringify(p)).join(', ');
-      const subject =
-        group.parts.length === 1
-          ? `Part ${listed} is`
-          : `A group of ${group.parts.length} parts (${listed}) is`;
-      return {
-        code: 'GEO_PART_CONNECTIVITY',
-        disposition: 'observe' as const,
-        dimension: 'visualQuality' as const,
-        profile: 'geometry.partConnectivity',
-        message: `${subject} not attached to the main body — the nearest gap is ${group.gap.toFixed(3)} m. ${
-          group.parts.length === 1
-            ? 'It floats on its own.'
-            : 'These parts touch each other but nothing else, so one join is missing rather than several parts being misplaced.'
-        }`,
-        affected: { node: group.parts[0]! },
-        measurement: {
-          name: 'gapToMainComponent',
-          actual: group.gap,
-          expected: CONNECTIVITY_TOLERANCE,
-        },
-        repairText: `Attach it with snapTo(${JSON.stringify(group.parts[0]!)}Part, hostPart), or reposition the group so it contacts the body. If it is meant to stand apart, say so in the part name (foliage, card, decal) so this check skips it.`,
-      };
-    });
+    return inspectPartConnectivity(context.scene);
   },
 });

@@ -1,291 +1,84 @@
-import { createHash } from 'node:crypto';
-/**
- * Render-mode resolution for the CLI: `auto | cpu | gpu`, plus a remote port URL.
- *
- * The engine itself has no opinion here — it takes an optional `PbrRenderPort` and
- * `captureViewsViaPort` owns the never-throw degrade to the CPU rasterizer. This
- * module only decides WHICH port (if any) to hand it, and it must never throw for
- * a missing or broken GPU: `auto` degrading silently to CPU is the whole point.
- *
- * `gpu` is the one mode that errors on unavailability, because a user who typed it
- * explicitly asked for a guarantee and would rather know than get a quiet downgrade.
- *
- * There is no GPU dependency to install. Both local and remote GPU are the same HTTP
- * render service — there is no in-process GPU adapter to import, because headless
- * WebGPU needs Node loader hooks that Bun does not run — so this package installs
- * and runs identically on a machine with no GPU at all, which is why `auto` is a
- * safe default. One code path, and a GPU on another machine works exactly like one
- * on this one.
- *
- * Where `auto` LOOKS for a local one, and where {@link RenderPortOptions.autoSpawn}
- * would start one, both resolve through `localRenderServiceUrl` so the two can never
- * disagree about where it lives.
- */
-import type { PbrRenderPort, PbrRenderResult } from './composer/render-port';
+/** Host selection policy. Verified HTTP transport is shared with local service discovery. */
+import type { PbrRenderPort } from './composer/render-port';
+import type { KilnToolContext } from './tools/registry';
+import { createRenderCapabilitiesReader } from './render-capabilities';
 import {
-  describeStaleService,
+  makeRemoteRenderPort,
+  probeCaptureIdentity,
+  readRenderServiceHealth,
+} from './render-service-client';
+import {
+  describeUnavailableService,
   explainRenderServiceState,
   inspectLocalRenderService,
-  localRenderServicePort,
   localRenderServiceState,
   localRenderServiceUrl,
   renderServiceDir,
+  renderServiceSourceFingerprint,
   startLocalRenderService,
-  terminateRenderService,
-  type LocalRenderServiceProbe,
 } from './render-service-host';
-import type { KilnToolContext } from './tools/registry';
-import { DEFAULT_BACKDROP_ID } from './views/background';
-
+export {
+  makeRemoteRenderPort,
+  probeCaptureIdentity,
+  probeRenderService,
+} from './render-service-client';
 export type RenderMode = 'auto' | 'cpu' | 'gpu';
-
-/** Health probe budget. Short: `auto` must not stall a CPU-only machine. */
-const HEALTH_PROBE_TIMEOUT_MS = 1_500;
-
-/**
- * Second budget, used only after the first probe timed out on a socket that was
- * accepted. See `probeRenderService`: a renderer busy with somebody else's frame
- * is still a renderer, and one local service shared by a batch of dispatched
- * agents is the documented way to use this.
- */
-const HEALTH_PROBE_BUSY_TIMEOUT_MS = 8_000;
-
-/**
- * In-loop deadline. Far below the deadline appropriate for a post-loop artifact
- * sheet, because this render blocks the caller while it runs. See AGENTS.md — the
- * two deadlines must not be collapsed onto one value.
- */
+/** In-loop timeout. Artifact callers supply their own larger deadline through the port owner. */
 export const CLI_VIEW_RENDER_TIMEOUT_MS = 20_000;
-
 export function resolveRenderMode(value: string): RenderMode {
   if (value === 'auto' || value === 'cpu' || value === 'gpu') return value;
   throw new Error(`--render must be auto, cpu or gpu (got: ${value})`);
 }
-
-/** Build a port that speaks the remote render service's HTTP contract. */
-export function makeRemoteRenderPort(url: string, token?: string): PbrRenderPort {
-  return async (req): Promise<PbrRenderResult> => {
-    const body: Record<string, unknown> = {
-      glb_base64: Buffer.from(req.glb).toString('base64'),
-    };
-    const inputGlbSha256 = `sha256:${createHash('sha256').update(req.glb).digest('hex')}` as const;
-    body['input_glb_sha256'] = inputGlbSha256;
-    if (req.cameras) {
-      body['cameras'] = req.cameras;
-      body['width'] = req.width;
-      body['height'] = req.height;
-      if (req.lightingPresetId) body['lighting_preset_id'] = req.lightingPresetId;
-    }
-    if (req.viewDirs) body['views'] = req.viewDirs;
-    // The service owns the colour table; the engine names the backdrop so both
-    // producers resolve one id to one colour. Always sent, so a sheet's backdrop
-    // never depends on which side's default happened to apply.
-    body['backdrop'] = req.backdrop ?? DEFAULT_BACKDROP_ID;
-    if (req.size !== undefined) body['size'] = req.size;
-    if (req.beautySize !== undefined) body['beauty_size'] = req.beautySize;
-
-    const res = await fetch(new URL('/render', url), {
-      method: 'POST',
-      headers: {
-        'content-type': 'application/json',
-        // The RunPod-style edge gateway consumes `Authorization`, so app-layer
-        // auth rides a custom header instead.
-        ...(token ? { 'x-render-token': token } : {}),
-      },
-      body: JSON.stringify(body),
-      signal: AbortSignal.timeout(CLI_VIEW_RENDER_TIMEOUT_MS),
-    });
-    if (!res.ok) throw new Error(`render service returned ${res.status}`);
-    const json = (await res.json()) as {
-      ok?: boolean;
-      rendererId?: string;
-      views?: string[];
-      beauty?: string;
-      error?: string;
-      cameras?: PbrRenderResult['cameras'];
-      width?: number;
-      height?: number;
-      fidelity?: {
-        version?: string;
-        producer?: string;
-        materialFaithful?: boolean;
-        delivered?: string;
-        degraded?: boolean;
-        inputGlbSha256?: string;
-        rendererId?: string;
-      };
-    };
-    if (!json.ok) throw new Error(json.error ?? 'render service reported failure');
-    return {
-      ok: true,
-      rendererId: json.rendererId ?? 'remote',
-      ...(json.cameras ? { cameras: json.cameras, width: json.width, height: json.height } : {}),
-      ...(json.fidelity?.version === 'kiln.render-fidelity.v1' &&
-      json.fidelity.producer === 'kiln-render-service' &&
-      json.fidelity.materialFaithful === true &&
-      json.fidelity.delivered === 'full-material' &&
-      json.fidelity.degraded === false &&
-      json.fidelity.inputGlbSha256 === inputGlbSha256 &&
-      json.fidelity.rendererId === json.rendererId
-        ? { derivativeFidelity: { materialFaithful: true as const, inputGlbSha256 } }
-        : {}),
-      ...(json.views
-        ? { viewsPng: json.views.map((b64) => new Uint8Array(Buffer.from(b64, 'base64'))) }
-        : {}),
-      ...(json.beauty ? { beautyPng: new Uint8Array(Buffer.from(json.beauty, 'base64')) } : {}),
-    };
-  };
-}
-
-/**
- * A port that gets a renderer listening on its first call, then behaves exactly
- * like {@link makeRemoteRenderPort} for the rest of the session.
- *
- * It deliberately AWAITS the start rather than failing fast and warming in the
- * background. `captureViewsViaPort` already owns a deadline for one in-loop call
- * and degrades to the CPU rasterizer when it expires, so a slow start is already
- * handled by the policy that handles a slow render -- and adding a second budget
- * here would be the duplicated degrade policy AGENTS.md forbids. A start that
- * outruns the in-loop deadline costs one CPU view; the service keeps warming and
- * the next render gets it.
- *
- * A start that FAILS is cached as failed. A renderer that could not start will
- * not start for the next view either, and re-attempting a spawn per render would
- * stall the loop this exists to serve.
- */
-export function makeLazyRenderPort(start: () => Promise<string>, token?: string): PbrRenderPort {
-  let resolving: Promise<{ url: string; port: PbrRenderPort }> | undefined;
-  const resolve = (): Promise<{ url: string; port: PbrRenderPort }> =>
+/** Failed starts are cached. Only an explicitly refused socket permits a new local start. */
+export function makeLazyRenderPort(
+  start: () => Promise<string>,
+  token?: string,
+  sourceFingerprint?: string,
+  initialUrl?: string,
+): PbrRenderPort {
+  let resolving: Promise<{ url: string; port: PbrRenderPort }> | undefined = initialUrl
+    ? Promise.resolve({
+        url: initialUrl,
+        port: makeRemoteRenderPort(initialUrl, token, sourceFingerprint),
+      })
+    : undefined;
+  const resolve = () =>
     (resolving ??= start().then(
-      (url) => ({ url, port: makeRemoteRenderPort(url, token) }),
-      (err: unknown) => {
+      (url) => ({
+        url,
+        port: makeRemoteRenderPort(url, token, sourceFingerprint),
+      }),
+      (error) => {
         throw new Error(
-          `render service could not start: ${err instanceof Error ? err.message : String(err)}`,
+          `render service could not start: ${error instanceof Error ? error.message : String(error)}`,
         );
       },
     ));
-  return async (req) => {
-    const { url, port } = await resolve();
+  return async (req, execution) => {
+    execution?.signal?.throwIfAborted();
+    const pending = resolve();
+    const { url, port } = await pending;
+    execution?.signal?.throwIfAborted();
     try {
-      return await port(req);
+      return await port(req, execution);
     } catch (error) {
-      // A renderer that answered before and does not answer now has gone away:
-      // the session that started it exited, or it was replaced. That is not a
-      // render failure, so it is not cached as one. Ask `/health` once rather
-      // than reading the error, because "connection refused" is spelled
-      // differently under Node and Bun; then start again -- which joins a
-      // replacement if one is already up -- and retry this request once.
-      if (error instanceof Error && error.name === 'TimeoutError') throw error;
-      if (await listening(url)) throw error;
-      resolving = undefined;
-      return (await resolve()).port(req);
+      if (execution?.signal?.aborted || (error as Error).name === 'TimeoutError') throw error;
+      if (
+        (
+          await readRenderServiceHealth(url, {
+            token,
+            signal: execution?.signal,
+          })
+        ).kind !== 'absent'
+      )
+        throw error;
+      execution?.signal?.throwIfAborted();
+      // Concurrent captures can all observe the old socket disappearing. Only
+      // the first retires its connection; the others share the replacement.
+      if (resolving === pending) resolving = undefined;
+      return (await resolve()).port(req, execution);
     }
   };
-}
-
-/** Whether anything at all answers `/health` there. */
-async function listening(url: string): Promise<boolean> {
-  try {
-    const res = await fetch(new URL('/health', url), { signal: AbortSignal.timeout(1_500) });
-    return res.ok;
-  } catch {
-    return false;
-  }
-}
-
-/** Fresh attestation per capture; unknown/older/unreachable services bypass cell reuse. */
-export async function probeCaptureIdentity(url: string): Promise<string | undefined> {
-  try {
-    const response = await fetch(new URL('/health', url), {
-      signal: AbortSignal.timeout(HEALTH_PROBE_TIMEOUT_MS),
-      cache: 'no-store',
-    });
-    if (!response.ok) return undefined;
-    const health = (await response.json()) as {
-      ok?: boolean;
-      rendererId?: string;
-      captureIdentity?: { version?: string; fingerprint?: string; instanceId?: string };
-    };
-    const identity = health.captureIdentity;
-    if (
-      !health.ok ||
-      !health.rendererId ||
-      identity?.version !== 'kiln.capture-producer.v1' ||
-      !/^sha256:[a-f0-9]{64}$/.test(identity.fingerprint ?? '') ||
-      !identity.instanceId?.trim()
-    )
-      return undefined;
-    return JSON.stringify([
-      identity.version,
-      identity.fingerprint,
-      identity.instanceId,
-      health.rendererId,
-    ]);
-  } catch {
-    return undefined;
-  }
-}
-
-/** One `/health` request. `busy` means the socket was accepted and then went quiet. */
-type Probe = { kind: 'ok'; rendererId: string } | { kind: 'busy' } | { kind: 'absent' };
-
-async function probeOnce(url: string, timeoutMs: number): Promise<Probe> {
-  try {
-    const res = await fetch(new URL('/health', url), {
-      signal: AbortSignal.timeout(timeoutMs),
-    });
-    if (!res.ok) return { kind: 'absent' };
-    const json = (await res.json()) as { ok?: boolean; rendererId?: string };
-    if (!json.ok) return { kind: 'absent' };
-    return { kind: 'ok', rendererId: json.rendererId ?? 'unknown-renderer' };
-  } catch (err) {
-    // `AbortSignal.timeout` rejects with a TimeoutError; everything else here —
-    // ECONNREFUSED, DNS, a socket hangup — arrives as a TypeError from fetch.
-    const timedOut = err instanceof Error && err.name === 'TimeoutError';
-    return timedOut ? { kind: 'busy' } : { kind: 'absent' };
-  }
-}
-
-/**
- * Probe a render service. Never throws — a missing GPU is the expected case on
- * most machines, and `auto` degrading quietly to the CPU rasterizer is the point.
- *
- * The probe asks whether a renderer is THERE, which is not the same question as
- * whether it is free. The service renders on the GPU from a single-threaded Node
- * process, so while it is drawing somebody else's frame it accepts the socket and
- * answers nothing, and a 1.5 second budget expires. One local renderer shared by a
- * batch of dispatched agents is the documented way to use this, so that state is
- * routine rather than exceptional — and reading it as "no GPU here" silently drops
- * the whole session onto the CPU rasterizer, where every textured material draws
- * flat white and the agent cannot tell. It looks like a model with bad taste.
- *
- * Nothing listening is a different answer and still has to be fast, or `auto`
- * would stall on every CPU-only machine. It is: the kernel refuses the connection
- * in about a millisecond, which arrives here as `absent` rather than `busy`, so
- * only a socket that was actually accepted is worth waiting longer for.
- */
-/**
- * Exported for `src/__tests__/cli-render-mode.test.ts`, which is the only place
- * the two budgets can be observed: `buildRenderPort` reaches the probe only on
- * the no-URL path, and that path is pinned to port 8000 on the host machine.
- */
-export async function probeRenderService(url: string): Promise<string | undefined> {
-  const first = await probeOnce(url, HEALTH_PROBE_TIMEOUT_MS);
-  if (first.kind === 'ok') return first.rendererId;
-  if (first.kind === 'absent') return undefined;
-  const second = await probeOnce(url, HEALTH_PROBE_BUSY_TIMEOUT_MS);
-  return second.kind === 'ok' ? second.rendererId : undefined;
-}
-
-/**
- * The same patience as {@link probeRenderService}, answering the fuller question
- * the host acts on: not just whether a renderer is there, but whether it runs
- * the source on disk and whether anyone still owns it.
- */
-async function inspectWithPatience(url: string, dir: string): Promise<LocalRenderServiceProbe> {
-  const first = await inspectLocalRenderService(url, dir, HEALTH_PROBE_TIMEOUT_MS);
-  if (first.kind !== 'busy') return first;
-  return inspectLocalRenderService(url, dir, HEALTH_PROBE_BUSY_TIMEOUT_MS);
 }
 
 /** What actually got selected, for honest CLI reporting. */
@@ -333,148 +126,136 @@ interface ViewFidelityLike {
   degradeReason?: string;
 }
 
-/** Host policy for {@link buildRenderPort}. Every field is opt-in. */
+/** Local auto starts lazily by default; false is an explicit host opt-out. */
 export interface RenderPortOptions {
-  /**
-   * Start the render service that ships with this installation when no renderer
-   * is already listening. Off by default for `auto`, and deliberately so: a
-   * one-shot CLI invocation should not pay a GPU process's startup to draw one
-   * sheet, whereas a long-lived MCP server amortizes it across a whole session.
-   *
-   * `mode === 'gpu'` implies it regardless of this flag, because that mode is an
-   * explicit demand for a guarantee rather than a preference.
-   *
-   * Attaching happens ONLY where a renderer could actually run. On a machine that
-   * did not install one, `viewRenderPort` stays absent and the session is
-   * byte-identical to one built without this option -- which is what keeps
-   * `describeDrawnBy` reporting an ordinary CPU render as ordinary rather than as
-   * a degrade.
-   */
   autoSpawn?: boolean;
-  /** Injection seam for tests: how a service gets started. */
   start?: () => Promise<string>;
-  /** Injection seam for tests: where the packaged render service lives. */
   serviceDir?: string;
 }
-
-/**
- * Resolve the requested mode into a tool context. An absent `viewRenderPort` means
- * the CPU rasterizer — byte-identical to the behavior before ports existed.
- */
 export async function buildRenderPort(
   mode: RenderMode,
   portUrl: string | undefined,
   options?: RenderPortOptions,
 ): Promise<KilnToolContext> {
-  const explicitClientToken = process.env['KILN_RENDER_TOKEN'];
-  const localClientToken = explicitClientToken ?? process.env['RENDER_SERVICE_TOKEN'];
-  const context: KilnToolContext = mode === 'gpu' ? { viewRenderRequired: true } : {};
-  const attach = (url: string, label: string, token?: string): KilnToolContext => {
-    context.viewRenderPort = makeRemoteRenderPort(url, token);
-    context.viewRenderTimeoutMs = CLI_VIEW_RENDER_TIMEOUT_MS;
-    context.captureCacheIdentity = () => probeCaptureIdentity(url);
-    selected.set(context, label);
-    return context;
-  };
-  const attachLazy = (
-    start: () => Promise<string>,
-    label: string,
-    token?: string,
-  ): KilnToolContext => {
-    let url: string | undefined;
-    context.viewRenderPort = makeLazyRenderPort(async () => {
-      url = await start();
-      return url;
-    }, token);
-    context.viewRenderTimeoutMs = CLI_VIEW_RENDER_TIMEOUT_MS;
-    // Nothing to attest until a producer exists. `undefined` bypasses cell reuse,
-    // which is the correct reading of "no renderer has drawn anything yet".
-    context.captureCacheIdentity = () => (url ? probeCaptureIdentity(url) : undefined);
-    selected.set(context, label);
-    return context;
-  };
-
-  if (mode === 'cpu') {
-    selected.set(context, 'cpu raster');
-    return context;
-  }
-
-  // An explicit URL is taken on trust: the user said where the renderer is, and a
-  // health probe that fails would only turn their explicit choice into a silent
-  // downgrade. `captureViewsViaPort` still degrades per-call if it does not answer.
-  if (portUrl) return attach(portUrl, `GPU service (${portUrl})`, explicitClientToken);
-
-  const envUrl = process.env['KILN_RENDER_PORT_URL'];
-  if (envUrl) return attach(envUrl, `GPU service (${envUrl})`, explicitClientToken);
-
-  const localUrl = localRenderServiceUrl();
-  // `options` is optional and `gpu` reaches here without it, so every read is
-  // guarded -- this branch used to be entered only by a caller that passed one.
+  const remoteToken = process.env['KILN_RENDER_TOKEN'];
+  const localToken = remoteToken ?? process.env['RENDER_SERVICE_TOKEN'];
+  const startupEnvironment = { ...process.env };
+  const readCapabilities = createRenderCapabilitiesReader(mode, portUrl, {
+    ...options,
+    injectedStart: Boolean(options?.start),
+  });
+  // Keep route and credentials fixed for the lifetime of this host. Reprobe
+  // refreshes readiness, not ambient configuration or the loaded source build.
+  const explicitUrl = portUrl || process.env['KILN_RENDER_PORT_URL'];
   const dir = options?.serviceDir ?? renderServiceDir();
-  const probe = await inspectWithPatience(localUrl, dir);
-  let pruned = '';
-  if (probe.kind === 'service') {
-    if (!probe.stale)
-      return attach(localUrl, `GPU service (${probe.rendererId})`, localClientToken);
-    // Stale. An orphan is nobody's and runs old code, so it goes; anything
-    // still owned or hand-started is left where it is and named, because the
-    // silent alternative -- joining it and reporting its 400 as a degrade --
-    // is the confusing state this exists to remove.
-    if (!probe.orphaned) {
-      const why = `${describeStaleService(localUrl, probe)}; stop it with \`kiln service stop\``;
-      if (mode === 'gpu') throw new Error(why);
-      selected.set(context, `cpu raster (${why})`);
+  const url = localRenderServiceUrl();
+  const source = mode === 'cpu' ? undefined : renderServiceSourceFingerprint(dir);
+  const context: KilnToolContext = {
+    ...(mode === 'gpu' ? { viewRenderRequired: true } : {}),
+    viewRenderTimeoutMs: CLI_VIEW_RENDER_TIMEOUT_MS,
+    renderCapabilities: async () => {
+      const readiness = await readCapabilities();
+      const configured = Boolean(context.viewRenderPort);
+      return {
+        ...readiness,
+        configured,
+        ...(!configured && readiness.configured
+          ? {
+              reprobeRequired: true,
+              reason:
+                'Renderer readiness changed after this host selected CPU. Call kiln_renderer with action=reprobe to refresh this session.',
+            }
+          : {}),
+      };
+    },
+  };
+  const select = async (): Promise<KilnToolContext> => {
+    const context: KilnToolContext = {};
+    const attach = (
+      url: string,
+      label: string,
+      token?: string,
+      source?: string,
+    ): KilnToolContext => {
+      context.viewRenderPort = makeRemoteRenderPort(url, token, source);
+      context.viewRenderTimeoutMs = CLI_VIEW_RENDER_TIMEOUT_MS;
+      context.captureCacheIdentity = () => probeCaptureIdentity(url, token, source);
+      selected.set(context, label);
+      return context;
+    };
+    if (mode === 'cpu') {
+      selected.set(context, 'cpu raster');
       return context;
     }
-    pruned = (await terminateRenderService(localUrl, probe))
-      ? `stopped ${describeStaleService(localUrl, probe)}`
-      : '';
-    if (!pruned) {
-      const why = `${describeStaleService(localUrl, probe)} and could not be stopped`;
-      if (mode === 'gpu') throw new Error(why);
-      selected.set(context, `cpu raster (${why})`);
-      return context;
-    }
-  } else if (probe.kind === 'foreign') {
-    const why = `port ${localRenderServicePort()} is in use by something that is not a render service; set KILN_RENDER_SERVICE_PORT to move the renderer`;
-    if (mode === 'gpu') throw new Error(why);
-    selected.set(context, `cpu raster (${why})`);
-    return context;
-  }
-
-  // Nothing usable is listening. If this installation can start one, hand back
-  // a port that will -- lazily, so a session that never renders a material
-  // never pays for a GPU process, and so the start is not in front of the first
-  // connection.
-  //
-  // `gpu` implies it. That mode means "I asked for a guarantee and would rather
-  // know than be quietly downgraded", and refusing while a renderer this
-  // installation ships sits one spawn away is not an honest way to answer it. It
-  // stays OFF for `auto`, which is a one-shot CLI sheet's default and should not
-  // pay a GPU process's startup to draw it.
-  if (options?.autoSpawn || mode === 'gpu') {
-    const state = options?.start ? 'ready' : localRenderServiceState(dir);
-    if (state === 'ready') {
-      const start = options?.start ?? (() => startLocalRenderService(dir));
-      return attachLazy(start, 'GPU service (started on demand)', localClientToken);
-    }
-    // The only remaining way to fail `gpu`: nothing is listening AND this
-    // installation cannot start one. Naming both facts is the whole message --
-    // "not reachable" alone left the user guessing whether to start something or
-    // install something.
-    if (mode === 'gpu')
-      throw new Error(
-        `no GPU render service is reachable at ${localUrl}, and ${explainRenderServiceState(state, dir)}.\n` +
-          'Set --render-port or KILN_RENDER_PORT_URL to point at one elsewhere, or use ' +
-          '--render auto to fall back to the CPU rasterizer.',
+    // Explicit remote selection never discovers, starts, or stops local services. The
+    // first render verifies remote health and exposes failures through the existing owner.
+    if (explicitUrl)
+      return attach(explicitUrl, `GPU service (explicit remote ${explicitUrl})`, remoteToken);
+    const attachLocal = (initialUrl?: string, label = 'GPU service (local, started on demand)') => {
+      let resolvedUrl = initialUrl;
+      const start = options?.start ?? (() => startLocalRenderService(dir, startupEnvironment));
+      context.viewRenderPort = makeLazyRenderPort(
+        async () => {
+          resolvedUrl = await start();
+          return resolvedUrl;
+        },
+        localToken,
+        source,
+        initialUrl,
       );
-  }
-
-  selected.set(
-    context,
-    pruned
-      ? `cpu raster (${pruned}; none started for a one-shot render)`
-      : 'cpu raster (no GPU service found)',
-  );
+      context.viewRenderTimeoutMs = CLI_VIEW_RENDER_TIMEOUT_MS;
+      context.captureCacheIdentity = () =>
+        resolvedUrl ? probeCaptureIdentity(resolvedUrl, localToken, source) : undefined;
+      selected.set(context, label);
+      return context;
+    };
+    const probe = await inspectLocalRenderService(url, dir);
+    if (probe.kind === 'service' && !probe.stale) {
+      const label = `GPU service (${probe.rendererId})`;
+      return options?.autoSpawn !== false || mode === 'gpu'
+        ? attachLocal(url, label)
+        : attach(url, label, localToken, source);
+    }
+    if (probe.kind !== 'absent') {
+      const why = describeUnavailableService(url, probe);
+      if (mode === 'gpu') throw new Error(why);
+      selected.set(context, `cpu raster (${why})`);
+      return context;
+    }
+    if (options?.autoSpawn !== false || mode === 'gpu') {
+      const state = options?.start ? 'ready' : localRenderServiceState(dir);
+      if (state === 'ready') return attachLocal();
+      const why = explainRenderServiceState(state, dir);
+      if (mode === 'gpu')
+        throw new Error(
+          `${why}; set --render-port or KILN_RENDER_PORT_URL for another device, or use --render auto for CPU`,
+        );
+      selected.set(context, `cpu raster (${why})`);
+      return context;
+    }
+    selected.set(context, 'cpu raster (local automatic startup disabled; no GPU service found)');
+    return context;
+  };
+  const apply = (next: KilnToolContext) => {
+    context.viewRenderPort = next.viewRenderPort;
+    context.captureCacheIdentity = next.captureCacheIdentity;
+    selected.set(context, describeRenderMode(next));
+  };
+  apply(await select());
+  context.viewRenderState = () => ({
+    viewRenderPort: context.viewRenderPort,
+    captureCacheIdentity: context.captureCacheIdentity,
+  });
+  let refreshing: Promise<import('./render-capabilities').RenderCapabilities> | undefined;
+  context.reprobeRenderer = () => {
+    if (refreshing) return refreshing;
+    refreshing = (async () => {
+      apply(await select());
+      return context.renderCapabilities!();
+    })().finally(() => {
+      refreshing = undefined;
+    });
+    return refreshing;
+  };
   return context;
 }

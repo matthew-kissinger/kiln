@@ -1,16 +1,14 @@
 {
   "name": "@kiln/engine",
   "private": true,
-  "version": "0.7.1",
+  "version": "0.8.0",
   "description": "Create and refine procedural 3D assets with JavaScript, image feedback, and reusable source revisions.",
   "license": "MIT",
   "author": "Matthew Kissinger",
   "type": "module",
   "packageManager": "bun@1.4.2",
   "engines": {
-    "bun": "1.4.2",
-    "node": "22.23.2",
-    "npm": "12.0.2"
+    "node": "^20.15.0 || >=22.2.0"
   },
   "bin": {
     "kiln": "./dist/cli.mjs",
@@ -26,6 +24,8 @@
     "./arena": "./src/arena/index.ts",
     "./render": "./src/render.ts",
     "./evaluator": "./src/evaluator/index.ts",
+    "./requirements": "./src/requirements.ts",
+    "./requirements/migration": "./src/contracts/requirements-migration.ts",
     "./kit": "./src/kit.ts",
     "./palette": "./src/palette.ts",
     "./views": "./src/views/index.ts",
@@ -41,6 +41,7 @@
     "./cache/node": "./src/build-cache-node.ts",
     "./profile": "./src/profile.ts",
     "./architecture": "./src/architecture.ts",
+    "./assembly": "./src/assembly.ts",
     "./character": "./src/character.ts",
     "./vehicle": "./src/vehicle.ts",
     "./material-recipes": "./src/material-recipes.ts",
@@ -49,9 +50,8 @@
     "./material-recipe-runtime": "./src/material-recipe-runtime.ts",
     "./material-recipe-prompt": "./src/material-recipe-prompt.ts",
     "./material-metrics": "./src/material-metrics.ts",
-    "./prompt": "./src/prompt.ts",
     "./prompt-api": "./src/prompt-api.ts",
-    "./list-primitives": "./src/list-primitives.ts",
+    "./discovery": "./src/discovery/index.ts",
     "./metrics": "./src/metrics.ts",
     "./inspect": "./src/inspect.ts",
     "./contracts": "./src/contracts/index.ts",
@@ -83,6 +83,7 @@
     "README.md",
     "CONTRIBUTING.md",
     "LICENSE",
+    "THIRD_PARTY_NOTICES.md",
     "CHANGELOG.md"
   ],
   "scripts": {
@@ -119,12 +120,13 @@
     "@modelcontextprotocol/client": "^2.0.0",
     "@modelcontextprotocol/ext-apps": "2.0.0",
     "@modelcontextprotocol/server": "^2.0.0",
-    "@openrouter/ai-sdk-provider": "^2.10.0",
     "@types/three": "^0.186.0",
     "acorn": "^8.18.0",
     "acorn-walk": "^8.3.5",
     "gltf-validator": "2.0.0-dev.3.10",
     "manifold-3d": "^3.5.3",
+    "minisearch": "7.2.0",
+    "pngjs": "7.0.0",
     "sharp": "^0.35.4",
     "three": "0.186.0",
     "three-subdivide": "1.1.5",
@@ -133,7 +135,8 @@
   },
   "peerDependencies": {
     "@ai-sdk/provider": "^3.0.0",
-    "@strands-agents/sdk": "^1.4.0"
+    "@strands-agents/sdk": "^1.18.0",
+    "@openrouter/ai-sdk-provider": "^2.10.0"
   },
   "overrides": {
     "sharp": "^0.35.4"
@@ -144,21 +147,26 @@
     },
     "@strands-agents/sdk": {
       "optional": true
+    },
+    "@openrouter/ai-sdk-provider": {
+      "optional": true
     }
   },
   "devDependencies": {
     "@ai-sdk/provider": "^3.0.16",
-    "@anthropic-ai/sdk": "^0.125.0",
+    "@anthropic-ai/sdk": "0.109.1",
     "@aws-sdk/client-bedrock-runtime": "^3.1131.0",
     "@biomejs/biome": "^2.5.13",
     "@google/genai": "^2.22.0",
-    "@strands-agents/sdk": "1.17.0",
+    "@openrouter/ai-sdk-provider": "^2.10.0",
+    "@strands-agents/sdk": "1.18.0",
     "@types/bun": "^1.4.2",
     "ai": "^6.0.282",
     "openai": "^6.49.0",
     "typescript": "^7.0.2"
   },
   "optionalDependencies": {
-    "@napi-rs/canvas": "1.0.9"
+    "@napi-rs/canvas": "1.0.9",
+    "webgpu": "0.6.1"
   }
 }

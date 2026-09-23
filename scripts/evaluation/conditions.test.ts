@@ -16,9 +16,9 @@ test('A/B deny new helper access through aliases but permit raw THREE and harmle
 test('A hides progressive lookup and advanced camera fields; B retains them', async () => {
   const a = createConditionRegistry('A');
   const b = createConditionRegistry('B');
-  const discovery = a.find((d) => d.name === 'kiln_list_primitives')!;
+  const discovery = a.find((d) => d.name === 'kiln_discover')!;
   expect(discovery.inputSchema.safeParse({ query: 'holes' }).success).toBe(false);
-  const output = await b.find((d) => d.name === 'kiln_list_primitives')!.run({ name: 'meshGeo' });
+  const output = await b.find((d) => d.name === 'kiln_discover')!.run({ name: 'meshGeo' });
   expect((output as { total: number }).total).toBe(0);
   const render = a.find((d) => d.name === 'kiln_render')!;
   expect(
@@ -33,9 +33,7 @@ test('all conditions preserve public source-reference tool names and C exposes n
     createConditionRegistry(condition as 'A' | 'B' | 'C'),
   );
   expect(rows[0]!.map((d) => d.name)).toEqual(rows[2]!.map((d) => d.name));
-  const output = await rows[2]!
-    .find((d) => d.name === 'kiln_list_primitives')!
-    .run({ name: 'meshGeo' });
+  const output = await rows[2]!.find((d) => d.name === 'kiln_discover')!.run({ ids: ['meshGeo'] });
   expect((output as { total: number }).total).toBe(1);
 });
 
@@ -65,7 +63,7 @@ test('reference edits cannot bypass the disabled-helper policy at evaluation', a
 });
 
 test('B grouped lookup preserves requested order without advertising disabled helpers', async () => {
-  const lookup = createConditionRegistry('B').find((d) => d.name === 'kiln_list_primitives')!;
+  const lookup = createConditionRegistry('B').find((d) => d.name === 'kiln_discover')!;
   const result = (await lookup.run({ names: ['sphereGeo', 'boxGeo'] })) as {
     primitives: Array<{ name: string }>;
   };

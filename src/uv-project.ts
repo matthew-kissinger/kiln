@@ -1,0 +1,185 @@
+/** Explicit UV0 projection in a rigid geometry-local frame. No preservation fallback. */
+import * as THREE from 'three';
+import { geometryFrameMatrix, type GeometryFrame } from './deform';
+
+export interface ProjectUVOptions {
+  projection: 'planar' | 'box' | 'cylindrical';
+  frame?: GeometryFrame;
+  /** Full-wrap U=0 direction in frame XZ, measured from +X toward +Z. Default 180. */
+  seamDegrees?: number;
+  /** Explicit [start angle, positive sweep <=360] in degrees. Cannot accompany seamDegrees. */
+  angularRange?: readonly [number, number];
+  /** Cylindrical cap triangles parallel to frame XZ use planar UVs by default. */
+  caps?: 'planar' | 'side';
+}
+
+const MAX_CORNERS = 2_000_000;
+const MAX_ATTRIBUTE_BYTES = 128 * 1024 * 1024;
+
+export function projectUV(
+  geometry: THREE.BufferGeometry,
+  options: ProjectUVOptions,
+): THREE.BufferGeometry {
+  if (
+    !options ||
+    typeof options !== 'object' ||
+    Array.isArray(options) ||
+    !['planar', 'box', 'cylindrical'].includes(options.projection) ||
+    Object.keys(options).some(
+      (key) => !['projection', 'frame', 'seamDegrees', 'angularRange', 'caps'].includes(key),
+    )
+  )
+    throw new Error(
+      'projectUV: select an explicit planar, box or cylindrical projection with documented options.',
+    );
+  const cylinder = options.projection === 'cylindrical';
+  if (
+    !cylinder &&
+    [options.seamDegrees, options.angularRange, options.caps].some((value) => value !== undefined)
+  )
+    throw new Error(
+      'projectUV: seamDegrees, angularRange and caps apply only to cylindrical projection.',
+    );
+  if (
+    options.seamDegrees !== undefined &&
+    (!Number.isFinite(options.seamDegrees) || options.angularRange !== undefined)
+  )
+    throw new Error('projectUV: seamDegrees must be finite and cannot accompany angularRange.');
+  if (
+    options.angularRange !== undefined &&
+    (!Array.isArray(options.angularRange) ||
+      options.angularRange.length !== 2 ||
+      !options.angularRange.every(Number.isFinite) ||
+      options.angularRange[1] <= 0 ||
+      options.angularRange[1] > 360)
+  )
+    throw new Error(
+      'projectUV: angularRange must be [finite start degrees, positive sweep <=360].',
+    );
+  if (options.caps !== undefined && options.caps !== 'planar' && options.caps !== 'side')
+    throw new Error('projectUV: caps must be planar or side.');
+  const inverse = geometryFrameMatrix(options.frame).invert();
+  const positions = geometry.getAttribute('position');
+  if (positions?.itemSize !== 3 || positions.count < 1 || positions.count > MAX_CORNERS)
+    throw new Error(`projectUV: position requires 1..${MAX_CORNERS} xyz samples.`);
+  if (Object.keys(geometry.morphAttributes).length)
+    throw new Error('projectUV: morph targets need a separate mapping contract.');
+  const index = geometry.index;
+  const corners = index?.count ?? positions.count;
+  if (!Number.isSafeInteger(corners) || corners < 3 || corners % 3 !== 0 || corners > MAX_CORNERS)
+    throw new Error(
+      `projectUV: triangle corner count must be divisible by three and <=${MAX_CORNERS}.`,
+    );
+  let bytes = corners * 8;
+  for (const [name, attribute] of Object.entries(geometry.attributes)) {
+    if (
+      attribute.count !== positions.count ||
+      !Number.isInteger(attribute.itemSize) ||
+      attribute.itemSize < 1 ||
+      attribute.itemSize > 16 ||
+      (attribute as THREE.InstancedBufferAttribute).isInstancedBufferAttribute
+    )
+      throw new Error(
+        `projectUV: ${name} must be a matching per-vertex attribute of 1..16 components.`,
+      );
+    bytes += corners * attribute.itemSize * attribute.array.BYTES_PER_ELEMENT;
+  }
+  if (bytes > MAX_ATTRIBUTE_BYTES)
+    throw new Error('projectUV: expanded attributes exceed 128 MiB.');
+  if (index)
+    for (let i = 0; i < corners; i++) {
+      const value = index.getX(i);
+      if (!Number.isSafeInteger(value) || value < 0 || value >= positions.count)
+        throw new Error('projectUV: index contains an invalid vertex reference.');
+    }
+  const points: THREE.Vector3[] = [];
+  const bounds = new THREE.Box3();
+  for (let i = 0; i < positions.count; i++) {
+    const point = new THREE.Vector3().fromBufferAttribute(positions, i).applyMatrix4(inverse);
+    if (![point.x, point.y, point.z].every(Number.isFinite))
+      throw new Error('projectUV: frame-local positions must be finite.');
+    points.push(point);
+    bounds.expandByPoint(point);
+  }
+  const extent = bounds.getSize(new THREE.Vector3());
+  const fit = (point: THREE.Vector3, axis: 'x' | 'y' | 'z') =>
+    extent[axis] > 0 ? (point[axis] - bounds.min[axis]) / extent[axis] : 0.5;
+  const outputUVs = new Float32Array(corners * 2);
+  const startDegrees = options.angularRange?.[0] ?? options.seamDegrees ?? 180;
+  const start = ((startDegrees % 360) * Math.PI) / 180;
+  const sweep = ((options.angularRange?.[1] ?? 360) * Math.PI) / 180;
+  const fullWrap = options.angularRange === undefined || options.angularRange[1] === 360;
+  const wrap = (angle: number) => ((angle % (2 * Math.PI)) + 2 * Math.PI) % (2 * Math.PI);
+  const normal = new THREE.Vector3();
+  const edge = new THREE.Vector3();
+  for (let i = 0; i < corners; i += 3) {
+    const triangle = [0, 1, 2].map(
+      (offset) => points[index ? index.getX(i + offset) : i + offset]!,
+    );
+    normal
+      .subVectors(triangle[1]!, triangle[0]!)
+      .cross(edge.subVectors(triangle[2]!, triangle[0]!))
+      .normalize();
+    const cap = cylinder && options.caps !== 'side' && Math.abs(normal.y) >= 1 - 1e-6;
+    let pairs: [number, number][];
+    if (cylinder && !cap) {
+      const angles = triangle.map((point) => {
+        let angle = wrap(Math.atan2(point.z, point.x) - start);
+        // Float32 positions and frame rebasing introduce angular boundary roundoff.
+        if (angle > 2 * Math.PI - 1e-6) angle = 0;
+        if (!fullWrap && angle > sweep + 1e-6)
+          throw new Error(
+            'projectUV: side vertex lies outside angularRange; choose a range covering the profile.',
+          );
+        return (fullWrap ? angle : Math.min(angle, sweep)) / sweep;
+      });
+      if (fullWrap && Math.max(...angles) - Math.min(...angles) > 0.5)
+        for (let j = 0; j < 3; j++) if (angles[j]! < 0.5) angles[j]! += 1;
+      if (fullWrap && Math.max(...angles) - Math.min(...angles) > 0.5 + 1e-6)
+        throw new Error(
+          'projectUV: side triangle spans more than half a revolution; add profile segments to resolve the mapping.',
+        );
+      pairs = triangle.map((point, j) => [angles[j]!, fit(point, 'y')]);
+    } else if (cap) {
+      pairs = triangle.map((point) => [fit(point, 'x'), fit(point, 'z')]);
+    } else if (options.projection === 'box') {
+      const axis =
+        Math.abs(normal.x) >= Math.abs(normal.y) && Math.abs(normal.x) >= Math.abs(normal.z)
+          ? 'x'
+          : Math.abs(normal.y) >= Math.abs(normal.z)
+            ? 'y'
+            : 'z';
+      pairs = triangle.map((point) => {
+        if (axis === 'x')
+          return [normal.x > 0 ? 1 - fit(point, 'z') : fit(point, 'z'), fit(point, 'y')];
+        if (axis === 'y')
+          return [fit(point, 'x'), normal.y > 0 ? 1 - fit(point, 'z') : fit(point, 'z')];
+        return [normal.z < 0 ? 1 - fit(point, 'x') : fit(point, 'x'), fit(point, 'y')];
+      });
+    } else pairs = triangle.map((point) => [fit(point, 'x'), fit(point, 'y')]);
+    for (let j = 0; j < 3; j++) {
+      const pair = pairs[j]!;
+      if (!pair.every((value) => Number.isFinite(Math.fround(value))))
+        throw new Error('projectUV: projected UVs must fit finite Float32.');
+      outputUVs[(i + j) * 2] = pair[0];
+      outputUVs[(i + j) * 2 + 1] = pair[1];
+    }
+  }
+  const out = geometry.index ? geometry.toNonIndexed() : geometry.clone();
+  out.userData = structuredClone(geometry.userData);
+  out.setDrawRange(geometry.drawRange.start, geometry.drawRange.count);
+  out.setAttribute('uv', new THREE.Float32BufferAttribute(outputUVs, 2));
+  if (out.hasAttribute('tangent')) {
+    out.deleteAttribute('tangent');
+    const previous = out.userData.kilnAttributeWarnings;
+    out.userData.kilnAttributeWarnings = [
+      ...(Array.isArray(previous) ? previous : []),
+      {
+        code: 'UV_PROJECTION_TANGENTS_DROPPED',
+        message:
+          'UV projection invalidated tangents; regenerate them when needed for normal mapping.',
+      },
+    ];
+  }
+  return out;
+}

@@ -31,20 +31,20 @@ export function withProgramReferences(def: KilnToolDef, store: ProgramStore): Ki
     });
   const summaries: Record<string, string> = {
     kiln_validate:
-      'Check program syntax and sandbox rules before building. Returns validation findings; use kiln_render to evaluate geometry and see the asset.',
+      'Check program syntax, sandbox rules and retired globals before building. Returns findings with codes, lines and repair hints where available; use kiln_render to evaluate geometry and see the asset.',
     kiln_render:
-      'Build a program and return geometry metrics, exact part paths and images. Omit capture for six views; choose preset/cells for orbit grids or version kiln.capture.v1 plus shots for part-local framing, perspective and separate images. Check viewFidelity before judging materials. Failed builds return errors without an image.',
+      'Build a program and return geometry metrics, a bounded part-path preview and images. If partsTruncated, use kiln_inspect listParts for remaining paths. Omit capture for six views; choose preset/cells for orbit grids or version kiln.capture.v1 plus shots for part-local framing, perspective and separate images. Check viewFidelity before judging materials. Failed builds return errors without an image.',
     kiln_screenshot_animation:
-      'Render sampled animation frames to check motion and attachments. Use shot for the shared camera controls, frameTimes for selected phases, and framing locked (default) or follow. The program must define animate(). Check viewFidelity before judging materials.',
+      'Review animation images, poseBounds and loopClosure endpoint evidence. An open endpoint is valid for one-shot motion; closed endpoints do not prove smooth velocity. Check motion, attachments and requested clearance; sampled bounds do not certify continuous contact or collision safety. Use shot for camera/subject, frameTimes for phases, and framing locked (default) or follow. Add phases when symmetry hides motion. The program must define animate(). Check viewFidelity before judging materials.',
     kiln_view_interior:
       'Render roof-off floor-plan, dollhouse, and eye-level cutaway views. Optional versioned capture selects custom roof-off shots. Select a roof by nodeName or let Kiln resolve its role/name. Review roofsHidden and warnings for unresolved occlusion.',
     kiln_inspect:
-      'Inspect a part with context or isolation. Use legacy part/orbit controls or shot for exact paths, part-local axes and perspective. Use names from the source or render result; check viewFidelity before judging materials.',
+      'List part paths and inspect joints, clearances and edit preservation. listParts filters names/paths with query; follow partListing.nextOffset on the same programRef/query. measure/surfacePairs return distances, not fit certificates. compare reports static changes and separate animation channel changes; paths adds complete static subtree summaries. image:false skips rendering. Otherwise use part/orbit or exact shot; check viewFidelity for materials.',
   };
   const description =
     def.name === 'kiln_edit'
-      ? 'Apply exact-string replacements to a program revision and render the result (render:false skips images). Edits are ordered and atomic: missing or ambiguous matches fail without changing the base. Returns a new programRef, parentRef and diff; untouched text stays identical. Read anchors with kiln_source. Optional capture chooses the same cameras as kiln_render. Use includeCode only when full source is needed.'
-      : `${summaries[def.name] ?? def.description} Supply code once or reuse programRef from an earlier result. Returns programRef even for an invalid draft. kiln_source reads that revision.`;
+      ? 'Atomically apply ordered exact-string replacements and render. Copy anchors from kiln_source. Returns programRef, parentRef, diff and preservation comparing static data and animation channels. Review changes; use kiln_inspect compare for more pages or protected subtrees. Failed comparison preserves the repair; render:false leaves preservation not_assessed. capture selects cameras; includeCode returns full source.'
+      : `${summaries[def.name] ?? def.description} Supply code OR a retained programRef. Even invalid drafts return a ref; read it with kiln_source.`;
   return {
     ...def,
     inputSchema,

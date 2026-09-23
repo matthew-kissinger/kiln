@@ -4,27 +4,40 @@ GLB bytes in, PBR PNG views out. Headless three.js `WebGPURenderer` on Dawn (the
 prebuilt) -- no browser, no X server, no engine coupling. This is the **GPU** in Kiln's
 `--render gpu` and `--render-port`.
 
-It is a separate Node project on purpose: headless WebGPU needs Node loader hooks that Bun does not
-run, so the renderer lives behind a socket rather than inside the engine process. The upside is that
-local and remote GPU are the same code path -- a GPU on another machine works exactly like one here.
+It runs in a separate Node process: headless WebGPU uses Node loader hooks, and a socket lets local
+and remote clients share the same renderer protocol. Renderer source is included with Kiln, and
+the root package declares its native GPU dependency as optional. The manifest in this directory
+also supports standalone/container development; normal Kiln setup uses the root dependencies.
 
 ## Run it
 
+Keep optional dependencies enabled when installing Kiln. In a source checkout, run
+`bun install --frozen-lockfile` from the repository root. `kiln service status` checks
+dependency readiness and any existing listener. CLI/MCP start a shared managed service
+on demand. To run one manually from the Kiln installation root:
+
 ```bash
-npm install
-npm start
+node --import ./render-service/src/register-hooks.mjs render-service/src/server.mjs
 ```
 
 It listens on `127.0.0.1:8000`, which is where `kiln --render auto` looks. Nothing else to
 configure, and nothing off this machine can reach it:
 
 ```bash
-cd .. && bun run kiln render examples/well.kiln.js --views sheet.png
+bun run kiln render examples/well.kiln.js --views sheet.png
 #   sheet.png  (GPU dawn-d3d12:nvidia-geforce-rtx-3070:D3D12 driver version 32.0.16.1074)
 ```
 
 Set `PORT` to move it. Point the engine at a non-default location with `--render-port <url>` or
 `KILN_RENDER_PORT_URL`.
+
+If the service requires authentication, set the client's `KILN_RENDER_TOKEN` to
+the same value as the renderer's `RENDER_SERVICE_TOKEN`. Local clients can also
+inherit `RENDER_SERVICE_TOKEN`; that local fallback is not sent to an explicit
+remote URL. `kiln service status` reports whether authentication is required and
+whether a client token is configured. Public health does not verify that token.
+A missing token is reported before uploading an asset; a rejected token reports
+HTTP 401 with setup guidance. Do not stop a shared renderer to bypass its access policy.
 
 **To serve other machines, say so and bring a token.** `HOST` widens the bind, and a bind wider
 than loopback requires `RENDER_SERVICE_TOKEN` -- without one the process refuses to start rather
@@ -48,16 +61,18 @@ will not start, never one that quietly renders on CPU while reporting success.
 
 | Route | Body | Returns |
 |---|---|---|
-| `GET /health` | -- | `{ok, rendererId, backend, adapter, capabilities, presentationProfile, lightingPresetIds, instance}` |
+| `GET /health` | -- | `{ok, rendererId, backend, adapter, capabilities, authRequired, presentationProfile, lightingPresetIds, instance}` |
 | `POST /render` (legacy) | `{glb_base64, size?=384, views?, beauty_size?, backdrop?}` | `{ok, rendererId, presentationProfile, timings, views[base64 png], beauty?}` |
 | `POST /render` (camera) | `{glb_base64, cameras, width, height, lighting_preset_id?, backdrop?}` | the above plus `{backend, cameras, width, height, lightingPresetId, viewSha256, outputSetSha256, cameraReceipts}` |
 | `POST /bake` | -- | 501 |
 
-`instance` is `{version, pid, ownerPid, startedAt, sourceDir, sourceFingerprint}`: who this process is,
-so the engine that finds it on the shared port can tell a current renderer from an orphan running
-older source (`src/instance.mjs`). `ownerPid` is the session that started it on demand, passed in as
-`RENDER_SERVICE_OWNER_PID`; the service watches that pid and exits when it is gone. A hand-started
-service has no owner and never exits on its own. `sourceFingerprint` hashes `src/` and nothing else,
+`instance` is `{version, pid, ownerPid, startedAt, sourceDir, sourceFingerprint, mode, idleTimeoutMs}`.
+The initiating `ownerPid` records provenance only; its exit does not stop a shared renderer.
+A managed service exits after its idle timeout, with admitted uploads, queued jobs and active
+renders preventing idle shutdown. A manual service stays running until explicitly stopped.
+Local clients can restart an absent service when automatic startup is enabled, including clients
+that joined it before it exited. A different or incompatible listener is never replaced automatically.
+`sourceFingerprint` hashes `src/` and nothing else,
 so `npm install` does not change it and an edit does.
 
 ## Deploy it with the engine
@@ -65,8 +80,8 @@ so `npm install` does not change it and an edit does.
 The engine and this service are one contract and ship from one commit. The engine sends every field
 it knows -- `backdrop`, `input_glb_sha256`, exact cameras -- and a service built before a field
 existed rejects the request with a 400, which the engine reports as a CPU degrade with the status in
-`degradeReason`. A local service is replaced or named automatically (see `instance` above); a hosted
-one is not, because the engine will not stop a process it did not start. When you update the engine
+`degradeReason`. An incompatible local listener is reported and left running; use `kiln service stop`
+explicitly once its clients are finished. Remote services are managed on their own device. When you update the engine
 behind `--render-port` or `KILN_RENDER_PORT_URL`, redeploy the service from the same commit, and
 compare `/health.instance.sourceFingerprint` against `bun run kiln service status` on a checkout of
 that commit if you need to prove which build is live.

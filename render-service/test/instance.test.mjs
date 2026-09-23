@@ -3,6 +3,13 @@ import { mkdtempSync, mkdirSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join, resolve, sep } from 'node:path';
 import test from 'node:test';
+import { pathToFileURL } from 'node:url';
+import {
+  buildCompatibility,
+  compatibilityFingerprint,
+  RENDER_SERVICE_DEPENDENCIES,
+  resolvedRendererDependencies,
+} from '../src/build-identity.mjs';
 
 import { buildHealthDocument } from '../src/health-contract.mjs';
 import {
@@ -10,7 +17,7 @@ import {
   fingerprintSourceDir,
   parseOwnerPid,
   processIsAlive,
-  startOwnerWatch,
+  serviceLifecycleOptions,
 } from '../src/instance.mjs';
 
 // Pure, like every other test in this directory: no GPU, no socket, no Dawn.
@@ -57,40 +64,70 @@ test('an owner pid is a positive integer or nothing', () => {
   assert.equal(parseOwnerPid('abc'), undefined);
 });
 
+test('compatibility binds source and all expected dependency versions without loading native code', () => {
+  const dir = scratch();
+  try {
+    writeFileSync(join(dir, 'server.mjs'), 'source');
+    const first = buildCompatibility({ sourceDir: dir, dependencies: RENDER_SERVICE_DEPENDENCIES });
+    assert.equal(first.fingerprint, compatibilityFingerprint(first));
+    const dependencies = { ...RENDER_SERVICE_DEPENDENCIES, webgpu: '0.0.0' };
+    assert.notEqual(first.fingerprint, compatibilityFingerprint({ ...first, dependencies }));
+    assert.throws(
+      () => compatibilityFingerprint({ ...first, dependencies: {} }),
+      /Missing.*dependency/,
+    );
+    writeFileSync(join(dir, 'server.mjs'), 'changed');
+    assert.notEqual(
+      first.fingerprint,
+      buildCompatibility({ sourceDir: dir, dependencies: RENDER_SERVICE_DEPENDENCIES }).fingerprint,
+    );
+    for (const [name, version] of Object.entries(RENDER_SERVICE_DEPENDENCIES)) {
+      const packageDir = join(dir, 'node_modules', name);
+      mkdirSync(packageDir, { recursive: true });
+      writeFileSync(
+        join(packageDir, 'package.json'),
+        JSON.stringify({ name, version, main: 'index.js' }),
+      );
+      writeFileSync(
+        join(packageDir, 'index.js'),
+        "throw new Error('must not execute native entry');",
+      );
+    }
+    const anchor = pathToFileURL(join(dir, 'server.mjs'));
+    assert.deepEqual(resolvedRendererDependencies(anchor), RENDER_SERVICE_DEPENDENCIES);
+    writeFileSync(
+      join(dir, 'node_modules', 'webgpu', 'package.json'),
+      JSON.stringify({ name: 'webgpu', version: '0.4.0', main: 'index.js' }),
+    );
+    assert.throws(
+      () => resolvedRendererDependencies(anchor),
+      /webgpu version conflict.*0.6.1.*0.4.0/,
+    );
+  } finally {
+    rmSync(dir, { recursive: true, force: true });
+  }
+});
+
 test('this process is alive; a pid nothing has is not', () => {
   assert.equal(processIsAlive(process.pid), true);
   // The largest pid Windows or Linux will hand out is far below this.
   assert.equal(processIsAlive(2 ** 22 + 12345), false);
 });
 
-test('the owner watch fires once, when the owner is gone, and then stops polling', () => {
-  const timers = [];
-  let alive = true;
-  const orphaned = [];
-  const stop = startOwnerWatch({
-    ownerPid: 77,
-    isAlive: () => alive,
-    onOrphaned: (pid) => orphaned.push(pid),
-    intervalMs: 5,
-    setTimer: (fn) => {
-      const handle = { fn, cleared: false, unref: () => undefined };
-      timers.push(handle);
-      return handle;
-    },
-    clearTimer: (handle) => {
-      handle.cleared = true;
-    },
+test('managed lifecycle derives from explicit mode or owner provenance, with bounded idle', () => {
+  assert.deepEqual(serviceLifecycleOptions({ RENDER_SERVICE_OWNER_PID: '77' }), {
+    mode: 'managed',
+    idleTimeoutMs: 300000,
   });
-  const tick = () => timers[0].fn();
-  tick();
-  tick();
-  assert.deepEqual(orphaned, [], 'a live owner is left alone');
-  alive = false;
-  tick();
-  tick();
-  assert.deepEqual(orphaned, [77], 'fires exactly once');
-  assert.equal(timers[0].cleared, true, 'and stops polling afterwards');
-  stop();
+  assert.deepEqual(serviceLifecycleOptions({}), { mode: 'manual', idleTimeoutMs: 300000 });
+  assert.equal(
+    serviceLifecycleOptions({ RENDER_SERVICE_OWNER_PID: '77', RENDER_SERVICE_MODE: 'manual' }).mode,
+    'manual',
+  );
+  assert.throws(() => serviceLifecycleOptions({ RENDER_SERVICE_MODE: 'unknown' }), /MODE/);
+  for (const value of ['0', '-1', 'NaN', 'Infinity', '1.5', '3600001']) {
+    assert.throws(() => serviceLifecycleOptions({ RENDER_SERVICE_IDLE_MS: value }), /IDLE/);
+  }
 });
 
 test('the health document carries the instance block when one is given', () => {
@@ -107,9 +144,11 @@ test('the health document carries the instance block when one is given', () => {
     sourceFingerprint: `sha256:${'a'.repeat(64)}`,
   });
   assert.deepEqual(buildHealthDocument(gpuState, false, instance).instance, {
-    version: 'kiln.render-service-instance.v1',
+    version: 'kiln.render-service-instance.v2',
     pid: 123,
     ownerPid: null,
+    mode: 'manual',
+    idleTimeoutMs: null,
     startedAt: '2026-09-16T00:00:00.000Z',
     sourceDir: '/srv/render-service',
     sourceFingerprint: `sha256:${'a'.repeat(64)}`,

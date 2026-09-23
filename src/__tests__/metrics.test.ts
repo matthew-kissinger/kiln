@@ -17,11 +17,17 @@ import {
   glassMaterial,
 } from '../primitives';
 import { renderSceneToGLB, renderGLB, gradeGlbBytes } from '../render';
-import { gradeInstanceability, type InstanceabilityMetrics } from '../metrics';
+import { collectGlbMetrics, gradeInstanceability, type InstanceabilityMetrics } from '../metrics';
+import { Document } from '@gltf-transform/core';
+import { EXTMeshGPUInstancing } from '@gltf-transform/extensions';
+import * as THREE from 'three';
+import { countTriangles } from '../primitives';
 
 const baseMetrics = (over: Partial<InstanceabilityMetrics> = {}): InstanceabilityMetrics => ({
   uniqueGeometries: 1,
   uniqueMaterials: 1,
+  meshNodes: 1,
+  meshInstances: 1,
   drawCalls: 1,
   textureCount: 0,
   skinned: false,
@@ -31,6 +37,62 @@ const baseMetrics = (over: Partial<InstanceabilityMetrics> = {}): Instanceabilit
 });
 
 describe('collectGlbMetrics (post-dedup)', () => {
+  it('distinguishes mesh nodes, instance copies, materials and estimated primitive draws', () => {
+    const doc = new Document();
+    const position = doc
+      .createAccessor()
+      .setType('VEC3')
+      .setArray(new Float32Array([0, 0, 0, 1, 0, 0, 0, 1, 0]));
+    const material = doc.createMaterial();
+    const triangle = doc.createPrimitive().setAttribute('POSITION', position).setMaterial(material);
+    const mesh = doc.createMesh().addPrimitive(triangle);
+    const ordinary = doc.createNode().setMesh(mesh);
+    const copies = doc.createAccessor().setType('VEC3').setArray(new Float32Array(9));
+    const instances = doc
+      .createExtension(EXTMeshGPUInstancing)
+      .createInstancedMesh()
+      .setAttribute('TRANSLATION', copies);
+    const instanced = doc
+      .createNode()
+      .setMesh(mesh)
+      .setExtension('EXT_mesh_gpu_instancing', instances);
+    const points = doc
+      .createNode()
+      .setMesh(
+        doc
+          .createMesh()
+          .addPrimitive(
+            doc
+              .createPrimitive()
+              .setMode(0)
+              .setAttribute('POSITION', position)
+              .setMaterial(material),
+          ),
+      );
+    doc.createScene().addChild(ordinary).addChild(instanced).addChild(points);
+    expect(collectGlbMetrics(doc)).toMatchObject({
+      meshNodes: 3,
+      meshInstances: 5,
+      drawCalls: 3,
+      uniqueMaterials: 1,
+      uniqueGeometries: 2,
+      triangles: 4,
+    });
+  });
+
+  it('source triangle counts include active InstancedMesh copies and zero-count batches', () => {
+    const root = new THREE.Group();
+    const mesh = new THREE.InstancedMesh(
+      new THREE.BoxGeometry(),
+      new THREE.MeshStandardMaterial(),
+      5,
+    );
+    root.add(mesh);
+    mesh.count = 3;
+    expect(countTriangles(root)).toBe(36);
+    mesh.count = 0;
+    expect(countTriangles(root)).toBe(0);
+  });
   it('an instanced 4-wheel scene reports 1 geometry, 1 material, 4 draw calls', async () => {
     const r = createRoot('Truck');
     const wg = cylinderGeo(0.4, 0.4, 0.2, 16);

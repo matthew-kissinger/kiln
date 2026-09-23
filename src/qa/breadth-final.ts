@@ -4,6 +4,7 @@ import * as THREE from 'three';
 import {
   readSemanticMetadataV1FromExtras,
   type AssetIntentV1,
+  type VfxIntentV1,
   type VfxAxisDirection,
   type VfxFacingMode,
   type VfxTransparencyMode,
@@ -214,21 +215,20 @@ export async function analyzeFinalVfxGlbBytesV1(bytes: Uint8Array): Promise<Fina
   };
 }
 
-function finalFinding(intent: AssetIntentV1, value: Omit<QaFinding, 'profile'>): QaFinding {
-  return { ...value, profile: intent.qaProfile || 'vfx.w7.final-glb' };
+function finalFinding(profile: string, value: Omit<QaFinding, 'profile'>): QaFinding {
+  return { ...value, profile };
 }
 
 /** Exact VFX-002/003 checks against the final serialized artifact. */
-export function evaluateFinalVfxGlbEvidenceV1(
-  intent: AssetIntentV1,
+export function inspectFinalEffects(
+  contract: VfxIntentV1,
   evidence: FinalVfxGlbEvidenceV1,
+  profile = 'asset.requirements.v1',
 ): QaFinding[] {
-  if (intent.category !== 'vfx' || !intent.vfx) return [];
-  const contract = intent.vfx;
   const findings: QaFinding[] = [];
   if (evidence.meshCount === 0 || evidence.primitiveCount === 0 || evidence.triangleCount === 0) {
     findings.push(
-      finalFinding(intent, {
+      finalFinding(profile, {
         code: 'VFX_GLTF_RENDERABLE_MISSING',
         disposition: 'block',
         dimension: 'exportIntegrity',
@@ -245,7 +245,7 @@ export function evaluateFinalVfxGlbEvidenceV1(
   const effectMaterials = evidence.materials.filter((material) => material.effectSurface);
   if (effectMaterials.length === 0) {
     findings.push(
-      finalFinding(intent, {
+      finalFinding(profile, {
         code: 'VFX_GLTF_EFFECT_SURFACE_MISSING',
         disposition: 'block',
         dimension: 'exportIntegrity',
@@ -258,7 +258,7 @@ export function evaluateFinalVfxGlbEvidenceV1(
   for (const material of effectMaterials) {
     if (material.alphaMode !== contract.transparency) {
       findings.push(
-        finalFinding(intent, {
+        finalFinding(profile, {
           code: 'VFX_GLTF_TRANSPARENCY_MODE_MISMATCH',
           disposition: 'block',
           dimension: 'exportIntegrity',
@@ -274,7 +274,7 @@ export function evaluateFinalVfxGlbEvidenceV1(
     }
     if (contract.transparency !== 'opaque' && !material.alphaData) {
       findings.push(
-        finalFinding(intent, {
+        finalFinding(profile, {
           code: 'VFX_GLTF_ALPHA_DATA_MISSING',
           disposition: 'block',
           dimension: 'exportIntegrity',
@@ -288,7 +288,7 @@ export function evaluateFinalVfxGlbEvidenceV1(
     }
     if (material.doubleSided !== contract.doubleSided) {
       findings.push(
-        finalFinding(intent, {
+        finalFinding(profile, {
           code: 'VFX_GLTF_SIDEDNESS_MISMATCH',
           disposition: 'block',
           dimension: 'exportIntegrity',
@@ -307,7 +307,7 @@ export function evaluateFinalVfxGlbEvidenceV1(
       (material.alphaCutoff === undefined || material.alphaCutoff <= 0 || material.alphaCutoff > 1)
     ) {
       findings.push(
-        finalFinding(intent, {
+        finalFinding(profile, {
           code: 'VFX_GLTF_ALPHA_CUTOFF_INVALID',
           disposition: 'block',
           dimension: 'exportIntegrity',
@@ -323,7 +323,7 @@ export function evaluateFinalVfxGlbEvidenceV1(
     !evidence.facingSemantics.includes(contract.facing.mode)
   ) {
     findings.push(
-      finalFinding(intent, {
+      finalFinding(profile, {
         code: 'VFX_GLTF_FACING_SEMANTIC_MISSING',
         disposition: 'block',
         dimension: 'exportIntegrity',
@@ -344,7 +344,7 @@ export function evaluateFinalVfxGlbEvidenceV1(
     contract.facing.normalAxis !== evidence.normalAxis
   ) {
     findings.push(
-      finalFinding(intent, {
+      finalFinding(profile, {
         code: 'VFX_GLTF_NORMAL_AXIS_MISMATCH',
         disposition: 'block',
         dimension: 'exportIntegrity',
@@ -363,7 +363,7 @@ export function evaluateFinalVfxGlbEvidenceV1(
     contract.facing.directionAxis !== evidence.directionAxis
   ) {
     findings.push(
-      finalFinding(intent, {
+      finalFinding(profile, {
         code: 'VFX_GLTF_DIRECTION_AXIS_MISMATCH',
         disposition: 'block',
         dimension: 'exportIntegrity',
@@ -381,7 +381,7 @@ export function evaluateFinalVfxGlbEvidenceV1(
     const clip = evidence.clips.find((candidate) => candidate.name === contract.animation.clipName);
     if (!clip || Math.abs(clip.durationSeconds - contract.animation.durationSeconds) > 0.000001) {
       findings.push(
-        finalFinding(intent, {
+        finalFinding(profile, {
           code: 'VFX_GLTF_REQUIRED_CLIP_MISSING',
           disposition: 'block',
           dimension: 'exportIntegrity',
@@ -399,6 +399,15 @@ export function evaluateFinalVfxGlbEvidenceV1(
     }
   }
   return findings;
+}
+
+/** Historical report adapter; current final-byte QA uses inspectFinalEffects directly. */
+export function evaluateFinalVfxGlbEvidenceV1(
+  intent: AssetIntentV1,
+  evidence: FinalVfxGlbEvidenceV1,
+): QaFinding[] {
+  if (intent.category !== 'vfx' || !intent.vfx) return [];
+  return inspectFinalEffects(intent.vfx, evidence, intent.qaProfile);
 }
 
 export async function appendFinalVfxGlbQa(
@@ -423,6 +432,13 @@ export async function appendFinalVfxGlbQa(
   >;
   metrics.exportIntegrity = {
     ...(metrics.exportIntegrity ?? {}),
+    ...finalEffectsMetrics(evidence),
+  };
+  return createAssetQaReportV1(intent, { findings, evaluatedDimensions, metrics });
+}
+
+export function finalEffectsMetrics(evidence: FinalVfxGlbEvidenceV1) {
+  return {
     finalVfxMeshCount: evidence.meshCount,
     finalVfxPrimitiveCount: evidence.primitiveCount,
     finalVfxTriangles: evidence.triangleCount,
@@ -434,5 +450,4 @@ export async function appendFinalVfxGlbQa(
     finalVfxDirectionAxis: evidence.directionAxis ?? null,
     finalVfxClipCount: evidence.clips.length,
   };
-  return createAssetQaReportV1(intent, { findings, evaluatedDimensions, metrics });
 }

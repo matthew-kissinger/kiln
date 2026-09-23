@@ -1,0 +1,297 @@
+{
+  "version": 1,
+  "work": "C:\\Users\\Mattm\\AppData\\Local\\Temp\\kiln-renderer-layout-5N2MBM",
+  "node": "v22.23.2",
+  "platform": "win32",
+  "arch": "x64",
+  "candidates": [
+    {
+      "layout": "main-optional-native",
+      "installs": [
+        {
+          "variant": "normal",
+          "install": "C:\\Users\\Mattm\\AppData\\Local\\Temp\\kiln-renderer-layout-5N2MBM\\main-optional-native-normal",
+          "installation": {
+            "status": 0,
+            "signal": null,
+            "ms": 4172.9368,
+            "stdout": "\nadded 7 packages in 4s\n",
+            "stderr": "npm warn install-scripts 1 package had install scripts blocked because they are not covered by allowScripts:\nnpm warn install-scripts   webgpu@0.6.1 (postinstall: node build/postinstall.js)\nnpm warn install-scripts\nnpm warn install-scripts Run `npm install-scripts ls` to review, or `npm install-scripts approve <pkg>` to allow.\n"
+          },
+          "installedBytes": 116260008,
+          "cpuImport": {
+            "status": 0,
+            "signal": null,
+            "ms": 76.80580000000009,
+            "stdout": "true\n",
+            "stderr": ""
+          },
+          "serviceDir": "C:\\Users\\Mattm\\AppData\\Local\\Temp\\kiln-renderer-layout-5N2MBM\\main-optional-native-normal\\node_modules\\@kiln-research\\main-optional-native",
+          "render": {
+            "status": 0,
+            "signal": null,
+            "ms": 5282.4231,
+            "stdout": "{\"mode\":\"direct\",\"readyMs\":1122.5344,\"totalMs\":5123.7919,\"observations\":[{\"wallMs\":2537.3105,\"pngBytes\":26705,\"pngSha256\":\"bd6c0164d3ff2d69d19a8eefadd85869bff9a530b9402d917bcc5ff309f99920\",\"timings\":{\"loadMs\":41.2,\"viewsMs\":1780.4,\"beautyMs\":0,\"totalMs\":1821.6}},{\"wallMs\":1463.4143999999997,\"pngBytes\":26705,\"pngSha256\":\"bd6c0164d3ff2d69d19a8eefadd85869bff9a530b9402d917bcc5ff309f99920\",\"timings\":{\"loadMs\":6.4,\"viewsMs\":1456.5,\"beautyMs\":0,\"totalMs\":1462.8}}],\"rendererId\":\"dawn-d3d12:nvidia-geforce-rtx-3070:D3D12 driver version 32.0.16.1074\",\"adapter\":{\"vendor\":\"nvidia\",\"architecture\":\"ampere\",\"device\":\"nvidia-geforce-rtx-3070\",\"description\":\"D3D12 driver version 32.0.16.1074\"},\"peakRssKiB\":301676,\"globalsChanged\":[\"navigator.gpu\",\"self\",\"requestAnimationFrame\",\"createImageBitmap\"]}\n",
+            "stderr": ""
+          }
+        },
+        {
+          "variant": "scripts-disabled",
+          "install": "C:\\Users\\Mattm\\AppData\\Local\\Temp\\kiln-renderer-layout-5N2MBM\\main-optional-native-scripts-disabled",
+          "installation": {
+            "status": 0,
+            "signal": null,
+            "ms": 3580.1633,
+            "stdout": "\nadded 7 packages in 3s\n",
+            "stderr": ""
+          },
+          "installedBytes": 116260028,
+          "cpuImport": {
+            "status": 0,
+            "signal": null,
+            "ms": 70.28200000000106,
+            "stdout": "true\n",
+            "stderr": ""
+          },
+          "serviceDir": "C:\\Users\\Mattm\\AppData\\Local\\Temp\\kiln-renderer-layout-5N2MBM\\main-optional-native-scripts-disabled\\node_modules\\@kiln-research\\main-optional-native",
+          "render": {
+            "status": 0,
+            "signal": null,
+            "ms": 3600.6355999999996,
+            "stdout": "{\"mode\":\"direct\",\"readyMs\":648.9388,\"totalMs\":3468.4799,\"observations\":[{\"wallMs\":1728.5378999999998,\"pngBytes\":26705,\"pngSha256\":\"bd6c0164d3ff2d69d19a8eefadd85869bff9a530b9402d917bcc5ff309f99920\",\"timings\":{\"loadMs\":34.6,\"viewsMs\":1125.2,\"beautyMs\":0,\"totalMs\":1159.8}},{\"wallMs\":1090.5193,\"pngBytes\":26705,\"pngSha256\":\"bd6c0164d3ff2d69d19a8eefadd85869bff9a530b9402d917bcc5ff309f99920\",\"timings\":{\"loadMs\":5.7,\"viewsMs\":1084.2,\"beautyMs\":0,\"totalMs\":1089.9}}],\"rendererId\":\"dawn-d3d12:nvidia-geforce-rtx-3070:D3D12 driver version 32.0.16.1074\",\"adapter\":{\"vendor\":\"nvidia\",\"architecture\":\"ampere\",\"device\":\"nvidia-geforce-rtx-3070\",\"description\":\"D3D12 driver version 32.0.16.1074\"},\"peakRssKiB\":286520,\"globalsChanged\":[\"navigator.gpu\",\"self\",\"requestAnimationFrame\",\"createImageBitmap\"]}\n",
+            "stderr": ""
+          }
+        },
+        {
+          "variant": "optional-omitted",
+          "install": "C:\\Users\\Mattm\\AppData\\Local\\Temp\\kiln-renderer-layout-5N2MBM\\main-optional-native-optional-omitted",
+          "installation": {
+            "status": 0,
+            "signal": null,
+            "ms": 3237.7310000000034,
+            "stdout": "\nadded 3 packages in 3s\n",
+            "stderr": ""
+          },
+          "installedBytes": 21185545,
+          "cpuImport": {
+            "status": 0,
+            "signal": null,
+            "ms": 68.95690000000104,
+            "stdout": "true\n",
+            "stderr": ""
+          },
+          "serviceDir": "C:\\Users\\Mattm\\AppData\\Local\\Temp\\kiln-renderer-layout-5N2MBM\\main-optional-native-optional-omitted\\node_modules\\@kiln-research\\main-optional-native",
+          "render": {
+            "status": 1,
+            "signal": null,
+            "ms": 114.66800000000148,
+            "stdout": "{\"mode\":\"direct\",\"error\":\"Cannot find package 'webgpu' imported from C:\\\\Users\\\\Mattm\\\\AppData\\\\Local\\\\Temp\\\\kiln-renderer-layout-5N2MBM\\\\main-optional-native-optional-omitted\\\\node_modules\\\\@kiln-research\\\\main-optional-native\\\\src\\\\gpu.mjs\",\"totalMs\":47.16029999999999}\n",
+            "stderr": ""
+          }
+        },
+        {
+          "variant": "offline-reuse",
+          "install": "C:\\Users\\Mattm\\AppData\\Local\\Temp\\kiln-renderer-layout-5N2MBM\\main-optional-native-offline-reuse",
+          "installation": {
+            "status": 0,
+            "signal": null,
+            "ms": 3719.7795000000006,
+            "stdout": "\nadded 7 packages in 4s\n",
+            "stderr": ""
+          },
+          "installedBytes": 116260022,
+          "cpuImport": {
+            "status": 0,
+            "signal": null,
+            "ms": 72.84200000000055,
+            "stdout": "true\n",
+            "stderr": ""
+          },
+          "serviceDir": "C:\\Users\\Mattm\\AppData\\Local\\Temp\\kiln-renderer-layout-5N2MBM\\main-optional-native-offline-reuse\\node_modules\\@kiln-research\\main-optional-native",
+          "render": {
+            "status": 0,
+            "signal": null,
+            "ms": 3572.404700000003,
+            "stdout": "{\"mode\":\"direct\",\"readyMs\":654.5251,\"totalMs\":3432.0574,\"observations\":[{\"wallMs\":1732.0122,\"pngBytes\":26705,\"pngSha256\":\"bd6c0164d3ff2d69d19a8eefadd85869bff9a530b9402d917bcc5ff309f99920\",\"timings\":{\"loadMs\":34.7,\"viewsMs\":1124.8,\"beautyMs\":0,\"totalMs\":1159.5}},{\"wallMs\":1045.02,\"pngBytes\":26705,\"pngSha256\":\"bd6c0164d3ff2d69d19a8eefadd85869bff9a530b9402d917bcc5ff309f99920\",\"timings\":{\"loadMs\":5.7,\"viewsMs\":1038.7,\"beautyMs\":0,\"totalMs\":1044.4}}],\"rendererId\":\"dawn-d3d12:nvidia-geforce-rtx-3070:D3D12 driver version 32.0.16.1074\",\"adapter\":{\"vendor\":\"nvidia\",\"architecture\":\"ampere\",\"device\":\"nvidia-geforce-rtx-3070\",\"description\":\"D3D12 driver version 32.0.16.1074\"},\"peakRssKiB\":286376,\"globalsChanged\":[\"navigator.gpu\",\"self\",\"requestAnimationFrame\",\"createImageBitmap\"]}\n",
+            "stderr": ""
+          }
+        }
+      ],
+      "archive": {
+        "path": "C:\\Users\\Mattm\\AppData\\Local\\Temp\\kiln-renderer-layout-5N2MBM\\main-optional-native-source\\kiln-research-main-optional-native-0.0.0.tgz",
+        "bytes": 29581,
+        "unpackedBytes": 87965,
+        "sha256": "ea766268c80c84e6be7a9e7821386c26a5cb993b5101ce4635e58febb8568b33"
+      },
+      "bun": {
+        "status": 0,
+        "signal": null,
+        "ms": 1249.5882999999994,
+        "stdout": "bun add v1.4.2 (744846f84)\n\ninstalled @kiln-research/main-optional-native@C:/Users/Mattm/AppData/Local/Temp/kiln-renderer-layout-5N2MBM/main-optional-native-source/kiln-research-main-optional-native-0.0.0.tgz\n\n7 packages installed [1216.00ms]\n\nBlocked 1 postinstall. Run `bun pm untrusted` for details.\n",
+        "stderr": "Resolving dependencies\nResolved, downloaded and extracted [16]\nSaved lockfile\n",
+        "installedBytes": 116256202,
+        "render": {
+          "status": 0,
+          "signal": null,
+          "ms": 3587.4897999999994,
+          "stdout": "{\"mode\":\"direct\",\"readyMs\":695.8192,\"totalMs\":3453.0337,\"observations\":[{\"wallMs\":1680.4310999999998,\"pngBytes\":26705,\"pngSha256\":\"bd6c0164d3ff2d69d19a8eefadd85869bff9a530b9402d917bcc5ff309f99920\",\"timings\":{\"loadMs\":33.7,\"viewsMs\":1086.6,\"beautyMs\":0,\"totalMs\":1120.3}},{\"wallMs\":1076.2842999999998,\"pngBytes\":26705,\"pngSha256\":\"bd6c0164d3ff2d69d19a8eefadd85869bff9a530b9402d917bcc5ff309f99920\",\"timings\":{\"loadMs\":5.8,\"viewsMs\":1069.9,\"beautyMs\":0,\"totalMs\":1075.6}}],\"rendererId\":\"dawn-d3d12:nvidia-geforce-rtx-3070:D3D12 driver version 32.0.16.1074\",\"adapter\":{\"vendor\":\"nvidia\",\"architecture\":\"ampere\",\"device\":\"nvidia-geforce-rtx-3070\",\"description\":\"D3D12 driver version 32.0.16.1074\"},\"peakRssKiB\":286080,\"globalsChanged\":[\"navigator.gpu\",\"self\",\"requestAnimationFrame\",\"createImageBitmap\"]}\n",
+          "stderr": ""
+        }
+      }
+    },
+    {
+      "layout": "optional-runtime-companion",
+      "installs": [
+        {
+          "variant": "normal",
+          "install": "C:\\Users\\Mattm\\AppData\\Local\\Temp\\kiln-renderer-layout-5N2MBM\\optional-runtime-companion-normal",
+          "installation": {
+            "status": 0,
+            "signal": null,
+            "ms": 3385.4788000000044,
+            "stdout": "\nadded 8 packages in 3s\n",
+            "stderr": "npm warn install-scripts 1 package had install scripts blocked because they are not covered by allowScripts:\nnpm warn install-scripts   webgpu@0.6.1 (postinstall: node build/postinstall.js)\nnpm warn install-scripts\nnpm warn install-scripts Run `npm install-scripts ls` to review, or `npm install-scripts approve <pkg>` to allow.\n"
+          },
+          "installedBytes": 116261508,
+          "cpuImport": {
+            "status": 0,
+            "signal": null,
+            "ms": 75.86759999999776,
+            "stdout": "true\n",
+            "stderr": ""
+          },
+          "serviceDir": "C:\\Users\\Mattm\\AppData\\Local\\Temp\\kiln-renderer-layout-5N2MBM\\optional-runtime-companion-normal\\node_modules\\@kiln-research\\renderer-runtime",
+          "render": {
+            "status": 0,
+            "signal": null,
+            "ms": 3759.4467000000004,
+            "stdout": "{\"mode\":\"direct\",\"readyMs\":686.6733,\"totalMs\":3612.9616,\"observations\":[{\"wallMs\":1741.5895,\"pngBytes\":26705,\"pngSha256\":\"bd6c0164d3ff2d69d19a8eefadd85869bff9a530b9402d917bcc5ff309f99920\",\"timings\":{\"loadMs\":36,\"viewsMs\":1111.7,\"beautyMs\":0,\"totalMs\":1147.6}},{\"wallMs\":1184.1463000000003,\"pngBytes\":26705,\"pngSha256\":\"bd6c0164d3ff2d69d19a8eefadd85869bff9a530b9402d917bcc5ff309f99920\",\"timings\":{\"loadMs\":6.4,\"viewsMs\":1177,\"beautyMs\":0,\"totalMs\":1183.4}}],\"rendererId\":\"dawn-d3d12:nvidia-geforce-rtx-3070:D3D12 driver version 32.0.16.1074\",\"adapter\":{\"vendor\":\"nvidia\",\"architecture\":\"ampere\",\"device\":\"nvidia-geforce-rtx-3070\",\"description\":\"D3D12 driver version 32.0.16.1074\"},\"peakRssKiB\":287768,\"globalsChanged\":[\"navigator.gpu\",\"self\",\"requestAnimationFrame\",\"createImageBitmap\"]}\n",
+            "stderr": ""
+          }
+        },
+        {
+          "variant": "scripts-disabled",
+          "install": "C:\\Users\\Mattm\\AppData\\Local\\Temp\\kiln-renderer-layout-5N2MBM\\optional-runtime-companion-scripts-disabled",
+          "installation": {
+            "status": 0,
+            "signal": null,
+            "ms": 3930.9642999999996,
+            "stdout": "\nadded 8 packages in 4s\n",
+            "stderr": ""
+          },
+          "installedBytes": 116261528,
+          "cpuImport": {
+            "status": 0,
+            "signal": null,
+            "ms": 69.03740000000107,
+            "stdout": "true\n",
+            "stderr": ""
+          },
+          "serviceDir": "C:\\Users\\Mattm\\AppData\\Local\\Temp\\kiln-renderer-layout-5N2MBM\\optional-runtime-companion-scripts-disabled\\node_modules\\@kiln-research\\renderer-runtime",
+          "render": {
+            "status": 0,
+            "signal": null,
+            "ms": 3598.440699999999,
+            "stdout": "{\"mode\":\"direct\",\"readyMs\":669.2781,\"totalMs\":3461.1083,\"observations\":[{\"wallMs\":1742.1015000000002,\"pngBytes\":26705,\"pngSha256\":\"bd6c0164d3ff2d69d19a8eefadd85869bff9a530b9402d917bcc5ff309f99920\",\"timings\":{\"loadMs\":37.2,\"viewsMs\":1136.2,\"beautyMs\":0,\"totalMs\":1173.4}},{\"wallMs\":1049.2441,\"pngBytes\":26705,\"pngSha256\":\"bd6c0164d3ff2d69d19a8eefadd85869bff9a530b9402d917bcc5ff309f99920\",\"timings\":{\"loadMs\":5.8,\"viewsMs\":1042.9,\"beautyMs\":0,\"totalMs\":1048.7}}],\"rendererId\":\"dawn-d3d12:nvidia-geforce-rtx-3070:D3D12 driver version 32.0.16.1074\",\"adapter\":{\"vendor\":\"nvidia\",\"architecture\":\"ampere\",\"device\":\"nvidia-geforce-rtx-3070\",\"description\":\"D3D12 driver version 32.0.16.1074\"},\"peakRssKiB\":287432,\"globalsChanged\":[\"navigator.gpu\",\"self\",\"requestAnimationFrame\",\"createImageBitmap\"]}\n",
+            "stderr": ""
+          }
+        },
+        {
+          "variant": "optional-omitted",
+          "install": "C:\\Users\\Mattm\\AppData\\Local\\Temp\\kiln-renderer-layout-5N2MBM\\optional-runtime-companion-optional-omitted",
+          "installation": {
+            "status": 0,
+            "signal": null,
+            "ms": 863.1245000000054,
+            "stdout": "\nadded 1 package in 724ms\n",
+            "stderr": ""
+          },
+          "installedBytes": 4758,
+          "cpuImport": {
+            "status": 0,
+            "signal": null,
+            "ms": 65.71729999999661,
+            "stdout": "true\n",
+            "stderr": ""
+          },
+          "serviceDir": "C:\\Users\\Mattm\\AppData\\Local\\Temp\\kiln-renderer-layout-5N2MBM\\optional-runtime-companion-optional-omitted\\node_modules\\@kiln-research\\renderer-runtime",
+          "render": {
+            "status": 1,
+            "signal": null,
+            "ms": 107.45259999999689,
+            "stdout": "",
+            "stderr": "\r\nnode:internal/modules/run_main:123\r\n    triggerUncaughtException(\r\n    ^\r\nError [ERR_MODULE_NOT_FOUND]: Cannot find module 'C:\\Users\\Mattm\\AppData\\Local\\Temp\\kiln-renderer-layout-5N2MBM\\optional-runtime-companion-optional-omitted\\node_modules\\@kiln-research\\renderer-runtime\\src\\three-alias-hooks.mjs' imported from data:\r\n    at finalizeResolution (node:internal/modules/esm/resolve:275:11)\r\n    at moduleResolve (node:internal/modules/esm/resolve:861:10)\r\n    at defaultResolve (node:internal/modules/esm/resolve:985:11)\r\n    at nextResolve (node:internal/modules/esm/hooks:748:28)\r\n    at Hooks.resolve (node:internal/modules/esm/hooks:240:30)\r\n    at ModuleLoader.resolve (node:internal/modules/esm/loader:722:35)\r\n    at ModuleLoader.getModuleJobForImport (node:internal/modules/esm/loader:320:38)\r\n    at onImport.tracePromise.__proto__ (node:internal/modules/esm/loader:680:36)\r\n    at TracingChannel.tracePromise (node:diagnostics_channel:350:14)\r\n    at ModuleLoader.import (node:internal/modules/esm/loader:679:21) {\r\n  code: 'ERR_MODULE_NOT_FOUND',\r\n  url: 'file:///C:/Users/Mattm/AppData/Local/Temp/kiln-renderer-layout-5N2MBM/optional-runtime-companion-optional-omitted/node_modules/@kiln-research/renderer-runtime/src/three-alias-hooks.mjs'\r\n}\r\n\r\nNode.js v22.23.2\r\n"
+          }
+        },
+        {
+          "variant": "offline-reuse",
+          "install": "C:\\Users\\Mattm\\AppData\\Local\\Temp\\kiln-renderer-layout-5N2MBM\\optional-runtime-companion-offline-reuse",
+          "installation": {
+            "status": 0,
+            "signal": null,
+            "ms": 3614.8541999999943,
+            "stdout": "\nadded 8 packages in 3s\n",
+            "stderr": ""
+          },
+          "installedBytes": 116261522,
+          "cpuImport": {
+            "status": 0,
+            "signal": null,
+            "ms": 70.97000000000116,
+            "stdout": "true\n",
+            "stderr": ""
+          },
+          "serviceDir": "C:\\Users\\Mattm\\AppData\\Local\\Temp\\kiln-renderer-layout-5N2MBM\\optional-runtime-companion-offline-reuse\\node_modules\\@kiln-research\\renderer-runtime",
+          "render": {
+            "status": 0,
+            "signal": null,
+            "ms": 3743.4072000000015,
+            "stdout": "{\"mode\":\"direct\",\"readyMs\":695.7281,\"totalMs\":3588.8453,\"observations\":[{\"wallMs\":1765.3241999999998,\"pngBytes\":26705,\"pngSha256\":\"bd6c0164d3ff2d69d19a8eefadd85869bff9a530b9402d917bcc5ff309f99920\",\"timings\":{\"loadMs\":37,\"viewsMs\":1136.9,\"beautyMs\":0,\"totalMs\":1173.9}},{\"wallMs\":1127.2163,\"pngBytes\":26705,\"pngSha256\":\"bd6c0164d3ff2d69d19a8eefadd85869bff9a530b9402d917bcc5ff309f99920\",\"timings\":{\"loadMs\":5.9,\"viewsMs\":1120.5,\"beautyMs\":0,\"totalMs\":1126.4}}],\"rendererId\":\"dawn-d3d12:nvidia-geforce-rtx-3070:D3D12 driver version 32.0.16.1074\",\"adapter\":{\"vendor\":\"nvidia\",\"architecture\":\"ampere\",\"device\":\"nvidia-geforce-rtx-3070\",\"description\":\"D3D12 driver version 32.0.16.1074\"},\"peakRssKiB\":286356,\"globalsChanged\":[\"navigator.gpu\",\"self\",\"requestAnimationFrame\",\"createImageBitmap\"]}\n",
+            "stderr": ""
+          }
+        }
+      ],
+      "runtimeArchive": {
+        "path": "C:\\Users\\Mattm\\AppData\\Local\\Temp\\kiln-renderer-layout-5N2MBM\\runtime-source\\kiln-research-renderer-runtime-0.0.0.tgz",
+        "bytes": 29570,
+        "unpackedBytes": 87929,
+        "sha256": "1f477e44a8b1c03d5cb9baf79d5f182bb28290b01025d877e5d387a9d388ed20"
+      },
+      "archive": {
+        "path": "C:\\Users\\Mattm\\AppData\\Local\\Temp\\kiln-renderer-layout-5N2MBM\\optional-runtime-companion-source\\kiln-research-optional-runtime-companion-0.0.0.tgz",
+        "bytes": 369,
+        "unpackedBytes": 392,
+        "sha256": "d2435306552abb2248afa59cb334ced64c50726c6c235c543424cd70ce83750e"
+      },
+      "bun": {
+        "status": 0,
+        "signal": null,
+        "ms": 831.4313000000038,
+        "stdout": "bun add v1.4.2 (744846f84)\n\ninstalled @kiln-research/optional-runtime-companion@C:/Users/Mattm/AppData/Local/Temp/kiln-renderer-layout-5N2MBM/optional-runtime-companion-source/kiln-research-optional-runtime-companion-0.0.0.tgz\n\n8 packages installed [796.00ms]\n\nBlocked 1 postinstall. Run `bun pm untrusted` for details.\n",
+        "stderr": "Resolving dependencies\nResolved, downloaded and extracted [2]\nSaved lockfile\n",
+        "installedBytes": 116257077,
+        "render": {
+          "status": 0,
+          "signal": null,
+          "ms": 3595.2634000000035,
+          "stdout": "{\"mode\":\"direct\",\"readyMs\":604.1056,\"totalMs\":3450.7498,\"observations\":[{\"wallMs\":1759.0284000000001,\"pngBytes\":26705,\"pngSha256\":\"bd6c0164d3ff2d69d19a8eefadd85869bff9a530b9402d917bcc5ff309f99920\",\"timings\":{\"loadMs\":35.1,\"viewsMs\":1134.1,\"beautyMs\":0,\"totalMs\":1169.2}},{\"wallMs\":1087.087,\"pngBytes\":26705,\"pngSha256\":\"bd6c0164d3ff2d69d19a8eefadd85869bff9a530b9402d917bcc5ff309f99920\",\"timings\":{\"loadMs\":5.9,\"viewsMs\":1080.5,\"beautyMs\":0,\"totalMs\":1086.4}}],\"rendererId\":\"dawn-d3d12:nvidia-geforce-rtx-3070:D3D12 driver version 32.0.16.1074\",\"adapter\":{\"vendor\":\"nvidia\",\"architecture\":\"ampere\",\"device\":\"nvidia-geforce-rtx-3070\",\"description\":\"D3D12 driver version 32.0.16.1074\"},\"peakRssKiB\":286468,\"globalsChanged\":[\"navigator.gpu\",\"self\",\"requestAnimationFrame\",\"createImageBitmap\"]}\n",
+          "stderr": ""
+        }
+      }
+    }
+  ],
+  "limitations": [
+    "Single-host research prototypes, not full Kiln release qualification",
+    "CPU marker only proves the research entrypoint avoids native import; installed engine CPU gate remains required"
+  ],
+  "npm": "12.0.2",
+  "baseHead": "b81cfd4caed64bd90547ff83b4e513e59a1d4913",
+  "serviceSourceSha256": "947a50f9cec04391eecbd4a857d13f35a40b32c70f3f57ac4745b687f1b46b5e",
+  "fixtureSha256": "8ef3e9e5f28303639fc1d28c8648dda2494aed4c11b74ad17cb30b7726a59a9e",
+  "pinned": {
+    "pngjs": "^7.0.0",
+    "three": "0.186.0",
+    "webgpu": "0.6.1"
+  },
+  "existingWebgpu": "0.4.0"
+}

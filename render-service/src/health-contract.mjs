@@ -3,6 +3,7 @@ import {
   PRESENTATION_PRESET_CAPABILITIES,
   PRESENTATION_PRESET_IDS,
 } from './presentation-presets.mjs';
+import { RENDER_SERVICE_PROTOCOL, REQUIRED_RENDER_CAPABILITIES } from './build-identity.mjs';
 
 /** Provider-free health contract shared by the HTTP route and unit tests. */
 export const RENDER_CAPABILITIES = Object.freeze([
@@ -16,13 +17,16 @@ export const RENDER_CAPABILITIES = Object.freeze([
   ...PRESENTATION_PRESET_CAPABILITIES,
   'render.beauty',
   'auth.x-render-token',
+  ...REQUIRED_RENDER_CAPABILITIES.filter((capability) => capability !== 'render.fidelity.v1'),
 ]);
 
 export function buildHealthDocument(gpuState, authRequired, instance) {
   return {
     ok: true,
+    protocol: RENDER_SERVICE_PROTOCOL,
+    ...(gpuState.compatibility ? { compatibility: gpuState.compatibility } : {}),
     ...(gpuState.captureIdentity ? { captureIdentity: gpuState.captureIdentity } : {}),
-    // Who is listening: pid, owner lease and source fingerprint, so a host can
+    // Who is listening: pid, creator provenance and source fingerprint, so a host can
     // tell a current shared renderer from a stale orphan. See instance.mjs.
     ...(instance ? { instance } : {}),
     rendererId: gpuState.rendererId,

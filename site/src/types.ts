@@ -8,6 +8,12 @@ export interface Specimen {
   file: string;
   thumb: string;
   bytes: number;
+  runtime: {
+    file: string;
+    bytes: number;
+    sha256: string;
+    metadata: { file: string; bytes: number; sha256: string };
+  };
   animations?: number;
   authoredDate?: string;
   poster?: string;

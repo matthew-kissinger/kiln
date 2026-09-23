@@ -10,7 +10,7 @@ import {
   type KilnScreenshotAnimationResult,
 } from '../tools/registry';
 import { rasterizeComposedScene, renderCodeViewGrid } from '../views';
-import type { EvaluatorPortV1 } from './protocol';
+import type { EvaluatorPortV2 } from './protocol';
 
 const ANIMATED = `
 const meta = { name: 'remote-boundary', category: 'prop' };
@@ -30,7 +30,7 @@ describe('production evaluator boundary', () => {
   test('all source-taking review helpers consume injected evaluator GLB without local execution', async () => {
     const fixture = await renderGLBInProcess(ANIMATED);
     let calls = 0;
-    const evaluatorPort: EvaluatorPortV1 = {
+    const evaluatorPort: EvaluatorPortV2 = {
       async render() {
         calls++;
         return fixture;

@@ -360,7 +360,7 @@ export async function runKilnWorldIntegration(
     ];
     const agent = new Agent({
       model: options.model as never,
-      systemPrompt: toCachedSystemPrompt(WORLD_INTEGRATION_PROMPT_V2, options.model),
+      systemPrompt: await toCachedSystemPrompt(WORLD_INTEGRATION_PROMPT_V2, options.model),
       tools: tools as never,
       name: options.agentName ?? 'kiln-world-integrator',
     });

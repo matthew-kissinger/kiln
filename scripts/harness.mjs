@@ -14,7 +14,7 @@
 import { spawn, spawnSync } from 'node:child_process';
 import { cpSync, existsSync, mkdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { homedir, tmpdir } from 'node:os';
-import { dirname, join, resolve } from 'node:path';
+import { dirname, isAbsolute, join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 export const REPO = resolve(dirname(fileURLToPath(import.meta.url)), '..');
@@ -104,7 +104,7 @@ export const HARNESSES = {
     // nobody to trust it, so the allow-list written into `.claude/settings.json`
     // was honoured on some runs and silently ignored on others -- the same batch
     // produced a finished 22,000-triangle ship and two runs that could not call
-    // `kiln_list_primitives` at all. A CLI flag is not subject to that, so the
+    // the catalog discovery tool at all. A CLI flag is not subject to that, so the
     // grant is passed on the invocation and the settings file stays as the
     // belt-and-braces copy other harnesses can read. Both server names appear
     // because the tool prefix depends on how Kiln was installed.
@@ -149,7 +149,7 @@ export const HARNESSES = {
     // used to pass. `codex exec` runs with the approval policy pinned to
     // `never`, and under that policy an MCP tool call is not asked about, it is
     // refused: four dispatches came back inside a minute having written nothing
-    // but a note that `kiln_list_primitives` was blocked. The two flags are
+    // but a note that catalog discovery was blocked. The two flags are
     // mutually exclusive on the command line, and `--approve-for-me` is the one
     // that does both jobs -- it selects the same workspace-write sandbox and
     // moves approval to `on-request`, routed through automatic review, which is
@@ -182,7 +182,9 @@ export const HARNESSES = {
     // it blind and nothing in the output says so. scripts/check-vision.mjs is how
     // this pair was found and is worth running before trusting any new id.
     defaultModel: 'opencode-go/glm-5.3-flash',
-    argv: ({ model, prompt, sandbox }) => ['run', '--auto', '--dir', sandbox, '-m', model, prompt],
+    // Callers already set cwd to the workspace. V2 removed --dir; a private
+    // server also prevents an older shared service from retaining another loadout.
+    argv: ({ model, prompt }) => ['run', '--standalone', '--auto', '-m', model, prompt],
     // The model that answered, read back rather than assumed. `-m` has been
     // honoured on every run measured so far, but the gallery's whole claim is
     // that a named model wrote a particular program, and "we asked for it" is a
@@ -265,7 +267,7 @@ export const HARNESSES = {
   // and the risk there is specific: a user-level entry named `kiln` may point at a
   // different installation entirely. One on this machine pointed at an extracted
   // 0.6.0 package while the checkout was 0.7.0, which is the silent-wrong-engine
-  // case `kiln_list_primitives` capability output is meant to expose.
+  // case `kiln_discover({ capabilities: true })` is meant to expose.
   'cursor-agent': {
     bin: 'cursor-agent',
     // `-p` is a boolean here and the prompt is positional, unlike Claude's
@@ -317,11 +319,8 @@ export const HARNESSES = {
   },
 };
 
-// Windows: resolve the executable ourselves rather than asking for a shell.
-// `shell: true` concatenates argv into one command line, and the prompt is
-// multi-line -- so with a shell the child sees a mangled command and exits 2
-// before it has read anything. Resolving the .exe lets us pass a real argv
-// array, which CreateProcess hands through untouched.
+// Windows: resolve in PATH order and use a shell only for command shims.
+// Native executables receive argv directly; shim arguments need quoteArg below.
 const binCache = new Map();
 
 /**
@@ -340,15 +339,22 @@ const binCache = new Map();
  */
 export function resolveBin(bin) {
   if (process.platform !== 'win32') return { cmd: bin, shell: false };
+  // An explicit path needs no PATH lookup. where.exe rejects forward-slash
+  // paths; falling back to cmd.exe then silently drops multiline asset briefs.
+  if (isAbsolute(bin)) return { cmd: resolve(bin), shell: /\.(cmd|bat)$/i.test(bin) };
   if (!binCache.has(bin)) {
-    const r = spawnSync('where', [bin], { encoding: 'utf8', shell: true });
+    const r = spawnSync('where.exe', [bin], { encoding: 'utf8', windowsHide: true });
     const lines = (r.stdout ?? '')
       .split('\n')
       .map((l) => l.trim())
       .filter(Boolean);
-    const exe = lines.find((l) => l.toLowerCase().endsWith('.exe'));
-    const shim = lines.find((l) => /\.(cmd|bat)$/i.test(l));
-    binCache.set(bin, exe ? { cmd: exe, shell: false } : { cmd: shim ?? bin, shell: true });
+    // Preserve PATH precedence. Preferring any .exe over every .cmd selected an
+    // obsolete Scoop OpenCode even when the terminal resolved the current npm CLI.
+    const command = lines.find((line) => /\.(exe|com|cmd|bat)$/i.test(line));
+    binCache.set(bin, {
+      cmd: command ?? bin,
+      shell: command ? /\.(cmd|bat)$/i.test(command) : true,
+    });
   }
   return binCache.get(bin);
 }
@@ -548,7 +554,7 @@ export function makeSandbox(name) {
   // installed (as a plugin it is `plugin_kiln_kiln`), so allow every spelling.
   // `kiln_workspace` is the third and it is the one `create-workspace.mjs` and a
   // user-level registration both use: a smoke run with only the other two listed
-  // stopped and asked for `kiln_list_primitives` by name, exit 0, no program.
+  // stopped and asked for the catalog discovery tool by name, exit 0, no program.
   //
   // Scoped deliberately rather than reached for with
   // `--dangerously-skip-permissions`: this settings file governs one throwaway

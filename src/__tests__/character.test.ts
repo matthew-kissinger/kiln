@@ -1,3 +1,4 @@
+import { bindLegacyFixtureRequirements } from './helpers/requirements-fixture';
 import { describe, expect, test } from 'bun:test';
 import { WebIO } from '@gltf-transform/core';
 import * as THREE from 'three';
@@ -216,11 +217,13 @@ describe('CHAR-006/007 body-plan-agnostic createJointChain', () => {
     visual.name = 'Mesh_Body';
     root.add(visual);
     const rendered = await renderSceneToGLB(root, {
-      intent: createAssetIntentV1({
-        category: 'character',
-        capabilities: [],
-        character: { bodyPlan: 'custom', grounded: false },
-      }),
+      requirements: bindLegacyFixtureRequirements(
+        createAssetIntentV1({
+          category: 'character',
+          capabilities: [],
+          character: { bodyPlan: 'custom', grounded: false },
+        }),
+      ),
     });
     const document = await new WebIO().readBinary(rendered.bytes);
     const exported = document

@@ -1,32 +1,10 @@
-/**
- * Registry-unification gates (Phase 1.3):
- *
- *  1. Arity parity — every catalog signature's required-parameter count agrees
- *     with the real sandbox function's `Function.length` (named exceptions for
- *     rest/options/destructured signatures where JS arity can't see the truth).
- *  2. Prompt composition — the system prompt embeds the generated <api>
- *     enumeration, so EVERY cataloged primitive is teachable; a snapshot makes
- *     prompt changes reviewable in diffs.
- *  3. Skill drift gate — the on-disk kiln-glb skill files match the in-memory
- *     render; regenerate with `bun run kiln:gen-skill` when this fails.
- */
+/** Catalog signature and generated API-reference checks. Current skill drift is checked by check:skills. */
 
 import { describe, expect, test } from 'bun:test';
-import { existsSync, readFileSync } from 'node:fs';
-import { resolve, dirname } from 'node:path';
-import { fileURLToPath } from 'node:url';
 
-import { listPrimitives } from '../list-primitives';
-import {
-  renderApiSection,
-  renderPrimitivesMarkdown,
-  renderSkillQuickReference,
-} from '../prompt-api';
-import { KILN_SYSTEM_PROMPT, KILN_SYSTEM_PROMPT_SECTIONS, KILN_API_SECTION } from '../prompt';
+import { listHelperSpecs } from '../discovery/helper-specs';
+import { renderApiSection } from '../prompt-api';
 import { buildSandboxGlobals } from '../primitives';
-
-const REPO_ROOT = resolve(dirname(fileURLToPath(import.meta.url)), '../../../../..');
-const SKILL_DIR = resolve(REPO_ROOT, '.claude/skills/kiln-glb');
 
 // =============================================================================
 // (1) Arity parity
@@ -66,7 +44,7 @@ describe('catalog arity parity', () => {
   test('the catalog documents at least as many params as the impl declares', () => {
     const globals = buildSandboxGlobals();
     const mismatches: string[] = [];
-    for (const p of listPrimitives()) {
+    for (const p of listHelperSpecs()) {
       if (ARITY_EXCEPTIONS.has(p.name)) continue;
       const fn = globals[p.name] as ((...args: unknown[]) => unknown) | undefined;
       if (typeof fn !== 'function') continue; // covered by the existing parity test
@@ -82,49 +60,11 @@ describe('catalog arity parity', () => {
 });
 
 // =============================================================================
-// (2) Prompt composition
+// (2) Generated catalog renderings
 // =============================================================================
 
-describe('system prompt embeds the generated catalog', () => {
-  test('every cataloged primitive name appears in the system prompt', () => {
-    const missing = listPrimitives()
-      .map((p) => p.name)
-      .filter((name) => !KILN_SYSTEM_PROMPT.includes(name));
-    expect(missing).toEqual([]);
-  });
-
-  test('the sections compose to the full prompt in canonical order', () => {
-    expect(KILN_SYSTEM_PROMPT).toBe(KILN_SYSTEM_PROMPT_SECTIONS.map(([, s]) => s).join('\n\n'));
-    expect(KILN_SYSTEM_PROMPT_SECTIONS.map(([name]) => name)).toEqual([
-      'header',
-      'file-format',
-      'coordinate-contract',
-      'api',
-      'architecture',
-      'authoring-strategy',
-      'quality',
-      'attachment-rules',
-      'rules',
-      'animation-format',
-      'visual-qa',
-      'examples',
-    ]);
-  });
-
-  test('api section keeps the load-bearing hand idioms', () => {
-    expect(KILN_API_SECTION).toContain('WRONG: parent.add(createPart(...))');
-    expect(KILN_API_SECTION).toContain('createInstance("WheelFR"');
-    expect(KILN_API_SECTION).toContain('autoUnwrap');
-    expect(KILN_API_SECTION).toContain('THREE namespace is exposed');
-  });
-
-  test('api section snapshot (review prompt changes in this diff)', () => {
-    expect(renderApiSection(listPrimitives())).toMatchSnapshot();
-  });
-});
-
 describe('unified api surface (examples folded in)', () => {
-  const primitives = listPrimitives();
+  const primitives = listHelperSpecs();
   const def = renderApiSection(primitives);
   const withExamples = renderApiSection(primitives, { includeExamples: true });
 
@@ -149,28 +89,5 @@ describe('unified api surface (examples folded in)', () => {
 
   test('unified api snapshot (review folded examples in this diff)', () => {
     expect(withExamples).toMatchSnapshot();
-  });
-});
-
-// =============================================================================
-// (3) Skill drift gate
-// =============================================================================
-
-// The kiln-glb skill is a downstream artifact (lives outside the engine repo); this
-// gate stays dormant here and fires wherever the skill is vendored at the expected depth.
-describe.skipIf(!existsSync(SKILL_DIR))('kiln-glb skill files match the catalog render', () => {
-  test('references/primitives.md is up to date (bun run kiln:gen-skill)', () => {
-    const onDisk = readFileSync(resolve(SKILL_DIR, 'references/primitives.md'), 'utf-8');
-    expect(onDisk.replace(/\r\n/g, '\n')).toBe(renderPrimitivesMarkdown(listPrimitives()));
-  });
-
-  test('SKILL.md generated block is up to date (bun run kiln:gen-skill)', () => {
-    const skill = readFileSync(resolve(SKILL_DIR, 'SKILL.md'), 'utf-8').replace(/\r\n/g, '\n');
-    const begin = skill.indexOf('<!-- BEGIN GENERATED PRIMITIVES -->');
-    const end = skill.indexOf('<!-- END GENERATED PRIMITIVES -->');
-    expect(begin).toBeGreaterThan(-1);
-    expect(end).toBeGreaterThan(begin);
-    const block = skill.slice(begin, end);
-    expect(block).toContain(renderSkillQuickReference(listPrimitives()));
   });
 });

@@ -30,14 +30,17 @@ import { fileURLToPath } from 'node:url';
 import { PRESENTATION_PROFILE_ID, initRenderer, renderGlb } from './renderer.mjs';
 import {
   describeInstance,
-  fingerprintSourceDir,
   parseOwnerPid,
-  startOwnerWatch,
+  createServiceLifecycle,
+  serviceLifecycleOptions,
 } from './instance.mjs';
 import { acquireGpu } from './gpu.mjs';
 import { buildHealthDocument } from './health-contract.mjs';
 import { describeBind, resolveBindPolicy } from './bind-policy.mjs';
 import { createRendererCaptureIdentity } from './cache-identity.mjs';
+import { validateSelfContainedGlb } from './glb-input.mjs';
+import { readBoundedBody, requestCancellation } from './request-limits.mjs';
+import { buildCompatibility, resolvedRendererDependencies } from './build-identity.mjs';
 import {
   buildRenderFidelityV1,
   buildRenderOperationalEvidenceV1,
@@ -56,12 +59,18 @@ const PORT = Number(process.env.PORT ?? 8000);
 // started it on demand; a hand-started service has none and outlives sessions.
 const SOURCE_DIR = fileURLToPath(new URL('.', import.meta.url));
 const OWNER_PID = parseOwnerPid(process.env.RENDER_SERVICE_OWNER_PID);
+const LIFECYCLE = serviceLifecycleOptions(process.env);
+const COMPATIBILITY = buildCompatibility({
+  sourceDir: SOURCE_DIR,
+  dependencies: resolvedRendererDependencies(),
+});
 const INSTANCE = describeInstance({
   pid: process.pid,
   ownerPid: OWNER_PID,
   startedAt: new Date().toISOString(),
   sourceDir: realpathSync(dirname(SOURCE_DIR)),
-  sourceFingerprint: fingerprintSourceDir(SOURCE_DIR),
+  sourceFingerprint: COMPATIBILITY.sourceFingerprint,
+  ...LIFECYCLE,
 });
 const TOKEN = process.env.RENDER_SERVICE_TOKEN ?? '';
 // Unset now means loopback, and a wider bind has to say so AND carry a token.
@@ -96,6 +105,7 @@ try {
   process.exit(1);
 }
 gpuState.captureIdentity = createRendererCaptureIdentity(gpuState);
+gpuState.compatibility = COMPATIBILITY;
 console.log(`adapter: ${JSON.stringify(gpuState.summary)}`);
 console.log(`rendererId: ${gpuState.rendererId}`);
 // Only reachable on a loopback bind or an explicit waiver -- an exposed bind with
@@ -106,27 +116,14 @@ if (!TOKEN && bind.exposed)
     'WARNING: exposed bind with RENDER_SERVICE_ALLOW_UNAUTHENTICATED=1 — POST routes are UNAUTHENTICATED',
   );
 
-const renderQueue = createSerialRenderQueue({ processStartedAt: PROCESS_STARTED_AT });
-
-function readBody(req) {
-  return new Promise((resolve, reject) => {
-    const chunks = [];
-    let total = 0;
-    req.on('data', (c) => {
-      total += c.length;
-      if (total > MAX_BODY) {
-        reject(Object.assign(new Error('body too large'), { status: 413 }));
-        req.destroy();
-        return;
-      }
-      chunks.push(c);
-    });
-    req.on('end', () => resolve(Buffer.concat(chunks)));
-    req.on('error', reject);
-  });
-}
+let lifecycle;
+const renderQueue = createSerialRenderQueue({
+  processStartedAt: PROCESS_STARTED_AT,
+  onActivity: ({ admittedJobs }) => lifecycle?.setActivity(admittedJobs),
+});
 
 function send(res, status, obj) {
+  if (res.destroyed || res.writableEnded) return;
   const body = JSON.stringify(obj);
   res.writeHead(status, {
     'content-type': 'application/json',
@@ -137,6 +134,8 @@ function send(res, status, obj) {
 
 const server = createServer(async (req, res) => {
   const started = performance.now();
+  const cancellation = requestCancellation(req, res);
+  let admission;
   // Accumulated across the handler and emitted exactly once by done(). Only
   // names and sizes go in here — never a token, a header value, or GLB bytes.
   // Path only, never the query string: nothing here accepts a token as a query
@@ -149,6 +148,10 @@ const server = createServer(async (req, res) => {
     auth: 'not-required',
   };
   const done = (status, obj) => {
+    if (status >= 400 && !req.complete && !res.destroyed) {
+      res.setHeader('connection', 'close');
+      res.once('finish', () => req.destroy());
+    }
     send(res, status, obj);
     const outcomeCode = httpRenderOutcomeCode({
       method: log.method,
@@ -193,7 +196,22 @@ const server = createServer(async (req, res) => {
       }
       if (req.url === '/bake') return done(501, { ok: false, error: 'bake not implemented yet' });
 
-      const raw = await readBody(req);
+      // Reserve before reading: even stalled uploads count against admission
+      // and managed activity. Unknown/chunked lengths reserve the body ceiling.
+      const declared = req.headers['content-length'];
+      if (
+        declared !== undefined &&
+        (!/^\d+$/.test(declared) || !Number.isSafeInteger(Number(declared)))
+      )
+        return done(400, { ok: false, error: 'invalid content-length' });
+      const reservationBytes = declared === undefined ? MAX_BODY : Number(declared);
+      if (reservationBytes > MAX_BODY) return done(413, { ok: false, error: 'body too large' });
+      admission = renderQueue.reserve({ bytes: reservationBytes, signal: cancellation.signal });
+      let raw = await readBoundedBody(req, {
+        signal: cancellation.signal,
+        maxBytes: Math.max(1, reservationBytes),
+        timeoutMs: 15000,
+      });
       log.bodyBytes = raw.length;
       let body;
       try {
@@ -213,6 +231,7 @@ const server = createServer(async (req, res) => {
         return done(400, { ok: false, error: 'not a GLB (bad magic)' });
       }
       if (glb.length > MAX_GLB) return done(413, { ok: false, error: 'GLB too large' });
+      validateSelfContainedGlb(glb);
       // New fidelity-aware callers assert the identity they sent. Legacy callers
       // omit it and retain their exact historical response shape.
       let inputGlbSha256;
@@ -243,9 +262,13 @@ const server = createServer(async (req, res) => {
       } else {
         log.viewsRequested = renderMode.viewDirs.length;
       }
+      // Do not retain encoded JSON/body buffers in queued request closures.
+      raw = undefined;
+      body = undefined;
+      admission.resize(glb.length);
 
       const t0 = performance.now();
-      const queued = await renderQueue.enqueue(async (operationalStart) => {
+      const queued = await admission.run(async (operationalStart) => {
         log.renderOperationalStart = operationalStart;
         return {
           operationalStart,
@@ -339,24 +362,26 @@ const server = createServer(async (req, res) => {
       delete log.renderOperationalStart;
     }
     done(e.status ?? 500, { ok: false, error: String(e.message ?? e) });
+  } finally {
+    admission?.release();
+    cancellation.dispose();
   }
 });
 
-// A host that dies without running its exit hook -- a hard kill, which is the
-// only kind Windows has -- would otherwise leave this process holding the GPU
-// on the shared port forever. Watching the owner is what makes an on-demand
-// start safe to forget about.
-if (OWNER_PID !== undefined)
-  startOwnerWatch({
-    ownerPid: OWNER_PID,
-    onOrphaned: (pid) => {
-      console.error(`owner process ${pid} is gone; exiting`);
-      process.exit(0);
+server.requestTimeout = 20000;
+server.headersTimeout = 10000;
+server.once('close', () => lifecycle?.stop());
+
+server.listen(PORT, bind.host, () => {
+  lifecycle = createServiceLifecycle({
+    ...LIFECYCLE,
+    onIdle: () => {
+      console.error(`managed renderer idle for ${LIFECYCLE.idleTimeoutMs}ms; exiting`);
+      server.close(() => process.exit(0));
     },
   });
-
-server.listen(PORT, bind.host, () =>
+  lifecycle.setActivity(renderQueue.snapshot().admittedJobs);
   console.log(
     `kiln-render-service listening on ${describeBind(bind, { token: TOKEN, allowUnauthenticated: process.env.RENDER_SERVICE_ALLOW_UNAUTHENTICATED })}:${PORT}`,
-  ),
-);
+  );
+});

@@ -4,7 +4,14 @@ import {
   QaRegistry,
   type QaRule,
 } from './registry';
-import type { QaAffectedEntity, QaContext, QaFinding } from './types';
+import type { QaAffectedEntity, QaFinding } from './types';
+
+export interface UniversalQaInput {
+  scene?: unknown;
+  clips?: readonly unknown[];
+  requiredParts?: readonly string[];
+  animation?: { clips: readonly string[] };
+}
 
 interface VectorLike {
   x: number;
@@ -58,7 +65,7 @@ function isSceneNode(value: unknown): value is SceneNodeLike {
   return typeof value === 'object' && value !== null;
 }
 
-function sceneNodes(context: QaContext): SceneNodeLike[] {
+function sceneNodes(context: UniversalQaInput): SceneNodeLike[] {
   if (!isSceneNode(context.scene)) return [];
   const nodes: SceneNodeLike[] = [];
   const seen = new Set<SceneNodeLike>();
@@ -137,7 +144,7 @@ function iterableValues(value: ArrayLike<number> | undefined): number[] {
   return out;
 }
 
-function emptyOutputFindings(context: QaContext): QaFinding[] {
+function emptyOutputFindings(context: UniversalQaInput): QaFinding[] {
   const nodes = sceneNodes(context);
   if (nodes.some(isRenderable)) return [];
   return [
@@ -153,7 +160,7 @@ function emptyOutputFindings(context: QaContext): QaFinding[] {
   ];
 }
 
-function finiteDataFindings(context: QaContext): QaFinding[] {
+function finiteDataFindings(context: UniversalQaInput): QaFinding[] {
   const findings: QaFinding[] = [];
   for (const node of sceneNodes(context)) {
     const badTransform =
@@ -193,7 +200,7 @@ function finiteDataFindings(context: QaContext): QaFinding[] {
   return findings;
 }
 
-function invalidIndexFindings(context: QaContext): QaFinding[] {
+function invalidIndexFindings(context: UniversalQaInput): QaFinding[] {
   const findings: QaFinding[] = [];
   for (const node of sceneNodes(context)) {
     const index = node.geometry?.index;
@@ -223,8 +230,8 @@ function invalidIndexFindings(context: QaContext): QaFinding[] {
   return findings;
 }
 
-function zeroScaleFindings(context: QaContext): QaFinding[] {
-  const required = new Set(context.intent.requiredParts);
+function zeroScaleFindings(context: UniversalQaInput): QaFinding[] {
+  const required = new Set(context.requiredParts ?? []);
   const findings: QaFinding[] = [];
   for (const node of sceneNodes(context)) {
     const scale = node.scale;
@@ -255,7 +262,7 @@ function zeroScaleFindings(context: QaContext): QaFinding[] {
   return findings;
 }
 
-function clipList(context: QaContext): AnimationClipLike[] {
+function clipList(context: UniversalQaInput): AnimationClipLike[] {
   return (context.clips ?? []).filter(
     (clip): clip is AnimationClipLike => typeof clip === 'object' && clip !== null,
   );
@@ -269,8 +276,8 @@ function trackTarget(trackName: string): string | undefined {
   return path.slice(slash + 1) || undefined;
 }
 
-function requiredTrackTargets(context: QaContext): Set<string> {
-  const requested = new Set(context.intent.animation?.clips ?? []);
+function requiredTrackTargets(context: UniversalQaInput): Set<string> {
+  const requested = new Set(context.animation?.clips ?? []);
   const targets = new Set<string>();
   for (const clip of clipList(context)) {
     if (!clip.name || !requested.has(clip.name)) continue;
@@ -284,7 +291,7 @@ function requiredTrackTargets(context: QaContext): Set<string> {
   return targets;
 }
 
-function duplicateNameFindings(context: QaContext): QaFinding[] {
+function duplicateNameFindings(context: UniversalQaInput): QaFinding[] {
   const byName = new Map<string, SceneNodeLike[]>();
   for (const node of sceneNodes(context)) {
     const name = node.name?.trim();
@@ -294,7 +301,7 @@ function duplicateNameFindings(context: QaContext): QaFinding[] {
     byName.set(name, nodes);
   }
 
-  const required = new Set([...context.intent.requiredParts, ...requiredTrackTargets(context)]);
+  const required = new Set([...(context.requiredParts ?? []), ...requiredTrackTargets(context)]);
   const findings: QaFinding[] = [];
   for (const [name, nodes] of byName) {
     if (nodes.length < 2) continue;
@@ -317,8 +324,8 @@ function duplicateNameFindings(context: QaContext): QaFinding[] {
   return findings;
 }
 
-function animationTargetFindings(context: QaContext): QaFinding[] {
-  const animation = context.intent.animation;
+function animationTargetFindings(context: UniversalQaInput): QaFinding[] {
+  const animation = context.animation;
   if (!animation || animation.clips.length === 0) return [];
   const nodes = sceneNodes(context);
   const names = new Set(nodes.map((node) => node.name?.trim()).filter(Boolean) as string[]);
@@ -372,7 +379,13 @@ export const UNIVERSAL_QA_RULES: readonly QaRule[] = [
       '82c1b26db0a7900141aa44fd40e90fb858e80c51347dc6975ef1691f62730c78',
     ),
     defaultMode: 'enforce',
-    evaluate: emptyOutputFindings,
+    evaluate: (context) =>
+      emptyOutputFindings({
+        scene: context.scene,
+        clips: context.clips,
+        requiredParts: context.intent.requiredParts,
+        animation: context.intent.animation,
+      }),
   },
   {
     id: 'UNIVERSAL_FINITE_DATA_RULE',
@@ -386,7 +399,13 @@ export const UNIVERSAL_QA_RULES: readonly QaRule[] = [
       '82c1b26db0a7900141aa44fd40e90fb858e80c51347dc6975ef1691f62730c78',
     ),
     defaultMode: 'enforce',
-    evaluate: finiteDataFindings,
+    evaluate: (context) =>
+      finiteDataFindings({
+        scene: context.scene,
+        clips: context.clips,
+        requiredParts: context.intent.requiredParts,
+        animation: context.intent.animation,
+      }),
   },
   {
     id: 'UNIVERSAL_INDEX_RULE',
@@ -400,7 +419,13 @@ export const UNIVERSAL_QA_RULES: readonly QaRule[] = [
       '82c1b26db0a7900141aa44fd40e90fb858e80c51347dc6975ef1691f62730c78',
     ),
     defaultMode: 'enforce',
-    evaluate: invalidIndexFindings,
+    evaluate: (context) =>
+      invalidIndexFindings({
+        scene: context.scene,
+        clips: context.clips,
+        requiredParts: context.intent.requiredParts,
+        animation: context.intent.animation,
+      }),
   },
   {
     id: 'UNIVERSAL_ZERO_SCALE_RULE',
@@ -414,7 +439,13 @@ export const UNIVERSAL_QA_RULES: readonly QaRule[] = [
       '82c1b26db0a7900141aa44fd40e90fb858e80c51347dc6975ef1691f62730c78',
     ),
     defaultMode: 'enforce',
-    evaluate: zeroScaleFindings,
+    evaluate: (context) =>
+      zeroScaleFindings({
+        scene: context.scene,
+        clips: context.clips,
+        requiredParts: context.intent.requiredParts,
+        animation: context.intent.animation,
+      }),
   },
   {
     id: 'UNIVERSAL_NODE_NAME_RULE',
@@ -428,7 +459,13 @@ export const UNIVERSAL_QA_RULES: readonly QaRule[] = [
       '82c1b26db0a7900141aa44fd40e90fb858e80c51347dc6975ef1691f62730c78',
     ),
     defaultMode: 'enforce',
-    evaluate: duplicateNameFindings,
+    evaluate: (context) =>
+      duplicateNameFindings({
+        scene: context.scene,
+        clips: context.clips,
+        requiredParts: context.intent.requiredParts,
+        animation: context.intent.animation,
+      }),
   },
   {
     id: 'UNIVERSAL_ANIMATION_TARGET_RULE',
@@ -442,10 +479,28 @@ export const UNIVERSAL_QA_RULES: readonly QaRule[] = [
       '82c1b26db0a7900141aa44fd40e90fb858e80c51347dc6975ef1691f62730c78',
     ),
     defaultMode: 'enforce',
-    evaluate: animationTargetFindings,
+    evaluate: (context) =>
+      animationTargetFindings({
+        scene: context.scene,
+        clips: context.clips,
+        requiredParts: context.intent.requiredParts,
+        animation: context.intent.animation,
+      }),
   },
 ] as const;
 
 export function createUniversalQaRegistry(): QaRegistry {
   return new QaRegistry(UNIVERSAL_QA_RULES);
 }
+
+/** Shared measurement kernels; normal requirements QA never constructs a legacy intent. */
+export const UNIVERSAL_QA_KERNELS: Readonly<
+  Record<string, (input: UniversalQaInput) => QaFinding[]>
+> = {
+  UNIVERSAL_SCENE_CONTENT_RULE: emptyOutputFindings,
+  UNIVERSAL_FINITE_DATA_RULE: finiteDataFindings,
+  UNIVERSAL_INDEX_RULE: invalidIndexFindings,
+  UNIVERSAL_ZERO_SCALE_RULE: zeroScaleFindings,
+  UNIVERSAL_NODE_NAME_RULE: duplicateNameFindings,
+  UNIVERSAL_ANIMATION_TARGET_RULE: animationTargetFindings,
+};

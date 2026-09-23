@@ -8,8 +8,6 @@
  */
 import { afterEach, describe, expect, test } from 'bun:test';
 
-import { assessProgramGrade } from '../agent/grade-refine';
-import { createAssetIntentV1 } from '../contracts';
 import { renderGLB } from '../render';
 import { AssetQaBlockedError, qaBlockingEnabled, qaPolicyFromEnv } from './run';
 
@@ -55,8 +53,7 @@ describe('KILN_QA_MODE render-path integration', () => {
 
   test('a zero-scale program blocks under default env', async () => {
     delete process.env['KILN_QA_MODE'];
-    const intent = createAssetIntentV1({ category: 'prop' });
-    await expect(renderGLB(ZERO_SCALE_CODE, { intent })).rejects.toThrow(AssetQaBlockedError);
+    await expect(renderGLB(ZERO_SCALE_CODE)).rejects.toThrow(AssetQaBlockedError);
   });
 
   test('H-40(3): the blocked-render message carries the finding message + authored repairText', async () => {
@@ -64,8 +61,7 @@ describe('KILN_QA_MODE render-path integration', () => {
     // { ok:false, error: err.message }) — bare rule codes would leave the model
     // guessing what to fix.
     delete process.env['KILN_QA_MODE'];
-    const intent = createAssetIntentV1({ category: 'prop' });
-    const err = await renderGLB(ZERO_SCALE_CODE, { intent }).then(
+    const err = await renderGLB(ZERO_SCALE_CODE).then(
       () => undefined,
       (e: unknown) => e,
     );
@@ -79,23 +75,8 @@ describe('KILN_QA_MODE render-path integration', () => {
 
   test('the same program completes under KILN_QA_MODE=observe', async () => {
     process.env['KILN_QA_MODE'] = 'observe';
-    const intent = createAssetIntentV1({ category: 'prop' });
-    const render = await renderGLB(ZERO_SCALE_CODE, { intent });
+    const render = await renderGLB(ZERO_SCALE_CODE);
     expect(render.glb.byteLength).toBeGreaterThan(0);
-  });
-
-  test('H-10: assessProgramGrade reports a QA block as qaBlocked, not a broken program', async () => {
-    delete process.env['KILN_QA_MODE'];
-    const assess = await assessProgramGrade(ZERO_SCALE_CODE, { category: 'prop' });
-    expect(assess.ok).toBe(false);
-    expect(assess.qaBlocked).toBe(true);
-    expect(assess.error).toMatch(/Asset QA blocked/);
-  });
-
-  test('H-10: observe mode revives the salvage predicate for a QA-blocked program', async () => {
-    process.env['KILN_QA_MODE'] = 'observe';
-    const assess = await assessProgramGrade(ZERO_SCALE_CODE, { category: 'prop' });
-    expect(assess.ok).toBe(true);
-    expect(assess.qaBlocked).toBeUndefined();
+    expect(render.meta.qaReport).toMatchObject({ schemaVersion: 2, acceptance: 'incomplete' });
   });
 });

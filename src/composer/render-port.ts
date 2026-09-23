@@ -510,4 +510,7 @@ export interface PbrRenderResult {
 
 /** Host-supplied PBR renderer seam. Absent everywhere it is optional means the
  *  feature is off and behavior is byte-identical to the CPU-only path. */
-export type PbrRenderPort = (req: PbrRenderRequest) => Promise<PbrRenderResult>;
+export type PbrRenderPort = (
+  req: PbrRenderRequest,
+  execution?: { signal?: AbortSignal },
+) => Promise<PbrRenderResult>;

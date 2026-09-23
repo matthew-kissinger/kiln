@@ -3,37 +3,56 @@
 Changes to `@kiln/engine`. Source and installable packages are distributed through
 GitHub. The package is not published on the npm registry.
 
-## Unreleased: The render service knows who it is, and `kiln_screenshot` sees what `kiln_render` sees
+## 0.8.0 (unreleased candidate)
 
-- **The shared render-service port is no longer a guess.** `/health` now carries `instance`: the
-  service's pid, the session that started it on demand, and a fingerprint of the source it runs.
-  The host reads that before joining. A current service is joined whoever started it. A service
-  running older source than `render-service/src` -- the renderer from before a `git pull`, still
-  up -- is replaced when its owning session has exited, and left alone but named when another
-  session still owns it or it was started by hand. Before this, a stale orphan was joined by
-  every session and the engine's newer request fields came back as a 400 that the sheet reported
-  as a CPU degrade with nothing saying why.
-- **An on-demand service exits when the session that started it is gone.** The host passes
-  `RENDER_SERVICE_OWNER_PID`; the service polls it and exits on its own, so a hard-killed MCP
-  server on Windows, which never runs its exit hook, no longer leaves a GPU process on port 8000
-  for the rest of the day. A hand-started service has no owner and outlives sessions as before.
-- **A session that joined a renderer which then went away starts again on the next view** instead
-  of reporting connection refused as a degrade for the rest of its life.
-- **`kiln service status | stop | prune`.** `status` prints the facts the host acts on: the URL,
-  whether the service is installed, who is listening, its owner and whether its source is current.
-  `prune` stops a stale orphan and nothing else. `stop` stops the service whoever started it, for
-  the one case the host will not decide for you. Something that is not a render service on the
-  port is reported with the variable that moves the renderer, never joined.
-- **`kiln_screenshot` on the in-process loop is the same implementation as the unified
-  `kiln_render`.** It takes the same `capture` config (grid shape, per-part framing, backdrop),
-  routes textured and metallic scenes through the render port, and reports `viewFidelity`. It
-  had been a frozen CPU-only copy kept as the control arm of a bench that no longer exists, which
-  meant `kiln generate --render gpu` could never show its model a material-faithful view.
-- **The tier-2 dogfood receipt says whether the workspace MCP server was exercised.** `toolUsage`
-  counts every tool call in the trace and classifies the run as `exercised`, `not-exercised` or
-  `unknown`, so a run that completed through the CLI alone -- an outer agent that dispatched an
-  in-session subagent, as the blind OpenCode run did -- is visible in the receipt rather than
-  only to someone reading the trace.
+The 0.8.0 candidate also exposes Original GLB and Runtime GLB downloads in the local
+viewer and public gallery, with companion runtime metadata and unchanged canonical
+files. The public viewer adds native animation selection and pause/play controls.
+Gallery build scripts use the current evaluator API. Site setup text and
+historical-example labels match the upgraded CLI/MCP workflow.
+
+External CLI/MCP authoring skills and native Strands workflow instructions are
+separate. Optional native references expose only explicitly selected technical
+files, with no workspace setup, CLI command or delivery instructions.
+
+- **One asset workflow across CLI and MCP.** Kiln Discovery replaces
+  `kiln_list_primitives`; search ordinary modeling language, browse operations,
+  assemblies and optional recipes, then fetch exact contracts. No search model,
+  GPU, API key or category selection is required. Matching now normalizes Unicode
+  identifiers, retains term/field evidence, labels related and partial results,
+  and limits typo expansion to missing vocabulary.
+- **Explicit migration instead of hidden legacy fallbacks.** Retired Discovery
+  selectors, ambiguous helper aliases, category-driven execution and the old
+  evaluator/native interfaces fail with migration advice. See
+  [the migration guide](docs/migration.md) before updating an integration.
+- **Geometry and assembly contracts are sharper.** The unification pass repairs
+  scale-sensitive geometry diagnostics, sweeps, CSG precision/attributes, UV
+  ownership and assembly reuse. Requirements and QA report unsupported obligations
+  as incomplete; successful generation does not certify an asset's physical fit.
+- **Better evidence during review.** Animation review reports endpoint continuity
+  separately from loop intent and velocity smoothness. Rendered edits automatically
+  compare exported static data and animation channels; source-only edits explicitly
+  leave preservation unassessed. Focused inspection provides paged differences,
+  subtree summaries and surface measurements.
+- **A shared renderer with explicit fidelity.** Compatible clients share a managed
+  service with an idle lifetime; the starting session's exit does not kill other
+  clients' work. Incompatible listeners are reported without replacement. The
+  optional renderer ships inside Kiln; local startup, remote routes, cancellation,
+  admission limits and in-session reprobe share the documented contracts. Material
+  fidelity is reported for each view and CPU views remain geometry-only evidence.
+- **Strands is optional.** Its native workflow uses the shared program-reference
+  tools, unified rendering and an explicit `kiln_finish` terminal. Native context
+  stays outside the shared CLI/MCP skills; SDK/provider dependencies are optional.
+- **Consumer requirements are separate from maintainer pins.** CLI/MCP accept Node
+  20.15.0+ on the 20.x line or 22.2.0+; native Strands requires 22.2.0+. Installed
+  commands do not require Bun. Read-only workspace checks respect an existing
+  installed interpreter; repair/upgrade remains explicit. OpenCode setup guidance
+  reflects its current CLI, and Cline's affected image path has a documented workaround.
+
+This version is a local candidate, not a published package. Qualification and
+remaining limits are recorded in the [progress checkpoint](docs/plans/2026-09-22-progress-checkpoint.md).
+The development entries below retain earlier changes and may describe intermediate
+interfaces superseded by this version; use the current tool and migration guides.
 
 ## Unreleased: Test suite holds under a loaded runner
 

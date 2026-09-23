@@ -1,4 +1,4 @@
-#!/usr/bin/env bun
+#!/usr/bin/env node
 /**
  * Stdio adapter for the shared program-aware tool registry.
  * The CLI entry uses a persistent local source store. Embedded callers can inject
@@ -26,8 +26,10 @@ import {
 import { buildRenderPort, resolveRenderMode } from './cli-render-mode';
 import { localProgramStore } from './program-store-node';
 import { isDirectEntry } from './direct-entry';
+import { assertNodeRuntime } from './runtime-support.mjs';
 import { ENGINE_VERSION } from './engine-identity';
 import { createPackagedLocalToolContext } from './local-runtime';
+import { CATEGORY_MIGRATION_MESSAGE, readHostRequirementsFile } from './requirements-file';
 
 /** Server identity reported in the MCP handshake. */
 export const MCP_SERVER_NAME = 'kiln';
@@ -71,7 +73,7 @@ export const MCP_SERVER_INSTRUCTIONS = `Kiln turns JavaScript you write into GLB
 
 Work by reference. Send a program once to kiln_validate or kiln_render; the result carries a programRef. Keep it exactly as returned, including a short p_ handle, and use it for every later view and edit. kiln_source with that ref and a literal query returns exact edit anchors, and kiln_edit with that ref plus edits returns a new ref and renders by default. Do not resend a whole program to change part of it.
 
-Call kiln_list_primitives before writing code to get exact helper signatures, with capabilities: true for the runtime, source, export and camera contract. Read viewFidelity in any render result before judging materials: a geometry-flat CPU image is evidence about shape, not about material. When materialFaithful is false and the task concerns appearance, say so rather than concluding from a CPU view: material-faithful views come from the GPU render service that ships as render-service/ in this installation. It has its own npm install; once installed it is started on demand by the first view that needs it, so there is no order to get right and no session to restart.
+Call kiln_discover before writing code to get exact helper signatures, with capabilities: true for the runtime, source, export and camera contract. Read viewFidelity in any render result before judging materials: a geometry-flat CPU image is evidence about shape, not about material. When materialFaithful is false and the task concerns appearance, say so rather than concluding from a CPU view. Material-faithful views come from the GPU render service included as render-service/ in this Kiln installation. Its native dependencies are optional dependencies of Kiln; keep them enabled when installing. Check kiln service status for readiness and follow docs/rendering.md for local or remote setup. Auto mode starts a compatible local service on demand. Installed dependencies alone do not prove GPU support.
 
 Detailed workflows ship beside this server as Agent Skills, one directory each under ${packagedSkillsDir}:
 - kiln-setup-workspace: create a managed workspace for authoring, and verify its tools came up
@@ -336,16 +338,58 @@ export function createKilnMcpServer(
   return server;
 }
 
+/** Only explicit host startup configuration can supply a standalone session's policy. */
+async function readMcpRequirements(
+  argv: readonly string[],
+): Promise<KilnToolContext['requirements']> {
+  let file: string | undefined;
+  for (let index = 0; index < argv.length; index++) {
+    const option = argv[index];
+    if (option === '--category' || option?.startsWith('--category='))
+      throw new Error(CATEGORY_MIGRATION_MESSAGE);
+    if (option !== '--requirements') throw new Error(`Unknown MCP option: ${option}`);
+    if (file !== undefined) throw new Error('--requirements may be supplied only once.');
+    file = argv[++index];
+    if (!file || file.startsWith('-')) throw new Error('--requirements requires a file path.');
+  }
+  return file === undefined ? undefined : readHostRequirementsFile(file);
+}
+
 if (isDirectEntry(import.meta.url)) {
+  let requirements: KilnToolContext['requirements'];
+  try {
+    assertNodeRuntime();
+    requirements = await readMcpRequirements(process.argv.slice(2));
+  } catch (error) {
+    console.error(error instanceof Error ? error.message : String(error));
+    process.exit(1);
+  }
+  if (process.env['KILN_WORKSPACE']) {
+    // Keep setup code outside the runtime bundle; importing it must not turn its
+    // direct-entry check into another entrypoint for this MCP executable.
+    const { assertWorkspaceCurrent } = await import(
+      new URL('../scripts/create-workspace.mjs', import.meta.url).href
+    );
+    try {
+      await assertWorkspaceCurrent(
+        process.env['KILN_WORKSPACE'],
+        fileURLToPath(new URL('..', import.meta.url)),
+      );
+    } catch (error) {
+      console.error(error instanceof Error ? error.message : String(error));
+      process.exit(1);
+    }
+  }
   const mode = resolveRenderMode(process.env['KILN_RENDER'] ?? 'auto');
   // One probe before the first connection, so no client attach waits on a network
   // round trip -- but NOT a decision that lasts the session. `autoSpawn` hands
   // back a port that starts the packaged renderer on the first view that needs
   // one, which is the only ordering a user can actually achieve: the harness owns
   // this process's lifecycle, so "start the renderer first" was never theirs to do.
-  const context = await createPackagedLocalToolContext(
-    await buildRenderPort(mode, process.env['KILN_RENDER_PORT_URL'], { autoSpawn: true }),
-  );
+  const context = await createPackagedLocalToolContext({
+    ...(await buildRenderPort(mode, process.env['KILN_RENDER_PORT_URL'], { autoSpawn: true })),
+    requirements,
+  });
   context.programStore = localProgramStore();
   context.assetLibrary = localAssetLibrary();
   const deliveryBase = process.env['KILN_ASSET_DOWNLOAD_BASE_URL'];

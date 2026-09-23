@@ -28,8 +28,14 @@ interface PropMotionAssembly {
 
 const stable = (value: number): number => Math.round(value * 1_000_000) / 1_000_000;
 
-function finding(context: QaContext, value: Omit<QaFinding, 'profile'>): QaFinding {
-  return { ...value, profile: context.intent.qaProfile || PROFILE };
+function finding(
+  context: Pick<QaContext, 'intent'> | { profile: string },
+  value: Omit<QaFinding, 'profile'>,
+): QaFinding {
+  return {
+    ...value,
+    profile: 'intent' in context ? context.intent.qaProfile || PROFILE : context.profile,
+  };
 }
 
 function rolesOf(node: THREE.Object3D): readonly string[] {
@@ -59,7 +65,7 @@ function transformedBox(source: THREE.Box3, transform: THREE.Matrix4): THREE.Box
   return result;
 }
 
-function collectParts(root: THREE.Object3D): LocalPart[] {
+function collectParts(root: THREE.Object3D, measureVertices = false): LocalPart[] {
   root.updateWorldMatrix(true, true);
   const rootInverse = root.matrixWorld.clone().invert();
   const result: LocalPart[] = [];
@@ -68,12 +74,35 @@ function collectParts(root: THREE.Object3D): LocalPart[] {
     const renderable = node instanceof THREE.Mesh;
     let box: THREE.Box3 | undefined;
     if (renderable && node.geometry instanceof THREE.BufferGeometry) {
+      const position = node.geometry.getAttribute('position');
       node.geometry.computeBoundingBox();
       if (node.geometry.boundingBox) {
-        box = transformedBox(
-          node.geometry.boundingBox,
-          rootInverse.clone().multiply(node.matrixWorld),
-        );
+        const transform = rootInverse.clone().multiply(node.matrixWorld);
+        // Placement needs actual base-geometry extents. Transforming a local
+        // AABB invents empty corners on curved/sparse rotated meshes and can
+        // both report a false size mismatch and conceal a real grounding gap.
+        // Mechanism/clearance checks keep their deliberately conservative boxes.
+        const measure = (matrix: THREE.Matrix4): THREE.Box3 => {
+          if (!measureVertices || !position)
+            return transformedBox(node.geometry.boundingBox!, matrix);
+          const result = new THREE.Box3();
+          const point = new THREE.Vector3();
+          for (let i = 0; i < position.count; i++) {
+            point.fromBufferAttribute(position, i).applyMatrix4(matrix);
+            result.expandByPoint(point);
+          }
+          return result;
+        };
+        if (node instanceof THREE.InstancedMesh) {
+          box = new THREE.Box3();
+          const instance = new THREE.Matrix4();
+          for (let i = 0; i < node.count; i++) {
+            node.getMatrixAt(i, instance);
+            box.union(measure(transform.clone().multiply(instance)));
+          }
+        } else {
+          box = measure(transform);
+        }
       }
     } else if (roles.length > 0) {
       // Non-rendered semantic marker groups use their ordinary transform/scale
@@ -126,14 +155,10 @@ function motionAssemblies(parts: readonly LocalPart[]): PropMotionAssembly[] {
       if (pivot) get(pivot[1] as PropMotionKind, pivot[2]!).pivot = part;
       const moving = /^prop\.motion\.(hinge|slider|spinner)\.([^.]+)$/.exec(role);
       if (moving) get(moving[1] as PropMotionKind, moving[2]!).moving = part;
-      const clearance = /^prop\.clearance\.(?:hinge\.|slider\.|spinner\.)?([^.]+)$/.exec(role);
-      if (clearance) {
-        const direct = Array.from(values.values()).find((value) => value.id === clearance[1]);
-        if (direct) direct.clearance = part;
-      }
     }
   }
-  // A clearance role may be encountered before its pivot/moving role.
+  // Resolve only after all assembly identities are known. A typed clearance
+  // belongs to that kind; an untyped id is usable only when it is unambiguous.
   for (const part of parts) {
     for (const role of part.roles) {
       const match = /^prop\.clearance\.(?:(hinge|slider|spinner)\.)?([^.]+)$/.exec(role);
@@ -207,11 +232,35 @@ export function evaluatePropArticulationQa(context: QaContext): readonly QaFindi
   ) {
     return [];
   }
-  const root = context.scene;
+  if (
+    usesExplicitLegacyProfile(context) &&
+    motionAssemblies(collectParts(context.scene)).length === 0 &&
+    legacyArticulationEvidence(context, context.scene)
+  )
+    return [];
+  return inspectArticulation({
+    scene: context.scene,
+    profile: context.intent.qaProfile || PROFILE,
+    requireEvidence: true,
+  });
+}
+
+interface MechanismQaInput {
+  scene: unknown;
+  profile?: string;
+  /** Historical contract only. A generic request does not require this modeling convention. */
+  requireEvidence?: boolean;
+}
+
+/** Declared rigid mechanisms only; static prisms do not prove actual motion clearance. */
+export function inspectArticulation(input: MechanismQaInput): readonly QaFinding[] {
+  if (!(input.scene instanceof THREE.Object3D)) return [];
+  const root = input.scene;
+  const context = { profile: input.profile ?? 'asset.requirements.v1' };
   const parts = collectParts(root);
   const assemblies = motionAssemblies(parts);
   if (assemblies.length === 0) {
-    if (usesExplicitLegacyProfile(context) && legacyArticulationEvidence(context, root)) return [];
+    if (!input.requireEvidence) return [];
     return [
       finding(context, {
         code: 'PROP_ARTICULATION_MISSING',
@@ -340,9 +389,9 @@ function rolePart(parts: readonly LocalPart[], expression: RegExp): LocalPart | 
   return parts.find((part) => part.roles.some((role) => expression.test(role)));
 }
 
-function interiorUsable(box: THREE.Box3): boolean {
+function interiorUsable(box: THREE.Box3, minimumExtent: number): boolean {
   const size = box.getSize(new THREE.Vector3());
-  return size.x >= 0.08 && size.y >= 0.08 && size.z >= 0.08;
+  return [size.x, size.y, size.z].every((value) => value > 0 && value >= minimumExtent);
 }
 
 /** Exact negative-space checks activate only for authored semantic container markers. */
@@ -353,26 +402,44 @@ export function evaluatePropContainerQa(context: QaContext): readonly QaFinding[
     context.intent.subtype ?? '',
   );
   if (!explicitlyOpen && !explicitContainment) return [];
-  const root = context.scene;
-  const parts = collectParts(root);
-  const interior = rolePart(parts, /^prop\.container\.interior(?:\.|$)/);
-  const opening = rolePart(parts, /^prop\.container\.opening(?:\.|$)/);
-  const hasSemanticContainerEvidence = Boolean(interior || opening);
-
-  if (!hasSemanticContainerEvidence) {
+  if (usesExplicitLegacyProfile(context)) {
     // Preserve the W5 canonical-name control while keeping fallback narrow: a
     // jointed lid is evidence of an opening, but is never used to hard-judge
     // the invisible interior volume.
     const names: string[] = [];
-    root.traverse((node) => names.push(node.name));
+    context.scene.traverse((node) => names.push(node.name));
+    const hasSemanticContainerEvidence = collectParts(context.scene).some((part) =>
+      part.roles.some((role) => /^prop\.container\.(interior|opening)(?:\.|$)/.test(role)),
+    );
     if (
-      usesExplicitLegacyProfile(context) &&
+      !hasSemanticContainerEvidence &&
       names.some((name) => /^(?:Joint|Pivot)[_.-].*(?:lid|door|hatch)/i.test(name)) &&
       names.some((name) => /(?:Mesh[_.-])?(?:lid|door|hatch)/i.test(name))
     ) {
       return [];
     }
-    if (!explicitlyOpen) return [];
+  }
+  return inspectContainerOpening({
+    scene: context.scene,
+    profile: context.intent.qaProfile || PROFILE,
+    requireEvidence: explicitlyOpen,
+    minimumInteriorExtent: 0.08,
+  });
+}
+
+/** Declared opening markers only; no container subtype or human-scale size is inferred. */
+export function inspectContainerOpening(
+  input: MechanismQaInput & { minimumInteriorExtent?: number },
+): readonly QaFinding[] {
+  if (!(input.scene instanceof THREE.Object3D)) return [];
+  const root = input.scene;
+  const context = { profile: input.profile ?? 'asset.requirements.v1' };
+  const minimumExtent = input.minimumInteriorExtent ?? 0;
+  const parts = collectParts(root);
+  const interior = rolePart(parts, /^prop\.container\.interior(?:\.|$)/);
+  const opening = rolePart(parts, /^prop\.container\.opening(?:\.|$)/);
+  if (!interior && !opening) {
+    if (!input.requireEvidence) return [];
     return [
       finding(context, {
         code: 'PROP_CONTAINER_OPENING_MISSING',
@@ -408,7 +475,7 @@ export function evaluatePropContainerQa(context: QaContext): readonly QaFinding[
           'Add a non-rendered scaled prop.container.interior.main marker inside the shell.',
       }),
     );
-  } else if (!interiorUsable(interior.box)) {
+  } else if (!interiorUsable(interior.box, minimumExtent)) {
     const size = interior.box.getSize(new THREE.Vector3());
     findings.push(
       finding(context, {
@@ -423,13 +490,15 @@ export function evaluatePropContainerQa(context: QaContext): readonly QaFinding[
         measurement: {
           name: 'minimumInteriorExtent',
           actual: stable(Math.min(size.x, size.y, size.z)),
-          expected: '>=0.08',
-          threshold: 0.08,
+          expected: minimumExtent > 0 ? `>=${minimumExtent}` : '>0',
+          threshold: minimumExtent,
           unit: 'm',
         },
         viewHints: ['front', 'top'],
         repairText:
-          'Enlarge the interior marker and remove solid filler so all three clear extents are at least 0.08 m.',
+          minimumExtent > 0
+            ? `Enlarge the interior marker and remove solid filler so all three clear extents are at least ${minimumExtent} m.`
+            : 'Give the interior marker positive extents matching the requested usable space; do not infer a minimum size from the asset label.',
       }),
     );
   }
@@ -609,28 +678,39 @@ export function evaluatePropCircularAssemblyQa(context: QaContext): readonly QaF
   return findings;
 }
 
-/** Scale, placement pivot, and grounding evidence is advisory by policy. */
-export function evaluatePropScalePivotQa(context: QaContext): readonly QaFinding[] {
-  if (context.intent.category !== 'prop' || !(context.scene instanceof THREE.Object3D)) return [];
-  const root = context.scene;
-  const parts = collectParts(root);
+export interface PlacementQaInput {
+  scene?: unknown;
+  profile?: string;
+  bounds?: { x?: number; y?: number; z?: number };
+  groundPlaneY?: number;
+}
+
+/** Asset-local extents and requested base contact. Measurements remain advisory. */
+export function inspectPlacement(input: PlacementQaInput): readonly QaFinding[] {
+  if (!(input.scene instanceof THREE.Object3D)) return [];
+  const placementFinding = (value: Omit<QaFinding, 'profile'>): QaFinding => ({
+    ...value,
+    profile: input.profile ?? 'asset.requirements.v1',
+  });
+  const root = input.scene;
+  const parts = collectParts(root, true);
   const renderable = parts.filter((part) => part.renderable && part.box);
   if (renderable.length === 0) return [];
   const bounds = renderable.reduce((box, part) => box.union(part.box!), new THREE.Box3());
   const size = bounds.getSize(new THREE.Vector3());
   const findings: QaFinding[] = [];
   for (const axis of ['x', 'y', 'z'] as const) {
-    const expected = context.intent.bounds?.[axis];
+    const expected = input.bounds?.[axis];
     if (expected === undefined) continue;
     const actual = size[axis];
     const tolerance = Math.max(0.05, expected * 0.2);
     if (Math.abs(actual - expected) <= tolerance) continue;
     findings.push(
-      finding(context, {
+      placementFinding({
         code: 'PROP_SCALE_BOUNDS_MISMATCH',
         disposition: 'warn',
         dimension: 'promptAlignment',
-        message: `Prop ${axis.toUpperCase()} extent is ${actual.toFixed(4)} m, outside the declared ${expected.toFixed(4)} m scale band.`,
+        message: `Asset ${axis.toUpperCase()} extent is ${actual.toFixed(4)} m, outside the declared ${expected.toFixed(4)} m scale band.`,
         affected: { node: root.name || 'prop-root', attribute: `bounds.${axis}` },
         measurement: {
           name: `bounds.${axis}`,
@@ -643,19 +723,19 @@ export function evaluatePropScalePivotQa(context: QaContext): readonly QaFinding
       }),
     );
   }
-  if (context.intent.capabilities.includes('grounded')) {
-    if (Math.abs(bounds.min.y) > GROUND_TOLERANCE_METERS) {
+  if (input.groundPlaneY !== undefined) {
+    if (Math.abs(bounds.min.y - input.groundPlaneY) > GROUND_TOLERANCE_METERS) {
       findings.push(
-        finding(context, {
+        placementFinding({
           code: 'PROP_GROUND_MISMATCH',
           disposition: 'warn',
           dimension: 'categoryReadiness',
-          message: `Grounded prop base is ${Math.abs(bounds.min.y).toFixed(6)} m ${bounds.min.y > 0 ? 'above' : 'below'} asset-local Y=0.`,
+          message: `Requested grounded base is ${Math.abs(bounds.min.y - input.groundPlaneY).toFixed(6)} m ${bounds.min.y > input.groundPlaneY ? 'above' : 'below'} asset-local Y=${input.groundPlaneY}.`,
           affected: { node: root.name || 'prop-root' },
           measurement: {
             name: 'minimumY',
             actual: stable(bounds.min.y),
-            expected: 0,
+            expected: input.groundPlaneY,
             threshold: GROUND_TOLERANCE_METERS,
             unit: 'm',
           },
@@ -676,11 +756,11 @@ export function evaluatePropScalePivotQa(context: QaContext): readonly QaFinding
     const verticalDelta = Math.abs(point.y - bounds.min.y);
     if (horizontalOutside || verticalDelta > GROUND_TOLERANCE_METERS) {
       findings.push(
-        finding(context, {
+        placementFinding({
           code: 'PROP_PLACEMENT_PIVOT_OFF_BASE',
           disposition: 'warn',
           dimension: 'categoryReadiness',
-          message: 'Declared placement pivot is not on the prop support base.',
+          message: 'Declared placement pivot is not on the asset support base.',
           affected: {
             node: placement.node.name || 'placement-pivot',
             nodePath: nodePath(root, placement.node),
@@ -698,6 +778,17 @@ export function evaluatePropScalePivotQa(context: QaContext): readonly QaFinding
     }
   }
   return findings;
+}
+
+/** Old-data conformance adapter; current execution calls inspectPlacement directly. */
+export function evaluatePropScalePivotQa(context: QaContext): readonly QaFinding[] {
+  if (context.intent.category !== 'prop') return [];
+  return inspectPlacement({
+    scene: context.scene,
+    profile: context.intent.qaProfile || PROFILE,
+    bounds: context.intent.bounds,
+    groundPlaneY: context.intent.capabilities.includes('grounded') ? 0 : undefined,
+  });
 }
 
 export const PROP_EXACT_QA_RULE: QaRule = Object.freeze({

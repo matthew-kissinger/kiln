@@ -11,6 +11,7 @@ import {
   PRODUCTION_TEXTURE_RESOURCE_DESCRIPTORS_V1,
   PRODUCTION_TEXTURE_RESOURCE_IDS,
 } from './material-texture-library.generated';
+import { AuthoringDiagnosticError } from './evaluator/authoring-diagnostic';
 
 export const MATERIAL_RECIPE_SCHEMA_VERSION = 1 as const;
 
@@ -76,7 +77,7 @@ export interface MaterialRecipeOverridesV1 {
   alphaCutoff?: number;
   doubleSided?: boolean;
   emissiveColor?: string;
-  /** Baked into the standard emissive factor; no extension is required. */
+  /** Finite 0..1, baked into the core glTF emissive factor without an extension. */
   emissiveIntensity?: number;
   textureResources?: Partial<Record<MaterialTextureSlot, ApprovedTextureResourceId>>;
 }
@@ -623,6 +624,33 @@ export function cloneMaterialRecipeRequestV1(
   };
 }
 
+function recipeValidationError(issues: MaterialRecipeValidationIssue[]): Error {
+  const message = issues.map((issue) => `${issue.path}: ${issue.message}`).join('; ');
+  const fractionFields = ['roughness', 'metalness', 'opacity', 'alphaCutoff', 'emissiveIntensity'];
+  if (
+    issues.some(
+      (issue) =>
+        issue.code === 'INVALID_OVERRIDE_VALUE' &&
+        fractionFields.some((field) => issue.path === `overrides.${field}`),
+    )
+  )
+    return new AuthoringDiagnosticError('MATERIAL_FRACTION_RANGE', message);
+  if (
+    issues.some(
+      (issue) =>
+        [
+          'UNKNOWN_TEXTURE_SLOT',
+          'UNSUPPORTED_RESOURCE_ID',
+          'RESOURCE_SLOT_MISMATCH',
+          'RESOURCE_RECIPE_MISMATCH',
+        ].includes(issue.code) ||
+        (issue.code === 'INVALID_OVERRIDE_VALUE' && issue.path === 'overrides.textureResources'),
+    )
+  )
+    return new AuthoringDiagnosticError('MATERIAL_RECIPE_TEXTURE_BINDING', message);
+  return new TypeError(message);
+}
+
 export function createMaterialRecipeRequestV1(
   id: MaterialRecipeId,
   overrides?: MaterialRecipeOverridesV1,
@@ -630,7 +658,7 @@ export function createMaterialRecipeRequestV1(
   const candidate = { schemaVersion: 1 as const, id, ...(overrides ? { overrides } : {}) };
   const result = validateMaterialRecipeRequestV1(candidate);
   if (!result.valid || !result.value) {
-    throw new TypeError(result.issues.map((issue) => `${issue.path}: ${issue.message}`).join('; '));
+    throw recipeValidationError(result.issues);
   }
   return result.value;
 }
@@ -638,9 +666,7 @@ export function createMaterialRecipeRequestV1(
 export function resolveMaterialRecipeV1(value: MaterialRecipeRequestV1): PortablePbrRecipeV1 {
   const validation = validateMaterialRecipeRequestV1(value);
   if (!validation.valid || !validation.value) {
-    throw new TypeError(
-      validation.issues.map((issue) => `${issue.path}: ${issue.message}`).join('; '),
-    );
+    throw recipeValidationError(validation.issues);
   }
   const recipe = MATERIAL_RECIPE_LIBRARY_V1[validation.value.id];
   const over = validation.value.overrides ?? {};

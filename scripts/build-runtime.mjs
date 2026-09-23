@@ -50,8 +50,10 @@ export async function runtimeBuildIdentity(root) {
     engineVersion: pkg.version,
     toolchain: pkg.packageManager,
     sourceHash: sha(JSON.stringify(await sources(join(root, 'src')))),
+    rendererSourceHash: sha(JSON.stringify(await sources(join(root, 'render-service', 'src')))),
     dependencyHash: sha(await readFile(join(root, 'bun.lock'))),
     dependencies: pkg.dependencies ?? {},
+    optionalDependencies: pkg.optionalDependencies ?? {},
     target: 'node',
   };
   return { identity: `sha256:${sha(JSON.stringify(inputs))}`, ...inputs };

@@ -14,7 +14,7 @@ async function build() {
   const mr = proceduralTexture({ schemaVersion: 2, size: 8, usage: 'metallicRoughness', name: 'MetallicRoughness', layers: [{ op: 'checker', colorA: 0x0040c0, colorB: 0x00c040, squares: 2 }] });
   const ao = proceduralTexture({ schemaVersion: 2, size: 8, usage: 'occlusion', name: 'Occlusion', layers: [{ op: 'solid', color: 0x808080 }] });
   const emissive = proceduralTexture({ schemaVersion: 2, size: 8, usage: 'emissive', name: 'Emissive', layers: [{ op: 'stripes', colorA: 0x00ffff, colorB: 0x000000, count: 2 }] });
-  root.add(createPart('Body', boxUnwrap(boxGeo(1, 1, 1)), pbrMaterial({ albedo, normal, metallicRoughness: mr, aoMap: ao, emissive }), {}));
+  root.add(createPart('Body', copyGeometry(boxGeo(1, 1, 1)), pbrMaterial({ albedo, normal, metallicRoughness: mr, aoMap: ao, emissive }), {}));
   return root;
 }
 `;

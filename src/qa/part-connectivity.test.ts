@@ -58,7 +58,7 @@ describe('detached clusters', () => {
     expect(report.groups[0]!.gap).toBeCloseTo(4.4, 3);
   });
 
-  test('the finding says one join is missing, not that several parts are misplaced', () => {
+  test('the finding names the separated group without assuming it needs a join', () => {
     const findings = PART_CONNECTIVITY_QA_RULE.evaluate(
       context(
         sceneOf(
@@ -73,7 +73,7 @@ describe('detached clusters', () => {
 
     expect(findings).toHaveLength(1);
     expect(findings[0]!.message).toContain('group of 2 parts');
-    expect(findings[0]!.message).toContain('one join is missing');
+    expect(findings[0]!.message).toContain('This may be intentional');
     expect(findings[0]!.repairText).toContain('snapTo');
   });
 

@@ -1,5 +1,6 @@
 /** Frame-owning vehicle and wheel scaffolds for Kiln's +X-forward asset frame. */
 import * as THREE from 'three';
+import { assertDimension, assertFiniteTriple } from './geometry-budget';
 
 import {
   hasSemanticRole,
@@ -52,7 +53,7 @@ export interface VehicleFrameResult {
   propulsion: THREE.Object3D[];
 }
 
-export type WheelSide = 'left' | 'right';
+export type WheelSide = 'left' | 'right' | 'center';
 
 export interface WheelGeometrySet {
   tire: THREE.BufferGeometry;
@@ -70,7 +71,7 @@ export interface WheelAssemblyOptions {
   radius: number;
   width: number;
   side: WheelSide;
-  /** Axle index or stable axle label shared by its left/right pair. */
+  /** Axle index or stable axle label; centerline wheels need no left/right partner. */
   index: number | string;
   position?: [number, number, number];
   rimRadius?: number;
@@ -96,6 +97,16 @@ export interface WheelAssemblyResult {
   side: WheelSide;
   index: string;
   spinAxis: readonly [0, 0, 1];
+  /** Advisory checks for supplied geometry only; no shape/material/physics certification. */
+  geometryChecks: readonly WheelGeometryCheck[];
+}
+
+export interface WheelGeometryCheck {
+  part: keyof WheelGeometrySet;
+  status: 'match' | 'mismatch';
+  declared: { radius: number; width: number };
+  observed: { radius: number; width: number; boundsCenter: [number, number, number] };
+  differences: ('radius' | 'width' | 'center')[];
 }
 
 export interface ResolvedWheelAssembly {
@@ -133,7 +144,7 @@ function assertId(value: string, name: string): string {
 }
 
 function positive(value: number, name: string): number {
-  if (!Number.isFinite(value) || value <= 0) throw new RangeError(`${name} must be finite and > 0`);
+  assertDimension(name, value);
   return value;
 }
 
@@ -258,12 +269,53 @@ function cylinderZ(radius: number, width: number, segments = 16): THREE.Cylinder
 export function createWheelGeometrySet(radius: number, width: number): WheelGeometrySet {
   positive(radius, 'radius');
   positive(width, 'width');
-  if (width >= radius * 2) throw new RangeError('wheel width must be less than its diameter');
-  const tube = width / 2;
   return {
-    tire: new THREE.TorusGeometry(radius - tube, tube, 8, 20),
+    tire: defaultTireGeometry(radius, width),
     rim: cylinderZ(radius * 0.68, width * 0.8),
     hub: cylinderZ(radius * 0.34, width * 0.94),
+  };
+}
+
+function defaultTireGeometry(radius: number, width: number): THREE.TorusGeometry {
+  if (width >= radius * 2)
+    throw new RangeError('default wheel tire width must be less than its diameter');
+  const tube = width / 2;
+  return new THREE.TorusGeometry(radius - tube, tube, 8, 20);
+}
+
+function checkWheelGeometry(
+  part: keyof WheelGeometrySet,
+  geometry: THREE.BufferGeometry,
+  radius: number,
+  width: number,
+): WheelGeometryCheck {
+  const positions = geometry.getAttribute('position');
+  if (positions?.itemSize !== 3 || positions.count < 1 || positions.count > 2_000_000)
+    throw new RangeError(`wheel ${part} position must have 1..2000000 three-component samples.`);
+  const bounds = new THREE.Box3();
+  const point = new THREE.Vector3();
+  let actualRadius = 0;
+  for (let i = 0; i < positions.count; i++) {
+    point.fromBufferAttribute(positions, i);
+    if (![point.x, point.y, point.z].every(Number.isFinite))
+      throw new RangeError(`wheel ${part} position coordinates must be finite.`);
+    bounds.expandByPoint(point);
+    actualRadius = Math.max(actualRadius, Math.hypot(point.x, point.y));
+  }
+  const actualWidth = bounds.max.z - bounds.min.z;
+  const center = bounds.getCenter(new THREE.Vector3());
+  const tolerance = 1e-5 * Math.max(radius, width, actualRadius, actualWidth);
+  const differences: WheelGeometryCheck['differences'] = [];
+  if (Math.abs(actualRadius - radius) > tolerance) differences.push('radius');
+  if (Math.abs(actualWidth - width) > tolerance) differences.push('width');
+  if (Math.max(Math.abs(center.x), Math.abs(center.y), Math.abs(center.z)) > tolerance)
+    differences.push('center');
+  return {
+    part,
+    status: differences.length ? 'mismatch' : 'match',
+    declared: { radius, width },
+    observed: { radius: actualRadius, width: actualWidth, boundsCenter: center.toArray() },
+    differences,
   };
 }
 
@@ -283,6 +335,19 @@ export function createWheelAssembly(
     throw new RangeError('wheel radii must satisfy hub < rim < tire');
   if (rimWidth > width || hubWidth > width)
     throw new RangeError('rim/hub width must not exceed tire width');
+  if (options.side !== 'left' && options.side !== 'right' && options.side !== 'center')
+    throw new RangeError('wheel side must be left, right or center');
+  if (options.position !== undefined) assertFiniteTriple('wheel position', options.position);
+  const geometryChecks: WheelGeometryCheck[] = [];
+  for (const [part, declaredRadius, declaredWidth] of [
+    ['tire', radius, width],
+    ['rim', rimRadius, rimWidth],
+    ['hub', hubRadius, hubWidth],
+  ] as const) {
+    const geometry = options.geometries?.[part];
+    if (geometry)
+      geometryChecks.push(checkWheelGeometry(part, geometry, declaredRadius, declaredWidth));
+  }
   const index = assertId(String(options.index), 'wheel index');
   const key = `${options.side}.${index}`;
   const parent = options.parent;
@@ -333,8 +398,10 @@ export function createWheelAssembly(
   );
   (steeringPivot ?? root).add(spinPivot);
 
-  const defaults = createWheelGeometrySet(radius, width);
-  const tire = new THREE.Mesh(options.geometries?.tire ?? defaults.tire, materials.tire);
+  const tire = new THREE.Mesh(
+    options.geometries?.tire ?? defaultTireGeometry(radius, width),
+    materials.tire,
+  );
   const rim = new THREE.Mesh(
     options.geometries?.rim ?? cylinderZ(rimRadius, rimWidth),
     materials.rim,
@@ -397,6 +464,7 @@ export function createWheelAssembly(
     side: options.side,
     index,
     spinAxis: VEHICLE_AXES.wheelAxle,
+    geometryChecks,
   };
 }
 
@@ -425,7 +493,7 @@ function parseWheelRole(role: string): { side?: WheelSide; index?: string } {
   const parts = role.split('.');
   const side = parts.at(-2);
   return {
-    ...(side === 'left' || side === 'right' ? { side } : {}),
+    ...(side === 'left' || side === 'right' || side === 'center' ? { side } : {}),
     ...(parts.at(-1) ? { index: parts.at(-1)! } : {}),
   };
 }

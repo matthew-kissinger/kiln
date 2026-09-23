@@ -1,437 +1,12 @@
 // Bun Snapshot v1, https://bun.sh/docs/test/snapshots
 
-exports[`system prompt embeds the generated catalog api section snapshot (review prompt changes in this diff) 1`] = `
-"// Scene & structure (globals — no imports needed)
-createRoot(name: string)  // Creates the root Object3D for an asset. Call first in build().
-createPivot(name: string, position?: [x, y, z], parent?: Object3D)
-  // Creates an empty pivot node for skeletal animation. Name is auto-prefixed with \`Joint_\`.
-createJointChain(name, segments: { role, offset, aliases?, side?, localForwardAxis?, localBendAxis?, endEffector?, contact? }[], opts?: { parent?, parentRole? })
-  // Creates one body-plan-neutral deterministic Joint_* chain with explicit parent edges, rest
-  // frames, local axes, end effectors, contacts, and semantic metadata.
-  // NOTE: Use only the resolved body-plan graph. Offsets are local to the previous joint;
-  // contact end effectors must land at world Y=0.
-createVehicleFrame(name, opts?: { chassis?, axles?, seats?, contacts?, steering?, propulsion?, parent? })
-  // Creates a canonical +X-forward/+Y-up/+Z-right vehicle frame with typed semantic sockets for
-  // chassis, support, steering, and propulsion.
-  // NOTE: Generated vehicles keep +X as front. Boats and other non-wheeled subtypes use
-  // declared support/propulsion sockets, not wheel rules.
-createWheelAssembly(name, { tire, rim, hub? }, { radius, width, side, index, position?, rimRadius?, hubRadius?, steering?, loadBearing?, geometries?, parent? })
-  // Creates one axle-centered wheel pivot containing concentric tire/rim/hub roles, a contact
-  // marker, +Z spin frame, and optional steering pivot.
-  // NOTE: Keep tire, rim, and hub descendants concentric at the axle pivot. Reuse one geometry
-  // set across matching wheels.
-createPart(name, geometry, material, opts?: { position, rotation: [xDeg, yDeg, zDeg], scale, pivot, parent })
-  // Creates a mesh, optionally wrapped in a pivot, and attaches it to \`opts.parent\`. \`rotation\`
-  // is in DEGREES (like rotationTrack), NOT radians: [0, 0, 90] is a quarter turn; [0, 0, 1.57]
-  // is a no-op.
-  // NOTE: AUTO-ADDS to opts.parent. NEVER call parent.add(createPart(...)) — pass { parent }
-  // instead. rotation is DEGREES — writing radians (e.g. 0.785 or Math.PI/4) silently produces
-  // ~zero rotation.
-beamBetween(name, start: [x,y,z], end: [x,y,z], radius, material, opts?: { segments, parent })
-  // Creates a cylindrical rail/strut exactly between two endpoints. Use for braces, gun
-  // barrels, skid struts, cables, and scaffolding.
-snapTo(part: Object3D, host: Object3D, opts?: { axis?: 'x'|'y'|'z', overlap?: 0.02 })
-  // Translates \`part\` by the minimal vector that brings its bounding box into contact with
-  // \`host\` (plus a small overlap). The direct cure for a "Floating parts" warning — attach the
-  // part instead of eyeballing a corrective offset. No-op if they already touch.
-createLadder(name, { bottom, top, material, width?, rungCount?, railRadius?, rungRadius?, widthAxis?, parent? })
-  // Builds two continuous rails plus evenly-spaced rungs. Use this instead of loose boxes for
-  // ladders.
-createWingPair(name, material, { rootZ, span, rootChord, tipChord, sweep?, thickness?, dihedral?, rootX?, rootY?, parent? })
-  // Creates mirrored trapezoid aircraft wings with roots attached at +/-rootZ. Use for aircraft
-  // wings and helicopter stub wings.
-room(name, material, { width?, depth?, height?, wallThickness?, floor?, floorThickness?, openings?: [{ wall: 'front'|'back'|'left'|'right', kind?: 'door'|'window', offset?, width?, height?, sill? }], parent? })
-  // Builds a HOLLOW, enterable room: four thin walls + a floor, human-scaled (defaults: 2.8m
-  // ceiling, a centered 1.1x2.1m front door so it is enterable by default). \`front\` faces +X;
-  // the floor sits on the ground. The keystone of an architecture asset — add a roof with
-  // createRoofPlanes and fixtures as separate parts.
-  // NOTE: Use for any building the player enters. Do NOT model a building as a solid block —
-  // room() guarantees real interior space and a doorway gap. Pass openings to add windows /
-  // side doors.
-wallWithOpening(name, material, { length, height, thickness, axis?: 'x'|'z', opening?: { kind?: 'door'|'window', offset?, width?, height?, sill? }, parent? })
-  // A single wall panel with an optional real door/window cut, composed from solid box segments
-  // (side panels + lintel + window sill) — no CSG. Base at local Y=0, centered on the run axis.
-  // Use to compose custom building layouts or interior dividing walls beyond the default
-  // room().
-createRoofPlanes(name, material, { width, depth, height, overhang?, ridgeAxis?: 'x'|'z', thickness?, parent? })
-  // A pitched roof: two thin slopes meeting at one ridge and falling DOWN-AND-OUTWARD (opposite
-  // tilts — never mirrored the same way), footprint-matched with an eave overhang. Eave at
-  // local Y=0, ridge at Y=height, so position the group at Y=wallHeight. Returns a named group
-  // (e.g. \`Roof\`) the engine can lift to reveal the interior.
-  // NOTE: The two slopes must fall AWAY from each other from the ridge — createRoofPlanes does
-  // this for you. Drop it onto the walls (position.y = wall height).
-createGableRoof(name, material, { spanX, spanZ, rise?, pitchDegrees?, overhang?, ridgeAxis?: 'x'|'z', thickness?, parent? })
-  // Explicit-axis gable roof using unambiguous footprint spans. Each face owns a rigid frame
-  // with ridge tangent, outward normal, downhill direction, ridge/eave endpoints, dimensions,
-  // and a live local-to-world transform.
-  // NOTE: Prefer this over width/depth roof math. ridgeAxis is the direction of the ridge; roof
-  // panels run along each returned face downhill direction.
-createGableEndPanel(name, material, { span, rise, thickness?, ridgeAxis?: 'x'|'z', side?: 'positive'|'negative', openings?: [{ id?, offset?, bottom?, width, height }], parent? })
-  // Exact thick triangular end closure for a gable roof, with optional rectangular openings cut
-  // from the geometry and semantic boundary metadata.
-createGableShell(name, { wall, roof, floor?, gable? }, { spanX, spanZ, wallHeight?, rise?, pitchDegrees?, overhang?, ridgeAxis?: 'x'|'z', thickness?, wallThickness?, floorThickness?, closedEnds?, enterable?, openings?, gableOpenings?, parent? })
-  // Closed-by-default, correct-by-construction gable building: hollow room, floor, two opposing
-  // roof slopes, two complete gable ends, and a real front doorway when enterable.
-  // NOTE: Use for complete gable buildings. It stamps wall, floor, slope, gable, opening,
-  // adjacency, coverage, and separability semantics for deterministic QA and roof-off views.
-createRoofSurfaceLayout(name, material, { face, kind: 'panels'|'shingles'|'seams'|'corrugations', parent?, panelWidth?, rowHeight?, spacing?, thickness? })
-  // Places roof-local panels, shingles, seams, or corrugations from a returned RoofFaceFrame,
-  // so repeated elements run ridge-to-eave for either ridge axis without manual Euler
-  // rotations.
-  // NOTE: Always pass the face object returned by createGableRoof/createGableShell. Never infer
-  // the panel rotation from world axes.
-createStairs(name, material, { steps?, totalRise, totalRun, width, axis?: 'x'|'z', treadThickness?, riser?, parent? })
-  // A straight flight of stairs: box treads (with optional risers) climbing totalRise over
-  // totalRun from local origin toward +axis. Use for porch/entry steps or to connect storeys in
-  // a multi-storey building.
-
-// Geometry (returns BufferGeometry)
-meshGeo({ positions: number[], indices?: number[], normals?: number[], uvs?: number[], tangents?: number[] })
-  // Builds an owned triangle mesh from flat numeric arrays. Validates finite values, attribute
-  // lengths and indices; computes normals if absent. Counterclockwise winding.
-parametricSurface(sample: (u,v) => [x,y,z], opts?: { u?: [0,1], v?: [0,1], uSegments?: 24, vSegments?: 24, periodicU?: false, periodicV?: false, orientation?: 'uv'|'vu' })
-  // Samples an equation into an owned surface with UVs. Periodic endpoints must coincide; UV
-  // seams retain matching normals. A surface is not automatically a watertight solid.
-await implicitSurface(sample: ([x,y,z]) => signedValue, { bounds: { min, max }, edgeLength, maxCells?: 1000000, maxEvaluations?: 8000000, level?: 0, tolerance?: -1, smooth?: true })
-  // Experimental positive-inside implicit field sampled into a solid mesh. Requires explicit
-  // bounds and resolution; checks grid size and actual evaluation count. Output has no UVs.
-  // NOTE: Use async build and await. Smaller edgeLength increases cost sharply. This helper
-  // cannot stop a callback that never returns; the host evaluator process provides that
-  // boundary. Thin features and geometric accuracy require inspection.
-boxGeo(width: number, height: number, depth: number)  // 6-face box. 12 tris regardless of size. Cheapest geometry.
-sphereGeo(radius: number, widthSegments?: 8, heightSegments?: 6)
-  // UV sphere. Default 8x6 segments = 84 tris. Bump segments for smoother curves.
-cylinderGeo(radiusTop: number, radiusBottom: number, height: number, segments?: 8)
-  // Y-axis cylinder. Use radiusTop != radiusBottom for cones / tapered pieces.
-cylinderYGeo(radiusTop: number, radiusBottom: number, height: number, segments?: 8)
-  // Alias for cylinderGeo — a Y-axis cylinder. Provided because the sandbox exposes
-  // cylinderXGeo / cylinderZGeo and the symmetric Y form is commonly reached for.
-cylinderXGeo(radiusTop: number, radiusBottom: number, length: number, segments?: 8)
-  // Cylinder pre-rotated to run along +X/-X. Use for fuselages, cannons, barrels, axles, and
-  // forward-facing tubes.
-cylinderZGeo(radiusTop: number, radiusBottom: number, length: number, segments?: 8)
-  // Cylinder pre-rotated to run along +Z/-Z. Use for side-mounted weapons, rails, crossbars,
-  // and pipes.
-cylinderOnAxis(center: [x,y,z], normal: [x,y,z], radiusBottom: number, height: number, opts?: { radiusTop?, segments? })
-  // Frame-first cylinder: position + axis specified directly, no post-hoc rotation. Use when
-  // the cylinder needs to point along a non-cardinal direction (struts inside CSG operands,
-  // antennas off a tilted surface). For cardinal axes prefer the terser cylinderXGeo /
-  // cylinderYGeo / cylinderZGeo helpers.
-capsuleGeo(radius: number, height: number, segments?: 6)
-  // Stadium shape (cylinder with hemispherical caps). Good for limbs.
-capsuleYGeo(radius: number, height: number, segments?: 6)
-  // Alias for capsuleGeo — a Y-axis capsule. Provided for symmetry with capsuleXGeo /
-  // capsuleZGeo.
-capsuleXGeo(radius: number, length: number, segments?: 6)
-  // Capsule pre-rotated to run along +X/-X. Use for aircraft bodies, rounded vehicle hulls, and
-  // missiles.
-capsuleZGeo(radius: number, length: number, segments?: 6)
-  // Capsule pre-rotated to run along +Z/-Z. Use for lateral pods, floats, and side tanks.
-coneGeo(radius: number, height: number, segments?: 8)
-  // Y-axis cone (pointed up). Use for spikes, roofs, projectiles.
-coneYGeo(radius: number, height: number, segments?: 8)
-  // Alias for coneGeo — a Y-axis cone (point +Y). Provided for symmetry with coneXGeo /
-  // coneZGeo.
-coneXGeo(radius: number, length: number, segments?: 8)
-  // Cone pre-rotated so its point faces +X. Use for noses, rockets, shells, and forward-facing
-  // tips.
-coneZGeo(radius: number, length: number, segments?: 8)
-  // Cone pre-rotated so its point faces +Z. Use for side-facing projectiles and tips.
-taperConeGeo(radiusBottom: number, radiusTop: number, height: number, axis?: 'x'|'y'|'z', segments?: 8)
-  // Truncated cone (frustum) — exposes both bottom and top radius. radiusTop=0 matches coneGeo,
-  // radiusTop=radiusBottom matches cylinderGeo. Use for pylon caps, soda cans, lampshades,
-  // anything tapered that does not come to a point. axis selects orientation (default Y).
-torusGeo(radius: number, tube: number, radialSegments?: 8, tubularSegments?: 12)
-  // Donut shape. For rings, tyres, barrel ribs.
-planeGeo(width: number, height: number, widthSegments?: 1, heightSegments?: 1)
-  // Flat quad for TEXTURED surfaces (ground, signs, walls with albedo maps). For solid-color
-  // decals like red stars, hull numbers, stamps, or window cutouts on no-texture assets use
-  // decalBox — a bare planeGeo without a texture will render as a disconnected 2-tri square and
-  // get flagged as a stray plane.
-decalBox(width: number, height: number, depth?: 0.01)
-  // Thin box for solid-color surface decals: red stars, hull numbers, stamps, no-texture
-  // windows. Unlike planeGeo, has real depth so it visibly attaches to its host surface. Must
-  // be placed on a surface with position + rotation.
-  // NOTE: Offset at least 0.01 outside the host surface to avoid z-fighting (a 0.8-wide hull
-  // has faces at z=±0.4, so place the decal at z=±0.41).
-foliageCardGeo(opts?: { width?, height?, yPivot?: 0..1 })
-  // Single-quad foliage card with a configurable Y pivot. yPivot=0 plants the quad on the
-  // ground. Pair with an alpha-tested material and a leaf/plant sprite.
-crossedQuadsGeo(opts?: { width?, height?, planes?: 2 | 3, yPivot? })
-  // Cross-billboard bush primitive: 2 or 3 planes intersecting along the Y axis. Reads as a
-  // dense plant from any angle, cheaper than real geometry.
-octaGridPlane({ tilesX, tilesY, width?, height?, yPivot? })
-  // Atlas-ready billboard quad. UVs are pre-scaled to cover one tile of a tilesX×tilesY atlas;
-  // the consumer shader adds per-instance tile offsets at draw time.
-wingGeo(opts?: { span, rootChord, tipChord, sweep, thickness, dihedral })
-  // Trapezoid wing panel. Local root edge is at Z=0, span extends toward +Z, positive sweep
-  // moves the tip aft along -X.
-gearGeo(opts?: { teeth?: 12, rootRadius?: 0.8, tipRadius?: 1.0, boreRadius?: 0.2, height?: 0.3, toothWidthFrac?: 0.5 })
-  // Stylized gear with flat edges and an optional center bore; no CSG. Use boreRadius <
-  // rootRadius < tipRadius. Radii are absolute: an omitted rootRadius stays 0.8 when tipRadius
-  // changes. Set all three radii for small gears.
-bladeGeo(opts?: { length?: 1.5, baseWidth?: 0.1, thickness?: 0.015, tipLength?: 0.25, edgeBevel?: 0 })
-  // Parametric sword blade: rectangular base tapering to a point over tipLength. edgeBevel > 0
-  // pinches the cross-section toward a diamond ridge.
-
-// Materials
-gameMaterial(color, opts?: { metalness, roughness, emissive, emissiveIntensity, flatShading })
-  // Flat-shaded PBR material. Default for game-ready low-poly. Use for 95% of parts.
-await materialRecipe(recipeId, overrides?: { baseColor?, roughness?, metalness?, opacity?, alphaCutoff?, doubleSided?, emissiveColor?, emissiveIntensity?, textureResources? })
-  // Resolves a versioned portable
-  // bark/leaf/wood/stone/rubber/painted-metal/cloth/skin/glass/emissive recipe to standard glTF
-  // PBR.
-  // NOTE: Use only listed kiln.material.*.v1 IDs and approved kiln.texture.* resource IDs. Leaf
-  // is MASK, glass is BLEND, and host file paths are forbidden.
-await compilePortableMaterialSpecV2({ schemaVersion: 2, model: 'pbrMetallicRoughness', name?, baseColor?, roughness?, metalness?, emissive?, emissiveIntensity?, alphaMode?, alphaCutoff?, doubleSided?, textures?: { baseColor?, normal?, metallicRoughness?, emissive?, occlusion? } })
-  // Compiles the strict portable material contract. Texture refs are either typed procedural V2
-  // specs or closed approved kiln.texture.* IDs; paths, URLs, raw textures, callbacks, and
-  // shader source are rejected.
-  // NOTE: Use metallicRoughness as one packed G=roughness/B=metalness map. Every procedural ref
-  // usage must match its slot; resource refs must be approved for that exact slot.
-basicMaterial(color, opts?: { transparent, opacity })
-  // Unlit flat material. For UI / effects where lighting is baked in.
-glassMaterial(color, opts?: { opacity, roughness, metalness })
-  // Semi-transparent double-sided material. Panels need ~0.05 offset to avoid z-fighting.
-lambertMaterial(color, opts?: { flatShading, emissive })
-  // Cheaper than gameMaterial. No metalness/roughness. Use when PBR is overkill.
-pbrMaterial({ albedo?, normal?, roughness?, metalness?, metallicRoughness?, emissive?, aoMap?, alphaMode?, alphaCutoff?, doubleSided? })
-  // Portable glTF PBR material. Use an explicit packed metallicRoughness texture (G=roughness,
-  // B=metalness); separate data maps are rejected instead of silently dropping a channel.
-  // Supports OPAQUE/MASK/BLEND and double-sided output.
-foliageMaterial(albedo, { alphaCutoff?, roughness?, doubleSided? })
-  // Portable foliage material that defaults to glTF MASK, cutoff 0.5, rough nonmetal, and
-  // double-sided. Use an alpha-bearing albedo texture.
-
-// Instancing (share geometry+material; smaller GLBs)
-copyGeometry(geometry: BufferGeometry)
-  // Returns an independent geometry with copied vertex buffers. Use before direct mutation of a
-  // cached primitive.
-copyMaterial(material: Material)
-  // Copies material properties so edits do not change other parts. Referenced textures remain
-  // shared.
-createWheelGeometrySet(radius: number, width: number)
-  // Creates one reusable +Z-axle tire/rim/hub geometry set for instanced wheel assemblies.
-cloneGeometry(geo: BufferGeometry)
-  // Deprecated name: returns the SAME geometry, without copying. Use copyGeometry for
-  // independent vertex edits, or pass the original geometry directly for intentional sharing.
-cloneMaterial(mat: Material)
-  // Deprecated name: returns the SAME material. Use copyMaterial for independent property
-  // edits, or pass the original for intentional sharing.
-createInstance(name, source, opts?: { position, rotation: [xDeg, yDeg, zDeg], scale, parent })
-  // Creates a new mesh reusing an existing part's geometry + material at a new transform.
-  // Cheapest way to replicate wheels / bolts / fence posts / windows. \`rotation\` is in DEGREES,
-  // like createPart.
-
-// Arrays (replicate a source part)
-arrayLinear(namePrefix, source, count, offset: [x,y,z], parent?)
-  // \`count\` is the TOTAL, source included: the source stays where it is as copy 0 and the call
-  // returns count-1 new instances, so count 10 gives 10 posts, not 11. Copies share geometry +
-  // material via createInstance, and carry the source rotation and scale.
-arrayRadial(namePrefix, source, count, axis?: 'x'|'y'|'z', parent?, center?: [x,y,z])
-  // \`count\` is the TOTAL, source included: the source stays at its angle as copy 0 and the call
-  // returns count-1 new instances, so count 8 gives 8 bolts evenly spaced, not 9. Each copy's
-  // local rotation is oriented outward. Copies orbit the parent's origin unless you pass
-  // \`center\`. Perfect for gear teeth, radial bolts, circle of columns.
-mirror(name, source, axis: 'x'|'y'|'z', parent?)
-  // Reflects source across the plane whose normal is \`axis\`. Uses negative scale (winding flip
-  // handled by viewers).
-
-// CSG / Boolean (async — using any of these requires \`async function build()\`)
-// NOTE: For textured or multi-material booleans, pass { preserveAttributes: true } as the final
-// options argument. This preserves UV0 and source materials through actual operand runs;
-// exposed cut faces inherit the cutter material and UVs. Legacy calls omit that option and
-// discard UVs, so unwrap their result afterward: \`mesh.geometry = await
-// autoUnwrap(mesh.geometry)\`. Tangents are regenerated when needed. Empty operands/results fail
-// with a named cause. Convex hull faces are newly generated and have no original-face
-// provenance.
-await boolUnion(name: string, ...parts: Object3D[], opts?: { smooth?: false, preserveAttributes?: boolean })
-  // Merges two or more parts into one watertight manifold mesh. Default flat shading (hard
-  // edges) — pass { smooth: true } as last arg for averaged normals on organic merges.
-await boolDiff(name: string, body: Object3D, ...cutters: Object3D[], opts?: { smooth?: false, preserveAttributes?: boolean })
-  // Subtracts cutters from a body (holes, button recesses, window slots). Default flat shading
-  // for sharp mechanical edges.
-await roundedBoxGeo(width: number, height: number, depth: number, radius: number, opts?: { style?: 'round' | 'chamfer', segments?: 12, smooth?: boolean })
-  // A box with all twelve edges rounded (or chamfered) at the EXACT outer size requested —
-  // roundedBoxGeo(1, 1, 1, 0.1) measures 1x1x1, it does not grow. Use it anywhere boxGeo reads
-  // too sharp: consoles, crates, appliances, handheld props, machined blocks.
-  // NOTE: Real objects almost never have perfectly sharp box edges, and a small radius is the
-  // single cheapest upgrade to how manufactured an asset looks. Prefer this over boxGeo for
-  // anything moulded, cast, or machined. Keep radius small relative to the box (5-10% of the
-  // smallest dimension); radius must be less than half the smallest dimension or the call
-  // throws. style: 'chamfer' reads as machined metal, 'round' as moulded plastic. This is async
-  // — build() must be async and the call must use await.
-await extrudeProfile(profile: [number, number][], opts?: { depth?: 1, holes?: [number, number][][], bevel?: 0, bevelStyle?: 'round' | 'chamfer', segments?: 12, twist?: 0, taper?: number | [number, number], divisions?: number, axis?: 'x' | 'y' | 'z', center?: true, smooth?: false })
-  // Sweeps a closed 2D outline into a watertight solid, with optional holes, corner
-  // rounding/chamfering, twist, and taper. The way to build any cross-section that is not a box
-  // or a cylinder: L-brackets, I-beams, gaskets, washers, star and gear plates, signage,
-  // extruded trim.
-  // NOTE: The bevel rounds the edges PARALLEL to the sweep axis (the profile corners) — the two
-  // flat caps stay sharp. For a box rounded on all twelve edges use roundedBoxGeo instead.
-  // Holes are subtracted, so their winding order does not matter. A bevel larger than half the
-  // outline's narrowest feature throws rather than silently returning an empty solid. Output is
-  // manifold, so it feeds straight into boolUnion / boolDiff / boolIntersect. Async — await it
-  // inside an async build().
-await revolveProfile(profile: [number, number][], opts?: { segments?: 24, angle?: 360, bevel?: 0, bevelStyle?: 'round' | 'chamfer', bevelSegments?: 12, axis?: 'x' | 'y' | 'z', smooth?: true })
-  // Revolves a closed 2D outline around an axis into a watertight SOLID, optionally rounding
-  // the profile corners first. Bottles, tanks, pressure vessels, wheels, turned wood, domes,
-  // buttons, pills.
-  // NOTE: Use this instead of lathe/revolveGeo whenever the result must survive a boolean or
-  // needs a rounded rim — lathe and revolveGeo build an open surface, this builds a closed
-  // solid. Profile convention matches lathe: x is distance from the axis, y is position along
-  // it, and only the x >= 0 side is used. Async — await it inside an async build().
-circleProfile(radius: number, segments?: 24, center?: [number, number])
-  // Builds a closed circular outline for extrudeProfile / revolveProfile, so you never
-  // hand-write the trigonometry. Synchronous.
-await boolIntersect(name: string, a: Object3D, b: Object3D, opts?: { smooth?: false })
-  // Keeps only the volume where both operands overlap. Default flat shading.
-await hull(name: string, ...parts: Object3D[], opts?: { smooth?: true })
-  // Tightest convex mesh enclosing all input points. Default smooth shading (rocks, collision
-  // volumes). Pass { smooth: false } for a faceted look.
-
-// Mesh ops
-creaseNormals(geometry: BufferGeometry, opts?: { angle?: 60, tolerance?: number })
-  // Returns owned geometry with angle-limited smooth normals, preserving UV corners. Angle is
-  // degrees. Invalidates tangents; use after shaping for sharp rims and smooth walls.
-bend(geometry, { angle, frame?: { origin, rotation }, interval?: [minY,maxY], falloff?: t => weight })
-  // Bends local +Y toward +X through angle degrees. Returns owned geometry and updated
-  // normals/bounds; preserves UVs, invalidates tangents. Frame rotation is Euler XYZ degrees.
-  // NOTE: Deformation interval uses local Y distances; outside vertices stay unchanged. Add
-  // enough segments before bending. Falloff returns 0..1; use it to avoid a discontinuity at a
-  // selected interval boundary.
-twist(geometry, { angle, frame?: { origin, rotation }, interval?: [minY,maxY], falloff?: t => weight })
-  // Rotates the cross-section progressively around local +Y, reaching angle degrees at the end.
-  // Returns owned geometry; frame rotation uses Euler XYZ degrees.
-taper(geometry, { startScale?: [1,1], endScale: [x,z], frame?: { origin, rotation }, interval?: [minY,maxY], falloff?: t => weight })
-  // Scales local X/Z across the local Y interval using positive start/end scale pairs. Returns
-  // owned geometry; preserves UVs and invalidates tangents.
-displace(geometry, offset: ([x,y,z], t) => [dx,dy,dz], opts?: { frame?: { origin, rotation }, interval?: [minY,maxY], falloff?: t => weight })
-  // Adds an authored displacement vector in the chosen local frame. Returns owned geometry;
-  // callback coordinates are local and t is normalized along the interval.
-subdivide(geometry: BufferGeometry, iterations?: 1, opts?: { preserveUV?: boolean, split?: boolean, uvSmooth?: boolean, preserveEdges?: boolean, flatOnly?: boolean, weld?: boolean })
-  // Loop subdivision returns new geometry; each iteration roughly quadruples triangles and
-  // smooths the surface. Use preserveUV:true for textured meshes. Legacy position-only welding
-  // discards UVs and reports that loss. This smooths shapes, not selected-edge beveling.
-mergeVertices(geometry: BufferGeometry, opts?: { tolerance?: 1e-4, positionOnly?: boolean } | number)
-  // Returns indexed geometry. Default welding preserves attribute seams, so a textured cube
-  // retains separate face corners. positionOnly:true welds coincident positions and discards
-  // other attributes; use it explicitly when changing topology and regenerate shading/UVs
-  // afterward.
-
-// Curves
-sweepProfile(profile: [x,z][], path: [x,y,z][], opts?: { cap?: true, closed?: false, up?: [x,y,z], twist?: 0, scale?: number | [x,z][] })
-  // Sweeps a simple noncircular profile along polyline stations using transported frames.
-  // Supports total twist in degrees and per-station scales. Generates UVs and optional caps.
-  // NOTE: First version supports one simple profile without holes. Closed paths omit the
-  // repeated endpoint and require twist to be a multiple of 360. up sets the initial profile +Z
-  // direction and cannot parallel the path. Tight-turn warnings do not replace visual
-  // inspection for self-intersections.
-loftProfiles(sections: { profile: [x,z][], frame?: { origin, rotation } }[], opts?: { cap?: true })
-  // Joins corresponding simple profiles in explicit local XZ planes. Each frame uses Euler XYZ
-  // degrees and local +Y along the loft. Profiles need equal point counts and corresponding
-  // vertices.
-  // NOTE: No holes or automatic profile correspondence. Opposite winding is normalized while
-  // preserving the first point. Caps close boundaries but do not prove the loft has no
-  // self-intersections.
-curveToMesh(points: [x,y,z][], radius, tubularSegs?: 32, radialSegs?: 8, closed?: false)
-  // Sweeps a circular profile along a path. Equivalent to Blender's Curve to Mesh node with a
-  // circle profile. Use for pipes, cables, tubular frames.
-pipeAlongPath(points: [x,y,z][], radius: number, opts?: { bendRadius?: 0, closed?: false, tubularSegments?: 32, radialSegments?: 8 })
-  // Path-driven swept circle with optional bend smoothing. Generalises beamBetween
-  // (point-to-point) and curveToMesh (raw spline) into one helper. bendRadius>0 inserts
-  // interpolated waypoints near interior corners so the spline reads as a rounded turn instead
-  // of pinching to the control point.
-lathe(profile: [x,y][], segments?: 12)
-  // Surface of revolution. Spins a 2D profile around the Y axis. For bottles, vases, wheels,
-  // turned wood parts.
-revolveGeo(profile: [x,y][], opts?: { angle?: 2π, axis?: [x,y,z]=[0,1,0], segments?: 12 })
-  // Surface of revolution with explicit axis + sweep angle. Generalises lathe — use it when you
-  // need a partial sweep (half-dome, 90° wedge) or revolution around a non-Y axis. Profile
-  // convention is identical to lathe: x = radial distance, y = position along the axis.
-bezierCurve(controlPoints: [x,y,z][], samples?: 32)
-  // Samples a quadratic (3 ctrl pts) or cubic (4 ctrl pts) Bézier into a point list you can
-  // feed into curveToMesh.
-
-// UV unwrapping
-await autoUnwrap(geometry: BufferGeometry, opts?: { resolution?: 1024, padding?: 2, useNormals?: false })
-  // xatlas-based UV atlas for ANY geometry (CSG output, subdivided, deformed). Output is a
-  // packed atlas with arbitrary per-chart rotation — use for non-tileable baked textures. For
-  // directional tileable textures on box/cylinder/plane primitives, prefer the shape-aware
-  // unwraps below.
-boxUnwrap(geometry: BufferGeometry)
-  // Preserves BoxGeometry's built-in per-face UVs — every face maps [0,1] with consistent
-  // orientation. Use for crates/blocks with a tileable texture. Sync; no WASM cost.
-cylinderUnwrap(geometry: BufferGeometry)
-  // Preserves CylinderGeometry's built-in UVs: u wraps around the axis (horizontal texture
-  // features ring the cylinder), v runs up the height. Caps use circle-in-square. Sync; no WASM
-  // cost.
-planeUnwrap(geometry: BufferGeometry)
-  // Projects xy-extent of the bbox to [0,1]. Use for signs/decals/posters where you want ONE
-  // readable texture and no edge-face bleeding. Sync.
-panelRemapV(geo, vScale=0.30, vOffset=0, uScale=1, uOffset=0)
-  // Scales an existing UV attribute so a small mesh samples a sub-region of a SHARED texture.
-  // Replaces the broken texture.clone() pattern (Three.js Texture.clone() runs JSON.stringify
-  // on userData, mangling encoded PNG bytes — panelRemapV avoids that by remapping UVs on the
-  // geometry instead). Typical use: multi-zone albedo where v=0..0.30 is plain panel and
-  // v=0.30..1 has windows/markings — small parts call panelRemapV(unwrap(geo), 0.30) to sample
-  // only the clean strip.
-
-// Textures (approved resource loading is async)
-await loadApprovedTexture(resourceId)
-  // Loads one approved kiln.texture.* resource ID through the host-injected closed resolver.
-  // The registry fixes bytes, MIME, usage, dimensions, hash, and deadline; paths, URLs, byte
-  // arrays, resolver objects, hashes, and options are rejected.
-  // NOTE: Use only a concrete resource ID listed in material capabilities; never invent one.
-  // Prefer materialRecipe when a recipe already binds the family, or proceduralTexture V2 for
-  // authored surfaces. NEVER texture.clone() a loaded texture (clone() corrupts encoded bytes
-  // and breaks GLB export).
-proceduralTexture({ schemaVersion: 2, size?: 4..1024 pow2, usage?, name?, layers: ProceduralLayer[] })
-  // Builds a tiling texture from a bounded layer stack — no image file needed. Layers composite
-  // bottom-first. Noise is seeded and tileable, so the same spec always produces the same bytes
-  // and a repeating material shows no seam. Baked to PNG and embedded in the GLB automatically.
-  // NOTE: Layer fields by op — solid: { color }; checker: { colorA, colorB, squares? };
-  // stripes: { colorA, colorB, count?, angleDeg? }; gradient: { from, to, angleDeg? }; bricks:
-  // { brick, mortar, rows?, cols?, mortarWidth?, stagger? }; noise: { colorA, colorB, scale?,
-  // octaves?, seed? }. Every layer also accepts blend?: 'normal'|'multiply'|'screen'|'overlay'
-  // and opacity?: 0..1. Pattern counts are integers 1..256; noise octaves are 1..6. Sync — no
-  // await. Unknown/prototype keys, callbacks, paths, URLs, and shader source are rejected. Max
-  // 8 layers.
-normalMapFromHeight(source: THREE.Texture, { strength?: number, name?: string })
-  // Derives a tangent-space normal map from the source texture's brightness, treating it as
-  // height. The cheap way to get real PBR surface relief out of a procedural albedo. Wraps at
-  // the edges, so a tiling source gives a tiling normal map.
-  // NOTE: strength 1 is subtle, 4-8 reads clearly at normal viewing distance. Output is always
-  // linear data — never assign it to an albedo/emissive slot.
-
-// Animation — keyframes use "rotation"/"position"/"scale" keys, NOT "value"
-rotationTrack(jointName: string, keyframes: Array<{ time, rotation: [xDeg, yDeg, zDeg] }>, interp?: 'LINEAR' | 'STEP')
-  // Rotation track in degrees, auto-converted to quaternions. Joint name must include \`Joint_\`
-  // prefix.
-positionTrack(jointName: string, keyframes: Array<{ time, position: [x, y, z] }>, interp?: 'LINEAR' | 'STEP')
-  // Position track in world units. Always use \`position:\` not \`value:\` in keyframes.
-scaleTrack(jointName: string, keyframes: Array<{ time, scale: [x, y, z] }>, interp?: 'LINEAR' | 'STEP')
-  // Uniform or per-axis scale track.
-createClip(name: string, duration: number, tracks: KeyframeTrack[])
-  // Collects tracks into a named clip. Returned from animate().
-idleBreathing(bodyJoint: string, duration?: 2, amount?: 0.02)  // Gentle Y-axis bob. For NPC idle states.
-bobbingAnimation(rootName: string, duration?: 2, height?: 0.1)  // Floating / bobbing loop for pickups and effects.
-spinAnimation(jointName: string, duration?: 2, axis?: 'x' | 'y' | 'z')
-  // 360° rotation over \`duration\` around \`axis\`.
-
-// Inspection utilities
-geometryDiagnostics(geometry: BufferGeometry, tolerance?: 1e-6)
-  // Counts mesh topology problems after position-based seam matching. Open boundaries are valid
-  // for sheets; closed edges alone do not prove a self-intersection-free solid.
-countTriangles(root: Object3D)  // Sums triangle count across every mesh in the subtree.
-countMaterials(root: Object3D)  // Unique material count (by reference) across the subtree.
-getJointNames(root: Object3D)  // All node names beginning with \`Joint_\`. Use to sanity-check animation targets.
-validateAsset(root: Object3D, category: 'character' | 'prop' | 'vfx' | 'environment' | 'architecture' | 'vegetation' | 'vehicle')
-  // Checks geometry and material costs for the selected category. No default triangle limit;
-  // choose detail for the intended runtime and inspect measured draw calls."
-`;
-
 exports[`unified api surface (examples folded in) unified api snapshot (review folded examples in this diff) 1`] = `
 "// Scene & structure (globals — no imports needed)
+describeAssembly(root: Object3D, opts?: { clips?: readonly AnimationClip[] })
+  // Describes an existing subtree through common roles, frames, sockets, material slots and
+  // root-local bounds. Lookup lists are snapshots with live scene/resource references; bounds
+  // are null for geometry-free scaffolds. No asset category is needed.
+  // e.g. const assembly = describeAssembly(bay); const dimensions = assembly.bounds?.size;
 createRoot(name: string)  // Creates the root Object3D for an asset. Call first in build().
   // e.g. const root = createRoot('FuelDrum');
 createPivot(name: string, position?: [x, y, z], parent?: Object3D)
@@ -455,8 +30,9 @@ createVehicleFrame(name, opts?: { chassis?, axles?, seats?, contacts?, steering?
 createWheelAssembly(name, { tire, rim, hub? }, { radius, width, side, index, position?, rimRadius?, hubRadius?, steering?, loadBearing?, geometries?, parent? })
   // Creates one axle-centered wheel pivot containing concentric tire/rim/hub roles, a contact
   // marker, +Z spin frame, and optional steering pivot.
-  // NOTE: Keep tire, rim, and hub descendants concentric at the axle pivot. Reuse one geometry
-  // set across matching wheels.
+  // NOTE: side is 'left', 'right', or 'center': identity relative to the host, not fork design
+  // or automatic positioning. Centerline wheels need no partner. Keep tire, rim, and hub
+  // concentric at the axle pivot. Reuse geometry across matching wheels.
   // e.g. createWheelAssembly('FrontLeft', { tire: rubber, rim: metal }, { radius: 0.45, width:
   // 0.22, side: 'left', index: 'front', position: [1.2, 0.45, -0.9], steering: true,
   // geometries: wheelGeo, parent: frame.root });
@@ -470,19 +46,21 @@ createPart(name, geometry, material, opts?: { position, rotation: [xDeg, yDeg, z
   // e.g. createPart('Barrel', cylinderGeo(0.1, 0.1, 1), gameMaterial(0x556b2f), { position: [0,
   // 0.5, 0], rotation: [0, 0, 90], parent: root });
 beamBetween(name, start: [x,y,z], end: [x,y,z], radius, material, opts?: { segments, parent })
-  // Creates a cylindrical rail/strut exactly between two endpoints. Use for braces, gun
-  // barrels, skid struts, cables, and scaffolding.
+  // Creates a cylindrical rail/strut exactly between two endpoints in its parent frame. Derive
+  // attachment endpoints from the neighboring geometry; the helper does not find joints or join
+  // surfaces. Use for braces, barrels, struts, cables, and scaffolding.
   // e.g. beamBetween('SkidBraceA', [0.8, 0.3, 0.7], [0.8, 1.0, 0.45], 0.025, black, { parent:
   // root });
 snapTo(part: Object3D, host: Object3D, opts?: { axis?: 'x'|'y'|'z', overlap?: 0.02 })
-  // Translates \`part\` by the minimal vector that brings its bounding box into contact with
-  // \`host\` (plus a small overlap). The direct cure for a "Floating parts" warning — attach the
-  // part instead of eyeballing a corrective offset. No-op if they already touch.
+  // Translates \`part\` to align its bounding box with \`host\` plus optional overlap. This is a
+  // placement convenience: box contact does not establish surface attachment, and legitimate
+  // detached parts need no repair. No-op if the boxes already touch.
   // e.g. const scope = createPart('Scope', cylinderXGeo(0.04, 0.04, 0.3), steel, { parent:
   // root, position: [0.1, 0.32, 0] }); snapTo(scope, receiver);
-createLadder(name, { bottom, top, material, width?, rungCount?, railRadius?, rungRadius?, widthAxis?, parent? })
-  // Builds two continuous rails plus evenly-spaced rungs. Use this instead of loose boxes for
-  // ladders.
+createLadder(name, { bottom, top, material, width?, rungCount?, railRadius?, rungRadius?, segments?, widthAxis?, widthDirection?, parent? })
+  // Builds a rooted ladder with perpendicular rails/rungs and bottom/top endpoint frames and
+  // sockets. Describe or replicate result.root as one assembly. Explicit widthDirection is
+  // projected perpendicular to the endpoints.
   // e.g. createLadder('TowerLadder', { bottom: [0,0,0], top: [0,2.2,0], width: 0.45, rungCount:
   // 7, material: steel, parent: root });
 createWingPair(name, material, { rootZ, span, rootChord, tipChord, sweep?, thickness?, dihedral?, rootX?, rootY?, parent? })
@@ -500,20 +78,22 @@ room(name, material, { width?, depth?, height?, wallThickness?, floor?, floorThi
   // side doors.
   // e.g. const { root: hut } = room('Hut', wood, { width: 5, depth: 4, height: 2.8, openings:
   // [{ wall: 'front', kind: 'door' }, { wall: 'right', kind: 'window' }], parent: root });
-wallWithOpening(name, material, { length, height, thickness, axis?: 'x'|'z', opening?: { kind?: 'door'|'window', offset?, width?, height?, sill? }, parent? })
-  // A single wall panel with an optional real door/window cut, composed from solid box segments
-  // (side panels + lintel + window sill) — no CSG. Base at local Y=0, centered on the run axis.
-  // Use to compose custom building layouts or interior dividing walls beyond the default
-  // room().
+wallWithOpening(name, material, { length, height, thickness, axis?: 'x'|'z', opening?: { kind?: 'door'|'window', offset?, width?, height?, sill? }, openings?: [{ kind?: 'door'|'window', offset?, width?, height?, sill? }], parent? })
+  // A wall panel with real rectangular door/window gaps, composed from solid box segments.
+  // Supply opening or openings, never both. Multiple or vertically stacked apertures must not
+  // overlap or extend outside the wall. Base at local Y=0, centered on the run axis. Use to
+  // compose custom layouts and interior dividing walls.
   // e.g. wallWithOpening('Partition', plaster, { length: 4, height: 2.8, thickness: 0.12, axis:
   // 'x', opening: { kind: 'door', offset: 0.5 }, parent: root });
 createRoofPlanes(name, material, { width, depth, height, overhang?, ridgeAxis?: 'x'|'z', thickness?, parent? })
   // A pitched roof: two thin slopes meeting at one ridge and falling DOWN-AND-OUTWARD (opposite
-  // tilts — never mirrored the same way), footprint-matched with an eave overhang. Eave at
-  // local Y=0, ridge at Y=height, so position the group at Y=wallHeight. Returns a named group
-  // (e.g. \`Roof\`) the engine can lift to reveal the interior.
+  // tilts — never mirrored the same way), footprint-matched with an eave overhang. Outer top
+  // eave at local Y=0, ridge at Y=height. Thickness extends inward. For a wall-bearing datum
+  // use createGableRoof. Returns a named group (e.g. \`Roof\`) the engine can lift to reveal the
+  // interior.
   // NOTE: The two slopes must fall AWAY from each other from the ridge — createRoofPlanes does
-  // this for you. Drop it onto the walls (position.y = wall height).
+  // this for you. Its outer top eave is the datum; createGableRoof instead anchors the wall
+  // bearing line.
   // e.g. const { root: roof } = createRoofPlanes('Roof', shingle, { width: 5, depth: 4, height:
   // 1.6, overhang: 0.4, ridgeAxis: 'x', parent: root }); roof.position.y = 2.8;
 createGableRoof(name, material, { spanX, spanZ, rise?, pitchDegrees?, overhang?, ridgeAxis?: 'x'|'z', thickness?, parent? })
@@ -557,8 +137,10 @@ meshGeo({ positions: number[], indices?: number[], normals?: number[], uvs?: num
   // lengths and indices; computes normals if absent. Counterclockwise winding.
   // e.g. const triangle = meshGeo({ positions: [0,0,0, 1,0,0, 0,1,0], indices: [0,1,2] });
 parametricSurface(sample: (u,v) => [x,y,z], opts?: { u?: [0,1], v?: [0,1], uSegments?: 24, vSegments?: 24, periodicU?: false, periodicV?: false, orientation?: 'uv'|'vu' })
-  // Samples an equation into an owned surface with UVs. Periodic endpoints must coincide; UV
-  // seams retain matching normals. A surface is not automatically a watertight solid.
+  // At most 262,144 endpoint-inclusive samples per call, checked before invoking the sampler.
+  // Samples an equation into an owned surface with UVs. Periodic endpoints must agree within
+  // 1e-6 of the sampled diagonal, independent of origin and units; UV seams retain matching
+  // normals. A surface is not automatically a watertight solid.
   // e.g. const canopy = parametricSurface((u,v) => [u, 0.3*Math.sin(u*3)*Math.cos(v*2), v], {
   // u: [-2,2], v: [-1,1] });
 await implicitSurface(sample: ([x,y,z]) => signedValue, { bounds: { min, max }, edgeLength, maxCells?: 1000000, maxEvaluations?: 8000000, level?: 0, tolerance?: -1, smooth?: true })
@@ -648,9 +230,10 @@ decalBox(width: number, height: number, depth?: 0.01)
 foliageCardGeo(opts?: { width?, height?, yPivot?: 0..1 })
   // Single-quad foliage card with a configurable Y pivot. yPivot=0 plants the quad on the
   // ground. Pair with an alpha-tested material and a leaf/plant sprite.
-  // e.g. const leaves = await materialRecipe('kiln.material.leaf.v1'); const quad =
-  // foliageCardGeo({ width: 4, height: 6, yPivot: 0 }); createPart('Mesh_Fern', quad, leaves, {
-  // parent: root });
+  // NOTE: The example uses an approved 4x4 teaching placeholder, not production foliage detail.
+  // e.g. const albedo = await loadApprovedTexture('kiln.texture.leaf-mask-albedo.v1'); const
+  // leaves = foliageMaterial(albedo); const quad = foliageCardGeo({ width: 0.6, height: 1,
+  // yPivot: 0 }); createPart('LeafCard', quad, leaves, { parent: root });
 crossedQuadsGeo(opts?: { width?, height?, planes?: 2 | 3, yPivot? })
   // Cross-billboard bush primitive: 2 or 3 planes intersecting along the Y axis. Reads as a
   // dense plant from any angle, cheaper than real geometry.
@@ -681,21 +264,32 @@ bladeGeo(opts?: { length?: 1.5, baseWidth?: 0.1, thickness?: 0.015, tipLength?: 
 
 // Materials
 gameMaterial(color, opts?: { metalness, roughness, emissive, emissiveIntensity, flatShading })
-  // Flat-shaded PBR material. Default for game-ready low-poly. Use for 95% of parts.
+  // PBR material with flat shading by default; choose shading and material settings for the
+  // intended surface.
   // e.g. const mat = gameMaterial(0x8b7355, { roughness: 0.9 });
 await materialRecipe(recipeId, overrides?: { baseColor?, roughness?, metalness?, opacity?, alphaCutoff?, doubleSided?, emissiveColor?, emissiveIntensity?, textureResources? })
   // Resolves a versioned portable
   // bark/leaf/wood/stone/rubber/painted-metal/cloth/skin/glass/emissive recipe to standard glTF
   // PBR.
-  // NOTE: Use only listed kiln.material.*.v1 IDs and approved kiln.texture.* resource IDs. Leaf
-  // is MASK, glass is BLEND, and host file paths are forbidden.
+  // NOTE: Use only listed kiln.material.*.v1 IDs and approved kiln.texture.* resource IDs.
+  // textureResources uses portable slots baseColor, normal, metallicRoughness, emissive and
+  // occlusion with ID string values; albedo is a pbrMaterial field, not a recipe slot. Check
+  // resource allowedSlots and recipeIds. All numeric overrides (including emissiveIntensity)
+  // are finite 0..1. Recipe emission is baked into the core glTF emissive factor. Leaf is MASK,
+  // glass is BLEND, and host file paths are forbidden.
   // e.g. const bark = await materialRecipe('kiln.material.bark.v1', { baseColor: '#6b4328' });
 await compilePortableMaterialSpecV2({ schemaVersion: 2, model: 'pbrMetallicRoughness', name?, baseColor?, roughness?, metalness?, emissive?, emissiveIntensity?, alphaMode?, alphaCutoff?, doubleSided?, textures?: { baseColor?, normal?, metallicRoughness?, emissive?, occlusion? } })
-  // Compiles the strict portable material contract. Texture refs are either typed procedural V2
-  // specs or closed approved kiln.texture.* IDs; paths, URLs, raw textures, callbacks, and
+  // Compiles the strict portable material contract. Texture refs are typed procedural V2 specs
+  // or typed approved-resource references; bare IDs, paths, URLs, raw textures, callbacks, and
   // shader source are rejected.
-  // NOTE: Use metallicRoughness as one packed G=roughness/B=metalness map. Every procedural ref
-  // usage must match its slot; resource refs must be approved for that exact slot.
+  // NOTE: Use textures: { baseColor: { kind: "resource", resourceId:
+  // "kiln.texture.rough-concrete-albedo.v1" } } for an approved resource, or { kind:
+  // "procedural", spec: { schemaVersion: 2, ... } }; bare ID strings are invalid. Use
+  // metallicRoughness as one packed G=roughness/B=metalness map. Every procedural ref usage
+  // must match its slot; resource refs must be approved for that exact slot. baseColor and
+  // emissive are numeric color integers from 0x000000 to 0xffffff, not CSS or materialRecipe
+  // hex strings. roughness, metalness and alphaCutoff are finite 0..1; emissiveIntensity is
+  // finite 0..64 (unlike materialRecipe, whose intensity is 0..1).
   // e.g. const steel = await compilePortableMaterialSpecV2({ schemaVersion: 2, model:
   // 'pbrMetallicRoughness', roughness: 0.45, metalness: 0.85, textures: { metallicRoughness: {
   // kind: 'procedural', spec: { schemaVersion: 2, usage: 'metallicRoughness', size: 64, layers:
@@ -709,19 +303,30 @@ glassMaterial(color, opts?: { opacity, roughness, metalness })
 lambertMaterial(color, opts?: { flatShading, emissive })
   // Cheaper than gameMaterial. No metalness/roughness. Use when PBR is overkill.
   // e.g. const mat = lambertMaterial(0x2a4d14, { flatShading: true });
-pbrMaterial({ albedo?, normal?, roughness?, metalness?, metallicRoughness?, emissive?, aoMap?, alphaMode?, alphaCutoff?, doubleSided? })
+pbrMaterial({ albedo?, normal?, roughness?, metalness?, metallicRoughness?, emissive?, emissiveIntensity?, aoMap?, aoMapIntensity?, alphaMode?: 'opaque'|'mask'|'blend', alphaCutoff?, doubleSided? })
   // Portable glTF PBR material. Use an explicit packed metallicRoughness texture (G=roughness,
   // B=metalness); separate data maps are rejected instead of silently dropping a channel.
-  // Supports OPAQUE/MASK/BLEND and double-sided output.
+  // alphaMode takes lowercase opaque/mask/blend and exports uppercase glTF modes. Supports
+  // double-sided output.
   // e.g. const wood = proceduralTexture({ schemaVersion: 2, usage: 'albedo', layers: [{ op:
   // 'noise', colorA: 0x4f301c, colorB: 0x9a6b3e, scale: 8, octaves: 3, seed: 4 }] }); const
   // crate = pbrMaterial({ albedo: wood, roughness: 0.85, metalness: 0 });
 foliageMaterial(albedo, { alphaCutoff?, roughness?, doubleSided? })
   // Portable foliage material that defaults to glTF MASK, cutoff 0.5, rough nonmetal, and
   // double-sided. Use an alpha-bearing albedo texture.
-  // e.g. const mat = await materialRecipe('kiln.material.leaf.v1');
+  // NOTE: The example uses an approved 4x4 teaching placeholder. Check GPU and destination
+  // alpha filtering; a geometry-flat CPU view cannot establish the cutout silhouette.
+  // e.g. const albedo = await loadApprovedTexture('kiln.texture.leaf-mask-albedo.v1'); const
+  // mat = foliageMaterial(albedo, { alphaCutoff: 0.5, doubleSided: true });
 
 // Instancing (share geometry+material; smaller GLBs)
+replicateAssembly(source: AssemblyView, opts: { namespace: string, parent?: Object3D, space?: 'local' | 'world', geometry?: 'share' | 'copy', materials?: 'share' | 'copy', externalReferences?: 'reject' | 'preserve', unknownMetadata?: 'reject' | 'copy-json' })
+  // Replicates a complete supported hierarchy with namespaced semantic and animation
+  // references. Owns new nodes/clips; shares geometry/materials unless copy is requested.
+  // Revalidates the live source before attaching. Default local placement preserves authored
+  // transforms; returns the new subtree as result.root.
+  // e.g. const repeated = replicateAssembly(describeAssembly(bay), { namespace: 'bay2', parent:
+  // root }); repeated.root.position.x = 3;
 copyGeometry(geometry: BufferGeometry)
   // Returns an independent geometry with copied vertex buffers. Use before direct mutation of a
   // cached primitive.
@@ -733,14 +338,6 @@ copyMaterial(material: Material)
 createWheelGeometrySet(radius: number, width: number)
   // Creates one reusable +Z-axle tire/rim/hub geometry set for instanced wheel assemblies.
   // e.g. const wheelGeo = createWheelGeometrySet(0.45, 0.22);
-cloneGeometry(geo: BufferGeometry)
-  // Deprecated name: returns the SAME geometry, without copying. Use copyGeometry for
-  // independent vertex edits, or pass the original geometry directly for intentional sharing.
-  // e.g. const wheelGeo = cylinderGeo(0.4, 0.4, 0.2, 12);
-cloneMaterial(mat: Material)
-  // Deprecated name: returns the SAME material. Use copyMaterial for independent property
-  // edits, or pass the original for intentional sharing.
-  // e.g. const rubberMat = gameMaterial(0x1a1a1a, { roughness: 0.95 });
 createInstance(name, source, opts?: { position, rotation: [xDeg, yDeg, zDeg], scale, parent })
   // Creates a new mesh reusing an existing part's geometry + material at a new transform.
   // Cheapest way to replicate wheels / bolts / fence posts / windows. \`rotation\` is in DEGREES,
@@ -757,11 +354,12 @@ arrayLinear(namePrefix, source, count, offset: [x,y,z], parent?)
   // material via createInstance, and carry the source rotation and scale.
   // e.g. const post = createPart('Post0', cylinderGeo(0.05,0.05,1.5,6), wood, { position:
   // [0,0.75,0], parent: root }); arrayLinear('Post', post, 10, [0.5, 0, 0], root);
-arrayRadial(namePrefix, source, count, axis?: 'x'|'y'|'z', parent?, center?: [x,y,z])
+arrayRadial(namePrefix, source, count, axis?: 'x'|'y'|'z', parent?, center?: [x,y,z], opts?: { orientation?: 'outward'|'relative' })
   // \`count\` is the TOTAL, source included: the source stays at its angle as copy 0 and the call
-  // returns count-1 new instances, so count 8 gives 8 bolts evenly spaced, not 9. Each copy's
-  // local rotation is oriented outward. Copies orbit the parent's origin unless you pass
-  // \`center\`. Perfect for gear teeth, radial bolts, circle of columns.
+  // returns count-1 new mesh instances. Copies preserve source scale. Default outward rotation
+  // follows the orbit; relative orientation composes the orbit with the source rotation. Copies
+  // orbit the parent's origin unless you pass center. This is mesh reuse, not
+  // hierarchy-preserving assembly replication.
   // e.g. const bolt = createPart('Bolt0', cylinderGeo(0.02,0.02,0.1,6), steel, { position:
   // [1,0,0], parent: root }); arrayRadial('Bolt', bolt, 8, 'y', root);
 mirror(name, source, axis: 'x'|'y'|'z', parent?)
@@ -776,7 +374,11 @@ mirror(name, source, axis: 'x'|'y'|'z', parent?)
 // discard UVs, so unwrap their result afterward: \`mesh.geometry = await
 // autoUnwrap(mesh.geometry)\`. Tangents are regenerated when needed. Empty operands/results fail
 // with a named cause. Convex hull faces are newly generated and have no original-face
-// provenance.
+// provenance. Use static meshes: bake instances and poses first. Colors, secondary UVs, custom
+// attributes and morph targets do not survive CSG; inspect the reported losses. Keep the
+// returned mesh transform: its position is the first contributing mesh world origin, with
+// world-aligned geometry local to that origin. All operands use one shared computation frame;
+// geometry alone does not include world translation.
 await boolUnion(name: string, ...parts: Object3D[], opts?: { smooth?: false, preserveAttributes?: boolean })
   // Merges two or more parts into one watertight manifold mesh. Default flat shading (hard
   // edges) — pass { smooth: true } as last arg for averaged normals on organic merges.
@@ -806,12 +408,14 @@ await extrudeProfile(profile: [number, number][], opts?: { depth?: 1, holes?: [n
   // rounding/chamfering, twist, and taper. The way to build any cross-section that is not a box
   // or a cylinder: L-brackets, I-beams, gaskets, washers, star and gear plates, signage,
   // extruded trim.
-  // NOTE: The bevel rounds the edges PARALLEL to the sweep axis (the profile corners) — the two
-  // flat caps stay sharp. For a box rounded on all twelve edges use roundedBoxGeo instead.
-  // Holes are subtracted, so their winding order does not matter. A bevel larger than half the
-  // outline's narrowest feature throws rather than silently returning an empty solid. Output is
-  // manifold, so it feeds straight into boolUnion / boolDiff / boolIntersect. Async — await it
-  // inside an async build().
+  // NOTE: Profile (u,v) maps to XYZ as axis x: (d,v,-u), axis y: (u,d,-v), axis z: (u,v,d),
+  // where d is extrusion depth. For a desired XZ footprint on axis y, pass [X,-Z]; positive
+  // profile v projects toward -Z. The bevel rounds the edges PARALLEL to the sweep axis (the
+  // profile corners) — the two flat caps stay sharp. For a box rounded on all twelve edges use
+  // roundedBoxGeo instead. Holes are subtracted, so their winding order does not matter. A
+  // bevel larger than half the outline's narrowest feature throws rather than silently
+  // returning an empty solid. Output is manifold, so it feeds straight into boolUnion /
+  // boolDiff / boolIntersect. Async — await it inside an async build().
   // e.g. // L-bracket, inner AND outer corners filleted const outline = [[0, 0], [2, 0], [2,
   // 0.4], [0.4, 0.4], [0.4, 2], [0, 2]]; const geo = await extrudeProfile(outline, { depth:
   // 0.5, bevel: 0.06 }); createPart('Bracket', geo, steel, { parent: root });
@@ -832,10 +436,10 @@ circleProfile(radius: number, segments?: 24, center?: [number, number])
   // hand-write the trigonometry. Synchronous.
   // e.g. const washer = await extrudeProfile(circleProfile(1), { depth: 0.1, holes:
   // [circleProfile(0.4), circleProfile(0.1, 16, [0.7, 0])], });
-await boolIntersect(name: string, a: Object3D, b: Object3D, opts?: { smooth?: false })
+await boolIntersect(name: string, a: Object3D, b: Object3D, opts?: { smooth?: false, preserveAttributes?: boolean })
   // Keeps only the volume where both operands overlap. Default flat shading.
   // e.g. const lens = await boolIntersect('Lens', boxMesh, sphereMesh);
-await hull(name: string, ...parts: Object3D[], opts?: { smooth?: true })
+await hull(name: string, ...parts: Object3D[], opts?: { smooth?: true, preserveAttributes?: boolean })
   // Tightest convex mesh enclosing all input points. Default smooth shading (rocks, collision
   // volumes). Pass { smooth: false } for a faceted look.
   // e.g. const rockChunks = [...]; // scattered box meshes const rock = await hull('Rock',
@@ -844,7 +448,9 @@ await hull(name: string, ...parts: Object3D[], opts?: { smooth?: true })
 // Mesh ops
 creaseNormals(geometry: BufferGeometry, opts?: { angle?: 60, tolerance?: number })
   // Returns owned geometry with angle-limited smooth normals, preserving UV corners. Angle is
-  // degrees. Invalidates tangents; use after shaping for sharp rims and smooth walls.
+  // degrees. Default position tolerance is 1e-8 times the diagonal, with no world-unit floor;
+  // explicit tolerance is absolute. Invalidates tangents; use after shaping for sharp rims and
+  // smooth walls.
   // e.g. const shell = creaseNormals(cylinderGeo(1,1,2,32), { angle: 45 });
 bend(geometry, { angle, frame?: { origin, rotation }, interval?: [minY,maxY], falloff?: t => weight })
   // Bends local +Y toward +X through angle degrees. Returns owned geometry and updated
@@ -890,9 +496,9 @@ sweepProfile(profile: [x,z][], path: [x,y,z][], opts?: { cap?: true, closed?: fa
   // e.g. const rail = sweepProfile([[-.1,-.2],[.1,-.2],[.1,.2],[-.1,.2]],
   // [[0,0,0],[0,1,0],[1,2,0]]);
 loftProfiles(sections: { profile: [x,z][], frame?: { origin, rotation } }[], opts?: { cap?: true })
-  // Joins corresponding simple profiles in explicit local XZ planes. Each frame uses Euler XYZ
-  // degrees and local +Y along the loft. Profiles need equal point counts and corresponding
-  // vertices.
+  // Joins corresponding simple profiles in explicit local XZ planes. Frames use Euler XYZ
+  // degrees; initial section travel determines outward winding. Profiles need equal point
+  // counts and corresponding vertices.
   // NOTE: No holes or automatic profile correspondence. Opposite winding is normalized while
   // preserving the first point. Caps close boundaries but do not prove the loft has no
   // self-intersections.
@@ -927,6 +533,19 @@ bezierCurve(controlPoints: [x,y,z][], samples?: 32)
   // curveToMesh(path, 0.1);
 
 // UV unwrapping
+projectUV(geometry: BufferGeometry, opts: { projection: 'planar'|'box'|'cylindrical', frame?: { origin?: [x,y,z], rotation?: [xDeg,yDeg,zDeg] }, seamDegrees?: number, angularRange?: [startDeg,sweepDeg], caps?: 'planar'|'side' })
+  // Generates UV0 explicitly in a rigid geometry-local frame. Planar maps XY; box maps each
+  // face; cylindrical wraps frame Y with separate caps and split angular seams. Replaces
+  // existing UVs and removes stale tangents. To preserve good UVs use direct sharing or
+  // copyGeometry instead.
+  // e.g. const mapped = projectUV(rawGeometry, { projection: 'cylindrical', frame: { rotation:
+  // [0,0,-90] }, seamDegrees: 180 });
+remapUV(geometry: BufferGeometry, opts?: { scale?: [u, v], offset?: [u, v] })
+  // Scales and offsets existing UV0 on an independent geometry. Defaults are scale [1,1],
+  // offset [0,0]. Requires finite two-component UVs; does not unwrap or project. Reads
+  // interleaved and normalized attributes. Preserves topology and other attributes; nonidentity
+  // scaling removes stale tangents with a warning.
+  // e.g. const strip = remapUV(cylinderGeo(0.4, 0.4, 1), { scale: [1, 0.3], offset: [0, 0] });
 await autoUnwrap(geometry: BufferGeometry, opts?: { resolution?: 1024, padding?: 2, useNormals?: false })
   // xatlas-based UV atlas for ANY geometry (CSG output, subdivided, deformed). Output is a
   // packed atlas with arbitrary per-chart rotation — use for non-tileable baked textures. For
@@ -934,31 +553,6 @@ await autoUnwrap(geometry: BufferGeometry, opts?: { resolution?: 1024, padding?:
   // unwraps below.
   // e.g. const unwrapped = await autoUnwrap(someCsgResult, { resolution: 1024 }); const mesh =
   // new THREE.Mesh(unwrapped, bakedPbr);
-boxUnwrap(geometry: BufferGeometry)
-  // Preserves BoxGeometry's built-in per-face UVs — every face maps [0,1] with consistent
-  // orientation. Use for crates/blocks with a tileable texture. Sync; no WASM cost.
-  // e.g. const crate = boxUnwrap(boxGeo(1, 1, 1)); const mesh = new THREE.Mesh(crate,
-  // pbrMaterial({ albedo: planksTex }));
-cylinderUnwrap(geometry: BufferGeometry)
-  // Preserves CylinderGeometry's built-in UVs: u wraps around the axis (horizontal texture
-  // features ring the cylinder), v runs up the height. Caps use circle-in-square. Sync; no WASM
-  // cost.
-  // e.g. const barrel = cylinderUnwrap(cylinderGeo(0.5, 0.5, 1.2, 24)); const mesh = new
-  // THREE.Mesh(barrel, pbrMaterial({ albedo: bandsTex }));
-planeUnwrap(geometry: BufferGeometry)
-  // Projects xy-extent of the bbox to [0,1]. Use for signs/decals/posters where you want ONE
-  // readable texture and no edge-face bleeding. Sync.
-  // e.g. const sign = planeUnwrap(planeGeo(1, 0.6)); const mesh = new THREE.Mesh(sign,
-  // pbrMaterial({ albedo: kilnTextTex }));
-panelRemapV(geo, vScale=0.30, vOffset=0, uScale=1, uOffset=0)
-  // Scales an existing UV attribute so a small mesh samples a sub-region of a SHARED texture.
-  // Replaces the broken texture.clone() pattern (Three.js Texture.clone() runs JSON.stringify
-  // on userData, mangling encoded PNG bytes — panelRemapV avoids that by remapping UVs on the
-  // geometry instead). Typical use: multi-zone albedo where v=0..0.30 is plain panel and
-  // v=0.30..1 has windows/markings — small parts call panelRemapV(unwrap(geo), 0.30) to sample
-  // only the clean strip.
-  // e.g. const cowlGeo = panelRemapV(cylinderUnwrap(capsuleXGeo(0.45, 1.0)), 0.30); const cowl
-  // = new THREE.Mesh(cowlGeo, bodyMat); // SAME bodyMat as fuselage, no clone needed
 
 // Textures (approved resource loading is async)
 await loadApprovedTexture(resourceId)
@@ -971,12 +565,14 @@ await loadApprovedTexture(resourceId)
   // and breaks GLB export).
   // e.g. const bark = await loadApprovedTexture('kiln.texture.bark-brown-01-albedo.v1');
 proceduralTexture({ schemaVersion: 2, size?: 4..1024 pow2, usage?, name?, layers: ProceduralLayer[] })
-  // Builds a tiling texture from a bounded layer stack — no image file needed. Layers composite
-  // bottom-first. Noise is seeded and tileable, so the same spec always produces the same bytes
-  // and a repeating material shows no seam. Baked to PNG and embedded in the GLB automatically.
+  // Builds a repeat-wrapped texture from a bounded layer stack, with no image file needed.
+  // Layers composite bottom-first; the same spec produces the same bytes. Seeded noise is
+  // tileable, while other patterns can have visible repeat seams. Baked to PNG and embedded in
+  // the GLB automatically.
   // NOTE: Layer fields by op — solid: { color }; checker: { colorA, colorB, squares? };
   // stripes: { colorA, colorB, count?, angleDeg? }; gradient: { from, to, angleDeg? }; bricks:
-  // { brick, mortar, rows?, cols?, mortarWidth?, stagger? }; noise: { colorA, colorB, scale?,
+  // { brick, mortar, rows?, cols?, mortarWidth?: 0..1 (fraction of a brick cell, default 0.06),
+  // stagger?: 0..1 (row offset fraction, default 0.5) }; noise: { colorA, colorB, scale?,
   // octaves?, seed? }. Every layer also accepts blend?: 'normal'|'multiply'|'screen'|'overlay'
   // and opacity?: 0..1. Pattern counts are integers 1..256; noise octaves are 1..6. Sync — no
   // await. Unknown/prototype keys, callbacks, paths, URLs, and shader source are rejected. Max
@@ -996,12 +592,14 @@ normalMapFromHeight(source: THREE.Texture, { strength?: number, name?: string })
 
 // Animation — keyframes use "rotation"/"position"/"scale" keys, NOT "value"
 rotationTrack(jointName: string, keyframes: Array<{ time, rotation: [xDeg, yDeg, zDeg] }>, interp?: 'LINEAR' | 'STEP')
-  // Rotation track in degrees, auto-converted to quaternions. Joint name must include \`Joint_\`
-  // prefix.
+  // Absolute local XYZ Euler degrees converted to quaternion keys. Use an exact node name;
+  // Joint_ is a convention. LINEAR follows shortest quaternion arcs; STEP holds until the next
+  // key.
   // e.g. rotationTrack('Joint_Lid', [{ time: 0, rotation: [0, 0, 0] }, { time: 1, rotation:
   // [90, 0, 0] }]);
 positionTrack(jointName: string, keyframes: Array<{ time, position: [x, y, z] }>, interp?: 'LINEAR' | 'STEP')
-  // Position track in world units. Always use \`position:\` not \`value:\` in keyframes.
+  // Absolute parent-local positions in authored length units. Use \`position:\`, not \`value:\`.
+  // Finite nonnegative times must stay strictly increasing in float32.
   // e.g. positionTrack('Joint_Body', [{ time: 0, position: [0, 0, 0] }, { time: 1, position:
   // [0, 0.1, 0] }]);
 scaleTrack(jointName: string, keyframes: Array<{ time, scale: [x, y, z] }>, interp?: 'LINEAR' | 'STEP')
@@ -1009,29 +607,41 @@ scaleTrack(jointName: string, keyframes: Array<{ time, scale: [x, y, z] }>, inte
   // e.g. scaleTrack('Joint_Chest', [{ time: 0, scale: [1, 1, 1] }, { time: 1, scale: [1.1, 1.1,
   // 1.1] }]);
 createClip(name: string, duration: number, tracks: KeyframeTrack[])
-  // Collects tracks into a named clip. Returned from animate().
+  // Validates supported position/quaternion/scale tracks and collects them into a named clip.
+  // Duration is seconds (-1 derives from keys); explicit duration must include every key.
+  // Returned from animate().
   // e.g. return [createClip('Open', 1, [rotationTrack('Joint_Lid', [...])])];
-idleBreathing(bodyJoint: string, duration?: 2, amount?: 0.02)  // Gentle Y-axis bob. For NPC idle states.
-  // e.g. return [idleBreathing('Joint_Body')];
-bobbingAnimation(rootName: string, duration?: 2, height?: 0.1)  // Floating / bobbing loop for pickups and effects.
-  // e.g. return [bobbingAnimation('Joint_Root', 1.5, 0.08)];
+idleBreathing(bodyJoint: string, duration?: 2, amount?: 0.02, options?: { basePosition?: [x, y, z] })
+  // Gentle parent-local Y bob around options.basePosition, default [0,0,0]. Give the authored
+  // base explicitly or animate a separate zero-origin pivot.
+  // e.g. return [idleBreathing('Joint_Body', 2, 0.02, { basePosition: [0, 1.2, 0] })];
+bobbingAnimation(rootName: string, duration?: 2, height?: 0.1, options?: { basePosition?: [x, y, z] })
+  // Parent-local Y motion loop around options.basePosition, default [0,0,0]. A target name
+  // alone cannot infer its rest translation.
+  // e.g. return [bobbingAnimation('Joint_Root', 1.5, 0.08, { basePosition: [0, 0.5, 0] })];
 spinAnimation(jointName: string, duration?: 2, axis?: 'x' | 'y' | 'z')
   // 360° rotation over \`duration\` around \`axis\`.
   // e.g. return [spinAnimation('Joint_Rotor', 0.5, 'y')];
 
 // Inspection utilities
-geometryDiagnostics(geometry: BufferGeometry, tolerance?: 1e-6)
-  // Counts mesh topology problems after position-based seam matching. Open boundaries are valid
-  // for sheets; closed edges alone do not prove a self-intersection-free solid.
+materialBudgetAdvisory(root: Object3D, opts?: { maxMaterials?: number })
+  // Counts distinct material object identities and optionally compares an explicit nonnegative
+  // integer budget. Without maxMaterials it reports a count with null budget/exceeded and no
+  // warnings. Does not measure draw calls, validate geometry, choose an asset category, or
+  // establish asset validity.
+  // e.g. const advisory = materialBudgetAdvisory(root, { maxMaterials: 8 });
+geometryDiagnostics(geometry: BufferGeometry, tolerance?: number)
+  // Counts topology issues after position-grid matching. Default tolerance is 1e-6 times the
+  // finite-position diagonal; an explicit positive value is absolute. Reports effective
+  // tolerance and scale. Open boundaries are valid for sheets; closed edges do not certify a
+  // self-intersection-free solid.
   // e.g. const topology = geometryDiagnostics(shell);
-countTriangles(root: Object3D)  // Sums triangle count across every mesh in the subtree.
+countTriangles(root: Object3D)
+  // Sums placed mesh triangles across the subtree, including active InstancedMesh copies and
+  // two triangles per sprite. Not draw calls or visible-frame cost.
   // e.g. meta.tris = countTriangles(root);
 countMaterials(root: Object3D)  // Unique material count (by reference) across the subtree.
   // e.g. const mats = countMaterials(root);
 getJointNames(root: Object3D)  // All node names beginning with \`Joint_\`. Use to sanity-check animation targets.
-  // e.g. const joints = getJointNames(root);
-validateAsset(root: Object3D, category: 'character' | 'prop' | 'vfx' | 'environment' | 'architecture' | 'vegetation' | 'vehicle')
-  // Checks geometry and material costs for the selected category. No default triangle limit;
-  // choose detail for the intended runtime and inspect measured draw calls.
-  // e.g. const v = validateAsset(root, 'prop');"
+  // e.g. const joints = getJointNames(root);"
 `;

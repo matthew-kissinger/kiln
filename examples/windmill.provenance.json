@@ -1,5 +1,5 @@
 {
-  "sourceHash": "c1a7eeb546fdc10544635609c9b0035ae9307ea5da4f916630cb3ead9c73f6cb",
+  "sourceHash": "a9289958709ab250afbba7ca3b3ec559c331a8f9248336a749434ea635ff3c87",
   "model": "DeepSeek V4 Flash",
   "harness": "OpenCode",
   "provenance": {
@@ -7,10 +7,17 @@
     "sourceAccess": "Source header declares no repository implementation or finished examples supplied",
     "inheritedContext": "Not independently recorded; source-header declarations only",
     "startingExample": "None supplied, according to source header",
-    "humanIntervention": "Header declares no hand-authored source; other intervention not recorded",
+    "humanIntervention": "Maintainer-directed UV API migration by Codex; original model-authored shape and UV values retained.",
     "reviewFidelity": "Six-view review declared; renderer fidelity not recorded",
-    "poster": "Gallery GPU render of this exact source. Source, artifact, image hashes and camera settings are recorded alongside the poster; the artifact hash names the GLB bytes the image was rendered from, which the downloadable rebuild reproduces byte for byte only on the platform that recorded it.",
-    "posterReceipt": {
+    "poster": "Archival GPU poster from the source before the UV API migration. The original receipt is retained as historicalPosterReceipt; this image is not an exact-source render of the current program.",
+    "maintainerRevisions": [
+      {
+        "previousSourceHash": "c1a7eeb546fdc10544635609c9b0035ae9307ea5da4f916630cb3ead9c73f6cb",
+        "sourceHash": "a9289958709ab250afbba7ca3b3ec559c331a8f9248336a749434ea635ff3c87",
+        "description": "UV API migration by Codex: cylinderUnwrap replaced with copyGeometry to preserve existing built-in UVs."
+      }
+    ],
+    "historicalPosterReceipt": {
       "captureIdentity": [
         "kiln.capture-producer.v1",
         "sha256:10f346ec6287c8d635dabe4668d72925080e6fe3d059dd7a9252f2694ce595c2",

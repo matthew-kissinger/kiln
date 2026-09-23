@@ -2,7 +2,7 @@
 
 /**
  * No cap by default. Zero is this module's "unlimited" value, honoured by
- * `tryConsume`, by the step hook, and by the grade-refine headroom check.
+ * `tryConsume` and the shared pre-dispatch admission hook.
  *
  * It used to be 40, which was a cost guard carried over from a hosted product
  * where the operator paid for every call. Out here the person running the tool
@@ -49,13 +49,15 @@ export interface GenerationCallBudget {
   receipt(): GenerationCallBudgetReceipt;
 }
 
-/** Unparseable configuration falls back to the default rather than inventing a bound. */
+/** An invalid explicit spending limit must never turn into unlimited dispatch. */
 export function resolveGenerationModelCallLimit(raw: unknown): number {
   if (raw === undefined || raw === null || raw === '') return DEFAULT_GENERATION_MODEL_CALL_LIMIT;
-  const parsed = typeof raw === 'number' ? raw : Number(raw);
-  if (!Number.isFinite(parsed) || parsed < 0 || !Number.isInteger(parsed)) {
-    return DEFAULT_GENERATION_MODEL_CALL_LIMIT;
-  }
+  const parsed =
+    typeof raw === 'number' ? raw : typeof raw === 'string' && raw.trim() ? Number(raw) : NaN;
+  if (!Number.isSafeInteger(parsed) || parsed < 0)
+    throw new Error(
+      'Generation model-call limit must be a nonnegative safe integer; use 0 for unlimited.',
+    );
   return parsed;
 }
 

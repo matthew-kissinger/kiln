@@ -1,11 +1,5 @@
 // src/agent/providers.ts
-import { VercelModel } from "@strands-agents/sdk/models/vercel";
-import { AnthropicModel } from "@strands-agents/sdk/models/anthropic";
-import { OpenAIModel } from "@strands-agents/sdk/models/openai";
-import { GoogleModel } from "@strands-agents/sdk/models/google";
-import { BedrockModel } from "@strands-agents/sdk/models/bedrock";
 import { CachePointBlock, TextBlock } from "@strands-agents/sdk";
-import { createOpenRouter } from "@openrouter/ai-sdk-provider";
 
 // src/agent/stream-start.ts
 function ensureStreamStart(model) {
@@ -82,8 +76,12 @@ function splitToolResultImages(model) {
 }
 
 // src/agent/providers.ts
+var promptCacheSupport = new WeakMap;
+function rememberPromptCache(model, supported) {
+  promptCacheSupport.set(model, supported);
+  return model;
+}
 var OPENROUTER_EFFORTS = new Set(["xhigh", "high", "medium", "low", "minimal", "none"]);
-var MIN_VISIBLE_OUTPUT_TOKENS = 8192;
 function resolveOpenRouterReasoning(thinking, maxTokens) {
   if (thinking == null || thinking === "" || thinking === 0)
     return;
@@ -101,15 +99,16 @@ function resolveOpenRouterReasoning(thinking, maxTokens) {
   const raw = thinking.trim().toLowerCase();
   if (/^\d+$/.test(raw))
     return resolveOpenRouterReasoning(Number.parseInt(raw, 10), maxTokens);
-  let effort = raw === "max" ? "xhigh" : raw;
+  const effort = raw === "max" ? "xhigh" : raw;
   if (!OPENROUTER_EFFORTS.has(effort))
     return;
-  if ((effort === "xhigh" || effort === "high") && maxTokens != null && Number.isFinite(maxTokens) && maxTokens > 0 && maxTokens * 0.2 < MIN_VISIBLE_OUTPUT_TOKENS) {
-    effort = "medium";
-  }
   return { effort };
 }
-function makeOpenRouterModel(opts) {
+async function makeOpenRouterModel(opts) {
+  const [{ VercelModel }, { createOpenRouter }] = await Promise.all([
+    import("@strands-agents/sdk/models/vercel"),
+    import("@openrouter/ai-sdk-provider")
+  ]);
   const openrouter = createOpenRouter({ apiKey: opts.apiKey ?? process.env["OPENROUTER_API_KEY"] });
   let provider = ensureStreamStart(openrouter.chat(opts.modelId, {
     ...opts.reasoning ? { reasoning: opts.reasoning } : {},
@@ -118,10 +117,10 @@ function makeOpenRouterModel(opts) {
   }));
   if (opts.splitToolResultImages)
     provider = splitToolResultImages(provider);
-  return new VercelModel({
+  return rememberPromptCache(new VercelModel({
     provider,
     ...opts.maxTokens != null ? { maxTokens: opts.maxTokens } : {}
-  });
+  }), false);
 }
 var trimmedEnv = (k) => {
   const v = process.env[k];
@@ -164,50 +163,57 @@ function resolveAnthropicThinking(model, fromDesc) {
     return;
   return { params: { thinking: { type: "adaptive" }, output_config: { effort } } };
 }
-function makeKilnModel(desc, opts = {}) {
+async function makeKilnModel(desc, opts = {}) {
   const maxTokens = desc.maxTokens;
   switch (desc.provider) {
     case "anthropic": {
+      const { AnthropicModel } = await import("@strands-agents/sdk/models/anthropic");
       const thinking = resolveAnthropicThinking(desc.model, desc.thinking);
-      return new AnthropicModel({
+      return rememberPromptCache(new AnthropicModel({
         modelId: desc.model,
         ...opts.apiKey ? { apiKey: opts.apiKey } : {},
         ...maxTokens != null ? { maxTokens } : {},
         ...thinking ? { params: thinking.params } : {},
         ...thinking?.betas ? { betas: thinking.betas } : {}
-      });
+      }), true);
     }
-    case "openai":
-      return new OpenAIModel({
+    case "openai": {
+      const { OpenAIModel } = await import("@strands-agents/sdk/models/openai");
+      return rememberPromptCache(new OpenAIModel({
         api: "chat",
         modelId: desc.model,
         ...opts.apiKey ? { apiKey: opts.apiKey } : {},
         ...maxTokens != null ? { maxTokens } : {}
-      });
+      }), false);
+    }
     case "google": {
+      const { GoogleModel } = await import("@strands-agents/sdk/models/google");
       const thinkingLevel = resolveGoogleThinkingLevel(desc.thinking);
       const googleParams = {
         ...maxTokens != null ? { maxOutputTokens: maxTokens } : {},
         ...thinkingLevel ? { thinkingConfig: { thinkingLevel } } : {}
       };
-      return new GoogleModel({
+      return rememberPromptCache(new GoogleModel({
         modelId: desc.model,
         apiKey: opts.apiKey ?? trimmedEnv("GEMINI_API_KEY"),
         ...Object.keys(googleParams).length > 0 ? { params: googleParams } : {}
-      });
+      }), false);
     }
-    case "bedrock":
-      return new BedrockModel({
+    case "bedrock": {
+      const { BedrockModel } = await import("@strands-agents/sdk/models/bedrock");
+      return rememberPromptCache(new BedrockModel({
         modelId: desc.model,
         region: opts.region ?? trimmedEnv("AWS_REGION") ?? "us-west-2",
         ...maxTokens != null ? { maxTokens } : {}
-      });
+      }), true);
+    }
     case "meta": {
+      const { OpenAIModel } = await import("@strands-agents/sdk/models/openai");
       const apiKey = metaApiKey(opts);
       if (!apiKey) {
         throw new Error("Meta Model API key is required. Set MODEL_API_KEY, META_MODEL_API_KEY, or META_API_KEY.");
       }
-      return new OpenAIModel({
+      return rememberPromptCache(new OpenAIModel({
         modelId: desc.model,
         apiKey,
         clientConfig: { baseURL: META_MODEL_API_BASE_URL },
@@ -216,11 +222,11 @@ function makeKilnModel(desc, opts = {}) {
           parallel_tool_calls: false
         },
         ...maxTokens != null ? { maxTokens } : {}
-      });
+      }), false);
     }
     case "openrouter": {
       const reasoning = resolveOpenRouterReasoning(desc.thinking, maxTokens);
-      return makeOpenRouterModel({
+      return await makeOpenRouterModel({
         modelId: desc.model,
         ...opts.apiKey ? { apiKey: opts.apiKey } : {},
         ...maxTokens != null ? { maxTokens } : {},
@@ -236,11 +242,26 @@ function makeKilnModel(desc, opts = {}) {
     }
   }
 }
-function modelConsumesSystemPromptCachePoints(model) {
-  return model instanceof AnthropicModel || model instanceof BedrockModel;
+async function modelConsumesSystemPromptCachePoints(model) {
+  if (!model || typeof model !== "object" || !("stream" in model))
+    return false;
+  const known = promptCacheSupport.get(model);
+  if (known !== undefined)
+    return known;
+  const [anthropic, bedrock] = await Promise.allSettled([
+    import("@strands-agents/sdk/models/anthropic"),
+    import("@strands-agents/sdk/models/bedrock")
+  ]);
+  for (const result of [anthropic, bedrock]) {
+    if (result.status === "rejected" && !["ERR_MODULE_NOT_FOUND", "MODULE_NOT_FOUND"].includes(result.reason?.code))
+      throw result.reason;
+  }
+  const supported = anthropic.status === "fulfilled" && model instanceof anthropic.value.AnthropicModel || bedrock.status === "fulfilled" && model instanceof bedrock.value.BedrockModel;
+  promptCacheSupport.set(model, supported);
+  return supported;
 }
-function toCachedSystemPrompt(text, model) {
-  if (!modelConsumesSystemPromptCachePoints(model))
+async function toCachedSystemPrompt(text, model) {
+  if (!await modelConsumesSystemPromptCachePoints(model))
     return text;
   return [new TextBlock(text), new CachePointBlock({ cacheType: "default" })];
 }

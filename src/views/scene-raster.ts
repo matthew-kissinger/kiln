@@ -16,9 +16,9 @@
 import * as THREE from 'three';
 
 import {
-  resolveEvaluatorPortV1,
-  type EvaluatorExecutionProfileV1,
-  type EvaluatorPortV1,
+  resolveEvaluatorPortV2,
+  type EvaluatorExecutionProfileV2,
+  type EvaluatorPortV2,
 } from '../evaluator';
 import { loadGlbReviewScene } from './glb';
 import { encodePng } from './png';
@@ -76,8 +76,8 @@ export async function rasterizeComposedScene(
   opts: {
     views?: ViewSpec[];
     size?: number;
-    evaluatorPort?: EvaluatorPortV1;
-    evaluatorProfile?: EvaluatorExecutionProfileV1;
+    evaluatorPort?: EvaluatorPortV2;
+    evaluatorProfile?: EvaluatorExecutionProfileV2;
   } = {},
 ): Promise<ComposedSceneRasterResult> {
   const views = opts.views?.length ? opts.views : SCENE_VIEWS;
@@ -95,7 +95,7 @@ export async function rasterizeComposedScene(
       const glb = part.glb
         ? Uint8Array.from(part.glb)
         : (
-            await resolveEvaluatorPortV1(
+            await resolveEvaluatorPortV2(
               opts.evaluatorPort,
               opts.evaluatorProfile ?? 'trusted-local',
             ).render(part.code!)

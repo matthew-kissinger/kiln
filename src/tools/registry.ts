@@ -3,26 +3,36 @@ import {
   createCachedRenderPort,
   type CaptureCache,
 } from '../views/capture-cache';
-/**
- * Shared tool definitions. The original four-tool registry remains the in-process
- * baseline. createKilnProgramToolRegistry exposes saved revisions, source reads,
- * edit-and-render, and the unified view tools used by the stdio server.
- */
+/** Shared definitions for the program-reference MCP and native authoring workflows. */
 
 import { z } from 'zod';
 import { assetManifestSchema } from '../assets';
-import { MemoryProgramStore, retainProgram, type ProgramStore } from '../program-store';
+import {
+  MemoryProgramStore,
+  retainProgram,
+  programReference,
+  programRefPattern,
+  type ProgramStore,
+} from '../program-store';
+import { assertSavedRequirementsAuthorized } from '../requirements-assets';
 import { createKilnSourceDef, withProgramReferences } from './programs';
+import { ProgramArtifactStore, type NativeCompletion } from './program-artifacts';
 import { createKilnDiscoveryDef } from './discovery';
 import { createCachedEvaluatorPort, MemoryBuildCache, type BuildCache } from '../build-cache';
 import * as THREE from 'three';
 
-import { validate } from '../validation';
+import { validate, type ValidationIssue } from '../validation';
 import { evaluatorOutcomeMessage } from '../evaluator/protocol';
 import { inspectSceneStructure, renderSceneToGLB, type RenderResult } from '../render';
-import { listPrimitives, type PrimitiveSpec } from '../list-primitives';
 import type { AssetCategory, AssetIntentV1 } from '../contracts';
-import type { AssetQaReportV1 } from '../qa';
+import type { AssetQaReport } from '../qa';
+import type { RequirementsBinding } from '../requirements-store';
+import {
+  assertNoLegacyRuntimePolicy,
+  createRequirementsCheckpoint,
+  resolveRequirementsContext,
+  type RequirementsContext,
+} from '../requirements-context';
 import type {
   DerivativeReviewFidelityV1,
   DerivativeViewReceiptV1,
@@ -32,8 +42,8 @@ import type {
   ViewEvidenceHistoryV1,
 } from '../composer/render-port';
 import type { ViewGridResult } from '../views';
-import type { EvaluatorExecutionProfileV1, EvaluatorPortV1 } from '../evaluator';
-import { resolveEvaluatorPortV1 } from '../evaluator';
+import type { EvaluatorExecutionProfileV2, EvaluatorPortV2 } from '../evaluator';
+import { resolveEvaluatorPortV2 } from '../evaluator';
 import { sceneNeedsPbrShading } from '../material-resources';
 import { KilnDraftBuffer } from '../edit-buffer';
 // `agent/diff` has no imports of its own -- it is pure string work -- so this
@@ -69,7 +79,7 @@ export interface KilnToolDef {
   };
   /** Stable tool name exposed to the model (in-process and over MCP). */
   name: string;
-  /** Model-facing description, consistent with the kiln-glb SKILL.md language. */
+  /** Model-facing description shared by transports and current authoring guidance. */
   description: string;
   /** Zod schema for the tool input. */
   inputSchema: z.ZodType;
@@ -98,7 +108,7 @@ export interface KilnToolDef {
    * wrong for a result that already contains a rendered human-readable form of
    * itself, because then the wire carries the same information twice.
    *
-   * `kiln_list_primitives` is the case that forced this: it returns 92 entries
+   * `kiln_discover` is the case that forced this: it returns 92 entries
    * as a structured array (48 KB) AND as formatted text (36 KB), and pretty
    * printing the pair sent 90 KB for one call. Harnesses differ in how they cope
    * and one of them copes badly -- OpenCode truncates a result that large, spills
@@ -114,11 +124,22 @@ export interface KilnToolDef {
 
 /**
  * Host-owned context captured by tool closures. This object is never part of a
- * model-facing input schema, so generated source cannot select its own category
- * or QA profile. An intent, when present, is authoritative over the convenience
- * category field.
+ * model-facing input schema. One bound registry belongs to one task/asset lineage;
+ * hosts running independent assets construct separate contexts. Generated source
+ * cannot replace the host binding or turn descriptive labels into QA policy.
  */
 export interface KilnToolContext {
+  /** Snapshot a host-owned render connection at the start of a view operation.
+   * The callback survives context copies; one operation keeps one connection. */
+  viewRenderState?: () => Pick<KilnToolContext, 'viewRenderPort' | 'captureCacheIdentity'>;
+  /** Explicitly reconsider the existing host selection, without installing or rendering. */
+  reprobeRenderer?: () => Promise<import('../render-capabilities').RenderCapabilities>;
+  /** Host-owned read-only status; Discovery must never invoke the image port to probe readiness. */
+  renderCapabilities?: () => Promise<import('../render-capabilities').RenderCapabilities>;
+  /** Resolver configuration for this evaluator only. Read descriptors without resolving bytes. */
+  approvedTextureResources?: () => import('../material-resources').ApprovedTextureCatalogEntryV1[];
+  /** Native harness snapshot reader; absent from CLI/MCP and ordinary inline runs. */
+  skillResourceReader?: import('../agent/skill-resources').SkillResourceReader;
   /** Durable user collections, supplied by the host; never a disposable build cache. */
   assetLibrary?: import('../assets').AssetLibrary;
   /** Host-owned delivery URLs, for example expiring HTTPS links or a running local viewer. */
@@ -131,7 +152,7 @@ export interface KilnToolContext {
   assetBuildOptions?: Record<string, unknown>;
   geometryPolicy?: import('../geometry-export').GeometryExportPolicy;
   localExecution?: import('../local-runtime').LocalExecution;
-  evaluationControls?: () => import('../evaluator/protocol').EvaluatorPortCallControlsV1;
+  evaluationControls?: () => import('../evaluator/protocol').EvaluatorPortCallControlsV2;
   captureLimits?: import('../views/capture-limits').CaptureLimits;
   captureCache?: CaptureCache;
   captureCacheIdentity?: string | (() => string | undefined | Promise<string | undefined>);
@@ -148,7 +169,13 @@ export interface KilnToolContext {
   viewRenderRequired?: boolean;
   /** Optional shared source store for the reference-based tool surface. */
   programStore?: ProgramStore;
+  /** Private evaluated revisions for native completion; never accepted as tool input. */
+  programArtifacts?: ProgramArtifactStore;
+  /** Host binding, snapshotted before each evaluation. Omit for neutral authoring. */
+  requirements?: RequirementsBinding;
+  /** Retained only to issue an explicit migration error; never executed. */
   intent?: AssetIntentV1;
+  /** Retained only to issue an explicit migration error; never executed. */
   category?: AssetCategory;
   /** Host-owned material acceptance contract. The model cannot weaken it through
    * generated source or tool input. Each required usage must be backed by an
@@ -207,8 +234,8 @@ export interface KilnToolContext {
   /** Host-owned generated-source execution boundary. Production selects
    * `evaluator-required`; trusted local/test callers may retain the explicit
    * compatibility profile. */
-  evaluatorPort?: EvaluatorPortV1;
-  evaluatorProfile?: EvaluatorExecutionProfileV1;
+  evaluatorPort?: EvaluatorPortV2;
+  evaluatorProfile?: EvaluatorExecutionProfileV2;
 }
 
 export type RequiredProceduralTextureUsage = Extract<
@@ -245,7 +272,8 @@ function missingProceduralTextureResult(
       error: string;
       materialContract: ProceduralTextureMaterialContract;
       warnings: string[];
-      qaReport?: AssetQaReportV1;
+      requirements?: RequirementsContext;
+      qaReport?: AssetQaReport;
     }
   | undefined {
   const materialContract = proceduralTextureMaterialContract(rendered, context);
@@ -258,8 +286,9 @@ function missingProceduralTextureResult(
       'Create and bind each missing usage through pbrMaterial; derive a normal with ' +
       'normalMapFromHeight when appropriate, then render the corrected buffer again.',
     materialContract,
+    requirements: rendered.requirements,
     warnings: [...rendered.warnings],
-    ...(rendered.meta.qaReport ? { qaReport: rendered.meta.qaReport as AssetQaReportV1 } : {}),
+    ...(rendered.meta.qaReport ? { qaReport: rendered.meta.qaReport as AssetQaReport } : {}),
   };
 }
 
@@ -282,6 +311,8 @@ export interface RenderObservationInput {
   json: unknown;
   /** Trusted request intent, when the host supplied one. */
   intent?: AssetIntentV1;
+  /** Current host binding and neutral policy receipt, independent of generated labels. */
+  requirements?: RequirementsContext;
   /**
    * Shared generation-global allowance. The host must debit role `observer`
    * immediately before each actual provider dispatch; image preparation,
@@ -330,8 +361,9 @@ function resolveInLoopViewRenderTimeoutMs(
   });
 }
 
-function trustedCategory(context: KilnToolContext): AssetCategory | undefined {
-  return context.intent?.category ?? context.category;
+function toolRequirements(context: KilnToolContext): RequirementsContext {
+  assertNoLegacyRuntimePolicy(context);
+  return resolveRequirementsContext(context.requirements);
 }
 
 async function evaluateGeneratedSource(
@@ -339,7 +371,8 @@ async function evaluateGeneratedSource(
   context: KilnToolContext,
   optimize: 'off' | 'auto' = 'off',
 ): Promise<RenderResult> {
-  return resolveEvaluatorPortV1(
+  const requirements = toolRequirements(context);
+  return resolveEvaluatorPortV2(
     context.evaluatorPort,
     context.evaluatorProfile ?? 'trusted-local',
   ).render(
@@ -347,11 +380,21 @@ async function evaluateGeneratedSource(
     {
       optimize,
       ...(context.geometryPolicy ? { geometryPolicy: context.geometryPolicy } : {}),
-      ...(trustedCategory(context) ? { category: trustedCategory(context) } : {}),
-      ...(context.intent ? { intent: context.intent } : {}),
+      ...(requirements.binding ? { requirements: requirements.binding } : {}),
     },
     context.evaluationControls?.(),
   );
+}
+
+interface EvaluationEvidence {
+  requirements?: RequirementsContext;
+  qaReport?: AssetQaReport;
+}
+function evaluationEvidence(rendered: RenderResult): EvaluationEvidence {
+  return {
+    requirements: rendered.requirements,
+    ...(rendered.meta.qaReport ? { qaReport: rendered.meta.qaReport as AssetQaReport } : {}),
+  };
 }
 
 async function loadEvaluatedReviewScene(code: string, context: KilnToolContext) {
@@ -430,8 +473,7 @@ async function renderDerivativeCell(
     // and adjudicated. Submitting it for judgement a second time fails on the
     // round trip rather than on the asset: see `derivative` in render.ts.
     derivative: true,
-    ...(trustedCategory(context) ? { category: trustedCategory(context) } : {}),
-    ...(context.intent ? { intent: context.intent } : {}),
+    requirements: toolRequirements(context).binding,
   });
   const { cameraFromBounds, measureBounds } = await import('../views');
   const camera =
@@ -459,7 +501,9 @@ async function renderDerivativeCell(
       [camera],
       context.captureLimits,
       input.backdrop,
+      context.evaluationControls?.(),
     );
+    context.evaluationControls?.().signal?.throwIfAborted();
     if (ported.ok && ported.derivativeFidelityAttested) {
       if (ported.inputGlbSha256 !== inputGlbSha256) {
         throw new Error(
@@ -604,15 +648,6 @@ function derivativeReviewFidelity(
 // Schemas
 // =============================================================================
 
-const listPrimitivesInput = z.object({
-  category: z
-    .string()
-    .optional()
-    .describe(
-      'Optional category filter: geometry, material, structure, animation, utility, instancing, csg, arrays, mesh-ops, curves, uv, textures.',
-    ),
-});
-
 const validateInput = z.object({
   code: z.string().describe('Kiln source code (defines `meta` + `build()`, optional `animate()`).'),
 });
@@ -621,12 +656,7 @@ const renderInput = z.object({
   code: z.string().describe('Kiln source code to execute and render to an in-memory GLB.'),
 });
 
-/**
- * `kiln_render` (unified surface only) additionally accepts a capture config.
- * Kept off the shared `renderInput` on purpose: the four-tool baseline's
- * metrics-only `kiln_render` produces no image, so a grid shape would be a
- * meaningless argument there and would change that schema for no reason.
- */
+/** Unified render accepts optional capture configuration. */
 /**
  * A named backdrop, never a free colour: sheets must stay comparable across
  * runs, and a backdrop tuned to the asset colour hides the seams the model is
@@ -835,6 +865,14 @@ export const renderViewsBufferInput = renderViewsInput.omit({ code: true });
 
 const screenshotAnimationInput = z.object({
   shot: cameraShotInput.optional(),
+  measureParts: z
+    .array(cameraShotInput.shape.subject.unwrap())
+    .min(1)
+    .max(16)
+    .optional()
+    .describe(
+      'Exact names or paths of subtrees measured together at each phase, independent of camera selection.',
+    ),
   frames: z.number().int().min(2).max(6).optional(),
   frameTimes: z
     .array(z.number().min(0).max(1))
@@ -880,25 +918,6 @@ const viewInteriorInput = z.object({
 });
 
 // =============================================================================
-// kiln_list_primitives
-// =============================================================================
-
-function runListPrimitives(input: z.infer<typeof listPrimitivesInput>): {
-  primitives: PrimitiveSpec[];
-  text: string;
-} {
-  const all = listPrimitives();
-  const category = input.category?.trim().toLowerCase();
-  const primitives = category ? all.filter((p) => p.category.toLowerCase() === category) : all;
-
-  const text = primitives
-    .map((p) => `${p.signature} -> ${p.returns}\n  ${p.description}\n  e.g. ${p.example}`)
-    .join('\n\n');
-
-  return { primitives, text };
-}
-
-// =============================================================================
 // kiln_validate
 // =============================================================================
 
@@ -909,12 +928,18 @@ function runValidate(
   valid: boolean;
   errors: string[];
   warnings: string[];
+  issues: ValidationIssue[];
+  validationScope: 'syntax-and-sandbox';
+  requirements: RequirementsContext;
 } {
-  const category = trustedCategory(context);
-  const result = validate(input.code, category ? { category } : {});
+  const requirements = toolRequirements(context);
+  const result = validate(input.code);
   return {
+    validationScope: 'syntax-and-sandbox',
+    requirements,
     valid: result.valid,
     errors: result.errors,
+    issues: result.issues,
     warnings: result.warnings.map((w) => (w.fixHint ? `${w.message} (${w.fixHint})` : w.message)),
   };
 }
@@ -923,9 +948,80 @@ function runValidate(
 // kiln_render
 // =============================================================================
 
-export interface KilnRenderMetrics {
+const partListInput = z
+  .object({
+    query: z
+      .string()
+      .max(4096)
+      .optional()
+      .describe('Case-insensitive substring of name or exact encoded path; not a regex.'),
+    offset: z.number().int().min(0).optional(),
+    limit: z.number().int().min(1).max(100).optional(),
+  })
+  .strict();
+
+export interface PartListing {
+  total: number;
+  matched: number;
+  offset: number;
+  nextOffset?: number;
+  parts: { path: string; name: string }[];
+}
+
+interface PartPreview {
+  parts?: PartListing['parts'];
+  partsTotal?: number;
+  partsTruncated?: boolean;
+  partsNextOffset?: number;
+  partsHint?: string;
+}
+
+/** Same exported-scene paths used by exact camera and measurement selectors. */
+async function listPartPage(
+  root: THREE.Object3D,
+  options: z.infer<typeof partListInput> = {},
+): Promise<PartListing> {
+  const { listCameraSubjects } = await import('../views/camera');
+  const all = listCameraSubjects(root);
+  const query = options.query?.trim().toLowerCase();
+  const matches = query
+    ? all.filter(
+        (part) =>
+          part.name.toLowerCase().includes(query) || part.path.toLowerCase().includes(query),
+      )
+    : all;
+  const offset = options.offset ?? 0;
+  const parts = matches
+    .slice(offset, offset + (options.limit ?? 80))
+    .map(({ path, name }) => ({ path, name }));
+  const nextOffset = offset + parts.length;
+  return {
+    total: all.length,
+    matched: matches.length,
+    offset,
+    parts,
+    ...(nextOffset < matches.length ? { nextOffset } : {}),
+  };
+}
+
+async function partPreview(root: THREE.Object3D): Promise<PartPreview> {
+  const page = await listPartPage(root);
+  return {
+    parts: page.parts,
+    partsTotal: page.total,
+    partsTruncated: page.nextOffset !== undefined,
+    ...(page.nextOffset === undefined
+      ? {}
+      : {
+          partsNextOffset: page.nextOffset,
+          partsHint:
+            'For remaining paths use kiln_inspect with image:false and listParts:{offset:80}. listParts.query filters names/paths; follow partListing.nextOffset on the same programRef and query.',
+        }),
+  };
+}
+
+export interface KilnRenderMetrics extends PartPreview {
   buildCache?: { key: `sha256:${string}`; hit: boolean };
-  parts?: { path: string; name: string }[];
   ok: boolean;
   tris?: number;
   meshes?: number;
@@ -951,12 +1047,13 @@ export interface KilnRenderMetrics {
   /** Post-dedup instanceability grade (informational): how cheap to render at scale. */
   instanceability?: { grade: string; summary: string };
   /** Structured deterministic report; five dimensions remain separate. */
-  qaReport?: AssetQaReportV1;
+  requirements?: RequirementsContext;
+  qaReport?: AssetQaReport;
   warnings: string[];
   error?: string;
 }
 
-/** Traversal-derived geometry metrics shared by `runRender` and `runRenderViews`. */
+/** Traversal-derived geometry metrics for unified rendering. */
 interface SceneMetrics {
   meshes: number;
   materials: number;
@@ -965,18 +1062,18 @@ interface SceneMetrics {
 }
 
 /**
- * Walk a (sandbox-created) scene root and collect mesh/material counts, the
- * world-space bounding box, and the lowest-touching mesh. Read-only — safe to
- * call alongside `renderSceneToGLB` / `renderViewGrid` on the same root.
- *
- * Mesh + material detection uses duck-typing (`.isMesh`): the sandbox THREE is
- * a different module realm than this module's THREE, so `instanceof` would
- * always be false across that boundary.
+ * Measure the review scene loaded from exported GLB bytes. Instances are already
+ * expanded by loadGlbReviewScene. Referenced base vertices establish rest geometry
+ * extents, not an alpha silhouette, shader displacement or animation envelope.
+ * Transforming local boxes would include empty corners around rotated geometry.
  */
 function collectSceneMetrics(root: THREE.Object3D): SceneMetrics {
   let meshes = 0;
   const materialSet = new Set<unknown>();
   let lowestPart: SceneMetrics['lowestPart'];
+  const box = new THREE.Box3();
+  const point = new THREE.Vector3();
+  root.updateWorldMatrix(true, true);
   root.traverse((node: THREE.Object3D) => {
     const n = node as { isMesh?: boolean; material?: unknown };
     if (n.isMesh) {
@@ -987,16 +1084,24 @@ function collectSceneMetrics(root: THREE.Object3D): SceneMetrics {
       } else if (mat) {
         materialSet.add(mat);
       }
-      // Ground-contact attribution: which mesh touches the lowest point.
-      const mb = new THREE.Box3().setFromObject(node);
+      const mesh = node as THREE.Mesh;
+      const position = mesh.geometry.getAttribute('position');
+      const index = mesh.geometry.index;
+      const mb = new THREE.Box3();
+      if (position) {
+        for (let i = 0; i < (index?.count ?? position.count); i++) {
+          point.fromBufferAttribute(position, index ? index.getX(i) : i);
+          mb.expandByPoint(point.applyMatrix4(mesh.matrixWorld));
+        }
+      }
+      box.union(mb);
+      // Attribute the minimum to this mesh's vertices, not its descendants.
       if (!mb.isEmpty() && (!lowestPart || mb.min.y < lowestPart.y)) {
         lowestPart = { name: node.name || '(unnamed mesh)', y: mb.min.y };
       }
     }
   });
 
-  // World-space bounding box.
-  const box = new THREE.Box3().setFromObject(root);
   let bbox: SceneMetrics['bbox'];
   if (!box.isEmpty()) {
     const size = new THREE.Vector3();
@@ -1036,77 +1141,13 @@ function withSyntaxDetail(message: string, code: string): string {
   return syntax ? `${message} ${syntax}` : message;
 }
 
-async function runRender(
-  input: z.infer<typeof renderInput>,
-  context: KilnToolContext,
-): Promise<KilnRenderMetrics> {
-  try {
-    const { root, rendered } = await loadEvaluatedReviewScene(input.code, context);
-    const materialContractFailure = missingProceduralTextureResult(rendered, context);
-    if (materialContractFailure) return materialContractFailure;
-    const category = trustedCategory(context);
-
-    // Structural advisories (floating parts / stray planes at origin).
-    const structuralWarnings = inspectSceneStructure(root, { category });
-    const metrics = collectSceneMetrics(root);
-
-    const warnings = [...structuralWarnings, ...rendered.warnings];
-    const instanceability = rendered.meta.instanceability;
-
-    return {
-      ok: true,
-      ...(rendered.buildCache ? { buildCache: rendered.buildCache } : {}),
-      parts: (await import('../views'))
-        .listCameraSubjects(root)
-        .slice(0, 80)
-        .map(({ path, name }) => ({ path, name })),
-      tris: rendered.tris,
-      meshes: metrics.meshes,
-      materials: metrics.materials,
-      ...(rendered.meta.instanceability
-        ? { distinctMaterials: rendered.meta.instanceability.metrics.uniqueMaterials }
-        : {}),
-      bbox: metrics.bbox,
-      lowestPart: metrics.lowestPart,
-      ...(instanceability
-        ? {
-            instanceability: {
-              grade: instanceability.grade,
-              summary: instanceability.summary,
-            },
-          }
-        : {}),
-      warnings,
-      qaReport: rendered.meta.qaReport as AssetQaReportV1 | undefined,
-    };
-  } catch (err) {
-    return {
-      ok: false,
-      error: withSyntaxDetail(err instanceof Error ? err.message : String(err), input.code),
-      warnings: [],
-    };
-  }
-}
-
-// =============================================================================
-// kiln_screenshot
+// Shared render views
 // =============================================================================
 
-/**
- * `kiln_screenshot` is the unified view path under the in-process loop's name.
- *
- * It used to be a frozen copy: CPU-only, no capture config, no backdrop, while
- * every other surface took all three and routed through the render port. The
- * freeze protected a bench in which this tool was the control arm; that bench
- * is gone, and what remained was a loop whose model could never see a
- * material-faithful view even on a machine with a renderer. One implementation
- * now serves both names, so a backdrop chosen on the CLI and one chosen here
- * paint the same pixel, and `viewFidelity` tells the model which producer drew.
- */
+/** Unified render result: geometry measurements, views and fidelity. */
 export type KilnScreenshotResult = KilnRenderViewsResult;
 
-/** Shared media extractor for screenshot-shaped outputs (pngBase64 -> bytes + stripped JSON).
- *  Used by both `kiln_screenshot` and the unified `kilnRenderViewsDef` (both carry `pngBase64`). */
+/** Extract PNG bytes for host image transport without duplicating base64 in text. */
 export function screenshotMedia(output: unknown): { png: Uint8Array; json: unknown } | undefined {
   const o = output as KilnScreenshotResult | undefined;
   if (!o || typeof o.pngBase64 !== 'string' || o.pngBase64.length === 0) return undefined;
@@ -1118,11 +1159,10 @@ export function screenshotMedia(output: unknown): { png: Uint8Array; json: unkno
 // kiln_render (unified) — collapsed render + screenshot
 // =============================================================================
 
-export interface KilnRenderViewsResult {
+export interface KilnRenderViewsResult extends PartPreview {
   captureCache?: { hit: boolean; reused: number; total: number };
   buildCache?: { key: `sha256:${string}`; hit: boolean };
   cameraShots?: import('../views').ResolvedCameraShotV1[];
-  parts?: { path: string; name: string }[];
   derivativeReceipts?: DerivativeViewReceiptV1[];
   framesBase64?: string[];
   ok: boolean;
@@ -1147,12 +1187,18 @@ export interface KilnRenderViewsResult {
   /** Post-dedup instanceability grade (informational): how cheap to render at scale. */
   instanceability?: { grade: string; summary: string };
   /** Structured deterministic report; five dimensions remain separate. */
-  qaReport?: AssetQaReportV1;
+  requirements?: RequirementsContext;
+  qaReport?: AssetQaReport;
   materialContract?: ProceduralTextureMaterialContract;
   /** View names in grid order (row-major). Defaults to Front, Right, Back, Left, Top, 3/4. */
   views?: string[];
   /** Grid shape and backdrop actually rendered — echoes the capture config back, or `3x2` on neutral by default. */
-  capture?: { preset: string; cols: number; cells: number; backdrop?: BackdropId };
+  capture?: {
+    preset: string;
+    cols: number;
+    cells: number;
+    backdrop?: BackdropId;
+  };
   gridWidth?: number;
   gridHeight?: number;
   /** The 3x2 grid PNG, base64-encoded (transports with image support strip this and attach the bytes). */
@@ -1164,22 +1210,43 @@ export interface KilnRenderViewsResult {
   error?: string;
 }
 
-/**
- * Collapsed "see it" tool for the unified surface: execute the code ONCE, then
- * report geometry metrics AND the six-view image grid together. A build error
- * throws before any image is produced, so failures come back image-free
- * ({ ok:false, error }, no `pngBase64`) — the model never gets a picture of a
- * model that did not build. Warnings mirror `runRender` exactly (structural +
- * render warnings) so this is a drop-in superset of `kiln_render` plus an image.
- * The views module is imported lazily (node:zlib) to keep it out of the browser
- * bundle graph.
- */
+/** Evaluate once, then return metrics, structural advisories and views. Failed builds are image-free. */
+async function retainReviewedArtifact(
+  input: z.infer<typeof renderViewsInput>,
+  rendered: RenderResult,
+  reviewed: KilnRenderViewsResult,
+  context: KilnToolContext,
+): Promise<KilnRenderViewsResult> {
+  context.evaluationControls?.().signal?.throwIfAborted();
+  if (!context.programArtifacts) return reviewed;
+  // Full-asset grids depict the exact retained bytes. Derivative shots remain
+  // derivative evidence even though their source artifact is retained as well.
+  if (reviewed.viewFidelity && !reviewed.derivativeReceipts) {
+    reviewed.viewFidelity = {
+      ...reviewed.viewFidelity,
+      exactArtifact: true,
+      reasonCodes: reviewed.viewFidelity.reasonCodes?.filter(
+        (code) => code !== 'IN_LOOP_BUILD_NOT_PERSISTED',
+      ),
+    };
+  }
+  await context.programArtifacts.record({
+    code: input.code,
+    rendered,
+    review: reviewed,
+    captureSelection: input.capture ? { capture: input.capture } : {},
+  });
+  return reviewed;
+}
+
 async function runRenderViews(
   input: z.infer<typeof renderViewsInput>,
   context: KilnToolContext,
-  toolName: 'kiln_render' | 'kiln_screenshot' = 'kiln_render',
+  onEvaluated?: (artifact: RenderResult) => void,
 ): Promise<KilnRenderViewsResult> {
+  context = snapshotRenderContext(context);
   try {
+    context.evaluationControls?.().signal?.throwIfAborted();
     // `CPU_RASTER_RENDERER_ID` and `resolveGridCapture` come from this SAME lazy
     // import rather than static ones on purpose. `../views/renderer-id` reads
     // package.json with `readFileSync` at MODULE LOAD, so a static import would
@@ -1190,27 +1257,32 @@ async function runRenderViews(
       '../views'
     );
     const { root, rendered, reasonCodes } = await loadEvaluatedReviewScene(input.code, context);
+    onEvaluated?.(rendered);
+    context = { ...context, requirements: rendered.requirements.binding };
     const materialContractFailure = missingProceduralTextureResult(rendered, context);
     if (materialContractFailure) return materialContractFailure;
-    const category = trustedCategory(context);
 
-    const structuralWarnings = inspectSceneStructure(root, { category });
+    const structuralWarnings = inspectSceneStructure(root);
     const metrics = collectSceneMetrics(root);
     if ('shots' in (input.capture ?? {})) {
-      const { renderCaptureGrid, listCameraSubjects } = await import('../views');
+      const { renderCaptureGrid } = await import('../views');
       const grid = await renderCaptureGrid(root, input.capture!, (cell) =>
         renderDerivativeCell(cell, context),
       );
       const receipts = grid.derivativeReceipts;
       const materialFaithful = receipts.every((r) => r.materialFaithful);
-      return {
+      context.evaluationControls?.().signal?.throwIfAborted();
+      const reviewed: KilnRenderViewsResult = {
         ok: true,
+        ...evaluationEvidence(rendered),
         ...(rendered.buildCache ? { buildCache: rendered.buildCache } : {}),
         tris: rendered.tris,
         meshes: metrics.meshes,
         materials: metrics.materials,
         ...(rendered.meta.instanceability
-          ? { distinctMaterials: rendered.meta.instanceability.metrics.uniqueMaterials }
+          ? {
+              distinctMaterials: rendered.meta.instanceability.metrics.uniqueMaterials,
+            }
           : {}),
         bbox: metrics.bbox,
         lowestPart: metrics.lowestPart,
@@ -1220,9 +1292,7 @@ async function runRenderViews(
         gridWidth: grid.width,
         gridHeight: grid.height,
         cameraShots: grid.cameraShots,
-        parts: listCameraSubjects(root)
-          .slice(0, 80)
-          .map(({ path, name }) => ({ path, name })),
+        ...(await partPreview(root)),
         derivativeReceipts: receipts,
         ...('output' in input.capture! && input.capture.output === 'separate'
           ? { framesBase64: grid.perFramePngs.map((p) => p.toString('base64')) }
@@ -1240,6 +1310,7 @@ async function runRenderViews(
         },
         warnings: [...structuralWarnings, ...rendered.warnings],
       };
+      return await retainReviewedArtifact(input, rendered, reviewed, context);
     }
 
     // Route to the GPU only when a flat-shaded raster would misrepresent the
@@ -1268,7 +1339,10 @@ async function runRenderViews(
         rendered.glb,
         resolveInLoopViewRenderTimeoutMs(context, 'in-loop-grid'),
         input.capture,
+        context.captureLimits,
+        context.evaluationControls?.(),
       );
+      context.evaluationControls?.().signal?.throwIfAborted();
       if (ported.ok) {
         // The port reports pixels only, not view names. Derive the same names
         // the CPU path would report for this capture config through the SAME
@@ -1334,16 +1408,16 @@ async function runRenderViews(
       requested: 'full-preferred',
       delivered: materialFaithful ? 'full-material' : 'geometry-flat',
       materialFaithful,
-      // False here is structural, not a warning about the bytes: this surface
-      // always renders an in-loop build. Say so, or the flag reads as a defect.
-      exactArtifact: false,
+      // Native completion can select these retained bytes without another bake.
+      // Other hosts receive an in-loop build until they persist an artifact.
+      exactArtifact: context.programArtifacts !== undefined,
       rendererId: drawnBy.renderer,
       inputGlbSha256,
       degraded: drawnBy.degraded,
       ...(drawnBy.degradedReason ? { degradeReason: drawnBy.degradedReason } : {}),
-      reasonCodes: ['IN_LOOP_BUILD_NOT_PERSISTED'],
+      reasonCodes: context.programArtifacts ? [] : ['IN_LOOP_BUILD_NOT_PERSISTED'],
     };
-    const viewEvidence = context.viewEvidenceHistory?.record(toolName, viewFidelity);
+    const viewEvidence = context.viewEvidenceHistory?.record('kiln_render', viewFidelity);
 
     // A host bookkeeping hook must never be able to fail a render the model is
     // waiting on.
@@ -1356,18 +1430,18 @@ async function runRenderViews(
     const warnings = [...structuralWarnings, ...rendered.warnings];
     const materialContract = proceduralTextureMaterialContract(rendered, context);
 
-    return {
+    const reviewed: KilnRenderViewsResult = {
       ok: true,
+      requirements: rendered.requirements,
       ...(rendered.buildCache ? { buildCache: rendered.buildCache } : {}),
-      parts: (await import('../views'))
-        .listCameraSubjects(root)
-        .slice(0, 80)
-        .map(({ path, name }) => ({ path, name })),
+      ...(await partPreview(root)),
       tris: rendered.tris,
       meshes: metrics.meshes,
       materials: metrics.materials,
       ...(rendered.meta.instanceability
-        ? { distinctMaterials: rendered.meta.instanceability.metrics.uniqueMaterials }
+        ? {
+            distinctMaterials: rendered.meta.instanceability.metrics.uniqueMaterials,
+          }
         : {}),
       bbox: metrics.bbox,
       lowestPart: metrics.lowestPart,
@@ -1388,9 +1462,10 @@ async function runRenderViews(
       viewFidelity,
       ...(viewEvidence ? { viewEvidence } : {}),
       warnings,
-      qaReport: rendered.meta.qaReport as AssetQaReportV1 | undefined,
+      qaReport: rendered.meta.qaReport as AssetQaReport | undefined,
       ...(materialContract ? { materialContract } : {}),
     };
+    return await retainReviewedArtifact(input, rendered, reviewed, context);
   } catch (err) {
     return {
       ok: false,
@@ -1400,13 +1475,7 @@ async function runRenderViews(
   }
 }
 
-/**
- * The unified-surface render tool: render + screenshot collapsed into one.
- * Exported separately and intentionally NOT part of `kilnToolRegistry`, whose
- * `kiln_screenshot` runs this same implementation under the in-process loop's
- * name. Shares `screenshotMedia` so transports with image support attach the
- * PNG bytes and strip the base64 from the JSON.
- */
+/** Shared render definition and PNG media contract for the current authoring workflows. */
 const KILN_RENDER_VIEWS_DESCRIPTION =
   'Build the current asset and return geometry metrics, exact part paths and images. Omit capture for six orthographic views. Choose preset/cells for a smaller orbit sheet, or version kiln.capture.v1 with shots for per-part framing, local axes, perspective and separate images. +X is forward, +Y up, +Z right. Review silhouette, attachments, proportion and ground contact. GPU PBR shading supports textured or metallic materials; a flat-shaded CPU render supports geometry review. Read viewFidelity; do not judge material fidelity from CPU views. Failed builds return errors without images.' +
   VIEW_EVIDENCE_GUIDANCE;
@@ -1434,8 +1503,11 @@ export const kilnRenderViewsDef: KilnToolDef = createKilnRenderViewsDef();
 // kiln_screenshot_animation — SEE one clip's motion (6 phase-labeled frames)
 // =============================================================================
 
-export interface KilnScreenshotAnimationResult {
+export interface KilnScreenshotAnimationResult extends EvaluationEvidence {
+  loopClosure?: import('../views/pose').LoopClosureEvidence;
   cameraShots?: import('../views').ResolvedCameraShotV1[];
+  /** Sampled world-space geometry, independent of framing and image fidelity. */
+  poseBounds?: import('../views').AnimationPoseBounds[];
   ok: boolean;
   clip?: string;
   camera?: string;
@@ -1461,27 +1533,22 @@ export interface KilnScreenshotAnimationResult {
   error?: string;
 }
 
-/**
- * Execute Kiln code and rasterize ONE animation clip into a strip of six
- * evenly-sampled, phase-labeled frames from one camera (pure CPU). This is the
- * motion analogue of kiln_screenshot: it lets the agent SEE its animation and
- * catch defects invisible in a static pose — sideways walks, reverse-bending
- * knees, attacks that swing behind the body, and held items that don't track the
- * hand. Never throws — build/clip failures come back as { ok:false, error }.
- */
+/** Review the exported clip at requested phases, with posed geometry bounds and
+ * GPU or CPU images. Build/clip failures come back as { ok:false, error }. */
 async function runScreenshotAnimation(
   input: z.infer<typeof screenshotAnimationInput>,
   context: KilnToolContext,
 ): Promise<KilnScreenshotAnimationResult> {
+  context = snapshotRenderContext(context);
   try {
     const { renderClipAnimation } = await import('../views');
-    const { root, clips } = await loadEvaluatedReviewScene(input.code, context);
-    const warnings = inspectSceneStructure(root, {
-      category: trustedCategory(context),
-    });
+    const { root, clips, rendered } = await loadEvaluatedReviewScene(input.code, context);
+    context = { ...context, requirements: rendered.requirements.binding };
+    const warnings = inspectSceneStructure(root);
     const r = await renderClipAnimation(root, clips, {
       clip: input.clip,
       ...(input.shot ? { shot: input.shot } : {}),
+      ...(input.measureParts ? { measureParts: input.measureParts } : {}),
       ...(input.frames !== undefined ? { frames: input.frames } : {}),
       ...(input.frameTimes ? { frameTimes: input.frameTimes } : {}),
       ...(input.framing ? { framing: input.framing } : {}),
@@ -1492,6 +1559,7 @@ async function runScreenshotAnimation(
     if (!r.ok) {
       return {
         ok: false,
+        ...evaluationEvidence(rendered),
         frames: 0,
         warnings,
         ...(r.error ? { error: r.error } : {}),
@@ -1505,12 +1573,15 @@ async function runScreenshotAnimation(
       : undefined;
     const base: KilnScreenshotAnimationResult = {
       ok: true,
+      ...evaluationEvidence(rendered),
       frames: r.frames,
       ...(r.cameraShots ? { cameraShots: r.cameraShots } : {}),
       warnings,
       ...(r.clip ? { clip: r.clip } : {}),
       ...(r.camera ? { camera: r.camera } : {}),
       ...(r.frameTimes ? { frameTimes: r.frameTimes } : {}),
+      ...(r.poseBounds ? { poseBounds: r.poseBounds } : {}),
+      ...(r.loopClosure ? { loopClosure: r.loopClosure } : {}),
       ...(r.duration != null ? { duration: r.duration } : {}),
       ...(r.unresolvedTracks ? { unresolvedTracks: r.unresolvedTracks } : {}),
       ...(r.width ? { width: r.width } : {}),
@@ -1553,28 +1624,17 @@ export function screenshotAnimationMediaMulti(
   };
 }
 
-/**
- * The animation-feedback tool: render one clip's motion as a 6-frame strip.
- * Exported separately and intentionally NOT in `kilnToolRegistry` (the bench
- * baseline stays the unchanged four); the agent tool surfaces add it explicitly.
- * Carries both `media` (grid) and `mediaMulti` (perFrame) so image transports show
- * the right thing in either mode.
- */
+/** Shared animation feedback with grid and per-frame image transport support. */
 const KILN_SCREENSHOT_ANIMATION_DESCRIPTION =
-  'SEE one animation clip move: renders the named clip as six frames sampled evenly from start to end ' +
-  '(each labeled with its phase %) from one camera, as a 3x2 grid. Use this after animating ANY asset to ' +
-  'verify the MOTION — a static screenshot cannot show it — whether it is a character walking, a door or ' +
-  'chest lid swinging on its hinge, a wheel/gear/turret/windmill turning on its axle, a lever or hatch ' +
-  'throwing, or a flag/frond/branch swaying. Read the side (right) view and confirm each moving part ' +
-  'travels the way it should about its OWN real pivot, and that the static base stays put. For a ' +
-  'character specifically: a walk swings the legs forward and back (not splayed sideways and not sliding ' +
-  'the body sideways), knees bend backward at the joint (not forward like a bird), an attack swings down ' +
-  'and FORWARD through the front (not behind the back), and a held weapon tracks the hand through the ' +
-  'swing. args: clip (required, the clip name), camera (default right; also front/back/left/top/' +
-  'three-quarter), perFrame (optional, separate high-res frames). If unresolvedTracks comes back ' +
-  'non-empty the clip targets joints that do not exist (a name mismatch) and looks frozen — fix the ' +
-  'track names. Each frame is rendered from deterministic posed GLB bytes: GPU PBR when available, ' +
-  'otherwise a GLB-native geometry-flat fallback. Read viewFidelity before judging materials; writes no files.' +
+  'Review a named animation clip at sampled phases, with phase-labeled images and poseBounds in world metres. ' +
+  'Use this to check motion against the brief: pivots, attachment, ground clearance, travel and which parts remain fixed. ' +
+  'Choose a camera that reveals the movement and inspect intermediate phases; symmetric parts can look stationary at regularly spaced phases. ' +
+  'poseBounds reports scene geometry and the selected shot subject before camera isolation. Optional measureParts selects 1..16 exact names/paths for simultaneous per-part bounds; empty subtrees return null. Sampled bounds do not certify continuous collision or physical contact. ' +
+  'args: clip (required), frameTimes (ordered fractions 0..1) or frames (2..6, default 6), ' +
+  'camera (default right; also front/back/left/top/three-quarter) or shot, and perFrame (separate images). ' +
+  'Nonempty unresolvedTracks names targets that do not exist; correct the track names. ' +
+  'Images use deterministic posed GLB bytes: GPU PBR when available, otherwise geometry-flat CPU fallback. ' +
+  'Read viewFidelity before judging materials; writes no files.' +
   VIEW_EVIDENCE_GUIDANCE;
 
 /** Create an animation-view definition with host-owned QA context. */
@@ -1600,9 +1660,14 @@ export const kilnScreenshotAnimationDef: KilnToolDef = createKilnScreenshotAnima
 // kiln_view_interior (unified) — see INSIDE an enterable building, roof off
 // =============================================================================
 
-export interface KilnViewInteriorResult {
+export interface KilnViewInteriorResult extends EvaluationEvidence {
   /** Grid shape and backdrop actually rendered, echoed like every other image result. */
-  capture?: { preset: string; cols: number; cells: number; backdrop?: BackdropId };
+  capture?: {
+    preset: string;
+    cols: number;
+    cells: number;
+    backdrop?: BackdropId;
+  };
   cameraShots?: import('../views').ResolvedCameraShotV1[];
   framesBase64?: string[];
   ok: boolean;
@@ -1638,9 +1703,11 @@ async function runViewInterior(
   input: z.infer<typeof viewInteriorInput>,
   context: KilnToolContext,
 ): Promise<KilnViewInteriorResult> {
+  context = snapshotRenderContext(context);
   try {
     const { renderInteriorGrid } = await import('../views');
-    const { root } = await loadEvaluatedReviewScene(input.code, context);
+    const { root, rendered: evaluated } = await loadEvaluatedReviewScene(input.code, context);
+    context = { ...context, requirements: evaluated.requirements.binding };
     // No default name. An explicit nodeName stays an exact-name override; with
     // none, the grid resolves the roof from its semantic role (and only then
     // falls back to historical "Roof" naming) — so a correctly-roled roof named
@@ -1651,9 +1718,7 @@ async function runViewInterior(
       ...(nodeName ? { nodeName } : {}),
       renderDerivativeCell: (cell) => renderDerivativeCell(cell, context),
     });
-    const warnings = inspectSceneStructure(root, {
-      category: trustedCategory(context),
-    });
+    const warnings = inspectSceneStructure(root);
     if (grid.roofsHidden === 0) {
       warnings.push(
         nodeName
@@ -1667,6 +1732,7 @@ async function runViewInterior(
       : undefined;
     return {
       ok: true,
+      ...evaluationEvidence(evaluated),
       views: grid.views,
       gridWidth: grid.width,
       gridHeight: grid.height,
@@ -1690,11 +1756,7 @@ async function runViewInterior(
   }
 }
 
-/**
- * The unified-surface interior-QA tool. Exported separately and intentionally NOT
- * part of `kilnToolRegistry` (the four-tool bench baseline stays unchanged). Shares
- * `screenshotMedia` so image transports attach the PNG bytes and strip the base64.
- */
+/** Interior views share the unified image transport contract. */
 const KILN_VIEW_INTERIOR_DESCRIPTION =
   'SEE INSIDE an enterable building: renders it with the roof lifted off, as a ' +
   'three-view grid. (1) Floor plan: top-down — check the interior is open and walkable and the footprint ' +
@@ -1739,70 +1801,98 @@ const attachmentEndpointInput = z
     point: cameraVec3Input.optional(),
   })
   .strict();
+// Uniform items with an exact length also work in draft-07 tool consumers.
+const surfacePairInput = z.array(z.string().max(4096)).length(2) as unknown as z.ZodType<
+  [string, string]
+>;
 const inspectInput = z.object({
-  measure: z
-    .object({ from: attachmentEndpointInput, to: attachmentEndpointInput })
+  image: z
+    .boolean()
+    .optional()
+    .describe(
+      'False: requires listParts/measure/surfacePairs/compare; no image or camera controls. Default true.',
+    ),
+  listParts: partListInput
+    .optional()
+    .describe(
+      'List exported-scene paths, including nested parts. Default 80, max 100 per page. Follow partListing.nextOffset with the same programRef/query. image:false avoids rendering.',
+    ),
+  surfacePairs: z
+    .array(surfacePairInput)
+    .min(1)
+    .max(12)
+    .optional()
+    .describe('[fromPath,toPath] pairs; check surfaceMeasurements.status and each result.'),
+  compare: z
+    .object({
+      programRef: z.string().regex(programRefPattern),
+      offset: z.number().int().min(0).optional(),
+      limit: z.number().int().min(1).max(100).optional(),
+      paths: z
+        .array(z.string().max(4096))
+        .min(1)
+        .max(12)
+        .optional()
+        .describe(
+          'Exact baseline node paths, scene-prefixed without primitive children. Complete subtree summaries.',
+        ),
+    })
     .strict()
     .optional()
     .describe(
-      'Straight-line distance between exact named node origins or subject-local points; asset units, not surface clearance.',
+      'Static geometry/material/transform/bounds under current host settings. Follow nextOffset; paths adds complete subtrees.',
     ),
-  shot: cameraShotInput
+  measure: z
+    .object({
+      mode: z.enum(['anchors', 'surface']).optional(),
+      from: attachmentEndpointInput,
+      to: attachmentEndpointInput,
+    })
+    .strict()
     .optional()
-    .describe('Exact framed shot; omit legacy part/view/orbit fields when using this.'),
+    .describe(
+      'Default anchors: origin/local-point distance. Surface: disjoint mesh triangles, omit points. Rest pose, asset units. Check status/bounds; no solid clearance/attachment proof.',
+    ),
+  shot: cameraShotInput.optional().describe('Exact shot; omit part/view/orbit controls.'),
   code: z.string().describe('Kiln source code to execute and inspect.'),
   part: z
     .string()
     .optional()
     .describe(
-      'The part to frame, by node name from your program (case-insensitive; substring match as a ' +
-        'fallback). Omit to frame the whole asset.',
+      'Frame named part and descendants (case-insensitive, substring fallback). Omit for whole asset.',
     ),
   view: z
     .string()
     .optional()
-    .describe(
-      'Camera angle: front, right, back, left, top, or three-quarter (default). Ignored when ' +
-        'azimuthDeg or elevationDeg is given.',
-    ),
+    .describe('front/right/back/left/top/three-quarter (default). Orbit angles override.'),
   azimuthDeg: z
     .number()
     .optional()
-    .describe(
-      'Orbit the camera around the asset: 0 = front, 90 = right, 180 = back, 270 = left. Wraps, ' +
-        'so 315 and -45 are the same. Use it to look between the named views — at a corner, a ' +
-        'seam, or whatever angle the last render left ambiguous.',
-    ),
+    .describe('Orbit degrees: 0 front, 90 right, 180 back, 270 left. Wraps.'),
   elevationDeg: z
     .number()
     .optional()
-    .describe(
-      'Orbit the camera up or down: 0 = eye level, positive looks down from above, negative from ' +
-        'below. Clamped to -89..89. Combine with azimuthDeg for any three-quarter angle you want.',
-    ),
-  zoom: z
-    .number()
-    .optional()
-    .describe(
-      'Padding multiplier around the part bounds, clamped to 1-4. Default 1.2; raise it to see ' +
-        'more surrounding context.',
-    ),
+    .describe('Elevation degrees: 0 eye level, positive above. Clamped -89..89.'),
+  zoom: z.number().optional().describe('Bounds padding 1..4; default 1.2. Larger = more context.'),
   isolate: z
     .boolean()
     .optional()
-    .describe(
-      'Hide everything except the named part (and its descendants) so nothing can block the view. ' +
-        'Use it when the part is buried inside or behind other geometry. Needs `part`; without ' +
-        'one it does nothing. Default false — surrounding geometry stays visible for context.',
-    ),
+    .describe('Hide surrounding geometry. Requires part; default false.'),
 });
 
 /** Unified-agent schema: identical inspection controls, with source supplied
  * by the working buffer instead of the model. */
 export const inspectBufferInput = inspectInput.omit({ code: true });
 
-export interface KilnInspectResult {
-  measurement?: ReturnType<typeof import('../views/measurement').measureAttachment>;
+export interface KilnInspectResult extends EvaluationEvidence {
+  partListing?: PartListing;
+  surfaceMeasurements?: ReturnType<typeof import('../views/surface-distance').measureSurfacePairs>;
+  comparison?: Awaited<ReturnType<typeof import('../revision-comparison').compareRevisionGlbs>> & {
+    programRef: string;
+  };
+  measurement?:
+    | ReturnType<typeof import('../views/measurement').measureAttachment>
+    | ReturnType<typeof import('../views/surface-distance').measureSurfaceDistance>;
   subjectFrame?: ReturnType<typeof import('../views/measurement').describeSubjectFrame>;
   cameraShot?: import('../views').ResolvedCameraShotV1;
   ok: boolean;
@@ -1841,23 +1931,71 @@ async function runInspect(
   input: z.infer<typeof inspectInput>,
   context: KilnToolContext,
 ): Promise<KilnInspectResult> {
+  context = snapshotRenderContext(context);
   try {
+    const legacyCamera = [
+      input.part,
+      input.view,
+      input.azimuthDeg,
+      input.elevationDeg,
+      input.zoom,
+      input.isolate,
+    ].some((value) => value !== undefined);
+    if (input.image === false && (input.shot !== undefined || legacyCamera))
+      throw new Error('image:false cannot be combined with camera controls.');
+    if (
+      input.image === false &&
+      !input.listParts &&
+      !input.measure &&
+      !input.surfacePairs &&
+      !input.compare
+    )
+      throw new Error('image:false requires listParts, measure, surfacePairs or compare.');
+    if (input.shot && legacyCamera)
+      throw new Error('shot cannot be combined with legacy inspection controls');
     const { prepareInspectView } = await import('../views/inspect');
-    const { root } = await loadEvaluatedReviewScene(input.code, context);
+    const {
+      root,
+      rendered: evaluated,
+      reasonCodes,
+    } = await loadEvaluatedReviewScene(input.code, context);
+    context = { ...context, requirements: evaluated.requirements.binding };
     const { measureAttachment, describeSubjectFrame } = await import('../views/measurement');
-    const measurement = input.measure ? measureAttachment(root, input.measure) : undefined;
+    let comparison: KilnInspectResult['comparison'];
+    if (input.compare) {
+      if (!context.programStore) throw new Error('Revision comparison requires a program store.');
+      const previousCode = await context.programStore.get(input.compare.programRef);
+      const previous = await evaluateGeneratedSource(previousCode, context);
+      const { compareRevisionGlbs } = await import('../revision-comparison');
+      comparison = {
+        ...(await compareRevisionGlbs(previous.glb, evaluated.glb, input.compare)),
+        programRef: input.compare.programRef,
+      };
+    }
+    let measurement: KilnInspectResult['measurement'];
+    let surfaceMeasurements: KilnInspectResult['surfaceMeasurements'];
+    if (input.measure?.mode === 'surface' || input.surfacePairs) {
+      const unsupported = reasonCodes.filter((code) => /SKIN|MORPH|NON_TRIANGLE/.test(code));
+      if (unsupported.length)
+        throw new Error(`Surface measurement unavailable: ${unsupported.join(', ')}.`);
+      const { measureSurfaceDistance, measureSurfacePairs } = await import(
+        '../views/surface-distance'
+      );
+      if (input.measure?.mode === 'surface')
+        measurement = measureSurfaceDistance(root, input.measure);
+      if (input.surfacePairs) surfaceMeasurements = measureSurfacePairs(root, input.surfacePairs);
+    }
+    if (input.measure && input.measure.mode !== 'surface')
+      measurement = measureAttachment(root, input.measure);
+    const measurements = {
+      ...(input.listParts ? { partListing: await listPartPage(root, input.listParts) } : {}),
+      ...(measurement ? { measurement } : {}),
+      ...(surfaceMeasurements ? { surfaceMeasurements } : {}),
+      ...(comparison ? { comparison } : {}),
+    };
+    if (input.image === false)
+      return { ok: true, ...evaluationEvidence(evaluated), ...measurements };
     if (input.shot) {
-      if (
-        [
-          input.part,
-          input.view,
-          input.azimuthDeg,
-          input.elevationDeg,
-          input.zoom,
-          input.isolate,
-        ].some((v) => v !== undefined)
-      )
-        throw new Error('shot cannot be combined with legacy inspection controls');
       const { renderCaptureGrid } = await import('../views');
       const grid = await renderCaptureGrid(
         root,
@@ -1866,9 +2004,10 @@ async function runInspect(
       );
       return {
         ok: true,
+        ...evaluationEvidence(evaluated),
         cameraShot: grid.cameraShots[0],
         subjectFrame: describeSubjectFrame(root, input.shot.subject),
-        ...(measurement ? { measurement } : {}),
+        ...measurements,
         pngBase64: grid.perFramePngs[0]!.toString('base64'),
         width: 512,
         height: 512,
@@ -1918,8 +2057,9 @@ async function runInspect(
       : `Framed the whole asset from ${from}.`;
     return {
       ok: true,
+      ...evaluationEvidence(evaluated),
       ...(r.part ? { part: r.part } : {}),
-      ...(measurement ? { measurement } : {}),
+      ...measurements,
       view: r.view,
       azimuthDeg: r.azimuthDeg,
       elevationDeg: r.elevationDeg,
@@ -1940,14 +2080,9 @@ async function runInspect(
   }
 }
 
-/**
- * The unified-surface close-up tool. Exported separately and intentionally NOT
- * part of `kilnToolRegistry` (the four-tool bench baseline stays unchanged). No
- * host context: it renders pixels only — no validation or category-aware QA.
- * Shares `screenshotMedia` so image transports attach the PNG bytes and strip
- * the base64.
- */
+/** Inspection provides targeted views, measurements and revision comparisons. */
 const KILN_INSPECT_DESCRIPTION =
+  'List complete part paths with listParts and image:false; query filters names/paths, offset/limit paginate. Follow partListing.nextOffset. ' +
   'ZOOM IN on one part: renders a single 512x512 close-up framed to the named part (the node name ' +
   'you gave createPart, matched case-insensitively with a substring fallback) and its descendants, ' +
   'from one camera. Use it after kiln_render reveals a suspect region — a floating part, a bad ' +
@@ -1990,45 +2125,13 @@ export const kilnInspectDef: KilnToolDef = createKilnInspectDef();
 // Registry
 // =============================================================================
 
-/**
- * Create the four-tool baseline registry with trusted host context captured in
- * every validate/render/view closure. Tool schemas remain byte-for-byte neutral:
- * the model cannot provide or override this context.
- */
 // =============================================================================
 // kiln_edit — patch an existing program and see the result in one call
 // =============================================================================
 //
-// The refine verb. Authoring a new asset and fixing an existing one are
-// different jobs, and until now only the first had a tool: every MCP surface
-// took a whole program and rendered it, so "change the wheel radius" meant
-// re-emitting the entire file and hoping nothing else moved.
-//
-// Two decisions in here are worth stating, because the obvious alternatives are
-// both wrong.
-//
-// It is STATELESS. The in-process surface keeps a working buffer across turns,
-// and porting that to MCP would have meant session state living in the server
-// while the host agent holds the same program on disk -- two copies, no
-// reconciliation, and a desync the model cannot see. Over MCP the host owns the
-// text, which is the invariant the rest of this transport already keeps. So the
-// caller passes the code in and gets the patched code back, and there is exactly
-// one copy at every moment.
-//
-// It is ALL-OR-NOTHING. Edits apply in order against a buffer seeded from
-// `code`, and if any one of them fails to match, nothing is returned but the
-// error. A partial application would hand back a program in a state the model
-// did not ask for and would have to diff against its own intent to discover.
-// Failing whole means the retry is the same call with a corrected edit.
-//
-// The render is folded in for the same reason `kiln_render` collapses metrics
-// and views: the loop is edit-then-look, and splitting it across two calls
-// doubles the round trips for no gain.
-//
-// Like `kilnRenderViewsDef`, this sits OUTSIDE `createKilnToolRegistry`. The
-// in-process agent does not need this def -- it has a working buffer across
-// turns and its own edit tools, so `kiln_edit` is reached through
-// `kilnMcpToolDefs()`, where the host holds the program and nothing else does.
+// Edits apply atomically to the selected immutable program. A failed match
+// produces no partial revision. Both native and MCP callers share this operation;
+// optional rendering provides feedback from the edited source.
 
 const editOperationInput = z.object({
   oldString: z
@@ -2065,6 +2168,12 @@ const editInput = z.object({
 
 /** Result of one `kiln_edit` call. */
 export interface KilnEditResult {
+  /** Exact static comparison is evidence, never a semantic preservation verdict. */
+  preservation?: {
+    status: 'compared' | 'not_assessed';
+    comparison?: Awaited<ReturnType<typeof import('../revision-comparison').compareRevisionGlbs>>;
+    reason?: string;
+  };
   framesBase64?: string[];
   ok: boolean;
   /** Why the call failed. Present only when ok is false. */
@@ -2089,6 +2198,7 @@ async function runEdit(
   input: z.infer<typeof editInput>,
   context: KilnToolContext,
 ): Promise<KilnEditResult> {
+  context = snapshotRenderContext(context);
   const buffer = new KilnDraftBuffer(input.code);
   const applied: { occurrences: number }[] = [];
 
@@ -2112,14 +2222,51 @@ async function runEdit(
     toLabel: 'after',
   });
 
-  if (input.render === false) return { ok: true, code, applied, diff };
+  if (input.render === false)
+    return {
+      ok: true,
+      code,
+      applied,
+      diff,
+      preservation: {
+        status: 'not_assessed',
+        reason:
+          'Source-only edit. Unchanged source text does not prove unchanged geometry; compare the rendered revisions with kiln_inspect compare.',
+      },
+    };
 
+  let editedArtifact: RenderResult | undefined;
   const rendered = await runRenderViews(
     { code, ...(input.capture ? { capture: input.capture } : {}) } as z.infer<
       typeof renderViewsInput
     >,
     context,
+    (artifact) => {
+      editedArtifact = artifact;
+    },
   );
+
+  let preservation: KilnEditResult['preservation'] = {
+    status: 'not_assessed',
+    reason: 'The edited revision did not produce a reviewed build.',
+  };
+  if (rendered.ok && editedArtifact) {
+    try {
+      context.evaluationControls?.().signal?.throwIfAborted();
+      const previous = await evaluateGeneratedSource(input.code, context);
+      const { compareRevisionGlbs } = await import('../revision-comparison');
+      preservation = {
+        status: 'compared',
+        comparison: await compareRevisionGlbs(previous.glb, editedArtifact.glb, { limit: 12 }),
+      };
+    } catch (error) {
+      context.evaluationControls?.().signal?.throwIfAborted();
+      preservation = {
+        status: 'not_assessed',
+        reason: `Static comparison unavailable: ${error instanceof Error ? error.message : String(error)}`,
+      };
+    }
+  }
 
   // Lift the image to the top level and strip it from the nested result, so the
   // PNG crosses the wire once rather than being carried in both places.
@@ -2131,6 +2278,7 @@ async function runEdit(
     code,
     applied,
     diff,
+    preservation,
     render: renderJson as KilnRenderViewsResult,
     ...(pngBase64 ? { pngBase64 } : {}),
     ...(framesBase64 ? { framesBase64 } : {}),
@@ -2173,59 +2321,16 @@ export function createKilnEditDef(context: KilnToolContext = {}): KilnToolDef {
 /** Neutral compatibility export. */
 export const kilnEditDef: KilnToolDef = createKilnEditDef();
 
-export function createKilnToolRegistry(context: KilnToolContext = {}): KilnToolDef[] {
-  // The view tool shares the unified implementation, which keeps a per-context
-  // evidence trail; the three text tools read the context as given.
-  const viewContext = withViewEvidenceHistory(context);
-  return [
-    {
-      name: 'kiln_list_primitives',
-      description:
-        'List the Kiln sandbox primitives available to generated 3D code: geometry helpers (boxGeo, cylinderXGeo, capsuleGeo, ...), materials (gameMaterial, glassMaterial, ...), structure (createRoot, createPart, createPivot), animation, CSG, arrays, UV, and textures. Call this before writing Kiln code to discover exact signatures and idiomatic usage. Optionally filter by category.',
-      inputSchema: listPrimitivesInput,
-      run: async (input) => runListPrimitives(listPrimitivesInput.parse(input)),
-      // The `primitives` array and `text` carry identical information; the model
-      // reads the text. Sending both is what made this call 90 KB.
-      text: (output) => (output as { text: string }).text,
-    },
-    {
-      name: 'kiln_validate',
-      description:
-        'Statically validate Kiln source code before rendering. Checks for the required `meta` const and `build()` function, `value:` keyframe typos, infinite loops, recursive build() calls, and syntax errors. Returns { valid, errors, warnings }. Warnings are advisory only (they never make code invalid). There is NO triangle budget: density is never warned about, so build as much detail as the asset deserves. Run this to catch mistakes cheaply before kiln_render.',
-      inputSchema: validateInput,
-      run: async (input) => runValidate(validateInput.parse(input), context),
-    },
-    {
-      name: 'kiln_render',
-      description:
-        'Execute Kiln code and render it to an in-memory GLB, returning geometry metrics: triangle count, mesh count, material count, the world-space bounding box, lowestPart (the mesh touching the lowest point — anything below Y=0 must be intentionally below-grade like earthworks or keels, never wheels/tails/equipment), and an instanceability grade (A–F, informational: how cheap to render at scale — driven by distinct-material count; fewer shared materials grade higher). Includes structural warnings for floating parts and stray planes left at the origin. Use this to confirm a model builds and to inspect its size and structure. Does not write any files.',
-      inputSchema: renderInput,
-      run: async (input) => runRender(renderInput.parse(input), context),
-    },
-    {
-      name: 'kiln_screenshot',
-      description:
-        'Render Kiln code to an image grid so you can SEE the asset. Omit capture for six views: ' +
-        'row 1 = Front (camera on +X, the nose/muzzle should face you), Right (+Z, the long profile), Back (-X); ' +
-        'row 2 = Left (-Z), Top (+Y, check symmetry), 3/4 perspective (check part contact and overall read). ' +
-        'Use it to verify orientation (+X forward), attachment (no floating parts), and silhouette before submitting. ' +
-        'If a view looks wrong, fix the code and screenshot again. capture selects a smaller orbit sheet, ' +
-        'per-part framing or a backdrop (neutral, dark, light). Textured or metallic materials draw through the GPU ' +
-        'render service when one is available; otherwise a flat-shaded CPU render supports geometry review only. ' +
-        'Read viewFidelity before judging materials. Does not write files.',
-      inputSchema: renderViewsInput,
-      run: async (input) =>
-        guardCaptureBudget('kiln_screenshot', input, viewContext, () =>
-          runRenderViews(renderViewsInput.parse(input), viewContext, 'kiln_screenshot'),
-        ),
-      media: screenshotMedia,
-      mediaMulti: screenshotAnimationMediaMulti,
-    },
-  ];
+/** Shared syntax-only definition; the authoring registries own the workflow. */
+function createKilnValidateDef(context: KilnToolContext): KilnToolDef {
+  return {
+    name: 'kiln_validate',
+    description:
+      'Statically validate Kiln source code before rendering. Checks for the required `meta` const and `build()` function, `value:` keyframe typos, infinite loops, recursive build() calls, retired globals and syntax errors. Returns { valid, errors, issues, warnings }; issues include stable codes, lines and repair hints where available. Warnings are advisory only (they never make code invalid). There is NO triangle budget: density is never warned about, so build as much detail as the asset deserves. Run this to catch mistakes cheaply before kiln_render.',
+    inputSchema: validateInput,
+    run: async (input) => runValidate(validateInput.parse(input), context),
+  };
 }
-
-/** Neutral compatibility registry. It never reads category from generated source. */
-export const kilnToolRegistry: KilnToolDef[] = createKilnToolRegistry();
 
 /** Portable authoring surface. Hosts share a store explicitly; no hidden current program. */
 let localCacheScope = 0;
@@ -2240,8 +2345,8 @@ function withBuildCache(context: KilnToolContext): KilnToolContext {
   // host caches should supply an exact engine/dependency identity explicitly.
   const scope = `kiln-local-registry-${++localCacheScope}`;
   const evaluator = {
-    render: (...args: Parameters<import('../evaluator').EvaluatorPortV1['render']>) =>
-      resolveEvaluatorPortV1(
+    render: (...args: Parameters<import('../evaluator').EvaluatorPortV2['render']>) =>
+      resolveEvaluatorPortV2(
         context.evaluatorPort,
         context.evaluatorProfile ?? 'trusted-local',
       ).render(...args),
@@ -2282,9 +2387,11 @@ async function guardCaptureBudget(
       frames?: number;
       frameTimes?: number[];
       render?: boolean;
+      image?: boolean;
       shot?: unknown;
     };
     if (name === 'kiln_edit' && args.render === false) return await run();
+    if (name === 'kiln_inspect' && args.image === false) return await run();
     let cells = 6,
       size = 384,
       cols = 3,
@@ -2332,9 +2439,37 @@ async function guardCaptureBudget(
   }
 }
 
+function snapshotRenderContext(context: KilnToolContext): KilnToolContext {
+  return context.viewRenderState
+    ? { ...context, ...context.viewRenderState(), viewRenderState: undefined }
+    : context;
+}
+
 function withCaptureCache(context: KilnToolContext): KilnToolContext {
   if (context.cacheCaptures === false) return { ...context, captureCache: undefined };
   const cache = context.captureCache ?? new MemoryCaptureCache();
+  if (context.viewRenderState) {
+    const read = context.viewRenderState;
+    const wrapped = new WeakMap<PbrRenderPort, PbrRenderPort>();
+    return {
+      ...context,
+      captureCache: cache,
+      viewRenderState: () => {
+        const state = read();
+        if (!state.viewRenderPort || !state.captureCacheIdentity) return state;
+        let port = wrapped.get(state.viewRenderPort);
+        if (!port) {
+          const identity = state.captureCacheIdentity;
+          port = createCachedRenderPort(state.viewRenderPort, {
+            cache,
+            identity: () => (typeof identity === 'function' ? identity() : identity),
+          });
+          wrapped.set(state.viewRenderPort, port);
+        }
+        return { ...state, viewRenderPort: port };
+      },
+    };
+  }
   const identity = () =>
     typeof context.captureCacheIdentity === 'function'
       ? context.captureCacheIdentity()
@@ -2353,16 +2488,54 @@ function withCaptureCache(context: KilnToolContext): KilnToolContext {
   };
 }
 
+const rendererInput = z.strictObject({
+  action: z.enum(['status', 'reprobe']).default('status'),
+});
+
 export function createKilnProgramToolRegistry(
   suppliedContext: KilnToolContext = {},
 ): KilnToolDef[] {
-  const context = withCaptureCache(withBuildCache(suppliedContext));
-  const store = context.programStore ?? new MemoryProgramStore();
-  const baseline = createKilnToolRegistry(context);
+  toolRequirements(suppliedContext);
+  const store = suppliedContext.programStore ?? new MemoryProgramStore();
+  const context = withCaptureCache(withBuildCache({ ...suppliedContext, programStore: store }));
   return [
     createKilnDiscoveryDef({ ...suppliedContext, programStore: store }),
+    {
+      name: 'kiln_renderer',
+      description:
+        'Inspect status, or reprobe after renderer setup/repair to refresh this session and reset failed starts. Never installs, starts, stops or renders. Preserves CPU/local/remote selection; environment/credential changes require a host restart. Read viewFidelity after rendering.',
+      inputSchema: rendererInput,
+      run: async (raw: unknown) => {
+        const { action } = rendererInput.parse(raw);
+        if (action === 'reprobe' && !suppliedContext.reprobeRenderer)
+          return {
+            ok: false,
+            error:
+              'Renderer reprobe is not provided by this host. Configure its render connection through the host.',
+          };
+        if (!suppliedContext.renderCapabilities)
+          return {
+            ok: false,
+            error:
+              'Renderer status is not provided by this host. Discovery reports its declared configuration.',
+          };
+        try {
+          return {
+            ok: true,
+            renderer: await (action === 'reprobe'
+              ? suppliedContext.reprobeRenderer!()
+              : suppliedContext.renderCapabilities()),
+          };
+        } catch (error) {
+          return {
+            ok: false,
+            error: error instanceof Error ? error.message : String(error),
+          };
+        }
+      },
+    },
     ...[
-      baseline.find((d) => d.name === 'kiln_validate')!,
+      createKilnValidateDef(context),
       createKilnRenderViewsDef(context),
       createKilnScreenshotAnimationDef(context),
       createKilnViewInteriorDef(context),
@@ -2374,7 +2547,7 @@ export function createKilnProgramToolRegistry(
   ].map((def) => ({
     ...def,
     annotations: {
-      readOnlyHint: ['kiln_source', 'kiln_list_primitives', 'kiln_export', 'kiln_present'].includes(
+      readOnlyHint: ['kiln_source', 'kiln_discover', 'kiln_export', 'kiln_present'].includes(
         def.name,
       ),
       destructiveHint: false,
@@ -2382,6 +2555,89 @@ export function createKilnProgramToolRegistry(
       openWorldHint: false,
     },
   }));
+}
+
+/** Canonical native workflow: shared definitions plus one host-owned terminal. */
+export function createKilnNativeToolRegistry(
+  suppliedContext: KilnToolContext,
+  completion: NativeCompletion,
+): KilnToolDef[] {
+  const active = toolRequirements(suppliedContext);
+  const context = {
+    ...suppliedContext,
+    requirements: active.binding,
+    programStore: suppliedContext.programStore ?? new MemoryProgramStore(),
+    programArtifacts: suppliedContext.programArtifacts ?? new ProgramArtifactStore(),
+  };
+  const inputSchema = z.strictObject({
+    programRef: z.string().regex(programRefPattern),
+  });
+  const skillResourceInput = z.strictObject({
+    skill: z.string().min(1).max(64),
+    path: z.string().min(1).max(240).optional(),
+    offset: z
+      .number()
+      .int()
+      .min(0)
+      .max(256 * 1024)
+      .default(0),
+    limit: z.number().int().min(1).max(16000).default(12000),
+  });
+  const delivery = new Set([
+    'kiln_save',
+    'kiln_assets',
+    'kiln_export',
+    'kiln_import',
+    'kiln_present',
+  ]);
+  return [
+    ...createKilnProgramToolRegistry(context).filter(
+      (def) => context.assetLibrary || !delivery.has(def.name),
+    ),
+    ...(context.skillResourceReader
+      ? [
+          {
+            name: 'kiln_skill_resource',
+            description:
+              'Read a bounded text reference from a configured native skill. Omit path to list exact available reference keys. Offsets count UTF-16 characters; follow nextOffset for another page. Reads the immutable run snapshot, without filesystem access or script execution.',
+            inputSchema: skillResourceInput,
+            annotations: {
+              readOnlyHint: true,
+              destructiveHint: false,
+              idempotentHint: true,
+              openWorldHint: false,
+            },
+            run: async (raw: unknown) =>
+              context.skillResourceReader!(skillResourceInput.parse(raw)),
+          },
+        ]
+      : []),
+    {
+      name: 'kiln_finish',
+      description:
+        'Finish this run with one exact reviewed programRef. Call alone after kiln_render (or an edit that rendered). Unknown, unreviewed, evicted or differently bound revisions are rejected. Returns recorded QA acceptance separately from model completion; no implicit optimization or re-execution occurs.',
+      inputSchema,
+      run: async (raw: unknown) => {
+        if (completion.artifact) throw new Error('This native run has already finished.');
+        const { programRef } = inputSchema.parse(raw);
+        const code = await context.programStore.get(programRef);
+        const artifact = context.programArtifacts.get(await programReference(code), active);
+        completion.artifact = artifact;
+        return {
+          ok: true,
+          completion: 'finished',
+          programRef: artifact.programRef,
+          artifactGlbSha256: artifact.rendered.artifactGlbSha256,
+          requirements: artifact.rendered.requirements,
+          acceptance:
+            (artifact.rendered.meta.qaReport as { acceptance?: string } | undefined)?.acceptance ??
+            'incomplete',
+          qaReport: artifact.rendered.meta.qaReport,
+          viewFidelity: artifact.review.viewFidelity,
+        };
+      },
+    },
+  ];
 }
 
 const assetSelector = {
@@ -2395,6 +2651,77 @@ const assetSelector = {
   assetId: z.string().regex(/^[a-z][a-z0-9_-]{0,79}$/),
   revisionId: z.string().regex(/^[a-z][a-z0-9_-]{0,79}$/),
 };
+
+/** Build one current-policy revision for ordinary save or explicit migration. */
+export async function buildProgramAssetDraft(
+  code: string,
+  context: KilnToolContext,
+  backdrop?: BackdropId,
+): Promise<
+  Pick<import('../assets').AssetDraft, 'code' | 'glb' | 'preview' | 'previewInfo' | 'build'>
+> {
+  const callContext = {
+    ...context,
+    requirements: toolRequirements(context).binding,
+  };
+  const rendered = await evaluateGeneratedSource(code, callContext);
+  let preview: Uint8Array | undefined;
+  let previewInfo: import('../assets').AssetManifest['preview'];
+  try {
+    // The preview is the default six-view sheet on the named backdrop, and
+    // the manifest records the one actually painted, so a preview reviewed
+    // on `dark` ships on `dark` and a reader never has to guess.
+    const result = await runRenderViews(
+      {
+        code,
+        ...(backdrop ? { capture: { backdrop } } : {}),
+      } as z.infer<typeof renderViewsInput>,
+      { ...callContext, evaluatorPort: { render: async () => rendered } },
+    );
+    if (!result.ok || !result.pngBase64) throw new Error(result.error ?? 'Preview unavailable');
+    preview = Uint8Array.from(Buffer.from(result.pngBase64, 'base64'));
+    previewInfo = {
+      fidelity: result.viewFidelity,
+      backdrop: result.capture?.backdrop ?? DEFAULT_BACKDROP_ID,
+    };
+  } catch (error) {
+    previewInfo = {
+      error: error instanceof Error ? error.message : String(error),
+    };
+  }
+  const dependencies = rendered.materialResourceProvenance ?? [];
+  return {
+    code,
+    glb: rendered.glb,
+    preview,
+    previewInfo,
+    build: {
+      engine: context.localExecution?.runtimeIdentity ?? 'source-development:unverified',
+      options: {
+        ...context.assetBuildOptions,
+        optimize: 'off',
+        instance: context.assetBuildOptions?.instance ?? 'unspecified-by-host',
+        geometryPolicy: context.geometryPolicy ?? 'warn',
+        requirements: rendered.requirements,
+        ...(rendered.requirements.binding
+          ? {
+              requirementsCheckpoint: createRequirementsCheckpoint(
+                await programReference(code),
+                rendered.requirements.binding,
+              ),
+            }
+          : {}),
+      },
+      warnings: rendered.warnings,
+      integration: rendered.integrationManifest,
+      qa: rendered.meta.qaReport,
+      dependencies,
+      rebuild: dependencies.some((d) => d.delivery === 'runtime')
+        ? 'external-dependencies-required'
+        : 'engine-required',
+    },
+  };
+}
 
 /** All asset operation schemas live here, alongside the existing tool definitions. */
 export function createKilnAssetDefs(context: KilnToolContext): KilnToolDef[] {
@@ -2479,58 +2806,19 @@ export function createKilnAssetDefs(context: KilnToolContext): KilnToolDef[] {
       run: async (raw) => {
         const { backdrop, ...input } = saveInput.parse(raw);
         const target = library();
-        const code = await context.programStore!.get(input.programRef);
-        const rendered = await evaluateGeneratedSource(code, context);
-        let preview: Uint8Array | undefined;
-        let previewInfo: import('../assets').AssetManifest['preview'];
-        try {
-          // The preview is the default six-view sheet on the named backdrop, and
-          // the manifest records the one actually painted, so a preview reviewed
-          // on `dark` ships on `dark` and a reader never has to guess.
-          const result = await runRenderViews(
-            {
-              code,
-              ...(backdrop ? { capture: { backdrop } } : {}),
-            } as z.infer<typeof renderViewsInput>,
-            { ...context, evaluatorPort: { render: async () => rendered } },
-          );
-          if (!result.ok || !result.pngBase64)
-            throw new Error(result.error ?? 'Preview unavailable');
-          preview = Uint8Array.from(Buffer.from(result.pngBase64, 'base64'));
-          previewInfo = {
-            fidelity: result.viewFidelity,
-            backdrop: result.capture?.backdrop ?? DEFAULT_BACKDROP_ID,
-          };
-        } catch (error) {
-          previewInfo = {
-            error: error instanceof Error ? error.message : String(error),
-          };
+        const activeRequirements = toolRequirements(context);
+        const callContext = {
+          ...context,
+          requirements: activeRequirements.binding,
+        };
+        if (input.assetId && input.parentRevision) {
+          const previous = await target.read(input.collection, input.assetId, input.parentRevision);
+          assertSavedRequirementsAuthorized(previous.manifest, activeRequirements);
         }
-        const dependencies = rendered.materialResourceProvenance ?? [];
+        const code = await context.programStore!.get(input.programRef);
         const asset = await target.save(input.collection, {
           ...input,
-          code,
-          glb: rendered.glb,
-          preview,
-          previewInfo,
-          build: {
-            engine: context.localExecution?.runtimeIdentity ?? 'source-development:unverified',
-            options: {
-              ...context.assetBuildOptions,
-              optimize: 'off',
-              instance: context.assetBuildOptions?.instance ?? 'unspecified-by-host',
-              geometryPolicy: context.geometryPolicy ?? 'warn',
-              category: trustedCategory(context),
-              intent: context.intent,
-            },
-            warnings: rendered.warnings,
-            integration: rendered.integrationManifest,
-            qa: rendered.meta.qaReport,
-            dependencies,
-            rebuild: dependencies.some((d) => d.delivery === 'runtime')
-              ? 'external-dependencies-required'
-              : 'engine-required',
-          },
+          ...(await buildProgramAssetDraft(code, callContext, backdrop)),
         });
         return links(input.collection, asset);
       },
@@ -2542,6 +2830,7 @@ export function createKilnAssetDefs(context: KilnToolContext): KilnToolDef[] {
       inputSchema: assetsInput,
       run: async (raw) => {
         const input = assetsInput.parse(raw);
+        const activeRequirements = toolRequirements(context);
         const target = library();
         if (input.action === 'collections') return { collections: target.collections() };
         if (input.action === 'list') {
@@ -2570,11 +2859,15 @@ export function createKilnAssetDefs(context: KilnToolContext): KilnToolDef[] {
           throw new Error('get/restore requires assetId and revisionId');
         const record = await target.read(input.collection, input.assetId, input.revisionId);
         if (input.action === 'get') return links(input.collection, record.manifest);
+        const saved = assertSavedRequirementsAuthorized(record.manifest, activeRequirements);
         const code = record.files['source.kiln.js'];
         if (!code) throw new Error('Source unavailable: this asset contains only a GLB');
         return {
           ...(await links(input.collection, record.manifest)),
           programRef: await retainProgram(context.programStore!, new TextDecoder().decode(code)),
+          requirements: activeRequirements,
+          savedRequirements: saved,
+          acceptance: 'reevaluation-required',
         };
       },
     },

@@ -1,0 +1,116 @@
+{
+  "serviceDir": "C:\\Users\\Mattm\\AppData\\Local\\Temp\\kiln-renderer-layout-5N2MBM\\main-optional-native-normal\\node_modules\\@kiln-research\\main-optional-native",
+  "node": "v22.23.2",
+  "scope": "real local GPU HTTP; not a second-machine test",
+  "health": {
+    "ok": true,
+    "captureIdentity": {
+      "version": "kiln.capture-producer.v1",
+      "fingerprint": "sha256:3486e34a454e6dbf90bc42b864ce691249fca4b160ccf0a9baf9abc3b59d1284",
+      "instanceId": "d261c119-e923-4171-98c6-6758bac1cc76"
+    },
+    "instance": {
+      "version": "kiln.render-service-instance.v1",
+      "pid": 15488,
+      "ownerPid": 14692,
+      "startedAt": "2026-09-21T23:18:46.751Z",
+      "sourceDir": "C:\\Users\\Mattm\\AppData\\Local\\Temp\\kiln-renderer-layout-5N2MBM\\main-optional-native-normal\\node_modules\\@kiln-research\\main-optional-native",
+      "sourceFingerprint": "sha256:d077e819c165ee810b4c3601f3746618a3fa2ab6b15bcbec1270e79423de6bbd"
+    },
+    "rendererId": "dawn-d3d12:nvidia-geforce-rtx-3070:D3D12 driver version 32.0.16.1074",
+    "backend": "d3d12",
+    "adapter": {
+      "vendor": "nvidia",
+      "architecture": "ampere",
+      "device": "nvidia-geforce-rtx-3070",
+      "description": "D3D12 driver version 32.0.16.1074"
+    },
+    "capabilities": [
+      "render.views",
+      "render.views.checked",
+      "render.cameras.perspective-v1",
+      "render.targets.rectangular-v1",
+      "render.outputs.sha256-v1",
+      "render.fidelity.v1",
+      "render.operational-evidence.v1",
+      "render.profile.neutral-studio-v1",
+      "render.profile.gallery-studio-v1",
+      "render.beauty",
+      "auth.x-render-token"
+    ],
+    "presentationProfile": "neutral-studio-v1",
+    "lightingPresetIds": [
+      "neutral-studio-v1",
+      "gallery-studio-v1"
+    ],
+    "authRequired": false
+  },
+  "readyMs": 18031.3595,
+  "firstRender": {
+    "ms": 1602.638899999998,
+    "pngBytes": 26705,
+    "pngSha256": "bd6c0164d3ff2d69d19a8eefadd85869bff9a530b9402d917bcc5ff309f99920",
+    "timings": {
+      "loadMs": 17.7,
+      "viewsMs": 1571.2,
+      "beautyMs": 0,
+      "totalMs": 1588.9,
+      "queueWaitMs": 0,
+      "queueAndTotalMs": 1593.3
+    }
+  },
+  "startupToFirstPngMs": 19634.8425,
+  "concurrentRenders": [
+    {
+      "ms": 2028.2017000000014,
+      "pngBytes": 26705,
+      "pngSha256": "bd6c0164d3ff2d69d19a8eefadd85869bff9a530b9402d917bcc5ff309f99920",
+      "timings": {
+        "loadMs": 14.9,
+        "viewsMs": 2002.8,
+        "beautyMs": 0,
+        "totalMs": 2017.7,
+        "queueWaitMs": 0,
+        "queueAndTotalMs": 2018.9
+      }
+    },
+    {
+      "ms": 2238.5917999999983,
+      "pngBytes": 26705,
+      "pngSha256": "bd6c0164d3ff2d69d19a8eefadd85869bff9a530b9402d917bcc5ff309f99920",
+      "timings": {
+        "loadMs": 3.8,
+        "viewsMs": 205.4,
+        "beautyMs": 0,
+        "totalMs": 209.2,
+        "queueWaitMs": 0,
+        "queueAndTotalMs": 209.5
+      }
+    }
+  ],
+  "observerReachedServiceBeforeOwnerExit": true,
+  "ownerExit": {
+    "serviceExited": true,
+    "serviceExitCode": 0,
+    "serviceSignal": null,
+    "elapsedMs": 1692.0335000000014,
+    "observerStillAlive": true,
+    "observerLostService": true,
+    "observations": [
+      "ok",
+      "ok",
+      "ok",
+      "ok",
+      "ok",
+      "ok",
+      "ok",
+      "ok",
+      "unreachable",
+      "unreachable",
+      "unreachable",
+      "unreachable"
+    ]
+  },
+  "stderr": "owner process 14692 is gone; exiting\n",
+  "serviceLog": "adapter: {\"vendor\":\"nvidia\",\"architecture\":\"ampere\",\"device\":\"nvidia-geforce-rtx-3070\",\"description\":\"D3D12 driver version 32.0.16.1074\"}\nrendererId: dawn-d3d12:nvidia-geforce-rtx-3070:D3D12 driver version 32.0.16.1074\nkiln-render-service listening on 127.0.0.1 (this machine only, no auth needed (loopback only)):57369\n{\"evt\":\"request\",\"method\":\"GET\",\"path\":\"/health\",\"auth\":\"not-required\",\"outcomeCode\":\"health_ok\",\"status\":200,\"ms\":1.9}\n{\"evt\":\"request\",\"method\":\"POST\",\"path\":\"/render\",\"auth\":\"disabled\",\"bodyBytes\":8537,\"glbBytes\":6364,\"inputGlbSha256\":\"sha256:8ef3e9e5f28303639fc1d28c8648dda2494aed4c11b74ad17cb30b7726a59a9e\",\"renderMode\":\"legacy\",\"viewsRequested\":1,\"views\":1,\"beauty\":false,\"timings\":{\"loadMs\":17.7,\"viewsMs\":1571.2,\"beautyMs\":0,\"totalMs\":1588.9,\"queueWaitMs\":0,\"queueAndTotalMs\":1593.3},\"operationalEvidence\":{\"version\":\"kiln.render-operational.v1\",\"outcomeCode\":\"gpu_success\",\"queueWaitMs\":0,\"queueDepthAtEnqueue\":0,\"concurrencyAtStart\":1,\"concurrencyLimit\":1,\"workerPhase\":\"first-render\",\"workerAgeMsAtStart\":17767.6,\"evidenceClamped\":false},\"outcomeCode\":\"gpu_success\",\"status\":200,\"ms\":1596}\n{\"evt\":\"request\",\"method\":\"POST\",\"path\":\"/render\",\"auth\":\"disabled\",\"bodyBytes\":8537,\"glbBytes\":6364,\"inputGlbSha256\":\"sha256:8ef3e9e5f28303639fc1d28c8648dda2494aed4c11b74ad17cb30b7726a59a9e\",\"renderMode\":\"legacy\",\"viewsRequested\":1,\"views\":1,\"beauty\":false,\"timings\":{\"loadMs\":14.9,\"viewsMs\":2002.8,\"beautyMs\":0,\"totalMs\":2017.7,\"queueWaitMs\":0,\"queueAndTotalMs\":2018.9},\"operationalEvidence\":{\"version\":\"kiln.render-operational.v1\",\"outcomeCode\":\"gpu_success\",\"queueWaitMs\":0,\"queueDepthAtEnqueue\":0,\"concurrencyAtStart\":1,\"concurrencyLimit\":1,\"workerPhase\":\"warm-render\",\"workerAgeMsAtStart\":19372.3,\"evidenceClamped\":false},\"outcomeCode\":\"gpu_success\",\"status\":200,\"ms\":2020}\n{\"evt\":\"request\",\"method\":\"POST\",\"path\":\"/render\",\"auth\":\"disabled\",\"bodyBytes\":8537,\"glbBytes\":6364,\"inputGlbSha256\":\"sha256:8ef3e9e5f28303639fc1d28c8648dda2494aed4c11b74ad17cb30b7726a59a9e\",\"renderMode\":\"legacy\",\"viewsRequested\":1,\"views\":1,\"beauty\":false,\"timings\":{\"loadMs\":3.8,\"viewsMs\":205.4,\"beautyMs\":0,\"totalMs\":209.2,\"queueWaitMs\":0,\"queueAndTotalMs\":209.5},\"operationalEvidence\":{\"version\":\"kiln.render-operational.v1\",\"outcomeCode\":\"gpu_success\",\"queueWaitMs\":0,\"queueDepthAtEnqueue\":0,\"concurrencyAtStart\":1,\"concurrencyLimit\":1,\"workerPhase\":\"warm-render\",\"workerAgeMsAtStart\":21392.9,\"evidenceClamped\":false},\"outcomeCode\":\"gpu_success\",\"status\":200,\"ms\":210.3}\n{\"evt\":\"request\",\"method\":\"GET\",\"path\":\"/health\",\"auth\":\"not-required\",\"outcomeCode\":\"health_ok\",\"status\":200,\"ms\":0.4}\n{\"evt\":\"request\",\"method\":\"GET\",\"path\":\"/health\",\"auth\":\"not-required\",\"outcomeCode\":\"health_ok\",\"status\":200,\"ms\":0.2}\n{\"evt\":\"request\",\"method\":\"GET\",\"path\":\"/health\",\"auth\":\"not-required\",\"outcomeCode\":\"health_ok\",\"status\":200,\"ms\":0.5}\n{\"evt\":\"request\",\"method\":\"GET\",\"path\":\"/health\",\"auth\":\"not-required\",\"outcomeCode\":\"health_ok\",\"status\":200,\"ms\":0.2}\n{\"evt\":\"request\",\"method\":\"GET\",\"path\":\"/health\",\"auth\":\"not-required\",\"outcomeCode\":\"health_ok\",\"status\":200,\"ms\":0.3}\n{\"evt\":\"request\",\"method\":\"GET\",\"path\":\"/health\",\"auth\":\"not-required\",\"outcomeCode\":\"health_ok\",\"status\":200,\"ms\":0.3}\n{\"evt\":\"request\",\"method\":\"GET\",\"path\":\"/health\",\"auth\":\"not-required\",\"outcomeCode\":\"health_ok\",\"status\":200,\"ms\":0.3}\n{\"evt\":\"request\",\"method\":\"GET\",\"path\":\"/health\",\"auth\":\"not-required\",\"outcomeCode\":\"health_ok\",\"status\":200,\"ms\":0.3}\n"
+}

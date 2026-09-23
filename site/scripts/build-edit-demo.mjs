@@ -3,7 +3,7 @@ import { join } from 'node:path';
 import { createHash } from 'node:crypto';
 import { MemoryProgramStore } from '../../src/program-store';
 import { createKilnProgramToolRegistry } from '../../src/tools/registry';
-import { resolveEvaluatorPortV1 } from '../../src/evaluator/protocol';
+import { resolveEvaluatorPortV2 } from '../../src/evaluator/protocol';
 
 export async function buildEditDemo(repo, out) {
   const source = await readFile(join(repo, 'site/examples/workbench.kiln.js'), 'utf8');
@@ -46,7 +46,7 @@ export async function buildEditDemo(repo, out) {
     ['after', after],
   ]) {
     const code = await store.get(result.programRef);
-    const render = await resolveEvaluatorPortV1(undefined, 'trusted-local').render(code);
+    const render = await resolveEvaluatorPortV2(undefined, 'trusted-local').render(code);
     const png = tool(name === 'before' ? 'kiln_render' : 'kiln_edit').media(result)?.png;
     if (!png) throw new Error(`Edit demo ${name} returned no image`);
     await writeFile(join(out, `workbench-${name}.png`), png);

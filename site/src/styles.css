@@ -16,6 +16,8 @@
   color-scheme: light;
 }
 
+.download-note { margin: 0; padding: 12px 28px; color: var(--dim); font-size: 12px; border-bottom: 1px solid var(--rule); }
+
 .hero-title { max-width: 15ch; font-size: clamp(38px, 6vw, 64px); line-height: 1.06; letter-spacing: -0.045em; margin: 0 0 26px; text-wrap: balance; }
 .section-heading { display: flex; flex-wrap: wrap; align-items: baseline; justify-content: space-between; gap: 12px; margin-bottom: 20px; }
 .section-heading a { font-size: 13px; }
@@ -310,7 +312,7 @@ button {
  */
 .viewer {
   display: grid;
-  grid-template-rows: auto 1fr;
+  grid-template-rows: auto auto 1fr;
   grid-template-columns: minmax(0, 1fr);
   height: 100%;
   overflow: hidden;
@@ -1094,7 +1096,7 @@ fieldset.tabs { padding:0; border:0; min-width:0; }
 .hero-exhibit .hero-canvas { height:auto; aspect-ratio:4/3; }
 
 @media (max-width: 900px) {
-  .viewer { height: auto; min-height: 100%; overflow: visible; grid-template-rows: auto auto; }
+  .viewer { height: auto; min-height: 100%; overflow: visible; grid-template-rows: auto auto auto; }
   .viewer .stage { overflow: visible; }
   .viewer .model-viewport { height: clamp(320px, 62svh, 540px); }
   .viewer .panels { position: static; flex-direction: column; align-items: stretch; gap: 12px; padding: 16px; pointer-events: auto; background: var(--ground); }

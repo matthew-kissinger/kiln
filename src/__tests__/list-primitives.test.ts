@@ -9,12 +9,12 @@
 
 import { describe, expect, test } from 'bun:test';
 
-import { listPrimitives } from '../list-primitives';
+import { listHelperSpecs } from '../discovery/helper-specs';
 import { buildSandboxGlobals } from '../primitives';
 
-describe('kiln.listPrimitives', () => {
+describe('kiln.listHelperSpecs', () => {
   test('returns a non-empty catalog with expected shape', () => {
-    const spec = listPrimitives();
+    const spec = listHelperSpecs();
     expect(spec.length).toBeGreaterThan(20);
     for (const p of spec) {
       expect(p.name).toMatch(/^[a-zA-Z_][a-zA-Z0-9_]*$/);
@@ -41,13 +41,13 @@ describe('kiln.listPrimitives', () => {
 
   test('every cataloged primitive is present in the sandbox globals', () => {
     const globals = buildSandboxGlobals();
-    for (const p of listPrimitives()) {
+    for (const p of listHelperSpecs()) {
       expect(typeof globals[p.name]).toBe('function');
     }
   });
 
   test('every sandbox function (except Math/console) appears in the catalog', () => {
-    const catalog = new Set(listPrimitives().map((p) => p.name));
+    const catalog = new Set(listHelperSpecs().map((p) => p.name));
     const globals = buildSandboxGlobals();
 
     const missing: string[] = [];
@@ -61,8 +61,8 @@ describe('kiln.listPrimitives', () => {
   });
 
   test('returned array is a defensive copy', () => {
-    const a = listPrimitives();
-    const b = listPrimitives();
+    const a = listHelperSpecs();
+    const b = listHelperSpecs();
     expect(a).not.toBe(b);
     expect(a[0]).not.toBe(b[0]);
     a[0]!.name = 'mutated';
@@ -70,7 +70,7 @@ describe('kiln.listPrimitives', () => {
   });
 
   test('contains canonical entries for the major primitive groups', () => {
-    const names = new Set(listPrimitives().map((p) => p.name));
+    const names = new Set(listHelperSpecs().map((p) => p.name));
     for (const expected of [
       'createRoot',
       'createPivot',

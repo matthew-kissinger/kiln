@@ -1,17 +1,9 @@
 import { describe, expect, test } from 'bun:test';
 
-import type { CharacterBodyPlan } from '../character';
-import {
-  createAssetIntentV1,
-  type AssetIntentV1,
-  type CharacterLocomotionMode,
-} from '../contracts';
-import { buildUserPrompt } from '../prompt';
 import { evaluateCharacterQa } from './character';
 import { CHARACTER_ADVISORY_QA_RULE, evaluateCharacterAdvisoryQa } from './character-advisory';
 import {
   W6_CHARACTER_BODY_PLAN_COVERAGE,
-  W6_CHARACTER_PROMPT_CORPUS,
   W6_CHARACTER_VEHICLE_FIXTURE_CORPUS,
   W6_VEHICLE_PROMPT_CORPUS,
 } from './character-vehicle-corpus';
@@ -158,63 +150,4 @@ describe('W6 advisory rollout boundary', () => {
       expect(finding.repairText?.length, id).toBeGreaterThan(50);
     }
   });
-});
-
-describe('CHAR-031/032 and VEH-030 resolved prompt corpus', () => {
-  const locomotion = (subtype: string, motion: 'static' | 'animated'): CharacterLocomotionMode => {
-    if (motion === 'static') return 'stationary';
-    if (subtype === 'avian') return 'fly';
-    if (subtype === 'serpentine') return 'slither';
-    if (subtype === 'wheeled') return 'roll';
-    return 'walk';
-  };
-
-  for (const entry of W6_CHARACTER_PROMPT_CORPUS) {
-    test(`${entry.id} injects only its resolved body-plan contract`, () => {
-      const movement = locomotion(entry.subtype, entry.motion);
-      const intent = createAssetIntentV1({
-        category: 'character',
-        character: {
-          bodyPlan: entry.subtype as CharacterBodyPlan,
-          grounded: movement !== 'fly',
-          locomotion: movement,
-          gait: movement,
-          rootMotion: 'inPlace',
-          clips: entry.motion === 'animated' ? [{ name: movement, playback: 'loop' }] : [],
-        },
-      });
-      const prompt = buildUserPrompt({
-        prompt: entry.prompt,
-        category: 'character',
-        mode: 'glb',
-        intent,
-        includeAnimation: entry.motion === 'animated',
-      });
-      for (const expected of entry.expectedGuidance) expect(prompt).toContain(expected);
-      for (const other of ['BIPED', 'QUADRUPED', 'AVIAN', 'SERPENTINE', 'MULTI-LIMB']) {
-        if (other === entry.subtype.toUpperCase()) continue;
-        expect(prompt).not.toContain(`Resolved body plan: ${other}.`);
-      }
-    });
-  }
-
-  for (const entry of W6_VEHICLE_PROMPT_CORPUS) {
-    test(`${entry.id} injects subtype-specific vehicle guidance`, () => {
-      const intent = createAssetIntentV1({
-        category: 'vehicle',
-        subtype: entry.subtype,
-        vehicle: { subtype: entry.subtype as NonNullable<AssetIntentV1['vehicle']>['subtype'] },
-      });
-      const prompt = buildUserPrompt({
-        prompt: entry.prompt,
-        category: 'vehicle',
-        mode: 'glb',
-        intent,
-        includeAnimation: entry.motion === 'animated',
-      });
-      expect(prompt).toContain('## Resolved Vehicle Contract');
-      for (const expected of entry.expectedGuidance) expect(prompt).toContain(expected);
-      expect(prompt).not.toContain('## Resolved Character Contract');
-    });
-  }
 });

@@ -1,3 +1,4 @@
+// Maintainer revision: Kiln UV API migration replaces the old UV-preserving wrapper with copyGeometry; geometry and existing UV values are unchanged.
 // A 6-pounder field gun: the kind of asset a studio artist would build.
 //
 // This is the repository's hero, and it exists to show what the loop produces
@@ -143,7 +144,7 @@ async function build() {
     createPart(`Trunnion_${side}`, cylinderZGeo(0.058, 0.058, 0.14, 20), bronze, { position: [-0.06, -0.04, sz * 0.19], parent: gun });
     createPart(`TrunnionCap_${side}`, cylinderZGeo(0.070, 0.070, 0.022, 20), bronze, { position: [-0.06, -0.04, sz * 0.26], parent: gun });
     // Capsquare: the iron strap that actually holds a trunnion down.
-    createPart(`Capsquare_${side}`, boxUnwrap(boxGeo(0.10, 0.13, 0.016)), iron, { position: [-0.06, -0.10, sz * 0.285], parent: gun });
+    createPart(`Capsquare_${side}`, copyGeometry(boxGeo(0.10, 0.13, 0.016)), iron, { position: [-0.06, -0.10, sz * 0.285], parent: gun });
   }
 
   // Dolphins: the cast lifting handles on top of a real barrel.
@@ -179,7 +180,7 @@ async function build() {
       const bot = edgeAt(botEdge, x) + 0.02;
       const h = top - bot;
       const cy = (top + bot) / 2;
-      createPart(`Strap_${side}${i}`, boxUnwrap(boxGeo(0.06, h, 0.014)), iron, {
+      createPart(`Strap_${side}${i}`, copyGeometry(boxGeo(0.06, h, 0.014)), iron, {
         position: [x, cy, sz * (CHEEK_Z + CHEEK_T / 2 + 0.007)], parent: root,
       });
       for (const t of [0.22, 0.78]) {

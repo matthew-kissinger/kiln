@@ -2,11 +2,26 @@
 name: kiln-author-asset
 description: Create a procedural 3D asset with Kiln JavaScript, review useful camera views, refine saved source, and export a GLB.
 license: MIT
+metadata:
+  kiln-workflow: workspace
+  kiln-shared-references: references/program-contract.md references/geometry-recipes.md references/camera-recipes.md references/reusable-frame.kiln.js
 ---
 
 # Author a Kiln asset
 
-Read the [program contract](references/program-contract.md) when writing source. Use `kiln_list_primitives` for unfamiliar signatures: `names: ["loftProfiles", "createPart", "createClip"]` retrieves up to six together. Search by operation or category when choosing an approach; avoid looking up helpers already explained in your context. Request `capabilities: true` for the runtime, source, export, and camera contract. The catalog is a modeling API, not a closed list of allowed shapes.
+Read the [program contract](references/program-contract.md) when writing source. Use `kiln_discover({})` for a compact orientation: current families/tags, starting `createRoot`/`createPart` signatures, and six entry summaries by default. Search in ordinary modeling language, for example `{ query: "curved hollow tube" }`; you do not need to know a helper's name first. Search runs locally without a search model, GPU, or network call.
+
+Search and overview return summaries. Fetch complete contracts and examples with `{ ids: ["loftProfiles", "createPart", "createClip"] }`, up to six distinct exact IDs or executable names. Copy recipe IDs from results. Exact selectors are case-sensitive and never corrected into another helper. Use optional `family`, `kind: "operation" | "assembly" | "recipe"`, or `tags` from the overview to narrow search; follow `nextOffset` with `offset` when needed. Request `{ capabilities: true }` separately for the current runtime, source, export, and camera contract. Avoid fetching signatures already present in context. Recipes are optional construction guidance; neither a recipe nor an asset category is a prerequisite for using the modeling tools.
+
+Discovery contains geometry/UV/material operations, reusable assemblies, and
+construction or articulation recipes. Describe an operation and constraint, such
+as `profile along a curved path`, `texture tiling`, or `copy articulated hierarchy`;
+an asset name alone may be too broad. Results show matched and unmatched terms,
+spelling/prefix expansions, and related companions. A match in explanatory text
+can concern a limitation. Read the contract before treating a result as support
+for your request. Use current tags from the overview to narrow a crowded result;
+tags organize the catalog and do not select an asset category. If search is weak,
+try the geometric operation or browse a family; custom geometry remains available.
 
 ## Make the asset
 
@@ -16,17 +31,48 @@ For Blender, Unity or an FBX handoff, read the [engine handoff guide](references
 
 Write ordinary JavaScript with `meta` and `build()`. Keep dimensions that should change together in named parameters. Use [geometry recipes](references/geometry-recipes.md) for freeform surfaces, deformations, lofts, Boolean materials, or repeated parts. A model can author its own equations and topology; it does not need to assemble everything from boxes.
 
+For connected assemblies, derive mating points from shared dimensions in the same
+local frame. Identify the intended neighbor at each end of a support, and separate
+those joints from nearby parts that need clearance. `beamBetween` uses the endpoints
+you supply; it does not find the frame. Discovery's joined-frame recipe shows this
+pattern without requiring a category. A centerline wheel uses `side: 'center'`;
+wheel side describes placement identity, not single- or double-sided fork design.
+
 Submit `code` once to `kiln_render` or `kiln_validate`, then retain its `programRef`, including on a failed build. In a generated asset workspace, `node kiln.mjs source asset.kiln.js` imports a file directly. Copy the returned reference exactly for later views and edits. Built-in stores return short handles such as `p_7c94a132b8e0`; full SHA-256 references also work. Do not construct a handle or retransmit the program.
+
+For CLI camera files and PNG export, use [camera commands](references/camera-cli.md).
 
 ## Review what matters
 
-Choose views that answer a question. A broad sheet can establish shape; a part-local view can reveal a seam, underside, or hidden attachment. Use the [camera recipes](references/camera-recipes.md) for image count, exact part framing, explicit cameras, and separate images. Read returned part paths instead of constructing them.
+For the joints or gaps the brief depends on, use `kiln_inspect` with
+`measure: { mode: 'surface', from: { subject: { path: A } }, to: { subject: { path: B } } }`,
+substituting exact returned part paths. Check each end of a support against its
+intended neighbor, including the fittings that attach it to the body. A fitting
+touching a cable or pin does not establish that the fitting itself is mounted.
+Check required gaps separately. Read `measurement.status`
+and the closest points alongside an in-context view. Zero can mean touching or
+intersecting; a whole-assembly minimum may find an unrelated contact. Keep
+unmeasured interfaces unverified even when overall structural QA passes.
+Batch up to 12 intended pairs with `surfacePairs: [[A, B], [C, D]]` instead of
+repeating the same inspection. Read every `surfaceMeasurements.results` entry;
+`status: partial` includes failed or unfinished checks. Set `image: false` and
+omit camera controls for numeric checks after reviewing a relevant image.
+
+Choose views that answer a question. A broad sheet can establish shape; a part-local view can reveal a seam, underside, or hidden attachment. Use the [camera recipes](references/camera-recipes.md) for image count, exact part framing, explicit cameras, and separate images. Read returned part paths instead of constructing them. The render response lists at most 80 paths. If `partsTruncated` or a needed part is absent, use `kiln_inspect({ programRef, image: false, listParts: { query: "part name" } })`. This searches nested names and paths; follow `partListing.nextOffset` with the same reference and query. Omit the query to list everything. A missing preview entry does not mean the part failed to export.
 
 Inspect the actual images. Render on the default neutral grey backdrop first. Only when a sheet you have seen shows a part merging with it, add `backdrop` to `capture`: `light` when the merging part is darker than the grey (near-black iron, dark wood), `dark` when it is lighter (near-white, pale grey, emissive). Read the echoed `capture.backdrop`. Check silhouette, proportion, orientation, attachment, and ground contact. If the request calls for a finished asset, repair concrete gaps visible at its intended viewing distance rather than stopping at a blockout. Do not repeat the same render without a new question or change.
 
-`viewFidelity.materialFaithful: false` means geometry evidence, not verified PBR appearance. Check camera/fallback receipts too. A GPU connection alone is not evidence that the requested view was used. Animation needs intermediate-pose review; interiors may need cutaway views.
+For specified openings and travel limits, measure usable space including protruding
+teeth, fasteners or trim. Nominal plate spacing alone does not establish clearance.
+For overall dimensions, use the rendered revision's `bounds.size` in metres,
+including projections and attached parts. State separately when a measurement
+describes only a body or centerline. Source parameters are not measured extents.
+
+`viewFidelity.materialFaithful: false` means geometry evidence, not verified PBR appearance. Check camera/fallback receipts too. A GPU connection alone is not evidence that the requested view was used. Animation needs intermediate-pose review; interiors may need cutaway views. Use `kiln_screenshot_animation` for clip sampling. In a CLI workspace, use `node kiln.mjs animation RETURNED_REF --clip CLIP_NAME --phases 0,0.017,0.31,0.68,1 --views motion.png --render gpu --json` and read the PNG. Phases are fractions of clip duration; use `--render cpu` for geometry-only review. This samples the exported animation without editing source into posed copies. Check `poseBounds` against requested ground clearance and dimensions at those poses. Include tread and other protrusions; a correct rest pose does not prove clearance during rotation. Choose phases inside a geometric repeat even when regular samples look identical; quarter turns of 16 repeated lugs all show the same alignment. Sampled bounds do not prove continuous contact or collision safety.
 
 ## Revise and deliver
+
+Report QA `acceptance` separately from delivery, including incomplete checks and unverified material appearance. Never use an unrendered edit or a previous image as evidence for the selected revision.
 
 Read the [export profile guide](references/export-profiles.md) when choosing delivery files. Keep the default editable ZIP for continued authoring; use the opt-in runtime GLB and metadata sidecar for application delivery when its measured size benefit is useful. Converter selection happens during rendering, while the delivery profile applies to a saved revision. Report the actual choices and preserve the canonical source; neither option establishes scene performance.
 
@@ -44,6 +90,10 @@ node kiln.mjs render RETURNED_REF --out asset-v1.glb --views asset-v1.png
 ```
 
 Replace `RETURNED_REF` with the final reference returned by Kiln. Keep `.kiln/programs`, including its mappings, while using saved references.
+
+Add `--json` to CLI `render` for a machine-readable receipt with the source reference,
+requirements, output paths and image fidelity. Read the image file separately.
+On failure, check `ok` and `files`: a GLB may have been written before a failed image.
 
 To save a chosen camera view, write the `capture` object itself to `cameras.json` and run `node kiln.mjs render RETURNED_REF --capture cameras.json --views hero.png`. This uses the same camera schema and render pipeline as MCP. CLI image export supports grid output; use one shot for a single hero PNG. Add `--backdrop light` or `--backdrop dark` to any `--views` command when the neutral grey hides the silhouette. Do not copy image base64 into shell commands. The [camera recipes](references/camera-recipes.md) include a complete file example.
 

@@ -19,6 +19,7 @@
 // dispatching is the same three lines for every harness.
 import { copyFileSync, existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { join, resolve } from 'node:path';
+import { fileURLToPath } from 'node:url';
 
 // The harness table, the Windows-safe spawn, the deadline that kills a process
 // tree, and the clean-room sandbox all live next door: `harness-smoke.mjs`
@@ -26,56 +27,7 @@ import { join, resolve } from 'node:path';
 // them to send that same harness after an asset.
 import { HARNESSES, REPO, makeSandbox, parseDuration, run } from './harness.mjs';
 
-/**
- * Mirrored from `ASSET_CATEGORIES` in src/contracts/asset.ts, because this
- * script runs before anything is built and cannot import the TypeScript source.
- * `src/__tests__/dispatch-categories.test.ts` fails if the two ever drift.
- */
-const ASSET_CATEGORIES = [
-  'prop',
-  'character',
-  'vfx',
-  'environment',
-  'architecture',
-  'vegetation',
-  'vehicle',
-];
-
-/**
- * Extra guidance appended to the brief, and EXPERIMENTAL -- read the entry for
- * `prop` before using any of the others.
- *
- * `prop` is the default and its entry is deliberately empty. That is not an
- * omission: almost anything can be built as a prop, the base skill already
- * describes how, and an empty entry is the least constrained brief this script
- * can send. The six below each narrow the model's attention to what tends to go
- * wrong for that kind of subject, which is a bet. It pays when the subject
- * really is one of those things and the failure mode is the named one. It costs
- * when it is not: telling a model to worry about storey rhythm and eaves is
- * actively unhelpful for a bandstand, and pushing branching rules at something
- * that is a plant in name only will make it worse than saying nothing.
- *
- * So the honest default is `prop`, and reaching for another category is a
- * deliberate choice to trade freedom for a hint. If a run comes back worse than
- * the same brief as a prop, the hint was wrong and the category is the thing to
- * drop first.
- */
-const CATEGORY_BRIEF = {
-  architecture:
-    'This is ARCHITECTURE. Get the mass and the storey rhythm right before any ornament: floor heights consistent, openings on a grid, a roof that meets its walls with a real eave rather than hovering. Repeated elements (bays, columns, windows) should be generated in a loop from one set of numbers so they stay aligned.',
-  character:
-    'This is a CHARACTER. Proportion beats detail: block the silhouette to a believable height first, then subdivide. Build it symmetric about the +X forward axis, standing on Y=0, in a neutral stance with limbs slightly away from the body so nothing interpenetrates.',
-  vegetation:
-    'This is VEGETATION. Nothing on a plant is straight or evenly spaced. Drive branching from a small recursive rule with varied angle and length rather than placing limbs by hand, taper every stem toward its tip, and let the crown be an irregular volume rather than a sphere.',
-  vehicle:
-    'This is a VEHICLE. It has to look like it works: wheels or tracks touching Y=0 and equally spaced, a cabin sized for whoever drives it, and a clear front. Build it along +X forward so it points the way the frame says it points.',
-  environment:
-    'This is an ENVIRONMENT piece. It will be placed among others, so keep the footprint honest and the origin sensible, and make the parts that meet the ground actually meet it.',
-  vfx: 'This is a VFX asset. It reads as motion and light rather than as an object: build it from layered, mostly emissive or transparent shells, keep the triangle count low, and make sure it looks right from every angle because a viewer will orbit it.',
-  prop: '',
-};
-
-function parseArgs(argv) {
+export function parseArgs(argv) {
   const opts = {
     harness: 'agy',
     model: null,
@@ -91,15 +43,7 @@ function parseArgs(argv) {
     // locomotive without its rods moving is a shed on wheels. --animate adds
     // the rig requirements to the brief and makes the child prove the loop.
     animate: false,
-    // Every asset dispatched before this flag existed came back a prop, because
-    // the brief hardcoded `category: 'prop'`. The problem was not that they were
-    // props -- most of them are, correctly -- but that nobody could say
-    // otherwise, so the field carried no information and the engine's own
-    // per-category guidance was unreachable. `prop` stays the default because it
-    // is the right answer most of the time; see CATEGORY_BRIEF below for what
-    // choosing another one actually buys and costs.
-    category: 'prop',
-    subject: null,
+    subject: '',
   };
   const rest = [];
   for (let i = 0; i < argv.length; i++) {
@@ -112,15 +56,13 @@ function parseArgs(argv) {
     else if (a === '--tris') opts.tris = argv[++i];
     else if (a === '--wait') opts.waitMinutes = Number(argv[++i]);
     else if (a === '--animate') opts.animate = true;
-    else if (a === '--category') opts.category = argv[++i];
-    else rest.push(a);
+    else if (a === '--category' || a.startsWith('--category=')) {
+      throw new Error(
+        '--category was removed. Describe the intended asset in the brief; discover optional recipes as needed.',
+      );
+    } else rest.push(a);
   }
   opts.subject = rest.join(' ').trim();
-  if (!ASSET_CATEGORIES.includes(opts.category)) {
-    throw new Error(
-      `--category ${opts.category} is not a Kiln category. Pick one of: ${ASSET_CATEGORIES.join(', ')}.`,
-    );
-  }
   return opts;
 }
 
@@ -131,13 +73,13 @@ function parseArgs(argv) {
  *   1. ABSOLUTE paths. Every CLI resolves relative paths against something --
  *      `agy` against the installed plugin copy, not your working tree -- so a
  *      prompt that says `examples/foo.js` writes to a file you will never find.
- *   2. list_primitives FIRST. Without it the model writes the API it remembers
- *      from some other engine and every call fails.
+ *   2. Discovery contracts before unfamiliar calls, so authoring follows the
+ *      installed API while leaving the choice of modeling approach open.
  *   3. An explicit instruction to LOOK at the render and revise. A model that
  *      is not told to look will write one pass, declare success, and stop --
  *      and the whole argument for this tool is the loop, not the codegen.
  */
-function composePrompt({ name, subject, file, tris, animate, category }) {
+export function composePrompt({ name, subject, file, tris, animate }) {
   const motion = animate
     ? [
         '- THIS ASSET MUST MOVE. Hang every moving part off a pivot: pass',
@@ -156,15 +98,16 @@ function composePrompt({ name, subject, file, tris, animate, category }) {
   return [
     `Author a Kiln 3D asset: ${subject}.`,
     '',
-    'You have the Kiln MCP tools (kiln_list_primitives, kiln_render, kiln_inspect,',
+    'You have the Kiln MCP tools (kiln_discover, kiln_render, kiln_inspect,',
     'kiln_validate, kiln_view_interior, kiln_screenshot_animation) and the',
     'kiln-author-asset skill. Use them.',
     '',
     'Rules:',
     `- Write the program to the ABSOLUTE path ${file.replaceAll('\\', '/')}`,
-    '- Call kiln_list_primitives FIRST, so you use the real API rather than one',
-    '  you remember from another engine.',
-    `- Start the file with: const meta = { name: '${toPascal(name)}', category: '${category}' };`,
+    '- Use kiln_discover for a compact overview and natural-language modeling',
+    '  queries. Fetch exact ids for unfamiliar helper contracts; recipes are',
+    '  optional guidance and do not restrict the asset or require a category.',
+    `- Start the file with: const meta = { name: '${toPascal(name)}' };`,
     '- Coordinates are +X forward, +Y up, +Z right, and the asset sits on Y=0.',
     '- Write a ROUGH version of the file EARLY, before you have the details',
     '  worked out, then improve it. Do NOT solve the geometry analytically',
@@ -175,7 +118,6 @@ function composePrompt({ name, subject, file, tris, animate, category }) {
     `- Target ${tris} triangles.`,
     ...motion,
     '- Finish by reporting the triangle count and the bounds.',
-    ...(CATEGORY_BRIEF[category] ? ['', CATEGORY_BRIEF[category]] : []),
   ].join('\n');
 }
 
@@ -284,7 +226,7 @@ async function main() {
     // already, and omitted the harness that had written six of the gallery.
     const names = Object.keys(HARNESSES).join('|');
     console.error(
-      `usage: dispatch-asset.mjs [--harness ${names}] [--model M] [--category ${ASSET_CATEGORIES.join('|')}] --name <slug> "<subject>"`,
+      `usage: dispatch-asset.mjs [--harness ${names}] [--model M] --name <slug> "<subject>"`,
     );
     process.exit(2);
   }
@@ -437,4 +379,4 @@ async function main() {
   process.exit(check.code === 0 ? 0 : 1);
 }
 
-main();
+if (process.argv[1] && resolve(process.argv[1]) === fileURLToPath(import.meta.url)) main();

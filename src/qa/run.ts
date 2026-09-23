@@ -21,6 +21,7 @@ import { QaRegistry, type QaRuleMode, type QaRulePolicy } from './registry';
 import {
   createAssetQaReportV1,
   type AssetQaReportV1,
+  type AssetQaReport,
   type QaContext,
   type QaFinding,
 } from './types';
@@ -291,12 +292,12 @@ export function qaBlockingEnabled(env: Record<string, string | undefined> = proc
 const MAX_DETAILED_BLOCKERS = 6;
 
 export class AssetQaBlockedError extends Error {
-  readonly report: AssetQaReportV1;
+  readonly report: AssetQaReport;
   readonly stage: 'scene' | 'final-glb';
   readonly gltfValidation?: KhronosGltfValidationReport;
 
   constructor(
-    report: AssetQaReportV1,
+    report: AssetQaReport,
     stage: 'scene' | 'final-glb',
     gltfValidation?: KhronosGltfValidationReport,
   ) {
@@ -305,13 +306,13 @@ export class AssetQaBlockedError extends Error {
       .filter((finding) => finding.disposition === 'block');
     // H-40(3): this message IS what the agent reads when a mid-loop render is
     // QA-blocked (kiln_render catches and returns { ok:false, error: message }),
-    // so each blocker carries its human message + authored repairText — bare
-    // rule codes give the model nothing to act on.
+    // Include the measured target as quoted data as well as repair advice.
+    // Some messages (for example missing UVs) contain no part identity of their own.
     const detailed = blockers
       .slice(0, MAX_DETAILED_BLOCKERS)
       .map(
         (finding) =>
-          `${finding.code}: ${finding.message}${finding.repairText ? ` FIX: ${finding.repairText}` : ''}`,
+          `${finding.code}: ${finding.message}${finding.affected ? ` AFFECTED: ${JSON.stringify(finding.affected)}` : ''}${finding.repairText ? ` FIX: ${finding.repairText}` : ''}`,
       );
     const overflow =
       blockers.length > MAX_DETAILED_BLOCKERS

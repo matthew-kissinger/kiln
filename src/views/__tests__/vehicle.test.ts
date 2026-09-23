@@ -1,7 +1,9 @@
 import { describe, expect, test } from 'bun:test';
 import * as THREE from 'three';
 
-import { createAssetIntentV1, stampSemanticMetadataV1 } from '../../contracts';
+import { stampSemanticMetadataV1 } from '../../contracts';
+import { createAssetRequirementsV1 } from '../../contracts/requirements';
+import { createAssetRequirementsStore } from '../../requirements-store';
 import { renderSceneToGLB } from '../../render';
 import { createVehicleFrame, createWheelAssembly } from '../../vehicle';
 import {
@@ -99,14 +101,22 @@ describe('vehicle diagnostics', () => {
 
   test('captures underbody and one wheel close-up through the production render path', async () => {
     const root = fixture();
-    const intent = createAssetIntentV1({ category: 'vehicle', subtype: 'wheeled' });
+    const requirements = createAssetRequirementsStore().host.bind(
+      { taskId: 'diagnostics', lineageId: 'mobility' },
+      createAssetRequirementsV1({
+        requirements: {
+          mobility: { state: 'requested', value: { wheelCount: 4 } },
+        },
+      }),
+      { actor: 'owner', source: 'brief', reason: 'Mobility inspection' },
+    );
     const rootSnapshot = {
       position: root.position.clone(),
       quaternion: root.quaternion.clone(),
       scale: root.scale.clone(),
       children: [...root.children],
     };
-    const focused = captureVehicleDiagnosticViews(root, intent, 72);
+    const focused = captureVehicleDiagnosticViews(root, 72);
     expect(focused.map((capture) => capture.kind)).toEqual(['underbody', 'wheel-section']);
     expect(focused.every((capture) => capture.png.byteLength > 100)).toBe(true);
     expect(focused[1]?.id).toContain('wheel.assembly.right.front');
@@ -128,11 +138,15 @@ describe('vehicle diagnostics', () => {
       true,
     );
 
-    const rendered = await renderSceneToGLB(root, { intent });
+    const neutral = await renderSceneToGLB(root);
+    expect(neutral.diagnosticViews).toBeUndefined();
+    const rendered = await renderSceneToGLB(root, { requirements });
     expect(rendered.diagnosticViews?.map((capture) => capture.kind)).toEqual([
       'underbody',
       'wheel-section',
     ]);
+    expect(rendered.bytes).toEqual(neutral.bytes);
+    expect(rendered.diagnosticViews?.every((capture) => capture.png.byteLength > 100)).toBe(true);
     expect(root.position).toEqual(rootSnapshot.position);
     expect(root.quaternion.angleTo(rootSnapshot.quaternion)).toBeCloseTo(0, 8);
     expect(root.scale).toEqual(rootSnapshot.scale);

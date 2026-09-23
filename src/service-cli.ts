@@ -1,55 +1,24 @@
-/**
- * `kiln service`: see who is on the shared render-service port, and clear it.
- *
- * The host joins, replaces or refuses a service on its own (see
- * `render-service-host.ts`); these commands exist for the one case it will not
- * decide for you -- a stale service that somebody started by hand or that
- * another session still owns -- and so a developer can see the same facts the
- * host acts on instead of inferring them from a degraded sheet.
- */
 import {
-  describeStaleService,
+  describeUnavailableService,
   explainRenderServiceState,
   inspectLocalRenderService,
-  localRenderServicePort,
   localRenderServiceState,
   localRenderServiceUrl,
-  processIsAlive,
   renderServiceDir,
   terminateRenderService,
-  type LocalRenderServiceProbe,
 } from './render-service-host';
+export const SERVICE_USAGE = `Usage:
+  kiln service status     inspect installation and the shared local renderer
+  kiln service reprobe    refresh readiness after an installation or service change
+  kiln service stop       explicitly stop the verified local renderer
 
-export const SERVICE_USAGE = `
-RENDER SERVICE
-  kiln service status     who is listening on the shared port, and whether it is current
-  kiln service stop       stop the render service on the shared port, whoever started it
-  kiln service prune      stop it only when it is an orphan running older source
-
-The port is 8000 unless KILN_RENDER_SERVICE_PORT says otherwise. A session starts the
-service on demand and stops it on exit; \`kiln service\` is for the one it will not decide
-for you: a stale service started by hand or still owned by another session.
+Managed renderers use a bounded idle lifetime shared by all sessions. Manual
+renderers run until stopped. A remote renderer is managed on its own device.
 `;
-
 export interface ServiceIo {
   log: (line: string) => void;
   error: (line: string) => void;
 }
-
-function describeProcess(probe: LocalRenderServiceProbe): string {
-  if (probe.kind !== 'service') return '';
-  if (!probe.instance) return 'unknown (this service predates instance reporting)';
-  const { pid, ownerPid } = probe.instance;
-  if (ownerPid === null) return `pid ${pid}, started by hand`;
-  return `pid ${pid}, started by session ${ownerPid} (${processIsAlive(ownerPid) ? 'running' : 'exited'})`;
-}
-
-function describeSource(probe: LocalRenderServiceProbe, dir: string): string {
-  if (probe.kind !== 'service') return '';
-  if (!probe.instance) return 'unknown (this service predates instance reporting)';
-  return probe.stale ? `stale (older than ${dir})` : 'current';
-}
-
 export async function serviceMain(
   argv: readonly string[],
   io: ServiceIo = { log: console.log, error: console.error },
@@ -59,83 +28,66 @@ export async function serviceMain(
     io.log(SERVICE_USAGE);
     return command === undefined ? 2 : 0;
   }
-  if (command !== 'status' && command !== 'stop' && command !== 'prune') {
-    io.error(`unknown service command: ${command}\n${SERVICE_USAGE}`);
+  if (command === 'prune') {
+    io.error(
+      'kiln service prune was removed: the initiating session exiting does not mean a shared renderer is unused. Use kiln service status, then kiln service stop explicitly when other clients are finished.',
+    );
     return 2;
   }
-
+  if (!['status', 'reprobe', 'stop'].includes(command) || argv.length !== 1) {
+    io.error(`unknown service command: ${argv.join(' ')}\n${SERVICE_USAGE}`);
+    return 2;
+  }
   const url = localRenderServiceUrl();
   const dir = renderServiceDir();
   const state = localRenderServiceState(dir);
   const probe = await inspectLocalRenderService(url, dir);
-
-  if (command === 'status') {
+  if (command === 'status' || command === 'reprobe') {
     io.log(`render service   ${url}`);
     io.log(
-      `installation     ${state === 'ready' ? `ready (${dir})` : explainRenderServiceState(state, dir)}`,
+      `installation     ${state === 'ready' ? `ready (${dir}); GPU checked at startup` : explainRenderServiceState(state, dir)}`,
     );
-    switch (probe.kind) {
-      case 'absent':
-        io.log('listening        no');
-        break;
-      case 'busy':
-        io.log('listening        yes, busy rendering (did not answer in time)');
-        break;
-      case 'foreign':
-        io.log(
-          `listening        something that is not a render service holds port ${localRenderServicePort()}; set KILN_RENDER_SERVICE_PORT to move the renderer`,
-        );
-        break;
-      case 'service':
-        io.log(`listening        yes  ${probe.rendererId}`);
-        io.log(`process          ${describeProcess(probe)}`);
-        io.log(`source           ${describeSource(probe, dir)}`);
-        break;
-    }
-    return 0;
+    if (probe.kind === 'absent') io.log('listening        no');
+    else if (probe.kind === 'service') {
+      io.log(`listening        yes  ${probe.rendererId}`);
+      io.log(
+        `process          pid ${probe.instance.pid}, ${probe.instance.ownerPid === null ? 'started by hand' : `started by session ${probe.instance.ownerPid} (provenance only)`}`,
+      );
+      io.log(
+        `lifetime         ${probe.instance.mode}${probe.instance.idleTimeoutMs ? `, idle timeout ${probe.instance.idleTimeoutMs}ms` : ''}`,
+      );
+      io.log(
+        `source           ${probe.stale ? 'incompatible (different from this installation)' : 'current'}`,
+      );
+      io.log(`protocol         ${probe.health.protocol}`);
+      io.log(`build            ${probe.health.compatibility.fingerprint}`);
+      const clientToken = process.env['KILN_RENDER_TOKEN'] ?? process.env['RENDER_SERVICE_TOKEN'];
+      io.log(
+        `authentication   ${!probe.health.authRequired ? 'not required' : clientToken ? 'required; client token configured (not verified by health)' : 'required; set KILN_RENDER_TOKEN to the matching renderer token'}`,
+      );
+    } else io.log(`listening        ${describeUnavailableService(url, probe)}`);
+    const missingToken =
+      probe.kind === 'service' &&
+      probe.health.authRequired &&
+      !(process.env['KILN_RENDER_TOKEN'] ?? process.env['RENDER_SERVICE_TOKEN']);
+    return command === 'reprobe' && (probe.kind !== 'service' || probe.stale || missingToken)
+      ? 1
+      : 0;
   }
-
   if (probe.kind === 'absent') {
     io.log(`nothing is listening on ${url}`);
     return 0;
   }
-  if (probe.kind === 'busy') {
-    io.error(`the render service on ${url} is busy rendering and did not answer; try again`);
+  if (probe.kind !== 'service') {
+    io.error(`${describeUnavailableService(url, probe)}; nothing was stopped`);
     return 1;
   }
-  if (probe.kind === 'foreign') {
-    io.error(
-      `port ${localRenderServicePort()} is in use by something that is not a render service; nothing was stopped. Set KILN_RENDER_SERVICE_PORT to move the renderer.`,
-    );
-    return 1;
-  }
-  if (!probe.instance) {
-    io.error(
-      `the render service on ${url} predates instance reporting and does not say its pid; stop it by hand and start it again from ${dir}`,
-    );
-    return 1;
-  }
-
-  if (command === 'prune') {
-    if (!probe.stale) {
-      io.log(`kept: the render service on ${url} (pid ${probe.instance.pid}) is current`);
-      return 0;
-    }
-    if (!probe.orphaned) {
-      io.log(`kept: ${describeStaleService(url, probe)}; \`kiln service stop\` stops it anyway`);
-      return 0;
-    }
-  }
-
-  const stopped = await terminateRenderService(url, probe);
-  if (!stopped) {
-    io.error(`could not stop the render service on ${url} (pid ${probe.instance.pid})`);
+  if (!(await terminateRenderService(url, probe))) {
+    io.error(`could not verify and stop the render service on ${url} (pid ${probe.instance.pid})`);
     return 1;
   }
   io.log(
-    command === 'prune'
-      ? `stopped: ${describeStaleService(url, probe)}`
-      : `stopped the render service on ${url} (pid ${probe.instance.pid}); the next view that needs it starts a new one`,
+    `stopped the render service on ${url} (pid ${probe.instance.pid}); the next local view that needs it starts a new one`,
   );
   return 0;
 }

@@ -7,8 +7,9 @@ import { receiptProblems, verifyReceipt } from './verify-package-receipt.mjs';
 
 const manifest = {
   version: '0.7.0',
-  engines: { bun: '1.4.2', node: '22.23.2', npm: '12.0.2' },
+  engines: { node: '^20.15.0 || >=22.2.0' },
 };
+const toolchain = { bun: '1.4.2', node: '22.23.2', npm: '12.0.2' };
 
 /** A receipt that must pass, so every case below differs from it by exactly one field. */
 const good = () => ({
@@ -30,11 +31,21 @@ const good = () => ({
   ],
 });
 
-const target = { platform: 'linux', arch: 'x64', manifest };
+const target = { platform: 'linux', arch: 'x64', manifest, toolchain };
 
 describe('package receipt verification', () => {
   test('a receipt matching the release is accepted', () => {
     expect(receiptProblems(good(), target)).toEqual([]);
+  });
+
+  test('consumer qualification requires the exact explicitly selected Node and npm', () => {
+    const consumer = { ...good(), node: 'v20.15.0', npm: '10.7.0' };
+    const selected = { ...target, node: '20.15.0', npm: '10.7.0' };
+    expect(receiptProblems(consumer, selected)).toEqual([]);
+    expect(receiptProblems({ ...consumer, node: 'v20.16.0' }, selected)).toEqual([
+      'node: expected v20.15.0, receipt says v20.16.0',
+    ]);
+    expect(receiptProblems(consumer, target)).toHaveLength(2);
   });
 
   // One case per field, because the whole reason this left the workflow as a one-liner
@@ -86,6 +97,7 @@ describe('package receipt verification', () => {
     };
     await writeFile(join(dir, 'package-smoke.json'), JSON.stringify(receipt));
     await writeFile(join(dir, 'package.json'), JSON.stringify(manifest));
+    await writeFile(join(dir, 'toolchain.json'), JSON.stringify(toolchain));
 
     // The receipt is addressed explicitly, because `--receipt` is relative to the working
     // directory and this fixture lives in a temp directory. The original version resolved
@@ -121,6 +133,7 @@ describe('package receipt verification', () => {
     // were resolved against it, this would throw ENOENT instead of reporting problems.
     const manifestRoot = await mkdtemp(join(tmpdir(), 'kiln-receipt-root-'));
     await writeFile(join(manifestRoot, 'package.json'), JSON.stringify(manifest));
+    await writeFile(join(manifestRoot, 'toolchain.json'), JSON.stringify(toolchain));
 
     const problems = await verifyReceipt(
       ['--platform', 'linux', '--arch', 'x64', '--receipt', join(dir, 'package-smoke.json')],

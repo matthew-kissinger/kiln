@@ -1,0 +1,12 @@
+{
+  "work": "C:\\Users\\Mattm\\AppData\\Local\\Temp\\kiln-renderer-baseline-OeoPrH",
+  "node": "v22.23.2",
+  "installMs": 3803.3833,
+  "installStatus": 0,
+  "installStdout": "\nadded 6 packages in 4s\n",
+  "installStderr": "",
+  "nodeModulesBytes": 116169249,
+  "renderStatus": 0,
+  "renderStdout": "{\"mode\":\"direct\",\"readyMs\":787.6136,\"totalMs\":3815.8292,\"observations\":[{\"wallMs\":1880.6936,\"pngBytes\":26705,\"pngSha256\":\"bd6c0164d3ff2d69d19a8eefadd85869bff9a530b9402d917bcc5ff309f99920\",\"timings\":{\"loadMs\":37.6,\"viewsMs\":1225.6,\"beautyMs\":0,\"totalMs\":1263.2}},{\"wallMs\":1146.9725000000003,\"pngBytes\":26705,\"pngSha256\":\"bd6c0164d3ff2d69d19a8eefadd85869bff9a530b9402d917bcc5ff309f99920\",\"timings\":{\"loadMs\":6.3,\"viewsMs\":1139.8,\"beautyMs\":0,\"totalMs\":1146.1}}],\"rendererId\":\"dawn-d3d12:nvidia-geforce-rtx-3070:D3D12 driver version 32.0.16.1074\",\"adapter\":{\"vendor\":\"nvidia\",\"architecture\":\"ampere\",\"device\":\"nvidia-geforce-rtx-3070\",\"description\":\"D3D12 driver version 32.0.16.1074\"},\"peakRssKiB\":287188,\"globalsChanged\":[\"navigator.gpu\",\"self\",\"requestAnimationFrame\",\"createImageBitmap\"]}\n",
+  "renderStderr": ""
+}

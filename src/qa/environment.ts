@@ -30,6 +30,16 @@ export {
   type EnvironmentSubtype,
 } from '../contracts/environment';
 
+export interface SpatialQaInput {
+  scene?: unknown;
+  profile?: string;
+  tileable?: boolean;
+  navigable?: boolean;
+  /** Optional asset-local metre thresholds; neutral navigation has no human-size default. */
+  navigation?: { minWidth?: number; minHeight?: number };
+  groundPlaneY?: number;
+}
+
 export interface ResolvedEnvironmentSocketV1 {
   id: string;
   type: string;
@@ -67,8 +77,8 @@ interface EdgePairMeasurements {
 
 const stable = (value: number): number => Math.round(value * 1_000_000) / 1_000_000;
 
-function finding(context: QaContext, value: Omit<QaFinding, 'profile'>): QaFinding {
-  return { ...value, profile: context.intent.qaProfile || PROFILE };
+function finding(context: SpatialQaInput, value: Omit<QaFinding, 'profile'>): QaFinding {
+  return { ...value, profile: context.profile ?? 'asset.requirements.v1' };
 }
 
 function rolesOf(node: THREE.Object3D): readonly string[] {
@@ -102,8 +112,8 @@ function orientedBoxFromLocalBounds(
   root: THREE.Object3D,
   node: THREE.Object3D,
   source: THREE.Box3,
+  relative = root.matrixWorld.clone().invert().multiply(node.matrixWorld),
 ): OrientedProbeBox3 | undefined {
-  const relative = root.matrixWorld.clone().invert().multiply(node.matrixWorld);
   if (!relative.elements.every(Number.isFinite)) return undefined;
   const position = new THREE.Vector3();
   const rotation = new THREE.Quaternion();
@@ -159,18 +169,28 @@ function collectParts(root: THREE.Object3D): LocalPart[] {
         new THREE.Vector3(0.5, 0.5, 0.5),
       );
     }
-    if (source) {
-      box = transformedBox(source, rootInverse.clone().multiply(node.matrixWorld));
-      orientedBox = orientedBoxFromLocalBounds(root, node, source);
+    const relative = rootInverse.clone().multiply(node.matrixWorld);
+    const count = node instanceof THREE.InstancedMesh ? node.count : 1;
+    for (let index = 0; index < count; index++) {
+      const transform = relative.clone();
+      if (node instanceof THREE.InstancedMesh) {
+        const instance = new THREE.Matrix4();
+        node.getMatrixAt(index, instance);
+        transform.multiply(instance);
+      }
+      if (source) {
+        box = transformedBox(source, transform);
+        orientedBox = orientedBoxFromLocalBounds(root, node, source, transform);
+      }
+      if (box?.isEmpty()) box = undefined;
+      result.push({
+        node,
+        roles,
+        ...(box ? { box } : {}),
+        ...(orientedBox ? { orientedBox } : {}),
+        renderable,
+      });
     }
-    if (box?.isEmpty()) box = undefined;
-    result.push({
-      node,
-      roles,
-      ...(box ? { box } : {}),
-      ...(orientedBox ? { orientedBox } : {}),
-      renderable,
-    });
   });
   return result;
 }
@@ -261,8 +281,8 @@ const SOCKET_PAIR_CONTRACTS = [
 ] as const;
 
 /** Exact socket presence/alignment for trusted environment profiles. */
-export function evaluateEnvironmentSocketQa(context: QaContext): readonly QaFinding[] {
-  if (context.intent.category !== 'environment' || !(context.scene instanceof THREE.Object3D)) {
+export function inspectPlacementSockets(context: SpatialQaInput): readonly QaFinding[] {
+  if (!(context.scene instanceof THREE.Object3D)) {
     return [];
   }
   const root = context.scene;
@@ -341,8 +361,10 @@ function boundarySamples(
 ): BoundarySample[] {
   root.updateWorldMatrix(true, true);
   const inverse = root.matrixWorld.clone().invert();
-  const bounds = new THREE.Box3().setFromObject(root);
-  const localBounds = transformedBox(bounds, root.matrixWorld.clone().invert());
+  const localBounds = new THREE.Box3();
+  for (const part of collectParts(root))
+    if (part.renderable && part.box) localBounds.union(part.box);
+  if (localBounds.isEmpty()) return [];
   const edge = side === 'negative' ? localBounds.min[axis] : localBounds.max[axis];
   const axisExtent = localBounds.max[axis] - localBounds.min[axis];
   const band = Math.max(0.002, axisExtent * 0.005);
@@ -356,30 +378,39 @@ function boundarySamples(
     const positions = node.geometry.getAttribute('position');
     if (positions?.itemSize !== 3) return;
     const normals = node.geometry.getAttribute('normal');
-    const transform = inverse.clone().multiply(node.matrixWorld);
-    const normalMatrix = new THREE.Matrix3().getNormalMatrix(transform);
-    const material = materialSignature(node.material);
-    for (let index = 0; index < positions.count; index++) {
-      const point = new THREE.Vector3(
-        positions.getX(index),
-        positions.getY(index),
-        positions.getZ(index),
-      ).applyMatrix4(transform);
-      if (Math.abs(point[axis] - edge) > band) continue;
-      const t = THREE.MathUtils.clamp((point[crossAxis] - crossMin) / crossExtent, 0, 1);
-      const bin = Math.min(bins - 1, Math.floor(t * bins));
-      const normal = normals
-        ? new THREE.Vector3(normals.getX(index), normals.getY(index), normals.getZ(index))
-            .applyMatrix3(normalMatrix)
-            .normalize()
-        : new THREE.Vector3(0, 1, 0);
-      const current = byBin.get(bin);
-      if (
-        !current ||
-        point.y > current.height ||
-        (point.y === current.height && normal.y > current.normal.y)
-      ) {
-        byBin.set(bin, { bin, height: point.y, normal, material });
+    const relative = inverse.clone().multiply(node.matrixWorld);
+    const count = node instanceof THREE.InstancedMesh ? node.count : 1;
+    for (let instanceIndex = 0; instanceIndex < count; instanceIndex++) {
+      const transform = relative.clone();
+      if (node instanceof THREE.InstancedMesh) {
+        const instance = new THREE.Matrix4();
+        node.getMatrixAt(instanceIndex, instance);
+        transform.multiply(instance);
+      }
+      const normalMatrix = new THREE.Matrix3().getNormalMatrix(transform);
+      const material = materialSignature(node.material);
+      for (let index = 0; index < positions.count; index++) {
+        const point = new THREE.Vector3(
+          positions.getX(index),
+          positions.getY(index),
+          positions.getZ(index),
+        ).applyMatrix4(transform);
+        if (Math.abs(point[axis] - edge) > band) continue;
+        const t = THREE.MathUtils.clamp((point[crossAxis] - crossMin) / crossExtent, 0, 1);
+        const bin = Math.min(bins - 1, Math.floor(t * bins));
+        const normal = normals
+          ? new THREE.Vector3(normals.getX(index), normals.getY(index), normals.getZ(index))
+              .applyMatrix3(normalMatrix)
+              .normalize()
+          : new THREE.Vector3(0, 1, 0);
+        const current = byBin.get(bin);
+        if (
+          !current ||
+          point.y > current.height ||
+          (point.y === current.height && normal.y > current.normal.y)
+        ) {
+          byBin.set(bin, { bin, height: point.y, normal, material });
+        }
       }
     }
   });
@@ -435,12 +466,8 @@ function edgePairMeasurements(
 }
 
 /** Height/normal/material edge sampling; only fully tagged tiles can block. */
-export function evaluateEnvironmentTileEdgeQa(context: QaContext): readonly QaFinding[] {
-  if (
-    context.intent.category !== 'environment' ||
-    !context.intent.capabilities.includes('tileable') ||
-    !(context.scene instanceof THREE.Object3D)
-  ) {
+export function inspectTileEdges(context: SpatialQaInput): readonly QaFinding[] {
+  if (context.tileable !== true || !(context.scene instanceof THREE.Object3D)) {
     return [];
   }
   const root = context.scene;
@@ -532,13 +559,9 @@ function isCorridor(part: LocalPart): boolean {
   return part.roles.some((role) => /^environment\.(?:navigation\.)?corridor(?:\.|$)/.test(role));
 }
 
-/** Exact blocker checks plus advisory default dimensions for authored corridor prisms. */
-export function evaluateEnvironmentNavigabilityQa(context: QaContext): readonly QaFinding[] {
-  if (
-    context.intent.category !== 'environment' ||
-    !context.intent.capabilities.includes('navigable') ||
-    !(context.scene instanceof THREE.Object3D)
-  ) {
+/** Blocker bounds and explicitly supplied advisory dimensions for authored corridor prisms. */
+export function inspectNavigationClearance(context: SpatialQaInput): readonly QaFinding[] {
+  if (context.navigable !== true || !(context.scene instanceof THREE.Object3D)) {
     return [];
   }
   const root = context.scene;
@@ -585,7 +608,8 @@ export function evaluateEnvironmentNavigabilityQa(context: QaContext): readonly 
       corridor.orientedBox.halfExtents[2] * 2,
     );
     const height = corridor.orientedBox.halfExtents[1] * 2;
-    if (width + 1e-6 < 0.8) {
+    const { minWidth, minHeight } = context.navigation ?? {};
+    if (minWidth !== undefined && width + 1e-6 < minWidth) {
       findings.push(
         finding(context, {
           code: 'ENV_NAV_CORRIDOR_TOO_NARROW',
@@ -599,17 +623,16 @@ export function evaluateEnvironmentNavigabilityQa(context: QaContext): readonly 
           measurement: {
             name: 'minimumCorridorWidth',
             actual: stable(width),
-            expected: '>=0.8',
-            threshold: 0.8,
+            expected: `>=${minWidth}`,
+            threshold: minWidth,
             unit: 'm',
           },
           viewHints: ['top', 'right'],
-          repairText:
-            'Widen only the declared corridor to at least 0.8 m while preserving surrounding structure.',
+          repairText: `Widen only the declared corridor to at least ${minWidth} m while preserving surrounding structure.`,
         }),
       );
     }
-    if (height + 1e-6 < 1.8) {
+    if (minHeight !== undefined && height + 1e-6 < minHeight) {
       findings.push(
         finding(context, {
           code: 'ENV_NAV_HEADROOM_TOO_LOW',
@@ -623,28 +646,41 @@ export function evaluateEnvironmentNavigabilityQa(context: QaContext): readonly 
           measurement: {
             name: 'minimumCorridorHeadroom',
             actual: stable(height),
-            expected: '>=1.8',
-            threshold: 1.8,
+            expected: `>=${minHeight}`,
+            threshold: minHeight,
             unit: 'm',
           },
           viewHints: ['right', 'three-quarter'],
-          repairText:
-            'Raise or clear only the corridor ceiling to provide at least 1.8 m headroom.',
+          repairText: `Raise or clear only the corridor ceiling to provide at least ${minHeight} m headroom.`,
         }),
       );
     }
-    const blocker = parts.find(
+    // Support surfaces may touch the prism's bottom, but their names/roles cannot
+    // exempt geometry that protrudes into the requested passage.
+    const obstacles = parts.filter((part) => part.renderable && part.node !== corridor.node);
+    const uncertain = obstacles.find(
       (part) =>
-        part.renderable &&
+        !part.orientedBox && part.box && corridor.box && part.box.intersectsBox(corridor.box),
+    );
+    if (uncertain)
+      findings.push(
+        finding(context, {
+          code: 'ENV_NAV_CLEARANCE_UNASSESSED',
+          disposition: 'warn',
+          dimension: 'categoryReadiness',
+          message: `Potential blocker ${uncertain.node.name || '(unnamed)'} has a sheared or degenerate transform; corridor clearance is unmeasured.`,
+          affected: {
+            node: uncertain.node.name || 'navigation-blocker',
+            nodePath: nodePath(root, uncertain.node),
+          },
+          measurement: { name: 'orientedBlockerEvidence', actual: false, expected: true },
+          repairText:
+            'Use measurable non-sheared obstacle geometry or review the unresolved clearance explicitly.',
+        }),
+      );
+    const blocker = obstacles.find(
+      (part) =>
         part.orientedBox &&
-        part.node !== corridor.node &&
-        !part.roles.some(
-          (role) =>
-            role.startsWith('environment.ground') ||
-            role.startsWith('environment.surface') ||
-            role.startsWith('environment.path.surface') ||
-            role.startsWith('environment.bridge.deck'),
-        ) &&
         !probeOrientedPenetration(part.orientedBox, corridor.orientedBox!, {
           maxDepth: 0,
           tolerance: 0.004,
@@ -698,8 +734,8 @@ function functionalLayer(part: LocalPart): boolean {
 }
 
 /** Ground-policy signals are intentionally advisory and separate terrain volume from accidents. */
-export function evaluateEnvironmentGroundQa(context: QaContext): readonly QaFinding[] {
-  if (context.intent.category !== 'environment' || !(context.scene instanceof THREE.Object3D)) {
+export function inspectSpatialSupport(context: SpatialQaInput): readonly QaFinding[] {
+  if (context.groundPlaneY === undefined || !(context.scene instanceof THREE.Object3D)) {
     return [];
   }
   const root = context.scene;
@@ -708,13 +744,13 @@ export function evaluateEnvironmentGroundQa(context: QaContext): readonly QaFind
   for (const part of parts) {
     const box = part.box!;
     if (intentionalGround(part)) continue;
-    if (functionalLayer(part) && box.min.y < -GROUND_TOLERANCE_METERS) {
+    if (functionalLayer(part) && box.min.y < context.groundPlaneY - GROUND_TOLERANCE_METERS) {
       findings.push(
         finding(context, {
           code: 'ENV_FUNCTIONAL_PART_BURIED',
           disposition: 'warn',
           dimension: 'categoryReadiness',
-          message: `${part.node.name || 'Functional environment part'} is buried ${Math.abs(box.min.y).toFixed(6)} m below asset-local ground.`,
+          message: `${part.node.name || 'Functional environment part'} is buried ${Math.abs(box.min.y - context.groundPlaneY).toFixed(6)} m below asset-local ground.`,
           affected: {
             node: part.node.name || 'environment-part',
             nodePath: nodePath(root, part.node),
@@ -722,7 +758,7 @@ export function evaluateEnvironmentGroundQa(context: QaContext): readonly QaFind
           measurement: {
             name: 'minimumY',
             actual: stable(box.min.y),
-            expected: '>=-0.02',
+            expected: `>=${context.groundPlaneY - GROUND_TOLERANCE_METERS}`,
             threshold: GROUND_TOLERANCE_METERS,
             unit: 'm',
           },
@@ -730,7 +766,7 @@ export function evaluateEnvironmentGroundQa(context: QaContext): readonly QaFind
         }),
       );
     }
-    if (functionalLayer(part) && box.min.y > GROUND_TOLERANCE_METERS) {
+    if (functionalLayer(part) && box.min.y > context.groundPlaneY + GROUND_TOLERANCE_METERS) {
       const supported = parts.some(
         (support) =>
           support !== part &&
@@ -757,7 +793,7 @@ export function evaluateEnvironmentGroundQa(context: QaContext): readonly QaFind
     }
     const size = box.getSize(new THREE.Vector3());
     if (
-      box.min.y < -0.05 &&
+      box.min.y < context.groundPlaneY - 0.05 &&
       size.y <= Math.max(0.05, Math.min(size.x, size.z) * 0.03) &&
       Math.max(size.x, size.z) >= 1
     ) {
@@ -785,6 +821,49 @@ export function evaluateEnvironmentGroundQa(context: QaContext): readonly QaFind
   return findings;
 }
 
+/** Old-data conformance adapters; the current runner calls the measurements directly. */
+export function evaluateEnvironmentSocketQa(context: QaContext): readonly QaFinding[] {
+  if (context.intent.category !== 'environment') return [];
+  return inspectPlacementSockets({
+    scene: context.scene,
+    profile: context.intent.qaProfile,
+    tileable: context.intent.capabilities.includes('tileable'),
+    navigable: context.intent.capabilities.includes('navigable'),
+    groundPlaneY: 0,
+  });
+}
+export function evaluateEnvironmentTileEdgeQa(context: QaContext): readonly QaFinding[] {
+  if (context.intent.category !== 'environment') return [];
+  return inspectTileEdges({
+    scene: context.scene,
+    profile: context.intent.qaProfile,
+    tileable: context.intent.capabilities.includes('tileable'),
+    navigable: context.intent.capabilities.includes('navigable'),
+    groundPlaneY: 0,
+  });
+}
+export function evaluateEnvironmentNavigabilityQa(context: QaContext): readonly QaFinding[] {
+  if (context.intent.category !== 'environment') return [];
+  return inspectNavigationClearance({
+    scene: context.scene,
+    profile: context.intent.qaProfile,
+    tileable: context.intent.capabilities.includes('tileable'),
+    navigable: context.intent.capabilities.includes('navigable'),
+    navigation: { minWidth: 0.8, minHeight: 1.8 },
+    groundPlaneY: 0,
+  });
+}
+export function evaluateEnvironmentGroundQa(context: QaContext): readonly QaFinding[] {
+  if (context.intent.category !== 'environment') return [];
+  return inspectSpatialSupport({
+    scene: context.scene,
+    profile: context.intent.qaProfile,
+    tileable: context.intent.capabilities.includes('tileable'),
+    navigable: context.intent.capabilities.includes('navigable'),
+    groundPlaneY: 0,
+  });
+}
+
 export const ENVIRONMENT_EXACT_QA_RULE: QaRule = Object.freeze({
   id: 'ENVIRONMENT_EXACT_PROFILE',
   profile: PROFILE,
@@ -794,7 +873,7 @@ export const ENVIRONMENT_EXACT_QA_RULE: QaRule = Object.freeze({
   promotion: conformancePromotionAuthorization(
     'environment-semantic-v1',
     'src/qa/environment.test.ts',
-    '13b0c50894074bf93a5dd9eb1c93e519b030312e030e5123493a4833a1438b28',
+    '3e2b68579323bf7d0b9949b67b9897dd856898fadc2e74345bbe70c4fe5e106a',
   ),
   defaultMode: 'enforce',
   evaluate: (context: QaContext) => [

@@ -315,7 +315,7 @@ async function validGlbFixture(): Promise<CorpusFixturePayload> {
   });
   const intent = createAssetIntentV1({ category: 'prop' });
   const { renderSceneToGLB } = await import('../render');
-  const result = await renderSceneToGLB(root, { intent });
+  const result = await renderSceneToGLB(root);
   return {
     kind: 'glb',
     intent,

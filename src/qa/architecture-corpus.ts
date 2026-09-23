@@ -318,6 +318,18 @@ export function buildArchitectureCorpusFixture(
   return { intent, scene: root };
 }
 
+// Every fixture whose intent declares one storey includes measurable floor evidence.
+function addFloorEvidence(root: THREE.Group, spanX = 6, spanZ = 4): void {
+  part(
+    root,
+    'Floor',
+    new THREE.BoxGeometry(spanX, 0.12, spanZ),
+    new THREE.MeshStandardMaterial({ color: 0xb9a17d }),
+    'floor',
+    [0, 0.06, 0],
+  );
+}
+
 function buildNonGableControl(
   subtype: 'bridge' | 'shed' | 'hip-roof building',
   roofType: 'none' | 'shed' | 'hip',
@@ -348,6 +360,9 @@ function buildNonGableControl(
     [0, 0.06, 0],
   );
   if (subtype === 'bridge') {
+    stampSemanticMetadataV1(root.getObjectByName('BridgeDeck')!, {
+      roles: ['bridge.deck', 'floor'],
+    });
     for (const side of [-1, 1] as const) {
       part(
         root,
@@ -464,6 +479,7 @@ function buildInteriorShellControl(hasShell: boolean): ArchitectureCorpusPayload
     interior.position.y = 1.5;
     root.add(interior);
   }
+  addFloorEvidence(root);
   root.updateMatrixWorld(true);
   return {
     intent: createAssetIntentV1({
@@ -502,6 +518,7 @@ function buildRemovableRoofControl(separable: boolean): ArchitectureCorpusPayloa
       : {}),
   });
   root.add(roof);
+  addFloorEvidence(root);
   root.updateMatrixWorld(true);
   return {
     intent: createAssetIntentV1({
@@ -538,6 +555,7 @@ function buildRotundaControl(radiusScale: 0.5 | 1): ArchitectureCorpusPayload {
     [0, wallHeight, 0],
   );
   dome.scale.set(radiusScale, 1, radiusScale);
+  addFloorEvidence(root, radius * 2, radius * 2);
   root.updateMatrixWorld(true);
   return {
     intent: createAssetIntentV1({

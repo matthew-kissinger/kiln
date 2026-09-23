@@ -1,12 +1,15 @@
 import { test, expect } from 'bun:test';
 import { makeRemoteRenderPort } from '../../cli-render-mode';
 import { cameraFromBounds } from '../camera';
+import { fakeRenderHealth } from '../../__tests__/helpers/fake-render-service';
 test('HTTP adapter forwards exact cameras and artifact fidelity', async () => {
   let body: Record<string, unknown> = {};
   const camera = cameraFromBounds({ min: [-1, -1, -1], max: [1, 1, 1] }, [1, 0, 0]);
   const server = Bun.serve({
     port: 0,
     fetch: async (req) => {
+      if (new URL(req.url).pathname === '/health')
+        return Response.json(fakeRenderHealth({ rendererId: 'gpu:test' }));
       body = (await req.json()) as Record<string, unknown>;
       return Response.json({
         ok: true,

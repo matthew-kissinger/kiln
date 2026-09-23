@@ -11,7 +11,7 @@
  * The generated workspace guide already says "a server named kiln may be a
  * different installation; do not substitute it silently" -- an instruction with
  * nothing behind it, because no tool result carried the identity to check. This
- * module is what it checks: `kiln_list_primitives {capabilities:true}` reports
+ * module is what it checks: `kiln_discover {capabilities:true}` reports
  * this, `.kiln/workspace.json` records `runtime`, and the two can be compared.
  *
  * No filesystem read, deliberately. `src/views/renderer-id.ts` does one at module
@@ -27,7 +27,7 @@
  * `src/__tests__/package-contents.test.ts` fails if it disagrees with the manifest
  * or with any plugin manifest, which is what keeps the literal honest.
  */
-export const ENGINE_VERSION = '0.7.1';
+export const ENGINE_VERSION = '0.8.0';
 
 /**
  * Where this engine was loaded from, as a `file://` URL of the package root.

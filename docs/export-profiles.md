@@ -85,7 +85,15 @@ descriptors for `runtime.glb` and `runtime.kiln-metadata.json`, including byte s
 and `kiln://assets/...` resource URIs. Read them through MCP `resources/read`.
 These resources are derived from the pinned revision on demand, without persisting
 a new revision. The local viewer host also serves those resource filenames through
-its existing `/files/` endpoint. Existing viewer download buttons retain editable behavior.
+its existing `/files/` endpoint. The local viewer offers **Original GLB** and
+**Runtime GLB**, plus a separate **Runtime metadata** download when that export is
+ready. Keep the metadata's filename unchanged next to `runtime.glb`. Opened editable
+ZIPs support the same export in the browser; a loose GLB retains its original download.
+
+The public gallery also offers both GLBs and the matching metadata. Its sidecar
+identifies the gallery asset and exact source/GLB hashes; the program download is
+separate. Neither GLB contains the complete editable bundle. Gallery examples are
+historical showcases and may still contain modeling defects.
 
 Runtime results do not reuse configured canonical download URLs: those would deliver
 the wrong GLB. Client support for saving MCP resources varies. Use the local CLI pair
