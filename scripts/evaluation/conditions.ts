@@ -3,8 +3,8 @@ import { parse } from 'acorn';
 import { full } from 'acorn-walk';
 import { z } from 'zod';
 import { geometryPrimitives } from '../../src/geometry-catalog';
-import { listPrimitives } from '../../src/list-primitives';
-import { resolveEvaluatorPortV1 } from '../../src/evaluator/protocol';
+import { listHelperSpecs } from '../../src/discovery/helper-specs';
+import { resolveEvaluatorPortV2 } from '../../src/evaluator/protocol';
 import {
   createKilnProgramToolRegistry,
   type KilnToolContext,
@@ -51,11 +51,26 @@ const legacyCapture = z
   })
   .strict();
 
+// A/B deliberately preserve the historical lookup behavior as isolated research controls.
+// C consumes the current Discovery contract; no control implementation ships in Kiln.
 function conditionDiscovery(def: KilnToolDef, condition: Condition): KilnToolDef {
   if (condition === 'C') return def;
   const schema =
-    condition === 'A' ? z.object({ category: z.string().optional() }).strict() : def.inputSchema;
-  const entries = listPrimitives().filter((entry) => !disabledHelperNames.includes(entry.name));
+    condition === 'A'
+      ? z.object({ category: z.string().optional() }).strict()
+      : z
+          .object({
+            category: z.string().optional(),
+            name: z.string().optional(),
+            names: z.array(z.string()).min(1).max(6).optional(),
+            query: z.string().optional(),
+            overview: z.boolean().optional(),
+            capabilities: z.boolean().optional(),
+            offset: z.number().int().nonnegative().optional(),
+            limit: z.number().int().min(1).max(12).optional(),
+          })
+          .strict();
+  const entries = listHelperSpecs().filter((entry) => !disabledHelperNames.includes(entry.name));
   return {
     ...def,
     description:
@@ -152,7 +167,7 @@ export function createConditionRegistry(
   condition: Condition,
   context: KilnToolContext = {},
 ): KilnToolDef[] {
-  const evaluator = resolveEvaluatorPortV1(
+  const evaluator = resolveEvaluatorPortV2(
     context.evaluatorPort,
     context.evaluatorProfile ?? 'trusted-local',
   );
@@ -177,7 +192,7 @@ export function createConditionRegistry(
         ),
     )
     .map((def) => {
-      if (def.name === 'kiln_list_primitives') return conditionDiscovery(def, condition);
+      if (def.name === 'kiln_discover') return conditionDiscovery(def, condition);
       let schema = def.inputSchema;
       if (condition === 'A' && schema instanceof z.ZodObject) {
         const overrides: Record<string, z.ZodType> = {};

@@ -2,6 +2,8 @@
 name: kiln-batch-dispatch
 description: Run requested Kiln asset batches or compare coding-agent harnesses and models in isolated workspaces. Use for repeatable trials, source-reference workflow checks, and distinguishing provider, tool, and asset-quality failures.
 license: MIT
+metadata:
+  kiln-workflow: workspace
 ---
 
 # Run comparable asset trials

@@ -4,7 +4,6 @@ import assert from 'node:assert/strict';
 import { spawn } from 'node:child_process';
 import { createHash } from 'node:crypto';
 import { mkdir, mkdtemp, readFile, stat, writeFile } from 'node:fs/promises';
-import { createRequire } from 'node:module';
 import { tmpdir } from 'node:os';
 import { dirname, join, resolve } from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
@@ -130,11 +129,16 @@ async function connect(server, cwd, store) {
     pending.clear();
   });
   try {
-    await call('initialize', {
+    const initialized = await call('initialize', {
       protocolVersion: '2025-11-25',
       capabilities: {},
       clientInfo: { name: 'kiln-package-smoke', version: '1' },
     });
+    assert.equal(
+      initialized.serverInfo.version,
+      receipt.engineVersion,
+      'MCP/package version drift',
+    );
     child.stdin.write(
       `${JSON.stringify({ jsonrpc: '2.0', method: 'notifications/initialized' })}\n`,
     );
@@ -273,8 +277,14 @@ try {
   );
   const png = await readFile(join(workspace, 'sheet.png'));
   assert.equal(png.subarray(0, 8).toString('hex'), '89504e470d0a1a0a');
-  const require = createRequire(join(runtime, 'package.json'));
-  const { NodeIO } = await import(pathToFileURL(require.resolve('@gltf-transform/core')).href);
+  // Resolve as ESM from this fresh installation. require.resolve selects the
+  // package's CJS branch, which cannot require its ESM dependencies on Node 20.15.
+  const inspectionImports = join(install, 'qualification-imports.mjs');
+  await writeFile(
+    inspectionImports,
+    "export {NodeIO} from '@gltf-transform/core';\nexport {ALL_EXTENSIONS} from '@gltf-transform/extensions';\n",
+  );
+  const { NodeIO, ALL_EXTENSIONS } = await import(pathToFileURL(inspectionImports).href);
   const doc = await new NodeIO().readBinary(await readFile(join(workspace, 'asset.glb')));
   assert(
     doc
@@ -398,7 +408,14 @@ try {
   );
   receipt.checks.push('packaged-node-worker');
   // Export/reload only: the native canvas encodes texture pixels; no CPU/GPU views.
-  receipt.communityExporter = await smokePackageExporter({ runtime, workspace, cli, command });
+  receipt.communityExporter = await smokePackageExporter({
+    runtime,
+    workspace,
+    cli,
+    command,
+    NodeIO,
+    ALL_EXTENSIONS,
+  });
   receipt.checks.push('community-exporter-textured-subprocess');
   const server = join(runtime, 'dist/mcp-server.mjs'),
     store = join(workspace, '.kiln/programs');

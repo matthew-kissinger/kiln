@@ -4,6 +4,13 @@ Three tiers, and they answer different questions. Running the cheap one does not
 what the expensive one would have. Per-harness install, flags and MCP config locations are in
 [headless harnesses](harnesses.md).
 
+The current V1 campaign is tracked in the [progress checkpoint](plans/2026-09-22-progress-checkpoint.md)
+and [reviewed run evidence](reviews/2026-09-22-opencode-main-campaign.md). It uses
+frozen checkout workspaces; later installed-package acceptance remains separate.
+Authorized free models and existing subscriptions may be used, with the model,
+runtime and guidance fixed within each trial. Historical run receipts below keep
+the versions, tool names and outcomes that were actually observed.
+
 | tier | question it answers | cost |
 | --- | --- | --- |
 | 0 · wiring smoke | can this harness reach the tools at all? | one short turn |
@@ -44,8 +51,8 @@ discovery is part of what is being tested. Four rules, each of which came from a
 failed for a reason unrelated to Kiln:
 
 - **Never name a tool in the prompt.** Copilot namespaces MCP tools as `<server>-<tool>`, so
-  an agent told to call `kiln_list_primitives` finds nothing by that literal name and
-  correctly reports the tools missing -- while listing its own tools shows all thirteen as
+  an agent told to call `kiln_discover` can miss its prefixed registration and
+  report the tools missing while listing its own tools shows them as
   `kiln_workspace-kiln_*`. A prompt that names a tool is a prompt that only runs on some
   harnesses.
 - **Never put the brief in a file.** Telling an agent to read `BRIEF.md` adds two failure

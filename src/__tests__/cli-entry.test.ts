@@ -32,13 +32,21 @@ it('executes a Node CLI symlink once and stays inert when imported', async () =>
     expect(direct.stdout.toString()).toContain('kiln render');
     expect(linked.exitCode).toBe(0);
     expect(linked.stdout.toString()).toBe(direct.stdout.toString());
-    const setup = join(runtime, 'create-workspace.mjs');
+    await mkdir(join(runtime, 'scripts'));
+    await mkdir(join(runtime, 'src'));
+    const setup = join(runtime, 'scripts/create-workspace.mjs');
     await copyFile(resolve(import.meta.dir, '../../scripts/create-workspace.mjs'), setup);
+    await copyFile(
+      resolve(import.meta.dir, '../runtime-support.mjs'),
+      join(runtime, 'src/runtime-support.mjs'),
+    );
     let setupAlias = join(directory, 'kiln-init');
-    if (process.platform === 'win32') setupAlias = join(directory, 'bin/create-workspace.mjs');
+    if (process.platform === 'win32')
+      setupAlias = join(directory, 'bin/scripts/create-workspace.mjs');
     else await symlink(setup, setupAlias, 'file');
     const directSetup = run(setup),
       linkedSetup = run(setupAlias);
+    expect(directSetup.exitCode, directSetup.stderr.toString()).toBe(0);
     expect(directSetup.stdout.toString()).toContain('Usage: kiln-init');
     expect(linkedSetup.exitCode).toBe(0);
     expect(linkedSetup.stdout.toString()).toBe(directSetup.stdout.toString());

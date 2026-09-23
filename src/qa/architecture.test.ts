@@ -9,6 +9,7 @@ import {
   stampSemanticMetadataV1,
 } from '../contracts';
 import { renderSceneToGLB } from '../render';
+import { bindLegacyFixtureRequirements } from '../__tests__/helpers/requirements-fixture';
 import { hideArchitectureRoofInScene } from '../views/architecture';
 import {
   ARCHITECTURE_REGRESSION_CORPUS,
@@ -19,7 +20,11 @@ import {
   architectureRepairRecipe,
   withArchitectureRepair,
 } from './architecture-repairs';
-import { ARCHITECTURE_REALISTIC_SCALE_BANDS, evaluateArchitectureQa } from './architecture';
+import {
+  ARCHITECTURE_REALISTIC_SCALE_BANDS,
+  evaluateArchitectureQa,
+  inspectStructure,
+} from './architecture';
 import { DETERMINISTIC_QA_REGISTRY, runDeterministicSceneQa } from './run';
 
 const canonicalCodes = new Set([
@@ -145,9 +150,23 @@ describe('ARCH-010–016 validator policy', () => {
 
   test('final export preserves helper portal/roof semantics and safely degrades full optimize', async () => {
     const { shell, intent } = canonicalHelperShell('x');
-    const rendered = await renderSceneToGLB(shell.root, { intent, optimize: 'full' });
+    const rendered = await renderSceneToGLB(shell.root, {
+      requirements: bindLegacyFixtureRequirements(intent),
+      optimize: 'full',
+    });
     expect(rendered.optimize?.mode).toBe('palette');
-    expect(rendered.qaReport.disposition).toBe('pass');
+    expect(rendered.qaReport.dimensions.exportIntegrity.status).toBe('pass');
+    expect(rendered.qaReport.rules.find((r) => r.id === 'ARCHITECTURE_PROFILE')?.status).toBe(
+      'evaluated',
+    );
+    expect(
+      rendered.qaReport.dimensions.requirementReadiness.findings.filter((f) =>
+        f.code.startsWith('ARCH_'),
+      ),
+    ).toEqual([]);
+    // Full historical records also carry obligations whose neutral adapters are still pending.
+    expect(rendered.qaReport.unevaluatedRequirements.length).toBeGreaterThan(0);
+    expect(rendered.qaReport.acceptance).toBe('incomplete');
     const document = await new WebIO().readBinary(rendered.bytes);
     const opening = document
       .getRoot()
@@ -280,7 +299,10 @@ describe('ARCH-010–016 validator policy', () => {
       category: 'architecture',
       architecture: { enterable: false, roof: { closedEnds: false } },
     });
-    const findings = evaluateArchitectureQa({ intent, scene });
+    const findings = inspectStructure({
+      scene,
+      structure: { roof: intent.architecture!.roof },
+    });
     expect(findings.some((finding) => finding.code === 'ARCH_MISSING_ROOF_ROLES')).toBe(true);
     expect(findings.every((finding) => finding.disposition !== 'block')).toBe(true);
   });

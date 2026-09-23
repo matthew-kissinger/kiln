@@ -4,12 +4,11 @@
 
 import { describe, it, expect } from 'bun:test';
 import type * as THREE from 'three';
-import { boxGeo, cylinderGeo, planeGeo } from '../primitives';
-import { boxUnwrap, cylinderUnwrap, planeUnwrap } from '../uv-shapes';
+import { boxGeo, cylinderGeo, planeGeo, copyGeometry, projectUV } from '../primitives';
 
-describe('boxUnwrap', () => {
+describe('preserving box UVs', () => {
   it('preserves BoxGeometry per-face [0,1] UVs', () => {
-    const b = boxUnwrap(boxGeo(1, 2, 3));
+    const b = copyGeometry(boxGeo(1, 2, 3));
     const uv = b.getAttribute('uv') as THREE.BufferAttribute;
     expect(uv).toBeDefined();
     // Built-in box UVs push (ix/gridX, 1-iy/gridY) — default 1×1 segments
@@ -34,14 +33,14 @@ describe('boxUnwrap', () => {
   it('does not mutate the input', () => {
     const input = boxGeo(1, 1, 1);
     const beforeUv = input.getAttribute('uv');
-    boxUnwrap(input);
+    copyGeometry(input);
     expect(input.getAttribute('uv')).toBe(beforeUv);
   });
 });
 
-describe('cylinderUnwrap', () => {
+describe('preserving cylinder UVs', () => {
   it('preserves CylinderGeometry axial UV layout', () => {
-    const c = cylinderUnwrap(cylinderGeo(0.5, 0.5, 1.2, 24));
+    const c = copyGeometry(cylinderGeo(0.5, 0.5, 1.2, 24));
     const uv = c.getAttribute('uv') as THREE.BufferAttribute;
     expect(uv).toBeDefined();
     // Side verts: v=0 at top, v=1 at bottom; u=0..1 around the circle.
@@ -65,9 +64,9 @@ describe('cylinderUnwrap', () => {
   });
 });
 
-describe('planeUnwrap', () => {
+describe('explicit planar UV projection', () => {
   it('maps xy bbox to [0,1]', () => {
-    const p = planeUnwrap(planeGeo(2, 3));
+    const p = projectUV(planeGeo(2, 3), { projection: 'planar' });
     const uv = p.getAttribute('uv') as THREE.BufferAttribute;
     expect(uv).toBeDefined();
     // 4 corners: (0,0), (1,0), (0,1), (1,1).
@@ -82,7 +81,7 @@ describe('planeUnwrap', () => {
   });
 
   it('works on a thin boxGeo (sign use case)', () => {
-    const sign = planeUnwrap(boxGeo(1, 0.6, 0.05));
+    const sign = projectUV(boxGeo(1, 0.6, 0.05), { projection: 'planar' });
     const uv = sign.getAttribute('uv') as THREE.BufferAttribute;
     expect(uv).toBeDefined();
     // All UVs still in [0,1]; xy extent respected.

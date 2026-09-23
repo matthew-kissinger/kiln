@@ -38,7 +38,7 @@ describe('MCP server instructions', () => {
     // read as material evidence.
     expect(MCP_SERVER_INSTRUCTIONS).toContain('programRef');
     expect(MCP_SERVER_INSTRUCTIONS).toContain('viewFidelity');
-    expect(MCP_SERVER_INSTRUCTIONS).toContain('kiln_list_primitives');
+    expect(MCP_SERVER_INSTRUCTIONS).toContain('kiln_discover');
     // The only channel a hand-wired directory has: no workspace guide exists there.
     expect(MCP_SERVER_INSTRUCTIONS).toContain('render-service/');
   });

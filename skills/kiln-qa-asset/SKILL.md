@@ -2,6 +2,8 @@
 name: kiln-qa-asset
 description: Check a Kiln asset's geometry, views, export fidelity, and behavior in its destination project. Use for delivery review, loading, materials, animation, collision, or runtime defects.
 license: MIT
+metadata:
+  kiln-workflow: workspace
 ---
 
 # Verify an asset for its intended use
@@ -16,6 +18,16 @@ Read validation/build findings and export warnings. `kiln_validate` only checks 
 
 Distinguish expected open sheets from invalid solid topology. `geometryDiagnostics` reports boundary edges, non-manifold edges, orientation conflicts and degenerates; it does not prove absence of self-intersection. A capped loft, shell-like surface, or sampled field is not automatically a manufacturing-grade solid.
 
+For an assembly, identify the required contact pairs and the required separation
+pairs. Review both ends of supports against their intended neighbors with focused
+views and `kiln_inspect` surface measurements, following intermediate fittings
+back to the body. A supported cable can end at an unmounted fitting; a bar can
+touch one neighbor while its other end floats. Review named separation findings
+against those intended connections even when other contact checks pass. Zero surface distance
+can mean intersection; it is appropriate evidence for neither a required gap
+nor a sound mechanical fitting by itself. Select the actual interface parts,
+not the entire assembly. Report unmeasured joints explicitly.
+
 Read `capture.backdrop` in image results: views are on a neutral grey unless a capture asked for `dark` or `light`, and a silhouette judged on the wrong assumption about the backdrop is not evidence. Check material and camera fidelity independently. A fallback image may still answer a geometry question, but it cannot establish faithful PBR appearance. Keep unresolved export or material findings visible in the delivery report.
 
 ## In the destination
@@ -25,6 +37,30 @@ For Blender, Unity or FBX, read the [engine handoff guide](references/engine-han
 Use the project's existing loader and renderer. Read the [integration checks](references/integration-checks.md) for manifests, frames, composition options, and limits.
 
 Confirm scale alongside existing objects, forward direction, ground contact, placement, and useful viewing distance. Check textures and lighting in the destination renderer. Exercise relevant animation, interaction, and collision; sample intermediate poses when checking motion. For web projects use the actual browser view, and for native projects use the destination runtime.
+
+Animation review returns `poseBounds` in world metres for each requested phase,
+including the selected subject when a shot names one. Compare those bounds with
+the requested ground plane or movement envelope. These measure drawable geometry
+before camera isolation, not physical contacts or a continuous swept volume.
+Repeated geometry needs phases inside a repeat as well as between keys: quarter
+turns of a 16-lug wheel all show the same alignment. Include irregular phases
+and inspect the moving subject; identical sampled bounds do not prove constant
+ground clearance. Report the range actually measured.
+
+For a requested repeating animation, also read `loopClosure`. It measures local
+translation, quaternion orientation and scale at zero and the clip duration,
+independently of selected image phases. `open` identifies endpoint gaps; `incomplete`
+cannot certify closure. Quaternion sign changes alone are not gaps. A one-shot
+opening or attack need not return to its initial pose. `closed` establishes only
+endpoint continuity, not smooth velocity, convincing motion or working contacts.
+
+For several moving contacts or attachments, pass `measureParts` with up to 16
+exact `{name}` or `{path}` selectors. Each phase returns `poseBounds.parts` in
+that order, independently of the camera; empty subtrees have `bounds:null`.
+Check the intended contact parts together. A low scene minimum can come from a
+floor or one foot and says nothing about the others; lack of penetration does
+not establish support. Bounds still do not prove balance, friction or contact.
+CLI uses `--measure-parts parts.json` with the same selector array.
 
 Reproduce defects before fixing them. Correct placement/loader/lighting problems in integration code; change asset source for a geometry or rig defect. Recheck the affected behavior after a repair.
 

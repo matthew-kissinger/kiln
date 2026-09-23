@@ -1,6 +1,9 @@
 # Condition B
 
-Call `kiln_list_primitives` without arguments for a compact overview. Use `name`
+Experimental control only: these legacy selectors are confined to the condition
+B host. They are not the shipping Discovery API or general authoring guidance.
+
+Call `kiln_discover` without arguments for a compact overview. Use `name`
 for one signature/example, `query` for an operation or `category` to browse; follow
 `nextOffset` for more results. `capabilities:true` describes runtime limits.
 

@@ -16,7 +16,7 @@ function makeFrame(name, spec, material, parent) {
   return { root, anchors: { top, base } };
 }
 
-const meta = { name: 'Three portal frames', category: 'architecture' };
+const meta = { name: 'Three portal frames' };
 function build() {
   const root = createRoot('PortalFrames');
   const steel = gameMaterial(0x3b7278);

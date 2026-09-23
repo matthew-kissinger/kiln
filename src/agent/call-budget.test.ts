@@ -3,6 +3,7 @@ import {
   DEFAULT_GENERATION_MODEL_CALL_LIMIT,
   createGenerationCallBudget,
   generationModelCallLimitFromEnv,
+  resolveGenerationModelCallLimit,
 } from './call-budget';
 
 describe('generation-global model-call budget', () => {
@@ -62,8 +63,27 @@ describe('generation-global model-call budget', () => {
       }),
     ).toBe(12);
     expect(generationModelCallLimitFromEnv({ KILN_AGENT_MAX_STEPS: '7' })).toBe(7);
-    expect(generationModelCallLimitFromEnv({ KILN_GENERATION_MAX_CALLS: 'invalid' })).toBe(
-      DEFAULT_GENERATION_MODEL_CALL_LIMIT,
-    );
+  });
+
+  test('invalid configured budgets fail instead of silently removing a spending limit', () => {
+    for (const input of [
+      'invalid',
+      ' ',
+      -1,
+      1.5,
+      NaN,
+      Infinity,
+      Number.MAX_SAFE_INTEGER + 1,
+      true,
+      {},
+      [],
+    ]) {
+      expect(() => resolveGenerationModelCallLimit(input)).toThrow(/nonnegative safe integer/);
+    }
+    expect(() =>
+      generationModelCallLimitFromEnv({ KILN_GENERATION_MAX_CALLS: 'invalid' }),
+    ).toThrow();
+    expect(resolveGenerationModelCallLimit('12')).toBe(12);
+    expect(resolveGenerationModelCallLimit(undefined)).toBe(0);
   });
 });

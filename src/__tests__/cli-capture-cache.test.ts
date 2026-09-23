@@ -1,3 +1,4 @@
+import { fakeRenderHealth } from './helpers/fake-render-service';
 import { test, expect } from 'bun:test';
 import { buildRenderPort } from '../cli-render-mode';
 import { createKilnProgramToolRegistry } from '../tools/registry';
@@ -10,15 +11,17 @@ test('local service identity enables default host GPU reuse and invalidates on r
     port: 0,
     fetch: async (request) => {
       if (new URL(request.url).pathname === '/health')
-        return Response.json({
-          ok: true,
-          rendererId: 'gpu:test',
-          captureIdentity: {
-            version: 'kiln.capture-producer.v1',
-            fingerprint: `sha256:${'a'.repeat(64)}`,
-            instanceId: instance,
-          },
-        });
+        return Response.json(
+          fakeRenderHealth({
+            ok: true,
+            rendererId: 'gpu:test',
+            captureIdentity: {
+              version: 'kiln.capture-producer.v1',
+              fingerprint: `sha256:${'a'.repeat(64)}`,
+              instanceId: instance,
+            },
+          }),
+        );
       renders++;
       const body = (await request.json()) as {
         glb_base64: string;

@@ -10,7 +10,7 @@ Use a primitive for a regular shape, a sweep or loft for a profile that follows 
 
 Work in metres, with +X forward, +Y up and +Z right. Keep an assembly's geometry in its own local frame; move the pivot to place it in the asset. Name important subassemblies and attachment pivots. Inspection accepts an exact node path when several instances share a name, and can measure between attachment points. [Camera and inspection examples](cameras.md).
 
-Copy shared primitive geometry with `copyGeometry` before modifying its buffers. Copy materials with `copyMaterial` before changing their properties. The older `cloneGeometry` and `cloneMaterial` helpers retain their historical identity behavior and do not make copies.
+Copy shared primitive geometry with `copyGeometry` before modifying its buffers. Copy materials with `copyMaterial` before changing their properties; texture references remain shared. Reuse the same geometry and material directly when sharing is intentional. The old identity aliases `cloneGeometry` and `cloneMaterial` have been removed. See [the explicit source migrations](migration.md#replace-removed-authoring-helpers) for these and the retired UV/advisory helpers.
 
 ## Check what survives export
 

@@ -1,17 +1,11 @@
 import { describe, expect, it } from 'bun:test';
 import * as THREE from 'three';
-import {
-  buildSandboxGlobals,
-  copyGeometry,
-  copyMaterial,
-  cloneGeometry,
-  cloneMaterial,
-} from '../primitives';
+import { buildSandboxGlobals, copyGeometry, copyMaterial } from '../primitives';
 import { meshGeo, parametricSurface, creaseNormals, geometryDiagnostics } from '../geometry';
 import { subdivide } from '../ops';
 
 describe('owned geometry and seam-preserving operations', () => {
-  it('copies cached geometry and material without changing legacy reuse semantics', () => {
+  it('copies cached geometry and material while direct references remain shared', () => {
     const globals = buildSandboxGlobals() as {
       boxGeo: (w: number, h: number, d: number) => THREE.BufferGeometry;
     };
@@ -21,11 +15,9 @@ describe('owned geometry and seam-preserving operations', () => {
     expect(copy).not.toBe(original);
     expect(original.boundingBox!.min.x).toBe(-0.5);
     expect(globals.boxGeo(1, 1, 1)).toBe(original);
-    expect(cloneGeometry(original)).toBe(original);
     const material = new THREE.MeshStandardMaterial({ color: 0xff0000 });
     copyMaterial(material).color.set(0x00ff00);
     expect(material.color.getHex()).toBe(0xff0000);
-    expect(cloneMaterial(material)).toBe(material);
   });
   it('keeps UV charts and coincident seam positions through smoothing', () => {
     const box = new THREE.BoxGeometry();

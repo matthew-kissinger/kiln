@@ -166,6 +166,81 @@ describe('true negatives — correct geometry that must not be flagged', () => {
 // -----------------------------------------------------------------------------
 
 describe('determinism and bounds', () => {
+  test('reflection, distant origins and scale preserve measured overlap', async () => {
+    for (const [scale, offset, reflected] of [
+      [1, 0, true],
+      [1, 1e12, false],
+      [1e-6, 0, false],
+      [1e-3, 0, false],
+      [1e6, 0, false],
+    ] as const) {
+      const a = boxAt('A', [1, 1, 1], [0, 0, 0]);
+      const b = boxAt('B', [1, 1, 1], [0.5, 0, 0]);
+      if (reflected) b.scale.x = -1;
+      const root = sceneOf(a, b);
+      root.scale.setScalar(scale);
+      root.position.set(offset, offset, offset);
+      const e = await analyzePartPenetration(root);
+      expect(e.skipped).toEqual([]);
+      expect(e.penetrations).toHaveLength(1);
+      expect(e.penetrations[0]!.fraction).toBeCloseTo(0.5, 6);
+      expect(e.penetrations[0]!.volume / (0.5 * scale ** 3)).toBeCloseTo(1, 6);
+    }
+  });
+
+  test('unsupported posed and instanced inputs are explicit rather than base-shape measurements', async () => {
+    const instance = new THREE.InstancedMesh(
+      new THREE.BoxGeometry(),
+      new THREE.MeshBasicMaterial(),
+      1,
+    );
+    instance.name = 'Instance';
+    const skin = new THREE.SkinnedMesh(new THREE.BoxGeometry());
+    skin.name = 'Skin';
+    const morph = boxAt('Morph', [1, 1, 1], [0, 0, 0]);
+    morph.geometry.morphAttributes.position = [morph.geometry.getAttribute('position').clone()];
+    for (const mesh of [instance, skin, morph]) {
+      const e = await analyzePartPenetration(sceneOf(mesh, boxAt('Box', [1, 1, 1], [0, 0, 0])));
+      expect(e.pairsTested).toBe(0);
+      expect(e.skipped).toHaveLength(1);
+      expect(e.skipped[0]!.part).toBe(mesh.name);
+      expect(e.skipped[0]!.reason).toContain('unsupported');
+      const findings = SELF_INTERSECTION_QA_RULE.evaluate({
+        intent: createAssetIntentV1({ category: 'prop' }),
+        derivedEvidence: { source: 'engine-scene-analysis', partPenetration: e },
+      });
+      expect(findings.some((f) => f.code === 'GEO_PART_SELF_INTERSECTION_UNMEASURED')).toBe(true);
+    }
+  });
+
+  test('pair discovery is bounded as well as boolean work', async () => {
+    const root = sceneOf(
+      ...Array.from({ length: 1000 }, (_, i) => boxAt(`P${i}`, [1, 1, 1], [0, 0, 0])),
+    );
+    const e = await analyzePartPenetration(root);
+    expect(e.broadPhaseTruncated).toBe(true);
+    expect(e.candidatePairs).toBeLessThan(499500);
+    expect(e.pairsTested).toBe(64);
+    expect(e.truncated).toBe(true);
+  });
+
+  test('overlap advice preserves intentional joints and measurement limits', () => {
+    const [finding] = SELF_INTERSECTION_QA_RULE.evaluate({
+      intent: createAssetIntentV1({ category: 'prop' }),
+      derivedEvidence: {
+        source: 'engine-scene-analysis',
+        partPenetration: {
+          schemaVersion: 1,
+          penetrations: [{ a: 'A', b: 'B', volume: 0.5, fraction: 0.5 }],
+          truncated: false,
+          skipped: [],
+        },
+      },
+    });
+    expect(finding!.repairText).toContain('intentional');
+    expect(finding!.repairText).toContain('within a single mesh');
+  });
+
   test('the same scene produces an identical report every run', async () => {
     const build = () =>
       sceneOf(

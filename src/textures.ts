@@ -9,6 +9,7 @@
  */
 
 import * as THREE from 'three';
+import { AuthoringDiagnosticError } from './evaluator/authoring-diagnostic';
 
 export type TextureSource = string | Buffer | Uint8Array;
 
@@ -241,17 +242,20 @@ export function pbrMaterial(opts: PbrMaterialOptions = {}): THREE.MeshStandardMa
   const roughnessTexture = isTex(opts.roughness) ? opts.roughness : undefined;
   const metalnessTexture = isTex(opts.metalness) ? opts.metalness : undefined;
   if (opts.metallicRoughness && (roughnessTexture || metalnessTexture)) {
-    throw new TypeError(
+    throw new AuthoringDiagnosticError(
+      'MATERIAL_PACKED_CHANNELS',
       'Use metallicRoughness for the packed G/B map; do not also pass texture-valued roughness/metalness.',
     );
   }
   if (roughnessTexture && metalnessTexture && roughnessTexture !== metalnessTexture) {
-    throw new TypeError(
+    throw new AuthoringDiagnosticError(
+      'MATERIAL_PACKED_CHANNELS',
       'Separate roughness and metalness textures are ambiguous in glTF. Pack G=roughness/B=metalness and pass metallicRoughness.',
     );
   }
   if ((roughnessTexture && !metalnessTexture) || (!roughnessTexture && metalnessTexture)) {
-    throw new TypeError(
+    throw new AuthoringDiagnosticError(
+      'MATERIAL_PACKED_CHANNELS',
       'A texture-valued roughness or metalness must be the same packed G/B texture in both slots, or use metallicRoughness.',
     );
   }
@@ -295,7 +299,10 @@ export function pbrMaterial(opts: PbrMaterialOptions = {}): THREE.MeshStandardMa
 
   const alphaMode = opts.alphaMode ?? 'opaque';
   if (alphaMode !== 'opaque' && alphaMode !== 'mask' && alphaMode !== 'blend') {
-    throw new TypeError('alphaMode must be one of "opaque", "mask", or "blend".');
+    throw new AuthoringDiagnosticError(
+      'MATERIAL_ALPHA_MODE',
+      'alphaMode must be one of "opaque", "mask", or "blend".',
+    );
   }
   if (opts.doubleSided !== undefined && typeof opts.doubleSided !== 'boolean') {
     throw new TypeError('doubleSided must be a boolean when provided.');

@@ -73,7 +73,7 @@ async function build() {
   const root = createRoot('Root');
   const tex = await loadApprovedTexture('kiln.texture.bark-albedo.v1');
   const mat = pbrMaterial({ albedo: tex, roughness: 0.85, metalness: 0 });
-  const geo = cylinderUnwrap(boxGeo(1, 1, 1));
+  const geo = copyGeometry(boxGeo(1, 1, 1));
   const m = new THREE.Mesh(geo, mat);
   m.name = 'Mesh_TexturedDirect';
   root.add(m);

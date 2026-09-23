@@ -15,11 +15,16 @@ async function readText(path) {
 }
 
 describe('repository reliability contracts', () => {
-  test('package metadata declares the CI-supported runtimes', async () => {
+  test('consumer runtime compatibility is separate from the exact CI toolchain', async () => {
     const pkg = await readJson('package.json');
 
     expect(pkg.packageManager).toBe('bun@1.4.2');
-    expect(pkg.engines).toEqual({ bun: '1.4.2', node: '22.23.2', npm: '12.0.2' });
+    expect(pkg.engines).toEqual({ node: '^20.15.0 || >=22.2.0' });
+    expect(await readJson('toolchain.json')).toEqual({
+      bun: '1.4.2',
+      node: '22.23.2',
+      npm: '12.0.2',
+    });
   });
 
   test('the toolchain checker verifies package and workflow metadata', async () => {
@@ -176,8 +181,12 @@ describe('repository reliability contracts', () => {
     // no path filter, so all six of its contexts always report and can all be
     // required. Conditional workflow, unrequired; unconditional workflow, required.
     const REQUIRED_CHECKS = [
-      'build portable Node package',
       'Node package \u00b7 Linux',
+      'build portable Node package',
+      'Node package \u00b7 Linux 20.15.0',
+      'Node package \u00b7 Linux 22.2.0',
+      'Node package \u00b7 Linux 24.20.0',
+      'Installed renderer \u00b7 Linux software Vulkan',
       'Node package \u00b7 Windows',
       'Node package \u00b7 macOS arm64',
       'Node package \u00b7 macOS x64',
@@ -195,6 +204,11 @@ describe('repository reliability contracts', () => {
       const job = body.slice(head.index, heads[index + 1]?.index ?? body.length);
       const declared = job.match(/^ {4}name: (.+)$/mu)?.[1] ?? head[1];
       const legs = [...job.matchAll(/^ {12}arch: (\S+)$/gmu)].map(([, arch]) => arch);
+      const nodes = job
+        .match(/^ {8}node: \[([^\]]+)\]$/mu)?.[1]
+        .split(',')
+        .map((node) => node.trim());
+      if (nodes) return nodes.map((node) => declared.replace(/\$\{\{ matrix\.node \}\}/u, node));
       return legs.length > 0
         ? legs.map((arch) => declared.replace(/\$\{\{ matrix\.arch \}\}/u, arch))
         : [declared];

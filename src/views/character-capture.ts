@@ -1,6 +1,6 @@
 import * as THREE from 'three';
 
-import type { CharacterIntentV1 } from '../contracts';
+import type { RigRequirements } from '../qa/character';
 import type { QaFinding } from '../qa/types';
 import { buildCharacterDiagnosticDescriptor, planCharacterDiagnosticRequests } from './character';
 import {
@@ -114,7 +114,7 @@ function projector(
 function skeletonCapture(
   root: THREE.Object3D,
   request: ReturnType<typeof planCharacterDiagnosticRequests>[number],
-  findings: readonly QaFinding[],
+  findings: readonly Pick<QaFinding, 'code' | 'affected'>[],
   size: number,
 ): CharacterCapturedDiagnosticV1 {
   const baseRequest: DiagnosticViewRequest = {
@@ -218,10 +218,12 @@ function skeletonCapture(
 export async function captureCharacterDiagnosticViews(
   root: THREE.Object3D,
   clips: readonly DuckClip[],
-  intent: CharacterIntentV1,
-  findings: readonly QaFinding[] = [],
+  requirements: RigRequirements,
+  findings: readonly Pick<QaFinding, 'code' | 'affected'>[] = [],
   size = 256,
 ): Promise<CharacterCapturedDiagnosticV1[]> {
+  if (!Number.isInteger(size) || size < 1 || size > 2048)
+    throw new RangeError('Diagnostic size must be an integer from 1 to 2048.');
   const transforms: Array<{
     node: THREE.Object3D;
     position: THREE.Vector3;
@@ -236,7 +238,7 @@ export async function captureCharacterDiagnosticViews(
       scale: node.scale.clone(),
     });
   });
-  const requests = planCharacterDiagnosticRequests(intent);
+  const requests = planCharacterDiagnosticRequests(requirements);
   const captures: CharacterCapturedDiagnosticV1[] = [];
   try {
     for (const request of requests) {

@@ -6,7 +6,7 @@
  * (which sets the internal `messageRole`) when it sees a `stream-start` stream
  * part, and its base model loop only stores the final message `if (messageRole)`.
  * The AI-SDK V3 spec lists `stream-start` as the leading part, but some providers
- * — notably `@openrouter/ai-sdk-provider` (2.9.0) — omit it, leading instead with
+ * — notably `@openrouter/ai-sdk-provider` (2.10.0) — omit it, leading instead with
  * `response-metadata`. The result: `messageRole` is never set, the terminal
  * `modelMessageStopEvent` is dropped, and the loop throws
  * `ModelError: Stream ended without completing a message`. Native Strands
@@ -17,8 +17,10 @@
  * spec-conformant `{ type: 'stream-start', warnings: [] }` part if the provider
  * doesn't already open with one. It is a no-op for conformant providers.
  *
- * Confirmed against the live OpenRouter `doStream` (no `stream-start`) and proven
- * end-to-end through a Strands Agent tool loop. Covered by stream-start.test.ts.
+ * Reproduced offline with the actual OpenRouter 2.10.0 + Strands SDK 1.18.0
+ * packages in openrouter-conformance.test.ts, including a complete tool loop and
+ * usage accounting. Re-test and remove this adapter when that provider emits
+ * conformant V3 streams. Do not patch the SDK or coerce the V4 provider into V3.
  */
 import type {
   LanguageModelV3,

@@ -1,5 +1,5 @@
 import { writeFileSync } from 'node:fs';
-import { evaluateEvaluatorRequestV1 } from './handler';
+import { evaluateEvaluatorRequestV2 } from './handler';
 import { MAX_EVALUATOR_REQUEST_BYTES } from './protocol';
 
 async function readBoundedInput(): Promise<string> {
@@ -15,12 +15,12 @@ async function readBoundedInput(): Promise<string> {
 }
 
 try {
-  writeFileSync(3, await evaluateEvaluatorRequestV1(await readBoundedInput()), {
+  writeFileSync(3, await evaluateEvaluatorRequestV2(await readBoundedInput()), {
     encoding: 'utf8',
   });
 } catch {
   // Input overflow happens before the handler can classify a request. Passing
   // an invalid empty request through the same handler keeps the result shape
   // canonical and sanitized.
-  writeFileSync(3, await evaluateEvaluatorRequestV1(''), { encoding: 'utf8' });
+  writeFileSync(3, await evaluateEvaluatorRequestV2(''), { encoding: 'utf8' });
 }

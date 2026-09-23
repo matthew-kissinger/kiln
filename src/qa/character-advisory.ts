@@ -5,7 +5,7 @@ import {
   type CharacterJointDescriptorV1,
   type CharacterJointNodeEvidenceV1,
 } from '../character';
-import type { AssetIntentV1, CharacterIntentV1 } from '../contracts';
+import type { RigQaInput } from './character';
 import { KILN_ENGINE_QA_OWNER, type QaRule } from './registry';
 import type { QaContext, QaFinding } from './types';
 
@@ -48,19 +48,15 @@ function isClipLike(value: unknown): value is ClipLike {
   );
 }
 
-function characterIntent(intent: AssetIntentV1): CharacterIntentV1 | undefined {
-  return intent.character;
-}
-
 function advisory(
-  context: QaContext,
+  context: RigQaInput,
   value: Omit<QaFinding, 'profile' | 'dimension' | 'disposition'>,
 ): QaFinding {
   return {
     ...value,
     disposition: 'warn',
     dimension: 'categoryReadiness',
-    profile: context.intent.qaProfile,
+    profile: context.profile ?? 'asset.requirements.v1',
   };
 }
 
@@ -92,7 +88,7 @@ function pairKey(descriptor: CharacterJointDescriptorV1): string {
     .join('.');
 }
 
-function bilateralSymmetryFindings(context: QaContext, root: THREE.Object3D): QaFinding[] {
+function bilateralSymmetryFindings(context: RigQaInput, root: THREE.Object3D): QaFinding[] {
   const points = jointPoints(root);
   const scale = characterScale(points);
   const threshold = Math.max(0.02, scale * REST_SYMMETRY_RATIO);
@@ -157,8 +153,8 @@ const QUADRUPED_CHAINS = [
   ['hip.hind.right', 'knee.hind.right', 'paw.hind.right'],
 ] as const;
 
-function restChainFindings(context: QaContext, root: THREE.Object3D): QaFinding[] {
-  const trusted = characterIntent(context.intent);
+function restChainFindings(context: RigQaInput, root: THREE.Object3D): QaFinding[] {
+  const trusted = context.rig;
   if (trusted?.bodyPlan !== 'biped' && trusted?.bodyPlan !== 'quadruped') return [];
   const points = jointPoints(root);
   const byRole = new Map(points.map((point) => [point.evidence.descriptor.role, point] as const));
@@ -218,7 +214,7 @@ function restChainFindings(context: QaContext, root: THREE.Object3D): QaFinding[
   return findings;
 }
 
-function forwardMarkerFindings(context: QaContext, root: THREE.Object3D): QaFinding[] {
+function forwardMarkerFindings(context: RigQaInput, root: THREE.Object3D): QaFinding[] {
   root.updateMatrixWorld(true);
   const expected = new THREE.Vector3(1, 0, 0).transformDirection(root.matrixWorld);
   const markers = collectCharacterJointNodes(root).filter((joint) =>
@@ -300,11 +296,11 @@ function sampleClip(root: THREE.Object3D, clip: ClipLike): MotionSample[] {
   });
 }
 
-function locomotionClips(context: QaContext): ClipLike[] {
-  const trusted = characterIntent(context.intent);
-  if (!trusted || trusted.locomotion === 'stationary') return [];
+function locomotionClips(context: RigQaInput): ClipLike[] {
+  const trusted = context.rig;
+  if (!trusted?.locomotion || trusted.locomotion === 'stationary') return [];
   const names = new Set(
-    trusted.clips.filter((clip) => clip.playback === 'loop').map((clip) => clip.name),
+    (trusted.clips ?? []).filter((clip) => clip.playback === 'loop').map((clip) => clip.name),
   );
   return (context.clips ?? [])
     .filter(isClipLike)
@@ -316,7 +312,7 @@ function limbRole(role: string): boolean {
 }
 
 function lateralEnergyFindings(
-  context: QaContext,
+  context: RigQaInput,
   root: THREE.Object3D,
   clips: readonly ClipLike[],
 ): QaFinding[] {
@@ -387,12 +383,12 @@ function correlation(a: readonly number[], b: readonly number[]): number | undef
 }
 
 function phaseOppositionFindings(
-  context: QaContext,
+  context: RigQaInput,
   root: THREE.Object3D,
   clips: readonly ClipLike[],
 ): QaFinding[] {
-  const trusted = characterIntent(context.intent);
-  if (trusted?.bodyPlan !== 'biped' || !/(?:walk|run)/i.test(trusted.locomotion)) return [];
+  const trusted = context.rig;
+  if (trusted?.bodyPlan !== 'biped' || !/(?:walk|run)/i.test(trusted.locomotion ?? '')) return [];
   const findings: QaFinding[] = [];
   for (const clip of clips) {
     const samples = sampleClip(root, clip);
@@ -439,7 +435,7 @@ function signedBendDegrees(
 }
 
 function bendDirectionFindings(
-  context: QaContext,
+  context: RigQaInput,
   root: THREE.Object3D,
   clips: readonly ClipLike[],
 ): QaFinding[] {
@@ -498,11 +494,11 @@ function bendDirectionFindings(
 }
 
 function footSlideFindings(
-  context: QaContext,
+  context: RigQaInput,
   root: THREE.Object3D,
   clips: readonly ClipLike[],
 ): QaFinding[] {
-  const trusted = characterIntent(context.intent);
+  const trusted = context.rig;
   if (!trusted?.grounded) return [];
   const rest = jointPoints(root);
   const threshold = Math.max(0.02, characterScale(rest) * FOOT_SLIDE_RATIO);
@@ -519,7 +515,7 @@ function footSlideFindings(
       let maximumFraction = 0;
       for (const sample of samples) {
         const entry = sample.byRole.get(role);
-        if (!entry || entry.point.y > contactTolerance) {
+        if (!entry || entry.point.y - (context.groundPlaneY ?? 0) > contactTolerance) {
           anchor = undefined;
           continue;
         }
@@ -559,8 +555,8 @@ function footSlideFindings(
 }
 
 /** W6 anatomy and motion measurements. Every result remains heuristic and nonblocking. */
-export function evaluateCharacterAdvisoryQa(context: QaContext): QaFinding[] {
-  if (context.intent.category !== 'character' || !(context.scene instanceof THREE.Object3D)) {
+export function inspectRigAdvisory(context: RigQaInput): QaFinding[] {
+  if (!context.rig || !(context.scene instanceof THREE.Object3D)) {
     return [];
   }
   const root = context.scene;
@@ -578,6 +574,15 @@ export function evaluateCharacterAdvisoryQa(context: QaContext): QaFinding[] {
       `${b.code}:${b.affected?.nodePath ?? ''}:${b.affected?.clip ?? ''}`,
     ),
   );
+}
+
+export function evaluateCharacterAdvisoryQa(context: QaContext): QaFinding[] {
+  return inspectRigAdvisory({
+    scene: context.scene,
+    clips: context.clips,
+    profile: context.intent.qaProfile,
+    rig: context.intent.category === 'character' ? context.intent.character : undefined,
+  });
 }
 
 export const CHARACTER_ADVISORY_QA_RULE: QaRule = Object.freeze({

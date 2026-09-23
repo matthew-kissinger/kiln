@@ -22,7 +22,7 @@ import { readFile } from 'node:fs/promises';
 import { dirname, join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
-import { resolveEvaluatorPortV1 } from '../src/evaluator/protocol';
+import { resolveEvaluatorPortV2 } from '../src/evaluator/protocol';
 
 const REPO = resolve(dirname(fileURLToPath(import.meta.url)), '..');
 const EXAMPLES = join(REPO, 'examples');
@@ -60,7 +60,7 @@ function chunks(glb) {
 }
 
 const names = process.argv.slice(2).length ? process.argv.slice(2) : SAMPLE;
-const evaluator = resolveEvaluatorPortV1(undefined, 'trusted-local');
+const evaluator = resolveEvaluatorPortV2(undefined, 'trusted-local');
 const rows = [];
 for (const name of names) {
   const source = await readFile(join(EXAMPLES, `${name}.kiln.js`), 'utf8');

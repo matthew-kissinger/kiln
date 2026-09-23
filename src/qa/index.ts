@@ -26,4 +26,9 @@ export * from './breadth-final';
 export * from './breadth-corpus';
 export * from './benchmark-fixtures';
 export * from './reference-comparison';
-export * from './run';
+// The public pipeline consumes current host requirements. Category aggregation
+// in run.ts is retained internally for historical conformance fixtures only.
+export { AssetQaBlockedError, gltfReportFindings, qaPolicyFromEnv, qaBlockingEnabled } from './run';
+export * from './requirements-run';
+export * from './requirements-report';
+export * from './requirements-applicability';

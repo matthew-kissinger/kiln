@@ -1,0 +1,709 @@
+[
+  {
+    "id": "copyGeometry",
+    "name": "copyGeometry",
+    "intent": "independent geometry copy duplicate mesh vertices edit without changing original",
+    "description": "Returns an independent geometry with copied vertex buffers. Use before direct mutation of a cached primitive.",
+    "family": "instancing"
+  },
+  {
+    "id": "copyMaterial",
+    "name": "copyMaterial",
+    "intent": "independent material copy edit material without changing original",
+    "description": "Copies material properties so edits do not change other parts. Referenced textures remain shared.",
+    "family": "instancing"
+  },
+  {
+    "id": "meshGeo",
+    "name": "meshGeo",
+    "intent": "",
+    "description": "Builds an owned triangle mesh from flat numeric arrays. Validates finite values, attribute lengths and indices; computes normals if absent. Counterclockwise winding.",
+    "family": "geometry"
+  },
+  {
+    "id": "parametricSurface",
+    "name": "parametricSurface",
+    "intent": "",
+    "description": "Samples an equation into an owned surface with UVs. Periodic endpoints must coincide; UV seams retain matching normals. A surface is not automatically a watertight solid.",
+    "family": "geometry"
+  },
+  {
+    "id": "geometryDiagnostics",
+    "name": "geometryDiagnostics",
+    "intent": "",
+    "description": "Counts mesh topology problems after position-based seam matching. Open boundaries are valid for sheets; closed edges alone do not prove a self-intersection-free solid.",
+    "family": "utility"
+  },
+  {
+    "id": "creaseNormals",
+    "name": "creaseNormals",
+    "intent": "smooth normals preserve sharp edges hard surface shading",
+    "description": "Returns owned geometry with angle-limited smooth normals, preserving UV corners. Angle is degrees. Invalidates tangents; use after shaping for sharp rims and smooth walls.",
+    "family": "mesh-ops"
+  },
+  {
+    "id": "bend",
+    "name": "bend",
+    "intent": "",
+    "description": "Bends local +Y toward +X through angle degrees. Returns owned geometry and updated normals/bounds; preserves UVs, invalidates tangents. Frame rotation is Euler XYZ degrees.",
+    "family": "mesh-ops"
+  },
+  {
+    "id": "twist",
+    "name": "twist",
+    "intent": "",
+    "description": "Rotates the cross-section progressively around local +Y, reaching angle degrees at the end. Returns owned geometry; frame rotation uses Euler XYZ degrees.",
+    "family": "mesh-ops"
+  },
+  {
+    "id": "taper",
+    "name": "taper",
+    "intent": "",
+    "description": "Scales local X/Z across the local Y interval using positive start/end scale pairs. Returns owned geometry; preserves UVs and invalidates tangents.",
+    "family": "mesh-ops"
+  },
+  {
+    "id": "displace",
+    "name": "displace",
+    "intent": "",
+    "description": "Adds an authored displacement vector in the chosen local frame. Returns owned geometry; callback coordinates are local and t is normalized along the interval.",
+    "family": "mesh-ops"
+  },
+  {
+    "id": "sweepProfile",
+    "name": "sweepProfile",
+    "intent": "profile along a path extruded rail curved trim",
+    "description": "Sweeps a simple noncircular profile along polyline stations using transported frames. Supports total twist in degrees and per-station scales. Generates UVs and optional caps.",
+    "family": "curves"
+  },
+  {
+    "id": "loftProfiles",
+    "name": "loftProfiles",
+    "intent": "loft cross sections varying cross section join cross sections",
+    "description": "Joins corresponding simple profiles in explicit local XZ planes. Each frame uses Euler XYZ degrees and local +Y along the loft. Profiles need equal point counts and corresponding vertices.",
+    "family": "curves"
+  },
+  {
+    "id": "implicitSurface",
+    "name": "implicitSurface",
+    "intent": "",
+    "description": "Experimental positive-inside implicit field sampled into a solid mesh. Requires explicit bounds and resolution; checks grid size and actual evaluation count. Output has no UVs.",
+    "family": "geometry"
+  },
+  {
+    "id": "createRoot",
+    "name": "createRoot",
+    "intent": "",
+    "description": "Creates the root Object3D for an asset. Call first in build().",
+    "family": "structure"
+  },
+  {
+    "id": "createPivot",
+    "name": "createPivot",
+    "intent": "",
+    "description": "Creates an empty pivot node for skeletal animation. Name is auto-prefixed with `Joint_`.",
+    "family": "structure"
+  },
+  {
+    "id": "createJointChain",
+    "name": "createJointChain",
+    "intent": "",
+    "description": "Creates one body-plan-neutral deterministic Joint_* chain with explicit parent edges, rest frames, local axes, end effectors, contacts, and semantic metadata.",
+    "family": "structure"
+  },
+  {
+    "id": "createVehicleFrame",
+    "name": "createVehicleFrame",
+    "intent": "",
+    "description": "Creates a canonical +X-forward/+Y-up/+Z-right vehicle frame with typed semantic sockets for chassis, support, steering, and propulsion.",
+    "family": "structure"
+  },
+  {
+    "id": "createWheelGeometrySet",
+    "name": "createWheelGeometrySet",
+    "intent": "",
+    "description": "Creates one reusable +Z-axle tire/rim/hub geometry set for instanced wheel assemblies.",
+    "family": "instancing"
+  },
+  {
+    "id": "createWheelAssembly",
+    "name": "createWheelAssembly",
+    "intent": "",
+    "description": "Creates one axle-centered wheel pivot containing concentric tire/rim/hub roles, a contact marker, +Z spin frame, and optional steering pivot.",
+    "family": "structure"
+  },
+  {
+    "id": "createPart",
+    "name": "createPart",
+    "intent": "",
+    "description": "Creates a mesh, optionally wrapped in a pivot, and attaches it to `opts.parent`. `rotation` is in DEGREES (like rotationTrack), NOT radians: [0, 0, 90] is a quarter turn; [0, 0, 1.57] is a no-op.",
+    "family": "structure"
+  },
+  {
+    "id": "beamBetween",
+    "name": "beamBetween",
+    "intent": "beam between points bar connecting endpoints",
+    "description": "Creates a cylindrical rail/strut exactly between two endpoints. Use for braces, gun barrels, skid struts, cables, and scaffolding.",
+    "family": "structure"
+  },
+  {
+    "id": "snapTo",
+    "name": "snapTo",
+    "intent": "",
+    "description": "Translates `part` by the minimal vector that brings its bounding box into contact with `host` (plus a small overlap). The direct cure for a \"Floating parts\" warning — attach the part instead of eyeballing a corrective offset. No-op if they already touch.",
+    "family": "structure"
+  },
+  {
+    "id": "createLadder",
+    "name": "createLadder",
+    "intent": "",
+    "description": "Builds two continuous rails plus evenly-spaced rungs. Use this instead of loose boxes for ladders.",
+    "family": "structure"
+  },
+  {
+    "id": "createWingPair",
+    "name": "createWingPair",
+    "intent": "",
+    "description": "Creates mirrored trapezoid aircraft wings with roots attached at +/-rootZ. Use for aircraft wings and helicopter stub wings.",
+    "family": "structure"
+  },
+  {
+    "id": "room",
+    "name": "room",
+    "intent": "hollow enclosure walls and floor room with doors and windows",
+    "description": "Builds a HOLLOW, enterable room: four thin walls + a floor, human-scaled (defaults: 2.8m ceiling, a centered 1.1x2.1m front door so it is enterable by default). `front` faces +X; the floor sits on the ground. The keystone of an architecture asset — add a roof with createRoofPlanes and fixtures as separate parts.",
+    "family": "structure"
+  },
+  {
+    "id": "wallWithOpening",
+    "name": "wallWithOpening",
+    "intent": "wall aperture cut a window doorway opening door or window in a wall",
+    "description": "A wall panel with real rectangular door/window gaps, composed from solid box segments. Supply opening or openings, never both. Multiple or vertically stacked apertures must not overlap or extend outside the wall. Base at local Y=0, centered on the run axis. Use to compose custom layouts and interior dividing walls.",
+    "family": "structure"
+  },
+  {
+    "id": "createRoofPlanes",
+    "name": "createRoofPlanes",
+    "intent": "",
+    "description": "A pitched roof: two thin slopes meeting at one ridge and falling DOWN-AND-OUTWARD (opposite tilts — never mirrored the same way), footprint-matched with an eave overhang. Eave at local Y=0, ridge at Y=height, so position the group at Y=wallHeight. Returns a named group (e.g. `Roof`) the engine can lift to reveal the interior.",
+    "family": "structure"
+  },
+  {
+    "id": "createGableRoof",
+    "name": "createGableRoof",
+    "intent": "",
+    "description": "Explicit-axis gable roof using unambiguous footprint spans. Each face owns a rigid frame with ridge tangent, outward normal, downhill direction, ridge/eave endpoints, dimensions, and a live local-to-world transform.",
+    "family": "structure"
+  },
+  {
+    "id": "createGableEndPanel",
+    "name": "createGableEndPanel",
+    "intent": "",
+    "description": "Exact thick triangular end closure for a gable roof, with optional rectangular openings cut from the geometry and semantic boundary metadata.",
+    "family": "structure"
+  },
+  {
+    "id": "createGableShell",
+    "name": "createGableShell",
+    "intent": "enclosed building shell gable house with openings",
+    "description": "Closed-by-default, correct-by-construction gable building: hollow room, floor, two opposing roof slopes, two complete gable ends, and a real front doorway when enterable.",
+    "family": "structure"
+  },
+  {
+    "id": "createRoofSurfaceLayout",
+    "name": "createRoofSurfaceLayout",
+    "intent": "",
+    "description": "Places roof-local panels, shingles, seams, or corrugations from a returned RoofFaceFrame, so repeated elements run ridge-to-eave for either ridge axis without manual Euler rotations.",
+    "family": "structure"
+  },
+  {
+    "id": "createStairs",
+    "name": "createStairs",
+    "intent": "stair flight steps tiered seating rise and run",
+    "description": "A straight flight of stairs: box treads (with optional risers) climbing totalRise over totalRun from local origin toward +axis. Use for porch/entry steps or to connect storeys in a multi-storey building.",
+    "family": "structure"
+  },
+  {
+    "id": "boxGeo",
+    "name": "boxGeo",
+    "intent": "",
+    "description": "6-face box. 12 tris regardless of size. Cheapest geometry.",
+    "family": "geometry"
+  },
+  {
+    "id": "sphereGeo",
+    "name": "sphereGeo",
+    "intent": "",
+    "description": "UV sphere. Default 8x6 segments = 84 tris. Bump segments for smoother curves.",
+    "family": "geometry"
+  },
+  {
+    "id": "cylinderGeo",
+    "name": "cylinderGeo",
+    "intent": "",
+    "description": "Y-axis cylinder. Use radiusTop != radiusBottom for cones / tapered pieces.",
+    "family": "geometry"
+  },
+  {
+    "id": "cylinderYGeo",
+    "name": "cylinderYGeo",
+    "intent": "",
+    "description": "Alias for cylinderGeo — a Y-axis cylinder. Provided because the sandbox exposes cylinderXGeo / cylinderZGeo and the symmetric Y form is commonly reached for.",
+    "family": "geometry"
+  },
+  {
+    "id": "cylinderXGeo",
+    "name": "cylinderXGeo",
+    "intent": "",
+    "description": "Cylinder pre-rotated to run along +X/-X. Use for fuselages, cannons, barrels, axles, and forward-facing tubes.",
+    "family": "geometry"
+  },
+  {
+    "id": "cylinderZGeo",
+    "name": "cylinderZGeo",
+    "intent": "",
+    "description": "Cylinder pre-rotated to run along +Z/-Z. Use for side-mounted weapons, rails, crossbars, and pipes.",
+    "family": "geometry"
+  },
+  {
+    "id": "cylinderOnAxis",
+    "name": "cylinderOnAxis",
+    "intent": "",
+    "description": "Frame-first cylinder: position + axis specified directly, no post-hoc rotation. Use when the cylinder needs to point along a non-cardinal direction (struts inside CSG operands, antennas off a tilted surface). For cardinal axes prefer the terser cylinderXGeo / cylinderYGeo / cylinderZGeo helpers.",
+    "family": "geometry"
+  },
+  {
+    "id": "capsuleGeo",
+    "name": "capsuleGeo",
+    "intent": "",
+    "description": "Stadium shape (cylinder with hemispherical caps). Good for limbs.",
+    "family": "geometry"
+  },
+  {
+    "id": "capsuleYGeo",
+    "name": "capsuleYGeo",
+    "intent": "",
+    "description": "Alias for capsuleGeo — a Y-axis capsule. Provided for symmetry with capsuleXGeo / capsuleZGeo.",
+    "family": "geometry"
+  },
+  {
+    "id": "capsuleXGeo",
+    "name": "capsuleXGeo",
+    "intent": "",
+    "description": "Capsule pre-rotated to run along +X/-X. Use for aircraft bodies, rounded vehicle hulls, and missiles.",
+    "family": "geometry"
+  },
+  {
+    "id": "capsuleZGeo",
+    "name": "capsuleZGeo",
+    "intent": "",
+    "description": "Capsule pre-rotated to run along +Z/-Z. Use for lateral pods, floats, and side tanks.",
+    "family": "geometry"
+  },
+  {
+    "id": "coneGeo",
+    "name": "coneGeo",
+    "intent": "",
+    "description": "Y-axis cone (pointed up). Use for spikes, roofs, projectiles.",
+    "family": "geometry"
+  },
+  {
+    "id": "coneYGeo",
+    "name": "coneYGeo",
+    "intent": "",
+    "description": "Alias for coneGeo — a Y-axis cone (point +Y). Provided for symmetry with coneXGeo / coneZGeo.",
+    "family": "geometry"
+  },
+  {
+    "id": "coneXGeo",
+    "name": "coneXGeo",
+    "intent": "",
+    "description": "Cone pre-rotated so its point faces +X. Use for noses, rockets, shells, and forward-facing tips.",
+    "family": "geometry"
+  },
+  {
+    "id": "coneZGeo",
+    "name": "coneZGeo",
+    "intent": "",
+    "description": "Cone pre-rotated so its point faces +Z. Use for side-facing projectiles and tips.",
+    "family": "geometry"
+  },
+  {
+    "id": "taperConeGeo",
+    "name": "taperConeGeo",
+    "intent": "",
+    "description": "Truncated cone (frustum) — exposes both bottom and top radius. radiusTop=0 matches coneGeo, radiusTop=radiusBottom matches cylinderGeo. Use for pylon caps, soda cans, lampshades, anything tapered that does not come to a point. axis selects orientation (default Y).",
+    "family": "geometry"
+  },
+  {
+    "id": "torusGeo",
+    "name": "torusGeo",
+    "intent": "",
+    "description": "Donut shape. For rings, tyres, barrel ribs.",
+    "family": "geometry"
+  },
+  {
+    "id": "planeGeo",
+    "name": "planeGeo",
+    "intent": "",
+    "description": "Flat quad for TEXTURED surfaces (ground, signs, walls with albedo maps). For solid-color decals like red stars, hull numbers, stamps, or window cutouts on no-texture assets use decalBox — a bare planeGeo without a texture will render as a disconnected 2-tri square and get flagged as a stray plane.",
+    "family": "geometry"
+  },
+  {
+    "id": "decalBox",
+    "name": "decalBox",
+    "intent": "",
+    "description": "Thin box for solid-color surface decals: red stars, hull numbers, stamps, no-texture windows. Unlike planeGeo, has real depth so it visibly attaches to its host surface. Must be placed on a surface with position + rotation.",
+    "family": "geometry"
+  },
+  {
+    "id": "foliageCardGeo",
+    "name": "foliageCardGeo",
+    "intent": "thin leaf cutout foliage card",
+    "description": "Single-quad foliage card with a configurable Y pivot. yPivot=0 plants the quad on the ground. Pair with an alpha-tested material and a leaf/plant sprite.",
+    "family": "geometry"
+  },
+  {
+    "id": "crossedQuadsGeo",
+    "name": "crossedQuadsGeo",
+    "intent": "",
+    "description": "Cross-billboard bush primitive: 2 or 3 planes intersecting along the Y axis. Reads as a dense plant from any angle, cheaper than real geometry.",
+    "family": "geometry"
+  },
+  {
+    "id": "octaGridPlane",
+    "name": "octaGridPlane",
+    "intent": "",
+    "description": "Atlas-ready billboard quad. UVs are pre-scaled to cover one tile of a tilesX×tilesY atlas; the consumer shader adds per-instance tile offsets at draw time.",
+    "family": "geometry"
+  },
+  {
+    "id": "wingGeo",
+    "name": "wingGeo",
+    "intent": "",
+    "description": "Trapezoid wing panel. Local root edge is at Z=0, span extends toward +Z, positive sweep moves the tip aft along -X.",
+    "family": "geometry"
+  },
+  {
+    "id": "gearGeo",
+    "name": "gearGeo",
+    "intent": "",
+    "description": "Stylized gear with flat edges and an optional center bore; no CSG. Use boreRadius < rootRadius < tipRadius. Radii are absolute: an omitted rootRadius stays 0.8 when tipRadius changes. Set all three radii for small gears.",
+    "family": "geometry"
+  },
+  {
+    "id": "bladeGeo",
+    "name": "bladeGeo",
+    "intent": "",
+    "description": "Parametric sword blade: rectangular base tapering to a point over tipLength. edgeBevel > 0 pinches the cross-section toward a diamond ridge.",
+    "family": "geometry"
+  },
+  {
+    "id": "gameMaterial",
+    "name": "gameMaterial",
+    "intent": "",
+    "description": "Flat-shaded PBR material. Default for game-ready low-poly. Use for 95% of parts.",
+    "family": "material"
+  },
+  {
+    "id": "materialRecipe",
+    "name": "materialRecipe",
+    "intent": "",
+    "description": "Resolves a versioned portable bark/leaf/wood/stone/rubber/painted-metal/cloth/skin/glass/emissive recipe to standard glTF PBR.",
+    "family": "material"
+  },
+  {
+    "id": "compilePortableMaterialSpecV2",
+    "name": "compilePortableMaterialSpecV2",
+    "intent": "",
+    "description": "Compiles the strict portable material contract. Texture refs are either typed procedural V2 specs or closed approved kiln.texture.* IDs; paths, URLs, raw textures, callbacks, and shader source are rejected.",
+    "family": "material"
+  },
+  {
+    "id": "basicMaterial",
+    "name": "basicMaterial",
+    "intent": "",
+    "description": "Unlit flat material. For UI / effects where lighting is baked in.",
+    "family": "material"
+  },
+  {
+    "id": "glassMaterial",
+    "name": "glassMaterial",
+    "intent": "",
+    "description": "Semi-transparent double-sided material. Panels need ~0.05 offset to avoid z-fighting.",
+    "family": "material"
+  },
+  {
+    "id": "lambertMaterial",
+    "name": "lambertMaterial",
+    "intent": "",
+    "description": "Cheaper than gameMaterial. No metalness/roughness. Use when PBR is overkill.",
+    "family": "material"
+  },
+  {
+    "id": "rotationTrack",
+    "name": "rotationTrack",
+    "intent": "",
+    "description": "Rotation track in degrees, auto-converted to quaternions. Joint name must include `Joint_` prefix.",
+    "family": "animation"
+  },
+  {
+    "id": "positionTrack",
+    "name": "positionTrack",
+    "intent": "",
+    "description": "Position track in world units. Always use `position:` not `value:` in keyframes.",
+    "family": "animation"
+  },
+  {
+    "id": "scaleTrack",
+    "name": "scaleTrack",
+    "intent": "",
+    "description": "Uniform or per-axis scale track.",
+    "family": "animation"
+  },
+  {
+    "id": "createClip",
+    "name": "createClip",
+    "intent": "",
+    "description": "Collects tracks into a named clip. Returned from animate().",
+    "family": "animation"
+  },
+  {
+    "id": "idleBreathing",
+    "name": "idleBreathing",
+    "intent": "",
+    "description": "Gentle Y-axis bob. For NPC idle states.",
+    "family": "animation"
+  },
+  {
+    "id": "bobbingAnimation",
+    "name": "bobbingAnimation",
+    "intent": "",
+    "description": "Floating / bobbing loop for pickups and effects.",
+    "family": "animation"
+  },
+  {
+    "id": "spinAnimation",
+    "name": "spinAnimation",
+    "intent": "",
+    "description": "360° rotation over `duration` around `axis`.",
+    "family": "animation"
+  },
+  {
+    "id": "createInstance",
+    "name": "createInstance",
+    "intent": "",
+    "description": "Creates a new mesh reusing an existing part's geometry + material at a new transform. Cheapest way to replicate wheels / bolts / fence posts / windows. `rotation` is in DEGREES, like createPart.",
+    "family": "instancing"
+  },
+  {
+    "id": "boolUnion",
+    "name": "boolUnion",
+    "intent": "join overlapping solids boolean union",
+    "description": "Merges two or more parts into one watertight manifold mesh. Default flat shading (hard edges) — pass { smooth: true } as last arg for averaged normals on organic merges.",
+    "family": "csg"
+  },
+  {
+    "id": "boolDiff",
+    "name": "boolDiff",
+    "intent": "subtract solids cut out a shape boolean difference",
+    "description": "Subtracts cutters from a body (holes, button recesses, window slots). Default flat shading for sharp mechanical edges.",
+    "family": "csg"
+  },
+  {
+    "id": "roundedBoxGeo",
+    "name": "roundedBoxGeo",
+    "intent": "",
+    "description": "A box with all twelve edges rounded (or chamfered) at the EXACT outer size requested — roundedBoxGeo(1, 1, 1, 0.1) measures 1x1x1, it does not grow. Use it anywhere boxGeo reads too sharp: consoles, crates, appliances, handheld props, machined blocks.",
+    "family": "csg"
+  },
+  {
+    "id": "extrudeProfile",
+    "name": "extrudeProfile",
+    "intent": "",
+    "description": "Sweeps a closed 2D outline into a watertight solid, with optional holes, corner rounding/chamfering, twist, and taper. The way to build any cross-section that is not a box or a cylinder: L-brackets, I-beams, gaskets, washers, star and gear plates, signage, extruded trim.",
+    "family": "csg"
+  },
+  {
+    "id": "revolveProfile",
+    "name": "revolveProfile",
+    "intent": "",
+    "description": "Revolves a closed 2D outline around an axis into a watertight SOLID, optionally rounding the profile corners first. Bottles, tanks, pressure vessels, wheels, turned wood, domes, buttons, pills.",
+    "family": "csg"
+  },
+  {
+    "id": "circleProfile",
+    "name": "circleProfile",
+    "intent": "",
+    "description": "Builds a closed circular outline for extrudeProfile / revolveProfile, so you never hand-write the trigonometry. Synchronous.",
+    "family": "csg"
+  },
+  {
+    "id": "boolIntersect",
+    "name": "boolIntersect",
+    "intent": "intersection of solids overlapping volume",
+    "description": "Keeps only the volume where both operands overlap. Default flat shading.",
+    "family": "csg"
+  },
+  {
+    "id": "hull",
+    "name": "hull",
+    "intent": "",
+    "description": "Tightest convex mesh enclosing all input points. Default smooth shading (rocks, collision volumes). Pass { smooth: false } for a faceted look.",
+    "family": "csg"
+  },
+  {
+    "id": "arrayLinear",
+    "name": "arrayLinear",
+    "intent": "linear repetition repeat along a line straight row regular spacing",
+    "description": "`count` is the TOTAL, source included: the source stays where it is as copy 0 and the call returns count-1 new instances, so count 10 gives 10 posts, not 11. Copies share geometry + material via createInstance, and carry the source rotation and scale.",
+    "family": "arrays"
+  },
+  {
+    "id": "arrayRadial",
+    "name": "arrayRadial",
+    "intent": "radial repetition repeat around a circle circular pattern ring of supports arena seating",
+    "description": "`count` is the TOTAL, source included: the source stays at its angle as copy 0 and the call returns count-1 new mesh instances. Copies preserve source scale. Default outward rotation follows the orbit; relative orientation composes the orbit with the source rotation. Copies orbit the parent's origin unless you pass center. This is mesh reuse, not hierarchy-preserving assembly replication.",
+    "family": "arrays"
+  },
+  {
+    "id": "mirror",
+    "name": "mirror",
+    "intent": "reflection across a plane opposite side symmetric counterpart",
+    "description": "Reflects source across the plane whose normal is `axis`. Uses negative scale (winding flip handled by viewers).",
+    "family": "arrays"
+  },
+  {
+    "id": "subdivide",
+    "name": "subdivide",
+    "intent": "",
+    "description": "Loop subdivision returns new geometry; each iteration roughly quadruples triangles and smooths the surface. Use preserveUV:true for textured meshes. Legacy position-only welding discards UVs and reports that loss. This smooths shapes, not selected-edge beveling.",
+    "family": "mesh-ops"
+  },
+  {
+    "id": "mergeVertices",
+    "name": "mergeVertices",
+    "intent": "",
+    "description": "Returns indexed geometry. Default welding preserves attribute seams, so a textured cube retains separate face corners. positionOnly:true welds coincident positions and discards other attributes; use it explicitly when changing topology and regenerate shading/UVs afterward.",
+    "family": "mesh-ops"
+  },
+  {
+    "id": "curveToMesh",
+    "name": "curveToMesh",
+    "intent": "curved tube tube following a curve hose conduit cable",
+    "description": "Sweeps a circular profile along a path. Equivalent to Blender's Curve to Mesh node with a circle profile. Use for pipes, cables, tubular frames.",
+    "family": "curves"
+  },
+  {
+    "id": "pipeAlongPath",
+    "name": "pipeAlongPath",
+    "intent": "tube along a path curved pipe hose conduit cable",
+    "description": "Path-driven swept circle with optional bend smoothing. Generalises beamBetween (point-to-point) and curveToMesh (raw spline) into one helper. bendRadius>0 inserts interpolated waypoints near interior corners so the spline reads as a rounded turn instead of pinching to the control point.",
+    "family": "curves"
+  },
+  {
+    "id": "lathe",
+    "name": "lathe",
+    "intent": "",
+    "description": "Surface of revolution. Spins a 2D profile around the Y axis. For bottles, vases, wheels, turned wood parts.",
+    "family": "curves"
+  },
+  {
+    "id": "revolveGeo",
+    "name": "revolveGeo",
+    "intent": "",
+    "description": "Surface of revolution with explicit axis + sweep angle. Generalises lathe — use it when you need a partial sweep (half-dome, 90° wedge) or revolution around a non-Y axis. Profile convention is identical to lathe: x = radial distance, y = position along the axis.",
+    "family": "curves"
+  },
+  {
+    "id": "bezierCurve",
+    "name": "bezierCurve",
+    "intent": "",
+    "description": "Samples a quadratic (3 ctrl pts) or cubic (4 ctrl pts) Bézier into a point list you can feed into curveToMesh.",
+    "family": "curves"
+  },
+  {
+    "id": "autoUnwrap",
+    "name": "autoUnwrap",
+    "intent": "unwrap texture coordinates UV atlas unfold mesh",
+    "description": "xatlas-based UV atlas for ANY geometry (CSG output, subdivided, deformed). Output is a packed atlas with arbitrary per-chart rotation — use for non-tileable baked textures. For directional tileable textures on box/cylinder/plane primitives, prefer the shape-aware unwraps below.",
+    "family": "uv"
+  },
+  {
+    "id": "boxUnwrap",
+    "name": "boxUnwrap",
+    "intent": "",
+    "description": "Preserves BoxGeometry's built-in per-face UVs — every face maps [0,1] with consistent orientation. Use for crates/blocks with a tileable texture. Sync; no WASM cost.",
+    "family": "uv"
+  },
+  {
+    "id": "cylinderUnwrap",
+    "name": "cylinderUnwrap",
+    "intent": "",
+    "description": "Preserves CylinderGeometry's built-in UVs: u wraps around the axis (horizontal texture features ring the cylinder), v runs up the height. Caps use circle-in-square. Sync; no WASM cost.",
+    "family": "uv"
+  },
+  {
+    "id": "planeUnwrap",
+    "name": "planeUnwrap",
+    "intent": "",
+    "description": "Projects xy-extent of the bbox to [0,1]. Use for signs/decals/posters where you want ONE readable texture and no edge-face bleeding. Sync.",
+    "family": "uv"
+  },
+  {
+    "id": "loadApprovedTexture",
+    "name": "loadApprovedTexture",
+    "intent": "",
+    "description": "Loads one approved kiln.texture.* resource ID through the host-injected closed resolver. The registry fixes bytes, MIME, usage, dimensions, hash, and deadline; paths, URLs, byte arrays, resolver objects, hashes, and options are rejected.",
+    "family": "textures"
+  },
+  {
+    "id": "proceduralTexture",
+    "name": "proceduralTexture",
+    "intent": "",
+    "description": "Builds a tiling texture from a bounded layer stack — no image file needed. Layers composite bottom-first. Noise is seeded and tileable, so the same spec always produces the same bytes and a repeating material shows no seam. Baked to PNG and embedded in the GLB automatically.",
+    "family": "textures"
+  },
+  {
+    "id": "normalMapFromHeight",
+    "name": "normalMapFromHeight",
+    "intent": "",
+    "description": "Derives a tangent-space normal map from the source texture's brightness, treating it as height. The cheap way to get real PBR surface relief out of a procedural albedo. Wraps at the edges, so a tiling source gives a tiling normal map.",
+    "family": "textures"
+  },
+  {
+    "id": "pbrMaterial",
+    "name": "pbrMaterial",
+    "intent": "",
+    "description": "Portable glTF PBR material. Use an explicit packed metallicRoughness texture (G=roughness, B=metalness); separate data maps are rejected instead of silently dropping a channel. Supports OPAQUE/MASK/BLEND and double-sided output.",
+    "family": "material"
+  },
+  {
+    "id": "foliageMaterial",
+    "name": "foliageMaterial",
+    "intent": "leaf transparency foliage cutout alpha mask",
+    "description": "Portable foliage material that defaults to glTF MASK, cutoff 0.5, rough nonmetal, and double-sided. Use an alpha-bearing albedo texture.",
+    "family": "material"
+  },
+  {
+    "id": "countTriangles",
+    "name": "countTriangles",
+    "intent": "",
+    "description": "Sums triangle count across every mesh in the subtree.",
+    "family": "utility"
+  },
+  {
+    "id": "countMaterials",
+    "name": "countMaterials",
+    "intent": "",
+    "description": "Unique material count (by reference) across the subtree.",
+    "family": "utility"
+  },
+  {
+    "id": "getJointNames",
+    "name": "getJointNames",
+    "intent": "",
+    "description": "All node names beginning with `Joint_`. Use to sanity-check animation targets.",
+    "family": "utility"
+  }
+]

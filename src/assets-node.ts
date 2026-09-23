@@ -100,9 +100,15 @@ export class FileAssetLibrary implements AssetLibrary {
   }
   async read(collection: string, assetId: string, revisionId: string): Promise<AssetRecord> {
     const dir = await this.path(collection, assetId, 'revisions', revisionId);
-    const manifest = assetManifestSchema.parse(
-      JSON.parse(new TextDecoder().decode(await this.file(dir, 'manifest.json', 1024 * 1024))),
+    const original = JSON.parse(
+      new TextDecoder('utf-8', { fatal: true }).decode(
+        await this.file(dir, 'manifest.json', 1024 * 1024),
+      ),
     );
+    // Validate known fields without discarding unrecognized provenance. Explicit
+    // migration must see those fields and stop, rather than unknowingly drop them.
+    assetManifestSchema.parse(original);
+    const manifest: AssetManifest = original;
     if (manifest.assetId !== assetId || manifest.revisionId !== revisionId)
       throw new Error('Asset identity mismatch');
     const files: Record<string, Uint8Array> = {};
@@ -157,7 +163,11 @@ export class FileAssetLibrary implements AssetLibrary {
     if (!records.length || records.length > 100)
       throw new Error('Import requires 1..100 revisions');
     // Validate the whole input before writing anything; per-revision commits are atomic.
-    for (const record of records) await verifyAssetRecord(record);
+    for (const record of records) {
+      await verifyAssetRecord(record);
+      if (Buffer.byteLength(`${JSON.stringify(record.manifest, null, 2)}\n`, 'utf8') > 1024 * 1024)
+        throw new Error('Manifest exceeds 1 MiB; no revision was written.');
+    }
     for (const record of records) {
       const { manifest, files } = record;
       const dest = await this.path(collection, manifest.assetId, 'revisions', manifest.revisionId);

@@ -258,8 +258,9 @@ function build() { return createRoot('R'); }
 function animate() {
   // Craft a track by hand so we can smuggle in a bad name.
   const track = rotationTrack('Joint_X', [{ time: 0, rotation: [0, 0, 0] }]);
+  const clip = createClip('c', 1, [track]);
   track.name = 'noSeparator'; // intentionally malformed
-  return [createClip('c', 1, [track])];
+  return [clip];
 }
 `);
     const warnings = inspectGeneratedAnimation(root, clips);
@@ -276,8 +277,9 @@ function build() {
 }
 function animate() {
   const track = rotationTrack('Joint_Body', [{ time: 0, rotation: [0, 0, 0] }]);
+  const clip = createClip('c', 1, [track]);
   track.name = 'Joint_Body.unsupportedChannel';
-  return [createClip('c', 1, [track])];
+  return [clip];
 }
 `);
     const warnings = inspectGeneratedAnimation(root, clips);

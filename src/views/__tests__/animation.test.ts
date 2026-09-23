@@ -80,6 +80,56 @@ function animate(root) {
 `;
 
 describe('renderClipAnimation', () => {
+  test('reports world-space bounds at each pose independently of focused camera framing', async () => {
+    const { root, clips } = await executeKilnCode(`
+      function build() {
+        const root = createRoot('Root');
+        const pivot = createPivot('Axle', [0, 0.5, 0], root);
+        createPart('Bar', boxGeo(2, 0.2, 0.1), gameMaterial('#887744'), { parent: pivot });
+        createPart('Fixed', boxGeo(0.2, 0.2, 0.2), gameMaterial('#555555'),
+          { parent: root, position: [4, 2, 0] });
+        return root;
+      }
+      function animate() { return [createClip('Turn', 2, [rotationTrack('Joint_Axle', [
+        { time: 0, rotation: [0, 0, 0] }, { time: 2, rotation: [0, 0, 90] }
+      ])])]; }
+    `);
+    const result = await renderClipAnimation(root, clips, {
+      clip: 'Turn',
+      frameTimes: [0, 0.5, 1],
+      size: 64,
+      perFrame: true,
+      shot: {
+        subject: { name: 'Joint_Axle' },
+        visibility: 'isolate',
+        camera: { type: 'orbit', azimuthDeg: 90, elevationDeg: 0 },
+      },
+    });
+    expect(result.ok).toBe(true);
+    expect(result.poseBounds).toHaveLength(3);
+    expect(result.poseBounds!.map((p) => [p.phase, p.timeSeconds])).toEqual([
+      [0, 0],
+      [0.5, 1],
+      [1, 2],
+    ]);
+    const lows = [0.4, 0.5 - 1.1 / Math.sqrt(2), -0.5];
+    for (const [i, pose] of result.poseBounds!.entries()) {
+      expect(pose.scene.min[1]).toBeCloseTo(lows[i]!, 6);
+      expect(pose.subject!.min[1]).toBeCloseTo(lows[i]!, 6);
+      expect(pose.scene.max[0]).toBeCloseTo(4.1, 6);
+      expect(pose.subject!.max[0]).toBeLessThanOrEqual(1.000001);
+    }
+    // Measurements are snapshots, not aliases to the final pose or camera union.
+    expect(result.poseBounds![0]!.subject!.min[1]).toBeCloseTo(0.4, 6);
+    const whole = await renderClipAnimation(root, clips, {
+      clip: 'Turn',
+      frameTimes: [0, 1],
+      size: 64,
+    });
+    expect(whole.poseBounds!.map((p) => p.subject)).toEqual([undefined, undefined]);
+    expect(whole.poseBounds![1]!.scene.min[1]).toBeCloseTo(-0.5, 6);
+  });
+
   test('renders a 6-frame grid for a named clip with correct metadata', async () => {
     const { root, clips } = await executeKilnCode(WALKER);
     const r = await renderClipAnimation(root, clips, { clip: 'walk', camera: 'right' });

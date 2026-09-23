@@ -1,23 +1,8 @@
-/**
- * runKilnAgent integration over a ScriptedModel — the real Strands Agent loop
- * (concurrent tool executor, hooks, usage accumulation) with zero network.
- *
- * Pins the loop-efficiency wiring end to end:
- *  - A2-instrumentation: cache read/write token counts flow from the model's
- *    metadata events into `result.usage`.
- *  - M1/M2: `result.counters` carries per-model-call stats and the
- *    renders-per-generation count.
- *  - A2-cachepoint: a provider whose adapter does NOT consume system-prompt
- *    cache points receives the PLAIN STRING system prompt (block-array shaping
- *    for Anthropic/Bedrock is pinned in providers.test.ts).
- *  - A3: the mutator batch guard is installed on the real run path.
- */
-import { describe, expect, test } from 'bun:test';
-
+/** Real Strands loop: usage, counters, recovery and model context, without network. */
+import { expect, test } from 'bun:test';
 import { runKilnAgent } from '../run';
-import { createGenerationCallBudget } from '../call-budget';
 import { ScriptedModel } from './scripted-model';
-
+import { programReference } from '../../program-store';
 const BOX_CODE = `
 const meta = { name: 'test-box', category: 'prop' };
 function build() {
@@ -27,172 +12,102 @@ function build() {
 }
 `;
 
-describe('runKilnAgent over a ScriptedModel (unified surface)', () => {
-  test('draft -> render -> finalize: captures code, usage w/ cache counts, and M1/M2 counters', async () => {
-    const model = new ScriptedModel([
-      {
-        toolCalls: [{ name: 'kiln_draft', input: { code: BOX_CODE } }],
-        usage: {
-          inputTokens: 100,
-          outputTokens: 10,
-          totalTokens: 110,
-          cacheWriteInputTokens: 900,
-        },
-      },
-      { toolCalls: [{ name: 'kiln_render', input: { capture: { preset: '2x2' } } }] },
-      { toolCalls: [{ name: 'kiln_finalize' }] },
-      {
-        text: 'done',
-        usage: {
-          inputTokens: 50,
-          outputTokens: 5,
-          totalTokens: 55,
-          cacheReadInputTokens: 900,
-        },
-      },
-    ]);
-
-    const result = await runKilnAgent({
-      model,
-      prompt: 'a red test box',
-      toolSurface: 'unified',
-      gradeRefine: 'off',
-    });
-
-    expect(result.error).toBeUndefined();
-    expect(result.code).toBe(BOX_CODE);
-    expect(result.steps).toBe(4);
-    expect(result.toolCalls).toEqual(['kiln_draft', 'kiln_render', 'kiln_finalize']);
-    expect(result.captureSelection).toEqual({ capture: { preset: '2x2' } });
-
-    // A2-instrumentation: cache counts accumulated alongside the token totals.
-    expect(result.usage).toEqual({
-      inputTokens: 150,
-      outputTokens: 15,
-      cacheReadInputTokens: 900,
-      cacheWriteInputTokens: 900,
-    });
-
-    // M1: one record per model call, each with the transcript length it saw.
-    expect(result.counters).toBeDefined();
-    expect(result.counters!.modelCalls).toHaveLength(4);
-    for (const call of result.counters!.modelCalls) {
-      expect(call.messages).toBeGreaterThan(0);
-    }
-    // The transcript grows monotonically across calls.
-    const sizes = result.counters!.modelCalls.map((c) => c.messages);
-    expect([...sizes].sort((a, b) => a - b)).toEqual(sizes);
-
-    // M2: exactly one render-bearing tool result (the kiln_render six-view image;
-    // draft/finalize results are JSON-only).
-    expect(result.counters!.renders).toBe(1);
-
-    // A2-cachepoint: ScriptedModel is not an Anthropic/Bedrock adapter, so the
-    // system prompt must arrive as the PLAIN STRING on every model call.
-    expect(model.seenSystemPrompts).toHaveLength(4);
-    for (const sp of model.seenSystemPrompts) {
-      expect(typeof sp).toBe('string');
-      expect(sp as string).toContain('3D asset');
-    }
+test('reference workflow retains cache usage, render counts and compact plain system text', async () => {
+  const programRef = await programReference(BOX_CODE);
+  const model = new ScriptedModel([
+    {
+      toolCalls: [{ name: 'kiln_validate', input: { code: BOX_CODE } }],
+      usage: { inputTokens: 100, outputTokens: 10, totalTokens: 110, cacheWriteInputTokens: 900 },
+    },
+    { toolCalls: [{ name: 'kiln_render', input: { programRef, capture: { preset: '2x2' } } }] },
+    {
+      toolCalls: [{ name: 'kiln_finish', input: { programRef } }],
+      usage: { inputTokens: 50, outputTokens: 5, totalTokens: 55, cacheReadInputTokens: 900 },
+    },
+    { text: 'unreachable' },
+  ]);
+  const candidates: { code: string; pngBase64: string; tris?: number }[] = [];
+  const result = await runKilnAgent({
+    model,
+    prompt: 'a red box',
+    onCandidate: (c) => candidates.push(c),
   });
-
-  test('A3 on the real run path: a mixed mutator batch is rejected, the model recovers', async () => {
-    const model = new ScriptedModel([
-      // Turn 1: illegal batch — a buffer write alongside a reader.
-      { toolCalls: [{ name: 'kiln_draft', input: { code: BOX_CODE } }, { name: 'kiln_view' }] },
-      // Turn 2: the model follows the guard's instruction — mutator alone.
-      { toolCalls: [{ name: 'kiln_draft', input: { code: BOX_CODE } }] },
-      { toolCalls: [{ name: 'kiln_render' }] },
-      { toolCalls: [{ name: 'kiln_finalize' }] },
-      { text: 'done' },
-    ]);
-
-    const result = await runKilnAgent({
-      model,
-      prompt: 'a red test box',
-      toolSurface: 'unified',
-      gradeRefine: 'off',
-    });
-
-    expect(result.error).toBeUndefined();
-    // The rejected batch never wrote the buffer; the retry did, and finalize
-    // locked it in — so the run still converges on the drafted program.
-    expect(result.code).toBe(BOX_CODE);
-    expect(result.steps).toBe(5);
+  expect(result.completion).toBe('finished');
+  expect(result.code).toBe(BOX_CODE);
+  expect(result.steps).toBe(3);
+  expect(result.toolCalls).toEqual(['kiln_validate', 'kiln_render', 'kiln_finish']);
+  expect(result.captureSelection).toEqual({ capture: { preset: '2x2' } });
+  expect(result.usage).toEqual({
+    inputTokens: 150,
+    outputTokens: 15,
+    cacheReadInputTokens: 900,
+    cacheWriteInputTokens: 900,
   });
+  expect(result.counters!.modelCalls).toHaveLength(3);
+  const sizes = result.counters!.modelCalls.map((c) => c.messages);
+  expect(sizes.every((size) => size > 0)).toBe(true);
+  expect([...sizes].sort((a, b) => a - b)).toEqual(sizes);
+  expect(result.counters!.renders).toBe(1);
+  expect(candidates).toHaveLength(1);
+  expect(candidates[0]!.code).toBe(BOX_CODE);
+  expect(candidates[0]!.pngBase64).toBe(result.artifact!.review.pngBase64!);
+  expect(candidates[0]!.tris).toBeGreaterThan(0);
+  expect(model.seenSystemPrompts).toHaveLength(3);
+  for (const prompt of model.seenSystemPrompts) {
+    expect(typeof prompt).toBe('string');
+    expect(String(prompt)).toContain('3D assets');
+    expect(String(prompt)).toContain('kiln_discover');
+  }
+});
 
-  test('refine framing keeps the directive INSIDE the (cacheable) system prompt text', async () => {
-    const model = new ScriptedModel([
-      { toolCalls: [{ name: 'kiln_render' }] },
-      { toolCalls: [{ name: 'kiln_finalize' }] },
-      { text: 'done' },
-    ]);
+test('a model can recover from rejected mixed completion without finishing stale work', async () => {
+  const programRef = await programReference(BOX_CODE);
+  const model = new ScriptedModel([
+    {
+      toolCalls: [
+        { name: 'kiln_render', input: { code: BOX_CODE } },
+        { name: 'kiln_finish', input: { programRef } },
+      ],
+    },
+    { toolCalls: [{ name: 'kiln_render', input: { code: BOX_CODE, capture: { preset: '1x1' } } }] },
+    { toolCalls: [{ name: 'kiln_finish', input: { programRef } }] },
+  ]);
+  const result = await runKilnAgent({ model, prompt: 'a box' });
+  expect(result.error).toBeUndefined();
+  expect(result.completion).toBe('finished');
+  expect(result.steps).toBe(3);
+  expect(result.counters!.renders).toBe(1);
+});
 
-    await runKilnAgent({
-      model,
-      prompt: 'make it blue',
-      toolSurface: 'unified',
-      existingCode: BOX_CODE,
-      gradeRefine: 'off',
-    });
-
-    const sp = model.seenSystemPrompts[0] as string;
-    expect(typeof sp).toBe('string');
-    // The refine directive is prepended to the same string that becomes the
-    // cached TextBlock for cache-point providers.
-    expect(sp.startsWith('You are MODIFYING an existing Kiln asset')).toBe(true);
+test('refinement context carries the existing reference and keeps task changes out of constant system text', async () => {
+  const ref = await programReference(BOX_CODE);
+  const model = new ScriptedModel([{ text: 'stopped' }]);
+  await runKilnAgent({
+    model,
+    prompt: 'make it cobalt',
+    existingCode: BOX_CODE,
+    originalPrompt: 'a red box',
   });
+  const system = model.seenSystemPrompts[0];
+  expect(String(system)).not.toContain('cobalt');
+  const text = JSON.stringify(model.messageSnapshots[0]);
+  expect(text).toContain('make it cobalt');
+  expect(text).toContain(`p_${ref.slice(7, 19)}`);
+  expect(text).toContain('preserve features unrelated');
+  expect(text).not.toContain('function build()');
+});
 
-  test('a finalize admitted on the exact last call succeeds without a paid follow-up turn', async () => {
-    const budget = createGenerationCallBudget(3);
-    const model = new ScriptedModel([
-      { toolCalls: [{ name: 'kiln_draft', input: { code: BOX_CODE } }] },
-      { toolCalls: [{ name: 'kiln_render' }] },
-      { toolCalls: [{ name: 'kiln_finalize' }] },
-      { text: 'unreachable paid follow-up' },
-    ]);
-
-    const result = await runKilnAgent({
-      model,
-      prompt: 'a red test box',
-      toolSurface: 'unified',
-      generationCallBudget: budget,
-      gradeRefine: 'off',
-    });
-
-    expect(result.error).toBeUndefined();
-    expect(result.code).toBe(BOX_CODE);
-    expect(result.steps).toBe(3);
-    expect(result.toolCalls).toEqual(['kiln_draft', 'kiln_render', 'kiln_finalize']);
-    expect(budget.receipt()).toMatchObject({ consumed: 3, denied: 0, exhausted: true });
+test('failed rendering emits no candidate and assistant source is never promoted', async () => {
+  const candidates: unknown[] = [];
+  const result = await runKilnAgent({
+    model: new ScriptedModel([
+      { toolCalls: [{ name: 'kiln_render', input: { code: 'nope(' } }] },
+      { text: BOX_CODE },
+    ]),
+    prompt: 'box',
+    onCandidate: (c) => candidates.push(c),
   });
-
-  test('step-cap salvage refuses source mutated after the last successful render', async () => {
-    const budget = createGenerationCallBudget(3);
-    const model = new ScriptedModel([
-      { toolCalls: [{ name: 'kiln_draft', input: { code: BOX_CODE } }] },
-      { toolCalls: [{ name: 'kiln_render' }] },
-      {
-        toolCalls: [
-          {
-            name: 'kiln_edit',
-            input: { oldString: "gameMaterial('#ff0000')", newString: "gameMaterial('#0000ff')" },
-          },
-        ],
-      },
-      { text: 'unreachable paid follow-up' },
-    ]);
-
-    const result = await runKilnAgent({
-      model,
-      prompt: 'a blue test box',
-      toolSurface: 'unified',
-      generationCallBudget: budget,
-      gradeRefine: 'off',
-    });
-
-    expect(result.code).toBeUndefined();
-    expect(result.error).toContain('step cap');
-    expect(budget.receipt()).toMatchObject({ consumed: 3, denied: 0, exhausted: true });
-  });
+  expect(result.completion).toBe('failed');
+  expect(result.code).toBeUndefined();
+  expect(candidates).toEqual([]);
 });

@@ -1,9 +1,17 @@
 import { createHash } from 'node:crypto';
-import type { EvaluatorPortV1 } from './evaluator';
+import type { EvaluatorPortV2 } from './evaluator';
 import type { RenderResult } from './render';
 import { EvaluatorPortError } from './evaluator/protocol';
 import * as acorn from 'acorn';
 import * as walk from 'acorn-walk';
+import {
+  assertNoLegacyRuntimePolicy,
+  resolveRequirementsContext,
+  validateRequirementsContext,
+  requirementsContextsEqual,
+  type RequirementsContext,
+} from './requirements-context';
+import { validateRequirementsQaReport } from './qa/requirements-report';
 
 /** Conservative cache admission, not a sandbox or a proof for arbitrary JavaScript. */
 function sourceHasAmbientInputs(code: string): boolean {
@@ -130,13 +138,34 @@ function canonical(value: unknown): unknown {
   throw new Error('Build input contains a non-data dependency.');
 }
 
+/** Receipts must be valid before semantic cache reuse can replace their task provenance. */
+function validateBuildRequirements(
+  result: RenderResult,
+  expected: RequirementsContext,
+  exact: boolean,
+): void {
+  try {
+    const actual = validateRequirementsContext(result.requirements);
+    validateRequirementsQaReport(result.meta.qaReport, actual);
+    if (
+      actual.policyHash !== expected.policyHash ||
+      actual.adviceHash !== expected.adviceHash ||
+      (exact && !requirementsContextsEqual(actual, expected))
+    )
+      throw new Error('Requirements mismatch.');
+  } catch {
+    throw new EvaluatorPortError('PROTOCOL_ERROR');
+  }
+}
+
 export function createCachedEvaluatorPort(
-  evaluator: EvaluatorPortV1,
+  evaluator: EvaluatorPortV2,
   options: { cache: BuildCache; identity(): string | undefined },
-): EvaluatorPortV1 {
+): EvaluatorPortV2 {
   const pending = new Map<string, Promise<{ result: RenderResult; shareable: boolean }>>();
   return {
     async render(code, renderOptions, controls) {
+      assertNoLegacyRuntimePolicy(renderOptions ?? {});
       const signal = controls?.signal;
       const checkCancelled = () => {
         if (signal?.aborted) throw new EvaluatorPortError('CANCELLED');
@@ -148,15 +177,30 @@ export function createCachedEvaluatorPort(
       if (!identity || renderOptions?.textureResolver || sourceHasAmbientInputs(code))
         return evaluator.render(code, renderOptions, controls);
       let serialized: string;
+      let requirements = resolveRequirementsContext(renderOptions?.requirements);
       try {
         // Fingerprint and evaluation must observe the same values even when the
         // caller edits its options while a disk cache lookup is in flight.
         renderOptions = structuredClone(renderOptions);
+        requirements = resolveRequirementsContext(renderOptions?.requirements);
+        const { requirements: _binding, ...optionsWithoutBinding } = renderOptions ?? {};
         const { signal: _signal, ...dataControls } = controls ?? {};
         const snapshotControls = structuredClone(dataControls);
         controls = { ...snapshotControls, ...(signal ? { signal } : {}) };
         serialized = JSON.stringify(
-          canonical({ identity, code, options: renderOptions ?? {}, controls: snapshotControls }),
+          canonical({
+            version: 'kiln.build-requirements.v1',
+            identity,
+            code,
+            options: {
+              ...optionsWithoutBinding,
+              requirements: {
+                policyHash: requirements.policyHash,
+                adviceHash: requirements.adviceHash,
+              },
+            },
+            controls: snapshotControls,
+          }),
         );
       } catch {
         return evaluator.render(code, renderOptions, controls);
@@ -164,18 +208,26 @@ export function createCachedEvaluatorPort(
       const key = `sha256:${createHash('sha256').update(serialized).digest('hex')}` as const;
       const cached = await options.cache.get(key).catch(() => undefined);
       checkCancelled();
-      if (cached) return { ...cached, buildCache: { key, hit: true } };
+      if (cached) {
+        try {
+          validateBuildRequirements(cached, requirements, false);
+          return { ...copy(cached), requirements, buildCache: { key, hit: true } };
+        } catch {
+          // An old or inconsistent disposable entry is a miss, never current acceptance evidence.
+        }
+      }
       // A cancellable miss owns its worker. It may read completed artifacts, but
       // never shares an in-flight request whose owner could abort another caller.
       const existing = signal ? undefined : pending.get(key);
       if (existing) {
         const completed = await existing;
         if (!completed.shareable) return evaluator.render(code, renderOptions, controls);
-        return { ...copy(completed.result), buildCache: { key, hit: true } };
+        return { ...copy(completed.result), requirements, buildCache: { key, hit: true } };
       }
       const build = (async () => {
         const result = await evaluator.render(code, renderOptions, controls);
         checkCancelled();
+        validateBuildRequirements(result, requirements, true);
         let snapshot: RenderResult;
         try {
           snapshot = copy(result);
@@ -191,7 +243,7 @@ export function createCachedEvaluatorPort(
         const completed = await build;
         checkCancelled();
         return completed.shareable
-          ? { ...copy(completed.result), buildCache: { key, hit: false } }
+          ? { ...copy(completed.result), requirements, buildCache: { key, hit: false } }
           : completed.result;
       } finally {
         if (!signal) pending.delete(key);

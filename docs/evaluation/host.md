@@ -1,9 +1,15 @@
 # Running a pilot cell
 
-The experimental host is `scripts/evaluation/server.ts`. It exposes the eight
-public source-reference tools with a condition adapter. It starts no model and
+The experimental host is `scripts/evaluation/server.ts`. It exposes the nine
+non-collection tools with a condition adapter. It starts no model and
 makes no provider request. Do not use this adapter for Q1: final acceptance uses
 the installed shipping package and shipping skills.
+
+The current adapter names discovery `kiln_discover` in all conditions. A/B retain
+legacy lookup selectors only as isolated research controls; C uses the shipping
+Discovery contract. These controls are not compatibility aliases in the package.
+Historical run packets retain their original tool names and identities. Record
+new guide and adapter hashes for new runs; do not apply new results retroactively.
 
 Create a config outside the clean-room project, with an output directory that
 does not exist yet. Its parent directory must already exist:

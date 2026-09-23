@@ -8,6 +8,7 @@ import {
   stampSemanticMetadataV1,
 } from '../contracts';
 import { renderSceneToGLB } from '../render';
+import { bindLegacyFixtureRequirements } from '../__tests__/helpers/requirements-fixture';
 import {
   ENVIRONMENT_SOCKET_TYPES,
   ENVIRONMENT_SUBTYPES,
@@ -315,11 +316,13 @@ describe('ENV-004 semantic placement sockets', () => {
   test('preserves exact frame/socket metadata through GLB export and reload', async () => {
     const root = semanticTile();
     const rendered = await renderSceneToGLB(root, {
-      intent: createAssetIntentV1({
-        category: 'environment',
-        subtype: 'terrain-tile',
-        capabilities: ['tileable'],
-      }),
+      requirements: bindLegacyFixtureRequirements(
+        createAssetIntentV1({
+          category: 'environment',
+          subtype: 'terrain-tile',
+          capabilities: ['tileable'],
+        }),
+      ),
       optimize: 'full',
     });
     const document = await new WebIO().readBinary(rendered.bytes);

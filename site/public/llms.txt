@@ -22,7 +22,8 @@ Your coding harness supplies the model. The tools do not require a separate mode
 ## Authoring workflow
 
 Read the generated project's AGENTS.md and START.md and its installed skills.
-Discover the connected host's capabilities with kiln_list_primitives({capabilities:true}).
+Discover the connected host's capabilities with kiln_discover({capabilities:true}).
+Use ordinary-language queries with kiln_discover, then fetch selected IDs for exact contracts.
 Read the actual tool schemas before calling tools; do not infer helper signatures.
 Submit new source once. Reuse the returned programRef for source reads, edits and renders.
 Copy it exactly: built-in stores return short immutable handles such as p_7c94a132b8e0.
@@ -35,6 +36,10 @@ CPU views show geometry and base colours; use the optional GPU renderer for PBR 
 Export both accepted source and GLB. Keep model attribution and actual render provenance.
 
 ## Skills
+
+These shared skills are for external CLI/MCP harnesses. The optional built-in Strands
+agent registers its own native workflow context internally; do not copy that context
+into a CLI/MCP workspace. See docs/runtime.md for the native harness boundary.
 
 - Author: https://raw.githubusercontent.com/matthew-kissinger/kiln/main/skills/kiln-author-asset/SKILL.md
 - Refine: https://raw.githubusercontent.com/matthew-kissinger/kiln/main/skills/kiln-refine-asset/SKILL.md
@@ -49,4 +54,5 @@ Export both accepted source and GLB. Keep model attribution and actual render pr
 - Gallery manifest, including source and GLB paths: https://kilnstudio.tools/assets/index.json
 
 This file is a reading index. The linked registry-generated reference and the connected
-host's capabilities describe the API. The gallery is curated work, not a model benchmark.
+host's capabilities describe the API. Gallery assets are unvetted historical showcases,
+not golden examples or a model benchmark.

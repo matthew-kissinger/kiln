@@ -108,6 +108,18 @@ test('concurrent child revisions both survive and list as branches', async () =>
     (await store.read('project', base.assetId, base.revisionId)).manifest.parentRevision,
   ).toBeUndefined();
 });
+
+test('a manifest that would exceed the reader limit never becomes a saved revision', async () => {
+  const { store } = await library();
+  const input = await draft();
+  await expect(
+    store.save('project', {
+      ...input,
+      build: { ...input.build, options: { provenance: 'x'.repeat(1024 * 1024) } },
+    }),
+  ).rejects.toThrow('Manifest exceeds 1 MiB');
+  expect(await store.list('project')).toEqual([]);
+});
 test('unknown roots and traversal are rejected; import is idempotent', async () => {
   const { store } = await library();
   const saved = await store.save('project', await draft());

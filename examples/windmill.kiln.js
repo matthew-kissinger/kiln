@@ -1,3 +1,4 @@
+// Maintainer revision: Kiln UV API migration replaces the old UV-preserving wrapper with copyGeometry; geometry and existing UV values are unchanged.
 // Authored by: opencode-go/deepseek-v4-flash-vision-exp, via opencode.
 //
 // Written by the model itself through the Kiln MCP tools: it wrote the
@@ -64,7 +65,7 @@ async function build() {
   const baseR = 4.5, topR = 3.0, topY = 14.0;
   const towR = (y) => baseR + (topR - baseR) * (y / topY);
 
-  const towerGeo = cylinderUnwrap(cylinderGeo(topR, baseR, topY, 32));
+  const towerGeo = copyGeometry(cylinderGeo(topR, baseR, topY, 32));
   createPart('Tower', towerGeo, brick, { position: [0, 7, 0], parent: root });
 
   // The eleven course rings that used to be here were a stand-in for coursing

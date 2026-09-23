@@ -1,5 +1,5 @@
 /**
- * Part-vs-part self-intersection gate — T4.1
+ * Bounded part-vs-part solid-overlap observation — T4.1
  *
  * ## Why intersection VOLUME, not triangle overlap
  *
@@ -13,10 +13,11 @@
  *   same space. Contact is coplanar triangles; interpenetration is shared
  *   volume. A triangle test sees both as "they overlap".
  *
- * Boolean intersection volume separates them by construction: surfaces in
+ * Boolean intersection volume distinguishes these fixtures: surfaces in
  * contact enclose zero volume, interpenetrating solids enclose a real one. That
  * is exactly the distinction the gate has to make, so it is measured directly
- * rather than approximated.
+ * rather than inferred from bounding boxes. Numeric tolerance and representation
+ * limits still apply; intentional joints can also share real volume.
  *
  * manifold-3d is already a dependency (`solids.ts`), so this costs no new
  * package and reuses the same watertight-solid machinery CSG runs on.
@@ -26,7 +27,8 @@
  * Booleans are expensive and pair count grows quadratically, so the pass is
  * staged:
  *
- * 1. **Broad phase** — world-space AABB overlap. Rejects almost every pair for
+ * 1. **Broad phase** — world-space AABB overlap, capped at 250,000 pair checks.
+ *    Retains at most 64 candidate pairs. Rejects separated pairs for
  *    the price of six comparisons. Parts that do not share a bounding box
  *    cannot share volume.
  * 2. **Narrow phase** — one boolean per surviving pair, capped by
@@ -52,6 +54,8 @@ import { KILN_ENGINE_QA_OWNER, type QaRule } from './registry';
 export const MAX_PART_TRIANGLES = 20000;
 /** Narrow-phase budget. Broad phase normally leaves far fewer than this. */
 export const MAX_NARROW_PHASE_PAIRS = 64;
+/** Bound pair discovery even when many boxes overlap; retain only the narrow-phase budget. */
+export const MAX_BROAD_PHASE_PAIRS = 250_000;
 /**
  * Intersection volume below this fraction of the smaller part's volume is
  * treated as contact rather than penetration.
@@ -75,13 +79,15 @@ export interface PartPenetrationPairV1 {
 export interface PartPenetrationEvidenceV1 {
   schemaVersion: 1;
   source: 'engine-scene-analysis';
-  /** Parts that were actually compared. */
+  /** Eligible mesh parts collected; not every part necessarily reaches a boolean. */
   partsAnalyzed: number;
-  /** Pairs that survived the AABB broad phase. */
+  /** Overlapping pairs found; a lower bound when broadPhaseTruncated is true. */
   candidatePairs: number;
+  /** Pair discovery itself exhausted its budget; later pairs were not considered. */
+  broadPhaseTruncated?: boolean;
   /** Pairs a boolean was actually run on. */
   pairsTested: number;
-  /** True when the narrow-phase cap stopped the analysis short. */
+  /** True when either pair-discovery or narrow-phase budget stopped analysis short. */
   truncated: boolean;
   /** Parts skipped, with the reason — never silently dropped. */
   skipped: { part: string; reason: string }[];
@@ -94,10 +100,14 @@ interface AnalyzedPart {
   mesh: THREE.Mesh;
   box: THREE.Box3;
   triangles: number;
+  center: THREE.Vector3;
+  scale: number;
 }
 
 /** Fixed precision so a report is byte-comparable across runs. */
 const round = (n: number): number => Math.round(n * 1e9) / 1e9;
+// Absolute decimal rounding erased micron-scale positive volumes. Keep relative precision.
+const roundVolume = (n: number): number => Number(n.toPrecision(9));
 
 function triangleCount(geometry: THREE.BufferGeometry): number {
   const index = geometry.getIndex();
@@ -120,10 +130,30 @@ function collectParts(
   const parts: AnalyzedPart[] = [];
   root.updateWorldMatrix(true, true);
 
-  root.traverse((node) => {
+  root.traverseVisible((node) => {
     const mesh = node as THREE.Mesh;
     if (!mesh.isMesh || !mesh.geometry) return;
     const name = mesh.name || '(unnamed mesh)';
+    if (
+      (mesh as THREE.InstancedMesh).isInstancedMesh ||
+      (mesh as THREE.SkinnedMesh).isSkinnedMesh ||
+      Object.values(mesh.geometry.morphAttributes).some((targets) => targets.length)
+    ) {
+      skipped.push({
+        part: name,
+        reason: 'instancing, skin or morph deformation is unsupported by part-volume analysis',
+      });
+      return;
+    }
+    const total = mesh.geometry.index?.count ?? mesh.geometry.getAttribute('position')?.count ?? 0;
+    const range = mesh.geometry.drawRange;
+    if (range.start !== 0 || range.count < total) {
+      skipped.push({
+        part: name,
+        reason: 'partial triangle draw ranges are unsupported by part-volume analysis',
+      });
+      return;
+    }
     const triangles = triangleCount(mesh.geometry);
     if (triangles === 0) return;
     if (triangles > MAX_PART_TRIANGLES) {
@@ -133,16 +163,33 @@ function collectParts(
       });
       return;
     }
-    const box = new THREE.Box3().setFromObject(mesh);
+    // Bounds belong to this mesh, never its child meshes (which are independent parts).
+    mesh.geometry.computeBoundingBox();
+    const box = mesh.geometry.boundingBox!.clone().applyMatrix4(mesh.matrixWorld);
     if (box.isEmpty()) return;
-    parts.push({ name, mesh, box, triangles });
+    const center = box.getCenter(new THREE.Vector3());
+    const size = box.getSize(new THREE.Vector3());
+    const scale = Math.max(size.x, size.y, size.z);
+    if (
+      ![...box.min, ...box.max, scale].every(Number.isFinite) ||
+      !(scale > 0) ||
+      !Number.isFinite(mesh.matrixWorld.determinant()) ||
+      mesh.matrixWorld.determinant() === 0
+    ) {
+      skipped.push({
+        part: name,
+        reason: 'non-finite or collapsed transformed bounds cannot be measured',
+      });
+      return;
+    }
+    parts.push({ name, mesh, box, triangles, center, scale });
   });
 
   return parts;
 }
 
 /**
- * World-space triangle soup for one mesh, as manifold wants it.
+ * Normalized triangle soup for one static mesh, as manifold wants it.
  *
  * Deliberately independent of `solids.ts`'s `threeToManifold`: that one walks a
  * whole Object3D and enforces CSG's stricter operand contract, whereas this
@@ -150,17 +197,26 @@ function collectParts(
  * report on rather than throw over.
  */
 function meshToArrays(
-  mesh: THREE.Mesh,
+  part: AnalyzedPart,
 ): { vertProperties: Float32Array; triVerts: Uint32Array } | null {
+  const { mesh, center, scale } = part;
   const geometry = mesh.geometry;
   const position = geometry.getAttribute('position') as THREE.BufferAttribute | undefined;
-  if (!position) return null;
+  if (position?.itemSize !== 3) return null;
 
-  const matrix = mesh.matrixWorld;
+  // Translate before transforming vertices, then normalize before Float32 conversion.
+  // Manifold solids are later placed in a shared pair frame using double transforms.
+  const matrix = mesh.matrixWorld.clone();
+  matrix.elements[12] -= center.x;
+  matrix.elements[13] -= center.y;
+  matrix.elements[14] -= center.z;
   const v = new THREE.Vector3();
   const verts = new Float32Array(position.count * 3);
   for (let i = 0; i < position.count; i++) {
-    v.set(position.getX(i), position.getY(i), position.getZ(i)).applyMatrix4(matrix);
+    v.set(position.getX(i), position.getY(i), position.getZ(i))
+      .applyMatrix4(matrix)
+      .divideScalar(scale);
+    if (![v.x, v.y, v.z].every((n) => Number.isFinite(Math.fround(n)))) return null;
     verts[i * 3] = v.x;
     verts[i * 3 + 1] = v.y;
     verts[i * 3 + 2] = v.z;
@@ -171,12 +227,19 @@ function meshToArrays(
   if (index) {
     if (index.count % 3 !== 0) return null;
     tris = new Uint32Array(index.count);
-    for (let i = 0; i < index.count; i++) tris[i] = index.getX(i);
+    for (let i = 0; i < index.count; i++) {
+      const id = index.getX(i);
+      if (!Number.isSafeInteger(id) || id < 0 || id >= position.count) return null;
+      tris[i] = id;
+    }
   } else {
     if (position.count % 3 !== 0) return null;
     tris = new Uint32Array(position.count);
     for (let i = 0; i < position.count; i++) tris[i] = i;
   }
+  if (mesh.matrixWorld.determinant() < 0)
+    for (let i = 0; i < tris.length; i += 3)
+      [tris[i + 1], tris[i + 2]] = [tris[i + 2]!, tris[i + 1]!];
 
   return { vertProperties: verts, triVerts: tris };
 }
@@ -209,16 +272,23 @@ export async function analyzePartPenetration(
 
   // Broad phase first, so an unwinnable scene never pays for WASM init.
   const candidates: Array<[AnalyzedPart, AnalyzedPart]> = [];
-  for (let i = 0; i < parts.length; i++) {
+  let considered = 0;
+  broadPhase: for (let i = 0; i < parts.length; i++) {
     for (let j = i + 1; j < parts.length; j++) {
-      if (parts[i]!.box.intersectsBox(parts[j]!.box)) candidates.push([parts[i]!, parts[j]!]);
+      if (considered++ === MAX_BROAD_PHASE_PAIRS) {
+        base.broadPhaseTruncated = true;
+        break broadPhase;
+      }
+      if (parts[i]!.box.intersectsBox(parts[j]!.box)) {
+        base.candidatePairs++;
+        if (candidates.length < MAX_NARROW_PHASE_PAIRS) candidates.push([parts[i]!, parts[j]!]);
+      }
     }
   }
-  base.candidatePairs = candidates.length;
+  base.truncated = !!base.broadPhaseTruncated || base.candidatePairs > candidates.length;
   if (candidates.length === 0) return base;
 
-  const tested = candidates.slice(0, MAX_NARROW_PHASE_PAIRS);
-  base.truncated = candidates.length > tested.length;
+  const tested = candidates;
 
   const Module = await import('manifold-3d');
   const wasm = await Module.default();
@@ -230,7 +300,7 @@ export async function analyzePartPenetration(
     if (cache.has(part.mesh)) return cache.get(part.mesh)!;
     let solid: InstanceType<typeof Manifold> | null = null;
     try {
-      const arrays = meshToArrays(part.mesh);
+      const arrays = meshToArrays(part);
       if (arrays) {
         const mesh = new Mesh({ numProp: 3, ...arrays });
         // Three's primitives split vertices at UV/normal seams — a BoxGeometry
@@ -240,14 +310,13 @@ export async function analyzePartPenetration(
         mesh.merge();
         solid = new Manifold(mesh);
       } else {
-        skipped.push({ part: part.name, reason: 'its triangle list is malformed' });
+        skipped.push({ part: part.name, reason: 'its triangle positions or indices are invalid' });
       }
     } catch (err) {
-      // A part that is not a closed solid (an open shell, a foliage card) cannot
-      // enclose volume, so it cannot penetrate anything. Reported, not fatal.
+      // Failure to build a closed solid is unmeasured, never evidence of no intersection.
       skipped.push({
         part: part.name,
-        reason: `it is not a closed solid, so it encloses no volume (${err instanceof Error ? err.message : String(err)})`,
+        reason: `a valid closed solid could not be measured (${err instanceof Error ? err.message : String(err)})`,
       });
       solid = null;
     }
@@ -264,23 +333,38 @@ export async function analyzePartPenetration(
       base.pairsTested++;
 
       let overlap: InstanceType<typeof Manifold> | null = null;
+      const scale = Math.max(a.scale, b.scale);
+      const pa = sa.scale(a.scale / scale);
+      const scaledB = sb.scale(b.scale / scale);
+      const pb = scaledB.translate(b.center.clone().sub(a.center).divideScalar(scale).toArray());
       try {
-        overlap = Manifold.intersection(sa, sb);
+        overlap = Manifold.intersection(pa, pb);
         const volume = overlap.volume();
         if (volume > 0) {
-          const smaller = Math.min(Math.abs(sa.volume()), Math.abs(sb.volume()));
+          const smaller = Math.min(Math.abs(pa.volume()), Math.abs(pb.volume()));
           const fraction = smaller > 0 ? volume / smaller : 0;
           if (fraction > CONTACT_VOLUME_FRACTION) {
+            const assetVolume = volume * scale ** 3;
+            if (!Number.isFinite(assetVolume) || !(assetVolume > 0)) {
+              skipped.push({
+                part: a.name,
+                reason: `intersection with ${JSON.stringify(b.name)} is outside representable volume range`,
+              });
+              continue;
+            }
             penetrations.push({
               a: a.name,
               b: b.name,
-              volume: round(volume),
+              volume: roundVolume(assetVolume),
               fraction: round(fraction),
             });
           }
         }
       } finally {
         overlap?.delete();
+        pa.delete();
+        pb.delete();
+        scaledB.delete();
       }
     }
   } finally {
@@ -329,35 +413,48 @@ export const SELF_INTERSECTION_QA_RULE: QaRule = Object.freeze({
   owner: KILN_ENGINE_QA_OWNER,
   defaultMode: 'observe',
   evaluate(context: QaContext): readonly QaFinding[] {
-    const evidence = readEvidence(context as { derivedEvidence?: Record<string, unknown> });
-    if (!evidence) return [];
+    return inspectPartPenetration(readEvidence(context));
+  },
+});
 
-    const findings: QaFinding[] = evidence.penetrations.map((pair) => ({
-      code: 'GEO_PART_SELF_INTERSECTION',
+/** Shared observation kernel; the measurement is derived by the engine, never asset metadata. */
+export function inspectPartPenetration(evidence?: PartPenetrationEvidenceV1): readonly QaFinding[] {
+  if (!evidence) return [];
+
+  const findings: QaFinding[] = evidence.penetrations.map((pair) => ({
+    code: 'GEO_PART_SELF_INTERSECTION',
+    disposition: 'observe' as const,
+    dimension: 'visualQuality' as const,
+    profile: 'geometry.selfIntersection',
+    message: `Parts ${JSON.stringify(pair.a)} and ${JSON.stringify(pair.b)} occupy the same space: they share ${pair.volume.toPrecision(3)} m³, which is ${(pair.fraction * 100).toFixed(1)}% of the smaller part.`,
+    affected: { node: pair.a },
+    measurement: {
+      name: 'intersectionVolumeFraction',
+      actual: pair.fraction,
+      expected: CONTACT_VOLUME_FRACTION,
+    },
+    repairText:
+      'Check whether this overlap is intentional, such as a joined beam or embedded detail. For unintended solid overlap, move a part or use boolDiff to cut clearance. This observation does not test intersections within a single mesh, open surfaces, empty passage space or motion.',
+  }));
+
+  if (evidence.truncated) {
+    findings.push({
+      code: 'GEO_PART_SELF_INTERSECTION_TRUNCATED',
       disposition: 'observe' as const,
       dimension: 'visualQuality' as const,
       profile: 'geometry.selfIntersection',
-      message: `Parts ${JSON.stringify(pair.a)} and ${JSON.stringify(pair.b)} occupy the same space: they share ${pair.volume.toPrecision(3)} m³, which is ${(pair.fraction * 100).toFixed(1)}% of the smaller part.`,
-      affected: { node: pair.a },
-      measurement: {
-        name: 'intersectionVolumeFraction',
-        actual: pair.fraction,
-        expected: CONTACT_VOLUME_FRACTION,
-      },
-      repairText:
-        'Move one part clear of the other, or subtract it with boolDiff so the overlap becomes a real cut instead of two solids in the same place.',
-    }));
+      message: `Only ${evidence.pairsTested} of ${evidence.broadPhaseTruncated ? 'at least ' : ''}${evidence.candidatePairs} overlapping part pairs were checked (analysis budget). Parts beyond that were not examined.`,
+    });
+  }
+  if (evidence.skipped.length) {
+    findings.push({
+      code: 'GEO_PART_SELF_INTERSECTION_UNMEASURED',
+      disposition: 'observe' as const,
+      dimension: 'visualQuality' as const,
+      profile: 'geometry.selfIntersection',
+      message: `${evidence.skipped.length} part-volume measurements were unavailable: ${evidence.skipped.map((s) => `${JSON.stringify(s.part)}: ${s.reason}`).join('; ')}. These parts are not certified clear.`,
+    });
+  }
 
-    if (evidence.truncated) {
-      findings.push({
-        code: 'GEO_PART_SELF_INTERSECTION_TRUNCATED',
-        disposition: 'observe' as const,
-        dimension: 'visualQuality' as const,
-        profile: 'geometry.selfIntersection',
-        message: `Only ${evidence.pairsTested} of ${evidence.candidatePairs} overlapping part pairs were checked (analysis budget). Parts beyond that were not examined.`,
-      });
-    }
-
-    return findings;
-  },
-});
+  return findings;
+}

@@ -9,7 +9,9 @@ The checkout is `@kiln/engine`; its package exports point to TypeScript source. 
 | Subpath | Purpose |
 |---|---|
 | `@kiln/engine/tools` | SDK-independent tool definitions and registry factories |
-| `@kiln/engine/agent` | Optional Strands agent loop, model factory, and draft buffer |
+| `@kiln/engine/agent` | Optional Strands program-reference loop, model factory and exact-revision completion |
+| `@kiln/engine/discovery` | Offline ranked catalog search and exact helper/recipe contracts |
+| `@kiln/engine/requirements` | Host-bound, category-independent asset requirements |
 | `@kiln/engine/render` | Build, serialize, inspect, and compose GLBs |
 | `@kiln/engine/views` | Shared cameras, CPU images, capture limits, GPU port helpers and cell caches |
 | `@kiln/engine/validation` | Syntax and structural checks |
@@ -27,7 +29,22 @@ See [package.json](../package.json) for all exports.
 
 ## Tool surfaces
 
-[src/tools/registry.ts](../src/tools/registry.ts) defines the tools. `createKilnToolRegistry` is the in-process loop's four tools; its `kiln_screenshot` runs the same implementation as the unified `kiln_render`. `createKilnProgramToolRegistry` adds saved-source references and combines build metrics with rendered views for the current MCP surface. The two surfaces share implementations but intentionally differ in their available tools.
+[src/tools/registry.ts](../src/tools/registry.ts) owns the current tool definitions.
+`createKilnProgramToolRegistry` supplies fourteen MCP tools.
+`createKilnNativeToolRegistry` reuses those definitions, removes unavailable delivery
+services and adds exact-reference completion. The retired mutable-buffer factories
+and separate `kiln_screenshot` are not the supported native workflow.
+
+| Interface | Execution and feedback | Completion and host services |
+| --- | --- | --- |
+| CLI | Node commands call shared engine operations; render/inspection receipts accompany image files that the host agent must read. | The invoking agent controls delivery. CLI/MCP can share the same workspace, stores and requirements binding. |
+| MCP | Fourteen registry tools over stdio; unified `kiln_render` returns metrics, QA, part paths and typed images with fidelity. Numeric-only inspection can omit images. | The host owns the agent loop; no terminal submit tool. Host media handling still needs qualification. |
+| Native Strands | Direct in-process registry adapters with injected stores, requirements and rendering; no CLI/MCP hop. Same source/reference/edit/inspection semantics. | Ten default tools including `kiln_finish`; five delivery tools when an asset library is injected. A configured skill-resource reader adds one tool. Finish selects a retained reviewed revision; it does not certify QA success. |
+
+Discovery needs no inference service. Recipes are optional guidance; requirements
+select checks independently of labels. The Strands SDK and provider adapters are
+optional dependencies, loaded only for native generation. See [runtime support](runtime.md)
+for the separate core and native-agent Node requirements.
 
 An embedded host can inject a `ProgramStore`. The default registry store is in memory; the stdio server and CLI use a local file store. [Program revisions](programs.md) describes the contract and lifecycle.
 

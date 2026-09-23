@@ -1,7 +1,7 @@
 import { describe, expect, test } from 'bun:test';
 import type * as THREE from 'three';
 
-import { listPrimitives } from '../list-primitives';
+import { listHelperSpecs } from '../discovery/helper-specs';
 import {
   APPROVED_TEXTURE_RESOURCES_V1,
   type ApprovedTextureResourceDescriptorV1,
@@ -44,8 +44,8 @@ describe('H6 generated texture boundary', () => {
     const globals = buildSandboxGlobals();
     expect(globals['loadTexture']).toBeUndefined();
     expect(typeof globals['loadApprovedTexture']).toBe('function');
-    expect(listPrimitives().some(({ name }) => name === 'loadTexture')).toBe(false);
-    expect(listPrimitives().some(({ name }) => name === 'loadApprovedTexture')).toBe(true);
+    expect(listHelperSpecs().some(({ name }) => name === 'loadTexture')).toBe(false);
+    expect(listHelperSpecs().some(({ name }) => name === 'loadApprovedTexture')).toBe(true);
   });
 
   test.each([
@@ -95,7 +95,7 @@ describe('H6 generated texture boundary', () => {
       async function build() {
         const root = createRoot('Root');
         const albedo = await loadApprovedTexture('${SUBJECT}');
-        root.add(new THREE.Mesh(boxUnwrap(boxGeo(1, 1, 1)), pbrMaterial({ albedo })));
+        root.add(new THREE.Mesh(copyGeometry(boxGeo(1, 1, 1)), pbrMaterial({ albedo })));
         return root;
       }
     `);
@@ -121,7 +121,7 @@ describe('H6 generated texture boundary', () => {
       async function build() {
         const root = createRoot('Root');
         const albedo = await loadApprovedTexture('${SUBJECT}');
-        root.add(new THREE.Mesh(boxUnwrap(boxGeo(1, 1, 1)), pbrMaterial({ albedo })));
+        root.add(new THREE.Mesh(copyGeometry(boxGeo(1, 1, 1)), pbrMaterial({ albedo })));
         return root;
       }
     `,

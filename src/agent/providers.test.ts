@@ -107,58 +107,63 @@ describe('makeKilnModel', () => {
     }
   });
 
-  test('constructs the right Strands model class per provider', () => {
-    expect(makeKilnModel({ provider: 'google', model: 'gemini-3.5-flash' }).constructor.name).toBe(
-      'GoogleModel',
-    );
+  test('constructs the right Strands model class per provider', async () => {
     expect(
-      makeKilnModel({ provider: 'anthropic', model: 'claude-opus-4-8', maxTokens: 16000 })
+      (await makeKilnModel({ provider: 'google', model: 'gemini-3.5-flash' })).constructor.name,
+    ).toBe('GoogleModel');
+    expect(
+      (await makeKilnModel({ provider: 'anthropic', model: 'claude-opus-4-8', maxTokens: 16000 }))
         .constructor.name,
     ).toBe('AnthropicModel');
     expect(
-      makeKilnModel({ provider: 'openai', model: 'gpt-5.5', maxTokens: 16000 }).constructor.name,
+      (await makeKilnModel({ provider: 'openai', model: 'gpt-5.5', maxTokens: 16000 })).constructor
+        .name,
     ).toBe('OpenAIModel');
     expect(
-      makeKilnModel({
-        provider: 'bedrock',
-        model: 'global.anthropic.claude-opus-4-8',
-        maxTokens: 16000,
-      }).constructor.name,
+      (
+        await makeKilnModel({
+          provider: 'bedrock',
+          model: 'global.anthropic.claude-opus-4-8',
+          maxTokens: 16000,
+        })
+      ).constructor.name,
     ).toBe('BedrockModel');
-    expect(makeKilnModel({ provider: 'openrouter', model: 'x-ai/grok-4.3' }).constructor.name).toBe(
-      'VercelModel',
-    );
     expect(
-      makeKilnModel({ provider: 'meta', model: 'muse-spark-1.1', maxTokens: 4096 }).constructor
-        .name,
+      (await makeKilnModel({ provider: 'openrouter', model: 'x-ai/grok-4.3' })).constructor.name,
+    ).toBe('VercelModel');
+    expect(
+      (await makeKilnModel({ provider: 'meta', model: 'muse-spark-1.1', maxTokens: 4096 }))
+        .constructor.name,
     ).toBe('OpenAIModel');
   });
 
-  test('accepts a BYOK apiKey override for the google path', () => {
-    const m = makeKilnModel(
+  test('accepts a BYOK apiKey override for the google path', async () => {
+    const m = await makeKilnModel(
       { provider: 'google', model: 'gemini-3.5-flash' },
       { apiKey: 'byok-override' },
     );
     expect(m).toBeTruthy();
   });
 
-  test('passes a BYOK apiKey through to the anthropic and openai clients', () => {
+  test('passes a BYOK apiKey through to the anthropic and openai clients', async () => {
     const clientKey = (m: unknown): unknown =>
       (m as { _client?: { apiKey?: unknown } })._client?.apiKey;
     expect(
       clientKey(
-        makeKilnModel(
+        await makeKilnModel(
           { provider: 'anthropic', model: 'claude-opus-4-8' },
           { apiKey: 'byok-anthropic' },
         ),
       ),
     ).toBe('byok-anthropic');
     expect(
-      clientKey(makeKilnModel({ provider: 'openai', model: 'gpt-5.5' }, { apiKey: 'byok-openai' })),
+      clientKey(
+        await makeKilnModel({ provider: 'openai', model: 'gpt-5.5' }, { apiKey: 'byok-openai' }),
+      ),
     ).toBe('byok-openai');
     expect(
       clientKey(
-        makeKilnModel({ provider: 'meta', model: 'muse-spark-1.1' }, { apiKey: 'byok-meta' }),
+        await makeKilnModel({ provider: 'meta', model: 'muse-spark-1.1' }, { apiKey: 'byok-meta' }),
       ),
     ).toBe('byok-meta');
   });
@@ -195,21 +200,17 @@ describe('makeKilnModel', () => {
       expect(resolveOpenRouterReasoning(32000)).toEqual({ max_tokens: 32000 });
     });
 
-    test("A7 clamp: high/xhigh downgrade to medium when OpenRouter's ~80% translation would starve visible output", () => {
-      // The cycle-2 step-1 deaths: Sonnet 4.6 twin at 32K + 'high' → ~6.4K visible.
-      expect(resolveOpenRouterReasoning('high', 32000)).toEqual({ effort: 'medium' });
-      expect(resolveOpenRouterReasoning('xhigh', 16000)).toEqual({ effort: 'medium' });
-      // The 64K/48K twins keep 'high' (visible remainder ≥ 8192) — the live
-      // config that put Fable 5 / Sonnet 5 in the #1 tie group stays untouched.
-      expect(resolveOpenRouterReasoning('high', 64000)).toEqual({ effort: 'high' });
-      expect(resolveOpenRouterReasoning('high', 48000)).toEqual({ effort: 'high' });
-      // medium/low are never rewritten.
-      expect(resolveOpenRouterReasoning('medium', 16000)).toEqual({ effort: 'medium' });
-      expect(resolveOpenRouterReasoning('low', 16000)).toEqual({ effort: 'low' });
+    test('explicit effort is preserved independently of the completion budget', () => {
+      for (const maxTokens of [1500, 16000, 32000, 48000, 64000]) {
+        expect(resolveOpenRouterReasoning('high', maxTokens)).toEqual({ effort: 'high' });
+        expect(resolveOpenRouterReasoning('xhigh', maxTokens)).toEqual({ effort: 'xhigh' });
+        expect(resolveOpenRouterReasoning('medium', maxTokens)).toEqual({ effort: 'medium' });
+        expect(resolveOpenRouterReasoning('low', maxTokens)).toEqual({ effort: 'low' });
+      }
     });
 
-    test('an OpenRouter-hosted Claude with thinking still constructs the Vercel bridge', () => {
-      const m = makeKilnModel({
+    test('an OpenRouter-hosted Claude with thinking still constructs the Vercel bridge', async () => {
+      const m = await makeKilnModel({
         provider: 'openrouter',
         model: 'anthropic/claude-opus-4.8',
         maxTokens: 64000,
@@ -219,8 +220,12 @@ describe('makeKilnModel', () => {
     });
   });
 
-  test('meta uses the Meta base URL and explicit Responses params', () => {
-    const model = makeKilnModel({ provider: 'meta', model: 'muse-spark-1.1', maxTokens: 4096 });
+  test('meta uses the Meta base URL and explicit Responses params', async () => {
+    const model = await makeKilnModel({
+      provider: 'meta',
+      model: 'muse-spark-1.1',
+      maxTokens: 4096,
+    });
     const cfg = (model as unknown as { getConfig(): Record<string, unknown> }).getConfig();
     expect(cfg['modelId']).toBe('muse-spark-1.1');
     expect(cfg['maxTokens']).toBe(4096);
@@ -237,9 +242,9 @@ describe('makeKilnModel', () => {
     const getCfg = (m: unknown): Record<string, unknown> =>
       (m as { getConfig(): Record<string, unknown> }).getConfig();
 
-    test('descriptor maxTokens + thinking flow into the Gemini generationConfig params', () => {
+    test('descriptor maxTokens + thinking flow into the Gemini generationConfig params', async () => {
       const cfg = getCfg(
-        makeKilnModel({
+        await makeKilnModel({
           provider: 'google',
           model: 'gemini-3.5-flash',
           maxTokens: 65536,
@@ -252,23 +257,23 @@ describe('makeKilnModel', () => {
       });
     });
 
-    test('a bare descriptor sends no params — the pre-knob API-default behavior', () => {
-      const cfg = getCfg(makeKilnModel({ provider: 'google', model: 'gemini-3.5-flash' }));
+    test('a bare descriptor sends no params — the pre-knob API-default behavior', async () => {
+      const cfg = getCfg(await makeKilnModel({ provider: 'google', model: 'gemini-3.5-flash' }));
       expect(cfg['params']).toBeUndefined();
     });
 
-    test('xhigh/max collapse to high; numbers and unknown keywords are ignored', () => {
-      const level = (thinking: string | number) =>
+    test('xhigh/max collapse to high; numbers and unknown keywords are ignored', async () => {
+      const level = async (thinking: string | number) =>
         (
-          getCfg(makeKilnModel({ provider: 'google', model: 'gemini-3.5-flash', thinking }))[
+          getCfg(await makeKilnModel({ provider: 'google', model: 'gemini-3.5-flash', thinking }))[
             'params'
           ] as { thinkingConfig?: { thinkingLevel?: string } } | undefined
         )?.thinkingConfig?.thinkingLevel;
-      expect(level('xhigh')).toBe('high');
-      expect(level('max')).toBe('high');
-      expect(level('medium')).toBe('medium');
-      expect(level(8000)).toBeUndefined();
-      expect(level('ultra')).toBeUndefined();
+      expect(await level('xhigh')).toBe('high');
+      expect(await level('max')).toBe('high');
+      expect(await level('medium')).toBe('medium');
+      expect(await level(8000)).toBeUndefined();
+      expect(await level('ultra')).toBeUndefined();
     });
   });
 
@@ -276,15 +281,15 @@ describe('makeKilnModel', () => {
     const getCfg = (m: unknown): Record<string, unknown> =>
       (m as { getConfig(): Record<string, unknown> }).getConfig();
 
-    test('sends nothing by default — the API default (adaptive on Fable 5), the verified config', () => {
-      const cfg = getCfg(makeKilnModel({ provider: 'anthropic', model: 'claude-fable-5' }));
+    test('sends nothing by default — the API default (adaptive on Fable 5), the verified config', async () => {
+      const cfg = getCfg(await makeKilnModel({ provider: 'anthropic', model: 'claude-fable-5' }));
       expect(cfg['params']).toBeUndefined();
       expect(cfg['betas']).toBeUndefined();
     });
 
-    test('effort keyword maps to the adaptive shape (Fable 5 family), no beta header', () => {
+    test('effort keyword maps to the adaptive shape (Fable 5 family), no beta header', async () => {
       const cfg = getCfg(
-        makeKilnModel({ provider: 'anthropic', model: 'claude-fable-5', thinking: 'high' }),
+        await makeKilnModel({ provider: 'anthropic', model: 'claude-fable-5', thinking: 'high' }),
       );
       expect(cfg['params']).toEqual({
         thinking: { type: 'adaptive' },
@@ -293,48 +298,54 @@ describe('makeKilnModel', () => {
       expect(cfg['betas']).toBeUndefined();
     });
 
-    test('numeric budget maps to the legacy enabled shape + interleaved beta (pre-adaptive models)', () => {
+    test('numeric budget maps to the legacy enabled shape + interleaved beta (pre-adaptive models)', async () => {
       const cfg = getCfg(
-        makeKilnModel({ provider: 'anthropic', model: 'claude-haiku-4-5', thinking: 8000 }),
+        await makeKilnModel({ provider: 'anthropic', model: 'claude-haiku-4-5', thinking: 8000 }),
       );
       expect(cfg['params']).toEqual({ thinking: { type: 'enabled', budget_tokens: 8000 } });
       expect(cfg['betas']).toEqual(['interleaved-thinking-2025-05-14']);
     });
 
-    test('adaptive-only models ignore numeric thinking budgets (budget_tokens 400s on them)', () => {
+    test('adaptive-only models ignore numeric thinking budgets (budget_tokens 400s on them)', async () => {
       for (const model of [
         'claude-sonnet-5',
         'claude-fable-5',
         'claude-opus-4-8',
         'claude-opus-4-7',
       ]) {
-        const cfg = getCfg(makeKilnModel({ provider: 'anthropic', model, thinking: 8000 }));
+        const cfg = getCfg(await makeKilnModel({ provider: 'anthropic', model, thinking: 8000 }));
         expect(cfg['params']).toBeUndefined();
         expect(cfg['betas']).toBeUndefined();
       }
     });
 
-    test('env keyword/number applies (numbers floored to 1024); descriptor 0 forces default; google ignores it', () => {
+    test('env keyword/number applies (numbers floored to 1024); descriptor 0 forces default; google ignores it', async () => {
       const prev = process.env['KILN_THINKING'];
       try {
         process.env['KILN_THINKING'] = 'medium';
-        const adaptive = getCfg(makeKilnModel({ provider: 'anthropic', model: 'claude-fable-5' }));
+        const adaptive = getCfg(
+          await makeKilnModel({ provider: 'anthropic', model: 'claude-fable-5' }),
+        );
         expect(adaptive['params']).toEqual({
           thinking: { type: 'adaptive' },
           output_config: { effort: 'medium' },
         });
 
         process.env['KILN_THINKING'] = '512';
-        const floored = getCfg(makeKilnModel({ provider: 'anthropic', model: 'claude-haiku-4-5' }));
+        const floored = getCfg(
+          await makeKilnModel({ provider: 'anthropic', model: 'claude-haiku-4-5' }),
+        );
         expect(floored['params']).toEqual({ thinking: { type: 'enabled', budget_tokens: 1024 } });
 
         const off = getCfg(
-          makeKilnModel({ provider: 'anthropic', model: 'claude-fable-5', thinking: 0 }),
+          await makeKilnModel({ provider: 'anthropic', model: 'claude-fable-5', thinking: 0 }),
         );
         expect(off['params']).toBeUndefined();
 
         // Non-anthropic providers must not grow a thinking param from the env.
-        const google = getCfg(makeKilnModel({ provider: 'google', model: 'gemini-3.5-flash' }));
+        const google = getCfg(
+          await makeKilnModel({ provider: 'google', model: 'gemini-3.5-flash' }),
+        );
         expect(google['params']).toBeUndefined();
       } finally {
         if (prev === undefined) delete process.env['KILN_THINKING'];
@@ -347,13 +358,13 @@ describe('makeKilnModel', () => {
 describe('toCachedSystemPrompt (A2 portable cache breakpoint)', () => {
   const TEXT = 'You generate exportable 3D game assets as Kiln code.';
 
-  test('Anthropic models get [TextBlock, CachePointBlock] — the adapter emits cache_control', () => {
-    const model = makeKilnModel(
+  test('Anthropic models get [TextBlock, CachePointBlock] — the adapter emits cache_control', async () => {
+    const model = await makeKilnModel(
       { provider: 'anthropic', model: 'claude-opus-4-8' },
       { apiKey: 'test-key' },
     );
-    expect(modelConsumesSystemPromptCachePoints(model)).toBe(true);
-    const shaped = toCachedSystemPrompt(TEXT, model);
+    expect(await modelConsumesSystemPromptCachePoints(model)).toBe(true);
+    const shaped = await toCachedSystemPrompt(TEXT, model);
     expect(Array.isArray(shaped)).toBe(true);
     const blocks = shaped as unknown[];
     expect(blocks).toHaveLength(2);
@@ -366,34 +377,37 @@ describe('toCachedSystemPrompt (A2 portable cache breakpoint)', () => {
     expect((blocks[1] as { type: string }).type).toBe('cachePointBlock');
   });
 
-  test('Bedrock models get the block array too (converse cachePoint entry)', () => {
-    const model = makeKilnModel(
+  test('Bedrock models get the block array too (converse cachePoint entry)', async () => {
+    const model = await makeKilnModel(
       { provider: 'bedrock', model: 'global.anthropic.claude-opus-4-8' },
       { region: 'us-west-2' },
     );
-    expect(modelConsumesSystemPromptCachePoints(model)).toBe(true);
-    expect(Array.isArray(toCachedSystemPrompt(TEXT, model))).toBe(true);
+    expect(await modelConsumesSystemPromptCachePoints(model)).toBe(true);
+    expect(Array.isArray(await toCachedSystemPrompt(TEXT, model))).toBe(true);
   });
 
-  test('Google keeps the plain string (its adapter drops cache points)', () => {
-    const model = makeKilnModel(
+  test('Google keeps the plain string (its adapter drops cache points)', async () => {
+    const model = await makeKilnModel(
       { provider: 'google', model: 'gemini-3.5-flash' },
       { apiKey: 'test-key' },
     );
-    expect(modelConsumesSystemPromptCachePoints(model)).toBe(false);
-    expect(toCachedSystemPrompt(TEXT, model)).toBe(TEXT);
+    expect(await modelConsumesSystemPromptCachePoints(model)).toBe(false);
+    expect(await toCachedSystemPrompt(TEXT, model)).toBe(TEXT);
   });
 
-  test('OpenAI / OpenRouter (Vercel bridge) / unknown models keep the plain string', () => {
-    const openai = makeKilnModel({ provider: 'openai', model: 'gpt-5.5' }, { apiKey: 'test-key' });
-    expect(toCachedSystemPrompt(TEXT, openai)).toBe(TEXT);
-    const openrouter = makeKilnModel(
+  test('OpenAI / OpenRouter (Vercel bridge) / unknown models keep the plain string', async () => {
+    const openai = await makeKilnModel(
+      { provider: 'openai', model: 'gpt-5.5' },
+      { apiKey: 'test-key' },
+    );
+    expect(await toCachedSystemPrompt(TEXT, openai)).toBe(TEXT);
+    const openrouter = await makeKilnModel(
       { provider: 'openrouter', model: 'x-ai/grok-4.3' },
       { apiKey: 'test-key' },
     );
-    expect(toCachedSystemPrompt(TEXT, openrouter)).toBe(TEXT);
-    expect(toCachedSystemPrompt(TEXT, undefined)).toBe(TEXT);
-    expect(toCachedSystemPrompt(TEXT, {})).toBe(TEXT);
+    expect(await toCachedSystemPrompt(TEXT, openrouter)).toBe(TEXT);
+    expect(await toCachedSystemPrompt(TEXT, undefined)).toBe(TEXT);
+    expect(await toCachedSystemPrompt(TEXT, {})).toBe(TEXT);
   });
 });
 
@@ -403,8 +417,8 @@ describe('OpenRouter-Anthropic prompt caching (cache_control)', () => {
   const settingsOf = (model: unknown): Record<string, unknown> =>
     (model as { _provider: { settings: Record<string, unknown> } })._provider.settings;
 
-  test('an anthropic/* slug is built with the ephemeral cache_control directive', () => {
-    const model = makeKilnModel(
+  test('an anthropic/* slug is built with the ephemeral cache_control directive', async () => {
+    const model = await makeKilnModel(
       { provider: 'openrouter', model: 'anthropic/claude-sonnet-5' },
       { apiKey: 'test-key' },
     );
@@ -412,7 +426,7 @@ describe('OpenRouter-Anthropic prompt caching (cache_control)', () => {
   });
 
   test('the directive reaches the outgoing request body (fetch captured, no network)', async () => {
-    const model = makeKilnModel(
+    const model = await makeKilnModel(
       { provider: 'openrouter', model: 'anthropic/claude-opus-4.8' },
       { apiKey: 'test-key' },
     );
@@ -445,13 +459,13 @@ describe('OpenRouter-Anthropic prompt caching (cache_control)', () => {
     expect(body?.['cache_control']).toEqual({ type: 'ephemeral' });
   });
 
-  test('non-Anthropic OpenRouter vendors do NOT get the flag', () => {
+  test('non-Anthropic OpenRouter vendors do NOT get the flag', async () => {
     for (const model of ['x-ai/grok-4.3', 'openai/gpt-5.5', 'moonshotai/kimi-k2.5']) {
-      const built = makeKilnModel({ provider: 'openrouter', model }, { apiKey: 'test-key' });
+      const built = await makeKilnModel({ provider: 'openrouter', model }, { apiKey: 'test-key' });
       expect(settingsOf(built)['cache_control']).toBeUndefined();
     }
     // ...and the reasoning setting is still the only thing that lands there.
-    const reasoning = makeKilnModel(
+    const reasoning = await makeKilnModel(
       { provider: 'openrouter', model: 'x-ai/grok-4.3', maxTokens: 64000, thinking: 'high' },
       { apiKey: 'test-key' },
     );
@@ -462,7 +476,7 @@ describe('OpenRouter-Anthropic prompt caching (cache_control)', () => {
   });
 
   test('all OpenRouter author calls prefer throughput without changing the requested model', async () => {
-    const model = makeKilnModel(
+    const model = await makeKilnModel(
       { provider: 'openrouter', model: 'deepseek/deepseek-v4-flash-latest' },
       { apiKey: 'test-key' },
     );
@@ -494,16 +508,16 @@ describe('OpenRouter-Anthropic prompt caching (cache_control)', () => {
     expect(body?.['provider']).toEqual({ sort: 'throughput' });
   });
 
-  test('the two caching mechanisms stay separate: cache_control is not a system cache point', () => {
-    const model = makeKilnModel(
+  test('the two caching mechanisms stay separate: cache_control is not a system cache point', async () => {
+    const model = await makeKilnModel(
       { provider: 'openrouter', model: 'anthropic/claude-sonnet-5' },
       { apiKey: 'test-key' },
     );
     // The Vercel bridge DROPS CachePointBlocks, so the system prompt must stay a
     // plain string even for the vendor whose upstream supports caching. The
     // request-settings directive above is how OpenRouter gets it instead.
-    expect(modelConsumesSystemPromptCachePoints(model)).toBe(false);
-    expect(toCachedSystemPrompt('SYSTEM', model)).toBe('SYSTEM');
+    expect(await modelConsumesSystemPromptCachePoints(model)).toBe(false);
+    expect(await toCachedSystemPrompt('SYSTEM', model)).toBe('SYSTEM');
   });
 });
 
@@ -591,7 +605,7 @@ describe('the cache breakpoint reaches the wire (captured transports, no network
 
   test('toCachedSystemPrompt becomes cache_control on the system text block', async () => {
     const { model, read } = anthropicModel();
-    const shaped = toCachedSystemPrompt(TEXT, model);
+    const shaped = await toCachedSystemPrompt(TEXT, model);
     expect(Array.isArray(shaped)).toBe(true);
     const body = await captureRequest(model, shaped, read);
     expect(body['system']).toEqual([
@@ -637,7 +651,7 @@ describe('the cache breakpoint reaches the wire (captured transports, no network
     const cached = bedrockModel('global.anthropic.claude-opus-4-8');
     const body = await captureRequest(
       cached.model,
-      toCachedSystemPrompt(TEXT, cached.model),
+      await toCachedSystemPrompt(TEXT, cached.model),
       cached.read,
     );
     expect(body['system']).toEqual([{ text: TEXT }, { cachePoint: { type: 'default' } }]);

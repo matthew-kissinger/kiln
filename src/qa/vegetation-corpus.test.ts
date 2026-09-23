@@ -3,6 +3,7 @@ import { createHash } from 'node:crypto';
 import { describe, expect, test } from 'bun:test';
 import type * as THREE from 'three';
 
+import { bindLegacyFixtureRequirements } from '../__tests__/helpers/requirements-fixture';
 import { renderSceneToGLB } from '../render';
 import { evaluateVegetationAdvisoryQa, evaluateVegetationContactQa } from './vegetation';
 import {
@@ -75,18 +76,18 @@ describe('VEG-019 helper-independent vegetation regression corpus', () => {
       if (fixture.id === 'floating-adversary') {
         await expect(
           renderSceneToGLB(firstPayload.scene, {
-            intent: firstPayload.intent,
+            requirements: bindLegacyFixtureRequirements(firstPayload.intent),
             optimize: 'off',
           }),
         ).rejects.toThrow('VEG_CONTACT_FLOATING');
         continue;
       }
       const first = await renderSceneToGLB(firstPayload.scene, {
-        intent: firstPayload.intent,
+        requirements: bindLegacyFixtureRequirements(firstPayload.intent),
         optimize: 'off',
       });
       const repeat = await renderSceneToGLB(repeatPayload.scene, {
-        intent: repeatPayload.intent,
+        requirements: bindLegacyFixtureRequirements(repeatPayload.intent),
         optimize: 'off',
       });
       expect(first.gltfValidation.issues.numErrors).toBe(0);

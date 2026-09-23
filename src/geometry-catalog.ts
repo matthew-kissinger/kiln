@@ -1,7 +1,78 @@
-import type { PrimitiveSpec } from './list-primitives';
+import type { HelperSpec } from './discovery/helper-specs';
+
+/** Source migration guidance only. These names are not callable globals or exports. */
+export const REMOVED_AUTHORING_HELPERS: Readonly<Record<string, string>> = Object.freeze({
+  boxUnwrap:
+    'Preserve existing UVs with direct geometry sharing or copyGeometry. Generate new face mappings explicitly with projectUV(geo, { projection: "box", frame? }); planar projection is a separate mode.',
+  cylinderUnwrap:
+    'Preserve valid built-in UVs with direct sharing or copyGeometry. For cylindrical mapping use projectUV(geo, { projection: "cylindrical", frame?, seamDegrees?, angularRange?, caps? }); partial arcs need an explicit angularRange.',
+  planeUnwrap:
+    'Use projectUV(geo, { projection: "planar", frame? }) to generate frame-XY UVs. Preserve existing UVs with direct sharing or copyGeometry instead.',
+  cloneGeometry:
+    'Pass the original geometry directly for intentional sharing. Use copyGeometry only for independent editable buffers; the removed helper returned its input.',
+  cloneMaterial:
+    'Pass the original material directly for intentional sharing. Use copyMaterial for independent properties; referenced textures remain shared.',
+  panelRemapV:
+    'Use remapUV(geo, { scale: [uScale, vScale], offset: [uOffset, vOffset] }). Preserve omitted legacy defaults explicitly: scale [1, 0.3], offset [0, 0]. Missing UVs must be projected or unwrapped first.',
+  validateAsset:
+    'Use materialBudgetAdvisory(root, { maxMaterials }) for an explicit material-count budget, or countMaterials(root) for a count. It does not validate assets or measure draw calls; use kiln_validate and render/QA findings for the actual validation workflow.',
+});
 
 /** Authoring helpers discovered through the same catalog as the original primitives. */
-export const geometryPrimitives: readonly PrimitiveSpec[] = [
+export const geometryPrimitives: readonly HelperSpec[] = [
+  {
+    name: 'projectUV',
+    signature:
+      "projectUV(geometry: BufferGeometry, opts: { projection: 'planar'|'box'|'cylindrical', frame?: { origin?: [x,y,z], rotation?: [xDeg,yDeg,zDeg] }, seamDegrees?: number, angularRange?: [startDeg,sweepDeg], caps?: 'planar'|'side' })",
+    returns: 'THREE.BufferGeometry (owned, non-indexed triangle corners)',
+    category: 'uv',
+    description:
+      'Generates UV0 explicitly in a rigid geometry-local frame. Planar maps XY; box maps each face; cylindrical wraps frame Y with separate caps and split angular seams. Replaces existing UVs and removes stale tangents. To preserve good UVs use direct sharing or copyGeometry instead.',
+    example:
+      "const mapped = projectUV(rawGeometry, { projection: 'cylindrical', frame: { rotation: [0,0,-90] }, seamDegrees: 180 });",
+  },
+  {
+    name: 'describeAssembly',
+    signature: 'describeAssembly(root: Object3D, opts?: { clips?: readonly AnimationClip[] })',
+    returns:
+      'AssemblyView { version, root, nodes, roles: Map, frames, sockets, materials, bounds, clips, ownership }',
+    category: 'structure',
+    description:
+      'Describes an existing subtree through common roles, frames, sockets, material slots and root-local bounds. Lookup lists are snapshots with live scene/resource references; bounds are null for geometry-free scaffolds. No asset category is needed.',
+    example: 'const assembly = describeAssembly(bay); const dimensions = assembly.bounds?.size;',
+  },
+  {
+    name: 'replicateAssembly',
+    signature:
+      "replicateAssembly(source: AssemblyView, opts: { namespace: string, parent?: Object3D, space?: 'local' | 'world', geometry?: 'share' | 'copy', materials?: 'share' | 'copy', externalReferences?: 'reject' | 'preserve', unknownMetadata?: 'reject' | 'copy-json' })",
+    returns:
+      'AssemblyReplica extends AssemblyView { nodeMap, nameMap, jointRoleMap, clipMap, externalReferences }',
+    category: 'instancing',
+    description:
+      'Replicates a complete supported hierarchy with namespaced semantic and animation references. Owns new nodes/clips; shares geometry/materials unless copy is requested. Revalidates the live source before attaching. Default local placement preserves authored transforms; returns the new subtree as result.root.',
+    example:
+      "const repeated = replicateAssembly(describeAssembly(bay), { namespace: 'bay2', parent: root }); repeated.root.position.x = 3;",
+  },
+  {
+    name: 'remapUV',
+    signature: 'remapUV(geometry: BufferGeometry, opts?: { scale?: [u, v], offset?: [u, v] })',
+    returns: 'THREE.BufferGeometry (owned clone, UV0 stored as Float32)',
+    category: 'uv',
+    description:
+      'Scales and offsets existing UV0 on an independent geometry. Defaults are scale [1,1], offset [0,0]. Requires finite two-component UVs; does not unwrap or project. Reads interleaved and normalized attributes. Preserves topology and other attributes; nonidentity scaling removes stale tangents with a warning.',
+    example:
+      'const strip = remapUV(cylinderGeo(0.4, 0.4, 1), { scale: [1, 0.3], offset: [0, 0] });',
+  },
+  {
+    name: 'materialBudgetAdvisory',
+    signature: 'materialBudgetAdvisory(root: Object3D, opts?: { maxMaterials?: number })',
+    returns:
+      '{ materialCount, maxMaterials: number | null, exceeded: boolean | null, warnings: string[] }',
+    category: 'utility',
+    description:
+      'Counts distinct material object identities and optionally compares an explicit nonnegative integer budget. Without maxMaterials it reports a count with null budget/exceeded and no warnings. Does not measure draw calls, validate geometry, choose an asset category, or establish asset validity.',
+    example: 'const advisory = materialBudgetAdvisory(root, { maxMaterials: 8 });',
+  },
   {
     name: 'copyGeometry',
     signature: 'copyGeometry(geometry: BufferGeometry)',
@@ -37,18 +108,18 @@ export const geometryPrimitives: readonly PrimitiveSpec[] = [
     returns: 'THREE.BufferGeometry',
     category: 'geometry',
     description:
-      'Samples an equation into an owned surface with UVs. Periodic endpoints must coincide; UV seams retain matching normals. A surface is not automatically a watertight solid.',
+      'At most 262,144 endpoint-inclusive samples per call, checked before invoking the sampler. Samples an equation into an owned surface with UVs. Periodic endpoints must agree within 1e-6 of the sampled diagonal, independent of origin and units; UV seams retain matching normals. A surface is not automatically a watertight solid.',
     example:
       'const canopy = parametricSurface((u,v) => [u, 0.3*Math.sin(u*3)*Math.cos(v*2), v], { u: [-2,2], v: [-1,1] });',
   },
   {
     name: 'geometryDiagnostics',
-    signature: 'geometryDiagnostics(geometry: BufferGeometry, tolerance?: 1e-6)',
+    signature: 'geometryDiagnostics(geometry: BufferGeometry, tolerance?: number)',
     returns:
-      '{ vertices, triangles, boundaryEdges, nonManifoldEdges, orientationConflicts, degenerateTriangles, invalidIndices, nonFiniteVertices }',
+      '{ tolerance, toleranceMode, positionScale, vertices, triangles, boundaryEdges, nonManifoldEdges, orientationConflicts, degenerateTriangles, invalidIndices, nonFiniteVertices }',
     category: 'utility',
     description:
-      'Counts mesh topology problems after position-based seam matching. Open boundaries are valid for sheets; closed edges alone do not prove a self-intersection-free solid.',
+      'Counts topology issues after position-grid matching. Default tolerance is 1e-6 times the finite-position diagonal; an explicit positive value is absolute. Reports effective tolerance and scale. Open boundaries are valid for sheets; closed edges do not certify a self-intersection-free solid.',
     example: 'const topology = geometryDiagnostics(shell);',
   },
   {
@@ -57,7 +128,7 @@ export const geometryPrimitives: readonly PrimitiveSpec[] = [
     returns: 'THREE.BufferGeometry',
     category: 'mesh-ops',
     description:
-      'Returns owned geometry with angle-limited smooth normals, preserving UV corners. Angle is degrees. Invalidates tangents; use after shaping for sharp rims and smooth walls.',
+      'Returns owned geometry with angle-limited smooth normals, preserving UV corners. Angle is degrees. Default position tolerance is 1e-8 times the diagonal, with no world-unit floor; explicit tolerance is absolute. Invalidates tangents; use after shaping for sharp rims and smooth walls.',
     example: 'const shell = creaseNormals(cylinderGeo(1,1,2,32), { angle: 45 });',
   },
   {
@@ -122,7 +193,7 @@ export const geometryPrimitives: readonly PrimitiveSpec[] = [
     returns: 'THREE.BufferGeometry',
     category: 'curves',
     description:
-      'Joins corresponding simple profiles in explicit local XZ planes. Each frame uses Euler XYZ degrees and local +Y along the loft. Profiles need equal point counts and corresponding vertices.',
+      'Joins corresponding simple profiles in explicit local XZ planes. Frames use Euler XYZ degrees; initial section travel determines outward winding. Profiles need equal point counts and corresponding vertices.',
     promptNotes:
       'No holes or automatic profile correspondence. Opposite winding is normalized while preserving the first point. Caps close boundaries but do not prove the loft has no self-intersections.',
     example:

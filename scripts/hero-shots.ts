@@ -27,7 +27,7 @@ import sharp from 'sharp';
 
 import { captureViewPngsViaPort } from '../src/agent/generate';
 import { buildRenderPort } from '../src/cli-render-mode';
-import { resolveEvaluatorPortV1 } from '../src/evaluator/protocol';
+import { resolveEvaluatorPortV2 } from '../src/evaluator/protocol';
 
 const HERE = dirname(fileURLToPath(import.meta.url));
 const REPO = resolve(HERE, '..');
@@ -196,7 +196,7 @@ async function main(): Promise<void> {
     );
     process.exit(1);
   }
-  const evaluator = resolveEvaluatorPortV1(undefined, 'trusted-local');
+  const evaluator = resolveEvaluatorPortV2(undefined, 'trusted-local');
 
   for (const name of names) {
     const src = join(EXAMPLES, `${name}.kiln.js`);

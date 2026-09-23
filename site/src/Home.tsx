@@ -157,7 +157,8 @@ export function Home({ specimens }: { specimens: Specimen[] }) {
         </div>
         <p className="aside">
           Every example opens in a 3D viewer, with its source and model credit alongside it. Browse
-          the shapes, inspect an assembly, or start from a program you like.
+          the shapes or inspect an assembly. These historical showcases may contain modeling issues
+          and are not vetted reference assets.
         </p>
       </section>
       <section className="band reading-section" aria-labelledby="reading-title">
@@ -192,6 +193,11 @@ export function Home({ specimens }: { specimens: Specimen[] }) {
             <p>
               Give it the text guide below. It links to setup, tool contracts and skills, including
               how to reuse a source revision across calls.
+            </p>
+            <p>
+              Discovery finds primitives, helpers and recipes by intent or related words. Recipes
+              guide the build without requiring an asset category. No local model is required for
+              search.
             </p>
             <a href={asset('llms.txt')}>Agent reading guide · plain text →</a>
             <a href={`${DOCS}/tools.md`}>Tool arguments and results</a>
@@ -351,7 +357,7 @@ kiln_render({ programRef, capture: {
               create your project-local agent setup.
             </p>
             <p>
-              From a source checkout, install <a href="https://bun.sh">Bun 1.3.14</a> and render the
+              From a source checkout, install <a href="https://bun.sh">Bun 1.4.2</a> and render the
               small teaching example:
             </p>
             <Code>{`git clone https://github.com/matthew-kissinger/kiln
@@ -397,8 +403,9 @@ cd ../my-assets
               </q>
             </p>
             <p className="aside">
-              Tested on Node.js 22.23.1. Composition and batch skills are opt-in.{' '}
-              <a href={`${DOCS}/clean-room.md`}>Clean-room boundaries</a> ·{' '}
+              Installed CLI/MCP tools support Node.js 20.15.0+ on 20.x, or 22.2.0 and later. Bun is
+              needed for engine development, not installed commands. Composition and batch skills
+              are opt-in. <a href={`${DOCS}/clean-room.md`}>Clean-room boundaries</a> ·{' '}
               <a href={`${DOCS}/install.md`}>Package and plugin installation</a>
             </p>
           </section>
@@ -434,7 +441,8 @@ Show it with kiln_present.`}</Code>
             <p>
               Save the GLB alongside its source, build records, and revision history. Open your
               project collection or personal library in the local viewer to browse, compare
-              revisions, and download a GLB or editable ZIP bundle.
+              revisions, and download the original GLB, a runtime GLB with companion metadata, or an
+              editable ZIP bundle. Runtime delivery keeps geometry and textures unchanged.
             </p>
             <Code>{`node kiln.mjs view`}</Code>
             <p>

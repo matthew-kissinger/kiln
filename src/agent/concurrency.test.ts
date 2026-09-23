@@ -1,139 +1,135 @@
-/**
- * A3 mutator/reader batch guard.
- *
- * Unit level: `rejectMixedMutatorBatch` / `toolNamesInBatch` are pure, so the
- * allow/deny matrix is pinned directly. Integration level: a REAL Strands
- * `Agent` (default CONCURRENT tool executor) driven by a ScriptedModel proves
- * the guard rejects a mixed batch on the genuine run path — the batch's tool
- * results come back as errors carrying the guard's message, the mutator never
- * touches the buffer — while a solo mutator and a pure-reader batch execute.
- */
-import { describe, expect, test } from 'bun:test';
+import { expect, test } from 'bun:test';
 import { Agent, Message, ToolResultBlock, ToolUseBlock, TextBlock } from '@strands-agents/sdk';
-
 import {
-  KILN_MUTATOR_TOOLS,
-  installMutatorBatchGuard,
-  rejectMixedMutatorBatch,
+  installCompletionBatchGuard,
+  rejectMixedCompletionBatch,
   toolNamesInBatch,
 } from './concurrency';
-import { makeKilnUnifiedTools, type UnifiedSink } from './tools';
+import { makeKilnNativeTools } from './tools';
 import { ScriptedModel } from './__tests__/scripted-model';
+import { MemoryProgramStore, programReference } from '../program-store';
+import type { NativeCompletion } from '../tools/program-artifacts';
 
-const BOX_CODE = `
-const meta = { name: 'test-box', category: 'prop' };
-function build() {
-  const root = createRoot('Root');
-  createPart('Mesh_Box', boxGeo(1, 1, 1), gameMaterial('#ff0000'), { parent: root, position: [0, 0.5, 0] });
-  return root;
-}
-`;
+const code = `const meta={name:'Box'};function build(){const root=createRoot('Root');createPart('Body',boxGeo(1,1,1),gameMaterial('#ff0000'),{parent:root});return root;}`;
 
-describe('rejectMixedMutatorBatch', () => {
-  test('classifies exactly kiln_draft and kiln_edit as mutators', () => {
-    expect([...KILN_MUTATOR_TOOLS].sort()).toEqual(['kiln_draft', 'kiln_edit']);
-  });
-
-  test('mixed mutator + reader batch is rejected with an actionable message', () => {
-    const msg = rejectMixedMutatorBatch(['kiln_edit', 'kiln_render']);
-    expect(msg).toBeDefined();
-    expect(msg).toContain('kiln_edit');
-    expect(msg).toContain('ALONE');
-    expect(msg).toContain('No tools were executed');
-  });
-
-  test('two mutators together are also rejected', () => {
-    expect(rejectMixedMutatorBatch(['kiln_draft', 'kiln_edit'])).toBeDefined();
-    expect(rejectMixedMutatorBatch(['kiln_edit', 'kiln_edit'])).toBeDefined();
-  });
-
-  test('solo mutator is allowed', () => {
-    expect(rejectMixedMutatorBatch(['kiln_draft'])).toBeUndefined();
-    expect(rejectMixedMutatorBatch(['kiln_edit'])).toBeUndefined();
-  });
-
-  test('pure-reader batches are allowed', () => {
-    expect(rejectMixedMutatorBatch(['kiln_view', 'kiln_render'])).toBeUndefined();
-    expect(rejectMixedMutatorBatch(['kiln_render', 'kiln_inspect', 'kiln_view'])).toBeUndefined();
-    expect(rejectMixedMutatorBatch([])).toBeUndefined();
-  });
-});
-
-describe('toolNamesInBatch', () => {
-  test('extracts toolUse names in order, ignoring text blocks', () => {
-    const message = new Message({
-      role: 'assistant',
-      content: [
-        new TextBlock('let me edit and render'),
-        new ToolUseBlock({ name: 'kiln_edit', toolUseId: 'a', input: {} }),
-        new ToolUseBlock({ name: 'kiln_render', toolUseId: 'b', input: {} }),
-      ],
-    });
-    expect(toolNamesInBatch(message)).toEqual(['kiln_edit', 'kiln_render']);
-  });
-});
-
-describe('installMutatorBatchGuard on a real Agent (concurrent executor)', () => {
-  function toolResults(messages: readonly Message[]): ToolResultBlock[] {
-    const out: ToolResultBlock[] = [];
-    for (const m of messages) {
-      for (const b of m.content) if (b instanceof ToolResultBlock) out.push(b);
-    }
-    return out;
+test('only batches mixing native completion with another call are rejected', () => {
+  for (const batch of [
+    ['kiln_finish', 'kiln_render'],
+    ['kiln_edit', 'kiln_finish'],
+    ['kiln_finish', 'kiln_finish'],
+  ]) {
+    expect(rejectMixedCompletionBatch(batch)).toContain('must run alone');
+    expect(rejectMixedCompletionBatch(batch)).toContain('No tools');
   }
+  for (const batch of [
+    [],
+    ['kiln_finish'],
+    ['kiln_edit'],
+    ['kiln_edit', 'kiln_source'],
+    ['kiln_edit', 'kiln_edit'],
+    ['kiln_inspect', 'kiln_render'],
+  ])
+    expect(rejectMixedCompletionBatch(batch)).toBeUndefined();
+});
 
-  test('a mixed kiln_draft + kiln_view batch is rejected: both calls error, buffer untouched', async () => {
-    const sink: UnifiedSink = { edits: [] };
-    const model = new ScriptedModel([
-      { toolCalls: [{ name: 'kiln_draft', input: { code: BOX_CODE } }, { name: 'kiln_view' }] },
-      { text: 'stopping after the rejection' },
-    ]);
-    const agent = new Agent({
-      model,
-      systemPrompt: 'test',
-      tools: makeKilnUnifiedTools({ sink }) as never,
-    });
-    installMutatorBatchGuard(agent);
+test('tool name extraction ignores text and preserves batch order', () => {
+  expect(
+    toolNamesInBatch(
+      new Message({
+        role: 'assistant',
+        content: [
+          new TextBlock('review and finish'),
+          new ToolUseBlock({ name: 'kiln_render', toolUseId: 'a', input: {} }),
+          new ToolUseBlock({ name: 'kiln_finish', toolUseId: 'b', input: {} }),
+        ],
+      }),
+    ),
+  ).toEqual(['kiln_render', 'kiln_finish']);
+});
 
-    await agent.invoke('build a box');
+function results(agent: Agent): ToolResultBlock[] {
+  return agent.messages.flatMap((message) =>
+    message.content.filter((b): b is ToolResultBlock => b instanceof ToolResultBlock),
+  );
+}
 
-    // Neither tool ran: the draft never reached the buffer/sink.
-    expect(sink.code).toBeUndefined();
-    const results = toolResults(agent.messages);
-    expect(results).toHaveLength(2);
-    for (const r of results) {
-      expect(r.status).toBe('error');
-      const text = r.content
-        .map((c) => ((c as { type?: string }).type === 'textBlock' ? (c as TextBlock).text : ''))
-        .join(' ');
-      expect(text).toContain('kiln_draft');
-      expect(text).toContain('ALONE');
-    }
+test('real concurrent executor rejects every call in a mixed completion batch', async () => {
+  const completion: NativeCompletion = {};
+  const programStore = new MemoryProgramStore();
+  const ref = await programStore.put(code);
+  let evaluated = false;
+  const agent = new Agent({
+    model: new ScriptedModel([
+      {
+        toolCalls: [
+          { name: 'kiln_render', input: { programRef: ref } },
+          { name: 'kiln_finish', input: { programRef: ref } },
+        ],
+      },
+      { text: 'stopped' },
+    ]),
+    tools: makeKilnNativeTools(completion, {
+      programStore,
+      evaluatorPort: {
+        render: async () => {
+          evaluated = true;
+          throw new Error('must not run');
+        },
+      },
+    }),
   });
+  installCompletionBatchGuard(agent);
+  await agent.invoke('build');
+  expect(evaluated).toBe(false);
+  expect(completion.artifact).toBeUndefined();
+  expect(results(agent)).toHaveLength(2);
+  for (const result of results(agent)) {
+    expect(result.status).toBe('error');
+    expect(JSON.stringify(result.content)).toContain('must run alone');
+  }
+});
 
-  test('a solo mutator executes, and a later pure-reader batch executes too', async () => {
-    const sink: UnifiedSink = { edits: [] };
-    const model = new ScriptedModel([
-      { toolCalls: [{ name: 'kiln_draft', input: { code: BOX_CODE } }] },
-      { toolCalls: [{ name: 'kiln_view' }, { name: 'kiln_view' }] },
-      { toolCalls: [{ name: 'kiln_render' }] },
-      { toolCalls: [{ name: 'kiln_finalize' }] },
-      { text: 'done' },
-    ]);
-    const agent = new Agent({
-      model,
-      systemPrompt: 'test',
-      tools: makeKilnUnifiedTools({ sink }) as never,
-    });
-    installMutatorBatchGuard(agent);
-
-    await agent.invoke('build a box');
-
-    expect(sink.code).toBe(BOX_CODE);
-    expect(sink.finalized).toBe(true);
-    // Solo mutator + both readers + render + finalize all produced SUCCESS results.
-    const results = toolResults(agent.messages);
-    expect(results).toHaveLength(5);
-    expect(results.every((r) => r.status === 'success')).toBe(true);
+test('parallel edits and source reads remain independent revisions', async () => {
+  const programStore = new MemoryProgramStore();
+  const programRef = await programStore.put(code);
+  const agent = new Agent({
+    model: new ScriptedModel([
+      {
+        toolCalls: [
+          {
+            name: 'kiln_edit',
+            input: {
+              programRef,
+              edits: [{ oldString: '#ff0000', newString: '#0000ff' }],
+              capture: { preset: '1x1' },
+            },
+          },
+          {
+            name: 'kiln_edit',
+            input: {
+              programRef,
+              edits: [{ oldString: '#ff0000', newString: '#00ff00' }],
+              capture: { preset: '1x1' },
+            },
+          },
+          { name: 'kiln_source', input: { programRef } },
+        ],
+      },
+      { text: 'stopped' },
+    ]),
+    tools: makeKilnNativeTools({}, { programStore }),
   });
+  installCompletionBatchGuard(agent);
+  await agent.invoke('review variants');
+  expect(await programStore.get(programRef)).toBe(code);
+  for (const color of ['#0000ff', '#00ff00']) {
+    const changed = code.replace('#ff0000', color);
+    expect(await programStore.get(await programReference(changed))).toBe(changed);
+  }
+  expect(results(agent)).toHaveLength(3);
+  expect(results(agent).every((result) => result.status === 'success')).toBe(true);
+  const source = results(agent).find((result) =>
+    JSON.stringify(result.content).includes('function build'),
+  );
+  expect(JSON.stringify(source?.content)).toContain('#ff0000');
 });

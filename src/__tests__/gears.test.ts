@@ -102,7 +102,7 @@ describe('gearGeo', () => {
   });
 
   it('rejects invalid params', () => {
-    expect(() => gearGeo({ teeth: 2 })).toThrow(/teeth must be >= 3/);
+    expect(() => gearGeo({ teeth: 2 })).toThrow(/teeth.*3/);
     expect(() => gearGeo({ tipRadius: 0.5, rootRadius: 0.8 })).toThrow(/tipRadius/);
     expect(() => gearGeo({ boreRadius: 1.0, rootRadius: 0.8 })).toThrow(/boreRadius/);
   });

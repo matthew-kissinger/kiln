@@ -35,6 +35,7 @@ export * from './camera-capture';
 import {
   rasterizeView,
   measureBounds,
+  measurePartBounds,
   hideNodeInScene,
   type RasterOptions,
   type ViewSpec,
@@ -46,6 +47,7 @@ import { annotateViewCell } from './annotate';
 import { resolveGridCapture, type CaptureConfig, type CaptureShape } from './capture';
 import {
   prepareClip,
+  measureLoopClosure,
   poseSceneAtTime,
   planFrameTimes,
   findClip,
@@ -63,9 +65,9 @@ import {
 } from '../palette-snap';
 import { loadGlbGeometryFlatScene, type GlbGeometryFlatReasonCode } from './glb';
 import {
-  resolveEvaluatorPortV1,
-  type EvaluatorExecutionProfileV1,
-  type EvaluatorPortV1,
+  resolveEvaluatorPortV2,
+  type EvaluatorExecutionProfileV2,
+  type EvaluatorPortV2,
 } from '../evaluator';
 
 export {
@@ -531,8 +533,8 @@ function expandFrameBounds(
 
 /** Execute a Kiln program and render its scene into the 3x2 grid. */
 export interface CodeViewGridOptions extends ViewGridOptions {
-  evaluatorPort?: EvaluatorPortV1;
-  evaluatorProfile?: EvaluatorExecutionProfileV1;
+  evaluatorPort?: EvaluatorPortV2;
+  evaluatorProfile?: EvaluatorExecutionProfileV2;
 }
 
 export async function renderCodeViewGrid(
@@ -540,7 +542,7 @@ export async function renderCodeViewGrid(
   opts: CodeViewGridOptions = {},
 ): Promise<ViewGridResult> {
   const { evaluatorPort, evaluatorProfile, ...viewOptions } = opts;
-  const rendered = await resolveEvaluatorPortV1(
+  const rendered = await resolveEvaluatorPortV2(
     evaluatorPort,
     evaluatorProfile ?? 'trusted-local',
   ).render(code);
@@ -584,6 +586,8 @@ function resolveCamera(name?: string): ViewSpec {
 
 export interface AnimationViewOptions extends RasterOptions {
   shot?: CameraShotV1;
+  /** Up to 16 exact subtrees to measure at every pose, independent of the camera. */
+  measureParts?: NonNullable<CameraShotV1['subject']>[];
   frameTimes?: number[];
   framing?: 'locked' | 'follow';
   /** Clip to render, by name (case-insensitive, substring-tolerant). Omit → first clip. */
@@ -622,7 +626,20 @@ export type DerivativeCellRenderer = (
   input: DerivativeCellRenderInput,
 ) => Promise<DerivativeCellRenderResult>;
 
+/** Drawable geometry in world metres before camera isolation/cutaway. Samples
+ * describe only the requested poses, not swept bounds or collision/contact QA. */
+export interface AnimationPoseBounds {
+  phase: number;
+  timeSeconds: number;
+  scene: { min: [number, number, number]; max: [number, number, number] };
+  /** Selected shot subject, if any, in the same world coordinate system. */
+  subject?: { min: [number, number, number]; max: [number, number, number] };
+  /** Input order; null bounds mean no drawable triangles, never inferred contact. */
+  parts?: { path: string; name: string; bounds: ReturnType<typeof measurePartBounds> }[];
+}
+
 export interface AnimationViewResult {
+  loopClosure?: import('./pose').LoopClosureEvidence;
   cameraShots?: ResolvedCameraShotV1[];
   ok: boolean;
   clip?: string;
@@ -630,6 +647,7 @@ export interface AnimationViewResult {
   frames: number;
   /** Phase fraction (0..1) of each frame, in order. */
   frameTimes: number[];
+  poseBounds?: AnimationPoseBounds[];
   /** Clip duration in seconds. */
   duration?: number;
   /** Track targets that resolve to no joint — the "frozen clip" signal (cause #1). */
@@ -704,15 +722,41 @@ export async function renderClipAnimation(
     ? opts.frameTimes.map((t) => t * prepared.duration)
     : planFrameTimes(prepared.duration, frameCount);
   const frameTimes = times.map((t) => (prepared.duration > 0 ? t / prepared.duration : 0));
+  if (opts.measureParts && (opts.measureParts.length < 1 || opts.measureParts.length > 16))
+    throw new Error('measureParts must contain 1..16 exact selectors');
+  const measuredParts = opts.measureParts?.map((selector) => selectCameraSubject(root, selector));
+  if (
+    measuredParts &&
+    new Set(measuredParts.map((part) => part.node)).size !== measuredParts.length
+  )
+    throw new Error('measureParts contains duplicate part selections');
 
-  // Pass 1 — union the posed bounds so all frames share one camera framing.
+  // Pass 1 — measure each pose and union subject bounds for steady framing.
   const min: [number, number, number] = [Infinity, Infinity, Infinity];
   const max: [number, number, number] = [-Infinity, -Infinity, -Infinity];
-  for (const t of times) {
+  const poseBounds: AnimationPoseBounds[] = [];
+  for (const [i, t] of times.entries()) {
     poseSceneAtTime(root as never, prepared, t);
-    const b = measureBounds(
-      opts.shot?.subject ? selectCameraSubject(root, opts.shot.subject).node : root,
-    );
+    const scene = measureBounds(root);
+    const subject = opts.shot?.subject
+      ? measureBounds(selectCameraSubject(root, opts.shot.subject).node)
+      : undefined;
+    poseBounds.push({
+      phase: frameTimes[i]!,
+      timeSeconds: t,
+      scene,
+      ...(subject ? { subject } : {}),
+      ...(measuredParts
+        ? {
+            parts: measuredParts.map(({ path, name, node }) => ({
+              path,
+              name,
+              bounds: measurePartBounds(node),
+            })),
+          }
+        : {}),
+    });
+    const b = subject ?? scene;
     for (let a = 0; a < 3; a++) {
       const lo = b.min[a]!;
       const hi = b.max[a]!;
@@ -798,10 +842,12 @@ export async function renderClipAnimation(
 
   const baseMeta = {
     ok: true as const,
+    loopClosure: measureLoopClosure(root as never, chosen),
     clip: prepared.name,
     camera: cam.name,
     frames: times.length,
     frameTimes,
+    poseBounds,
     ...(cameraShots.length ? { cameraShots } : {}),
     duration: prepared.duration,
     ...(prepared.unresolved.length ? { unresolvedTracks: prepared.unresolved } : {}),

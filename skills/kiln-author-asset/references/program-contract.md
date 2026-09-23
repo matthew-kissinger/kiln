@@ -3,7 +3,7 @@
 A `.kiln.js` file is ordinary JavaScript evaluated with Kiln globals. Do not add imports, exports, or TypeScript syntax. JSDoc and local helper functions are supported.
 
 ```js
-const meta = { name: 'Reading lamp', category: 'prop', role: 'prop' };
+const meta = { name: 'Reading lamp' };
 function build() {
   const root = createRoot('ReadingLamp');
   const metal = gameMaterial(0x556677);
@@ -13,7 +13,7 @@ function build() {
 }
 ```
 
-`meta.name` identifies the asset. `meta.category` is descriptive source metadata and appears as `modelCategory` in render results, but it does **not** select validation or QA policy: the host-owned brief/intent is authoritative so generated source cannot weaken its own checks. If the host supplies no category, Kiln uses its default policy rather than trusting this field. Categories are `prop`, `character`, `vfx`, `environment`, `architecture`, `vegetation`, and `vehicle`. `meta.role` describes its scene role when composition needs one: `ground`, `building`, `wonder`, `poi`, `prop`, `fill`, or `vehicle`.
+`meta.name` identifies the asset. No `meta.category` is needed to discover or use helpers. If retained in existing source, it is descriptive metadata and does **not** select validation or QA policy: the host-owned requirements are authoritative so generated source cannot weaken its own checks. Discovery families and tags describe catalog entries, not the category of the asset being built. `meta.role` describes its scene role when composition needs one: `ground`, `building`, `wonder`, `poi`, `prop`, `fill`, or `vehicle`.
 
 `build()` returns a `THREE.Object3D` and may be async. Use `async`/`await` for Boolean operations, `roundedBoxGeo`, `extrudeProfile`, `revolveProfile`, `implicitSurface`, approved texture loading, and other catalog signatures marked async. `sweepProfile`, `loftProfiles`, and ordinary deformations are synchronous.
 
@@ -29,7 +29,7 @@ To review that motion, `kiln_screenshot_animation` needs the clip **by name** --
 - `createPart` prefixes mesh names with `Mesh_`. `createPart(..., { parent })` attaches the part; do not separately add its return value to another parent.
 - `createPivot(name, position?, parent?)` is positional and prefixes the node name with `Joint_`. Rotate the returned object directly if needed.
 - Cached primitives may share geometry. Use `copyGeometry` or `.clone()` before direct vertex/geometry mutation. `copyMaterial` copies material properties while sharing referenced textures.
-- Legacy `cloneGeometry` and `cloneMaterial` return their input. They are deprecated reuse helpers, not independent copies.
+- The former `cloneGeometry` and `cloneMaterial` aliases are removed. When migrating saved source, use the original value directly to preserve sharing, or `copyGeometry`/`copyMaterial` when an independent copy is intended.
 
 ## Geometry and execution boundaries
 

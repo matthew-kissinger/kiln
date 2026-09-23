@@ -247,7 +247,11 @@ describe('vehicle semantic QA', () => {
 
   test('validates declared rotor pivot, hierarchy, mast center, and +Y axis frame', () => {
     const frame = createVehicleFrame('Helicopter');
-    const intent = createAssetIntentV1({ category: 'vehicle', subtype: 'rotorcraft' });
+    const intent = createAssetIntentV1({
+      category: 'vehicle',
+      subtype: 'rotorcraft',
+      vehicle: { supportAssemblies: [] },
+    });
     expect(codes(evaluateVehicleQa({ intent, scene: frame.root }))).toContain('VEH_ROTOR_PIVOT');
     const pivot = new THREE.Object3D();
     pivot.name = 'MainRotorPivot';
@@ -278,7 +282,11 @@ describe('vehicle semantic QA', () => {
     stampSemanticMetadataV1(propeller, { roles: ['propulsion.propeller.main'] });
     pivot.add(propeller);
     frame.root.add(pivot);
-    const intent = createAssetIntentV1({ category: 'vehicle', subtype: 'fixed-wing' });
+    const intent = createAssetIntentV1({
+      category: 'vehicle',
+      subtype: 'fixed-wing',
+      vehicle: { supportAssemblies: [] },
+    });
     expect(evaluateVehicleQa({ intent, scene: frame.root })).toEqual([]);
     propeller.position.y = 0.2;
     expect(codes(evaluateVehicleQa({ intent, scene: frame.root }))).toContain('VEH_ROTOR_PIVOT');

@@ -12,8 +12,6 @@ import {
   createRoot,
   createPart,
   createInstance,
-  cloneGeometry,
-  cloneMaterial,
   cylinderGeo,
   boxGeo,
   gameMaterial,
@@ -21,11 +19,13 @@ import {
 import { gradeGlbBytes, optimizeGlbBytes, renderSceneToGLB } from '../render';
 
 describe('Wave 1B: instancing primitives', () => {
-  it('cloneGeometry and cloneMaterial return the same reference', () => {
+  it('direct references share geometry and material between parts', () => {
     const geo = boxGeo(1, 1, 1);
     const mat = gameMaterial(0xff0000);
-    expect(cloneGeometry(geo)).toBe(geo);
-    expect(cloneMaterial(mat)).toBe(mat);
+    const a = createPart('A', geo, mat) as THREE.Mesh;
+    const b = createPart('B', geo, mat) as THREE.Mesh;
+    expect(a.geometry).toBe(b.geometry);
+    expect(a.material).toBe(b.material);
   });
 
   it('createInstance reuses geometry and material of source', () => {

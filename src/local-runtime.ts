@@ -1,5 +1,5 @@
 import type { KilnToolContext } from './tools/registry';
-import type { EvaluatorPortV1 } from './evaluator/protocol';
+import type { EvaluatorPortV2 } from './evaluator/protocol';
 import { renderGLBViaSubprocess } from './evaluator/subprocess';
 import { renderGLBViaIsolatedEvaluator } from './evaluator/isolation';
 import { renderGLBInProcess, resolveEvaluatorMode, type RenderGlbOptions } from './render';
@@ -10,6 +10,8 @@ import { FileBuildCache } from './build-cache-node';
 import { installedRuntimeIdentity } from './runtime-identity';
 import { dirname, join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { Console } from 'node:console';
+import { ApprovedTextureResourceCache, approvedTextureCatalogV1 } from './material-resources';
 
 export interface LocalExecution {
   mode: 'in-process' | 'subprocess' | 'isolated';
@@ -69,7 +71,13 @@ export function createLocalToolContext(
   const maxGlbBytes = 16 * 1024 * 1024;
   const gltfExporter = resolveGltfExporter(env.KILN_GLTF_EXPORTER ?? 'legacy');
   const maxResponseBytes = 32 * 1024 * 1024;
-  const evaluatorPort: EvaluatorPortV1 = {
+  // Keep authored diagnostics off the CLI JSON and MCP stdio channels. The
+  // subprocess already isolates stdout; this sink covers trusted local evaluation.
+  const diagnosticConsole = new Console({ stdout: process.stderr, stderr: process.stderr });
+  // Worker protocols do not transport parent resolver capabilities. A fresh cache
+  // describes their embedded resources without inheriting a parent byte resolver.
+  const workerTextures = mode === 'in-process' ? undefined : new ApprovedTextureResourceCache();
+  const evaluatorPort: EvaluatorPortV2 = {
     async render(code, options = {}, controls = {}) {
       if (controls.signal?.aborted) {
         const { EvaluatorPortError } = await import('./evaluator/protocol');
@@ -81,14 +89,14 @@ export function createLocalToolContext(
       )
         throw new Error('geometryPolicy must be warn or strict');
       const resolved: RenderGlbOptions = {
-        ...(gltfExporter === 'three' ? { gltfExporter } : {}),
+        gltfExporter,
         optimize,
         instance,
         ...options,
         geometryPolicy: geometryPolicy === 'strict' ? 'strict' : (options.geometryPolicy ?? 'warn'),
       };
       if (mode === 'in-process') {
-        const result = await renderGLBInProcess(code, resolved);
+        const result = await renderGLBInProcess(code, { ...resolved, diagnosticConsole });
         if (controls.signal?.aborted) {
           const { EvaluatorPortError } = await import('./evaluator/protocol');
           throw new EvaluatorPortError('CANCELLED');
@@ -114,12 +122,14 @@ export function createLocalToolContext(
   };
   return {
     ...base,
+    approvedTextureResources: () => approvedTextureCatalogV1({ cache: workerTextures }),
     geometryPolicy: geometryPolicy as 'warn' | 'strict',
     programStore:
       base.programStore ??
       new FileProgramStore(resolve(env.KILN_PROGRAM_STORE ?? '.kiln/programs')),
     evaluatorPort,
     assetBuildOptions: {
+      gltfExporter,
       optimize,
       instance,
       geometryPolicy,

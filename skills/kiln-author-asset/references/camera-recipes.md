@@ -18,7 +18,7 @@ Presets are `COLSxROWS`: `1x1`, `1x2`, `2x1`, `3x1`, `2x2`, `3x2`, `3x3`. `cells
 
 ## A whole asset and one local detail
 
-Read exact part paths from a render result. `subject.name` requires an exact unique name; `subject.path` resolves duplicate names unambiguously.
+Read exact part paths from a render result. It previews at most 80 entries and reports `partsTotal` and `partsTruncated`. Retrieve later or nested paths with `kiln_inspect({ programRef: REF, image: false, listParts: { query: "hinge" } })`; omit `query` for all parts and follow `partListing.nextOffset` using the same reference/query. Listings include groups and exported primitive children. `subject.name` requires an exact unique name; `subject.path` resolves duplicate names unambiguously.
 
 ```js
 kiln_render({ programRef: REF, capture: {
@@ -31,7 +31,7 @@ kiln_render({ programRef: REF, capture: {
 } });
 ```
 
-Versioned capture accepts 1–9 shots, 1–3 columns, and a square per-shot `size` from 128–1024. It does not accept `width`/`height`; those are returned dimensions. Set `output: 'separate'` when individual images better fit the harness. `visibility: 'isolate'` hides everything outside the selected subtree; context remains visible by default. Orbit `relativeTo` is `world`, `asset`, or `part`. Orbit cameras derive their target and distance from the selected subject bounds, so they accept `subject` and `padding`, not `target` or `distance`. Use an explicit camera when you need `position` and `target`.
+Versioned capture accepts 1–9 shots, 1–3 columns, and a square per-shot `size` from 128–1024. It does not accept `width`/`height`; those are returned dimensions. Set `output: 'separate'` when individual images better fit the harness. `visibility: 'isolate'` hides everything outside the selected subtree; context remains visible by default. Orbit `relativeTo` is `world`, `asset`, or `part`. Put `subject` on the shot, alongside `camera`, using either `{ path: EXACT_PATH }` or `{ name: EXACT_UNIQUE_NAME }`, never both. Orbit cameras derive target and distance from that subject's bounds; `padding` belongs inside `camera`, while `subject`, `target` and `distance` do not. Use an explicit camera when you need `position` and `target`.
 
 `backdrop` selects the colour behind every cell: `neutral` grey by default, `dark` when a part that merges with the grey is lighter than it (near-white, pale grey, emissive), `light` when it is darker (near-black, dark wood). Choose it from a sheet you have seen, not from the brief: render on the default first and switch only when a silhouette merges with it. It is a fixed choice, not a free colour, and the result echoes it as `capture.backdrop`. Legacy `preset`/`cells` sheets accept it too.
 
@@ -63,35 +63,3 @@ Inspect returned resolved cameras and fidelity/fallback receipts. A correct-look
 With `framing: 'bounds'`, target may be omitted and defaults to the selected world-bounds center. The camera fits the selected geometry; omit `halfHeight` because fitting computes it. `padding` is accepted only for bounds fitting. Perspective bounds fitting uses a conservative bounding sphere at the selected FOV.
 
 `targetOffset` uses the selected frame's axes. It moves the target in explicit framing; bounds framing moves eye and target together. Inspect returned camera receipts when composing these controls. The host can impose smaller shot, pixel, or byte budgets than the schema maximum; follow the returned limit instead of retrying the same oversized request.
-
-## Save chosen views to PNG
-
-Write only the `capture` object to `cameras.json`, without `programRef` or an outer
-`capture` key. Coordinates are JSON numbers, not quoted strings.
-
-```json
-{
-  "version": "kiln.capture.v1",
-  "output": "grid",
-  "cols": 1,
-  "size": 768,
-  "shots": [{
-    "name": "Hero",
-    "camera": {"type": "orbit", "azimuthDeg": 40, "elevationDeg": 20}
-  }]
-}
-```
-
-```sh
-node kiln.mjs render RETURNED_REF --capture cameras.json --views hero.png --out asset.glb
-```
-
-Replace `RETURNED_REF` with the reference returned by Kiln. Use the saved revision and
-reuse the file for matched before/after cameras. The CLI
-uses the same validated camera pipeline as MCP and can reuse the evaluated build.
-It writes PNG bytes directly; there is no need to copy image base64. `--capture`
-requires `--views`, accepts JSON up to 1 MiB, and supports grid output only. A single
-shot is one image; multiple shots share the grid. For separate files, export one
-single-shot recipe per requested file. MCP still supports `output: "separate"` for
-image blocks delivered to the agent. `--backdrop neutral|dark|light` sets the backdrop of
-any `--views` sheet, with or without `--capture`, and wins over the recipe's own `backdrop`.

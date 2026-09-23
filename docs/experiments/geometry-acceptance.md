@@ -1,5 +1,46 @@
 # Bevel, shell and remesh acceptance follow-up
 
+## Current checkout decision, September 23
+
+E01–E03 are evaluated using the original cases below, repeated on runtime
+`1276ef6a…82c774c` after the Float32 solid-conversion correction. The
+[current receipt](geometry-acceptance-2026-09-23.json) preserves all twelve cases
+and three supported shell-construction alternatives. The older results below
+remain historical evidence. No new general-purpose modifier is promoted.
+
+- **Shell:** the open-sheet prototype still drops UVs and folds across the axis
+  when an inward 0.1 offset exceeds the 0.06 curvature radius, despite clean
+  topology counters. Keep it experimental. Current `extrudeProfile` produces a
+  planar 0.1 wall; explicit inner/outer `revolveProfile` contours produce 0.1 and
+  0.01 radial walls. Each passed 96 independent triangle-ray samples and topology
+  checks. At 96 segments, midpoint-facet thickness is `t * cos(PI / 96)`, rather
+  than exactly the analytic radial difference. These supported constructions
+  require authored contours and new material/UV assignment; they do not offset
+  arbitrary textured meshes or certify global minimum thickness.
+- **Bevel:** profile rounding remains the practical bounded tool. The refreshed
+  concave Minkowski case drops from 1,514 to 1,500 triangles and its diagnostic
+  findings clear. The mixed case drops from 1,582 to 1,574, with four degeneracy
+  and four over-shared-edge findings at the current relative diagnostic tolerance.
+  Those tolerance-based findings differ from the exact-zero faces addressed by
+  the conversion fix. Thin erosion still becomes empty; arbitrary selected-edge
+  control and attribute transport remain absent. Decline a general modifier.
+  Current profile erosion failures now include repair advice through CLI/MCP.
+- **Remesh:** the three field reconstructions retain the earlier triangle counts
+  (1,798 / 1,560 / 2,712), sampled shape errors and attribute loss. Warped and
+  Boolean inputs gain better triangle proportions, but finite sampling cannot
+  guarantee preservation of features. Keep field reconstruction experimental;
+  explicit source segmentation remains appropriate when the authored surface
+  must be retained. The refinement control's sampled error stays below `4e-8`;
+  it neither improves aspect ratios nor establishes attribute transfer.
+
+These are completed bounded evaluations, not three newly shipped capabilities.
+The existing public helpers and the measured alternatives satisfy the useful
+construction cases without silently adding destructive general modifiers. E05's
+broader intersection diagnostics, C09's API consolidation and the aggregate C10
+decision remain separate work. No gallery asset was repaired or regenerated.
+
+## Original September 5 evaluation
+
 This follow-up covers the representative shapes missing from the [initial experiments](geometry-frontier.md). Run `node scripts/geometry-acceptance.mjs` to reproduce its twelve offline cases. Each gets a separate Bun process and a 20-second deadline. The [receipt](geometry-acceptance-2026-09-05.json) records dimensions, topology, error samples, attributes and timings. These are exploratory single-run timings while other validation was active, not comparative performance benchmarks.
 
 ## Bevel: concave junctions, mixed surfaces and thin features

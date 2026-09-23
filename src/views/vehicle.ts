@@ -1,10 +1,10 @@
 /** Renderable vehicle diagnostic evidence without mutating the authored scene. */
 import * as THREE from 'three';
 
-import { readSemanticMetadataV1, stampSemanticMetadataV1, type AssetIntentV1 } from '../contracts';
+import { readSemanticMetadataV1, stampSemanticMetadataV1 } from '../contracts';
 import { resolveVehicleWheelAssemblies } from '../vehicle';
 import {
-  planDiagnosticViews,
+  MOBILITY_DIAGNOSTIC_REQUESTS,
   renderDiagnosticView,
   type DiagnosticOverlayRegion,
   type DiagnosticViewRequest,
@@ -399,16 +399,16 @@ function selectWheelSectionRequest(
  *  metric overlay is rendered through a detached sibling with the same local transform. */
 export function captureVehicleDiagnosticViews(
   root: THREE.Object3D,
-  intent: AssetIntentV1,
   size = 256,
 ): VehicleCapturedDiagnosticV1[] {
-  if (intent.category !== 'vehicle') return [];
+  if (!Number.isInteger(size) || size < 1 || size > 2048)
+    throw new RangeError(
+      'Diagnostic size must be an integer from 1 to 2048; category/intent selection is retired.',
+    );
   const descriptor = describeVehicleDiagnostics(root);
   const overlay = createVehicleDiagnosticOverlay(root, descriptor);
   const composite = compositeForCapture(root, overlay);
-  const requests = planDiagnosticViews(intent).extra.filter(
-    (value) => value.variant === 'vehicle-underbody' || value.variant === 'vehicle-wheel-section',
-  );
+  const requests = MOBILITY_DIAGNOSTIC_REQUESTS;
   return requests.map((baseRequest) => {
     const requestValue =
       baseRequest.variant === 'vehicle-wheel-section'

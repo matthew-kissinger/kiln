@@ -430,7 +430,14 @@ export function analyzeAssetScopeObservationV1(root: THREE.Object3D): AssetScope
     for (const role of roles) if (DRESSING_ROLE.test(role)) dressing.add(role);
     if (node !== root && DRESSING_NAME.test(node.name)) dressing.add(`name:${node.name}`);
   });
-  const memberCount = members.size > 0 ? members.size : renderableCount > 0 ? 1 : 0;
+  // Count independent member roots. A replaceable part nested inside a member
+  // belongs to that assembly; it does not turn a single asset into a cluster.
+  const memberRoots = [...members].filter((node) => {
+    for (let parent = node.parent; parent; parent = parent.parent)
+      if (members.has(parent)) return false;
+    return true;
+  });
+  const memberCount = memberRoots.length > 0 ? memberRoots.length : renderableCount > 0 ? 1 : 0;
   return {
     topLevelAssetRoots: memberCount,
     reusableMemberCount: memberCount,

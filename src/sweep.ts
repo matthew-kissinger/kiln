@@ -2,6 +2,7 @@
 import * as THREE from 'three';
 import { meshGeo, type Point3 } from './geometry';
 import { geometryFrameMatrix, type GeometryFrame } from './deform';
+import { AuthoringDiagnosticError } from './evaluator/authoring-diagnostic';
 
 export type ProfilePoint = readonly [number, number];
 export interface LoftSection {
@@ -21,22 +22,40 @@ export interface SweepOptions extends LoftOptions {
   scale?: number | readonly (readonly [number, number])[];
 }
 
+function rejectHoles(value: object, label: string): void {
+  if ('holes' in value && value.holes !== undefined)
+    throw new AuthoringDiagnosticError(
+      'PROFILE_HOLES_UNSUPPORTED',
+      `${label}: holes are unsupported. Use extrudeProfile for a holed cross-section with optional twist/taper; independently varying contours need explicit geometry or solid subtraction.`,
+    );
+}
+
 function profilePoints(profile: readonly ProfilePoint[]): THREE.Vector2[] {
   if (profile.length < 3 || profile.some((p) => p.length !== 2 || !p.every(Number.isFinite)))
     throw new Error('profile requires at least three finite xy points');
   const points = profile.map((p) => new THREE.Vector2(...p));
-  if (points[0]!.distanceTo(points[points.length - 1]!) < 1e-10) points.pop();
+  // Validate shape in profile-relative units. Absolute cutoffs reject the same
+  // valid profile when authored in small units, and raw area loses translation precision.
+  const bounds = new THREE.Box2().setFromPoints(points);
+  const extent = bounds.getSize(new THREE.Vector2()).length();
+  if (!(extent > 0) || !Number.isFinite(extent))
+    throw new Error('profile requires a finite nonzero extent');
+  const normalized = points.map((p) => p.clone().sub(bounds.min).divideScalar(extent));
+  if (normalized[0]!.distanceTo(normalized[normalized.length - 1]!) < 1e-10) {
+    points.pop();
+    normalized.pop();
+  }
   if (points.length < 3) throw new Error('profile requires three distinct points');
   const cross = (a: THREE.Vector2, b: THREE.Vector2, c: THREE.Vector2) =>
     (b.x - a.x) * (c.y - a.y) - (b.y - a.y) * (c.x - a.x);
   for (let i = 0; i < points.length; i++) {
-    const a = points[i]!,
-      b = points[(i + 1) % points.length]!;
+    const a = normalized[i]!,
+      b = normalized[(i + 1) % points.length]!;
     if (a.distanceToSquared(b) < 1e-20) throw new Error('profile has duplicate adjacent points');
     for (let j = i + 1; j < points.length; j++) {
       if (j === i + 1 || (i === 0 && j === points.length - 1)) continue;
-      const c = points[j]!,
-        d = points[(j + 1) % points.length]!;
+      const c = normalized[j]!,
+        d = normalized[(j + 1) % points.length]!;
       if (
         cross(a, b, c) * cross(a, b, d) <= 0 &&
         cross(c, d, a) * cross(c, d, b) <= 0 &&
@@ -48,7 +67,7 @@ function profilePoints(profile: readonly ProfilePoint[]): THREE.Vector2[] {
         throw new Error('profile self-intersects or touches itself');
     }
   }
-  const area = THREE.ShapeUtils.area(points);
+  const area = THREE.ShapeUtils.area(normalized);
   if (Math.abs(area) < 1e-12) throw new Error('profile area must be nonzero');
   // Keep the first correspondence point fixed when normalizing winding.
   if (area < 0) points.splice(1, points.length - 1, ...points.slice(1).reverse());
@@ -60,6 +79,7 @@ function buildLoft(
   profiles: THREE.Vector2[][],
   closed: boolean,
   cap: boolean,
+  firstFrameForward?: THREE.Vector3,
 ): THREE.BufferGeometry {
   const n = rings[0]!.length,
     positions: number[] = [],
@@ -72,7 +92,8 @@ function buildLoft(
   for (let i = 1; i < centers.length; i++)
     lengths.push(lengths[i - 1]! + centers[i]!.distanceTo(centers[i - 1]!));
   const total = lengths[lengths.length - 1]!;
-  if (total < 1e-10) throw new Error('loft section centers must progress along a nonzero path');
+  if (!(total > 0) || !Number.isFinite(total))
+    throw new Error('loft section centers must progress along a finite nonzero path');
   for (let i = 0; i < rings.length; i++) {
     const ring = rings[i]!,
       distance = [0];
@@ -89,7 +110,52 @@ function buildLoft(
         b = a + 1,
         c = a + n + 1,
         d = c + 1;
-      indices.push(a, c, b, b, c, d);
+      const origin = rings[i]![j]!,
+        ab = rings[i]![(j + 1) % n]!.clone().sub(origin),
+        ac = rings[i + 1]![j]!.clone().sub(origin),
+        ad = rings[i + 1]![(j + 1) % n]!.clone().sub(origin);
+      // The edge at an intermediate section is lerp(ab, ad-ac, t). If it
+      // collapses inside this interval, correspondence folds the side panel.
+      // Normalize by edge length, not station spacing, to retain thin profiles.
+      const endEdge = ad.clone().sub(ac),
+        edgeScale = Math.max(ab.length(), endEdge.length());
+      if (edgeScale > 0) {
+        const startEdge = ab.clone().divideScalar(edgeScale),
+          delta = endEdge.divideScalar(edgeScale).sub(startEdge),
+          denominator = delta.lengthSq(),
+          t = denominator > 0 ? -startEdge.dot(delta) / denominator : 0;
+        if (t > 0 && t < 1 && startEdge.addScaledVector(delta, t).lengthSq() <= 1e-20)
+          throw new AuthoringDiagnosticError('PROFILE_CORRESPONDENCE_COLLAPSE');
+      }
+      const scale = Math.max(ab.length(), ac.length(), ad.length());
+      // A fixed diagonal biases warped panels: mirrored profiles then produce
+      // different surfaces. Use the bilinear midpoint, invariant to corner order,
+      // for nonplanar panels. Planar panels retain their compact triangulation.
+      const warp =
+        scale > 0
+          ? Math.abs(
+              ab
+                .clone()
+                .divideScalar(scale)
+                .dot(ac.clone().divideScalar(scale).cross(ad.clone().divideScalar(scale))),
+            )
+          : 0;
+      if (warp > 1e-10) {
+        const middle = positions.length / 3;
+        positions.push(
+          ...origin
+            .clone()
+            .addScaledVector(ab, 0.25)
+            .addScaledVector(ac, 0.25)
+            .addScaledVector(ad, 0.25)
+            .toArray(),
+        );
+        uvs.push(
+          (uvs[a * 2]! + uvs[b * 2]! + uvs[c * 2]! + uvs[d * 2]!) / 4,
+          (uvs[a * 2 + 1]! + uvs[b * 2 + 1]! + uvs[c * 2 + 1]! + uvs[d * 2 + 1]!) / 4,
+        );
+        indices.push(a, c, middle, c, d, middle, d, b, middle, b, a, middle);
+      } else indices.push(a, c, b, b, c, d);
     }
   if (cap && !closed)
     for (const station of [0, rings.length - 1]) {
@@ -110,6 +176,11 @@ function buildLoft(
         else indices.push(...tri.toReversed().map((j) => start + j));
       }
     }
+  // Section planes do not prescribe a traversal direction. Descending stations
+  // need the opposite winding, including caps, before normals are computed.
+  if (firstFrameForward && firstFrameForward.dot(centers[1]!.clone().sub(centers[0]!)) < 0)
+    for (let i = 0; i < indices.length; i += 3)
+      [indices[i + 1], indices[i + 2]] = [indices[i + 2]!, indices[i + 1]!];
   const out = meshGeo({ positions, indices, uvs });
   // The duplicated profile UV seam should not become a shading seam.
   const normal = out.getAttribute('normal');
@@ -137,20 +208,30 @@ function buildLoft(
   return out;
 }
 
-/** Profiles lie in each section's local XZ plane; local +Y follows the loft. No holes in this first version. */
+/** Profiles lie in local XZ planes; first-section travel determines outward winding. No holes. */
 export function loftProfiles(
   sections: readonly LoftSection[],
   options: LoftOptions = {},
 ): THREE.BufferGeometry {
+  rejectHoles(options, 'loftProfiles');
   if (sections.length < 2) throw new Error('loftProfiles needs at least two sections');
-  const profiles = sections.map((section) => profilePoints(section.profile));
+  const profiles = sections.map((section, i) => {
+    rejectHoles(section, `loftProfiles section ${i}`);
+    return profilePoints(section.profile);
+  });
   if (profiles.some((p) => p.length !== profiles[0]!.length))
     throw new Error('loftProfiles sections must have the same point count and correspondence');
-  const rings = sections.map((section, i) => {
-    const frame = geometryFrameMatrix(section.frame);
-    return profiles[i]!.map((p) => new THREE.Vector3(p.x, 0, p.y).applyMatrix4(frame));
-  });
-  const out = buildLoft(rings, profiles, false, options.cap ?? true);
+  const frames = sections.map((section) => geometryFrameMatrix(section.frame));
+  const rings = profiles.map((profile, i) =>
+    profile.map((p) => new THREE.Vector3(p.x, 0, p.y).applyMatrix4(frames[i]!)),
+  );
+  const out = buildLoft(
+    rings,
+    profiles,
+    false,
+    options.cap ?? true,
+    new THREE.Vector3(0, 1, 0).transformDirection(frames[0]!),
+  );
   out.userData.kilnGeometryWarnings = [
     {
       code: 'LOFT_SELF_INTERSECTION_UNCHECKED',
@@ -167,6 +248,7 @@ export function sweepProfile(
   path: readonly Point3[],
   options: SweepOptions = {},
 ): THREE.BufferGeometry {
+  rejectHoles(options, 'sweepProfile');
   const points = profilePoints(profile),
     closed = options.closed ?? false,
     twist = options.twist ?? 0;
@@ -179,16 +261,31 @@ export function sweepProfile(
   )
     throw new Error('sweepProfile requires finite path points (two open or three closed)');
   const stations = path.map((p) => new THREE.Vector3(...p));
-  if (closed && stations[0]!.distanceTo(stations[stations.length - 1]!) < 1e-10)
+  const pathExtent = new THREE.Box3().setFromPoints(stations).getSize(new THREE.Vector3()).length();
+  if (!(pathExtent > 0) || !Number.isFinite(pathExtent))
+    throw new Error('sweepProfile path stations must be distinct with finite extent');
+  const pathTolerance = pathExtent * 1e-10;
+  if (closed && stations[0]!.distanceTo(stations[stations.length - 1]!) < pathTolerance)
     throw new Error('closed sweep path should omit its repeated endpoint');
   const segments: THREE.Vector3[] = [];
   for (let i = 0; i < stations.length - (closed ? 0 : 1); i++) {
     const direction = stations[(i + 1) % stations.length]!.clone().sub(stations[i]!);
-    if (direction.length() < 1e-10) throw new Error('sweepProfile path stations must be distinct');
+    if (direction.length() < pathTolerance)
+      throw new Error('sweepProfile path stations must be distinct');
     segments.push(direction.normalize());
   }
   const warnings: { code: string; message: string }[] = [];
-  const radius = Math.max(...points.map((p) => p.length()));
+  const scales = stations.map((_, i) => {
+    const scale =
+      typeof options.scale === 'number'
+        ? [options.scale, options.scale]
+        : (options.scale?.[i] ?? [1, 1]);
+    if (scale.length !== 2 || !scale.every((n) => Number.isFinite(n) && n > 0))
+      throw new Error('sweepProfile scale requires positive finite pairs');
+    return scale as readonly [number, number];
+  });
+  if (Array.isArray(options.scale) && options.scale.length !== stations.length)
+    throw new Error('sweepProfile scale needs one pair per path station');
   const tangents = stations.map((_, i) => {
     if (!closed && i === 0) return segments[0]!.clone();
     if (!closed && i === stations.length - 1) return segments[segments.length - 1]!.clone();
@@ -201,6 +298,11 @@ export function sweepProfile(
       stations[i]!.distanceTo(stations[(i - 1 + stations.length) % stations.length]!),
       stations[i]!.distanceTo(stations[(i + 1) % stations.length]!),
     );
+    const scale = scales[i]!;
+    const radius = points.reduce(
+      (maximum, point) => Math.max(maximum, Math.hypot(point.x * scale[0], point.y * scale[1])),
+      0,
+    );
     if (radius * Math.tan(angle / 2) >= distance * 0.5)
       warnings.push({
         code: 'SWEEP_TIGHT_TURN',
@@ -208,24 +310,15 @@ export function sweepProfile(
       });
     return incoming.clone().add(outgoing).normalize();
   });
-  const scales = stations.map((_, i) => {
-    const scale =
-      typeof options.scale === 'number'
-        ? [options.scale, options.scale]
-        : (options.scale?.[i] ?? [1, 1]);
-    if (scale.length !== 2 || !scale.every((n) => Number.isFinite(n) && n > 0))
-      throw new Error('sweepProfile scale requires positive finite pairs');
-    return scale as readonly [number, number];
-  });
-  if (Array.isArray(options.scale) && options.scale.length !== stations.length)
-    throw new Error('sweepProfile scale needs one pair per path station');
   const up = options.up
     ? new THREE.Vector3(...options.up)
     : Math.abs(tangents[0]!.z) < 0.9
       ? new THREE.Vector3(0, 0, 1)
       : new THREE.Vector3(1, 0, 0);
-  if (![up.x, up.y, up.z].every(Number.isFinite) || up.lengthSq() < 1e-20)
+  const upLength = Math.hypot(up.x, up.y, up.z);
+  if (!(upLength > 0) || !Number.isFinite(upLength))
     throw new Error('sweepProfile up must be a finite nonzero vector');
+  up.divideScalar(upLength);
   let z = up.clone().addScaledVector(tangents[0]!, -up.dot(tangents[0]!));
   if (z.lengthSq() < 1e-12)
     throw new Error('sweepProfile up must not be parallel to the first path tangent');

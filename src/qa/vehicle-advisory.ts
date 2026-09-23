@@ -1,6 +1,7 @@
 import * as THREE from 'three';
 
-import { readSemanticMetadataV1, type VehicleIntentV1 } from '../contracts';
+import { readSemanticMetadataV1 } from '../contracts';
+import type { MobilityQaInput, MobilityRequirements } from './vehicle';
 import { resolveVehicleWheelAssemblies, type ResolvedWheelAssembly } from '../vehicle';
 import {
   createOrientedProbeBox3,
@@ -23,14 +24,14 @@ const VEHICLE_VIEWS = [
 ];
 
 function advisory(
-  context: QaContext,
+  context: MobilityQaInput,
   value: Omit<QaFinding, 'profile' | 'dimension' | 'disposition'>,
 ): QaFinding {
   return {
     ...value,
     disposition: 'warn',
     dimension: 'categoryReadiness',
-    profile: context.intent.qaProfile,
+    profile: context.profile ?? 'asset.requirements.v1',
     viewHints: value.viewHints ?? [...VEHICLE_VIEWS],
   };
 }
@@ -57,7 +58,7 @@ function wheelPairs(
 }
 
 function bilateralSymmetryFindings(
-  context: QaContext,
+  context: MobilityQaInput,
   root: THREE.Object3D,
   wheels: readonly ResolvedWheelAssembly[],
 ): QaFinding[] {
@@ -196,7 +197,7 @@ function chassisMeshes(root: THREE.Object3D): THREE.Mesh[] {
 }
 
 function penetrationFindings(
-  context: QaContext,
+  context: MobilityQaInput,
   root: THREE.Object3D,
   wheels: readonly ResolvedWheelAssembly[],
 ): QaFinding[] {
@@ -243,9 +244,9 @@ function wholeAssetBounds(root: THREE.Object3D): THREE.Box3 | undefined {
 }
 
 function orientationFindings(
-  context: QaContext,
+  context: MobilityQaInput,
   root: THREE.Object3D,
-  intent: VehicleIntentV1,
+  intent: MobilityRequirements,
 ): QaFinding[] {
   if (
     intent.subtype === 'fixed-wing' ||
@@ -264,7 +265,7 @@ function orientationFindings(
     advisory(context, {
       code: 'VEH_ORIENTATION_SIDEWAYS',
       message:
-        `${intent.subtype} bounds are Z-dominant despite canonical +X travel ` +
+        `${intent.subtype ?? 'Mobility assembly'} bounds are Z-dominant despite canonical +X travel ` +
         `(spanX=${size.x.toFixed(6)}, spanZ=${size.z.toFixed(6)} m).`,
       affected: { node: root.name || 'vehicle-root' },
       measurement: {
@@ -331,9 +332,9 @@ function weldedBoundaryEdges(root: THREE.Object3D, loop: THREE.Object3D): number
 }
 
 function trackProfileFindings(
-  context: QaContext,
+  context: MobilityQaInput,
   root: THREE.Object3D,
-  intent: VehicleIntentV1,
+  intent: MobilityRequirements,
 ): QaFinding[] {
   if (intent.subtype !== 'tracked') return [];
   const loops: THREE.Object3D[] = [];
@@ -425,11 +426,11 @@ function trackProfileFindings(
 }
 
 /** W6 plausibility signals. The policy registry always rewrites them to observe. */
-export function evaluateVehicleAdvisoryQa(context: QaContext): QaFinding[] {
-  if (context.intent.category !== 'vehicle' || !(context.scene instanceof THREE.Object3D)) {
+export function inspectMobilityAdvisory(context: MobilityQaInput): QaFinding[] {
+  if (!(context.scene instanceof THREE.Object3D)) {
     return [];
   }
-  const intent = context.intent.vehicle;
+  const intent = context.mobility;
   if (!intent) return [];
   const root = context.scene;
   root.updateMatrixWorld(true);
@@ -444,6 +445,16 @@ export function evaluateVehicleAdvisoryQa(context: QaContext): QaFinding[] {
       `${b.code}:${b.affected?.nodePath ?? b.affected?.node ?? ''}`,
     ),
   );
+}
+
+/** Old-data conformance adapter; no category is synthesized by the neutral runner. */
+export function evaluateVehicleAdvisoryQa(context: QaContext): QaFinding[] {
+  if (context.intent.category !== 'vehicle') return [];
+  return inspectMobilityAdvisory({
+    scene: context.scene,
+    profile: context.intent.qaProfile,
+    mobility: context.intent.vehicle,
+  });
 }
 
 export const VEHICLE_W6_ADVISORY_QA_RULE: QaRule = Object.freeze({

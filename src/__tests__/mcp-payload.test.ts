@@ -1,29 +1,7 @@
 /**
- * Tool results have a size budget, and nothing was enforcing it.
- *
- * `kiln_list_primitives` returned its 92 entries twice -- once as a structured
- * array and once as the formatted text rendered from that array -- and the
- * default MCP serialization pretty-printed the pair. One call put 90,497 bytes
- * on the wire.
- *
- * Harnesses do not agree on what to do with a result that size. Claude Code and
- * `agy` swallow it. OpenCode truncates it, spills the full copy to a file under
- * its tool-output directory, and hands the model the cut-off version plus the
- * problem of reassembling the rest. A dispatched `glm-5.3` run did exactly that:
- * it called the tool, was told the catalog was truncated, and spent the next
- * twenty-two minutes grepping and re-reading the spill file at increasing
- * offsets. It never wrote a program. The timeout, not the model, ended it.
- *
- * The fix was to stop sending the same information twice, which cost nothing:
- * in-process callers still get `primitives` from `run()`, and the wire carries
- * the text the model actually reads. Measured after: 36,647 bytes, received in
- * full by the same model on the same harness, which then enumerated all 92
- * primitives and their categories correctly.
- *
- * The ceiling below is deliberately loose. It is not a claim about any harness's
- * exact threshold -- OpenCode's sits somewhere between the two measurements and
- * is not documented -- it is a tripwire for the regression that actually
- * happened: a result quietly starting to carry its own contents twice.
+ * Discovery must stay bounded across structured and human-readable transports.
+ * A compact overview contains summaries and a short starting guide; exact detail
+ * supplies contracts separately. These checks exercise the real MCP serialization.
  */
 import { readdir, readFile } from 'node:fs/promises';
 import { join, resolve } from 'node:path';
@@ -44,14 +22,15 @@ const defOf = (name: string) => {
   return def;
 };
 
-describe('kiln_list_primitives wire payload', () => {
+describe('kiln_discover wire payload', () => {
   it('sends the catalog once, not twice', async () => {
-    const def = defOf('kiln_list_primitives');
-    const raw = (await def.run({})) as { primitives: unknown[]; text: string };
+    const def = defOf('kiln_discover');
+    const raw = (await def.run({})) as { entries: unknown[]; total: number; text: string };
     const wire = await runTool(def, {});
 
     // The structured array is still there for in-process callers.
-    expect(raw.primitives.length).toBeGreaterThan(50);
+    expect(raw.entries).toHaveLength(6);
+    expect(raw.total).toBeGreaterThan(50);
 
     const block = wire.content[0] as { type: string; text: string };
     expect(block.type).toBe('text');
@@ -63,10 +42,10 @@ describe('kiln_list_primitives wire payload', () => {
   });
 
   it('stays under the size that derails a harness', async () => {
-    const wire = await runTool(defOf('kiln_list_primitives'), {});
+    const wire = await runTool(defOf('kiln_discover'), {});
     const bytes = Buffer.byteLength(JSON.stringify(wire), 'utf8');
-    expect({ tool: 'kiln_list_primitives', over: bytes > CATALOG_CEILING }).toEqual({
-      tool: 'kiln_list_primitives',
+    expect({ tool: 'kiln_discover', over: bytes > CATALOG_CEILING }).toEqual({
+      tool: 'kiln_discover',
       over: false,
     });
   });
@@ -94,17 +73,16 @@ describe('kiln_list_primitives wire payload', () => {
 });
 
 /**
- * The always-on cost of attaching Kiln, and the README's claim about it.
+ * The always-on cost of attaching Kiln.
  *
  * Everything else a harness pays for Kiln is per-call and visible. This is the
  * part that is paid on every turn of every session whether or not the model is
  * modelling anything: the tool schemas the harness advertises, and the front
- * matter each skill uses to say when it applies. The README quotes both figures
- * to argue that the surface is small, and a number in prose with nothing holding
- * it to the code is a number that will be wrong by the next release.
+ * matter each skill uses to say when it applies. Measure the actual advertised
+ * definitions so changes cannot silently expand this fixed context cost.
  *
- * The ceilings are the point of the test; the exact figures are what the README
- * has to match. If a description grows for a good reason, update both -- the
+ * The ceilings are the point of the test. Record measured increases and their
+ * rationale in the change review. If a description grows for a good reason, the
  * failure is a prompt to re-measure, not a rule against writing documentation.
  */
 describe('always-on context cost', () => {
@@ -146,10 +124,11 @@ describe('always-on context cost', () => {
 
   it('the tool schemas stay within the context budget', async () => {
     const chars = schemaChars();
-    // Collections add four explicit verbs without changing cached authoring schemas.
-    // Measured full public surface: ~28 KiB, up from ~24 KiB before collections.
-    // Keep the expanded surface bounded; this is context cost, not a coverage gate.
-    expect(chars).toBeLessThan(30 * 1024);
+    // 32,455 serialized characters for fourteen tools, including bounded part
+    // listing on inspect. This replaces guessed paths/repeated image calls for
+    // scenes over the 80-part preview. No new tool or loaded helper catalog.
+    // Keep the new bound explicit; this is context cost, not a coverage gate.
+    expect(chars).toBeLessThan(32 * 1024);
   });
 
   it('skill discovery stays within the context budget', async () => {

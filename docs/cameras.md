@@ -25,6 +25,22 @@ Kiln uses +X forward, +Y up and +Z right. Azimuth 0 looks from the front (+X), 9
 
 The versioned capture format supports up to nine `shots`. Use the exact `parts[].path` or a unique `parts[].name` from a render result. These identify evaluated scene nodes, whose names can include generated prefixes. Duplicate names require a path.
 
+Render results preview at most 80 paths and report `partsTotal`, `partsTruncated`
+and, when needed, `partsNextOffset`. An absent preview entry is not evidence of a
+missing exported part. Retrieve the full inventory without generating an image:
+
+```js
+kiln_inspect({ programRef: REF, image: false, listParts: { query: "hinge", limit: 80 } });
+```
+
+`query` is a case-insensitive substring of the node name or encoded path, not a
+regex. Omit it for all nodes, including groups and primitive children. Follow
+`partListing.nextOffset` with the same `programRef` and query; `total` counts all
+nodes, `matched` counts filtered nodes. The default page has 80 entries; maximum
+100. With the CLI, put the same controls (without `programRef`) in a JSON file:
+`node kiln.mjs inspect REF --request controls.json --json`. Neither interface
+needs a renderer for `image:false` listings. Paths belong to that evaluated revision.
+
 ```json
 {
   "programRef":"sha256:<revision>",
@@ -68,6 +84,24 @@ The versioned format uses `shots`, not legacy `preset/cells`. Unknown or conflic
 - `kiln_view_interior` accepts versioned `capture` after roof removal. Custom shots retain walls; the default three-view preset also removes near walls for its eye-level cutaway.
 - `kiln_screenshot_animation` accepts `shot`, `frames` (2–6), or ordered `frameTimes` (1–9 phase fractions from 0 to 1). Do not combine `frames` and `frameTimes`. `framing:"locked"` is the default; it preserves one camera across the sampled motion. Choose `"follow"` to track a subject with a shot. `perFrame:true` returns separate images.
 
+Animation `measureParts` accepts 1–16 `{name}` or `{path}` selectors and returns
+world-space bounds for each selected subtree in every `poseBounds.parts` entry.
+Selections do not change camera framing; ambiguous names and duplicate selections
+fail explicitly. Empty geometry returns `bounds:null`. Use this to compare moving
+contacts or attachments together; scene bounds alone cannot establish support.
+CLI accepts the same array in `--measure-parts parts.json`. These are sampled
+geometry bounds, not continuous collision, balance or physical-contact evidence.
+
+## Comparing edits
+
+`kiln_inspect` accepts `compare: {programRef: OLD_REF, offset: 0, limit: 50}`
+alongside the current source/reference and camera controls. It reports exact
+exported static geometry, material, rest-transform and bounds changes with GLB
+hashes. Follow `comparison.nextOffset` to read every change. Both revisions use
+current host settings; comparison does not certify intent, animation or physical
+fit. Unsupported or ambiguous structures fail explicitly. See
+[the comparison workflow and limits](../skills/kiln-refine-asset/references/revision-and-views.md#compare-exported-revisions).
+
 ## What the receipts establish
 
 `cameraShots` describes the resolved world cameras, subject bounds, and visibility. Derivative receipts also carry the camera and `cameraFidelity`: `engine-resolved` for the CPU projection, or `echo-validated` when a GPU service acknowledges the exact requested parameters and dimensions. An echo is a transport check, not independent proof that an arbitrary remote service rendered honest pixels.
@@ -78,7 +112,27 @@ Use the same revision, camera recipe and lighting when comparing geometry. A sou
 
 ### Anchor measurements
 
+CLI exposes the shared inspection tool as `kiln inspect <file.js|ref> --request
+controls.json --views close.png --json`. The JSON file contains inspection controls
+only (`shot`, `measure`, or part/orbit options); source comes from the positional
+argument. Images are optional, written atomically, and cannot replace an input file.
+
 `kiln_inspect` accepts `measure: {from: {subject: {path}, point: [x,y,z]}, to: {subject: {path}, point: [x,y,z]}}` alongside its camera controls. Each point uses its selected node's local coordinates. Omit `point` to measure from the node origin. Use ordinary named child groups or pivots as reusable attachment anchors; their returned exact paths distinguish repeated names.
+
+Set `measure.mode: "surface"` to compare two disjoint mesh subjects instead, omitting
+`point`. This returns the minimum triangle-surface distance and closest world points
+in the exported rest pose. Select the intended interface: unrelated contact
+elsewhere in a broad assembly can hide a local gap. Check `measurement.status`;
+an incomplete result reports `distance: null` and lower/upper bounds. Narrow the
+selection when its 20,000-triangle-per-subject or 250,000-step search budget is
+exceeded. The search groups triangles by bounds and visits nearer groups first;
+its work limit includes group expansion and individual triangle-pair checks.
+`pairsVisited` counts the individual triangle pairs checked.
+Skin/morph deformation and unsupported primitive representations are rejected.
+Zero distance can mean touching or intersection; positive distance does not exclude
+one solid containing another. Neither result certifies physical attachment, solid
+clearance, motion or alpha/displacement appearance. The measurement is independent
+of image fidelity and does not change QA acceptance.
 
 The result reports both resolved world points and their straight-line distance in asset units. It does not claim surface clearance, contact, collision, or a real-world unit conversion. Exact `shot` inspection also returns `subjectFrame`: local and world bounds, column-major world transform, origin, and normalized local axes expressed in world coordinates. Empty anchor groups have null bounds.
 

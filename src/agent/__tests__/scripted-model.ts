@@ -26,6 +26,7 @@ export type ScriptedTurn =
 export class ScriptedModel extends Model {
   /** `options.systemPrompt` captured per stream() call, in order. */
   readonly seenSystemPrompts: unknown[] = [];
+  readonly messageSnapshots: unknown[] = [];
   private turnIndex = 0;
 
   constructor(private readonly turns: ScriptedTurn[]) {
@@ -45,6 +46,7 @@ export class ScriptedModel extends Model {
     options?: StreamOptions,
   ): AsyncIterable<ModelStreamEvent> {
     this.seenSystemPrompts.push(options?.systemPrompt);
+    this.messageSnapshots.push(JSON.parse(JSON.stringify(_messages)));
     const turn: ScriptedTurn = this.turns[this.turnIndex] ?? { text: '(script exhausted)' };
     this.turnIndex += 1;
 

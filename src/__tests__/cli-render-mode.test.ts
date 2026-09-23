@@ -1,17 +1,5 @@
-/**
- * The `auto` health probe, and the difference between "no renderer" and "busy".
- *
- * This exists because of a real batch run. Three agents were dispatched against
- * one local GPU render service; the service was up the whole time, and one of the
- * runs still reported `cpu raster (no GPU service found)` and judged its materials
- * off a flat-white sheet. Nothing was broken. The renderer was simply drawing
- * somebody else's frame, and a 1.5 second probe expired against a socket that had
- * been accepted and would have answered a moment later.
- *
- * The two cases below are the whole contract: a machine with nothing listening
- * must still fall through to the CPU rasterizer immediately, and a machine whose
- * renderer is merely occupied must not be mistaken for one.
- */
+import { fakeRenderHealth } from './helpers/fake-render-service';
+/** Strict health verification, explicit remote selection, and token isolation. */
 import { createServer, type Server } from 'node:http';
 import type { AddressInfo } from 'node:net';
 
@@ -20,6 +8,102 @@ import { afterEach, describe, expect, it } from 'bun:test';
 import { buildRenderPort, makeRemoteRenderPort, probeRenderService } from '../cli-render-mode';
 
 const servers: Server[] = [];
+
+it.each(['auto', 'gpu'] as const)(
+  '%s rejoins a local renderer after the service joined at startup exits',
+  async (mode) => {
+    const previousPort = process.env.KILN_RENDER_SERVICE_PORT;
+    const previousUrl = process.env.KILN_RENDER_PORT_URL;
+    let generation = 1;
+    let starts = 0;
+    const server = createServer(async (req, res) => {
+      res.setHeader('content-type', 'application/json');
+      if (req.url === '/health') {
+        const health = fakeRenderHealth();
+        health.captureIdentity.instanceId = `generation-${generation}`;
+        res.end(JSON.stringify(health));
+        return;
+      }
+      for await (const _chunk of req) {
+        // Drain each request, including concurrent captures after reconnection.
+      }
+      res.end(JSON.stringify({ ok: true, rendererId: 'test-renderer', views: ['cG5n'] }));
+    });
+    servers.push(server);
+    await new Promise<void>((done) => server.listen(0, '127.0.0.1', done));
+    const port = (server.address() as AddressInfo).port;
+    const url = `http://127.0.0.1:${port}`;
+    try {
+      delete process.env.KILN_RENDER_PORT_URL;
+      process.env.KILN_RENDER_SERVICE_PORT = String(port);
+      const context = await buildRenderPort(mode, undefined, {
+        start: async () => {
+          starts++;
+          generation++;
+          await new Promise<void>((done) => server.listen(port, '127.0.0.1', done));
+          return url;
+        },
+      });
+      const request = {
+        glb: new Uint8Array([1]),
+        viewDirs: [[1, 0, 0]] as [number, number, number][],
+        size: 384,
+      };
+      const captureIdentity = context.captureCacheIdentity;
+      if (typeof captureIdentity !== 'function') throw new Error('Expected live capture identity');
+      const before = await captureIdentity();
+      await context.viewRenderPort!(request);
+      expect(starts).toBe(0);
+      await new Promise<void>((done) => server.close(() => done()));
+      const results = await Promise.all(
+        Array.from({ length: 4 }, () => context.viewRenderPort!(request)),
+      );
+      expect(results.every((r) => r.rendererId === 'test-renderer')).toBe(true);
+      expect(starts).toBe(1);
+      expect(await captureIdentity()).not.toEqual(before);
+    } finally {
+      if (previousPort === undefined) delete process.env.KILN_RENDER_SERVICE_PORT;
+      else process.env.KILN_RENDER_SERVICE_PORT = previousPort;
+      if (previousUrl === undefined) delete process.env.KILN_RENDER_PORT_URL;
+      else process.env.KILN_RENDER_PORT_URL = previousUrl;
+    }
+  },
+);
+
+it.each(['opt-out', 'explicit-remote'] as const)(
+  '%s does not start a renderer after a joined service exits',
+  async (selection) => {
+    const previousPort = process.env.KILN_RENDER_SERVICE_PORT;
+    const previousUrl = process.env.KILN_RENDER_PORT_URL;
+    let starts = 0;
+    const url = await serve(0);
+    try {
+      delete process.env.KILN_RENDER_PORT_URL;
+      process.env.KILN_RENDER_SERVICE_PORT = new URL(url).port;
+      const context = await buildRenderPort(
+        'auto',
+        selection === 'explicit-remote' ? url : undefined,
+        {
+          autoSpawn: false,
+          start: async () => {
+            starts++;
+            return url;
+          },
+        },
+      );
+      await new Promise<void>((done) => servers.at(-1)!.close(() => done()));
+      await expect(
+        context.viewRenderPort!({ glb: new Uint8Array([1]), viewDirs: [[1, 0, 0]], size: 384 }),
+      ).rejects.toThrow(/absent/);
+      expect(starts).toBe(0);
+    } finally {
+      if (previousPort === undefined) delete process.env.KILN_RENDER_SERVICE_PORT;
+      else process.env.KILN_RENDER_SERVICE_PORT = previousPort;
+      if (previousUrl === undefined) delete process.env.KILN_RENDER_PORT_URL;
+      else process.env.KILN_RENDER_PORT_URL = previousUrl;
+    }
+  },
+);
 
 afterEach(async () => {
   await Promise.all(
@@ -32,7 +116,7 @@ function serve(delayMs: number, status = 200): Promise<string> {
   const server = createServer((_req, res) => {
     setTimeout(() => {
       res.writeHead(status, { 'content-type': 'application/json' });
-      res.end(JSON.stringify({ ok: status === 200, rendererId: 'test-renderer' }));
+      res.end(JSON.stringify(fakeRenderHealth()));
     }, delayMs);
   });
   servers.push(server);
@@ -48,11 +132,9 @@ describe('probeRenderService', () => {
     expect(await probeRenderService(await serve(0))).toBe('test-renderer');
   });
 
-  it('finds a renderer that is busy when first asked', async () => {
-    // Past the 1.5s first budget, inside the 8s second one. Before the retry
-    // existed this returned undefined and the caller ran the whole session on the
-    // CPU rasterizer with a healthy GPU sitting on the other end of the socket.
-    expect(await probeRenderService(await serve(2_000))).toBe('test-renderer');
+  it('does not claim readiness when a health response exceeds its deadline', async () => {
+    // A slow listener is unknown until a subsequent explicit probe verifies it.
+    expect(await probeRenderService(await serve(2_000))).toBeUndefined();
   });
 
   it('gives up on a service that answers with an error', async () => {
@@ -75,6 +157,11 @@ describe('probeRenderService', () => {
 it('names the shared grid backdrop to the GPU service for ordinary asset sheets', async () => {
   let body: Record<string, unknown> | undefined;
   const server = createServer(async (req, res) => {
+    if (req.url === '/health') {
+      res.setHeader('content-type', 'application/json');
+      res.end(JSON.stringify(fakeRenderHealth()));
+      return;
+    }
     const chunks: Buffer[] = [];
     for await (const chunk of req) chunks.push(Buffer.from(chunk));
     body = JSON.parse(Buffer.concat(chunks).toString('utf8'));
@@ -112,6 +199,11 @@ it('authenticates an auto-started local renderer with its inherited service toke
   const token = 'local-renderer-test-token';
   let receivedToken: string | undefined;
   const server = createServer(async (req, res) => {
+    if (req.url === '/health') {
+      res.setHeader('content-type', 'application/json');
+      res.end(JSON.stringify(fakeRenderHealth()));
+      return;
+    }
     receivedToken = req.headers['x-render-token'] as string | undefined;
     for await (const _chunk of req) {
       // Drain the request before answering, like the real render service.
@@ -174,7 +266,12 @@ it('authenticates when joining an already-running local renderer with its inheri
   const server = createServer(async (req, res) => {
     if (req.url === '/health') {
       res.setHeader('content-type', 'application/json');
-      res.end(JSON.stringify({ ok: true, rendererId: 'test-renderer' }));
+      res.end(JSON.stringify(fakeRenderHealth()));
+      return;
+    }
+    if (req.url === '/health') {
+      res.setHeader('content-type', 'application/json');
+      res.end(JSON.stringify(fakeRenderHealth()));
       return;
     }
     receivedToken = req.headers['x-render-token'] as string | undefined;
@@ -225,6 +322,11 @@ it('does not leak local service token to explicit remote renderers (portUrl or e
   const previousEnvUrl = process.env.KILN_RENDER_PORT_URL;
   let receivedToken: string | undefined;
   const server = createServer(async (req, res) => {
+    if (req.url === '/health') {
+      res.setHeader('content-type', 'application/json');
+      res.end(JSON.stringify(fakeRenderHealth()));
+      return;
+    }
     receivedToken = req.headers['x-render-token'] as string | undefined;
     for await (const _chunk of req) {
       // Drain the request.
@@ -233,7 +335,7 @@ it('does not leak local service token to explicit remote renderers (portUrl or e
     res.end(
       JSON.stringify({
         ok: true,
-        rendererId: 'test-remote-renderer',
+        rendererId: 'test-renderer',
         views: [Buffer.from('png').toString('base64')],
       }),
     );
@@ -286,7 +388,12 @@ it('prioritizes explicit KILN_RENDER_TOKEN over RENDER_SERVICE_TOKEN', async () 
   const server = createServer(async (req, res) => {
     if (req.url === '/health') {
       res.setHeader('content-type', 'application/json');
-      res.end(JSON.stringify({ ok: true, rendererId: 'test-renderer' }));
+      res.end(JSON.stringify(fakeRenderHealth()));
+      return;
+    }
+    if (req.url === '/health') {
+      res.setHeader('content-type', 'application/json');
+      res.end(JSON.stringify(fakeRenderHealth()));
       return;
     }
     receivedToken = req.headers['x-render-token'] as string | undefined;
@@ -327,6 +434,11 @@ it('prioritizes explicit KILN_RENDER_TOKEN over RENDER_SERVICE_TOKEN', async () 
     let remoteReceivedToken: string | undefined;
     server.removeAllListeners('request');
     server.on('request', async (req, res) => {
+      if (req.url === '/health') {
+        res.setHeader('content-type', 'application/json');
+        res.end(JSON.stringify(fakeRenderHealth()));
+        return;
+      }
       remoteReceivedToken = req.headers['x-render-token'] as string | undefined;
       for await (const _chunk of req) {
       }
@@ -351,6 +463,11 @@ it('prioritizes explicit KILN_RENDER_TOKEN over RENDER_SERVICE_TOKEN', async () 
     let spawnReceivedToken: string | undefined;
     server.removeAllListeners('request');
     server.on('request', async (req, res) => {
+      if (req.url === '/health') {
+        res.setHeader('content-type', 'application/json');
+        res.end(JSON.stringify(fakeRenderHealth()));
+        return;
+      }
       spawnReceivedToken = req.headers['x-render-token'] as string | undefined;
       for await (const _chunk of req) {
       }
@@ -391,7 +508,12 @@ it('sends no token when neither KILN_RENDER_TOKEN nor RENDER_SERVICE_TOKEN is se
   const server = createServer(async (req, res) => {
     if (req.url === '/health') {
       res.setHeader('content-type', 'application/json');
-      res.end(JSON.stringify({ ok: true, rendererId: 'test-renderer' }));
+      res.end(JSON.stringify(fakeRenderHealth()));
+      return;
+    }
+    if (req.url === '/health') {
+      res.setHeader('content-type', 'application/json');
+      res.end(JSON.stringify(fakeRenderHealth()));
       return;
     }
     receivedToken = req.headers['x-render-token'] as string | undefined;

@@ -17,6 +17,23 @@ import * as THREE from 'three';
 import { LoopSubdivision } from 'three-subdivide/build/index.module.js';
 import { mergeVertices as threeMergeVertices } from 'three/examples/jsm/utils/BufferGeometryUtils.js';
 import { createInstance } from './primitives';
+import {
+  GEOMETRY_ALLOCATION_LIMITS,
+  assertRepetitionCount,
+  assertFiniteTriple,
+  assertDimension,
+} from './geometry-budget';
+import { AuthoringDiagnosticError } from './evaluator/authoring-diagnostic';
+
+function assertFiniteSourceFrame(name: string, source: THREE.Object3D): void {
+  assertFiniteTriple(`${name} source position`, source.position.toArray());
+  assertFiniteTriple(`${name} source scale`, source.scale.toArray());
+  assertFiniteTriple(`${name} source rotation`, [
+    source.rotation.x,
+    source.rotation.y,
+    source.rotation.z,
+  ]);
+}
 
 // =============================================================================
 // Array ops
@@ -39,6 +56,11 @@ export function arrayLinear(
   offset: [number, number, number],
   parent?: THREE.Object3D,
 ): THREE.Object3D[] {
+  assertRepetitionCount('arrayLinear', count);
+  assertFiniteSourceFrame('arrayLinear', source);
+  assertFiniteTriple('arrayLinear offset', offset);
+  const last = source.position.toArray().map((value, axis) => value + offset[axis]! * (count - 1));
+  assertFiniteTriple('arrayLinear resulting position', last);
   const out: THREE.Object3D[] = [];
   // Source is already at some position; clones start at offset 1.
   const base = source.position.toArray() as [number, number, number];
@@ -74,6 +96,11 @@ function degreesOf(euler: THREE.Euler): [number, number, number] {
  * Radial array: place `count` copies of `source` around an axis at radius.
  * Source stays put; clones orbit `center` (the parent's origin by default) on
  * the given axis.
+ * All positions/axes are in parent-local coordinates; a supplied different
+ * parent receives those same coordinates, without a world-space conversion.
+ * Scale is preserved. Default `outward` orientation retains the orbit-only
+ * convention (the source rotation is ignored). `relative` composes the orbit
+ * rotation with the source's complete authored orientation.
  *
  * `center` exists because the default could not be worked around: a ring of
  * rivets about a hub that is not at the parent's origin meant writing the
@@ -92,7 +119,14 @@ export function arrayRadial(
   axis: 'x' | 'y' | 'z' = 'y',
   parent?: THREE.Object3D,
   center?: [number, number, number],
+  options: { orientation?: 'outward' | 'relative' } = {},
 ): THREE.Object3D[] {
+  assertRepetitionCount('arrayRadial', count);
+  assertFiniteSourceFrame('arrayRadial', source);
+  if (!['x', 'y', 'z'].includes(axis)) throw new RangeError('arrayRadial axis must be x, y or z.');
+  if (options.orientation !== undefined && !['outward', 'relative'].includes(options.orientation))
+    throw new RangeError('arrayRadial orientation must be outward or relative.');
+  if (center) assertFiniteTriple('arrayRadial center', center);
   const out: THREE.Object3D[] = [];
   const pivot = center ? new THREE.Vector3(...center) : new THREE.Vector3();
   // Orbit in pivot-relative space, then translate back, so the default (pivot at
@@ -105,10 +139,18 @@ export function arrayRadial(
         ? new THREE.Vector3(0, 0, 1)
         : new THREE.Vector3(0, 1, 0);
 
+  const positions: THREE.Vector3[] = [];
+  for (let i = 1; i < count; i++) {
+    const position = basePos
+      .clone()
+      .applyMatrix4(new THREE.Matrix4().makeRotationAxis(axisVec, (i / count) * Math.PI * 2))
+      .add(pivot);
+    assertFiniteTriple('arrayRadial resulting position', position.toArray());
+    positions.push(position);
+  }
   for (let i = 1; i < count; i++) {
     const angle = (i / count) * Math.PI * 2;
-    const m = new THREE.Matrix4().makeRotationAxis(axisVec, angle);
-    const rotated = basePos.clone().applyMatrix4(m).add(pivot);
+    const rotated = positions[i - 1]!;
     // Rotate local frame too so the copy faces outward consistently.
     const eulerDeg: [number, number, number] =
       axis === 'y'
@@ -116,13 +158,16 @@ export function arrayRadial(
         : axis === 'x'
           ? [(angle * 180) / Math.PI, 0, 0]
           : [0, 0, (angle * 180) / Math.PI];
-    out.push(
-      createInstance(`${namePrefix}${i}`, source, {
-        position: [rotated.x, rotated.y, rotated.z],
-        rotation: eulerDeg,
-        parent,
-      }),
-    );
+    const copy = createInstance(`${namePrefix}${i}`, source, {
+      position: [rotated.x, rotated.y, rotated.z],
+      rotation: eulerDeg,
+      scale: source.scale.toArray() as [number, number, number],
+      parent,
+    });
+    if (options.orientation === 'relative') {
+      copy.quaternion.setFromAxisAngle(axisVec, angle).multiply(source.quaternion);
+    }
+    out.push(copy);
   }
   return out;
 }
@@ -131,9 +176,12 @@ export function arrayRadial(
  * Mirror: create one mirrored instance of `source` across the given plane.
  * Plane is identified by its normal axis ('x' = mirror across YZ plane).
  *
- * Uses a negative scale on the mirror axis. Note: negative scale flips
- * triangle winding — the bridge still exports correctly but lighting on
- * the mirrored copy may invert until GLB viewers apply the TRS properly.
+ * The plane passes through the parent-local origin. Source local coordinates
+ * are reflected, then placed under `parent` (no implicit world reparenting).
+ * Preserves source rotation and nonuniform scale with shared mesh resources.
+ * Reflection is represented by signed TRS; winding is not baked into geometry.
+ * A manually authored local matrix with shear, a zero scale or nonfinite
+ * entries is rejected because a glTF node TRS cannot represent it faithfully.
  */
 export function mirror(
   name: string,
@@ -141,18 +189,35 @@ export function mirror(
   axis: 'x' | 'y' | 'z',
   parent?: THREE.Object3D,
 ): THREE.Object3D {
-  const sourcePos = source.position.toArray() as [number, number, number];
-  const pos: [number, number, number] = [
-    axis === 'x' ? -sourcePos[0] : sourcePos[0],
-    axis === 'y' ? -sourcePos[1] : sourcePos[1],
-    axis === 'z' ? -sourcePos[2] : sourcePos[2],
-  ];
-  const scale: [number, number, number] = [
-    axis === 'x' ? -1 : 1,
-    axis === 'y' ? -1 : 1,
-    axis === 'z' ? -1 : 1,
-  ];
-  return createInstance(name, source, { position: pos, scale, parent });
+  if (source.matrixAutoUpdate) source.updateMatrix();
+  const reflected = new THREE.Matrix4()
+    .makeScale(axis === 'x' ? -1 : 1, axis === 'y' ? -1 : 1, axis === 'z' ? -1 : 1)
+    .multiply(source.matrix);
+  if (!reflected.elements.every(Number.isFinite) || reflected.determinant() === 0) {
+    throw new RangeError(
+      `mirror("${name}"): source requires a finite, nonsingular local transform.`,
+    );
+  }
+  const position = new THREE.Vector3();
+  const quaternion = new THREE.Quaternion();
+  const scale = new THREE.Vector3();
+  reflected.decompose(position, quaternion, scale);
+  const recomposed = new THREE.Matrix4().compose(position, quaternion, scale);
+  if (
+    reflected.elements.some(
+      (value, i) => Math.abs(value - recomposed.elements[i]!) > 1e-8 * Math.max(1, Math.abs(value)),
+    )
+  ) {
+    throw new RangeError(
+      `mirror("${name}"): local shear cannot be represented by a reflected TRS.`,
+    );
+  }
+  const copy = createInstance(name, source);
+  copy.position.copy(position);
+  copy.quaternion.copy(quaternion);
+  copy.scale.copy(scale);
+  if (parent) parent.add(copy);
+  return copy;
 }
 
 // =============================================================================
@@ -233,27 +298,121 @@ export function subdivide(
     preserveUV?: boolean;
   } = {},
 ): THREE.BufferGeometry {
+  if (geometry.hasAttribute('skinIndex') || geometry.hasAttribute('skinWeight'))
+    throw new Error(
+      'subdivide cannot interpolate skin joint indices safely; subdivide before skin binding.',
+    );
+  if (
+    !Number.isSafeInteger(iterations) ||
+    iterations < 0 ||
+    iterations > GEOMETRY_ALLOCATION_LIMITS.subdivisionIterations
+  )
+    throw new RangeError(
+      `subdivide iterations must be an integer from 0 to ${GEOMETRY_ALLOCATION_LIMITS.subdivisionIterations}.`,
+    );
+  const position = geometry.getAttribute('position');
+  if (position?.itemSize !== 3) throw new TypeError('subdivide requires xyz positions.');
+  const corners = geometry.index?.count ?? position.count;
+  if (!Number.isSafeInteger(corners) || corners % 3 !== 0)
+    throw new TypeError('subdivide requires complete triangles.');
+  // edgeSplit allocates up to four triangles per source face even at zero iterations.
+  const upperTriangles = (corners / 3) * (opts.split === false ? 1 : 4) * 4 ** iterations;
+  if (
+    !Number.isSafeInteger(upperTriangles) ||
+    upperTriangles > GEOMETRY_ALLOCATION_LIMITS.subdivisionTriangles
+  )
+    throw new RangeError(
+      `subdivide triangle budget exceeded: worst-case ${upperTriangles}, limit ${GEOMETRY_ALLOCATION_LIMITS.subdivisionTriangles}. Reduce iterations or subdivide a smaller mesh.`,
+    );
+  const attributes = [
+    ...Object.values(geometry.attributes),
+    ...Object.values(geometry.morphAttributes).flat(),
+  ];
+  for (const [name, attribute] of Object.entries(geometry.attributes))
+    if (
+      attribute.count !== position.count ||
+      !Number.isInteger(attribute.itemSize) ||
+      attribute.itemSize < 1 ||
+      attribute.itemSize > 4
+    )
+      throw new Error(
+        `subdivide ${name} must be a matching continuous per-vertex attribute with 1..4 components.`,
+      );
+  for (const targets of Object.values(geometry.morphAttributes))
+    if (targets.some((attribute) => attribute.count !== position.count || attribute.itemSize !== 3))
+      throw new Error(
+        'subdivide morph targets currently require matching three-component attributes.',
+      );
+  const bytesPerCorner = attributes.reduce(
+    (sum, attribute) => sum + attribute.itemSize * Math.max(4, attribute.array.BYTES_PER_ELEMENT),
+    0,
+  );
+  const upperAttributeBytes =
+    upperTriangles * 3 * (bytesPerCorner + (geometry.hasAttribute('normal') ? 0 : 12));
+  if (
+    !Number.isSafeInteger(upperAttributeBytes) ||
+    upperAttributeBytes > GEOMETRY_ALLOCATION_LIMITS.subdivisionAttributeBytes
+  )
+    throw new RangeError(
+      `subdivide attribute budget exceeded: worst-case ${upperAttributeBytes} bytes, limit ${GEOMETRY_ALLOCATION_LIMITS.subdivisionAttributeBytes}.`,
+    );
   const { weld = true, preserveUV = false, ...subOpts } = opts;
-  // Subdivision wants position-only adjacency. Weld shared corners so
-  // Three's box/sphere/cylinder (which keep 4 verts per face for
-  // independent normals/UVs) become a single connected surface.
-  const input =
-    weld && !preserveUV ? mergeVertices(geometry, { positionOnly: true }) : geometry.clone();
-  const center = new THREE.Vector3();
-  let normalizationScale = 1;
-  if (preserveUV) {
-    subOpts.uvSmooth = false;
-    // Upstream adjacency hashes positions to two decimal places. Normalize the
-    // owned copy so choosing millimeters rather than meters does not change topology.
-    input.computeBoundingBox();
-    const extent = input.boundingBox!.getSize(new THREE.Vector3());
-    input.boundingBox!.getCenter(center);
-    const size = Math.max(extent.x, extent.y, extent.z);
-    normalizationScale = size > 0 ? 10000 / size : 1;
-    input
-      .translate(-center.x, -center.y, -center.z)
-      .scale(normalizationScale, normalizationScale, normalizationScale);
+  // Normalize every path before welding and upstream adjacency hashing. Otherwise
+  // changing units changes the 1e-4 weld and upstream two-decimal topology decisions.
+  const prepared = geometry.clone();
+  prepared.computeBoundingBox();
+  const center = prepared.boundingBox!.getCenter(new THREE.Vector3());
+  const extent = prepared.boundingBox!.getSize(new THREE.Vector3());
+  const size = Math.max(extent.x, extent.y, extent.z);
+  const normalizationScale = size > 0 ? 10000 / size : 1;
+  if (!Number.isFinite(normalizationScale) || !center.toArray().every(Number.isFinite))
+    throw new Error('subdivide requires finite representable positions.');
+  prepared
+    .translate(-center.x, -center.y, -center.z)
+    .scale(normalizationScale, normalizationScale, normalizationScale);
+  const input = weld && !preserveUV ? mergeVertices(prepared, { positionOnly: true }) : prepared;
+  // Upstream uses Vector3 temporaries even for four-component attributes. Scalar
+  // channels receive the same linear weights without losing W. Decode normalized
+  // storage too, because upstream does not propagate its normalized flag.
+  const fourthComponents: Array<{ name: string; lanes: string[] }> = [];
+  const reservedNames = new Set(Object.keys(input.attributes));
+  let laneIndex = 0;
+  for (const [name, attribute] of Object.entries(input.attributes)) {
+    if (name === 'tangent') {
+      input.deleteAttribute(name);
+      continue;
+    }
+    const components = attribute.itemSize;
+    const decoded = new Float32Array(attribute.count * components);
+    for (let i = 0; i < attribute.count; i++)
+      for (let component = 0; component < components; component++)
+        decoded[i * components + component] = attribute.getComponent(i, component);
+    if (components === 4) {
+      const lanes: string[] = [];
+      for (let component = 0; component < 4; component++) {
+        let lane: string;
+        do {
+          lane = `__kiln_subdivision_lane_${laneIndex++}`;
+        } while (reservedNames.has(lane) || input.hasAttribute(lane));
+        const values = new Float32Array(attribute.count);
+        for (let i = 0; i < attribute.count; i++) values[i] = decoded[i * 4 + component]!;
+        input.setAttribute(lane, new THREE.BufferAttribute(values, 1));
+        lanes.push(lane);
+      }
+      input.deleteAttribute(name);
+      fourthComponents.push({ name, lanes });
+    } else input.setAttribute(name, new THREE.BufferAttribute(decoded, components));
   }
+  for (const targets of Object.values(input.morphAttributes))
+    for (let target = 0; target < targets.length; target++) {
+      const attribute = targets[target]!;
+      const decoded = new Float32Array(attribute.count * 3);
+      for (let i = 0; i < attribute.count; i++)
+        for (let component = 0; component < 3; component++)
+          decoded[i * 3 + component] = attribute.getComponent(i, component);
+      targets[target] = new THREE.BufferAttribute(decoded, 3);
+    }
+  if (preserveUV) subOpts.uvSmooth = false;
   // `three-subdivide` builds each new vertex normal by SUMMING the normals of
   // the faces around it and never divides through, so the length comes out as
   // however many faces met there -- 2/3 after one iteration on a box, and 0.35
@@ -263,15 +422,28 @@ export function subdivide(
   // press: `subdivide(boxGeo(1.5, 0.6, 0.8), 2)` produced 1,104 bad normals out
   // of 1,152 and blocked the build at final-glb. Same repair as `lathe`.
   const output = normalizeSurfaceNormals(LoopSubdivision.modify(input, iterations, subOpts));
-  if (preserveUV)
-    output
-      .scale(1 / normalizationScale, 1 / normalizationScale, 1 / normalizationScale)
-      .translate(center.x, center.y, center.z);
+  for (const { name, lanes } of fourthComponents) {
+    const count = output.getAttribute('position').count;
+    const values = new Float32Array(count * 4);
+    for (let component = 0; component < 4; component++) {
+      const lane = output.getAttribute(lanes[component]!);
+      for (let i = 0; i < count; i++) values[i * 4 + component] = lane.getX(i);
+      output.deleteAttribute(lanes[component]!);
+    }
+    output.setAttribute(name, new THREE.BufferAttribute(values, 4));
+  }
+  output
+    .scale(1 / normalizationScale, 1 / normalizationScale, 1 / normalizationScale)
+    .translate(center.x, center.y, center.z);
+  output.userData = structuredClone(geometry.userData);
   output.deleteAttribute('tangent');
   output.computeBoundingBox();
   output.computeBoundingSphere();
   if (geometry.getAttribute('uv') && !output.getAttribute('uv')) {
     output.userData.kilnAttributeWarnings = [
+      ...(Array.isArray(output.userData.kilnAttributeWarnings)
+        ? output.userData.kilnAttributeWarnings
+        : []),
       {
         code: 'SUBDIVIDE_UV_DROPPED',
         message:
@@ -279,6 +451,48 @@ export function subdivide(
       },
     ];
   }
+  const dropped = Object.keys(geometry.attributes).filter(
+    (name) => name !== 'uv' && !output.hasAttribute(name),
+  );
+  if (dropped.length)
+    output.userData.kilnAttributeWarnings = [
+      ...(Array.isArray(output.userData.kilnAttributeWarnings)
+        ? output.userData.kilnAttributeWarnings
+        : []),
+      {
+        code: 'SUBDIVIDE_ATTRIBUTES_DROPPED',
+        message: `Subdivision removed attributes: ${dropped.join(', ')}. Rebuild required shading attributes after subdivision.`,
+      },
+    ];
+  if (geometry.groups.length && !output.groups.length)
+    output.userData.kilnAttributeWarnings = [
+      ...(Array.isArray(output.userData.kilnAttributeWarnings)
+        ? output.userData.kilnAttributeWarnings
+        : []),
+      {
+        code: 'SUBDIVIDE_GROUPS_DROPPED',
+        message:
+          'Position-only subdivision removed material groups. Use preserveUV: true to retain corner attributes and material boundaries.',
+      },
+    ];
+  const retainedMorphs = new Set(
+    Object.entries(output.morphAttributes)
+      .filter(([, targets]) => targets.length > 0)
+      .map(([name]) => name),
+  );
+  const droppedMorphs = Object.keys(geometry.morphAttributes).filter(
+    (name) => !retainedMorphs.has(name),
+  );
+  if (droppedMorphs.length)
+    output.userData.kilnAttributeWarnings = [
+      ...(Array.isArray(output.userData.kilnAttributeWarnings)
+        ? output.userData.kilnAttributeWarnings
+        : []),
+      {
+        code: 'SUBDIVIDE_MORPHS_DROPPED',
+        message: `Position-only subdivision removed morph attributes: ${droppedMorphs.join(', ')}. Use preserveUV: true to retain supported corner and morph attributes.`,
+      },
+    ];
   if (geometry.userData.kilnCsgProvenance || geometry.userData.kilnRanges) {
     delete output.userData.kilnCsgProvenance;
     delete output.userData.kilnRanges;
@@ -297,6 +511,14 @@ export function subdivide(
 // =============================================================================
 // Curve ops
 // =============================================================================
+
+function assertTubeRadius(radius: number): void {
+  try {
+    assertDimension('Tube radius', radius);
+  } catch {
+    throw new AuthoringDiagnosticError('TUBE_RADIUS');
+  }
+}
 
 /**
  * Sweep a circular profile along a path of points to produce a tube mesh.
@@ -319,6 +541,7 @@ export function curveToMesh(
   radialSegments = 8,
   closed = false,
 ): THREE.BufferGeometry {
+  assertTubeRadius(radius);
   const vectors = points.map((p) => new THREE.Vector3(p[0], p[1], p[2]));
   const curve = new THREE.CatmullRomCurve3(vectors, closed);
   return new THREE.TubeGeometry(curve, tubularSegments, radius, radialSegments, closed);
@@ -375,8 +598,7 @@ function normalizeSurfaceNormals(geo: THREE.BufferGeometry): THREE.BufferGeometr
 }
 
 export function lathe(profile: Array<[number, number]>, segments = 12): THREE.BufferGeometry {
-  const points2d = profile.map((p) => new THREE.Vector2(p[0], p[1]));
-  return normalizeSurfaceNormals(new THREE.LatheGeometry(points2d, segments));
+  return revolveGeo(profile, { segments });
 }
 
 /**
@@ -465,6 +687,7 @@ export function pipeAlongPath(
   } = {},
 ): THREE.BufferGeometry {
   const { bendRadius = 0, closed = false, tubularSegments = 32, radialSegments = 8 } = options;
+  assertTubeRadius(radius);
 
   if (points.length < 2) {
     throw new Error(`pipeAlongPath: need at least 2 points (got ${points.length}).`);
@@ -500,9 +723,7 @@ export function pipeAlongPath(
     pathPoints = smoothed;
   }
 
-  const vectors = pathPoints.map((p) => new THREE.Vector3(p[0], p[1], p[2]));
-  const curve = new THREE.CatmullRomCurve3(vectors, closed);
-  return new THREE.TubeGeometry(curve, tubularSegments, radius, radialSegments, closed);
+  return curveToMesh(pathPoints, radius, tubularSegments, radialSegments, closed);
 }
 
 /**

@@ -1,5 +1,10 @@
 # Repository size reduction and site-asset migration
 
+Historical implementation log. Tool counts, runtime versions and decisions below
+describe their recorded revisions. The current V1 initiative is tracked in the
+[unification plan](2026-09-21-kiln-discovery-and-unified-authoring.md) and
+[progress checkpoint](2026-09-22-progress-checkpoint.md).
+
 A fresh clone of this repository costs 440 MB and 79 seconds. The owner noticed
 this after open-sourcing the project, and the cause is site and social media
 material carried in git history rather than anything the tools need. This plan

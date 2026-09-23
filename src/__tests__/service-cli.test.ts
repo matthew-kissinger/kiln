@@ -1,12 +1,4 @@
-/**
- * `kiln service status | stop | prune` against real processes on a private port.
- *
- * The host acts on a stale orphan by itself; these commands are for the service
- * it will not touch -- started by hand or owned by a session that is still
- * running -- and for seeing the facts it acts on. So the tests spawn the fake
- * service as a process, give it an owner or none, and check both what is
- * printed and whether the process is still there afterwards.
- */
+/** Local renderer status and explicit stop; retired prune never mutates shared lifetime. */
 import { createServer, type Server } from 'node:http';
 import type { AddressInfo } from 'node:net';
 import type { ChildProcess } from 'node:child_process';
@@ -114,15 +106,15 @@ describe('kiln service', () => {
     expect(out).toContain('source           current');
   }, 30_000);
 
-  it('prune keeps a current service and a stale one somebody still owns; stop stops either', async () => {
+  it('retired prune reports its replacement while explicit stop stops a verified local process', async () => {
     const { dir, port } = await installation();
     const current = await spawnFakeRenderService(dir, port, {
       FAKE_SOURCE_FINGERPRINT: renderServiceSourceFingerprint(dir)!,
     });
     children.push(current);
     const kept = await run(['prune']);
-    expect(kept.code).toBe(0);
-    expect(kept.out).toContain('kept');
+    expect(kept.code).toBe(2);
+    expect(kept.err).toContain('was removed');
     expect(await alive(port)).toBe(true);
 
     const stopped = await run(['stop']);
@@ -136,24 +128,23 @@ describe('kiln service', () => {
     });
     children.push(owned);
     const keptOwned = await run(['prune']);
-    expect(keptOwned.code).toBe(0);
-    expect(keptOwned.out).toContain('kept');
-    expect(keptOwned.out).toContain(`session ${process.pid}, which is still running`);
+    expect(keptOwned.code).toBe(2);
+    expect(keptOwned.err).toContain('was removed');
+    expect(keptOwned.err).toContain('shared renderer');
     expect(await alive(port)).toBe(true);
   }, 30_000);
 
-  it('prune stops a stale orphan and says what it was', async () => {
+  it('retired prune never stops a shared renderer after its initiating host exits', async () => {
     const { dir, port } = await installation();
     const orphan = await spawnFakeRenderService(dir, port, {
       RENDER_SERVICE_OWNER_PID: String(deadPid()),
       FAKE_SOURCE_FINGERPRINT: `sha256:${'0'.repeat(64)}`,
     });
     children.push(orphan);
-    const { code, out } = await run(['prune']);
-    expect(code).toBe(0);
-    expect(out).toContain('stopped');
-    expect(out).toContain('which has exited');
-    expect(await alive(port)).toBe(false);
+    const { code, err } = await run(['prune']);
+    expect(code).toBe(2);
+    expect(err).toContain('was removed');
+    expect(await alive(port)).toBe(true);
   }, 30_000);
 
   it('refuses to stop something that is not a render service', async () => {

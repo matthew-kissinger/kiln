@@ -1,5 +1,5 @@
 {
-  "sourceHash": "f27ff0adf535ef28afb3f2818048d406ef639cdfd2bf163e548e07440832e304",
+  "sourceHash": "06cdd76fd0f71f57f83ff81e23cd8efa8d1bc73cd7ffb97d754702f26dff8ec0",
   "model": "Claude Opus 5",
   "harness": "Claude Code",
   "provenance": {
@@ -7,10 +7,17 @@
     "sourceAccess": "Not recorded",
     "inheritedContext": "Not independently recorded; source-header declarations only",
     "startingExample": "Not recorded",
-    "humanIntervention": "Not recorded",
+    "humanIntervention": "Maintainer-directed UV API migration by Codex; original model-authored shape and UV values retained.",
     "reviewFidelity": "Not recorded",
-    "poster": "Gallery GPU render of this exact source. Source, artifact, image hashes and camera settings are recorded alongside the poster; the artifact hash names the GLB bytes the image was rendered from, which the downloadable rebuild reproduces byte for byte only on the platform that recorded it.",
-    "posterReceipt": {
+    "poster": "Archival GPU poster from the source before the UV API migration. The original receipt is retained as historicalPosterReceipt; this image is not an exact-source render of the current program.",
+    "maintainerRevisions": [
+      {
+        "previousSourceHash": "f27ff0adf535ef28afb3f2818048d406ef639cdfd2bf163e548e07440832e304",
+        "sourceHash": "06cdd76fd0f71f57f83ff81e23cd8efa8d1bc73cd7ffb97d754702f26dff8ec0",
+        "description": "UV API migration by Codex: boxUnwrap replaced with copyGeometry to preserve existing built-in UVs."
+      }
+    ],
+    "historicalPosterReceipt": {
       "captureIdentity": [
         "kiln.capture-producer.v1",
         "sha256:10f346ec6287c8d635dabe4668d72925080e6fe3d059dd7a9252f2694ce595c2",

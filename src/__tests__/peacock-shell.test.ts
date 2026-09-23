@@ -2,14 +2,14 @@ import { readFile } from 'node:fs/promises';
 import { expect, it } from 'bun:test';
 import { FrontSide, type Mesh, Vector3 } from 'three';
 import { GLTFLoader } from 'three/examples/jsm/loaders/GLTFLoader.js';
-import { resolveEvaluatorPortV1 } from '../evaluator/protocol';
+import { resolveEvaluatorPortV2 } from '../evaluator/protocol';
 
 it('Peacock enamel shell faces outward without double-sided masking', async () => {
   const source = await readFile(
     new URL('../../examples/mechanical-peacock.kiln.js', import.meta.url),
     'utf8',
   );
-  const { glb } = await resolveEvaluatorPortV1(undefined, 'trusted-local').render(source);
+  const { glb } = await resolveEvaluatorPortV2(undefined, 'trusted-local').render(source);
   const { scene } = await new GLTFLoader().parseAsync(Uint8Array.from(glb).buffer, '');
   const mesh = scene.getObjectByName('Mesh_BodyShell') as Mesh;
   expect(mesh).toBeDefined();

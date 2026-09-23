@@ -1,0 +1,973 @@
+{
+  "version": "kiln.retrieval-benchmark.v1",
+  "split": "heldout",
+  "runtime": {
+    "node": "26.3.0",
+    "bun": "1.4.2",
+    "boringssl": "41bf9b59c2ebf277a7aa427e1ecad5cc80dd4d4f",
+    "openssl": "1.1.0",
+    "llhttp": "9.3.0",
+    "libarchive": "ded82291ab41d5e355831b96b0e1ff49e24d8939",
+    "mimalloc": "6a64e1ba7f5b2130d4efccb67ec87fd0003f0f6a",
+    "picohttpparser": "066d2b1e9ab820703db0837a7255d92d30f0c9f5",
+    "uwebsockets": "744846f844374847c902b5e7fd59b4342a51ef99",
+    "webkit": "2e2aa2290fac856d6f451ceacb58f7f5b44dd057",
+    "zig": "04e7f6ac1e009525bc00934f20199c68f04e0a24",
+    "zlib": "12731092979c6d07f42da27da673a9f6c7b13586",
+    "tinycc": "05f0fafaa3be31e31d7b4b5c17dc60f62c991171",
+    "lolhtml": "725ce499aa9b71e38b7a2d0a9fbb6d7294a4079e",
+    "ares": "c7a3138dcfe3bb0eaaf10c0c24c36dc66dc790ab",
+    "libdeflate": "c8c56a20f8f621e6a966b716b31f1dedab6a41e3",
+    "usockets": "744846f844374847c902b5e7fd59b4342a51ef99",
+    "lshpack": "8905c024b6d052f083a3d11d0a169b3c2735c8a1",
+    "zstd": "f8745da6ff1ad1e7bab384bd1f9d742439278e99",
+    "v8": "14.6.202.34-node.20",
+    "uv": "1.51.1-dev",
+    "napi": "10",
+    "icu": "78.3",
+    "unicode": "17.0",
+    "sqlite": "3.53.2",
+    "modules": "147"
+  },
+  "platform": "win32",
+  "catalogSize": 101,
+  "judgmentsSha256": "5f2dcd6343b90df14a484ca004ed3641bba14ac74566b4fc0b91039be3a4bfd7",
+  "documentsSha256": "44ad07beb55136e6fb89be17eae70ffd115a13d319d4d07e5afddfe777f861eb",
+  "limitations": [
+    "Single Windows host; first query excludes module import cost.",
+    "Shared preprocessing/weights, native matching differs. FlexSearch combines field ranks with weighted RRF.",
+    "No unsupported-query abstention layer or exact lookup bypass. These are candidate retrievers, not finished Discovery.",
+    "Neural challengers and independently judged blind queries remain unrun. No default selected."
+  ],
+  "rows": [
+    {
+      "name": "current-substring-baseline",
+      "initializeMs": 0,
+      "recallAt5": 0,
+      "mrrAt5": 0,
+      "unsupportedQueriesReturningResults": 0,
+      "results": [
+        {
+          "split": "heldout",
+          "type": "intent",
+          "query": "arrange pillars in a ring",
+          "relevant": [
+            "arrayRadial"
+          ],
+          "found": [],
+          "recallAt5": 0,
+          "reciprocalRank": 0,
+          "unsupportedReturned": false,
+          "firstQueryMs": 0.5020000000000024,
+          "medianWarmMs": 0.1483000000000061,
+          "responseBytes": 2
+        },
+        {
+          "split": "heldout",
+          "type": "intent",
+          "query": "hollow enclosure with a doorway",
+          "relevant": [
+            "room",
+            "wallWithOpening",
+            "createGableShell"
+          ],
+          "found": [],
+          "recallAt5": 0,
+          "reciprocalRank": 0,
+          "unsupportedReturned": false,
+          "firstQueryMs": 0.17419999999999902,
+          "medianWarmMs": 0.14459999999999695,
+          "responseBytes": 2
+        },
+        {
+          "split": "heldout",
+          "type": "intent",
+          "query": "a hose that follows several bends",
+          "relevant": [
+            "pipeAlongPath",
+            "curveToMesh",
+            "sweepProfile"
+          ],
+          "found": [],
+          "recallAt5": 0,
+          "reciprocalRank": 0,
+          "unsupportedReturned": false,
+          "firstQueryMs": 0.2576999999999998,
+          "medianWarmMs": 0.25320000000000675,
+          "responseBytes": 2
+        },
+        {
+          "split": "heldout",
+          "type": "typo",
+          "query": "miror",
+          "relevant": [
+            "mirror"
+          ],
+          "found": [],
+          "recallAt5": 0,
+          "reciprocalRank": 0,
+          "unsupportedReturned": false,
+          "firstQueryMs": 0.22220000000000084,
+          "medianWarmMs": 0.1413999999999902,
+          "responseBytes": 2
+        },
+        {
+          "split": "heldout",
+          "type": "typo",
+          "query": "loftProfles",
+          "relevant": [
+            "loftProfiles"
+          ],
+          "found": [],
+          "recallAt5": 0,
+          "reciprocalRank": 0,
+          "unsupportedReturned": false,
+          "firstQueryMs": 0.1700000000000017,
+          "medianWarmMs": 0.13459999999999184,
+          "responseBytes": 2
+        },
+        {
+          "split": "heldout",
+          "type": "rare",
+          "query": "join cross sections of changing size",
+          "relevant": [
+            "loftProfiles"
+          ],
+          "found": [],
+          "recallAt5": 0,
+          "reciprocalRank": 0,
+          "unsupportedReturned": false,
+          "firstQueryMs": 0.12109999999999843,
+          "medianWarmMs": 0.12399999999999523,
+          "responseBytes": 2
+        },
+        {
+          "split": "heldout",
+          "type": "long",
+          "query": "I need a bar between these two points and I want its length and direction to follow the endpoints",
+          "relevant": [
+            "beamBetween"
+          ],
+          "found": [],
+          "recallAt5": 0,
+          "reciprocalRank": 0,
+          "unsupportedReturned": false,
+          "firstQueryMs": 0.2511999999999972,
+          "medianWarmMs": 0.2638999999999925,
+          "responseBytes": 2
+        },
+        {
+          "split": "heldout",
+          "type": "intent",
+          "query": "arena seating steps",
+          "relevant": [
+            "createStairs",
+            "arrayRadial"
+          ],
+          "found": [],
+          "recallAt5": 0,
+          "reciprocalRank": 0,
+          "unsupportedReturned": false,
+          "firstQueryMs": 0.14220000000000255,
+          "medianWarmMs": 0.15980000000000416,
+          "responseBytes": 2
+        },
+        {
+          "split": "heldout",
+          "type": "ownership",
+          "query": "independent duplicate of mesh vertices",
+          "relevant": [
+            "copyGeometry"
+          ],
+          "found": [],
+          "recallAt5": 0,
+          "reciprocalRank": 0,
+          "unsupportedReturned": false,
+          "firstQueryMs": 0.13649999999999807,
+          "medianWarmMs": 0.1307999999999936,
+          "responseBytes": 2
+        },
+        {
+          "split": "heldout",
+          "type": "near-miss",
+          "query": "cloneGeometry",
+          "relevant": [],
+          "note": "Retired identity alias must not be presented as independently editable geometry.",
+          "found": [],
+          "recallAt5": null,
+          "reciprocalRank": 0,
+          "unsupportedReturned": false,
+          "firstQueryMs": 0.125,
+          "medianWarmMs": 0.1280000000000001,
+          "responseBytes": 2
+        },
+        {
+          "split": "heldout",
+          "type": "unsupported",
+          "query": "simulate smoke fluid dynamics",
+          "relevant": [],
+          "found": [],
+          "recallAt5": null,
+          "reciprocalRank": 0,
+          "unsupportedReturned": false,
+          "firstQueryMs": 0.11530000000000484,
+          "medianWarmMs": 0.13799999999999102,
+          "responseBytes": 2
+        },
+        {
+          "split": "heldout",
+          "type": "intent",
+          "query": "texture on a thin leaf cutout",
+          "relevant": [
+            "foliageCardGeo",
+            "foliageMaterial"
+          ],
+          "found": [],
+          "recallAt5": 0,
+          "reciprocalRank": 0,
+          "unsupportedReturned": false,
+          "firstQueryMs": 0.1881000000000057,
+          "medianWarmMs": 0.2290999999999883,
+          "responseBytes": 2
+        }
+      ]
+    },
+    {
+      "name": "orama-3.1.18",
+      "initializeMs": 10.476400000000005,
+      "recallAt5": 0.9666666666666666,
+      "mrrAt5": 0.645,
+      "unsupportedQueriesReturningResults": 1,
+      "results": [
+        {
+          "split": "heldout",
+          "type": "intent",
+          "query": "arrange pillars in a ring",
+          "relevant": [
+            "arrayRadial"
+          ],
+          "found": [
+            "wingGeo",
+            "createWingPair",
+            "torusGeo",
+            "cylinderUnwrap",
+            "arrayRadial"
+          ],
+          "recallAt5": 1,
+          "reciprocalRank": 0.2,
+          "unsupportedReturned": false,
+          "firstQueryMs": 5.443300000000008,
+          "medianWarmMs": 0.8917000000000002,
+          "responseBytes": 70
+        },
+        {
+          "split": "heldout",
+          "type": "intent",
+          "query": "hollow enclosure with a doorway",
+          "relevant": [
+            "room",
+            "wallWithOpening",
+            "createGableShell"
+          ],
+          "found": [
+            "room",
+            "createGableShell",
+            "wallWithOpening"
+          ],
+          "recallAt5": 1,
+          "reciprocalRank": 1,
+          "unsupportedReturned": false,
+          "firstQueryMs": 0.5048000000000172,
+          "medianWarmMs": 0.38280000000000314,
+          "responseBytes": 45
+        },
+        {
+          "split": "heldout",
+          "type": "intent",
+          "query": "a hose that follows several bends",
+          "relevant": [
+            "pipeAlongPath",
+            "curveToMesh",
+            "sweepProfile"
+          ],
+          "found": [
+            "bend",
+            "createGableShell",
+            "pipeAlongPath",
+            "mirror",
+            "curveToMesh"
+          ],
+          "recallAt5": 0.6666666666666666,
+          "reciprocalRank": 0.3333333333333333,
+          "unsupportedReturned": false,
+          "firstQueryMs": 0.6550000000000011,
+          "medianWarmMs": 0.5317000000000007,
+          "responseBytes": 66
+        },
+        {
+          "split": "heldout",
+          "type": "typo",
+          "query": "miror",
+          "relevant": [
+            "mirror"
+          ],
+          "found": [
+            "mirror"
+          ],
+          "recallAt5": 1,
+          "reciprocalRank": 1,
+          "unsupportedReturned": false,
+          "firstQueryMs": 0.1337000000000046,
+          "medianWarmMs": 0.08500000000000796,
+          "responseBytes": 10
+        },
+        {
+          "split": "heldout",
+          "type": "typo",
+          "query": "loftProfles",
+          "relevant": [
+            "loftProfiles"
+          ],
+          "found": [
+            "loftProfiles",
+            "createRoofPlanes"
+          ],
+          "recallAt5": 1,
+          "reciprocalRank": 1,
+          "unsupportedReturned": false,
+          "firstQueryMs": 1.7284999999999968,
+          "medianWarmMs": 0.23980000000000246,
+          "responseBytes": 35
+        },
+        {
+          "split": "heldout",
+          "type": "rare",
+          "query": "join cross sections of changing size",
+          "relevant": [
+            "loftProfiles"
+          ],
+          "found": [
+            "crossedQuadsGeo",
+            "getJointNames",
+            "loftProfiles",
+            "createJointChain",
+            "mirror"
+          ],
+          "recallAt5": 1,
+          "reciprocalRank": 0.3333333333333333,
+          "unsupportedReturned": false,
+          "firstQueryMs": 0.8754000000000133,
+          "medianWarmMs": 0.5398000000000138,
+          "responseBytes": 78
+        },
+        {
+          "split": "heldout",
+          "type": "long",
+          "query": "I need a bar between these two points and I want its length and direction to follow the endpoints",
+          "relevant": [
+            "beamBetween"
+          ],
+          "found": [
+            "beamBetween",
+            "createJointChain",
+            "getJointNames",
+            "torusGeo",
+            "room"
+          ],
+          "recallAt5": 1,
+          "reciprocalRank": 1,
+          "unsupportedReturned": false,
+          "firstQueryMs": 2.7793000000000063,
+          "medianWarmMs": 0.9540000000000077,
+          "responseBytes": 68
+        },
+        {
+          "split": "heldout",
+          "type": "intent",
+          "query": "arena seating steps",
+          "relevant": [
+            "createStairs",
+            "arrayRadial"
+          ],
+          "found": [
+            "createStairs",
+            "arrayRadial"
+          ],
+          "recallAt5": 1,
+          "reciprocalRank": 1,
+          "unsupportedReturned": false,
+          "firstQueryMs": 0.5679999999999836,
+          "medianWarmMs": 0.2750999999999806,
+          "responseBytes": 30
+        },
+        {
+          "split": "heldout",
+          "type": "ownership",
+          "query": "independent duplicate of mesh vertices",
+          "relevant": [
+            "copyGeometry"
+          ],
+          "found": [
+            "mergeVertices",
+            "curveToMesh",
+            "meshGeo",
+            "copyGeometry",
+            "countTriangles"
+          ],
+          "recallAt5": 1,
+          "reciprocalRank": 0.25,
+          "unsupportedReturned": false,
+          "firstQueryMs": 0.6462999999999965,
+          "medianWarmMs": 0.3101000000000056,
+          "responseBytes": 73
+        },
+        {
+          "split": "heldout",
+          "type": "near-miss",
+          "query": "cloneGeometry",
+          "relevant": [],
+          "note": "Retired identity alias must not be presented as independently editable geometry.",
+          "found": [
+            "copyGeometry",
+            "coneGeo",
+            "coneYGeo",
+            "coneZGeo",
+            "coneXGeo"
+          ],
+          "recallAt5": null,
+          "reciprocalRank": 0,
+          "unsupportedReturned": true,
+          "firstQueryMs": 0.25099999999997635,
+          "medianWarmMs": 0.1862000000000137,
+          "responseBytes": 59
+        },
+        {
+          "split": "heldout",
+          "type": "unsupported",
+          "query": "simulate smoke fluid dynamics",
+          "relevant": [],
+          "found": [],
+          "recallAt5": null,
+          "reciprocalRank": 0,
+          "unsupportedReturned": false,
+          "firstQueryMs": 0.3733000000000004,
+          "medianWarmMs": 0.34099999999997976,
+          "responseBytes": 2
+        },
+        {
+          "split": "heldout",
+          "type": "intent",
+          "query": "texture on a thin leaf cutout",
+          "relevant": [
+            "foliageCardGeo",
+            "foliageMaterial"
+          ],
+          "found": [
+            "proceduralTexture",
+            "loadApprovedTexture",
+            "foliageCardGeo",
+            "foliageMaterial",
+            "autoUnwrap"
+          ],
+          "recallAt5": 1,
+          "reciprocalRank": 0.3333333333333333,
+          "unsupportedReturned": false,
+          "firstQueryMs": 0.7357000000000085,
+          "medianWarmMs": 0.4462999999999795,
+          "responseBytes": 91
+        }
+      ]
+    },
+    {
+      "name": "minisearch-7.2.0",
+      "initializeMs": 3.9818,
+      "recallAt5": 0.9666666666666666,
+      "mrrAt5": 0.95,
+      "unsupportedQueriesReturningResults": 1,
+      "results": [
+        {
+          "split": "heldout",
+          "type": "intent",
+          "query": "arrange pillars in a ring",
+          "relevant": [
+            "arrayRadial"
+          ],
+          "found": [
+            "wingGeo",
+            "arrayRadial",
+            "createWingPair",
+            "cylinderUnwrap",
+            "torusGeo"
+          ],
+          "recallAt5": 1,
+          "reciprocalRank": 0.5,
+          "unsupportedReturned": false,
+          "firstQueryMs": 2.154699999999991,
+          "medianWarmMs": 0.15059999999999718,
+          "responseBytes": 70
+        },
+        {
+          "split": "heldout",
+          "type": "intent",
+          "query": "hollow enclosure with a doorway",
+          "relevant": [
+            "room",
+            "wallWithOpening",
+            "createGableShell"
+          ],
+          "found": [
+            "room",
+            "createGableShell",
+            "wallWithOpening",
+            "createGableEndPanel"
+          ],
+          "recallAt5": 1,
+          "reciprocalRank": 1,
+          "unsupportedReturned": false,
+          "firstQueryMs": 0.4440000000000168,
+          "medianWarmMs": 0.20119999999997162,
+          "responseBytes": 67
+        },
+        {
+          "split": "heldout",
+          "type": "intent",
+          "query": "a hose that follows several bends",
+          "relevant": [
+            "pipeAlongPath",
+            "curveToMesh",
+            "sweepProfile"
+          ],
+          "found": [
+            "pipeAlongPath",
+            "bend",
+            "createGableShell",
+            "curveToMesh",
+            "arrayRadial"
+          ],
+          "recallAt5": 0.6666666666666666,
+          "reciprocalRank": 1,
+          "unsupportedReturned": false,
+          "firstQueryMs": 0.15960000000001173,
+          "medianWarmMs": 0.120900000000006,
+          "responseBytes": 71
+        },
+        {
+          "split": "heldout",
+          "type": "typo",
+          "query": "miror",
+          "relevant": [
+            "mirror"
+          ],
+          "found": [
+            "mirror"
+          ],
+          "recallAt5": 1,
+          "reciprocalRank": 1,
+          "unsupportedReturned": false,
+          "firstQueryMs": 0.03300000000001546,
+          "medianWarmMs": 0.02230000000002974,
+          "responseBytes": 10
+        },
+        {
+          "split": "heldout",
+          "type": "typo",
+          "query": "loftProfles",
+          "relevant": [
+            "loftProfiles"
+          ],
+          "found": [
+            "loftProfiles",
+            "createRoofPlanes"
+          ],
+          "recallAt5": 1,
+          "reciprocalRank": 1,
+          "unsupportedReturned": false,
+          "firstQueryMs": 0.10960000000000036,
+          "medianWarmMs": 0.054500000000018645,
+          "responseBytes": 35
+        },
+        {
+          "split": "heldout",
+          "type": "rare",
+          "query": "join cross sections of changing size",
+          "relevant": [
+            "loftProfiles"
+          ],
+          "found": [
+            "loftProfiles",
+            "mirror",
+            "bladeGeo",
+            "twist",
+            "extrudeProfile"
+          ],
+          "recallAt5": 1,
+          "reciprocalRank": 1,
+          "unsupportedReturned": false,
+          "firstQueryMs": 0.3266999999999598,
+          "medianWarmMs": 0.19130000000001246,
+          "responseBytes": 61
+        },
+        {
+          "split": "heldout",
+          "type": "long",
+          "query": "I need a bar between these two points and I want its length and direction to follow the endpoints",
+          "relevant": [
+            "beamBetween"
+          ],
+          "found": [
+            "beamBetween",
+            "createGableRoof",
+            "bladeGeo",
+            "pipeAlongPath",
+            "room"
+          ],
+          "recallAt5": 1,
+          "reciprocalRank": 1,
+          "unsupportedReturned": false,
+          "firstQueryMs": 0.46280000000001564,
+          "medianWarmMs": 0.3654000000000224,
+          "responseBytes": 67
+        },
+        {
+          "split": "heldout",
+          "type": "intent",
+          "query": "arena seating steps",
+          "relevant": [
+            "createStairs",
+            "arrayRadial"
+          ],
+          "found": [
+            "createStairs",
+            "arrayRadial"
+          ],
+          "recallAt5": 1,
+          "reciprocalRank": 1,
+          "unsupportedReturned": false,
+          "firstQueryMs": 0.1109000000000151,
+          "medianWarmMs": 0.06979999999998654,
+          "responseBytes": 30
+        },
+        {
+          "split": "heldout",
+          "type": "ownership",
+          "query": "independent duplicate of mesh vertices",
+          "relevant": [
+            "copyGeometry"
+          ],
+          "found": [
+            "copyGeometry",
+            "mergeVertices",
+            "curveToMesh",
+            "meshGeo",
+            "createInstance"
+          ],
+          "recallAt5": 1,
+          "reciprocalRank": 1,
+          "unsupportedReturned": false,
+          "firstQueryMs": 0.26209999999997535,
+          "medianWarmMs": 0.17790000000002237,
+          "responseBytes": 73
+        },
+        {
+          "split": "heldout",
+          "type": "near-miss",
+          "query": "cloneGeometry",
+          "relevant": [],
+          "note": "Retired identity alias must not be presented as independently editable geometry.",
+          "found": [
+            "geometryDiagnostics",
+            "copyGeometry",
+            "createWheelGeometrySet",
+            "coneYGeo",
+            "coneGeo"
+          ],
+          "recallAt5": null,
+          "reciprocalRank": 0,
+          "unsupportedReturned": true,
+          "firstQueryMs": 0.1442000000000121,
+          "medianWarmMs": 0.10239999999998872,
+          "responseBytes": 84
+        },
+        {
+          "split": "heldout",
+          "type": "unsupported",
+          "query": "simulate smoke fluid dynamics",
+          "relevant": [],
+          "found": [],
+          "recallAt5": null,
+          "reciprocalRank": 0,
+          "unsupportedReturned": false,
+          "firstQueryMs": 0.186300000000017,
+          "medianWarmMs": 0.14400000000000546,
+          "responseBytes": 2
+        },
+        {
+          "split": "heldout",
+          "type": "intent",
+          "query": "texture on a thin leaf cutout",
+          "relevant": [
+            "foliageCardGeo",
+            "foliageMaterial"
+          ],
+          "found": [
+            "foliageCardGeo",
+            "foliageMaterial",
+            "proceduralTexture",
+            "loadApprovedTexture",
+            "decalBox"
+          ],
+          "recallAt5": 1,
+          "reciprocalRank": 1,
+          "unsupportedReturned": false,
+          "firstQueryMs": 0.15660000000002583,
+          "medianWarmMs": 0.08420000000000982,
+          "responseBytes": 89
+        }
+      ]
+    },
+    {
+      "name": "flexsearch-0.8.212-weighted-rrf",
+      "initializeMs": 16.118699999999997,
+      "recallAt5": 0.9666666666666666,
+      "mrrAt5": 0.7833333333333333,
+      "unsupportedQueriesReturningResults": 1,
+      "results": [
+        {
+          "split": "heldout",
+          "type": "intent",
+          "query": "arrange pillars in a ring",
+          "relevant": [
+            "arrayRadial"
+          ],
+          "found": [
+            "arrayRadial",
+            "torusGeo",
+            "cylinderUnwrap"
+          ],
+          "recallAt5": 1,
+          "reciprocalRank": 1,
+          "unsupportedReturned": false,
+          "firstQueryMs": 1.298599999999965,
+          "medianWarmMs": 0.03469999999998663,
+          "responseBytes": 43
+        },
+        {
+          "split": "heldout",
+          "type": "intent",
+          "query": "hollow enclosure with a doorway",
+          "relevant": [
+            "room",
+            "wallWithOpening",
+            "createGableShell"
+          ],
+          "found": [
+            "room",
+            "wallWithOpening",
+            "createGableShell"
+          ],
+          "recallAt5": 1,
+          "reciprocalRank": 1,
+          "unsupportedReturned": false,
+          "firstQueryMs": 0.3464999999999918,
+          "medianWarmMs": 0.03769999999997253,
+          "responseBytes": 45
+        },
+        {
+          "split": "heldout",
+          "type": "intent",
+          "query": "a hose that follows several bends",
+          "relevant": [
+            "pipeAlongPath",
+            "curveToMesh",
+            "sweepProfile"
+          ],
+          "found": [
+            "curveToMesh",
+            "pipeAlongPath",
+            "bend",
+            "arrayRadial"
+          ],
+          "recallAt5": 0.6666666666666666,
+          "reciprocalRank": 1,
+          "unsupportedReturned": false,
+          "firstQueryMs": 0.09510000000000218,
+          "medianWarmMs": 0.02199999999999136,
+          "responseBytes": 52
+        },
+        {
+          "split": "heldout",
+          "type": "typo",
+          "query": "miror",
+          "relevant": [
+            "mirror"
+          ],
+          "found": [
+            "mirror",
+            "createWingPair",
+            "createRoofPlanes"
+          ],
+          "recallAt5": 1,
+          "reciprocalRank": 1,
+          "unsupportedReturned": false,
+          "firstQueryMs": 0.152499999999975,
+          "medianWarmMs": 0.011700000000018917,
+          "responseBytes": 46
+        },
+        {
+          "split": "heldout",
+          "type": "typo",
+          "query": "loftProfles",
+          "relevant": [
+            "loftProfiles"
+          ],
+          "found": [
+            "loftProfiles"
+          ],
+          "recallAt5": 1,
+          "reciprocalRank": 1,
+          "unsupportedReturned": false,
+          "firstQueryMs": 0.05560000000002674,
+          "medianWarmMs": 0.014200000000016644,
+          "responseBytes": 16
+        },
+        {
+          "split": "heldout",
+          "type": "rare",
+          "query": "join cross sections of changing size",
+          "relevant": [
+            "loftProfiles"
+          ],
+          "found": [
+            "crossedQuadsGeo",
+            "createJointChain",
+            "getJointNames",
+            "loftProfiles",
+            "boolUnion"
+          ],
+          "recallAt5": 1,
+          "reciprocalRank": 0.25,
+          "unsupportedReturned": false,
+          "firstQueryMs": 0.15200000000004366,
+          "medianWarmMs": 0.0362999999999829,
+          "responseBytes": 81
+        },
+        {
+          "split": "heldout",
+          "type": "long",
+          "query": "I need a bar between these two points and I want its length and direction to follow the endpoints",
+          "relevant": [
+            "beamBetween"
+          ],
+          "found": [
+            "beamBetween",
+            "curveToMesh",
+            "pipeAlongPath",
+            "coneXGeo",
+            "coneZGeo"
+          ],
+          "recallAt5": 1,
+          "reciprocalRank": 1,
+          "unsupportedReturned": false,
+          "firstQueryMs": 0.19779999999997244,
+          "medianWarmMs": 0.04759999999998854,
+          "responseBytes": 67
+        },
+        {
+          "split": "heldout",
+          "type": "intent",
+          "query": "arena seating steps",
+          "relevant": [
+            "createStairs",
+            "arrayRadial"
+          ],
+          "found": [
+            "createStairs",
+            "arrayRadial"
+          ],
+          "recallAt5": 1,
+          "reciprocalRank": 1,
+          "unsupportedReturned": false,
+          "firstQueryMs": 0.08080000000001064,
+          "medianWarmMs": 0.015100000000018099,
+          "responseBytes": 30
+        },
+        {
+          "split": "heldout",
+          "type": "ownership",
+          "query": "independent duplicate of mesh vertices",
+          "relevant": [
+            "copyGeometry"
+          ],
+          "found": [
+            "meshGeo",
+            "curveToMesh",
+            "mergeVertices",
+            "copyGeometry",
+            "copyMaterial"
+          ],
+          "recallAt5": 1,
+          "reciprocalRank": 0.25,
+          "unsupportedReturned": false,
+          "firstQueryMs": 0.1150000000000091,
+          "medianWarmMs": 0.03740000000004784,
+          "responseBytes": 71
+        },
+        {
+          "split": "heldout",
+          "type": "near-miss",
+          "query": "cloneGeometry",
+          "relevant": [],
+          "note": "Retired identity alias must not be presented as independently editable geometry.",
+          "found": [
+            "copyGeometry",
+            "createWheelGeometrySet",
+            "geometryDiagnostics",
+            "boxGeo",
+            "creaseNormals"
+          ],
+          "recallAt5": null,
+          "reciprocalRank": 0,
+          "unsupportedReturned": true,
+          "firstQueryMs": 0.09080000000000155,
+          "medianWarmMs": 0.036200000000008004,
+          "responseBytes": 88
+        },
+        {
+          "split": "heldout",
+          "type": "unsupported",
+          "query": "simulate smoke fluid dynamics",
+          "relevant": [],
+          "found": [],
+          "recallAt5": null,
+          "reciprocalRank": 0,
+          "unsupportedReturned": false,
+          "firstQueryMs": 0.05160000000000764,
+          "medianWarmMs": 0.009799999999984266,
+          "responseBytes": 2
+        },
+        {
+          "split": "heldout",
+          "type": "intent",
+          "query": "texture on a thin leaf cutout",
+          "relevant": [
+            "foliageCardGeo",
+            "foliageMaterial"
+          ],
+          "found": [
+            "proceduralTexture",
+            "loadApprovedTexture",
+            "foliageCardGeo",
+            "autoUnwrap",
+            "foliageMaterial"
+          ],
+          "recallAt5": 1,
+          "reciprocalRank": 0.3333333333333333,
+          "unsupportedReturned": false,
+          "firstQueryMs": 0.12289999999995871,
+          "medianWarmMs": 0.029500000000041382,
+          "responseBytes": 91
+        }
+      ]
+    }
+  ]
+}

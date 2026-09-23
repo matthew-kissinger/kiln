@@ -1,8 +1,10 @@
 # Condition C
 
-Call `kiln_list_primitives` without arguments for a compact overview. Use `name`
-for one signature/example, `query` for an operation or `category` to browse; follow
-`nextOffset` for more results. `capabilities:true` describes runtime limits.
+Call `kiln_discover` without arguments for a compact overview. Search ordinary
+modeling language with `query`; fetch complete contracts with `ids`. Use optional
+`family`, `kind` or `tags` from the overview to narrow results; follow `nextOffset`
+for more results. `capabilities:true` describes runtime limits. Recipes guide
+construction without restricting asset type.
 
 For views, legacy preset/cells still work. Advanced captures use
 `version:"kiln.capture.v1"` and `shots`. Choose exact part paths from the render

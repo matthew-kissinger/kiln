@@ -28,6 +28,8 @@ const repository = fileURLToPath(new URL('..', import.meta.url));
 
 /** Everything the gate reads. Missing one surfaces as an ENOENT, not a silent pass. */
 const INSPECTED = [
+  'toolchain.json',
+  'src/runtime-support.mjs',
   'package.json',
   'render-service/package.json',
   'site/package.json',
@@ -99,11 +101,35 @@ test('the staged copy of this repository passes, so every rule below can fail', 
   }
 });
 
-test('a stale engine pin is named', async () => {
+test('maintainer pins do not become consumer Bun or npm requirements', async () => {
   await rejects(
     'package.json',
+    (text) => {
+      const pkg = JSON.parse(text);
+      pkg.engines.npm = '12.0.2';
+      return JSON.stringify(pkg);
+    },
+    'engines must contain only the end-user Node range',
+  );
+});
+
+test('a changed maintainer pin is checked against the real build configuration', async () => {
+  await rejects(
+    'toolchain.json',
     (text) => text.replace('"bun": "1.4.2"', '"bun": "1.4.1"'),
-    'engines.bun must be 1.4.2',
+    'packageManager must be bun@1.4.1',
+  );
+});
+
+test('a stale consumer floor is named independently of maintainer pins', async () => {
+  await rejects(
+    'package.json',
+    (text) => {
+      const pkg = JSON.parse(text);
+      pkg.engines.node = '22.23.2';
+      return JSON.stringify(pkg);
+    },
+    'engines.node must match the runtime compatibility contract',
   );
 });
 

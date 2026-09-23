@@ -1,3 +1,4 @@
+import { GEOMETRY_ALLOCATION_LIMITS } from './geometry-budget';
 /** Owned custom meshes, surface sampling, and explicit topology diagnostics. */
 import * as THREE from 'three';
 import { AuthoringDiagnosticError } from './evaluator/authoring-diagnostic';
@@ -16,7 +17,10 @@ function finiteArray(values: ArrayLike<number>, label: string, length?: number):
   if (length !== undefined && result.length !== length)
     throw new Error(`${label}: expected ${length} values, got ${result.length}`);
   if (!result.every((n) => Number.isFinite(Math.fround(n))))
-    throw new Error(`${label}: all values must be finite Float32 values`);
+    throw new AuthoringDiagnosticError(
+      'MESH_DATA_NONFINITE',
+      `${label}: all values must be finite Float32 values`,
+    );
   return result;
 }
 
@@ -68,41 +72,94 @@ export function meshGeo(data: MeshGeoData): THREE.BufferGeometry {
 }
 
 export interface GeometryDiagnostics {
+  /** Effective geometry-local distance used for quantization; zero for a collapsed extent. */
+  tolerance: number;
+  toleranceMode: 'relative' | 'absolute';
+  positionScale: number;
   vertices: number;
   triangles: number;
   boundaryEdges: number;
   nonManifoldEdges: number;
   orientationConflicts: number;
   degenerateTriangles: number;
+  /** Faces collapsed by the diagnostic grid and excluded from edge counts, not necessarily zero-area geometry. */
+  collapsedByToleranceTriangles: number;
   invalidIndices: number;
   nonFiniteVertices: number;
 }
 
-/** Position-welded topology counts. UV and normal seams do not count as open boundaries. */
+function boundsScale(bounds: THREE.Box3) {
+  const size = bounds.getSize(new THREE.Vector3());
+  const scale = Math.hypot(size.x, size.y, size.z);
+  if (!Number.isFinite(scale)) throw new Error('Geometry position extent must be finite');
+  return scale;
+}
+
+/** Finite bounds only: malformed vertices are reported separately by the diagnostic caller. */
+function positionFrame(position: THREE.BufferAttribute | THREE.InterleavedBufferAttribute) {
+  const bounds = new THREE.Box3();
+  const point = new THREE.Vector3();
+  for (let i = 0; i < position.count; i++) {
+    point.fromBufferAttribute(position, i);
+    if ([point.x, point.y, point.z].every(Number.isFinite)) bounds.expandByPoint(point);
+  }
+  return {
+    origin: bounds.isEmpty() ? new THREE.Vector3() : bounds.min,
+    scale: boundsScale(bounds),
+  };
+}
+
+function positionTolerance(scale: number, supplied: number | undefined, relative: number) {
+  if (supplied === undefined) return scale * relative;
+  if (!Number.isFinite(supplied) || supplied <= 0)
+    throw new Error('Geometry tolerance must be positive and finite');
+  if (scale / supplied > Number.MAX_SAFE_INTEGER)
+    throw new Error('Geometry tolerance is too small to resolve the position extent safely');
+  return supplied;
+}
+
+function positionKey(point: THREE.Vector3, origin: THREE.Vector3, tolerance: number) {
+  if (tolerance === 0) return point.toArray().join(',');
+  return point
+    .clone()
+    .sub(origin)
+    .toArray()
+    .map((x) => Math.round(x / tolerance))
+    .join(',');
+}
+
+/** Quantized topology counts, not a solid-validity certificate. Default tolerance scales with extent. */
 export function geometryDiagnostics(
   geometry: THREE.BufferGeometry,
-  tolerance = 1e-6,
+  tolerance?: number,
 ): GeometryDiagnostics {
-  if (!Number.isFinite(tolerance) || tolerance <= 0)
-    throw new Error('geometryDiagnostics tolerance must be positive');
   const p = geometry.getAttribute('position');
   if (p?.itemSize !== 3) throw new Error('geometryDiagnostics requires xyz positions');
+  const frame = positionFrame(p);
+  const distance = positionTolerance(frame.scale, tolerance, 1e-6);
   const result: GeometryDiagnostics = {
+    tolerance: distance,
+    toleranceMode: tolerance === undefined ? 'relative' : 'absolute',
+    positionScale: frame.scale,
     vertices: p.count,
     triangles: 0,
     boundaryEdges: 0,
     nonManifoldEdges: 0,
     orientationConflicts: 0,
     degenerateTriangles: 0,
+    collapsedByToleranceTriangles: 0,
     invalidIndices: 0,
     nonFiniteVertices: 0,
   };
   const ids: number[] = [];
   const points = new Map<string, number>();
+  const finite: boolean[] = [];
+  const point = new THREE.Vector3();
   for (let i = 0; i < p.count; i++) {
-    const xyz = [p.getX(i), p.getY(i), p.getZ(i)];
-    if (!xyz.every(Number.isFinite)) result.nonFiniteVertices++;
-    const key = xyz.map((x) => Math.round(x / tolerance)).join(',');
+    point.fromBufferAttribute(p, i);
+    finite[i] = [point.x, point.y, point.z].every(Number.isFinite);
+    if (!finite[i]) result.nonFiniteVertices++;
+    const key = finite[i] ? positionKey(point, frame.origin, distance) : `invalid:${i}`;
     if (!points.has(key)) points.set(key, points.size);
     ids.push(points.get(key)!);
   }
@@ -124,10 +181,20 @@ export function geometryDiagnostics(
       continue;
     }
     const [ia, ib, ic] = triangle as [number, number, number];
+    if (!finite[ia] || !finite[ib] || !finite[ic]) continue;
     a.fromBufferAttribute(p, ia);
     b.fromBufferAttribute(p, ib);
     c.fromBufferAttribute(p, ic);
-    if (b.sub(a).cross(c.sub(a)).lengthSq() <= tolerance ** 4) result.degenerateTriangles++;
+    const scale = frame.scale || 1;
+    b.sub(a).divideScalar(scale);
+    c.sub(a).divideScalar(scale);
+    if (b.cross(c).length() <= (distance / scale) ** 2) result.degenerateTriangles++;
+    // A face whose corners merge in the diagnostic grid is not an edge with
+    // two extra incident faces. Report the lost topology resolution separately.
+    if (ids[ia] === ids[ib] || ids[ib] === ids[ic] || ids[ic] === ids[ia]) {
+      result.collapsedByToleranceTriangles++;
+      continue;
+    }
     for (const [start, end] of [
       [ia, ib],
       [ib, ic],
@@ -135,7 +202,6 @@ export function geometryDiagnostics(
     ]) {
       const u = ids[start!]!,
         v = ids[end!]!;
-      if (u === v) continue;
       const key = u < v ? `${u}:${v}` : `${v}:${u}`;
       const edge = edges.get(key) ?? { count: 0, direction: 0 };
       edge.count++;
@@ -181,17 +247,32 @@ export function parametricSurface(
   ] as const)
     if (!Number.isSafeInteger(n) || n < 1)
       throw new Error(`parametricSurface ${name} must be a positive integer`);
+  const sampleCount = (nu + 1) * (nv + 1);
+  if (
+    !Number.isSafeInteger(sampleCount) ||
+    sampleCount > GEOMETRY_ALLOCATION_LIMITS.parametricSamples
+  )
+    throw new RangeError(
+      `parametricSurface sample budget exceeded: requested ${sampleCount}, limit ${GEOMETRY_ALLOCATION_LIMITS.parametricSamples}. Reduce uSegments/vSegments or split the surface.`,
+    );
   for (const [name, range] of [
     ['u', u],
     ['v', v],
   ] as const)
-    if (range.length !== 2 || !range.every(Number.isFinite) || range[0] === range[1])
+    if (
+      range.length !== 2 ||
+      !range.every(Number.isFinite) ||
+      range[0] === range[1] ||
+      !Number.isFinite(range[1] - range[0])
+    )
       throw new Error(`parametricSurface ${name} must be a finite nonzero domain`);
   if (orientation !== 'uv' && orientation !== 'vu')
     throw new Error('parametricSurface orientation must be uv or vu');
   const positions: number[] = [],
     uvs: number[] = [],
     indices: number[] = [];
+  const sampledBounds = new THREE.Box3();
+  const sampledPoint = new THREE.Vector3();
   for (let j = 0; j <= nv; j++)
     for (let i = 0; i <= nu; i++) {
       const point = sample(u[0] + ((u[1] - u[0]) * i) / nu, v[0] + ((v[1] - v[0]) * j) / nv);
@@ -200,9 +281,12 @@ export function parametricSurface(
           `parametricSurface: sample (${i},${j}) must return three finite coordinates`,
         );
       positions.push(...point);
+      sampledBounds.expandByPoint(sampledPoint.set(...point));
       uvs.push(i / nu, j / nv);
     }
   const groups = Array.from({ length: (nu + 1) * (nv + 1) }, (_, i) => i);
+  // Work in the sampled extent, not absolute coordinates or a world-unit floor.
+  const seamScale = boundsScale(sampledBounds);
   const find = (i: number): number => {
     while (groups[i] !== i) i = groups[i]!;
     return i;
@@ -210,8 +294,7 @@ export function parametricSurface(
   const join = (a: number, b: number, _label: string) => {
     const pa = positions.slice(a * 3, a * 3 + 3),
       pb = positions.slice(b * 3, b * 3 + 3);
-    const scale = Math.max(1, ...pa.map(Math.abs), ...pb.map(Math.abs));
-    if (Math.hypot(...pa.map((x, k) => x - pb[k]!)) > scale * 1e-6)
+    if (Math.hypot(...pa.map((x, k) => x - pb[k]!)) > seamScale * 1e-6)
       throw new AuthoringDiagnosticError('PARAMETRIC_PERIODIC_ENDPOINT');
     groups[find(b)] = find(a);
     for (let k = 0; k < 3; k++) positions[b * 3 + k] = positions[a * 3 + k]!;
@@ -256,11 +339,9 @@ export function creaseNormals(
   const position = out.getAttribute('position');
   if (position?.itemSize !== 3 || position.count % 3 !== 0)
     throw new Error('creaseNormals requires complete xyz triangles');
-  out.computeBoundingBox();
-  const diagonal = out.boundingBox!.getSize(new THREE.Vector3()).length();
-  const tolerance = options.tolerance ?? Math.max(diagonal * 1e-8, 1e-12);
-  if (!Number.isFinite(tolerance) || tolerance <= 0)
-    throw new Error('creaseNormals tolerance must be positive and finite');
+  const frame = positionFrame(position);
+  const tolerance = positionTolerance(frame.scale, options.tolerance, 1e-8);
+  const scale = frame.scale || 1;
   const adjacent = new Map<string, Set<number>>();
   const keys: string[] = [];
   const faces: THREE.Vector3[] = [];
@@ -268,16 +349,13 @@ export function creaseNormals(
     const a = new THREE.Vector3().fromBufferAttribute(position, i);
     const b = new THREE.Vector3().fromBufferAttribute(position, i + 1);
     const c = new THREE.Vector3().fromBufferAttribute(position, i + 2);
-    const face = b.sub(a).cross(c.sub(a)).normalize();
+    const face = b.sub(a).divideScalar(scale).cross(c.sub(a).divideScalar(scale)).normalize();
     faces.push(face);
     for (let j = i; j < i + 3; j++) {
       const point = new THREE.Vector3().fromBufferAttribute(position, j);
       if (![point.x, point.y, point.z].every(Number.isFinite))
         throw new Error('creaseNormals positions must be finite');
-      const key = point
-        .toArray()
-        .map((n) => Math.round(n / tolerance))
-        .join(',');
+      const key = positionKey(point, frame.origin, tolerance);
       keys.push(key);
       const neighbors = adjacent.get(key) ?? new Set<number>();
       neighbors.add(i / 3);
@@ -295,6 +373,7 @@ export function creaseNormals(
   }
   out.setAttribute('normal', new THREE.BufferAttribute(normals, 3));
   out.deleteAttribute('tangent');
+  out.computeBoundingBox();
   out.computeBoundingSphere();
   return out;
 }

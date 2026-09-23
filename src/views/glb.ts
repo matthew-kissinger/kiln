@@ -23,6 +23,8 @@ import {
   VectorKeyframeTrack,
   Quaternion,
   Vector3,
+  InterpolateDiscrete,
+  InterpolateLinear,
 } from 'three';
 
 export const GLB_GEOMETRY_FLAT_REASON = {
@@ -152,6 +154,9 @@ function reviewClipsFromExtras(extras: unknown): AnimationClip[] | undefined {
         track.name.length > 512 ||
         !Array.isArray(track.times) ||
         !Array.isArray(track.values) ||
+        (track.interpolation !== undefined &&
+          track.interpolation !== 'LINEAR' &&
+          track.interpolation !== 'STEP') ||
         track.times.length > REVIEW_CLIP_LIMITS.samplesPerTrack ||
         track.values.length > REVIEW_CLIP_LIMITS.valuesPerTrack ||
         !track.times.every((value) => typeof value === 'number' && Number.isFinite(value)) ||
@@ -161,7 +166,12 @@ function reviewClipsFromExtras(extras: unknown): AnimationClip[] | undefined {
       }
       const property = track.name.slice(track.name.lastIndexOf('.') + 1);
       const Track = property === 'quaternion' ? QuaternionKeyframeTrack : VectorKeyframeTrack;
-      return new Track(track.name, track.times, track.values);
+      return new Track(
+        track.name,
+        track.times,
+        track.values,
+        track.interpolation === 'STEP' ? InterpolateDiscrete : InterpolateLinear,
+      );
     });
     return new AnimationClip(candidate.name, candidate.duration, tracks);
   });
@@ -632,8 +642,22 @@ export async function loadGlbReviewScene(bytes: Uint8Array): Promise<LoadedGlbRe
             const property =
               path === 'translation' ? 'position' : path === 'rotation' ? 'quaternion' : path;
             if (!node || !property || property === 'weights' || !input || !output) return [];
+            const interpolation = sampler!.getInterpolation();
+            if (interpolation !== 'STEP' && interpolation !== 'LINEAR') {
+              throw new GlbGeometryFlatError(
+                'GLB_FLAT_PARSE_FAILED',
+                `Animation review does not support ${interpolation} interpolation; use LINEAR or STEP.`,
+              );
+            }
             const Track = path === 'rotation' ? QuaternionKeyframeTrack : VectorKeyframeTrack;
-            return [new Track(`${node.getName()}.${property}`, input, output)];
+            return [
+              new Track(
+                `${node.getName()}.${property}`,
+                input,
+                output,
+                interpolation === 'STEP' ? InterpolateDiscrete : InterpolateLinear,
+              ),
+            ];
           }),
         ),
     );

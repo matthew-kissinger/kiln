@@ -1,0 +1,3725 @@
+[
+  {
+    "split": "development",
+    "query": "arrayRadial",
+    "relevant": [
+      "arrayRadial"
+    ],
+    "candidateCount": 7,
+    "candidateRecall": 1.0,
+    "found": [
+      "arrayRadial",
+      "arrayLinear",
+      "revolveGeo",
+      "taperConeGeo",
+      "meshGeo"
+    ],
+    "ranking": [
+      [
+        "arrayRadial",
+        0.9861623048782349
+      ],
+      [
+        "arrayLinear",
+        0.641862690448761
+      ],
+      [
+        "revolveGeo",
+        0.3115794360637665
+      ],
+      [
+        "taperConeGeo",
+        0.051023874431848526
+      ],
+      [
+        "meshGeo",
+        0.02617904730141163
+      ],
+      [
+        "mirror",
+        0.010527605190873146
+      ],
+      [
+        "loadApprovedTexture",
+        0.00036795399500988424
+      ]
+    ],
+    "querySeconds": 7.096151000005193,
+    "recallAt5": 1.0,
+    "reciprocalRank": 1.0,
+    "unsupportedReturned": false,
+    "unsupportedAboveHalf": false
+  },
+  {
+    "split": "development",
+    "query": "put supports evenly around a circle",
+    "relevant": [
+      "arrayRadial"
+    ],
+    "candidateCount": 8,
+    "candidateRecall": 1.0,
+    "found": [
+      "arrayRadial",
+      "circleProfile",
+      "pipeAlongPath",
+      "cylinderUnwrap",
+      "twist"
+    ],
+    "ranking": [
+      [
+        "arrayRadial",
+        0.9239075183868408
+      ],
+      [
+        "circleProfile",
+        0.2138269990682602
+      ],
+      [
+        "pipeAlongPath",
+        0.15520797669887543
+      ],
+      [
+        "cylinderUnwrap",
+        0.017075223848223686
+      ],
+      [
+        "twist",
+        0.013034959323704243
+      ],
+      [
+        "spinAnimation",
+        0.0026468541473150253
+      ],
+      [
+        "createLadder",
+        0.0023386289831250906
+      ],
+      [
+        "boolDiff",
+        0.0004204451397527009
+      ]
+    ],
+    "querySeconds": 8.236428600008367,
+    "recallAt5": 1.0,
+    "reciprocalRank": 1.0,
+    "unsupportedReturned": false,
+    "unsupportedAboveHalf": false
+  },
+  {
+    "split": "development",
+    "query": "cut windows into a wall",
+    "relevant": [
+      "wallWithOpening",
+      "room",
+      "boolDiff"
+    ],
+    "candidateCount": 8,
+    "candidateRecall": 1.0,
+    "found": [
+      "wallWithOpening",
+      "planeGeo",
+      "boolDiff",
+      "createGableEndPanel",
+      "room"
+    ],
+    "ranking": [
+      [
+        "wallWithOpening",
+        0.9963276982307434
+      ],
+      [
+        "planeGeo",
+        0.5740119218826294
+      ],
+      [
+        "boolDiff",
+        0.207566499710083
+      ],
+      [
+        "createGableEndPanel",
+        0.19737616181373596
+      ],
+      [
+        "room",
+        0.06668073683977127
+      ],
+      [
+        "createInstance",
+        0.015588878653943539
+      ],
+      [
+        "foliageMaterial",
+        0.013915006071329117
+      ],
+      [
+        "foliageCardGeo",
+        0.005992741324007511
+      ]
+    ],
+    "querySeconds": 7.882797199999914,
+    "recallAt5": 1.0,
+    "reciprocalRank": 1.0,
+    "unsupportedReturned": false,
+    "unsupportedAboveHalf": false
+  },
+  {
+    "split": "development",
+    "query": "tube along a curved path",
+    "relevant": [
+      "pipeAlongPath",
+      "sweepProfile",
+      "curveToMesh"
+    ],
+    "candidateCount": 7,
+    "candidateRecall": 1.0,
+    "found": [
+      "pipeAlongPath",
+      "curveToMesh",
+      "sweepProfile",
+      "cylinderXGeo",
+      "lathe"
+    ],
+    "ranking": [
+      [
+        "pipeAlongPath",
+        0.9996768236160278
+      ],
+      [
+        "curveToMesh",
+        0.9983093738555908
+      ],
+      [
+        "sweepProfile",
+        0.8407277464866638
+      ],
+      [
+        "cylinderXGeo",
+        0.4532424509525299
+      ],
+      [
+        "lathe",
+        0.4407137334346771
+      ],
+      [
+        "bezierCurve",
+        0.18731015920639038
+      ],
+      [
+        "arrayLinear",
+        0.0046617561019957066
+      ]
+    ],
+    "querySeconds": 6.907523399990168,
+    "recallAt5": 1.0,
+    "reciprocalRank": 1.0,
+    "unsupportedReturned": false,
+    "unsupportedAboveHalf": false
+  },
+  {
+    "split": "development",
+    "query": "edit a geometry copy independently",
+    "relevant": [
+      "copyGeometry"
+    ],
+    "candidateCount": 7,
+    "candidateRecall": 1.0,
+    "found": [
+      "copyGeometry",
+      "copyMaterial",
+      "meshGeo",
+      "boxGeo",
+      "arrayLinear"
+    ],
+    "ranking": [
+      [
+        "copyGeometry",
+        0.9993777275085449
+      ],
+      [
+        "copyMaterial",
+        0.888134241104126
+      ],
+      [
+        "meshGeo",
+        0.1919160783290863
+      ],
+      [
+        "boxGeo",
+        0.09189556539058685
+      ],
+      [
+        "arrayLinear",
+        0.024619245901703835
+      ],
+      [
+        "geometryDiagnostics",
+        0.019537776708602905
+      ],
+      [
+        "createWheelGeometrySet",
+        0.00530188949778676
+      ]
+    ],
+    "querySeconds": 5.842686700008926,
+    "recallAt5": 1.0,
+    "reciprocalRank": 1.0,
+    "unsupportedReturned": false,
+    "unsupportedAboveHalf": false
+  },
+  {
+    "split": "development",
+    "query": "change copied material without changing original",
+    "relevant": [
+      "copyMaterial"
+    ],
+    "candidateCount": 9,
+    "candidateRecall": 1.0,
+    "found": [
+      "copyMaterial",
+      "copyGeometry",
+      "arrayLinear",
+      "basicMaterial",
+      "createInstance"
+    ],
+    "ranking": [
+      [
+        "copyMaterial",
+        0.9985822439193726
+      ],
+      [
+        "copyGeometry",
+        0.9479578733444214
+      ],
+      [
+        "arrayLinear",
+        0.042784251272678375
+      ],
+      [
+        "basicMaterial",
+        0.018110046163201332
+      ],
+      [
+        "createInstance",
+        0.011520903557538986
+      ],
+      [
+        "lambertMaterial",
+        0.005713378544896841
+      ],
+      [
+        "glassMaterial",
+        0.005152133759111166
+      ],
+      [
+        "arrayRadial",
+        0.0033242886420339346
+      ],
+      [
+        "gameMaterial",
+        0.0026147349271923304
+      ]
+    ],
+    "querySeconds": 8.28522449999582,
+    "recallAt5": 1.0,
+    "reciprocalRank": 1.0,
+    "unsupportedReturned": false,
+    "unsupportedAboveHalf": false
+  },
+  {
+    "split": "development",
+    "query": "cylindr",
+    "relevant": [
+      "cylinderGeo",
+      "cylinderOnAxis",
+      "cylinderYGeo",
+      "cylinderXGeo",
+      "cylinderZGeo"
+    ],
+    "candidateCount": 7,
+    "candidateRecall": 1.0,
+    "found": [
+      "cylinderOnAxis",
+      "cylinderGeo",
+      "cylinderZGeo",
+      "cylinderXGeo",
+      "cylinderYGeo"
+    ],
+    "ranking": [
+      [
+        "cylinderOnAxis",
+        0.5506531596183777
+      ],
+      [
+        "cylinderGeo",
+        0.3803403675556183
+      ],
+      [
+        "cylinderZGeo",
+        0.1118151843547821
+      ],
+      [
+        "cylinderXGeo",
+        0.10632467269897461
+      ],
+      [
+        "cylinderYGeo",
+        0.09609869122505188
+      ],
+      [
+        "cylinderUnwrap",
+        0.03792668879032135
+      ],
+      [
+        "beamBetween",
+        0.03367641940712929
+      ]
+    ],
+    "querySeconds": 5.471223900007317,
+    "recallAt5": 1.0,
+    "reciprocalRank": 1.0,
+    "unsupportedReturned": false,
+    "unsupportedAboveHalf": false
+  },
+  {
+    "split": "development",
+    "query": "reflect across a plane",
+    "relevant": [
+      "mirror"
+    ],
+    "candidateCount": 7,
+    "candidateRecall": 1.0,
+    "found": [
+      "mirror",
+      "createRoofPlanes",
+      "planeGeo",
+      "octaGridPlane",
+      "createWingPair"
+    ],
+    "ranking": [
+      [
+        "mirror",
+        0.9859867691993713
+      ],
+      [
+        "createRoofPlanes",
+        0.03786594048142433
+      ],
+      [
+        "planeGeo",
+        0.03046606108546257
+      ],
+      [
+        "octaGridPlane",
+        0.024485906586050987
+      ],
+      [
+        "createWingPair",
+        0.023851221427321434
+      ],
+      [
+        "planeUnwrap",
+        0.018438449129462242
+      ],
+      [
+        "loftProfiles",
+        0.0059931278228759766
+      ]
+    ],
+    "querySeconds": 6.7067406999995,
+    "recallAt5": 1.0,
+    "reciprocalRank": 1.0,
+    "unsupportedReturned": false,
+    "unsupportedAboveHalf": false
+  },
+  {
+    "split": "development",
+    "query": "smooth normals while retaining sharp edges",
+    "relevant": [
+      "creaseNormals"
+    ],
+    "candidateCount": 8,
+    "candidateRecall": 1.0,
+    "found": [
+      "creaseNormals",
+      "boolUnion",
+      "subdivide",
+      "hull",
+      "normalMapFromHeight"
+    ],
+    "ranking": [
+      [
+        "creaseNormals",
+        0.9992914199829102
+      ],
+      [
+        "boolUnion",
+        0.43382498621940613
+      ],
+      [
+        "subdivide",
+        0.2315475195646286
+      ],
+      [
+        "hull",
+        0.15932340919971466
+      ],
+      [
+        "normalMapFromHeight",
+        0.08102826774120331
+      ],
+      [
+        "sphereGeo",
+        0.038587749004364014
+      ],
+      [
+        "roundedBoxGeo",
+        0.03799666091799736
+      ],
+      [
+        "boolDiff",
+        0.01966465264558792
+      ]
+    ],
+    "querySeconds": 7.0776037000032375,
+    "recallAt5": 1.0,
+    "reciprocalRank": 1.0,
+    "unsupportedReturned": false,
+    "unsupportedAboveHalf": false
+  },
+  {
+    "split": "development",
+    "query": "subtract one solid from another",
+    "relevant": [
+      "boolDiff"
+    ],
+    "candidateCount": 13,
+    "candidateRecall": 1.0,
+    "found": [
+      "boolDiff",
+      "implicitSurface",
+      "parametricSurface",
+      "extrudeProfile",
+      "coneGeo"
+    ],
+    "ranking": [
+      [
+        "boolDiff",
+        0.9913095235824585
+      ],
+      [
+        "implicitSurface",
+        0.05168256163597107
+      ],
+      [
+        "parametricSurface",
+        0.032161563634872437
+      ],
+      [
+        "extrudeProfile",
+        0.019615845754742622
+      ],
+      [
+        "coneGeo",
+        0.01793583109974861
+      ],
+      [
+        "coneZGeo",
+        0.015472477301955223
+      ],
+      [
+        "coneXGeo",
+        0.01084799226373434
+      ],
+      [
+        "boolIntersect",
+        0.009930218569934368
+      ],
+      [
+        "coneYGeo",
+        0.008742107078433037
+      ],
+      [
+        "boolUnion",
+        0.005792885087430477
+      ],
+      [
+        "planeGeo",
+        0.005365201737731695
+      ],
+      [
+        "wallWithOpening",
+        0.003550625639036298
+      ],
+      [
+        "normalMapFromHeight",
+        0.00023629279166925699
+      ]
+    ],
+    "querySeconds": 11.505289799999446,
+    "recallAt5": 1.0,
+    "reciprocalRank": 1.0,
+    "unsupportedReturned": false,
+    "unsupportedAboveHalf": false
+  },
+  {
+    "split": "development",
+    "query": "join overlapping solid shapes",
+    "relevant": [
+      "boolUnion"
+    ],
+    "candidateCount": 9,
+    "candidateRecall": 1.0,
+    "found": [
+      "boolUnion",
+      "boolIntersect",
+      "boolDiff",
+      "loftProfiles",
+      "implicitSurface"
+    ],
+    "ranking": [
+      [
+        "boolUnion",
+        0.9963661432266235
+      ],
+      [
+        "boolIntersect",
+        0.9387527108192444
+      ],
+      [
+        "boolDiff",
+        0.2120039463043213
+      ],
+      [
+        "loftProfiles",
+        0.009781242348253727
+      ],
+      [
+        "implicitSurface",
+        0.00832182914018631
+      ],
+      [
+        "planeGeo",
+        0.0075560505501925945
+      ],
+      [
+        "snapTo",
+        0.0055688973516225815
+      ],
+      [
+        "createJointChain",
+        0.0032323538325726986
+      ],
+      [
+        "getJointNames",
+        0.00019386457279324532
+      ]
+    ],
+    "querySeconds": 7.647605000005569,
+    "recallAt5": 1.0,
+    "reciprocalRank": 1.0,
+    "unsupportedReturned": false,
+    "unsupportedAboveHalf": false
+  },
+  {
+    "split": "development",
+    "query": "repeat beams in a straight row",
+    "relevant": [
+      "arrayLinear"
+    ],
+    "candidateCount": 9,
+    "candidateRecall": 1.0,
+    "found": [
+      "arrayLinear",
+      "pipeAlongPath",
+      "beamBetween",
+      "createRoofSurfaceLayout",
+      "extrudeProfile"
+    ],
+    "ranking": [
+      [
+        "arrayLinear",
+        0.9951127171516418
+      ],
+      [
+        "pipeAlongPath",
+        0.15427756309509277
+      ],
+      [
+        "beamBetween",
+        0.04645853489637375
+      ],
+      [
+        "createRoofSurfaceLayout",
+        0.040511295199394226
+      ],
+      [
+        "extrudeProfile",
+        0.016249721869826317
+      ],
+      [
+        "arrayRadial",
+        0.009572247043251991
+      ],
+      [
+        "proceduralTexture",
+        0.005993110593408346
+      ],
+      [
+        "createStairs",
+        0.005014859605580568
+      ],
+      [
+        "gameMaterial",
+        0.0009776270017027855
+      ]
+    ],
+    "querySeconds": 8.933834900002694,
+    "recallAt5": 1.0,
+    "reciprocalRank": 1.0,
+    "unsupportedReturned": false,
+    "unsupportedAboveHalf": false
+  },
+  {
+    "split": "development",
+    "query": "stairs and door opening",
+    "relevant": [
+      "createStairs",
+      "wallWithOpening"
+    ],
+    "candidateCount": 6,
+    "candidateRecall": 1.0,
+    "found": [
+      "createStairs",
+      "wallWithOpening",
+      "createGableShell",
+      "room",
+      "createLadder"
+    ],
+    "ranking": [
+      [
+        "createStairs",
+        0.6010395884513855
+      ],
+      [
+        "wallWithOpening",
+        0.5861198902130127
+      ],
+      [
+        "createGableShell",
+        0.5120530724525452
+      ],
+      [
+        "room",
+        0.2874905467033386
+      ],
+      [
+        "createLadder",
+        0.28476205468177795
+      ],
+      [
+        "createGableEndPanel",
+        0.025102363899350166
+      ]
+    ],
+    "querySeconds": 5.649212400006945,
+    "recallAt5": 1.0,
+    "reciprocalRank": 1.0,
+    "unsupportedReturned": false,
+    "unsupportedAboveHalf": false
+  },
+  {
+    "split": "development",
+    "query": "unfold a mesh for texture coordinates",
+    "relevant": [
+      "autoUnwrap"
+    ],
+    "candidateCount": 9,
+    "candidateRecall": 1.0,
+    "found": [
+      "autoUnwrap",
+      "cylinderUnwrap",
+      "meshGeo",
+      "proceduralTexture",
+      "loadApprovedTexture"
+    ],
+    "ranking": [
+      [
+        "autoUnwrap",
+        0.9984889030456543
+      ],
+      [
+        "cylinderUnwrap",
+        0.36543744802474976
+      ],
+      [
+        "meshGeo",
+        0.045173924416303635
+      ],
+      [
+        "proceduralTexture",
+        0.019993295893073082
+      ],
+      [
+        "loadApprovedTexture",
+        0.019686857238411903
+      ],
+      [
+        "mergeVertices",
+        0.014912302605807781
+      ],
+      [
+        "displace",
+        0.007624373771250248
+      ],
+      [
+        "createPart",
+        0.006913600489497185
+      ],
+      [
+        "curveToMesh",
+        0.004008914344012737
+      ]
+    ],
+    "querySeconds": 7.757441000008839,
+    "recallAt5": 1.0,
+    "reciprocalRank": 1.0,
+    "unsupportedReturned": false,
+    "unsupportedAboveHalf": false
+  },
+  {
+    "split": "development",
+    "query": "implicit signed distance surface",
+    "relevant": [
+      "implicitSurface"
+    ],
+    "candidateCount": 7,
+    "candidateRecall": 1.0,
+    "found": [
+      "implicitSurface",
+      "parametricSurface",
+      "createGableRoof",
+      "creaseNormals",
+      "revolveGeo"
+    ],
+    "ranking": [
+      [
+        "implicitSurface",
+        0.9476022124290466
+      ],
+      [
+        "parametricSurface",
+        0.18140818178653717
+      ],
+      [
+        "createGableRoof",
+        0.010686434805393219
+      ],
+      [
+        "creaseNormals",
+        0.009231551550328732
+      ],
+      [
+        "revolveGeo",
+        0.008372397162020206
+      ],
+      [
+        "planeUnwrap",
+        0.007471824064850807
+      ],
+      [
+        "createRoofSurfaceLayout",
+        0.0048291306011378765
+      ]
+    ],
+    "querySeconds": 5.754702499994892,
+    "recallAt5": 1.0,
+    "reciprocalRank": 1.0,
+    "unsupportedReturned": false,
+    "unsupportedAboveHalf": false
+  },
+  {
+    "split": "development",
+    "query": "speech recognition",
+    "relevant": [],
+    "candidateCount": 5,
+    "candidateRecall": null,
+    "found": [
+      "basicMaterial",
+      "parametricSurface",
+      "mirror",
+      "lathe",
+      "taper"
+    ],
+    "ranking": [
+      [
+        "basicMaterial",
+        0.00014331248530652374
+      ],
+      [
+        "parametricSurface",
+        9.985335054807365e-05
+      ],
+      [
+        "mirror",
+        8.814869943307713e-05
+      ],
+      [
+        "lathe",
+        8.688686648383737e-05
+      ],
+      [
+        "taper",
+        8.103568688966334e-05
+      ]
+    ],
+    "querySeconds": 3.4237100000027567,
+    "recallAt5": null,
+    "reciprocalRank": 0,
+    "unsupportedReturned": true,
+    "unsupportedAboveHalf": false
+  },
+  {
+    "split": "development",
+    "query": "inverse kinematics solver",
+    "relevant": [],
+    "candidateCount": 5,
+    "candidateRecall": null,
+    "found": [
+      "createJointChain",
+      "cylinderOnAxis",
+      "taper",
+      "revolveGeo",
+      "revolveProfile"
+    ],
+    "ranking": [
+      [
+        "createJointChain",
+        0.026186753064393997
+      ],
+      [
+        "cylinderOnAxis",
+        0.0038499466609209776
+      ],
+      [
+        "taper",
+        0.001693858066573739
+      ],
+      [
+        "revolveGeo",
+        0.0004040032799821347
+      ],
+      [
+        "revolveProfile",
+        0.0003771532792598009
+      ]
+    ],
+    "querySeconds": 4.5113861999998335,
+    "recallAt5": null,
+    "reciprocalRank": 0,
+    "unsupportedReturned": true,
+    "unsupportedAboveHalf": false
+  },
+  {
+    "split": "development",
+    "query": "wheel",
+    "relevant": [
+      "createWheelAssembly",
+      "createWheelGeometrySet"
+    ],
+    "candidateCount": 7,
+    "candidateRecall": 1.0,
+    "found": [
+      "createWheelGeometrySet",
+      "createWheelAssembly",
+      "createInstance",
+      "lathe",
+      "createVehicleFrame"
+    ],
+    "ranking": [
+      [
+        "createWheelGeometrySet",
+        0.5297903418540955
+      ],
+      [
+        "createWheelAssembly",
+        0.3215706944465637
+      ],
+      [
+        "createInstance",
+        0.13793033361434937
+      ],
+      [
+        "lathe",
+        0.12777204811573029
+      ],
+      [
+        "createVehicleFrame",
+        0.09427661448717117
+      ],
+      [
+        "revolveProfile",
+        0.038523584604263306
+      ],
+      [
+        "mirror",
+        0.002647279528900981
+      ]
+    ],
+    "querySeconds": 5.509683099997346,
+    "recallAt5": 1.0,
+    "reciprocalRank": 1.0,
+    "unsupportedReturned": false,
+    "unsupportedAboveHalf": false
+  },
+  {
+    "split": "heldout",
+    "query": "arrange pillars in a ring",
+    "relevant": [
+      "arrayRadial"
+    ],
+    "candidateCount": 8,
+    "candidateRecall": 1.0,
+    "found": [
+      "arrayRadial",
+      "torusGeo",
+      "cylinderUnwrap",
+      "arrayLinear",
+      "createLadder"
+    ],
+    "ranking": [
+      [
+        "arrayRadial",
+        0.9699205160140991
+      ],
+      [
+        "torusGeo",
+        0.03622565045952797
+      ],
+      [
+        "cylinderUnwrap",
+        0.02685793675482273
+      ],
+      [
+        "arrayLinear",
+        0.013773183338344097
+      ],
+      [
+        "createLadder",
+        0.009807787835597992
+      ],
+      [
+        "wingGeo",
+        0.0016967777628451586
+      ],
+      [
+        "spinAnimation",
+        0.00104324531275779
+      ],
+      [
+        "createWingPair",
+        0.0005532356444746256
+      ]
+    ],
+    "querySeconds": 7.226169200002914,
+    "recallAt5": 1.0,
+    "reciprocalRank": 1.0,
+    "unsupportedReturned": false,
+    "unsupportedAboveHalf": false
+  },
+  {
+    "split": "heldout",
+    "query": "hollow enclosure with a doorway",
+    "relevant": [
+      "room",
+      "wallWithOpening",
+      "createGableShell"
+    ],
+    "candidateCount": 5,
+    "candidateRecall": 1.0,
+    "found": [
+      "room",
+      "createGableShell",
+      "wallWithOpening",
+      "createGableEndPanel",
+      "hull"
+    ],
+    "ranking": [
+      [
+        "room",
+        0.9970970153808594
+      ],
+      [
+        "createGableShell",
+        0.992544949054718
+      ],
+      [
+        "wallWithOpening",
+        0.9519591927528381
+      ],
+      [
+        "createGableEndPanel",
+        0.17364275455474854
+      ],
+      [
+        "hull",
+        0.03450355306267738
+      ]
+    ],
+    "querySeconds": 5.506198900009622,
+    "recallAt5": 1.0,
+    "reciprocalRank": 1.0,
+    "unsupportedReturned": false,
+    "unsupportedAboveHalf": false
+  },
+  {
+    "split": "heldout",
+    "query": "a hose that follows several bends",
+    "relevant": [
+      "pipeAlongPath",
+      "curveToMesh",
+      "sweepProfile"
+    ],
+    "candidateCount": 8,
+    "candidateRecall": 0.6666666666666666,
+    "found": [
+      "pipeAlongPath",
+      "curveToMesh",
+      "bend",
+      "createGableShell",
+      "cylinderZGeo"
+    ],
+    "ranking": [
+      [
+        "pipeAlongPath",
+        0.9989660978317261
+      ],
+      [
+        "curveToMesh",
+        0.9945759773254395
+      ],
+      [
+        "bend",
+        0.07633361965417862
+      ],
+      [
+        "createGableShell",
+        0.008856642991304398
+      ],
+      [
+        "cylinderZGeo",
+        0.005114520434290171
+      ],
+      [
+        "coneXGeo",
+        0.003936489578336477
+      ],
+      [
+        "arrayRadial",
+        0.0024920792784541845
+      ],
+      [
+        "mirror",
+        0.0010026972740888596
+      ]
+    ],
+    "querySeconds": 8.108254399994621,
+    "recallAt5": 0.6666666666666666,
+    "reciprocalRank": 1.0,
+    "unsupportedReturned": false,
+    "unsupportedAboveHalf": false
+  },
+  {
+    "split": "heldout",
+    "query": "miror",
+    "relevant": [
+      "mirror"
+    ],
+    "candidateCount": 5,
+    "candidateRecall": 1.0,
+    "found": [
+      "mirror",
+      "lathe",
+      "createWingPair",
+      "createRoofPlanes",
+      "basicMaterial"
+    ],
+    "ranking": [
+      [
+        "mirror",
+        0.6187165379524231
+      ],
+      [
+        "lathe",
+        0.2336694747209549
+      ],
+      [
+        "createWingPair",
+        0.1560346782207489
+      ],
+      [
+        "createRoofPlanes",
+        0.0753232017159462
+      ],
+      [
+        "basicMaterial",
+        0.009283367544412613
+      ]
+    ],
+    "querySeconds": 5.010855600005016,
+    "recallAt5": 1.0,
+    "reciprocalRank": 1.0,
+    "unsupportedReturned": false,
+    "unsupportedAboveHalf": false
+  },
+  {
+    "split": "heldout",
+    "query": "loftProfles",
+    "relevant": [
+      "loftProfiles"
+    ],
+    "candidateCount": 6,
+    "candidateRecall": 1.0,
+    "found": [
+      "loftProfiles",
+      "extrudeProfile",
+      "createRoofPlanes",
+      "circleProfile",
+      "sweepProfile"
+    ],
+    "ranking": [
+      [
+        "loftProfiles",
+        0.9663306474685669
+      ],
+      [
+        "extrudeProfile",
+        0.38661012053489685
+      ],
+      [
+        "createRoofPlanes",
+        0.17307163774967194
+      ],
+      [
+        "circleProfile",
+        0.06592769175767899
+      ],
+      [
+        "sweepProfile",
+        0.0447063222527504
+      ],
+      [
+        "revolveProfile",
+        0.03058677166700363
+      ]
+    ],
+    "querySeconds": 5.729726300007314,
+    "recallAt5": 1.0,
+    "reciprocalRank": 1.0,
+    "unsupportedReturned": false,
+    "unsupportedAboveHalf": false
+  },
+  {
+    "split": "heldout",
+    "query": "join cross sections of changing size",
+    "relevant": [
+      "loftProfiles"
+    ],
+    "candidateCount": 10,
+    "candidateRecall": 1.0,
+    "found": [
+      "loftProfiles",
+      "extrudeProfile",
+      "crossedQuadsGeo",
+      "bladeGeo",
+      "taper"
+    ],
+    "ranking": [
+      [
+        "loftProfiles",
+        0.989730715751648
+      ],
+      [
+        "extrudeProfile",
+        0.12465042620897293
+      ],
+      [
+        "crossedQuadsGeo",
+        0.07435303181409836
+      ],
+      [
+        "bladeGeo",
+        0.06116992235183716
+      ],
+      [
+        "taper",
+        0.04169851541519165
+      ],
+      [
+        "twist",
+        0.025985585525631905
+      ],
+      [
+        "boolUnion",
+        0.01460196916013956
+      ],
+      [
+        "createJointChain",
+        0.007122136652469635
+      ],
+      [
+        "mirror",
+        0.001212643226608634
+      ],
+      [
+        "getJointNames",
+        0.0009972184197977185
+      ]
+    ],
+    "querySeconds": 8.936645499998122,
+    "recallAt5": 1.0,
+    "reciprocalRank": 1.0,
+    "unsupportedReturned": false,
+    "unsupportedAboveHalf": false
+  },
+  {
+    "split": "heldout",
+    "query": "I need a bar between these two points and I want its length and direction to follow the endpoints",
+    "relevant": [
+      "beamBetween"
+    ],
+    "candidateCount": 13,
+    "candidateRecall": 1.0,
+    "found": [
+      "beamBetween",
+      "pipeAlongPath",
+      "createGableRoof",
+      "cylinderOnAxis",
+      "bladeGeo"
+    ],
+    "ranking": [
+      [
+        "beamBetween",
+        0.997082531452179
+      ],
+      [
+        "pipeAlongPath",
+        0.26031413674354553
+      ],
+      [
+        "createGableRoof",
+        0.06095143035054207
+      ],
+      [
+        "cylinderOnAxis",
+        0.006402561906725168
+      ],
+      [
+        "bladeGeo",
+        0.0059565273113548756
+      ],
+      [
+        "parametricSurface",
+        0.005007299594581127
+      ],
+      [
+        "coneXGeo",
+        0.004647229332476854
+      ],
+      [
+        "curveToMesh",
+        0.0038440811913460493
+      ],
+      [
+        "coneZGeo",
+        0.002593494486063719
+      ],
+      [
+        "torusGeo",
+        0.001278100535273552
+      ],
+      [
+        "room",
+        0.001049800543114543
+      ],
+      [
+        "createJointChain",
+        0.00064616568852216
+      ],
+      [
+        "getJointNames",
+        5.599662836175412e-05
+      ]
+    ],
+    "querySeconds": 11.991204999998445,
+    "recallAt5": 1.0,
+    "reciprocalRank": 1.0,
+    "unsupportedReturned": false,
+    "unsupportedAboveHalf": false
+  },
+  {
+    "split": "heldout",
+    "query": "arena seating steps",
+    "relevant": [
+      "createStairs",
+      "arrayRadial"
+    ],
+    "candidateCount": 5,
+    "candidateRecall": 1.0,
+    "found": [
+      "createStairs",
+      "arrayRadial",
+      "room",
+      "createLadder",
+      "roundedBoxGeo"
+    ],
+    "ranking": [
+      [
+        "createStairs",
+        0.52460777759552
+      ],
+      [
+        "arrayRadial",
+        0.19810976088047028
+      ],
+      [
+        "room",
+        0.008362015709280968
+      ],
+      [
+        "createLadder",
+        0.0052607422694563866
+      ],
+      [
+        "roundedBoxGeo",
+        0.00048559863353148103
+      ]
+    ],
+    "querySeconds": 5.451548199998797,
+    "recallAt5": 1.0,
+    "reciprocalRank": 1.0,
+    "unsupportedReturned": false,
+    "unsupportedAboveHalf": false
+  },
+  {
+    "split": "heldout",
+    "query": "independent duplicate of mesh vertices",
+    "relevant": [
+      "copyGeometry"
+    ],
+    "candidateCount": 8,
+    "candidateRecall": 1.0,
+    "found": [
+      "copyGeometry",
+      "mergeVertices",
+      "createInstance",
+      "arrayRadial",
+      "meshGeo"
+    ],
+    "ranking": [
+      [
+        "copyGeometry",
+        0.999091625213623
+      ],
+      [
+        "mergeVertices",
+        0.3740004003047943
+      ],
+      [
+        "createInstance",
+        0.22176221013069153
+      ],
+      [
+        "arrayRadial",
+        0.06199228763580322
+      ],
+      [
+        "meshGeo",
+        0.029795609414577484
+      ],
+      [
+        "copyMaterial",
+        0.003524384694173932
+      ],
+      [
+        "countTriangles",
+        0.0015540599124506116
+      ],
+      [
+        "curveToMesh",
+        0.0011759536573663354
+      ]
+    ],
+    "querySeconds": 7.367336700001033,
+    "recallAt5": 1.0,
+    "reciprocalRank": 1.0,
+    "unsupportedReturned": false,
+    "unsupportedAboveHalf": false
+  },
+  {
+    "split": "heldout",
+    "query": "cloneGeometry",
+    "relevant": [],
+    "candidateCount": 11,
+    "candidateRecall": null,
+    "found": [
+      "copyGeometry",
+      "meshGeo",
+      "boxGeo",
+      "coneZGeo",
+      "coneGeo"
+    ],
+    "ranking": [
+      [
+        "copyGeometry",
+        0.9963430762290955
+      ],
+      [
+        "meshGeo",
+        0.03788210079073906
+      ],
+      [
+        "boxGeo",
+        0.012985363602638245
+      ],
+      [
+        "coneZGeo",
+        0.008721527643501759
+      ],
+      [
+        "coneGeo",
+        0.006595992483198643
+      ],
+      [
+        "createWheelGeometrySet",
+        0.006491147913038731
+      ],
+      [
+        "coneXGeo",
+        0.006070561707019806
+      ],
+      [
+        "creaseNormals",
+        0.0060312156565487385
+      ],
+      [
+        "bladeGeo",
+        0.005656029097735882
+      ],
+      [
+        "coneYGeo",
+        0.0038812158163636923
+      ],
+      [
+        "geometryDiagnostics",
+        0.0020447818096727133
+      ]
+    ],
+    "querySeconds": 8.050973400007933,
+    "recallAt5": null,
+    "reciprocalRank": 0,
+    "unsupportedReturned": true,
+    "unsupportedAboveHalf": true
+  },
+  {
+    "split": "heldout",
+    "query": "simulate smoke fluid dynamics",
+    "relevant": [],
+    "candidateCount": 5,
+    "candidateRecall": null,
+    "found": [
+      "implicitSurface",
+      "createPart",
+      "createInstance",
+      "bezierCurve",
+      "createRoofPlanes"
+    ],
+    "ranking": [
+      [
+        "implicitSurface",
+        0.008245933800935745
+      ],
+      [
+        "createPart",
+        0.003545538056641817
+      ],
+      [
+        "createInstance",
+        0.0010081571526825428
+      ],
+      [
+        "bezierCurve",
+        0.0010072489967569709
+      ],
+      [
+        "createRoofPlanes",
+        0.0006283239927142859
+      ]
+    ],
+    "querySeconds": 4.947183399999631,
+    "recallAt5": null,
+    "reciprocalRank": 0,
+    "unsupportedReturned": true,
+    "unsupportedAboveHalf": false
+  },
+  {
+    "split": "heldout",
+    "query": "texture on a thin leaf cutout",
+    "relevant": [
+      "foliageCardGeo",
+      "foliageMaterial"
+    ],
+    "candidateCount": 8,
+    "candidateRecall": 1.0,
+    "found": [
+      "foliageMaterial",
+      "foliageCardGeo",
+      "loadApprovedTexture",
+      "planeGeo",
+      "decalBox"
+    ],
+    "ranking": [
+      [
+        "foliageMaterial",
+        0.9866454005241394
+      ],
+      [
+        "foliageCardGeo",
+        0.9285048842430115
+      ],
+      [
+        "loadApprovedTexture",
+        0.8474864959716797
+      ],
+      [
+        "planeGeo",
+        0.6767058372497559
+      ],
+      [
+        "decalBox",
+        0.29842785000801086
+      ],
+      [
+        "proceduralTexture",
+        0.1712779402732849
+      ],
+      [
+        "boolDiff",
+        0.09161374717950821
+      ],
+      [
+        "autoUnwrap",
+        0.016144970431923866
+      ]
+    ],
+    "querySeconds": 7.839034000004176,
+    "recallAt5": 1.0,
+    "reciprocalRank": 1.0,
+    "unsupportedReturned": false,
+    "unsupportedAboveHalf": false
+  },
+  {
+    "split": "independent",
+    "query": "creaseNormals",
+    "relevant": [
+      "creaseNormals"
+    ],
+    "candidateCount": 9,
+    "candidateRecall": 1.0,
+    "found": [
+      "creaseNormals",
+      "bend",
+      "meshGeo",
+      "normalMapFromHeight",
+      "createGableRoof"
+    ],
+    "ranking": [
+      [
+        "creaseNormals",
+        0.9969667792320251
+      ],
+      [
+        "bend",
+        0.9189478158950806
+      ],
+      [
+        "meshGeo",
+        0.13118702173233032
+      ],
+      [
+        "normalMapFromHeight",
+        0.04888486489653587
+      ],
+      [
+        "createGableRoof",
+        0.029714250937104225
+      ],
+      [
+        "mirror",
+        0.006985403597354889
+      ],
+      [
+        "createInstance",
+        0.002911668736487627
+      ],
+      [
+        "createPivot",
+        0.0024636187590658665
+      ],
+      [
+        "createRoot",
+        0.0021920623257756233
+      ]
+    ],
+    "querySeconds": 6.137631699995836,
+    "recallAt5": 1.0,
+    "reciprocalRank": 1.0,
+    "unsupportedReturned": false,
+    "unsupportedAboveHalf": false
+  },
+  {
+    "split": "independent",
+    "query": "createJointChain local bend axis end effector",
+    "relevant": [
+      "createJointChain"
+    ],
+    "candidateCount": 11,
+    "candidateRecall": 1.0,
+    "found": [
+      "createJointChain",
+      "bend",
+      "createPivot",
+      "cylinderOnAxis",
+      "createVehicleFrame"
+    ],
+    "ranking": [
+      [
+        "createJointChain",
+        0.9990524649620056
+      ],
+      [
+        "bend",
+        0.7302992343902588
+      ],
+      [
+        "createPivot",
+        0.13832181692123413
+      ],
+      [
+        "cylinderOnAxis",
+        0.05726637318730354
+      ],
+      [
+        "createVehicleFrame",
+        0.011842719279229641
+      ],
+      [
+        "createWheelGeometrySet",
+        0.009228672832250595
+      ],
+      [
+        "createGableEndPanel",
+        0.007213928736746311
+      ],
+      [
+        "createGableRoof",
+        0.00677836500108242
+      ],
+      [
+        "createRoot",
+        0.006172503810375929
+      ],
+      [
+        "createRoofSurfaceLayout",
+        0.0022640421520918608
+      ],
+      [
+        "creaseNormals",
+        0.0003709454322233796
+      ]
+    ],
+    "querySeconds": 7.241059599997243,
+    "recallAt5": 1.0,
+    "reciprocalRank": 1.0,
+    "unsupportedReturned": false,
+    "unsupportedAboveHalf": false
+  },
+  {
+    "split": "independent",
+    "query": "normalMapFromHeight strength",
+    "relevant": [
+      "normalMapFromHeight"
+    ],
+    "candidateCount": 9,
+    "candidateRecall": 1.0,
+    "found": [
+      "normalMapFromHeight",
+      "meshGeo",
+      "planeGeo",
+      "cylinderUnwrap",
+      "proceduralTexture"
+    ],
+    "ranking": [
+      [
+        "normalMapFromHeight",
+        0.9941948056221008
+      ],
+      [
+        "meshGeo",
+        0.03027021884918213
+      ],
+      [
+        "planeGeo",
+        0.008491134271025658
+      ],
+      [
+        "cylinderUnwrap",
+        0.007327788509428501
+      ],
+      [
+        "proceduralTexture",
+        0.006294159218668938
+      ],
+      [
+        "creaseNormals",
+        0.006093333009630442
+      ],
+      [
+        "createRoofPlanes",
+        0.005803522188216448
+      ],
+      [
+        "displace",
+        0.004297098610550165
+      ],
+      [
+        "createClip",
+        0.0006089014932513237
+      ]
+    ],
+    "querySeconds": 6.978099900006782,
+    "recallAt5": 1.0,
+    "reciprocalRank": 1.0,
+    "unsupportedReturned": false,
+    "unsupportedAboveHalf": false
+  },
+  {
+    "split": "independent",
+    "query": "Keep the lip sharp but shade the sides smoothly without losing texture corners",
+    "relevant": [
+      "creaseNormals"
+    ],
+    "candidateCount": 11,
+    "candidateRecall": 1.0,
+    "found": [
+      "creaseNormals",
+      "boolDiff",
+      "mergeVertices",
+      "hull",
+      "planeUnwrap"
+    ],
+    "ranking": [
+      [
+        "creaseNormals",
+        0.9961418509483337
+      ],
+      [
+        "boolDiff",
+        0.4359706938266754
+      ],
+      [
+        "mergeVertices",
+        0.1148085817694664
+      ],
+      [
+        "hull",
+        0.08830829709768295
+      ],
+      [
+        "planeUnwrap",
+        0.0636676773428917
+      ],
+      [
+        "subdivide",
+        0.047446127980947495
+      ],
+      [
+        "loadApprovedTexture",
+        0.03652436286211014
+      ],
+      [
+        "copyMaterial",
+        0.035207539796829224
+      ],
+      [
+        "createClip",
+        0.03514875844120979
+      ],
+      [
+        "proceduralTexture",
+        0.017321834340691566
+      ],
+      [
+        "autoUnwrap",
+        0.004611331503838301
+      ]
+    ],
+    "querySeconds": 7.848469499993371,
+    "recallAt5": 1.0,
+    "reciprocalRank": 1.0,
+    "unsupportedReturned": false,
+    "unsupportedAboveHalf": false
+  },
+  {
+    "split": "independent",
+    "query": "A stretched pill lying front to back, with hemispherical ends",
+    "relevant": [
+      "capsuleXGeo"
+    ],
+    "candidateCount": 9,
+    "candidateRecall": 1.0,
+    "found": [
+      "capsuleGeo",
+      "revolveProfile",
+      "parametricSurface",
+      "lathe",
+      "capsuleXGeo"
+    ],
+    "ranking": [
+      [
+        "capsuleGeo",
+        0.37592390179634094
+      ],
+      [
+        "revolveProfile",
+        0.3736298382282257
+      ],
+      [
+        "parametricSurface",
+        0.24260950088500977
+      ],
+      [
+        "lathe",
+        0.21636252105236053
+      ],
+      [
+        "capsuleXGeo",
+        0.049977581948041916
+      ],
+      [
+        "materialRecipe",
+        0.011708659119904041
+      ],
+      [
+        "createGableShell",
+        0.010707649402320385
+      ],
+      [
+        "createGableEndPanel",
+        0.0029683499597012997
+      ],
+      [
+        "room",
+        0.0008940323605202138
+      ]
+    ],
+    "querySeconds": 6.341017999991891,
+    "recallAt5": 1.0,
+    "reciprocalRank": 0.2,
+    "unsupportedReturned": false,
+    "unsupportedAboveHalf": false
+  },
+  {
+    "split": "independent",
+    "query": "A tyre and hub that turn together at the axle while the whole wheel can steer",
+    "relevant": [
+      "createWheelAssembly"
+    ],
+    "candidateCount": 11,
+    "candidateRecall": 1.0,
+    "found": [
+      "createWheelAssembly",
+      "createWheelGeometrySet",
+      "createInstance",
+      "revolveProfile",
+      "createPart"
+    ],
+    "ranking": [
+      [
+        "createWheelAssembly",
+        0.9928838014602661
+      ],
+      [
+        "createWheelGeometrySet",
+        0.9918444752693176
+      ],
+      [
+        "createInstance",
+        0.006338951643556356
+      ],
+      [
+        "revolveProfile",
+        0.0027641027700155973
+      ],
+      [
+        "createPart",
+        0.0023055640049278736
+      ],
+      [
+        "cylinderXGeo",
+        0.0017412073211744428
+      ],
+      [
+        "lathe",
+        0.0012977824080735445
+      ],
+      [
+        "torusGeo",
+        0.0009141980553977191
+      ],
+      [
+        "createWingPair",
+        0.00038586085429415107
+      ],
+      [
+        "createRoofPlanes",
+        0.00015524962509516627
+      ],
+      [
+        "autoUnwrap",
+        8.280208567157388e-05
+      ]
+    ],
+    "querySeconds": 8.319484200008446,
+    "recallAt5": 1.0,
+    "reciprocalRank": 1.0,
+    "unsupportedReturned": false,
+    "unsupportedAboveHalf": false
+  },
+  {
+    "split": "independent",
+    "query": "Lay corrugated strips down the direction rain runs on either side of a pitched roof",
+    "relevant": [
+      "createRoofSurfaceLayout",
+      "createGableRoof"
+    ],
+    "candidateCount": 9,
+    "candidateRecall": 1.0,
+    "found": [
+      "createRoofSurfaceLayout",
+      "createRoofPlanes",
+      "createGableRoof",
+      "createGableEndPanel",
+      "proceduralTexture"
+    ],
+    "ranking": [
+      [
+        "createRoofSurfaceLayout",
+        0.9847874045372009
+      ],
+      [
+        "createRoofPlanes",
+        0.758166491985321
+      ],
+      [
+        "createGableRoof",
+        0.4454018771648407
+      ],
+      [
+        "createGableEndPanel",
+        0.06899907439947128
+      ],
+      [
+        "proceduralTexture",
+        0.0022431714460253716
+      ],
+      [
+        "room",
+        0.0014736944576725364
+      ],
+      [
+        "capsuleZGeo",
+        0.001245575025677681
+      ],
+      [
+        "mirror",
+        0.0005128328921273351
+      ],
+      [
+        "createRoot",
+        0.00011331321729812771
+      ]
+    ],
+    "querySeconds": 7.794159299999592,
+    "recallAt5": 1.0,
+    "reciprocalRank": 1.0,
+    "unsupportedReturned": false,
+    "unsupportedAboveHalf": false
+  },
+  {
+    "split": "independent",
+    "query": "Turn a bottle outline into a closed volume that I can subtract another solid from",
+    "relevant": [
+      "revolveProfile"
+    ],
+    "candidateCount": 8,
+    "candidateRecall": 1.0,
+    "found": [
+      "revolveProfile",
+      "boolDiff",
+      "extrudeProfile",
+      "circleProfile",
+      "boolIntersect"
+    ],
+    "ranking": [
+      [
+        "revolveProfile",
+        0.9731545448303223
+      ],
+      [
+        "boolDiff",
+        0.8845736384391785
+      ],
+      [
+        "extrudeProfile",
+        0.7534064054489136
+      ],
+      [
+        "circleProfile",
+        0.07553736120462418
+      ],
+      [
+        "boolIntersect",
+        0.03695368394255638
+      ],
+      [
+        "boolUnion",
+        0.0104148481041193
+      ],
+      [
+        "createClip",
+        0.00012939629959873855
+      ],
+      [
+        "normalMapFromHeight",
+        1.1188532880623825e-05
+      ]
+    ],
+    "querySeconds": 5.8417522000090685,
+    "recallAt5": 1.0,
+    "reciprocalRank": 1.0,
+    "unsupportedReturned": false,
+    "unsupportedAboveHalf": false
+  },
+  {
+    "split": "independent",
+    "query": "Carry an L-shaped cross section around a bent handrail route",
+    "relevant": [
+      "sweepProfile"
+    ],
+    "candidateCount": 11,
+    "candidateRecall": 0.0,
+    "found": [
+      "extrudeProfile",
+      "lathe",
+      "loftProfiles",
+      "twist",
+      "crossedQuadsGeo"
+    ],
+    "ranking": [
+      [
+        "extrudeProfile",
+        0.9394410252571106
+      ],
+      [
+        "lathe",
+        0.4884380102157593
+      ],
+      [
+        "loftProfiles",
+        0.39938056468963623
+      ],
+      [
+        "twist",
+        0.34044963121414185
+      ],
+      [
+        "crossedQuadsGeo",
+        0.12696297466754913
+      ],
+      [
+        "bend",
+        0.08108673244714737
+      ],
+      [
+        "createLadder",
+        0.03728500008583069
+      ],
+      [
+        "bladeGeo",
+        0.015159177593886852
+      ],
+      [
+        "createRoofSurfaceLayout",
+        0.00981341116130352
+      ],
+      [
+        "loadApprovedTexture",
+        0.00940473098307848
+      ],
+      [
+        "arrayLinear",
+        0.008588626980781555
+      ]
+    ],
+    "querySeconds": 8.195644999999786,
+    "recallAt5": 0.0,
+    "reciprocalRank": 0,
+    "unsupportedReturned": false,
+    "unsupportedAboveHalf": false
+  },
+  {
+    "split": "independent",
+    "query": "Bridge several matching polygon outlines at different positions into one capped transition",
+    "relevant": [
+      "loftProfiles"
+    ],
+    "candidateCount": 14,
+    "candidateRecall": 0.0,
+    "found": [
+      "taperConeGeo",
+      "boolUnion",
+      "createRoofPlanes",
+      "coneGeo",
+      "pipeAlongPath"
+    ],
+    "ranking": [
+      [
+        "taperConeGeo",
+        0.16688598692417145
+      ],
+      [
+        "boolUnion",
+        0.10907740890979767
+      ],
+      [
+        "createRoofPlanes",
+        0.08174259960651398
+      ],
+      [
+        "coneGeo",
+        0.03629443794488907
+      ],
+      [
+        "pipeAlongPath",
+        0.019440261647105217
+      ],
+      [
+        "mergeVertices",
+        0.017613645642995834
+      ],
+      [
+        "parametricSurface",
+        0.01746669039130211
+      ],
+      [
+        "geometryDiagnostics",
+        0.0145215829834342
+      ],
+      [
+        "coneXGeo",
+        0.012523639015853405
+      ],
+      [
+        "coneZGeo",
+        0.010277935303747654
+      ],
+      [
+        "coneYGeo",
+        0.009642091579735279
+      ],
+      [
+        "octaGridPlane",
+        0.0031694178469479084
+      ],
+      [
+        "positionTrack",
+        0.0022365532349795103
+      ],
+      [
+        "autoUnwrap",
+        0.0015391537453979254
+      ]
+    ],
+    "querySeconds": 11.093660099999397,
+    "recallAt5": 0.0,
+    "reciprocalRank": 0,
+    "unsupportedReturned": false,
+    "unsupportedAboveHalf": false
+  },
+  {
+    "split": "independent",
+    "query": "I have an equation mapping two parameters to xyz and want a sampled surface with texture coordinates",
+    "relevant": [
+      "parametricSurface"
+    ],
+    "candidateCount": 9,
+    "candidateRecall": 1.0,
+    "found": [
+      "parametricSurface",
+      "implicitSurface",
+      "planeUnwrap",
+      "autoUnwrap",
+      "normalMapFromHeight"
+    ],
+    "ranking": [
+      [
+        "parametricSurface",
+        0.9986758828163147
+      ],
+      [
+        "implicitSurface",
+        0.87688809633255
+      ],
+      [
+        "planeUnwrap",
+        0.21008038520812988
+      ],
+      [
+        "autoUnwrap",
+        0.07843553274869919
+      ],
+      [
+        "normalMapFromHeight",
+        0.043929483741521835
+      ],
+      [
+        "bezierCurve",
+        0.043880805373191833
+      ],
+      [
+        "loadApprovedTexture",
+        0.02138223499059677
+      ],
+      [
+        "proceduralTexture",
+        0.009971381165087223
+      ],
+      [
+        "createRoofSurfaceLayout",
+        0.00020461574604269117
+      ]
+    ],
+    "querySeconds": 6.80298199999379,
+    "recallAt5": 1.0,
+    "reciprocalRank": 1.0,
+    "unsupportedReturned": false,
+    "unsupportedAboveHalf": false
+  },
+  {
+    "split": "independent",
+    "query": "qadratic bezeir control ponts to sampled path",
+    "relevant": [
+      "bezierCurve"
+    ],
+    "candidateCount": 8,
+    "candidateRecall": 1.0,
+    "found": [
+      "bezierCurve",
+      "pipeAlongPath",
+      "implicitSurface",
+      "sweepProfile",
+      "curveToMesh"
+    ],
+    "ranking": [
+      [
+        "bezierCurve",
+        0.9948615431785583
+      ],
+      [
+        "pipeAlongPath",
+        0.44960594177246094
+      ],
+      [
+        "implicitSurface",
+        0.025940289720892906
+      ],
+      [
+        "sweepProfile",
+        0.008385281078517437
+      ],
+      [
+        "curveToMesh",
+        0.004899702034890652
+      ],
+      [
+        "compilePortableMaterialSpecV2",
+        0.002483814489096403
+      ],
+      [
+        "subdivide",
+        0.002451634034514427
+      ],
+      [
+        "planeGeo",
+        0.0021550008095800877
+      ]
+    ],
+    "querySeconds": 5.602159899994149,
+    "recallAt5": 1.0,
+    "reciprocalRank": 1.0,
+    "unsupportedReturned": false,
+    "unsupportedAboveHalf": false
+  },
+  {
+    "split": "independent",
+    "query": "extrdue profle with interor cutout",
+    "relevant": [
+      "extrudeProfile"
+    ],
+    "candidateCount": 8,
+    "candidateRecall": 1.0,
+    "found": [
+      "extrudeProfile",
+      "circleProfile",
+      "revolveProfile",
+      "sweepProfile",
+      "planeGeo"
+    ],
+    "ranking": [
+      [
+        "extrudeProfile",
+        0.9885514974594116
+      ],
+      [
+        "circleProfile",
+        0.8708879947662354
+      ],
+      [
+        "revolveProfile",
+        0.6401957869529724
+      ],
+      [
+        "sweepProfile",
+        0.5053461194038391
+      ],
+      [
+        "planeGeo",
+        0.1430603414773941
+      ],
+      [
+        "loftProfiles",
+        0.05140414088964462
+      ],
+      [
+        "foliageMaterial",
+        0.04147864878177643
+      ],
+      [
+        "foliageCardGeo",
+        0.025371666997671127
+      ]
+    ],
+    "querySeconds": 6.033711800002493,
+    "recallAt5": 1.0,
+    "reciprocalRank": 1.0,
+    "unsupportedReturned": false,
+    "unsupportedAboveHalf": false
+  },
+  {
+    "split": "independent",
+    "query": "unlit materal ignores scene ligths",
+    "relevant": [
+      "basicMaterial"
+    ],
+    "candidateCount": 9,
+    "candidateRecall": 1.0,
+    "found": [
+      "basicMaterial",
+      "gameMaterial",
+      "lambertMaterial",
+      "glassMaterial",
+      "capsuleZGeo"
+    ],
+    "ranking": [
+      [
+        "basicMaterial",
+        0.9551945924758911
+      ],
+      [
+        "gameMaterial",
+        0.041364140808582306
+      ],
+      [
+        "lambertMaterial",
+        0.01809636503458023
+      ],
+      [
+        "glassMaterial",
+        0.017630303278565407
+      ],
+      [
+        "capsuleZGeo",
+        0.003971543163061142
+      ],
+      [
+        "copyMaterial",
+        0.0038471571169793606
+      ],
+      [
+        "snapTo",
+        0.0016212094342336059
+      ],
+      [
+        "boxUnwrap",
+        0.0009751199977472425
+      ],
+      [
+        "cylinderUnwrap",
+        0.0005536270327866077
+      ]
+    ],
+    "querySeconds": 5.955200900003547,
+    "recallAt5": 1.0,
+    "reciprocalRank": 1.0,
+    "unsupportedReturned": false,
+    "unsupportedAboveHalf": false
+  },
+  {
+    "split": "independent",
+    "query": "booleen intersecion keep only overlapping volume",
+    "relevant": [
+      "boolIntersect"
+    ],
+    "candidateCount": 8,
+    "candidateRecall": 1.0,
+    "found": [
+      "boolIntersect",
+      "boolUnion",
+      "boolDiff",
+      "hull",
+      "snapTo"
+    ],
+    "ranking": [
+      [
+        "boolIntersect",
+        0.9990347623825073
+      ],
+      [
+        "boolUnion",
+        0.38171008229255676
+      ],
+      [
+        "boolDiff",
+        0.12295376509428024
+      ],
+      [
+        "hull",
+        0.022770866751670837
+      ],
+      [
+        "snapTo",
+        0.006172703113406897
+      ],
+      [
+        "mergeVertices",
+        0.0032996421214193106
+      ],
+      [
+        "subdivide",
+        0.0030334829352796078
+      ],
+      [
+        "parametricSurface",
+        0.0021543672773987055
+      ]
+    ],
+    "querySeconds": 5.235203100004583,
+    "recallAt5": 1.0,
+    "reciprocalRank": 1.0,
+    "unsupportedReturned": false,
+    "unsupportedAboveHalf": false
+  },
+  {
+    "split": "independent",
+    "query": "Count boundary and nonmanifold edges after matching duplicated seam positions",
+    "relevant": [
+      "geometryDiagnostics"
+    ],
+    "candidateCount": 11,
+    "candidateRecall": 1.0,
+    "found": [
+      "geometryDiagnostics",
+      "mergeVertices",
+      "createRoofSurfaceLayout",
+      "countTriangles",
+      "creaseNormals"
+    ],
+    "ranking": [
+      [
+        "geometryDiagnostics",
+        0.9976155757904053
+      ],
+      [
+        "mergeVertices",
+        0.4415620267391205
+      ],
+      [
+        "createRoofSurfaceLayout",
+        0.03621596470475197
+      ],
+      [
+        "countTriangles",
+        0.030793989077210426
+      ],
+      [
+        "creaseNormals",
+        0.007637141738086939
+      ],
+      [
+        "arrayLinear",
+        0.005027524195611477
+      ],
+      [
+        "countMaterials",
+        0.0030912787187844515
+      ],
+      [
+        "arrayRadial",
+        0.0019100286299362779
+      ],
+      [
+        "beamBetween",
+        0.0010098625207319856
+      ],
+      [
+        "mirror",
+        0.00033824535785242915
+      ],
+      [
+        "positionTrack",
+        0.0001490790891693905
+      ]
+    ],
+    "querySeconds": 7.9949304000037955,
+    "recallAt5": 1.0,
+    "reciprocalRank": 1.0,
+    "unsupportedReturned": false,
+    "unsupportedAboveHalf": false
+  },
+  {
+    "split": "independent",
+    "query": "Declare support and propulsion sockets for a boat with no wheels",
+    "relevant": [
+      "createVehicleFrame"
+    ],
+    "candidateCount": 9,
+    "candidateRecall": 1.0,
+    "found": [
+      "createVehicleFrame",
+      "createWheelAssembly",
+      "createInstance",
+      "createWheelGeometrySet",
+      "lathe"
+    ],
+    "ranking": [
+      [
+        "createVehicleFrame",
+        0.9811313152313232
+      ],
+      [
+        "createWheelAssembly",
+        0.008290296420454979
+      ],
+      [
+        "createInstance",
+        0.0027785669080913067
+      ],
+      [
+        "createWheelGeometrySet",
+        0.002002612454816699
+      ],
+      [
+        "lathe",
+        0.000638456258457154
+      ],
+      [
+        "arrayRadial",
+        8.926731970859692e-05
+      ],
+      [
+        "sweepProfile",
+        8.349819108843803e-05
+      ],
+      [
+        "creaseNormals",
+        3.350902261445299e-05
+      ],
+      [
+        "normalMapFromHeight",
+        6.6636621340876445e-06
+      ]
+    ],
+    "querySeconds": 7.34567490000336,
+    "recallAt5": 1.0,
+    "reciprocalRank": 1.0,
+    "unsupportedReturned": false,
+    "unsupportedAboveHalf": false
+  },
+  {
+    "split": "independent",
+    "query": "Extract a level set from a positive-inside gyroid scalar field in a finite box",
+    "relevant": [
+      "implicitSurface"
+    ],
+    "candidateCount": 10,
+    "candidateRecall": 1.0,
+    "found": [
+      "implicitSurface",
+      "boxGeo",
+      "decalBox",
+      "taper",
+      "roundedBoxGeo"
+    ],
+    "ranking": [
+      [
+        "implicitSurface",
+        0.9764594435691833
+      ],
+      [
+        "boxGeo",
+        0.02736351639032364
+      ],
+      [
+        "decalBox",
+        0.018438879400491714
+      ],
+      [
+        "taper",
+        0.009702829644083977
+      ],
+      [
+        "roundedBoxGeo",
+        0.0036354290787130594
+      ],
+      [
+        "boxUnwrap",
+        0.0031663672998547554
+      ],
+      [
+        "planeUnwrap",
+        0.0030082932207733393
+      ],
+      [
+        "normalMapFromHeight",
+        0.002574511803686619
+      ],
+      [
+        "createWheelGeometrySet",
+        0.000246654381044209
+      ],
+      [
+        "getJointNames",
+        1.5316232747863978e-05
+      ]
+    ],
+    "querySeconds": 7.157932899994194,
+    "recallAt5": 1.0,
+    "reciprocalRank": 1.0,
+    "unsupportedReturned": false,
+    "unsupportedAboveHalf": false
+  },
+  {
+    "split": "independent",
+    "query": "Impostor atlas quad whose shader chooses the view-dependent tile",
+    "relevant": [
+      "octaGridPlane"
+    ],
+    "candidateCount": 9,
+    "candidateRecall": 1.0,
+    "found": [
+      "octaGridPlane",
+      "planeGeo",
+      "autoUnwrap",
+      "foliageCardGeo",
+      "proceduralTexture"
+    ],
+    "ranking": [
+      [
+        "octaGridPlane",
+        0.9916248917579651
+      ],
+      [
+        "planeGeo",
+        0.47168001532554626
+      ],
+      [
+        "autoUnwrap",
+        0.04609445855021477
+      ],
+      [
+        "foliageCardGeo",
+        0.03355163708329201
+      ],
+      [
+        "proceduralTexture",
+        0.01821105368435383
+      ],
+      [
+        "crossedQuadsGeo",
+        0.016621587797999382
+      ],
+      [
+        "boxUnwrap",
+        0.013132759369909763
+      ],
+      [
+        "gameMaterial",
+        0.004071510396897793
+      ],
+      [
+        "mirror",
+        0.0011416313936933875
+      ]
+    ],
+    "querySeconds": 6.750235200001043,
+    "recallAt5": 1.0,
+    "reciprocalRank": 1.0,
+    "unsupportedReturned": false,
+    "unsupportedAboveHalf": false
+  },
+  {
+    "split": "independent",
+    "query": "Drill recesses into a painted body while retaining its existing UV and material attributes",
+    "relevant": [
+      "boolDiff"
+    ],
+    "candidateCount": 12,
+    "candidateRecall": 0.0,
+    "found": [
+      "copyMaterial",
+      "subdivide",
+      "mergeVertices",
+      "parametricSurface",
+      "boxUnwrap"
+    ],
+    "ranking": [
+      [
+        "copyMaterial",
+        0.09025432914495468
+      ],
+      [
+        "subdivide",
+        0.055907800793647766
+      ],
+      [
+        "mergeVertices",
+        0.047669801861047745
+      ],
+      [
+        "parametricSurface",
+        0.030712885782122612
+      ],
+      [
+        "boxUnwrap",
+        0.018688766285777092
+      ],
+      [
+        "materialRecipe",
+        0.014043819159269333
+      ],
+      [
+        "lambertMaterial",
+        0.011226994916796684
+      ],
+      [
+        "basicMaterial",
+        0.010710671544075012
+      ],
+      [
+        "compilePortableMaterialSpecV2",
+        0.009960323572158813
+      ],
+      [
+        "autoUnwrap",
+        0.007695035543292761
+      ],
+      [
+        "gameMaterial",
+        0.0029079222586005926
+      ],
+      [
+        "foliageMaterial",
+        0.0016192086040973663
+      ]
+    ],
+    "querySeconds": 8.597704800005886,
+    "recallAt5": 0.0,
+    "reciprocalRank": 0,
+    "unsupportedReturned": false,
+    "unsupportedAboveHalf": false
+  },
+  {
+    "split": "independent",
+    "query": "Generate seamless brick pixels and derive a tiling tangent-space bump normal from their brightness",
+    "relevant": [
+      "proceduralTexture",
+      "normalMapFromHeight"
+    ],
+    "candidateCount": 8,
+    "candidateRecall": 1.0,
+    "found": [
+      "normalMapFromHeight",
+      "proceduralTexture",
+      "meshGeo",
+      "creaseNormals",
+      "createGableRoof"
+    ],
+    "ranking": [
+      [
+        "normalMapFromHeight",
+        0.9985059499740601
+      ],
+      [
+        "proceduralTexture",
+        0.5453774929046631
+      ],
+      [
+        "meshGeo",
+        0.0984741672873497
+      ],
+      [
+        "creaseNormals",
+        0.049694981426000595
+      ],
+      [
+        "createGableRoof",
+        0.04873932525515556
+      ],
+      [
+        "sphereGeo",
+        0.032302480190992355
+      ],
+      [
+        "bend",
+        0.008023501373827457
+      ],
+      [
+        "createLadder",
+        0.001812114380300045
+      ]
+    ],
+    "querySeconds": 5.669846700009657,
+    "recallAt5": 1.0,
+    "reciprocalRank": 1.0,
+    "unsupportedReturned": false,
+    "unsupportedAboveHalf": false
+  },
+  {
+    "split": "independent",
+    "query": "Cheap crossed leaf cards with alpha cutouts visible from both sides",
+    "relevant": [
+      "crossedQuadsGeo",
+      "foliageMaterial"
+    ],
+    "candidateCount": 7,
+    "candidateRecall": 1.0,
+    "found": [
+      "foliageCardGeo",
+      "foliageMaterial",
+      "crossedQuadsGeo",
+      "boxGeo",
+      "wallWithOpening"
+    ],
+    "ranking": [
+      [
+        "foliageCardGeo",
+        0.9718947410583496
+      ],
+      [
+        "foliageMaterial",
+        0.8859227895736694
+      ],
+      [
+        "crossedQuadsGeo",
+        0.06139034777879715
+      ],
+      [
+        "boxGeo",
+        0.005213330499827862
+      ],
+      [
+        "wallWithOpening",
+        0.0035933121107518673
+      ],
+      [
+        "normalMapFromHeight",
+        0.0035436851903796196
+      ],
+      [
+        "planeGeo",
+        0.0020263928454369307
+      ]
+    ],
+    "querySeconds": 5.170545800006948,
+    "recallAt5": 1.0,
+    "reciprocalRank": 0.5,
+    "unsupportedReturned": false,
+    "unsupportedAboveHalf": false
+  },
+  {
+    "split": "independent",
+    "query": "Package translation and degree-based joint rotation keyframes into a named animation",
+    "relevant": [
+      "positionTrack",
+      "rotationTrack",
+      "createClip"
+    ],
+    "candidateCount": 9,
+    "candidateRecall": 0.6666666666666666,
+    "found": [
+      "rotationTrack",
+      "spinAnimation",
+      "twist",
+      "createPivot",
+      "bend"
+    ],
+    "ranking": [
+      [
+        "rotationTrack",
+        0.9157246947288513
+      ],
+      [
+        "spinAnimation",
+        0.09527191519737244
+      ],
+      [
+        "twist",
+        0.02753283828496933
+      ],
+      [
+        "createPivot",
+        0.02269112877547741
+      ],
+      [
+        "bend",
+        0.019655169919133186
+      ],
+      [
+        "createClip",
+        0.018654340878129005
+      ],
+      [
+        "getJointNames",
+        0.01749325543642044
+      ],
+      [
+        "createJointChain",
+        0.00477501330897212
+      ],
+      [
+        "bobbingAnimation",
+        0.004608211573213339
+      ]
+    ],
+    "querySeconds": 5.323269500004244,
+    "recallAt5": 0.3333333333333333,
+    "reciprocalRank": 1.0,
+    "unsupportedReturned": false,
+    "unsupportedAboveHalf": false
+  },
+  {
+    "split": "independent",
+    "query": "ring",
+    "relevant": [
+      "torusGeo",
+      "circleProfile"
+    ],
+    "candidateCount": 12,
+    "candidateRecall": 0.5,
+    "found": [
+      "arrayRadial",
+      "cylinderUnwrap",
+      "torusGeo",
+      "lathe",
+      "createWheelAssembly"
+    ],
+    "ranking": [
+      [
+        "arrayRadial",
+        0.15385285019874573
+      ],
+      [
+        "cylinderUnwrap",
+        0.14169612526893616
+      ],
+      [
+        "torusGeo",
+        0.13671989738941193
+      ],
+      [
+        "lathe",
+        0.12536801397800446
+      ],
+      [
+        "createWheelAssembly",
+        0.028745928779244423
+      ],
+      [
+        "wingGeo",
+        0.009387821890413761
+      ],
+      [
+        "createWingPair",
+        0.008696046657860279
+      ],
+      [
+        "mirror",
+        0.007338674273341894
+      ],
+      [
+        "snapTo",
+        0.007203091401606798
+      ],
+      [
+        "createVehicleFrame",
+        0.0040811276994645596
+      ],
+      [
+        "createPivot",
+        0.003754125675186515
+      ],
+      [
+        "createRoot",
+        0.0028021580073982477
+      ]
+    ],
+    "querySeconds": 10.288459700008389,
+    "recallAt5": 0.5,
+    "reciprocalRank": 0.3333333333333333,
+    "unsupportedReturned": false,
+    "unsupportedAboveHalf": false
+  },
+  {
+    "split": "independent",
+    "query": "spin around an axis",
+    "relevant": [
+      "spinAnimation",
+      "lathe",
+      "revolveGeo",
+      "revolveProfile"
+    ],
+    "candidateCount": 9,
+    "candidateRecall": 1.0,
+    "found": [
+      "revolveProfile",
+      "revolveGeo",
+      "lathe",
+      "cylinderOnAxis",
+      "spinAnimation"
+    ],
+    "ranking": [
+      [
+        "revolveProfile",
+        0.9450339674949646
+      ],
+      [
+        "revolveGeo",
+        0.9248639941215515
+      ],
+      [
+        "lathe",
+        0.9083360433578491
+      ],
+      [
+        "cylinderOnAxis",
+        0.889139711856842
+      ],
+      [
+        "spinAnimation",
+        0.5199497938156128
+      ],
+      [
+        "createWheelAssembly",
+        0.11595053970813751
+      ],
+      [
+        "cylinderUnwrap",
+        0.09909139573574066
+      ],
+      [
+        "arrayRadial",
+        0.09414128214120865
+      ],
+      [
+        "materialRecipe",
+        0.0015039535937830806
+      ]
+    ],
+    "querySeconds": 8.705162300000666,
+    "recallAt5": 1.0,
+    "reciprocalRank": 1.0,
+    "unsupportedReturned": false,
+    "unsupportedAboveHalf": false
+  },
+  {
+    "split": "independent",
+    "query": "Change one part's roughness without changing the other parts, but keep the image maps shared",
+    "relevant": [
+      "copyMaterial"
+    ],
+    "candidateCount": 11,
+    "candidateRecall": 1.0,
+    "found": [
+      "copyMaterial",
+      "pbrMaterial",
+      "subdivide",
+      "boolUnion",
+      "snapTo"
+    ],
+    "ranking": [
+      [
+        "copyMaterial",
+        0.8873658180236816
+      ],
+      [
+        "pbrMaterial",
+        0.07189077883958817
+      ],
+      [
+        "subdivide",
+        0.045980703085660934
+      ],
+      [
+        "boolUnion",
+        0.041189368814229965
+      ],
+      [
+        "snapTo",
+        0.0064241960644721985
+      ],
+      [
+        "createPart",
+        0.005603049416095018
+      ],
+      [
+        "createWheelGeometrySet",
+        0.002490818267688155
+      ],
+      [
+        "normalMapFromHeight",
+        0.001181232277303934
+      ],
+      [
+        "createGableShell",
+        0.0010877541499212384
+      ],
+      [
+        "sweepProfile",
+        0.0010131640592589974
+      ],
+      [
+        "createStairs",
+        0.0002111198555212468
+      ]
+    ],
+    "querySeconds": 10.743815199995879,
+    "recallAt5": 1.0,
+    "reciprocalRank": 1.0,
+    "unsupportedReturned": false,
+    "unsupportedAboveHalf": false
+  },
+  {
+    "split": "independent",
+    "query": "Pack arbitrary mesh islands for a non-repeating baked texture; chart rotation is fine",
+    "relevant": [
+      "autoUnwrap"
+    ],
+    "candidateCount": 11,
+    "candidateRecall": 1.0,
+    "found": [
+      "autoUnwrap",
+      "proceduralTexture",
+      "arrayRadial",
+      "meshGeo",
+      "loadApprovedTexture"
+    ],
+    "ranking": [
+      [
+        "autoUnwrap",
+        0.9952439665794373
+      ],
+      [
+        "proceduralTexture",
+        0.8238695859909058
+      ],
+      [
+        "arrayRadial",
+        0.04695257171988487
+      ],
+      [
+        "meshGeo",
+        0.024832293391227722
+      ],
+      [
+        "loadApprovedTexture",
+        0.014096405357122421
+      ],
+      [
+        "planeGeo",
+        0.012326865456998348
+      ],
+      [
+        "createPart",
+        0.010182702913880348
+      ],
+      [
+        "arrayLinear",
+        0.007987072691321373
+      ],
+      [
+        "createRoofSurfaceLayout",
+        0.004600911866873503
+      ],
+      [
+        "rotationTrack",
+        0.003868733299896121
+      ],
+      [
+        "curveToMesh",
+        0.00039716370520181954
+      ]
+    ],
+    "querySeconds": 10.999851899992791,
+    "recallAt5": 1.0,
+    "reciprocalRank": 1.0,
+    "unsupportedReturned": false,
+    "unsupportedAboveHalf": false
+  },
+  {
+    "split": "independent",
+    "query": "Bevel only the selected edges of my existing arbitrary triangle mesh",
+    "relevant": [],
+    "candidateCount": 7,
+    "candidateRecall": null,
+    "found": [
+      "subdivide",
+      "creaseNormals",
+      "meshGeo",
+      "mergeVertices",
+      "autoUnwrap"
+    ],
+    "ranking": [
+      [
+        "subdivide",
+        0.24316860735416412
+      ],
+      [
+        "creaseNormals",
+        0.02337265945971012
+      ],
+      [
+        "meshGeo",
+        0.008413932286202908
+      ],
+      [
+        "mergeVertices",
+        0.006161971017718315
+      ],
+      [
+        "autoUnwrap",
+        0.005384028889238834
+      ],
+      [
+        "countTriangles",
+        0.0007184363203123212
+      ],
+      [
+        "curveToMesh",
+        0.0004053766606375575
+      ]
+    ],
+    "querySeconds": 6.603100699998322,
+    "recallAt5": null,
+    "reciprocalRank": 0,
+    "unsupportedReturned": true,
+    "unsupportedAboveHalf": false
+  },
+  {
+    "split": "independent",
+    "query": "Solve inverse kinematics so an articulated foot follows a moving ground target",
+    "relevant": [],
+    "candidateCount": 13,
+    "candidateRecall": null,
+    "found": [
+      "getJointNames",
+      "createRoofPlanes",
+      "planeGeo",
+      "revolveGeo",
+      "boolIntersect"
+    ],
+    "ranking": [
+      [
+        "getJointNames",
+        0.0021064297761768103
+      ],
+      [
+        "createRoofPlanes",
+        0.0007830435060895979
+      ],
+      [
+        "planeGeo",
+        0.0006232698215171695
+      ],
+      [
+        "revolveGeo",
+        0.00021031597862020135
+      ],
+      [
+        "boolIntersect",
+        0.00019038701429963112
+      ],
+      [
+        "revolveProfile",
+        0.00015061449084896594
+      ],
+      [
+        "createRoot",
+        9.376332309329882e-05
+      ],
+      [
+        "createGableRoof",
+        8.930052717914805e-05
+      ],
+      [
+        "room",
+        5.5451528169214725e-05
+      ],
+      [
+        "boolDiff",
+        5.184961264603771e-05
+      ],
+      [
+        "arrayRadial",
+        3.4869382943725213e-05
+      ],
+      [
+        "copyMaterial",
+        2.334817145310808e-05
+      ],
+      [
+        "boolUnion",
+        2.1713896785513498e-05
+      ]
+    ],
+    "querySeconds": 13.848643799996353,
+    "recallAt5": null,
+    "reciprocalRank": 0,
+    "unsupportedReturned": true,
+    "unsupportedAboveHalf": false
+  },
+  {
+    "split": "independent",
+    "query": "Certify that an arbitrary mesh has absolutely no self intersections",
+    "relevant": [],
+    "candidateCount": 10,
+    "candidateRecall": null,
+    "found": [
+      "geometryDiagnostics",
+      "meshGeo",
+      "implicitSurface",
+      "autoUnwrap",
+      "creaseNormals"
+    ],
+    "ranking": [
+      [
+        "geometryDiagnostics",
+        0.778602659702301
+      ],
+      [
+        "meshGeo",
+        0.08315366506576538
+      ],
+      [
+        "implicitSurface",
+        0.07281266897916794
+      ],
+      [
+        "autoUnwrap",
+        0.01794949173927307
+      ],
+      [
+        "creaseNormals",
+        0.004403253551572561
+      ],
+      [
+        "createPart",
+        0.0016682761488482356
+      ],
+      [
+        "twist",
+        0.0014666287461295724
+      ],
+      [
+        "curveToMesh",
+        0.00124591204803437
+      ],
+      [
+        "copyMaterial",
+        4.259142224327661e-05
+      ],
+      [
+        "normalMapFromHeight",
+        7.131909114832524e-06
+      ]
+    ],
+    "querySeconds": 8.323188799986383,
+    "recallAt5": null,
+    "reciprocalRank": 0,
+    "unsupportedReturned": true,
+    "unsupportedAboveHalf": true
+  },
+  {
+    "split": "independent",
+    "query": "Load a texture straight from any HTTPS image URL inside build",
+    "relevant": [],
+    "candidateCount": 8,
+    "candidateRecall": null,
+    "found": [
+      "loadApprovedTexture",
+      "proceduralTexture",
+      "planeGeo",
+      "normalMapFromHeight",
+      "autoUnwrap"
+    ],
+    "ranking": [
+      [
+        "loadApprovedTexture",
+        0.9910463690757751
+      ],
+      [
+        "proceduralTexture",
+        0.08070319890975952
+      ],
+      [
+        "planeGeo",
+        0.0013524687383323908
+      ],
+      [
+        "normalMapFromHeight",
+        0.00036120761069469154
+      ],
+      [
+        "autoUnwrap",
+        0.000334404205204919
+      ],
+      [
+        "createGableShell",
+        9.718210640130565e-05
+      ],
+      [
+        "cylinderUnwrap",
+        9.29744855966419e-05
+      ],
+      [
+        "createStairs",
+        1.2474874893086962e-05
+      ]
+    ],
+    "querySeconds": 6.47371020000719,
+    "recallAt5": null,
+    "reciprocalRank": 0,
+    "unsupportedReturned": true,
+    "unsupportedAboveHalf": true
+  },
+  {
+    "split": "independent",
+    "query": "Measure the actual GPU draw calls by counting unique material objects",
+    "relevant": [],
+    "candidateCount": 11,
+    "candidateRecall": null,
+    "found": [
+      "countMaterials",
+      "gameMaterial",
+      "countTriangles",
+      "pbrMaterial",
+      "basicMaterial"
+    ],
+    "ranking": [
+      [
+        "countMaterials",
+        0.9795852899551392
+      ],
+      [
+        "gameMaterial",
+        0.019655443727970123
+      ],
+      [
+        "countTriangles",
+        0.018507424741983414
+      ],
+      [
+        "pbrMaterial",
+        0.01201816089451313
+      ],
+      [
+        "basicMaterial",
+        0.009457431733608246
+      ],
+      [
+        "lambertMaterial",
+        0.008142759092152119
+      ],
+      [
+        "compilePortableMaterialSpecV2",
+        0.006550258956849575
+      ],
+      [
+        "glassMaterial",
+        0.0064746178686618805
+      ],
+      [
+        "arrayLinear",
+        0.0007335550035350025
+      ],
+      [
+        "copyMaterial",
+        0.0003432090161368251
+      ],
+      [
+        "arrayRadial",
+        3.57108328898903e-05
+      ]
+    ],
+    "querySeconds": 8.12691310000082,
+    "recallAt5": null,
+    "reciprocalRank": 0,
+    "unsupportedReturned": true,
+    "unsupportedAboveHalf": true
+  },
+  {
+    "split": "independent",
+    "query": "Repeat tilted slats in a straight row, nine total including the one already placed",
+    "relevant": [
+      "arrayLinear"
+    ],
+    "candidateCount": 14,
+    "candidateRecall": 1.0,
+    "found": [
+      "arrayLinear",
+      "createRoofSurfaceLayout",
+      "createRoofPlanes",
+      "coneZGeo",
+      "coneXGeo"
+    ],
+    "ranking": [
+      [
+        "arrayLinear",
+        0.975632905960083
+      ],
+      [
+        "createRoofSurfaceLayout",
+        0.20941376686096191
+      ],
+      [
+        "createRoofPlanes",
+        0.02255805768072605
+      ],
+      [
+        "coneZGeo",
+        0.008987654000520706
+      ],
+      [
+        "coneXGeo",
+        0.008252652361989021
+      ],
+      [
+        "arrayRadial",
+        0.0037701171822845936
+      ],
+      [
+        "coneGeo",
+        0.0036793898325413465
+      ],
+      [
+        "pipeAlongPath",
+        0.0027594640851020813
+      ],
+      [
+        "createStairs",
+        0.002447898034006357
+      ],
+      [
+        "proceduralTexture",
+        0.0017576237441971898
+      ],
+      [
+        "createJointChain",
+        0.0006172665162011981
+      ],
+      [
+        "coneYGeo",
+        0.0005593402893282473
+      ],
+      [
+        "taperConeGeo",
+        0.000365310232155025
+      ],
+      [
+        "createWheelGeometrySet",
+        0.00028607709100469947
+      ]
+    ],
+    "querySeconds": 12.215947899996536,
+    "recallAt5": 1.0,
+    "reciprocalRank": 1.0,
+    "unsupportedReturned": false,
+    "unsupportedAboveHalf": false
+  },
+  {
+    "split": "independent",
+    "query": "A tight convex envelope enclosing several pieces for a faceted collision proxy",
+    "relevant": [
+      "hull"
+    ],
+    "candidateCount": 6,
+    "candidateRecall": 1.0,
+    "found": [
+      "hull",
+      "cylinderGeo",
+      "boolUnion",
+      "taperConeGeo",
+      "revolveProfile"
+    ],
+    "ranking": [
+      [
+        "hull",
+        0.9888893365859985
+      ],
+      [
+        "cylinderGeo",
+        0.5120392441749573
+      ],
+      [
+        "boolUnion",
+        0.02960810996592045
+      ],
+      [
+        "taperConeGeo",
+        0.018858524039387703
+      ],
+      [
+        "revolveProfile",
+        0.013765762560069561
+      ],
+      [
+        "createVehicleFrame",
+        0.0014318532776087523
+      ]
+    ],
+    "querySeconds": 4.2161627000023145,
+    "recallAt5": 1.0,
+    "reciprocalRank": 1.0,
+    "unsupportedReturned": false,
+    "unsupportedAboveHalf": false
+  }
+]

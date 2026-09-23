@@ -29,20 +29,38 @@ For creation, supply a brief with no starting asset. Follow the generated `START
 and ask the agent to read `AGENTS.md` and the relevant skill.
 
 If the brief depends on texture, roughness, metalness, glass or other material evidence,
-start the optional [GPU render service](rendering.md#running-the-gpu-renderer) before the
-first authoring session. CPU views are sufficient for shape and contact, but not materials.
-The MCP server probes renderer availability when its session starts; installing the renderer
-afterward requires restarting that agent session before it can use the new service.
+check the optional [GPU renderer setup](rendering.md#running-the-gpu-renderer) before the
+first authoring session. Auto mode starts a compatible local service lazily when dependencies
+are available. CPU views are sufficient for shape and contact, but not materials. Restart a
+session created without renderer support, or one with a cached startup failure, after repairing
+the installation. The CLI's `service reprobe` checks current readiness but cannot reconfigure
+another running MCP session.
 
 The MCP server is loaded by the harness process that runs in the workspace directory, and only
 by that process. An agent that hands the authoring to a subagent of its own session gives it the
 outer session's tools, not the workspace's; start a nested author as a separate harness process in
-the workspace (for OpenCode, `opencode run --dir <workspace> "<brief>"`) or it will have the CLI
+the workspace (for OpenCode 2, change into the workspace directory and run
+`opencode run --standalone "<brief>"`) or it will have the CLI
 alone.
 
 If paths move, use the [repair command](install.md#move-or-repair-an-installation).
 Repair preserves instruction/skill copies; new evaluations require fresh workspaces,
 not repaired old instructions.
+
+## Discovery migration
+
+The current tool is `kiln_discover`, or `node kiln.mjs discover` in a generated
+workspace. Start with an overview, search with ordinary modeling language using
+`query`, then request exact `ids` for full helper or recipe contracts. Overview and
+search return six summaries by default; recipes are optional and do not constrain
+the type of asset being built. No search model or asset-category selection is required.
+
+The old `kiln_list_primitives` tool and `name`, `names`, and `category` selectors
+have no compatibility alias. A workspace copied from an older installation needs
+updated instructions and a fresh harness/MCP session. Create a fresh workspace from
+the updated installation and import the required source or saved ZIPs; retain any
+custom skill edits separately. `--repair` does not update copied skills or reload
+a running session's tool schemas.
 
 ## Normal use and evaluation isolation
 
@@ -70,7 +88,7 @@ Pass absolute brief and output paths in headless runs. Project MCP configuration
 [`.agents/mcp_config.json`](https://antigravity.google/docs/cli/mcp/). User-level
 plugins can remain available, so verify the actual server name and local skill paths
 in the trace. A server named `kiln` may point to a different installation. Ask first
-for `kiln_workspace/kiln_list_primitives` with `capabilities: true` and verify its
+for the `kiln_workspace` server's `kiln_discover` with `{ capabilities: true }` and verify its
 runtime and source store. The standalone `agy mcp list` view is not proof of which
 project tools the conversation used.
 

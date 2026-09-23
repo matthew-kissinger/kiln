@@ -9,6 +9,7 @@ import {
 import { assetAttributionRows } from './attribution';
 import { createAssetStage } from './scene';
 import { assetViewerSelection } from './deep-link';
+import { exportAssetGlb } from '../asset-export';
 
 const el = <T extends HTMLElement = HTMLElement>(id: string) => document.getElementById(id)! as T;
 const node = <K extends keyof HTMLElementTagNameMap>(tag: K, text?: string, className?: string) => {
@@ -277,7 +278,7 @@ async function openDetail(entry: Entry) {
   const downloads = el('downloads');
   downloads.replaceChildren();
   for (const [file, label] of [
-    ['asset.glb', 'Download GLB'],
+    ['asset.glb', 'Original GLB'],
     ...(entry.manifest.editable ? [['source.kiln.js', 'Download source']] : []),
     ...(!entry.loose
       ? [
@@ -292,6 +293,49 @@ async function openDetail(entry: Entry) {
     link.href = href(entry, file!);
     link.download = `${entry.manifest.name.replace(/[^a-z0-9_-]/gi, '-')}${file === 'asset.glb' ? '.glb' : file === 'source.kiln.js' ? '.kiln.js' : '.zip'}`;
     downloads.append(link);
+  }
+  if (!entry.loose) {
+    const runtime = node('button', 'Runtime GLB');
+    const status = node('span');
+    status.setAttribute('role', 'status');
+    runtime.onclick = async () => {
+      runtime.disabled = true;
+      status.textContent = 'Preparing runtime download…';
+      try {
+        const output = entry.local
+          ? await exportAssetGlb(entry.local, { profile: 'runtime' })
+          : undefined;
+        const [glb, metadata] =
+          output?.profile === 'runtime'
+            ? [output.glb, output.metadata.bytes]
+            : await Promise.all([
+                bytes(entry, 'runtime.glb'),
+                bytes(entry, 'runtime.kiln-metadata.json'),
+              ]);
+        if (generation !== detailGeneration) return;
+        const glbLink = node('a', 'Runtime GLB');
+        glbLink.href = blobUrl(glb, 'model/gltf-binary');
+        glbLink.download = 'runtime.glb';
+        const metadataLink = node('a', 'Runtime metadata');
+        metadataLink.href = blobUrl(metadata, 'application/json');
+        // Keep the exact sibling filename referenced by the runtime GLB.
+        metadataLink.download = 'runtime.kiln-metadata.json';
+        runtime.replaceWith(glbLink, metadataLink);
+        status.textContent = 'Keep the companion metadata for traceability.';
+        glbLink.click();
+      } catch (error) {
+        if (generation !== detailGeneration) return;
+        status.textContent = `Runtime export unavailable: ${error instanceof Error ? error.message : error}`;
+        runtime.disabled = false;
+      }
+    };
+    downloads.append(runtime, status);
+    downloads.append(
+      node(
+        'p',
+        'Original GLB retains Kiln review data. Runtime GLB moves duplicate animation-review data into a companion JSON file; geometry and textures are unchanged. Keep the editable bundle for source and build records.',
+      ),
+    );
   }
   el<HTMLButtonElement>('refine').disabled = !entry.manifest.editable;
   el('asset-stats').replaceChildren();

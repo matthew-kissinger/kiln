@@ -1,3 +1,5 @@
+import { createAssetRequirementsV1 } from '../contracts/requirements';
+import { createAssetRequirementsStore } from '../requirements-store';
 import { describe, expect, test } from 'bun:test';
 import type * as THREE from 'three';
 
@@ -86,7 +88,23 @@ describe('W1 known-bad executable corpus', () => {
     for (const fixture of W1_KNOWN_BAD_CORPUS.filter((candidate) => candidate.kind === 'control')) {
       const payload = await fixture.build();
       if (payload.kind !== 'scene') continue;
-      const rendered = await renderSceneToGLB(payload.scene, { intent: payload.intent });
+      const rendered = await renderSceneToGLB(payload.scene, {
+        // This W1 corpus tests isolated geometry slices (including one limb and roof panels).
+        // Required parts remain checked; whole-body/storey defaults are not their briefs.
+        requirements: createAssetRequirementsStore().host.bind(
+          { taskId: 'corpus', lineageId: fixture.id },
+          createAssetRequirementsV1({
+            labels: [fixture.category],
+            requirements: {
+              parts: {
+                state: 'requested',
+                value: { required: payload.intent.requiredParts, forbiddenExtras: [] },
+              },
+            },
+          }),
+          { actor: 'test-author', source: 'brief', reason: 'Isolated W1 geometry control' },
+        ),
+      });
       expect(rendered.gltfValidation.issues.numErrors).toBe(0);
     }
   });

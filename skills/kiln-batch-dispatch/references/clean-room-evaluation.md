@@ -25,6 +25,6 @@ Report completed, interrupted, and failed trials separately. Keep provider avail
 For Antigravity, use the generated `node agy.mjs` launcher. Print mode disables
 automatic slash-command and skill expansion. In the brief, require the project skill
 copies and `kiln_workspace` server; use absolute task-file paths. Before asset work,
-call that server's `kiln_list_primitives` with `capabilities: true` and retain the
+call that server's `kiln_discover` with `{ capabilities: true }` and retain the
 runtime/store receipt. Global plugins may still be available: audit which server
 and skill paths were actually used, rather than trusting the final message.

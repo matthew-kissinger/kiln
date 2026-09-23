@@ -1,5 +1,8 @@
 # Antigravity project routing check — 2026-09-05
 
+Historical receipt for the recorded runtime. Its tool names describe that run;
+current setup uses `kiln_discover` and the [workspace guide](../clean-room.md).
+
 The project MCP configuration works. A failed asset pilot selected a globally
 installed Kiln skill and server; absence of observer traffic did not establish that
 Antigravity ignored the project configuration.

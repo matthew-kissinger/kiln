@@ -161,6 +161,9 @@ const CATEGORY_REQUESTS: Readonly<Record<AssetCategory, readonly DiagnosticViewR
     ]),
   });
 
+/** A reusable view recipe; it does not select an asset policy. */
+export const MOBILITY_DIAGNOSTIC_REQUESTS = CATEGORY_REQUESTS.vehicle;
+
 function architectureDiagnosticRequests(intent: AssetIntentV1): readonly DiagnosticViewRequest[] {
   const architecture = intent.architecture;
   if (!architecture) return [];

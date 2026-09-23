@@ -12,10 +12,11 @@ import { buildGeometryDemo } from './build-geometry-demo.mjs';
 import { isPublicExample } from './collection.mjs';
 import { buildExampleHistory } from './history.mjs';
 import { runtimeBuildIdentity } from '../../scripts/build-runtime.mjs';
+import { galleryRuntimeDownload } from './runtime-downloads.mjs';
 const sha256 = (value) => createHash('sha256').update(value).digest('hex');
 
 import { readAuthorship, readCategory } from '../../scripts/authorship';
-import { resolveEvaluatorPortV1 } from '../../src/evaluator/protocol';
+import { resolveEvaluatorPortV2 } from '../../src/evaluator/protocol';
 
 const SITE = resolve(dirname(fileURLToPath(import.meta.url)), '..');
 const REPO = resolve(SITE, '..');
@@ -49,7 +50,7 @@ await rm(THUMBS, { recursive: true, force: true });
 await mkdir(OUT, { recursive: true });
 await mkdir(THUMBS, { recursive: true });
 
-const evaluator = resolveEvaluatorPortV1(undefined, 'trusted-local');
+const evaluator = resolveEvaluatorPortV2(undefined, 'trusted-local');
 const manifest = [];
 let bytes = 0;
 
@@ -73,6 +74,9 @@ for (const name of names) {
     );
   await writeFile(join(OUT, `${name}.glb`), r.glb);
   await writeFile(join(OUT, `${name}.kiln.js`), src);
+  const runtime = await galleryRuntimeDownload(name, src, r.glb);
+  await writeFile(join(SITE, 'public', runtime.index.file), runtime.glb);
+  await writeFile(join(SITE, 'public', runtime.index.metadata.file), runtime.metadata);
   bytes += r.glb.byteLength;
 
   const im = r.integrationManifest;
@@ -81,6 +85,7 @@ for (const name of names) {
     file: `assets/${name}.glb`,
     thumb: `thumbs/${name}.webp`,
     bytes: r.glb.byteLength,
+    runtime: runtime.index,
     animations:
       JSON.parse(
         Buffer.from(r.glb)

@@ -127,12 +127,14 @@ export function createCachedRenderPort(
   port: PbrRenderPort,
   options: { cache: CaptureCache; identity(): string | undefined | Promise<string | undefined> },
 ): PbrRenderPort {
-  return async (input) => {
+  return async (input, execution) => {
+    execution?.signal?.throwIfAborted();
     const identity = await Promise.resolve()
       .then(() => options.identity())
       .catch(() => undefined);
+    execution?.signal?.throwIfAborted();
     if (!identity || input.beautySize !== undefined || !(input.cameras ?? input.viewDirs)?.length)
-      return port(input);
+      return port(input, execution);
     const validated = validatePbrRenderRequest(input);
     const request = { ...validated, glb: Uint8Array.from(validated.glb) };
     const hash = digest(request.glb);
@@ -157,6 +159,7 @@ export function createCachedRenderPort(
     const missing: number[] = [];
     for (let i = 0; i < keys.length; i++) {
       const cached = await options.cache.get(keys[i]!).catch(() => undefined);
+      execution?.signal?.throwIfAborted();
       const single = {
         ...request,
         ...(request.cameras
@@ -173,10 +176,12 @@ export function createCachedRenderPort(
           ? { cameras: missing.map((i) => request.cameras![i]!) }
           : { viewDirs: missing.map((i) => request.viewDirs![i]!) }),
       };
-      const produced = await port(subrequest);
+      const produced = await port(subrequest, execution);
+      execution?.signal?.throwIfAborted();
       const afterIdentity = await Promise.resolve()
         .then(() => options.identity())
         .catch(() => undefined);
+      execution?.signal?.throwIfAborted();
       if (afterIdentity !== identity)
         return missing.length === selectors.length
           ? produced

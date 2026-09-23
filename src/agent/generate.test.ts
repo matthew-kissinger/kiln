@@ -20,10 +20,6 @@ function build() {
   return root;
 }
 `;
-const FALSE_PROP_CODE = CANNED_CODE.replace(
-  "const meta = { name: 'TestBox' };",
-  "const meta = { name: 'TestBox', category: 'prop' };",
-);
 const PROCEDURAL_CODE = `
 const meta = { name: 'TexturedBox', category: 'prop' };
 function build() {
@@ -46,14 +42,34 @@ function build() {
 const realRun = await import('./run');
 const restoreRunModule = {
   runKilnAgent: realRun.runKilnAgent,
-  resolveToolSurface: realRun.resolveToolSurface,
-  buildAgentTools: realRun.buildAgentTools,
 };
 
 // Mutable impl the mocked runKilnAgent delegates to (set per test).
 let runImpl: (opts: Record<string, unknown>) => Promise<Record<string, unknown>>;
 mock.module('./run', () => ({
-  runKilnAgent: (opts: Record<string, unknown>) => runImpl(opts),
+  runKilnAgent: async (opts: Record<string, unknown>) => {
+    const result = await runImpl(opts);
+    if (typeof result.code !== 'string' || (result.error && !result.salvaged) || result.artifact)
+      return result;
+    const { renderGLBInProcess } = await import('../render');
+    const { programReference } = await import('../program-store');
+    const rendered = await renderGLBInProcess(result.code, {
+      requirements: opts.requirements as never,
+    });
+    const programRef = await programReference(result.code);
+    return {
+      ...result,
+      completion: result.salvaged ? 'partial' : 'finished',
+      programRef,
+      artifact: {
+        code: result.code,
+        programRef,
+        rendered,
+        review: { ok: true },
+        captureSelection: {},
+      },
+    };
+  },
 }));
 
 afterAll(() => {
@@ -95,7 +111,7 @@ describe('generateKilnAsset', () => {
       captured = opts;
       return {
         code: CANNED_CODE,
-        toolCalls: ['kiln_list_primitives', 'kiln_validate', 'kiln_render', 'kiln_submit'],
+        toolCalls: ['kiln_discover', 'kiln_validate', 'kiln_render', 'kiln_submit'],
         steps: 3,
         usage: { inputTokens: 100, outputTokens: 200 },
       };
@@ -116,7 +132,8 @@ describe('generateKilnAsset', () => {
     expect(r.meta.tris ?? 0).toBeGreaterThan(0);
     // Prompt + category threaded into the agent.
     expect(captured?.['prompt']).toBe('a wooden crate');
-    expect(captured?.['category']).toBe('prop');
+    expect(captured?.['category']).toBeUndefined();
+    expect(r.completion).toBe('finished');
   });
 
   test('preserves baked procedural texture lineage on the public generation result', async () => {
@@ -156,31 +173,19 @@ describe('generateKilnAsset', () => {
     expect(captured?.['originalPrompt']).toBe('a tower');
   });
 
-  test('full intent is authoritative through agent options and final render', async () => {
-    let captured: Record<string, unknown> | undefined;
-    runImpl = async (opts) => {
-      captured = opts;
-      return { code: FALSE_PROP_CODE, toolCalls: ['kiln_submit'], steps: 1 };
+  test('legacy category and intent require explicit migration before model execution', async () => {
+    let called = false;
+    runImpl = async () => {
+      called = true;
+      return {};
     };
-    const intent = createAssetIntentV1({ category: 'environment', subtype: 'set-piece' });
-
-    const result = await generateKilnAsset({
-      prompt: 'a compact car',
-      category: 'vehicle',
-      intent,
-    });
-
-    expect(captured?.['category']).toBe('environment');
-    expect(captured?.['intent']).toBe(intent);
-    expect(result.meta.category).toBe('environment');
-    expect(result.meta.modelCategory).toBe('prop');
-    const qaReport = result.meta.qaReport as {
-      category: string;
-      dimensions: { runtimeCost: { status: string; metrics?: Record<string, unknown> } };
-    };
-    expect(qaReport.category).toBe('environment');
-    expect(qaReport.dimensions.runtimeCost.status).toBe('pass');
-    expect(qaReport.dimensions.runtimeCost.metrics?.['instanceabilityGrade']).toBeDefined();
+    await expect(
+      generateKilnAsset({
+        prompt: 'an environment',
+        intent: createAssetIntentV1({ category: 'environment', subtype: 'set-piece' }),
+      }),
+    ).rejects.toThrow('explicit migration');
+    expect(called).toBe(false);
   });
 
   test('throws when the agent returns an error', async () => {
@@ -501,6 +506,40 @@ describe('generateKilnAsset viewRenderPort (B3b/B4)', () => {
     expect(r.renderDegradedReason).toContain('returned 3 view PNGs, expected 6');
     expect(r.viewsRendererId).toMatch(/^cpu-raster:/);
     expect(r.views).toBeInstanceOf(Buffer);
+  });
+
+  test('final native sheet uses the connection refreshed during the loop and its separate deadline', async () => {
+    const viewsPng = await stubViewPngs();
+    let active = false;
+    let finalCalls = 0;
+    const requests: string[] = [];
+    runImpl = async (opts) => {
+      expect(opts.viewRenderTimeoutMs).toBe(17);
+      active = true;
+      return okRun();
+    };
+    const result = await generateKilnAsset({
+      prompt: 'a crate',
+      captureViews: true,
+      inLoopViewRenderTimeoutMs: 17,
+      viewRenderTimeoutMs: 8000,
+      viewRenderState: () => ({
+        viewRenderPort: active
+          ? async () => {
+              finalCalls++;
+              return { ok: true, rendererId: 'refreshed-gpu', viewsPng };
+            }
+          : undefined,
+      }),
+      viewRenderTimeoutResolver: (context) => {
+        requests.push(context.requestKind);
+        return 8000;
+      },
+    });
+    expect(result.viewsRendererId).toBe('refreshed-gpu');
+    expect(result.renderDegraded).toBe(false);
+    expect(finalCalls).toBe(1);
+    expect(requests).toEqual(['final-grid']);
   });
 
   test('captureViewsViaPort is a public single-owner shell (success + degrade)', async () => {

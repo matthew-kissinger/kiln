@@ -9,16 +9,12 @@
  * the socket itself is the registry -- there is no lease file that could
  * disagree with what is actually listening.
  *
- * `ownerPid` is the process that started this one on demand. It exists for two
- * reasons. A host that finds an orphan running stale source may replace it,
- * where it must not touch a service somebody started by hand or is still
- * using. And on Windows a hard-killed host cannot run its exit hook, so the
- * service watches the owner itself and exits when it is gone (see
- * {@link startOwnerWatch}); a service started by hand has no owner and never
- * exits on its own.
+ * `ownerPid` records who initiated the process, but never grants lifetime
+ * authority over other clients. Managed services expire only after bounded
+ * inactivity with no admitted work. Manual services are explicitly long-lived.
  *
- * The engine mirrors {@link fingerprintSourceDir} in `src/render-service-host.ts`
- * and a test there fails if the two ever disagree on a directory.
+ * The host imports this source fingerprint and the shared build identity helper
+ * so readiness and health compare the same source and dependency contract.
  */
 import { createHash } from 'node:crypto';
 import { readFileSync, readdirSync, statSync } from 'node:fs';
@@ -66,38 +62,83 @@ export function processIsAlive(pid) {
   }
 }
 
-/**
- * Poll the owner and call `onOrphaned` exactly once when it is gone.
- *
- * Injected timers and liveness so the rule is testable in milliseconds without
- * a real process to kill. Returns the stop function.
- */
-export function startOwnerWatch({
-  ownerPid,
-  onOrphaned,
-  isAlive = processIsAlive,
-  intervalMs = 2_000,
-  setTimer = setInterval,
-  clearTimer = clearInterval,
+export const DEFAULT_MANAGED_IDLE_MS = 300000;
+
+export function serviceLifecycleOptions(env = {}) {
+  const mode =
+    env.RENDER_SERVICE_MODE ?? (parseOwnerPid(env.RENDER_SERVICE_OWNER_PID) ? 'managed' : 'manual');
+  if (!['managed', 'manual'].includes(mode))
+    throw new RangeError('RENDER_SERVICE_MODE must be managed or manual');
+  const idleTimeoutMs = Number(env.RENDER_SERVICE_IDLE_MS ?? DEFAULT_MANAGED_IDLE_MS);
+  if (!Number.isSafeInteger(idleTimeoutMs) || idleTimeoutMs < 1 || idleTimeoutMs > 3600000)
+    throw new RangeError('RENDER_SERVICE_IDLE_MS must be an integer in [1,3600000]');
+  return { mode, idleTimeoutMs };
+}
+
+/** Only admitted work extends lifetime. Health polling cannot hold a GPU forever. */
+export function createServiceLifecycle({
+  mode = 'manual',
+  idleTimeoutMs = DEFAULT_MANAGED_IDLE_MS,
+  onIdle,
+  setTimer = setTimeout,
+  clearTimer = clearTimeout,
 }) {
-  let fired = false;
-  const handle = setTimer(() => {
-    if (fired || isAlive(ownerPid)) return;
-    fired = true;
-    clearTimer(handle);
-    onOrphaned(ownerPid);
-  }, intervalMs);
-  // Never the reason the process stays up: the listening socket is.
-  if (typeof handle?.unref === 'function') handle.unref();
-  return () => clearTimer(handle);
+  serviceLifecycleOptions({ RENDER_SERVICE_MODE: mode, RENDER_SERVICE_IDLE_MS: idleTimeoutMs });
+  let active = 0;
+  let timer;
+  let stopped = false;
+  let generation = 0;
+  const cancel = () => {
+    generation++;
+    if (timer !== undefined) clearTimer(timer);
+    timer = undefined;
+  };
+  const arm = () => {
+    cancel();
+    if (mode !== 'managed' || stopped || active) return;
+    const current = generation;
+    timer = setTimer(() => {
+      if (current !== generation || stopped || active) return;
+      stopped = true;
+      cancel();
+      onIdle();
+    }, idleTimeoutMs);
+    timer?.unref?.();
+  };
+  arm();
+  return Object.freeze({
+    setActivity(count) {
+      if (!Number.isSafeInteger(count) || count < 0)
+        throw new RangeError('activity must be a nonnegative integer');
+      if (stopped) return;
+      const changed = active !== count;
+      active = count;
+      if (active) cancel();
+      else if (changed) arm();
+    },
+    stop() {
+      stopped = true;
+      cancel();
+    },
+  });
 }
 
 /** The `instance` block of `/health`. Frozen at boot; nothing in it is a secret. */
-export function describeInstance({ pid, ownerPid, startedAt, sourceDir, sourceFingerprint }) {
+export function describeInstance({
+  pid,
+  ownerPid,
+  startedAt,
+  sourceDir,
+  sourceFingerprint,
+  mode = 'manual',
+  idleTimeoutMs = DEFAULT_MANAGED_IDLE_MS,
+}) {
   return Object.freeze({
-    version: 'kiln.render-service-instance.v1',
+    version: 'kiln.render-service-instance.v2',
     pid,
     ownerPid: ownerPid ?? null,
+    mode,
+    idleTimeoutMs: mode === 'managed' ? idleTimeoutMs : null,
     startedAt,
     sourceDir,
     sourceFingerprint,

@@ -1,19 +1,24 @@
+import { resolveRequirementsContext } from '../requirements-context';
+import { createRequirementsQaReport } from '../qa/requirements-report';
 import { describe, expect, test } from 'bun:test';
 
 import type { RenderResult } from '../render';
 import {
-  createEvaluatorRequestV1,
-  decodeEvaluatorResultV1,
-  evaluateEvaluatorRequestV1,
+  createEvaluatorRequestV2,
+  decodeEvaluatorResultV2,
+  evaluateEvaluatorRequestV2,
 } from './index';
 
 const GLB = Buffer.from('glTF strict evaluator fixture');
 const HASH = `sha256:${new Bun.CryptoHasher('sha256').update(GLB).digest('hex')}` as const;
 const RENDER: RenderResult = {
   glb: GLB,
+  requirements: resolveRequirementsContext(),
   artifactGlbSha256: HASH,
   tris: 1,
-  meta: {},
+  meta: {
+    qaReport: createRequirementsQaReport(resolveRequirementsContext(), { executedRules: [] }),
+  },
   warnings: [],
   integrationManifest: {
     schemaVersion: 'kiln.integration-manifest.v1',
@@ -45,12 +50,30 @@ const RENDER: RenderResult = {
 };
 
 describe('transport-neutral evaluator handler', () => {
+  test('legacy envelopes fail before evaluation with current-version migration guidance', async () => {
+    const built = createEvaluatorRequestV2({ requestId: 'legacy', code: 'PRIVATE_SOURCE_MARKER' });
+    let evaluated = false;
+    const out = await evaluateEvaluatorRequestV2(
+      JSON.stringify({ ...built.request, version: 'kiln.evaluator.request.v1' }),
+      {
+        render: async () => {
+          evaluated = true;
+          return RENDER;
+        },
+      },
+    );
+    expect(evaluated).toBe(false);
+    expect(JSON.parse(out).error.code).toBe('INPUT_INVALID');
+    expect(JSON.parse(out).error.message).toContain('kiln.evaluator.request.v2');
+    expect(out).toContain('migration');
+    expect(out).not.toContain('PRIVATE_SOURCE_MARKER');
+  });
   test('reuses the strict protocol and canonical result encoding', async () => {
-    const built = createEvaluatorRequestV1({ requestId: 'http-1', code: 'fixture' });
-    const resultJson = await evaluateEvaluatorRequestV1(built.json, {
+    const built = createEvaluatorRequestV2({ requestId: 'http-1', code: 'fixture' });
+    const resultJson = await evaluateEvaluatorRequestV2(built.json, {
       render: async () => RENDER,
     });
-    expect(decodeEvaluatorResultV1(resultJson, 1024, 'http-1')).toMatchObject({
+    expect(decodeEvaluatorResultV2(resultJson, 1024, 'http-1')).toMatchObject({
       ok: true,
       requestId: 'http-1',
       render: { artifactGlbSha256: HASH },
@@ -58,20 +81,20 @@ describe('transport-neutral evaluator handler', () => {
   });
 
   test('sanitizes execution failures and refuses oversized encoded output', async () => {
-    const built = createEvaluatorRequestV1({ requestId: 'http-2', code: 'private source marker' });
-    const failed = await evaluateEvaluatorRequestV1(built.json, {
+    const built = createEvaluatorRequestV2({ requestId: 'http-2', code: 'private source marker' });
+    const failed = await evaluateEvaluatorRequestV2(built.json, {
       render: async () => {
         throw new Error('private source marker and /secret/path');
       },
     });
     expect(failed).not.toContain('private source marker');
     expect(failed).not.toContain('/secret/path');
-    expect(decodeEvaluatorResultV1(failed, 1024, 'http-2')).toMatchObject({
+    expect(decodeEvaluatorResultV2(failed, 1024, 'http-2')).toMatchObject({
       ok: false,
       error: { code: 'EXECUTION_REJECTED' },
     });
     await expect(
-      evaluateEvaluatorRequestV1(
+      evaluateEvaluatorRequestV2(
         built.json,
         { render: async () => RENDER },
         {
@@ -82,13 +105,13 @@ describe('transport-neutral evaluator handler', () => {
   });
 
   test('bounds the transport-neutral execution deadline', async () => {
-    const built = createEvaluatorRequestV1({ requestId: 'http-deadline', code: 'fixture' });
-    const failed = await evaluateEvaluatorRequestV1(
+    const built = createEvaluatorRequestV2({ requestId: 'http-deadline', code: 'fixture' });
+    const failed = await evaluateEvaluatorRequestV2(
       built.json,
       { render: () => new Promise(() => {}) },
       { deadlineMs: 5 },
     );
-    expect(decodeEvaluatorResultV1(failed, 1024, 'http-deadline')).toMatchObject({
+    expect(decodeEvaluatorResultV2(failed, 1024, 'http-deadline')).toMatchObject({
       ok: false,
       error: { code: 'DEADLINE_EXCEEDED' },
     });

@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'bun:test';
 import { createCachedEvaluatorPort, MemoryBuildCache } from '../build-cache';
 import { renderGLBInProcess } from '../render';
-import type { EvaluatorPortV1 } from '../evaluator';
+import type { EvaluatorPortV2 } from '../evaluator';
 import { createKilnProgramToolRegistry } from '../tools/registry';
 import { FileBuildCache } from '../build-cache-node';
 import { mkdtemp, readFile, writeFile, rm } from 'node:fs/promises';
@@ -36,7 +36,7 @@ describe('immutable build reuse', () => {
   });
   it('reuses evaluation for reference-based camera changes through public tools', async () => {
     let builds = 0;
-    const evaluator: EvaluatorPortV1 = {
+    const evaluator: EvaluatorPortV2 = {
       render: async (code, options) => {
         builds++;
         return renderGLBInProcess(code, options);
@@ -63,7 +63,7 @@ describe('immutable build reuse', () => {
   });
   it('coalesces builds and returns independent artifact bytes and metadata', async () => {
     let builds = 0;
-    const evaluator: EvaluatorPortV1 = {
+    const evaluator: EvaluatorPortV2 = {
       render: async (code, options) => {
         builds++;
         return renderGLBInProcess(code, options);
@@ -88,7 +88,7 @@ describe('immutable build reuse', () => {
   it('invalidates source, options and host identity and bypasses unknown dependencies', async () => {
     let builds = 0;
     let identity: string | undefined = 'engine-1';
-    const evaluator: EvaluatorPortV1 = {
+    const evaluator: EvaluatorPortV2 = {
       render: async (code, options) => {
         builds++;
         return renderGLBInProcess(code, options);
@@ -114,7 +114,7 @@ describe('immutable build reuse', () => {
 
   it('bounds memory and does not cache failures', async () => {
     let builds = 0;
-    const evaluator: EvaluatorPortV1 = {
+    const evaluator: EvaluatorPortV2 = {
       render: async (code, options) => {
         builds++;
         return renderGLBInProcess(code, options);

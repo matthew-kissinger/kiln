@@ -1,11 +1,12 @@
 /**
- * Strands tool skin: kiln_screenshot returns [ImageBlock, JsonBlock] so the
+ * Strands tool skin: kiln_render returns [ImageBlock, JsonBlock] so the
  * model literally sees the rendered views; plain tools keep their JSON output.
  */
 import { describe, expect, test } from 'bun:test';
 import { ImageBlock, JsonBlock } from '@strands-agents/sdk';
 
-import { makeKilnTools, makeKilnEditTools, type SubmitSink, type EditSink } from './tools';
+import { makeKilnNativeTools } from './tools';
+import { MemoryProgramStore } from '../program-store';
 import { createGenerationCallBudget } from './call-budget';
 
 const BOX_CODE = `
@@ -17,7 +18,7 @@ function build() {
 }
 `;
 
-function findTool(tools: ReturnType<typeof makeKilnTools>, name: string) {
+function findTool(tools: ReturnType<typeof makeKilnNativeTools>, name: string) {
   const t = tools.find((x) => x.name === name) as
     | { invoke(input: unknown): Promise<unknown> }
     | undefined;
@@ -25,12 +26,38 @@ function findTool(tools: ReturnType<typeof makeKilnTools>, name: string) {
   return t;
 }
 
-describe('makeKilnTools media handling', () => {
+describe('makeKilnNativeTools media handling', () => {
+  test('numeric inspection uses the shared controls without invoking the image observer', async () => {
+    let calls = 0;
+    const tools = makeKilnNativeTools(
+      {},
+      {
+        renderObservationPort: async () => {
+          calls++;
+          return {};
+        },
+        captureLimits: { maxTotalPixels: 1 },
+      },
+    );
+    const out = (await findTool(tools, 'kiln_inspect').invoke({
+      code: BOX_CODE,
+      image: false,
+      measure: {
+        from: { subject: { name: 'Mesh_Mesh_Box' } },
+        to: { subject: { name: 'Mesh_Mesh_Box' }, point: [0, 1, 0] },
+      },
+    })) as { ok: boolean; error?: string; measurement: { distance: number }; pngBase64?: string };
+    expect(out.error).toBeUndefined();
+    expect(out.ok).toBe(true);
+    expect(out.measurement.distance).toBe(1);
+    expect(out.pngBase64).toBeUndefined();
+    expect(calls).toBe(0);
+  });
   test('forwards the global budget so the observer port can debit actual dispatches', async () => {
     const budget = createGenerationCallBudget(1);
     expect(budget.tryConsume('author')).toBe(true);
     let observerCalls = 0;
-    const tools = makeKilnTools(
+    const tools = makeKilnNativeTools(
       {},
       {
         generationCallBudget: budget,
@@ -42,28 +69,30 @@ describe('makeKilnTools media handling', () => {
       },
     );
 
-    const result = await findTool(tools, 'kiln_screenshot').invoke({ code: BOX_CODE });
+    const result = await findTool(tools, 'kiln_render').invoke({ code: BOX_CODE });
     expect(observerCalls).toBe(1);
     expect(JSON.stringify(result)).toContain('ready');
     expect(budget.receipt()).toMatchObject({ consumed: 1, denied: 0 });
   });
 
-  test('exposes the four registry tools plus the animation view and kiln_submit', () => {
-    const sink: SubmitSink = {};
-    const tools = makeKilnTools(sink);
-    expect(tools.map((t) => t.name)).toEqual([
-      'kiln_list_primitives',
+  test('exposes shared source tools and a native terminal action', () => {
+    expect(makeKilnNativeTools({}, {}).map((t) => t.name)).toEqual([
+      'kiln_discover',
+      'kiln_renderer',
       'kiln_validate',
       'kiln_render',
-      'kiln_screenshot',
       'kiln_screenshot_animation',
-      'kiln_submit',
+      'kiln_view_interior',
+      'kiln_inspect',
+      'kiln_edit',
+      'kiln_source',
+      'kiln_finish',
     ]);
   });
 
-  test('kiln_screenshot returns [ImageBlock, JsonBlock] with the base64 stripped', async () => {
-    const tools = makeKilnTools({});
-    const out = (await findTool(tools, 'kiln_screenshot').invoke({ code: BOX_CODE })) as unknown[];
+  test('kiln_render returns [ImageBlock, JsonBlock] with the base64 stripped', async () => {
+    const tools = makeKilnNativeTools({}, {});
+    const out = (await findTool(tools, 'kiln_render').invoke({ code: BOX_CODE })) as unknown[];
     expect(Array.isArray(out)).toBe(true);
     expect(out).toHaveLength(2);
     expect(out[0]).toBeInstanceOf(ImageBlock);
@@ -76,7 +105,7 @@ describe('makeKilnTools media handling', () => {
 
   test('a host observer replaces screenshot pixels with a structured visual observation', async () => {
     const calls: Array<{ toolName: string; pngs: readonly Uint8Array[] }> = [];
-    const tools = makeKilnTools(
+    const tools = makeKilnNativeTools(
       {},
       {
         renderObservationPort: async (input) => {
@@ -89,7 +118,7 @@ describe('makeKilnTools media handling', () => {
         },
       },
     );
-    const out = (await findTool(tools, 'kiln_screenshot').invoke({ code: BOX_CODE })) as unknown[];
+    const out = (await findTool(tools, 'kiln_render').invoke({ code: BOX_CODE })) as unknown[];
 
     expect(out).toHaveLength(1);
     expect(out[0]).toBeInstanceOf(JsonBlock);
@@ -104,12 +133,12 @@ describe('makeKilnTools media handling', () => {
       },
     });
     expect(calls).toHaveLength(1);
-    expect(calls[0]?.toolName).toBe('kiln_screenshot');
+    expect(calls[0]?.toolName).toBe('kiln_render');
     expect(calls[0]?.pngs).toHaveLength(1);
   });
 
   test('an observer failure degrades to explicit unavailable JSON and never leaks pixels', async () => {
-    const tools = makeKilnTools(
+    const tools = makeKilnNativeTools(
       {},
       {
         renderObservationPort: async () => {
@@ -117,7 +146,7 @@ describe('makeKilnTools media handling', () => {
         },
       },
     );
-    const out = (await findTool(tools, 'kiln_screenshot').invoke({ code: BOX_CODE })) as unknown[];
+    const out = (await findTool(tools, 'kiln_render').invoke({ code: BOX_CODE })) as unknown[];
 
     expect(out).toHaveLength(1);
     expect(out[0]).toBeInstanceOf(JsonBlock);
@@ -126,9 +155,9 @@ describe('makeKilnTools media handling', () => {
     expect(JSON.stringify(json)).not.toContain('provider detail');
   });
 
-  test('kiln_screenshot on broken code falls back to the plain JSON error output', async () => {
-    const tools = makeKilnTools({});
-    const out = (await findTool(tools, 'kiln_screenshot').invoke({ code: 'nope(' })) as {
+  test('kiln_render on broken code falls back to the plain JSON error output', async () => {
+    const tools = makeKilnNativeTools({}, {});
+    const out = (await findTool(tools, 'kiln_render').invoke({ code: 'nope(' })) as {
       ok: boolean;
       error?: string;
     };
@@ -137,28 +166,21 @@ describe('makeKilnTools media handling', () => {
     expect(out.error).toBeDefined();
   });
 
-  test('kiln_render keeps its plain JSON output (no media wrapping)', async () => {
-    const tools = makeKilnTools({});
-    const out = (await findTool(tools, 'kiln_render').invoke({ code: BOX_CODE })) as {
-      ok: boolean;
-      tris?: number;
+  test('kiln_validate keeps its plain JSON output (no media wrapping)', async () => {
+    const tools = makeKilnNativeTools({}, {});
+    const out = (await findTool(tools, 'kiln_validate').invoke({ code: BOX_CODE })) as {
+      valid: boolean;
     };
     expect(Array.isArray(out)).toBe(false);
-    expect(out.ok).toBe(true);
-    expect(out.tris).toBeGreaterThan(0);
+    expect(out.valid).toBe(true);
   });
 });
 
-describe('makeKilnEditTools kiln_screenshot', () => {
-  test('defaults to the working buffer and returns image blocks', async () => {
-    const sink: EditSink = { edits: [] };
-    const tools = makeKilnEditTools({ seedCode: BOX_CODE, sink });
-    const out = (await findTool(
-      tools as ReturnType<typeof makeKilnTools>,
-      'kiln_screenshot',
-    ).invoke({})) as unknown[];
-    expect(Array.isArray(out)).toBe(true);
-    expect(out[0]).toBeInstanceOf(ImageBlock);
-    expect(out[1]).toBeInstanceOf(JsonBlock);
-  });
+test('native render reads the explicit retained reference and returns image blocks', async () => {
+  const programStore = new MemoryProgramStore();
+  const programRef = await programStore.put(BOX_CODE);
+  const tools = makeKilnNativeTools({}, { programStore });
+  const out = (await findTool(tools, 'kiln_render').invoke({ programRef })) as unknown[];
+  expect(out[0]).toBeInstanceOf(ImageBlock);
+  expect(out[1]).toBeInstanceOf(JsonBlock);
 });

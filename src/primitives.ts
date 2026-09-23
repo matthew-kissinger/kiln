@@ -10,12 +10,25 @@
  */
 
 import * as THREE from 'three';
+import { AuthoringDiagnosticError } from './evaluator/authoring-diagnostic';
+import {
+  assertDimension,
+  assertPrimitiveSegments,
+  assertPrimitiveGrid,
+  assertFiniteTriple,
+  GEOMETRY_ALLOCATION_LIMITS,
+} from './geometry-budget';
+import { buildWallPanels } from './wall-panels';
 import { createJointChain } from './character';
+import { describeAssembly, replicateAssembly } from './assembly';
+export * from './assembly';
+export { createRoofPlanes } from './architecture';
+export type { RoofPlanesOptions } from './architecture';
 import {
   createGableEndPanel,
   createGableRoof,
   createGableShell,
-  createRoofPlanes as createRoofPlanesExplicit,
+  createRoofPlanes,
   createRoofSurfaceLayout,
 } from './architecture';
 import * as gears from './gears';
@@ -37,12 +50,16 @@ import { compilePortableMaterialSpecV2 } from './portable-material-runtime';
 import { createVehicleFrame, createWheelAssembly, createWheelGeometrySet } from './vehicle';
 import {
   stampSemanticMetadataV1,
-  type AssetCategory,
   type SemanticMetadataV1,
   type SemanticMetadataV1Input,
 } from './contracts';
 import * as uv from './uv';
 import * as uvShapes from './uv-shapes';
+import { projectUV } from './uv-project';
+export { projectUV } from './uv-project';
+export type { ProjectUVOptions } from './uv-project';
+export { remapUV } from './uv-shapes';
+export type { RemapUVOptions } from './uv-shapes';
 
 export {
   createGableEndPanel,
@@ -178,7 +195,8 @@ function assertPartArgs(name: unknown, geometry: unknown, material: unknown): vo
       asObject?.isObject3D === true
         ? `an Object3D ("${asObject.name || 'unnamed'}"). The parent belongs in the options object as { parent }, not first`
         : `${name === null ? 'null' : typeof name}`;
-    throw new Error(
+    throw new AuthoringDiagnosticError(
+      'PART_NAME_ARGUMENT',
       `createPart: the first argument is the part NAME, a string, but got ${got}. ${SIG}`,
     );
   }
@@ -196,7 +214,8 @@ function assertPartArgs(name: unknown, geometry: unknown, material: unknown): vo
       got =
         geometry === null ? 'null' : geometry === undefined ? 'undefined' : `a ${typeof geometry}`;
     }
-    throw new Error(
+    throw new AuthoringDiagnosticError(
+      'PART_GEOMETRY_ARGUMENT',
       `createPart("${name}"): the second argument must be a geometry, but got ${got}. ${SIG}`,
     );
   }
@@ -210,7 +229,8 @@ function assertPartArgs(name: unknown, geometry: unknown, material: unknown): vo
           : material === undefined
             ? 'undefined'
             : `a ${typeof material}`;
-    throw new Error(
+    throw new AuthoringDiagnosticError(
+      'PART_MATERIAL_ARGUMENT',
       `createPart("${name}"): the third argument must be a material, but got ${got}. ${SIG}`,
     );
   }
@@ -265,6 +285,10 @@ export function createPart(
 // =============================================================================
 
 export function capsuleGeo(radius: number, height: number, segments = 6): THREE.CapsuleGeometry {
+  assertDimension('capsuleGeo radius', radius);
+  assertDimension('capsuleGeo height (straight middle length)', height, true);
+  assertDimension('capsuleGeo outer half-length', height / 2 + radius);
+  assertPrimitiveSegments('capsuleGeo segments', segments, 3);
   return new THREE.CapsuleGeometry(radius, height, 2, segments);
 }
 
@@ -286,6 +310,12 @@ export function cylinderGeo(
   height: number,
   segments = 8,
 ): THREE.CylinderGeometry {
+  assertDimension('cylinderGeo radiusTop', radiusTop, true);
+  assertDimension('cylinderGeo radiusBottom', radiusBottom, true);
+  if (radiusTop === 0 && radiusBottom === 0)
+    throw new RangeError('cylinderGeo requires at least one positive radius.');
+  assertDimension('cylinderGeo height', height);
+  assertPrimitiveSegments('cylinderGeo segments', segments, 3);
   return new THREE.CylinderGeometry(radiusTop, radiusBottom, height, segments);
 }
 
@@ -312,6 +342,8 @@ export function cylinderZGeo(
 }
 
 export function boxGeo(width: number, height: number, depth: number): THREE.BoxGeometry {
+  for (const [name, value] of Object.entries({ width, height, depth }))
+    assertDimension(`boxGeo ${name} (use planeGeo for a sheet)`, value);
   return new THREE.BoxGeometry(width, height, depth);
 }
 
@@ -320,10 +352,17 @@ export function sphereGeo(
   widthSegments = 8,
   heightSegments = 6,
 ): THREE.SphereGeometry {
+  assertDimension('sphereGeo radius', radius);
+  assertPrimitiveSegments('sphereGeo widthSegments', widthSegments, 3);
+  assertPrimitiveSegments('sphereGeo heightSegments', heightSegments, 2);
+  assertPrimitiveGrid('sphereGeo', widthSegments, heightSegments);
   return new THREE.SphereGeometry(radius, widthSegments, heightSegments);
 }
 
 export function coneGeo(radius: number, height: number, segments = 8): THREE.ConeGeometry {
+  assertDimension('coneGeo radius', radius);
+  assertDimension('coneGeo height', height);
+  assertPrimitiveSegments('coneGeo segments', segments, 3);
   return new THREE.ConeGeometry(radius, height, segments);
 }
 
@@ -370,16 +409,19 @@ export function cylinderOnAxis(
 ): THREE.CylinderGeometry {
   const radiusTop = options.radiusTop ?? radiusBottom;
   const segments = options.segments ?? 8;
-  const geo = new THREE.CylinderGeometry(radiusTop, radiusBottom, height, segments);
-
+  assertFiniteTriple('cylinderOnAxis center', center);
+  assertFiniteTriple('cylinderOnAxis normal', normal);
   const n = new THREE.Vector3(normal[0], normal[1], normal[2]);
-  const len = n.length();
+  const len = Math.hypot(...normal);
   if (len < 1e-6) {
     throw new Error(
       `cylinderOnAxis: normal must be a non-zero vector (got [${normal.join(',')}]).`,
     );
   }
-  n.divideScalar(len);
+  // Normalize by a component first so finite vectors cannot overflow lengthSq.
+  const magnitude = Math.max(...normal.map(Math.abs));
+  n.set(normal[0] / magnitude, normal[1] / magnitude, normal[2] / magnitude).normalize();
+  const geo = cylinderGeo(radiusTop, radiusBottom, height, segments);
 
   // Quaternion from Y to normal.
   const q = new THREE.Quaternion().setFromUnitVectors(new THREE.Vector3(0, 1, 0), n);
@@ -407,7 +449,8 @@ export function taperConeGeo(
   axis: 'x' | 'y' | 'z' = 'y',
   segments = 8,
 ): THREE.CylinderGeometry {
-  const geo = new THREE.CylinderGeometry(radiusTop, radiusBottom, height, segments);
+  if (!['x', 'y', 'z'].includes(axis)) throw new AuthoringDiagnosticError('TAPER_CONE_AXIS');
+  const geo = cylinderGeo(radiusTop, radiusBottom, height, segments);
   if (axis === 'x') geo.rotateZ(-Math.PI / 2);
   else if (axis === 'z') geo.rotateX(Math.PI / 2);
   return geo;
@@ -419,6 +462,12 @@ export function torusGeo(
   radialSegments = 8,
   tubularSegments = 12,
 ): THREE.TorusGeometry {
+  assertDimension('torusGeo radius', radius);
+  assertDimension('torusGeo tube', tube);
+  assertDimension('torusGeo outer radius', radius + tube);
+  assertPrimitiveSegments('torusGeo radialSegments', radialSegments, 3);
+  assertPrimitiveSegments('torusGeo tubularSegments', tubularSegments, 3);
+  assertPrimitiveGrid('torusGeo', radialSegments, tubularSegments);
   return new THREE.TorusGeometry(radius, tube, radialSegments, tubularSegments);
 }
 
@@ -428,6 +477,11 @@ export function planeGeo(
   widthSegments = 1,
   heightSegments = 1,
 ): THREE.PlaneGeometry {
+  assertDimension('planeGeo width', width);
+  assertDimension('planeGeo height', height);
+  assertPrimitiveSegments('planeGeo widthSegments', widthSegments, 1);
+  assertPrimitiveSegments('planeGeo heightSegments', heightSegments, 1);
+  assertPrimitiveGrid('planeGeo', widthSegments, heightSegments);
   return new THREE.PlaneGeometry(width, height, widthSegments, heightSegments);
 }
 
@@ -453,6 +507,9 @@ export function planeGeo(
  * ```
  */
 export function decalBox(width: number, height: number, depth: number = 0.01): THREE.BoxGeometry {
+  assertDimension('decalBox width', width);
+  assertDimension('decalBox height', height);
+  assertDimension('decalBox depth', depth, true);
   const d = Math.max(depth, 0.002);
   return new THREE.BoxGeometry(width, height, d);
 }
@@ -480,10 +537,24 @@ export interface FoliageCardOptions {
  *
  * Use with an alpha-tested material for leaves and billboard plants.
  */
+function validateCardFrame(name: string, width: number, height: number, yPivot: number): void {
+  assertDimension(`${name} width`, width);
+  assertDimension(`${name} height`, height);
+  const shift = height * (0.5 - yPivot);
+  if (
+    !Number.isFinite(yPivot) ||
+    ![shift - Math.fround(height / 2), shift + Math.fround(height / 2)].every((value) =>
+      Number.isFinite(Math.fround(value)),
+    )
+  )
+    throw new RangeError(`${name} yPivot must produce finite Float32 card coordinates.`);
+}
+
 export function foliageCardGeo(opts: FoliageCardOptions = {}): THREE.PlaneGeometry {
   const w = opts.width ?? 1;
   const h = opts.height ?? 1;
   const yPivot = opts.yPivot ?? 0;
+  validateCardFrame('foliageCardGeo', w, h, yPivot);
   const geom = new THREE.PlaneGeometry(w, h);
   // Shift so the pivot offset becomes the local origin.
   geom.translate(0, h * (0.5 - yPivot), 0);
@@ -510,6 +581,8 @@ export function crossedQuadsGeo(opts: CrossedQuadsOptions = {}): THREE.BufferGeo
   const h = opts.height ?? 1;
   const planes = opts.planes ?? 2;
   const yPivot = opts.yPivot ?? 0;
+  validateCardFrame('crossedQuadsGeo', w, h, yPivot);
+  if (planes !== 2 && planes !== 3) throw new RangeError('crossedQuadsGeo planes must be 2 or 3.');
 
   const geometries: THREE.PlaneGeometry[] = [];
   for (let i = 0; i < planes; i++) {
@@ -579,9 +652,15 @@ export interface OctaGridPlaneOptions {
  * tileY/tilesY) to each vertex's UV at draw time.
  */
 export function octaGridPlane(opts: OctaGridPlaneOptions): THREE.PlaneGeometry {
+  for (const key of ['tilesX', 'tilesY'] as const) {
+    if (!Number.isSafeInteger(opts[key]) || opts[key] <= 0) {
+      throw new RangeError(`octaGridPlane: ${key} must be a positive finite safe integer.`);
+    }
+  }
   const w = opts.width ?? 1;
   const h = opts.height ?? 1;
   const yPivot = opts.yPivot ?? 0;
+  validateCardFrame('octaGridPlane', w, h, yPivot);
   const geom = new THREE.PlaneGeometry(w, h);
   geom.translate(0, h * (0.5 - yPivot), 0);
 
@@ -633,6 +712,12 @@ export function wingGeo(options: WingGeometryOptions = {}): THREE.BufferGeometry
   const sweep = options.sweep ?? 0;
   const thickness = options.thickness ?? 0.04;
   const dihedral = options.dihedral ?? 0;
+  for (const [name, value] of Object.entries({ span, rootChord, thickness }))
+    assertDimension(`wingGeo ${name}`, value);
+  assertDimension('wingGeo tipChord', tipChord, true);
+  for (const [name, value] of Object.entries({ sweep, dihedral }))
+    if (!Number.isFinite(value) || !Number.isFinite(Math.fround(value)))
+      throw new RangeError(`wingGeo ${name} must be finite and Float32-representable.`);
 
   const rootLead = rootChord / 2;
   const rootTrail = -rootChord / 2;
@@ -666,6 +751,9 @@ export function wingGeo(options: WingGeometryOptions = {}): THREE.BufferGeometry
     dihedral - halfThickness,
     span,
   ]);
+
+  if (!vertices.every(Number.isFinite))
+    throw new RangeError('wingGeo dimensions and offsets produce nonfinite Float32 vertices.');
 
   const indices = [
     0,
@@ -708,7 +796,12 @@ export function wingGeo(options: WingGeometryOptions = {}): THREE.BufferGeometry
 
   const geo = new THREE.BufferGeometry();
   geo.setAttribute('position', new THREE.BufferAttribute(vertices, 3));
-  geo.setIndex(indices);
+  // A zero tip chord is a triangular wing: omit collapsed faces at the tip.
+  geo.setIndex(
+    tipChord === 0
+      ? [0, 1, 3, 4, 7, 5, 0, 2, 6, 0, 6, 4, 1, 5, 7, 1, 7, 3, 0, 4, 5, 0, 5, 1]
+      : indices,
+  );
   geo.computeVertexNormals();
   return geo;
 }
@@ -727,9 +820,19 @@ export function createWingPair(
   options: WingPairOptions,
 ): { right: THREE.Object3D; left: THREE.Object3D } {
   const { parent, rootX = 0, rootY = 0, rootZ, ...wingOptions } = options;
+  assertFiniteTriple('createWingPair root position', [rootX, rootY, rootZ]);
   const rightGeo = wingGeo(wingOptions);
   const leftGeo = wingGeo(wingOptions);
   leftGeo.scale(1, 1, -1);
+  // A baked reflection reverses orientation. Reverse every triangle before
+  // recomputing normals so single-sided rendering and exported solids agree.
+  const indices = leftGeo.getIndex()!;
+  for (let i = 0; i < indices.count; i += 3) {
+    const second = indices.getX(i + 1);
+    indices.setX(i + 1, indices.getX(i + 2));
+    indices.setX(i + 2, second);
+  }
+  indices.needsUpdate = true;
   leftGeo.computeVertexNormals();
 
   return {
@@ -778,11 +881,11 @@ export function beamBetween(
 }
 
 /**
- * Snap a part into contact with a host: translate `part` by the minimal
+ * Align world bounding boxes: translate `part` by the minimal
  * world-space vector that closes the gap between its bounding box and the
  * host's, plus a small `overlap` along the dominant gap axis (or the forced
- * `axis`). The cure for "Floating parts" warnings — instead of eyeballing a
- * corrective offset, attach the part and let the geometry resolve contact.
+ * `axis`). The axis selects the overlap bias, not a movement constraint: gaps
+ * on other axes are also closed. AABB overlap does not prove surface contact.
  *
  * If the boxes already touch or overlap, the part is left in place.
  * Returns `part` for chaining.
@@ -794,8 +897,8 @@ export function snapTo(
 ): THREE.Object3D {
   const overlap = options.overlap ?? 0.02;
   // Boxes in world space (works mid-build; matrices may be stale otherwise).
-  part.updateMatrixWorld(true);
-  host.updateMatrixWorld(true);
+  part.updateWorldMatrix(true, true);
+  host.updateWorldMatrix(true, true);
   const a = new THREE.Box3().setFromObject(part);
   const b = new THREE.Box3().setFromObject(host);
   if (a.isEmpty() || b.isEmpty()) return part;
@@ -805,7 +908,7 @@ export function snapTo(
     if (a.min[axis] > b.max[axis]) delta[axis] = b.max[axis] - a.min[axis];
     else if (a.max[axis] < b.min[axis]) delta[axis] = b.min[axis] - a.max[axis];
   }
-  if (delta.lengthSq() === 0) return part; // already in contact
+  if (delta.lengthSq() === 0) return part; // AABBs already touch or overlap.
 
   const dominant =
     options.axis ??
@@ -842,14 +945,22 @@ export interface LadderOptions {
   railRadius?: number;
   rungRadius?: number;
   segments?: number;
+  /** Preferred parent-space width basis, projected perpendicular to the endpoints. */
   widthAxis?: 'x' | 'z';
+  /** Explicit parent-space width direction; zero or parallel directions are rejected. */
+  widthDirection?: Vec3Tuple;
   parent?: THREE.Object3D;
 }
 
-export function createLadder(
-  name: string,
-  options: LadderOptions,
-): { leftRail: THREE.Object3D; rightRail: THREE.Object3D; rungs: THREE.Object3D[] } {
+export interface LadderResult {
+  /** Root at bottom in parent coordinates; child placements are root-local. */
+  root: THREE.Object3D;
+  leftRail: THREE.Object3D;
+  rightRail: THREE.Object3D;
+  rungs: THREE.Object3D[];
+}
+
+export function createLadder(name: string, options: LadderOptions): LadderResult {
   const {
     bottom,
     top,
@@ -860,13 +971,79 @@ export function createLadder(
     rungRadius = 0.02,
     segments = 6,
     widthAxis = 'x',
+    widthDirection,
     parent,
   } = options;
 
-  const bottomVec = new THREE.Vector3(...bottom);
-  const topVec = new THREE.Vector3(...top);
-  const offset =
-    widthAxis === 'x' ? new THREE.Vector3(width / 2, 0, 0) : new THREE.Vector3(0, 0, width / 2);
+  assertFiniteTriple('createLadder bottom', bottom);
+  assertFiniteTriple('createLadder top', top);
+  for (const [key, value] of Object.entries({ width, railRadius, rungRadius }))
+    assertDimension(`createLadder ${key}`, value);
+  assertPrimitiveSegments('createLadder segments', segments, 3);
+  if (
+    !Number.isSafeInteger(rungCount) ||
+    rungCount < 0 ||
+    rungCount > GEOMETRY_ALLOCATION_LIMITS.repeatedMeshes
+  )
+    throw new RangeError('createLadder rungCount must be an integer from 0 to 10000.');
+  if (widthAxis !== 'x' && widthAxis !== 'z')
+    throw new RangeError('createLadder widthAxis must be x or z.');
+
+  const bottomVec = new THREE.Vector3();
+  const topVec = new THREE.Vector3(...top).sub(new THREE.Vector3(...bottom));
+  const length = Math.hypot(topVec.x, topVec.y, topVec.z);
+  assertDimension('createLadder endpoint distance', length);
+  if (length <= 1e-4)
+    throw new RangeError('createLadder endpoints must be different by more than 1e-4.');
+  const along = topVec.clone().divideScalar(length);
+  if (widthDirection !== undefined)
+    assertFiniteTriple('createLadder widthDirection', widthDirection);
+  let across = widthDirection
+    ? new THREE.Vector3(...widthDirection)
+    : widthAxis === 'x'
+      ? new THREE.Vector3(1, 0, 0)
+      : new THREE.Vector3(0, 0, 1);
+  const largest = Math.max(Math.abs(across.x), Math.abs(across.y), Math.abs(across.z));
+  if (!largest) throw new RangeError('createLadder widthDirection must be nonzero.');
+  across.divideScalar(largest).normalize();
+  across.addScaledVector(along, -across.dot(along));
+  if (across.lengthSq() < 1e-12) {
+    if (widthDirection)
+      throw new RangeError('createLadder widthDirection must not be parallel to the endpoints.');
+    // Select the least-aligned canonical basis for a well-conditioned projection.
+    const axes = [
+      new THREE.Vector3(1, 0, 0),
+      new THREE.Vector3(0, 1, 0),
+      new THREE.Vector3(0, 0, 1),
+    ];
+    across = axes.reduce((best, axis) =>
+      Math.abs(axis.dot(along)) < Math.abs(best.dot(along)) ? axis : best,
+    );
+    across.addScaledVector(along, -across.dot(along));
+  }
+  across.normalize();
+  const offset = across.clone().multiplyScalar(width / 2);
+  const root = new THREE.Object3D();
+  root.name = name;
+  root.position.set(...bottom);
+  const rotation = new THREE.Quaternion()
+    .setFromRotationMatrix(
+      new THREE.Matrix4().makeBasis(across, along, across.clone().cross(along)),
+    )
+    .toArray();
+  stampSemanticMetadataV1(root, {
+    roles: ['ladder'],
+    frames: [
+      { id: 'bottom', translation: [0, 0, 0], rotation },
+      { id: 'top', translation: vectorToTuple(topVec), rotation },
+    ],
+    sockets: ['bottom', 'top'].map((id) => ({
+      id,
+      type: 'ladder-end',
+      frame: id,
+      compatibleTypes: ['ladder-end'],
+    })),
+  });
 
   const leftBottom = bottomVec.clone().sub(offset);
   const leftTop = topVec.clone().sub(offset);
@@ -879,7 +1056,7 @@ export function createLadder(
     vectorToTuple(leftTop),
     railRadius,
     material,
-    { parent, segments },
+    { parent: root, segments },
   );
   const rightRail = beamBetween(
     `${name}RightRail`,
@@ -887,7 +1064,7 @@ export function createLadder(
     vectorToTuple(rightTop),
     railRadius,
     material,
-    { parent, segments },
+    { parent: root, segments },
   );
 
   const rungs: THREE.Object3D[] = [];
@@ -901,12 +1078,18 @@ export function createLadder(
         vectorToTuple(center.clone().add(offset)),
         rungRadius,
         material,
-        { parent, segments },
+        { parent: root, segments },
       ),
     );
   }
 
-  return { leftRail, rightRail, rungs };
+  stampSemanticMetadataV1(leftRail, { roles: ['ladder.rail', 'ladder.rail.left'] });
+  stampSemanticMetadataV1(rightRail, { roles: ['ladder.rail', 'ladder.rail.right'] });
+  rungs.forEach((rung, index) => {
+    stampSemanticMetadataV1(rung, { roles: ['ladder.rung', `ladder.rung.${index + 1}`] });
+  });
+  if (parent) parent.add(root);
+  return { root, leftRail, rightRail, rungs };
 }
 
 // =============================================================================
@@ -942,15 +1125,18 @@ export interface WallWithOpeningOptions {
   thickness: number;
   /** Which horizontal axis the wall runs along. Default 'z'. */
   axis?: 'x' | 'z';
-  /** A single door/window cut. Omit for a solid wall. */
+  /** A single door/window cut. Mutually exclusive with `openings`. */
   opening?: WallOpening;
+  /** Multiple rectangular cuts, including vertically stacked windows.
+   * Cuts may touch but must not overlap and must fit inside the wall sides/top. */
+  openings?: readonly WallOpening[];
   parent?: THREE.Object3D;
 }
 
 /**
- * A single wall panel — optionally with one rectangular door/window cut —
- * composed from solid box segments (two side panels + a lintel, plus a sill
- * apron for a window). Runs along `axis`, base at local Y=0, centered on the
+ * A wall with rectangular door/window cuts, composed from solid box segments.
+ * Invalid, overlapping or out-of-bound cuts throw; they are never clipped.
+ * Runs along `axis`, base at local Y=0, centered on the
  * length axis. Returns the wall container so the caller can position it.
  */
 export function wallWithOpening(
@@ -958,10 +1144,12 @@ export function wallWithOpening(
   material: THREE.Material,
   options: WallWithOpeningOptions,
 ): THREE.Object3D {
-  const { length, height, thickness, axis = 'z', opening, parent } = options;
+  const { length, height, thickness, axis = 'z', opening, openings, parent } = options;
+  if (opening && openings)
+    throw new TypeError('wallWithOpening: use opening or openings, not both.');
+  const built = buildWallPanels(length, height, thickness, openings ?? (opening ? [opening] : []));
   const group = new THREE.Object3D();
   group.name = name;
-  const overlap = 0.02;
 
   const panel = (
     suffix: string,
@@ -972,7 +1160,7 @@ export function wallWithOpening(
   ): void => {
     const segLen = lenEnd - lenStart;
     const segH = yHi - yLo;
-    if (segLen <= 1e-4 || segH <= 1e-4) return;
+    if (segLen <= 0 || segH <= 0) return;
     const lenC = (lenStart + lenEnd) / 2;
     const yC = (yLo + yHi) / 2;
     const geo = axis === 'z' ? boxGeo(thickness, segH, segLen) : boxGeo(segLen, segH, thickness);
@@ -980,20 +1168,8 @@ export function wallWithOpening(
     createPart(`${name}${suffix}`, geo, material, { position: pos, parent: group });
   };
 
-  if (!opening) {
-    panel('', -length / 2, length / 2, 0, height);
-  } else {
-    const ow = opening.width ?? (opening.kind === 'window' ? 1.0 : 1.1);
-    const oh = opening.height ?? (opening.kind === 'window' ? 1.0 : 2.1);
-    const off = opening.offset ?? 0;
-    const left = off - ow / 2;
-    const right = off + ow / 2;
-    const sill = opening.kind === 'window' ? Math.max(opening.sill ?? 1.0, 0) : 0;
-    const top = Math.min(sill + oh, height);
-    panel('_L', -length / 2, left, 0, height); // full-height side panels
-    panel('_R', right, length / 2, 0, height);
-    panel('_Lintel', left - overlap, right + overlap, top, height); // above the gap
-    if (sill > 0) panel('_Sill', left - overlap, right + overlap, 0, sill); // below a window
+  for (const segment of built.panels) {
+    panel(segment.suffix, segment.left, segment.right, segment.bottom, segment.top);
   }
 
   if (parent) parent.add(group);
@@ -1051,13 +1227,6 @@ export function room(
   const root = new THREE.Object3D();
   root.name = name;
 
-  const openingFor = (wall: RoomOpening['wall']): WallOpening | undefined => {
-    const found = openings.find((op) => op.wall === wall);
-    if (!found) return undefined;
-    const { wall: _wall, ...rest } = found;
-    return rest;
-  };
-
   const wall = (
     suffix: string,
     len: number,
@@ -1065,13 +1234,12 @@ export function room(
     pos: [number, number, number],
     which: RoomOpening['wall'],
   ): THREE.Object3D => {
-    const op = openingFor(which);
     const w = wallWithOpening(`${name}_Wall${suffix}`, material, {
       length: len,
       height,
       thickness: wallThickness,
       axis,
-      ...(op ? { opening: op } : {}),
+      openings: openings.filter((op) => op.wall === which),
       parent: root,
     });
     w.position.set(...pos);
@@ -1088,61 +1256,13 @@ export function room(
   let floorObj: THREE.Object3D | null = null;
   if (floor) {
     floorObj = createPart(`${name}_Floor`, boxGeo(depth, floorThickness, width), material, {
-      position: [0, floorThickness / 2, 0],
+      position: [0, -floorThickness / 2, 0],
       parent: root,
     });
   }
 
   if (parent) parent.add(root);
   return { root, walls, floor: floorObj };
-}
-
-export interface RoofPlanesOptions {
-  /** Footprint extent along Z. */
-  width: number;
-  /** Footprint extent along X. */
-  depth: number;
-  /** Ridge height above the eave (local Y=0). */
-  height: number;
-  /** Eave overhang past the footprint on every side. Default 0.3. */
-  overhang?: number;
-  /** Axis the ridge line runs along; slopes fall toward the perpendicular
-   *  horizontal axis. Default 'x'. */
-  ridgeAxis?: 'x' | 'z';
-  /** Roof-plane thickness. Default 0.08. */
-  thickness?: number;
-  parent?: THREE.Object3D;
-}
-
-/**
- * A pitched roof: two thin sloped planes meeting at one ridge and falling
- * DOWN-AND-OUTWARD (opposite tilts — the cure for the recurring mirrored-slope
- * defect), footprint-matched with an eave overhang. Built with the eave at
- * local Y=0 and the ridge at Y=`height`, so the caller drops it onto the walls
- * at Y=wallHeight. Returns a named group (e.g. `Roof`) the engine can lift to
- * reveal the interior.
- */
-export function createRoofPlanes(
-  name: string,
-  material: THREE.Material,
-  options: RoofPlanesOptions,
-): { root: THREE.Object3D; slopes: [THREE.Object3D, THREE.Object3D] } {
-  const result = createRoofPlanesExplicit(name, material, options);
-  result.slopes[0].name = `Mesh_${name}A`;
-  result.slopes[1].name = `Mesh_${name}B`;
-  for (let index = 0; index < result.slopes.length; index++) {
-    const normal = new THREE.Vector3().setFromMatrixColumn(result.faces[index]!.localToRoof, 1);
-    result.slopes[index]!.position.addScaledVector(normal, (options.thickness ?? 0.08) / 2);
-  }
-  // Preserve the legacy, opposite-sign X Euler readout for ridge-X callers.
-  // The explicit face frame reverses the negative face's ridge tangent to stay
-  // right-handed, whose equivalent default Euler representation differs by PI.
-  if ((options.ridgeAxis ?? 'x') === 'x') {
-    const halfRun = options.width / 2 + (options.overhang ?? 0.3);
-    const angle = Math.atan2(options.height, halfRun);
-    result.slopes[1].rotation.set(-angle, Math.PI, 0);
-  }
-  return result;
 }
 
 export interface StairsOptions {
@@ -1164,8 +1284,8 @@ export interface StairsOptions {
 
 /**
  * A straight flight of stairs: box treads (with optional risers) climbing
- * `totalRise` over `totalRun` from local origin toward +`axis`. Connects storeys
- * (the multi-storey toggle) or makes porch/entry steps. Steps are named
+ * `totalRise` over `totalRun` from local origin along `axis`. Signed rise/run
+ * support ascending or descending flights in either direction. Steps are named
  * `Step_1..N` for engine use.
  */
 export function createStairs(
@@ -1183,9 +1303,20 @@ export function createStairs(
     riser = true,
     parent,
   } = options;
-  if (steps < 1) {
-    throw new Error(`createStairs("${name}"): steps must be >= 1 (got ${steps}).`);
+  if (
+    !Number.isSafeInteger(steps) ||
+    steps < 1 ||
+    steps > GEOMETRY_ALLOCATION_LIMITS.repeatedMeshes
+  ) {
+    throw new RangeError(
+      `createStairs("${name}"): steps must be >= 1, <= 10000 and a finite safe integer (got ${steps}).`,
+    );
   }
+  assertDimension('createStairs width', width);
+  assertDimension('createStairs treadThickness', treadThickness);
+  if (!Number.isFinite(totalRise) || !Number.isFinite(totalRun))
+    throw new RangeError('createStairs totalRise and totalRun must be finite.');
+  if (axis !== 'x' && axis !== 'z') throw new RangeError('createStairs axis must be x or z.');
   if (Math.abs(totalRise) < 1e-4 || Math.abs(totalRun) < 1e-4) {
     throw new Error(
       `createStairs("${name}"): totalRise and totalRun must be non-zero (got rise=${totalRise}, run=${totalRun}).`,
@@ -1202,8 +1333,8 @@ export function createStairs(
     const alongC = (i + 0.5) * stepRun;
     const treadGeo =
       axis === 'x'
-        ? boxGeo(stepRun, treadThickness, width)
-        : boxGeo(width, treadThickness, stepRun);
+        ? boxGeo(Math.abs(stepRun), treadThickness, width)
+        : boxGeo(width, treadThickness, Math.abs(stepRun));
     const treadPos: [number, number, number] =
       axis === 'x'
         ? [alongC, topY - treadThickness / 2, 0]
@@ -1216,12 +1347,12 @@ export function createStairs(
       const front = i * stepRun;
       const riserGeo =
         axis === 'x'
-          ? boxGeo(treadThickness, stepRise, width)
-          : boxGeo(width, stepRise, treadThickness);
+          ? boxGeo(treadThickness, Math.abs(stepRise), width)
+          : boxGeo(width, Math.abs(stepRise), treadThickness);
       const riserPos: [number, number, number] =
         axis === 'x'
-          ? [front + treadThickness / 2, topY - stepRise / 2, 0]
-          : [0, topY - stepRise / 2, front + treadThickness / 2];
+          ? [front + (Math.sign(stepRun) * treadThickness) / 2, topY - stepRise / 2, 0]
+          : [0, topY - stepRise / 2, front + (Math.sign(stepRun) * treadThickness) / 2];
       createPart(`${name}Riser${i + 1}`, riserGeo, material, { position: riserPos, parent: root });
     }
   }
@@ -1257,7 +1388,8 @@ function requireColor(color: unknown, fn: string): void {
     color && typeof color === 'object'
       ? `an object with keys [${Object.keys(color as object).join(', ')}]`
       : String(color);
-  throw new Error(
+  throw new AuthoringDiagnosticError(
+    'MATERIAL_COLOR_ARGUMENT',
     `${fn}(color, options?): color must be a hex number like 0x8c4a32 or a CSS string, got ${got}. ` +
       `Material settings go in the SECOND argument: ${fn}(0x8c4a32, { roughness: 0.5, metalness: 0.9 }).`,
   );
@@ -1335,14 +1467,101 @@ export function lambertMaterial(
 export type TrackInterpolation = 'LINEAR' | 'STEP';
 
 function threeInterpolation(mode?: TrackInterpolation): THREE.InterpolationModes {
+  if (mode !== undefined && mode !== 'LINEAR' && mode !== 'STEP') {
+    throw new Error(
+      'Animation interpolation must be LINEAR or STEP; cubic splines are unsupported.',
+    );
+  }
   return mode === 'STEP' ? THREE.InterpolateDiscrete : THREE.InterpolateLinear;
 }
 
+function animationNumber(value: unknown, label: string): asserts value is number {
+  if (
+    typeof value !== 'number' ||
+    !Number.isFinite(value) ||
+    !Number.isFinite(Math.fround(value))
+  ) {
+    throw new Error(`${label} must be finite and representable as float32.`);
+  }
+}
+
+function animationTarget(name: unknown): asserts name is string {
+  if (
+    typeof name !== 'string' ||
+    !name.trim() ||
+    name !== name.trim() ||
+    /[.[\]:/\\]/.test(name) ||
+    Array.from(name).some(
+      (character) => character.charCodeAt(0) < 32 || character.charCodeAt(0) === 127,
+    )
+  ) {
+    throw new Error(
+      'Animation target must be an exact nonempty node name, without binding paths or property syntax.',
+    );
+  }
+}
+
+function animationVector(value: unknown, label: string): asserts value is [number, number, number] {
+  if (!Array.isArray(value) || value.length !== 3) {
+    throw new Error(`${label} must contain exactly three finite components.`);
+  }
+  for (const component of value) animationNumber(component, label);
+}
+
+function animationTimes(times: ArrayLike<number>, label: string): void {
+  if (times.length === 0) throw new Error(`${label} requires at least one keyframe time.`);
+  let previous = -Infinity;
+  for (let i = 0; i < times.length; i++) {
+    const time = times[i];
+    animationNumber(time, `${label} time ${i}`);
+    const stored = Math.fround(time);
+    if (time < 0 || stored <= previous) {
+      throw new Error(
+        `${label} times must be nonnegative and strictly increasing after float32 storage.`,
+      );
+    }
+    previous = stored;
+  }
+}
+
+function animationKeys(
+  target: string,
+  frames: Array<{ time: number }>,
+  channel: 'rotation' | 'position' | 'scale',
+  interpolation?: TrackInterpolation,
+): void {
+  animationTarget(target);
+  threeInterpolation(interpolation);
+  if (!Array.isArray(frames) || frames.length === 0) {
+    throw new Error(`${channel}Track requires at least one keyframe.`);
+  }
+  for (const [i, frame] of frames.entries()) {
+    if (!frame || typeof frame !== 'object')
+      throw new Error(`${channel}Track keyframe ${i} must be an object.`);
+    animationVector(
+      (frame as unknown as Record<string, unknown>)[channel],
+      `${channel}Track ${channel} ${i}`,
+    );
+  }
+  animationTimes(
+    frames.map((frame) => frame.time),
+    `${channel}Track`,
+  );
+}
+
+/**
+ * Absolute local rotation: XYZ Euler angles in degrees, converted to unit quaternions.
+ * LINEAR uses shortest-arc quaternion interpolation, not linear Euler angles. A two-key
+ * 0-to-360 degree track is stationary; use intermediate rotations (as spinAnimation does).
+ * Times are nonnegative seconds, strictly increasing after float32 storage.
+ * The exact target node must exist in the authored scene; this constructor has no scene.
+ */
 export function rotationTrack(
   jointName: string,
   keyframes: Array<{ time: number; rotation: [number, number, number] }>,
   interpolation?: TrackInterpolation,
 ): THREE.QuaternionKeyframeTrack {
+  animationKeys(jointName, keyframes, 'rotation', interpolation);
   const times: number[] = [];
   const values: number[] = [];
   const euler = new THREE.Euler();
@@ -1367,11 +1586,13 @@ export function rotationTrack(
   );
 }
 
+/** Absolute parent-local positions in scene units. Times are nonnegative seconds. */
 export function positionTrack(
   jointName: string,
   keyframes: Array<{ time: number; position: [number, number, number] }>,
   interpolation?: TrackInterpolation,
 ): THREE.VectorKeyframeTrack {
+  animationKeys(jointName, keyframes, 'position', interpolation);
   const times: number[] = [];
   const values: number[] = [];
 
@@ -1388,11 +1609,13 @@ export function positionTrack(
   );
 }
 
+/** Absolute local scale factors; finite zero and negative values remain intentional options. */
 export function scaleTrack(
   jointName: string,
   keyframes: Array<{ time: number; scale: [number, number, number] }>,
   interpolation?: TrackInterpolation,
 ): THREE.VectorKeyframeTrack {
+  animationKeys(jointName, keyframes, 'scale', interpolation);
   const times: number[] = [];
   const values: number[] = [];
 
@@ -1409,11 +1632,78 @@ export function scaleTrack(
   );
 }
 
+/**
+ * Create a TRS clip with nonnegative duration in seconds, or -1 to derive duration from
+ * the final stored key. An explicit duration must include every key (float32 rounding
+ * is allowed); zero is valid for time-zero static poses. Tracks remain shared references.
+ * Export adds held final samples when needed to preserve an explicit longer duration.
+ * Supports LINEAR/STEP vector and quaternion tracks, not cubic splines or other channels.
+ * Quaternion samples must already be unit length (squared-length tolerance 1e-4).
+ * Validates target syntax, not scene existence/uniqueness: use scene inspection/QA for that.
+ */
 export function createClip(
   name: string,
   duration: number,
   tracks: THREE.KeyframeTrack[],
 ): THREE.AnimationClip {
+  if (typeof name !== 'string' || !name.trim())
+    throw new Error('Animation clip name must be nonempty.');
+  animationNumber(duration, 'Animation clip duration');
+  if (duration < 0 && duration !== -1)
+    throw new Error('Animation clip duration must be nonnegative, or -1 for automatic duration.');
+  if (!Array.isArray(tracks) || tracks.length === 0)
+    throw new Error('Animation clip requires at least one track.');
+  const names = new Set<string>();
+  for (const track of tracks) {
+    if (!(track instanceof THREE.KeyframeTrack))
+      throw new Error('Animation clip tracks must be KeyframeTrack instances.');
+    if (typeof track.name !== 'string')
+      throw new Error('Animation track target/channel must use a string name.');
+    const dot = track.name.lastIndexOf('.');
+    animationTarget(track.name.slice(0, dot));
+    const channel = track.name.slice(dot + 1);
+    if (!['position', 'scale', 'quaternion'].includes(channel)) {
+      throw new Error(
+        `Animation track ${track.name} has an unsupported channel; use position, quaternion or scale.`,
+      );
+    }
+    if (names.has(track.name))
+      throw new Error(`Duplicate animation target/channel: ${track.name}.`);
+    names.add(track.name);
+    const quaternion = channel === 'quaternion';
+    const Type = quaternion ? THREE.QuaternionKeyframeTrack : THREE.VectorKeyframeTrack;
+    if (!(track instanceof Type))
+      throw new Error(
+        `Animation channel ${channel} requires ${quaternion ? 'QuaternionKeyframeTrack' : 'VectorKeyframeTrack'}.`,
+      );
+    const mode = track.getInterpolation();
+    if (mode !== THREE.InterpolateLinear && mode !== THREE.InterpolateDiscrete) {
+      throw new Error(
+        'Animation interpolation must be LINEAR or STEP; cubic splines are unsupported.',
+      );
+    }
+    animationTimes(track.times, track.name);
+    const stride = quaternion ? 4 : 3;
+    if (track.values.length !== track.times.length * stride)
+      throw new Error(`Animation track ${track.name} requires ${stride} values per keyframe.`);
+    for (const value of track.values) animationNumber(value, `Animation track ${track.name} value`);
+    if (quaternion) {
+      for (let i = 0; i < track.values.length; i += 4) {
+        const lengthSquared =
+          track.values[i]! ** 2 +
+          track.values[i + 1]! ** 2 +
+          track.values[i + 2]! ** 2 +
+          track.values[i + 3]! ** 2;
+        if (Math.abs(lengthSquared - 1) > 1e-4)
+          throw new Error(`Animation track ${track.name} quaternion samples must be unit length.`);
+      }
+    }
+    if (duration !== -1 && track.times[track.times.length - 1]! > Math.fround(duration)) {
+      throw new Error(
+        `Animation clip duration ${duration} does not include every key of ${track.name}.`,
+      );
+    }
+  }
   return new THREE.AnimationClip(name, duration, tracks);
 }
 
@@ -1421,36 +1711,69 @@ export function createClip(
 // Common Animation Patterns
 // =============================================================================
 
-export function idleBreathing(bodyJoint: string, duration = 2, amount = 0.02): THREE.AnimationClip {
-  const y = 0;
+export interface PositionAnimationOptions {
+  /** Authored parent-local position in scene units. Defaults to [0, 0, 0], preserving the origin-pivot pattern. */
+  basePosition?: [number, number, number];
+}
+
+function positionPresetBase(
+  duration: number,
+  amount: number,
+  options: PositionAnimationOptions,
+): [number, number, number] {
+  animationNumber(duration, 'Animation preset duration');
+  if (duration <= 0) throw new Error('Animation preset duration must be positive.');
+  animationNumber(amount, 'Animation preset displacement');
+  if (!options || typeof options !== 'object' || Array.isArray(options))
+    throw new Error('Animation preset options must be an object.');
+  const base = options.basePosition === undefined ? [0, 0, 0] : options.basePosition;
+  animationVector(base, 'Animation preset basePosition');
+  return base;
+}
+
+/** Rise by amount along parent-local Y, then return to basePosition. Does not infer a rest pose. */
+export function idleBreathing(
+  bodyJoint: string,
+  duration = 2,
+  amount = 0.02,
+  options: PositionAnimationOptions = {},
+): THREE.AnimationClip {
+  const [x, y, z] = positionPresetBase(duration, amount, options);
   return createClip('Idle', duration, [
     positionTrack(bodyJoint, [
-      { time: 0, position: [0, y, 0] },
-      { time: duration / 2, position: [0, y + amount, 0] },
-      { time: duration, position: [0, y, 0] },
+      { time: 0, position: [x, y, z] },
+      { time: duration / 2, position: [x, y + amount, z] },
+      { time: duration, position: [x, y, z] },
     ]),
   ]);
 }
 
+/** Move by height along parent-local Y and return. Supply basePosition to retain an authored offset. */
 export function bobbingAnimation(
   rootName: string,
   duration = 2,
   height = 0.1,
+  options: PositionAnimationOptions = {},
 ): THREE.AnimationClip {
+  const [x, y, z] = positionPresetBase(duration, height, options);
   return createClip('Bob', duration, [
     positionTrack(rootName, [
-      { time: 0, position: [0, 0, 0] },
-      { time: duration / 2, position: [0, height, 0] },
-      { time: duration, position: [0, 0, 0] },
+      { time: 0, position: [x, y, z] },
+      { time: duration / 2, position: [x, y + height, z] },
+      { time: duration, position: [x, y, z] },
     ]),
   ]);
 }
 
+/** Full turn from identity rotation. Use an unrotated animation pivot to retain a part's rest rotation. */
 export function spinAnimation(
   jointName: string,
   duration = 2,
   axis: 'x' | 'y' | 'z' = 'y',
 ): THREE.AnimationClip {
+  animationNumber(duration, 'Animation preset duration');
+  if (duration <= 0) throw new Error('Animation preset duration must be positive.');
+  if (!['x', 'y', 'z'].includes(axis)) throw new Error('Spin animation axis must be x, y or z.');
   const rotation: [number, number, number] = [0, 0, 0];
   const idx = axis === 'x' ? 0 : axis === 'y' ? 1 : 2;
   const rotations: Array<{ time: number; rotation: [number, number, number] }> = [];
@@ -1471,28 +1794,6 @@ export function spinAnimation(
 // =============================================================================
 // Instancing / Reuse (Wave 1B)
 // =============================================================================
-
-/**
- * Returns the same BufferGeometry reference — explicit no-op clone that
- * signals intent to reuse geometry across multiple parts. gltf-transform
- * will dedupe on export, but authoring with the shared ref keeps memory
- * low at render time too.
- *
- * For 4 wheels on a truck: build one `cylinderGeo(...)`, pass it through
- * `cloneGeometry` to each `createPart` call. Four meshes, one geometry.
- */
-/** @deprecated Reuses its input. Use copyGeometry for an independent editable copy. */
-export function cloneGeometry(geo: THREE.BufferGeometry): THREE.BufferGeometry {
-  return geo;
-}
-
-/**
- * Shared material reference. See `cloneGeometry` for the pattern.
- */
-/** @deprecated Reuses its input. Use copyMaterial for independent material properties. */
-export function cloneMaterial(mat: THREE.Material): THREE.Material {
-  return mat;
-}
 
 /** Own vertex buffers before deforming a memoized primitive. */
 export function copyGeometry(geo: THREE.BufferGeometry): THREE.BufferGeometry {
@@ -1562,11 +1863,14 @@ export function countTriangles(root: THREE.Object3D): number {
     if ((child as { isMesh?: boolean }).isMesh) {
       const meshChild = child as THREE.Mesh;
       const geometry = meshChild.geometry;
+      const copies = (meshChild as THREE.InstancedMesh).isInstancedMesh
+        ? (meshChild as THREE.InstancedMesh).count
+        : 1;
       if (geometry.index) {
-        count += geometry.index.count / 3;
+        count += Math.floor(geometry.index.count / 3) * copies;
       } else {
         const position = geometry.getAttribute('position');
-        if (position) count += position.count / 3;
+        if (position) count += Math.floor(position.count / 3) * copies;
       }
     } else if ((child as { isSprite?: boolean }).isSprite) {
       // The canonical GLB bridge materializes every Three.js Sprite as one
@@ -1606,47 +1910,45 @@ export function getJointNames(root: THREE.Object3D): string[] {
   return joints;
 }
 
-/**
- * Validates asset against category guidelines.
- * Returns warnings for guidance but doesn't block on limits.
- *
- * There is no triangle advisory here, deliberately. This function used to warn
- * above a per-category `suggestedTris` (a prop was scolded at 3,001 triangles),
- * and a model that calls it while iterating reads that warning as an instruction
- * to remove detail. Triangle count is not a runtime cost driver — draw calls
- * are, which is what the material advisory below actually measures — so the
- * triangle line cost real asset quality and bought nothing.
- *
- * `countTriangles` is still exported and still reported in render metrics. It is
- * information, not a verdict.
- */
-export function validateAsset(
+/** Count distinct material identities against an optional caller-selected budget.
+ * This is not asset validation and does not estimate draw calls. */
+export function materialBudgetAdvisory(
   root: THREE.Object3D,
-  category: AssetCategory,
-): { valid: boolean; errors: string[]; warnings: string[] } {
-  const errors: string[] = [];
-  const warnings: string[] = [];
-
-  // Distinct-material count drives draw calls and the instanceability grade,
-  // which is a real cost. Unlike triangles, this one is worth saying out loud.
-  const suggestedMats: Record<AssetCategory, number> = {
-    character: 8,
-    prop: 6,
-    vfx: 4,
-    environment: 12,
-    architecture: 12,
-    vegetation: 8,
-    vehicle: 10,
-  };
-
-  const mats = countMaterials(root);
-  const matLimit = suggestedMats[category];
-
-  if (mats > matLimit) {
-    warnings.push(`High material count: ${mats} (suggested: ${matLimit})`);
+  options: { maxMaterials?: number } = {},
+): {
+  materialCount: number;
+  maxMaterials: number | null;
+  exceeded: boolean | null;
+  warnings: string[];
+} {
+  if (
+    !options ||
+    typeof options !== 'object' ||
+    Array.isArray(options) ||
+    Object.keys(options).some((key) => key !== 'maxMaterials')
+  ) {
+    throw new Error('materialBudgetAdvisory: options may contain only maxMaterials.');
   }
-
-  return { valid: true, errors, warnings };
+  const requested = options.maxMaterials;
+  if (
+    requested !== undefined &&
+    (typeof requested !== 'number' || !Number.isSafeInteger(requested) || requested < 0)
+  ) {
+    throw new Error('materialBudgetAdvisory: maxMaterials must be a nonnegative safe integer.');
+  }
+  const maxMaterials = requested === undefined ? null : requested;
+  const materialCount = countMaterials(root);
+  const exceeded = maxMaterials === null ? null : materialCount > maxMaterials;
+  return {
+    materialCount,
+    maxMaterials,
+    exceeded,
+    warnings: exceeded
+      ? [
+          `Material count ${materialCount} exceeds the requested budget ${maxMaterials}. This count is not a draw-call estimate or an asset-validity verdict.`,
+        ]
+      : [],
+  };
 }
 
 /**
@@ -1659,10 +1961,14 @@ export function validateAsset(
  * so render.ts can stash it into `render.meta.primitiveUsage` for
  * downstream analysis. When omitted, wrapping is skipped (zero overhead).
  */
+export type DiagnosticConsole = Pick<Console, 'log' | 'info' | 'debug' | 'warn' | 'error'>;
+
 export interface SandboxGlobalsOptions {
   /** Host-owned closed resolver. Generated code receives only the bound
    *  loadApprovedTexture(resourceId) closure, never this object. */
   textureResolver?: TextureResolver;
+  /** Host-owned diagnostic sink; defaults to the ambient console for library callers. */
+  console?: DiagnosticConsole;
 }
 
 export function buildSandboxGlobals(
@@ -1689,16 +1995,10 @@ export function buildSandboxGlobals(
   //
   // Pattern adapted from chili3d's lazy-mesher: each parametric geometry is
   // memoised on stringified args, so repeated calls inside a single build()
-  // return the same BufferGeometry reference. gltf-transform deduplicates
-  // on export but agents that don't reach for cloneGeometry/createInstance
-  // still get the win for free.
-  //
-  // Contract: callers must NOT mutate returned geometries. The existing
-  // primitive surface already follows this — every helper returns a fresh
-  // object today, and any caller that wants to mutate uses cloneGeometry
-  // first (already a no-op-by-design signal). With caching enabled, that
-  // signal becomes load-bearing: mutating a cached geometry corrupts every
-  // subsequent caller.
+  // return the same BufferGeometry reference. Direct-library factories remain
+  // fresh allocations. Pass cached references directly for intentional sharing;
+  // call copyGeometry before mutating vertices so other parts stay unchanged.
+  // Export may also deduplicate identical resources independently of this cache.
   //
   // Each cached geometry is also stamped with a `kilnRanges` entry on its
   // userData (B3 — sub-shape mapping). The renderer ignores it (gltf-
@@ -1781,6 +2081,8 @@ export function buildSandboxGlobals(
 
   return {
     createRoot: wrap('createRoot', createRoot),
+    describeAssembly: wrap('describeAssembly', describeAssembly),
+    replicateAssembly: wrap('replicateAssembly', replicateAssembly),
     createPivot: wrap('createPivot', createPivot),
     createJointChain: wrap('createJointChain', createJointChain),
     createVehicleFrame: wrap('createVehicleFrame', createVehicleFrame),
@@ -1851,8 +2153,6 @@ export function buildSandboxGlobals(
     parametricSurface: wrap('parametricSurface', geometry.parametricSurface),
     creaseNormals: wrap('creaseNormals', geometry.creaseNormals),
     geometryDiagnostics: wrap('geometryDiagnostics', geometry.geometryDiagnostics),
-    cloneGeometry: wrap('cloneGeometry', cloneGeometry),
-    cloneMaterial: wrap('cloneMaterial', cloneMaterial),
     createInstance: wrap('createInstance', createInstance),
     // CSG (async)
     boolUnion: wrap('boolUnion', solids.boolUnion),
@@ -1880,10 +2180,8 @@ export function buildSandboxGlobals(
     // UV (async)
     autoUnwrap: wrap('autoUnwrap', uv.autoUnwrap),
     // Shape-aware unwraps (sync — preserve built-in directional UVs)
-    boxUnwrap: wrap('boxUnwrap', uvShapes.boxUnwrap),
-    cylinderUnwrap: wrap('cylinderUnwrap', uvShapes.cylinderUnwrap),
-    planeUnwrap: wrap('planeUnwrap', uvShapes.planeUnwrap),
-    panelRemapV: wrap('panelRemapV', uvShapes.panelRemapV),
+    projectUV: wrap('projectUV', projectUV),
+    remapUV: wrap('remapUV', uvShapes.remapUV),
     // Parametric primitives
     gearGeo: wrapGeo('gearGeo', gears.gearGeo),
     bladeGeo: wrapGeo('bladeGeo', gears.bladeGeo),
@@ -1898,11 +2196,11 @@ export function buildSandboxGlobals(
     countTriangles: wrap('countTriangles', countTriangles),
     countMaterials: wrap('countMaterials', countMaterials),
     getJointNames: wrap('getJointNames', getJointNames),
-    validateAsset: wrap('validateAsset', validateAsset),
+    materialBudgetAdvisory: wrap('materialBudgetAdvisory', materialBudgetAdvisory),
     // THREE namespace is exposed so agents can `new THREE.Mesh(geo, mat)`
     // as operands to CSG and other ops that expect Object3D inputs.
     THREE,
     Math,
-    console,
+    console: options.console ?? console,
   };
 }

@@ -80,11 +80,12 @@ async function build() {
   // keeps this under a thousand triangles.
   // extrudeProfile returns bare geometry with no UVs, and a texture-backed
   // material on unwrapped geometry is a QA blocker, not a silent miss. Use the
-  // unwrap that matches the shape: cylinderUnwrap runs u around the Y axis and
-  // v up the height, so the brick courses wrap the curve. boxUnwrap's flat
-  // projection would smear them into horizontal bands on the outer face. Both
-  // helpers CLONE, so the return value is the one to keep.
-  const curbGeo = cylinderUnwrap(await extrudeProfile(stoneProfile, { depth: COURSE_H, axis: 'y' }));
+  // explicit cylindrical projection: U spans this stone's arc and V its height.
+  // Keeping the angular range explicit avoids stretching a narrow arc over a
+  // whole revolution. Projection returns owned buffers.
+  const curbGeo = projectUV(await extrudeProfile(stoneProfile, { depth: COURSE_H, axis: 'y' }), {
+    projection: 'cylindrical', angularRange: [-half * 180 / Math.PI, 2 * half * 180 / Math.PI],
+  });
 
   // Where the posts go, and why the curb has to know about it before it is laid.
   //
@@ -133,11 +134,12 @@ async function build() {
         continue;
       }
       // CSG bakes the world transform into the result and drops the UVs, so the
-      // unwrap has to run a second time. It lands correctly because the baked
-      // stone now sits around the ring's own axis, which is what the cylindrical
-      // unwrap measures from.
+      // projection runs again in the baked frame. Preserve the original stone's
+      // angular range instead of stretching each notched remnant independently.
       const notched = await boolDiff(`Curb_${course}_${i}`, block, ...sockets);
-      notched.geometry = cylinderUnwrap(notched.geometry);
+      notched.geometry = projectUV(notched.geometry, {
+        projection: 'cylindrical', angularRange: [(angle - half) * 180 / Math.PI, 2 * half * 180 / Math.PI],
+      });
       root.add(notched);
     }
   }
@@ -152,17 +154,16 @@ async function build() {
   // Same tile treatment as the base: the unwrap maps a whole turn to u 0..1
   // because it cannot know how big the ring is in metres, so the caller says.
   const linerR = R_IN - 0.005;
-  const linerGeo = panelRemapV(
-    cylinderUnwrap(
+  const linerGeo = remapUV(
+    projectUV(
       await extrudeProfile(circle(linerR), {
         depth: 2 * COURSE_H,
         axis: 'y',
         holes: [circle(R_IN - 0.045)],
       }),
+      { projection: 'cylindrical' },
     ),
-    (2 * COURSE_H) / 0.58,
-    0,
-    (2 * Math.PI * linerR) / 0.58,
+    { scale: [(2 * Math.PI * linerR) / 0.58, (2 * COURSE_H) / 0.58], offset: [0, 0] },
   );
   createPart('Shaft', linerGeo, stone, { position: [0, 0, 0], parent: root });
 
@@ -179,12 +180,12 @@ async function build() {
   const baseR = R_OUT + 0.05;
   // cylinderGeo ships its own UVs, so no unwrap runs and the brick texture gets
   // one full tile stretched around 5.8 m of circumference and squeezed into
-  // 100 mm of height -- which is why it read as wood grain. panelRemapV rescales
+  // 100 mm of height -- which is why it read as wood grain. remapUV rescales
   // the existing UVs to a real-world tile: ten repeats around, and a v range
   // matching the course height it actually is.
   const base = createPart(
     'Base',
-    panelRemapV(cylinderGeo(baseR, baseR, 0.10, 24), 0.1, 0, (2 * Math.PI * baseR) / 0.58),
+    remapUV(cylinderGeo(baseR, baseR, 0.10, 24), { scale: [(2 * Math.PI * baseR) / 0.58, 0.1] }),
     stone,
     { position: [0, 0.05, 0], parent: root },
   );

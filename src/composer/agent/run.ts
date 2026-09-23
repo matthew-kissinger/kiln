@@ -199,7 +199,7 @@ export async function runKilnComposer(
       // get [TextBlock, CachePointBlock]; other providers keep the plain string.
       // Safe here: the composer's system prompt is a static const, and the
       // SceneCompactionManager only manages `messages`, never the system prompt.
-      systemPrompt: toCachedSystemPrompt(COMPOSER_SYSTEM_PROMPT, opts.model),
+      systemPrompt: await toCachedSystemPrompt(COMPOSER_SYSTEM_PROMPT, opts.model),
       tools: allTools as never,
       name: opts.agentName ?? 'kiln-composer',
       conversationManager: compaction,

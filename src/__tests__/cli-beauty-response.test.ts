@@ -1,3 +1,4 @@
+import { fakeRenderHealth } from './helpers/fake-render-service';
 import { test, expect } from 'bun:test';
 import { makeRemoteRenderPort } from '../cli-render-mode';
 test('remote adapter preserves the requested beauty PNG alongside ordinary views', async () => {
@@ -10,6 +11,8 @@ test('remote adapter preserves the requested beauty PNG alongside ordinary views
     hostname: '127.0.0.1',
     port: 0,
     async fetch(req) {
+      if (new URL(req.url).pathname === '/health')
+        return Response.json(fakeRenderHealth({ rendererId: 'fixture' }));
       request = (await req.json()) as Record<string, unknown>;
       return Response.json({
         ok: true,

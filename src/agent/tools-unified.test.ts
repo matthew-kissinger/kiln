@@ -1,16 +1,26 @@
-/**
- * Unit tests for the unified buffer surface (KilnDraftBuffer.draft +
- * makeKilnUnifiedTools). Mirrors tools-edit.test.ts: the buffer is pure string
- * ops (tested directly) and the factory is checked for its tool wiring,
- * capture into the sink, the inline validation on buffer writes (A1), the
- * kiln_draft escape-hatch hint, and the collapsed kiln_render media contract.
- */
+/** Native reference-tool media, inspection, material, and view-evidence contracts. */
 import { describe, expect, test } from 'bun:test';
 import { ImageBlock, JsonBlock } from '@strands-agents/sdk';
 import { createHash } from 'node:crypto';
-
-import { KilnDraftBuffer, KilnEditBuffer, makeKilnUnifiedTools, type UnifiedSink } from './tools';
+import { makeKilnNativeTools } from './tools';
+import { MemoryProgramStore } from '../program-store';
+import { ProgramArtifactStore } from '../tools/program-artifacts';
+import type { KilnToolContext } from '../tools/registry';
+import { resolveRequirementsContext } from '../requirements-context';
 import { encodePng } from '../views';
+
+async function fixture(code: string, context: KilnToolContext = {}) {
+  const programStore = new MemoryProgramStore();
+  const programRef = await programStore.put(code);
+  const artifacts = new ProgramArtifactStore();
+  const tools = makeKilnNativeTools({}, { ...context, programStore, programArtifacts: artifacts });
+  return { tools, programRef, artifacts };
+}
+function findTool(tools: ReturnType<typeof makeKilnNativeTools>, name: string) {
+  const tool = tools.find((candidate) => candidate.name === name);
+  if (!tool) throw new Error(`Missing native tool ${name}`);
+  return tool as unknown as { invoke(input: unknown): Promise<unknown> };
+}
 
 const BOX_CODE = `
 const meta = { name: 'test-box', category: 'prop' };
@@ -66,139 +76,10 @@ function build() {
 }
 `;
 
-function findTool(tools: ReturnType<typeof makeKilnUnifiedTools>, name: string) {
-  const t = tools.find((x) => x.name === name) as
-    | { invoke(input: unknown): Promise<unknown> }
-    | undefined;
-  if (!t) throw new Error(`tool ${name} not found`);
-  return t;
-}
-
-describe('KilnDraftBuffer', () => {
-  test('seeds empty by default and KilnEditBuffer is the same class (alias)', () => {
-    expect(KilnEditBuffer).toBe(KilnDraftBuffer);
-    const buf = new KilnDraftBuffer();
-    expect(buf.code).toBe('');
-    expect(buf.edits).toHaveLength(0);
-  });
-
-  test('draft replaces the whole buffer and is NOT recorded as an edit', () => {
-    const buf = new KilnDraftBuffer();
-    const r = buf.draft(BOX_CODE);
-    expect(r.ok).toBe(true);
-    expect(r.bytes).toBe(BOX_CODE.length);
-    expect(r.lines).toBe(BOX_CODE.split('\n').length);
-    expect(buf.code).toBe(BOX_CODE);
-    expect(buf.edits).toHaveLength(0); // drafting is authoring, not a diff step
-  });
-
-  test('draft then surgical edit: edit is recorded, draft is not', () => {
-    const buf = new KilnDraftBuffer();
-    buf.draft(BOX_CODE);
-    const r = buf.apply({ oldString: 'boxGeo(1, 1, 1)', newString: 'boxGeo(2, 1, 1)' });
-    expect(r.ok).toBe(true);
-    expect(buf.code).toContain('boxGeo(2, 1, 1)');
-    expect(buf.edits).toHaveLength(1);
-  });
-});
-
-describe('makeKilnUnifiedTools', () => {
-  test('exposes exactly the eight unified tools in order (incl. the close-up, motion + interior views)', () => {
-    const sink: UnifiedSink = { edits: [] };
-    const tools = makeKilnUnifiedTools({ sink });
-    expect(tools.map((t) => t.name)).toEqual([
-      'kiln_draft',
-      'kiln_view',
-      'kiln_edit',
-      'kiln_render',
-      'kiln_inspect',
-      'kiln_screenshot_animation',
-      'kiln_view_interior',
-      'kiln_finalize',
-    ]);
-    // No legacy verbs leak into the unified surface (the static screenshot collapsed
-    // into kiln_render; only the dedicated motion + interior views are added). A1:
-    // there is no standalone kiln_validate — buffer writes validate inline.
-    expect(tools.map((t) => t.name)).not.toContain('kiln_list_primitives');
-    expect(tools.map((t) => t.name)).not.toContain('kiln_screenshot');
-    expect(tools.map((t) => t.name)).not.toContain('kiln_submit');
-    expect(tools.map((t) => t.name)).not.toContain('kiln_validate');
-    expect(sink.edits).toHaveLength(0);
-  });
-
-  test('kiln_draft writes the buffer + captures into sink.code; kiln_view reads it back', async () => {
-    const sink: UnifiedSink = { edits: [] };
-    const tools = makeKilnUnifiedTools({ sink });
-    const drafted = (await findTool(tools, 'kiln_draft').invoke({ code: BOX_CODE })) as {
-      ok: boolean;
-      bytes: number;
-      validation: { valid: boolean; errors: string[]; warnings: string[] };
-    };
-    expect(drafted.ok).toBe(true);
-    // A1: the draft result carries the static validation of the fresh buffer.
-    expect(drafted.validation.valid).toBe(true);
-    expect(drafted.validation.errors).toEqual([]);
-    expect(sink.code).toBe(BOX_CODE); // captured even before finalize
-    const viewed = (await findTool(tools, 'kiln_view').invoke({})) as {
-      code: string;
-      lines: number;
-    };
-    expect(viewed.code).toBe(BOX_CODE);
-  });
-
-  test('kiln_draft of a broken program surfaces the validation errors inline (A1)', async () => {
-    const sink: UnifiedSink = { edits: [] };
-    const tools = makeKilnUnifiedTools({ sink });
-    const drafted = (await findTool(tools, 'kiln_draft').invoke({
-      code: 'function build() { return 1; }', // no meta
-    })) as { ok: boolean; validation: { valid: boolean; errors: string[] } };
-    expect(drafted.ok).toBe(true); // the write itself succeeded
-    expect(drafted.validation.valid).toBe(false);
-    expect(drafted.validation.errors.length).toBeGreaterThan(0);
-  });
-
-  test('refine seed: kiln_edit updates sink.code; the shared edit trace records it', async () => {
-    const sink: UnifiedSink = { edits: [] };
-    const tools = makeKilnUnifiedTools({ seedCode: BOX_CODE, sink });
-    const edited = (await findTool(tools, 'kiln_edit').invoke({
-      oldString: 'boxGeo(1, 1, 1)',
-      newString: 'boxGeo(2, 1, 1)',
-    })) as { ok: boolean; validation: { valid: boolean; errors: string[] } };
-    expect(edited.ok).toBe(true);
-    // A1: a successful edit re-validates the edited buffer inline.
-    expect(edited.validation.valid).toBe(true);
-    expect(sink.code).toContain('boxGeo(2, 1, 1)');
-    expect(sink.edits).toHaveLength(1); // live trace shared into the sink
-  });
-
-  test('a kiln_edit that breaks the program reports validation errors inline (A1)', async () => {
-    const sink: UnifiedSink = { edits: [] };
-    const tools = makeKilnUnifiedTools({ seedCode: BOX_CODE, sink });
-    const edited = (await findTool(tools, 'kiln_edit').invoke({
-      oldString: 'function build() {',
-      newString: 'function broken() {',
-    })) as { ok: boolean; validation: { valid: boolean; errors: string[] } };
-    expect(edited.ok).toBe(true); // the string replace applied
-    expect(edited.validation.valid).toBe(false);
-    expect(edited.validation.errors.length).toBeGreaterThan(0);
-  });
-
-  test('a failed kiln_edit points the model at kiln_draft as the escape hatch', async () => {
-    const sink: UnifiedSink = { edits: [] };
-    const tools = makeKilnUnifiedTools({ seedCode: BOX_CODE, sink });
-    const failed = (await findTool(tools, 'kiln_edit').invoke({
-      oldString: 'sphereGeo(9)',
-      newString: 'boxGeo(9,9,9)',
-    })) as { ok: boolean; hint?: string };
-    expect(failed.ok).toBe(false);
-    expect(failed.hint).toContain('kiln_draft');
-    expect(sink.edits).toHaveLength(0); // nothing applied
-  });
-
-  test('kiln_render returns [ImageBlock, JsonBlock] for a valid buffer', async () => {
-    const sink: UnifiedSink = { edits: [] };
-    const tools = makeKilnUnifiedTools({ seedCode: BOX_CODE, sink });
-    const out = (await findTool(tools, 'kiln_render').invoke({})) as unknown[];
+describe('native reference tools', () => {
+  test('kiln_render returns [ImageBlock, JsonBlock] for a retained program', async () => {
+    const { tools, programRef } = await fixture(BOX_CODE);
+    const out = (await findTool(tools, 'kiln_render').invoke({ programRef })) as unknown[];
     expect(Array.isArray(out)).toBe(true);
     expect(out).toHaveLength(2);
     expect(out[0]).toBeInstanceOf(ImageBlock);
@@ -210,13 +91,10 @@ describe('makeKilnUnifiedTools', () => {
   });
 
   test('kiln_render fails closed with exact missing procedural texture usages', async () => {
-    const sink: UnifiedSink = { edits: [] };
-    const tools = makeKilnUnifiedTools({
-      seedCode: TEXTURED_BOX_CODE,
-      sink,
+    const { tools, programRef, artifacts } = await fixture(TEXTURED_BOX_CODE, {
       requiredProceduralTextureUsages: ['albedo', 'normal', 'metallicRoughness'],
     });
-    const out = (await findTool(tools, 'kiln_render').invoke({})) as {
+    const out = (await findTool(tools, 'kiln_render').invoke({ programRef })) as {
       ok: boolean;
       error?: string;
       materialContract?: { required: string[]; present: string[]; missing: string[] };
@@ -229,63 +107,56 @@ describe('makeKilnUnifiedTools', () => {
       present: ['albedo', 'normal'],
       missing: ['metallicRoughness'],
     });
-    expect(sink.rendered).toBeUndefined();
+    expect(artifacts.latest(resolveRequirementsContext())).toBeUndefined();
   });
 
   test('kiln_render accepts the exact required procedural usages and records current code', async () => {
-    const sink: UnifiedSink = { edits: [] };
-    const tools = makeKilnUnifiedTools({
-      seedCode: TEXTURED_BOX_CODE,
-      sink,
+    const { tools, programRef, artifacts } = await fixture(TEXTURED_BOX_CODE, {
       requiredProceduralTextureUsages: ['normal', 'albedo'],
     });
-    const out = (await findTool(tools, 'kiln_render').invoke({})) as unknown[];
+    const out = (await findTool(tools, 'kiln_render').invoke({ programRef })) as unknown[];
     expect(Array.isArray(out)).toBe(true);
-    expect(sink.rendered).toBe(true);
-    expect(sink.renderedCode).toBe(TEXTURED_BOX_CODE);
+    expect(artifacts.latest(resolveRequirementsContext())).toBeDefined();
+    expect(artifacts.latest(resolveRequirementsContext())?.code).toBe(TEXTURED_BOX_CODE);
   });
 
-  test('kiln_render exposes and honors the bounded capture contract on the working buffer', async () => {
-    const sink: UnifiedSink = { edits: [] };
-    const tools = makeKilnUnifiedTools({ seedCode: BOX_CODE, sink });
+  test('kiln_render exposes and honors the bounded capture contract on the retained program', async () => {
+    const { tools, programRef, artifacts } = await fixture(BOX_CODE);
     const render = findTool(tools, 'kiln_render');
-    const out = (await render.invoke({ capture: { preset: '1x1' } })) as unknown[];
+    const out = (await render.invoke({ programRef, capture: { preset: '1x1' } })) as unknown[];
     const json = (out[1] as JsonBlock).json as {
       capture?: { preset?: string; cols?: number; cells?: number; backdrop?: string };
     };
     expect(json.capture).toEqual({ preset: '1x1', cols: 1, cells: 1, backdrop: 'neutral' });
-    expect(sink.rendered).toBe(true);
-    expect(sink.capture).toEqual({ preset: '1x1' });
+    expect(artifacts.latest(resolveRequirementsContext())).toBeDefined();
+    expect(artifacts.latest(resolveRequirementsContext())?.captureSelection).toEqual({
+      capture: { preset: '1x1' },
+    });
 
-    await render.invoke({});
-    expect(sink.rendered).toBe(true);
-    expect(sink.capture).toBeUndefined(); // a later successful default render wins
+    await render.invoke({ programRef });
+    expect(artifacts.latest(resolveRequirementsContext())).toBeDefined();
+    expect(artifacts.latest(resolveRequirementsContext())?.captureSelection).toEqual({}); // a later successful default render wins
   });
 
-  test('kiln_render on a broken buffer is image-free (plain JSON error)', async () => {
-    const sink: UnifiedSink = { edits: [], capture: { preset: '2x2' } };
-    const tools = makeKilnUnifiedTools({ seedCode: 'not a kiln program (', sink });
-    const out = (await findTool(tools, 'kiln_render').invoke({})) as {
+  test('kiln_render on a broken source is image-free (plain JSON error)', async () => {
+    const { tools, programRef, artifacts } = await fixture('not a kiln program (');
+    const out = (await findTool(tools, 'kiln_render').invoke({ programRef })) as {
       ok: boolean;
       error?: string;
     };
     expect(Array.isArray(out)).toBe(false);
     expect(out.ok).toBe(false);
     expect(out.error).toBeDefined();
-    expect(sink.rendered).toBeUndefined();
-    expect(sink.capture).toEqual({ preset: '2x2' }); // failed renders never replace the last good layout
+    expect(artifacts.latest(resolveRequirementsContext())).toBeUndefined();
   });
 
   test('shares last faithful evidence across kiln_render then degraded kiln_inspect', async () => {
-    const sink: UnifiedSink = { edits: [] };
     const materialCode = TWO_PART_CODE.replace(
       "gameMaterial('#9aa0a6')",
       "gameMaterial('#9aa0a6', { metalness: 0.6 })",
     );
     let calls = 0;
-    const tools = makeKilnUnifiedTools({
-      seedCode: materialCode,
-      sink,
+    const { tools, programRef } = await fixture(materialCode, {
       viewRenderPort: async (request) => {
         calls++;
         if (calls > 1) return { ok: false, rendererId: 'gpu:test', error: 'device lost' };
@@ -302,8 +173,11 @@ describe('makeKilnUnifiedTools', () => {
         };
       },
     });
-    const render = (await findTool(tools, 'kiln_render').invoke({})) as unknown[];
-    const inspect = (await findTool(tools, 'kiln_inspect').invoke({ isolate: true })) as unknown[];
+    const render = (await findTool(tools, 'kiln_render').invoke({ programRef })) as unknown[];
+    const inspect = (await findTool(tools, 'kiln_inspect').invoke({
+      programRef,
+      isolate: true,
+    })) as unknown[];
     type EvidenceJson = {
       viewEvidence: {
         current: Record<string, unknown>;
@@ -331,37 +205,12 @@ describe('makeKilnUnifiedTools', () => {
     });
   });
 
-  test('kiln_render emits a render candidate (buffer code + six-view png) via onCandidate', async () => {
-    const sink: UnifiedSink = { edits: [] };
-    const got: Array<{ code: string; pngBase64: string; tris?: number }> = [];
-    const tools = makeKilnUnifiedTools({
-      seedCode: BOX_CODE,
-      sink,
-      onCandidate: (c) => got.push(c),
-    });
-    await findTool(tools, 'kiln_render').invoke({});
-    expect(got).toHaveLength(1);
-    expect(got[0]!.code).toBe(BOX_CODE); // the exact working buffer
-    expect(got[0]!.pngBase64.length).toBeGreaterThan(0); // the same image the agent saw
-    expect(got[0]!.tris).toBeGreaterThan(0);
-  });
-
-  test('kiln_render on a broken buffer does NOT emit a candidate (image-free build)', async () => {
-    const sink: UnifiedSink = { edits: [] };
-    const got: unknown[] = [];
-    const tools = makeKilnUnifiedTools({
-      seedCode: 'not a kiln program (',
-      sink,
-      onCandidate: (c) => got.push(c),
-    });
-    await findTool(tools, 'kiln_render').invoke({});
-    expect(got).toHaveLength(0); // a failed render has no image → no candidate
-  });
-
   test('kiln_inspect frames a named part: [ImageBlock, JsonBlock] and the text names part + view', async () => {
-    const sink: UnifiedSink = { edits: [] };
-    const tools = makeKilnUnifiedTools({ seedCode: TWO_PART_CODE, sink });
-    const out = (await findTool(tools, 'kiln_inspect').invoke({ part: 'head' })) as unknown[];
+    const { tools, programRef } = await fixture(TWO_PART_CODE);
+    const out = (await findTool(tools, 'kiln_inspect').invoke({
+      programRef,
+      part: 'head',
+    })) as unknown[];
     expect(Array.isArray(out)).toBe(true);
     expect(out).toHaveLength(2);
     expect(out[0]).toBeInstanceOf(ImageBlock);
@@ -378,11 +227,11 @@ describe('makeKilnUnifiedTools', () => {
     expect('pngBase64' in json).toBe(false); // image stripped by the media extractor
   });
 
-  test('kiln_inspect exposes and honors object-relative orbit angles on the working buffer', async () => {
-    const sink: UnifiedSink = { edits: [] };
-    const tools = makeKilnUnifiedTools({ seedCode: TWO_PART_CODE, sink });
+  test('kiln_inspect exposes and honors object-relative orbit angles on the retained program', async () => {
+    const { tools, programRef } = await fixture(TWO_PART_CODE);
     const inspect = findTool(tools, 'kiln_inspect');
     const out = (await inspect.invoke({
+      programRef,
       part: 'head',
       azimuthDeg: 125,
       elevationDeg: -20,
@@ -394,9 +243,8 @@ describe('makeKilnUnifiedTools', () => {
   });
 
   test('kiln_inspect on an unknown part returns the part list without throwing (image-free)', async () => {
-    const sink: UnifiedSink = { edits: [] };
-    const tools = makeKilnUnifiedTools({ seedCode: TWO_PART_CODE, sink });
-    const out = (await findTool(tools, 'kiln_inspect').invoke({ part: 'Blade' })) as {
+    const { tools, programRef } = await fixture(TWO_PART_CODE);
+    const out = (await findTool(tools, 'kiln_inspect').invoke({ programRef, part: 'Blade' })) as {
       ok: boolean;
       error?: string;
       availableParts?: string[];
@@ -409,9 +257,9 @@ describe('makeKilnUnifiedTools', () => {
   });
 
   test('kiln_inspect isolate:true reaches the renderer and is reported back', async () => {
-    const sink: UnifiedSink = { edits: [] };
-    const tools = makeKilnUnifiedTools({ seedCode: TWO_PART_CODE, sink });
+    const { tools, programRef } = await fixture(TWO_PART_CODE);
     const out = (await findTool(tools, 'kiln_inspect').invoke({
+      programRef,
       part: 'head',
       isolate: true,
     })) as unknown[];
@@ -422,18 +270,22 @@ describe('makeKilnUnifiedTools', () => {
   });
 
   test('kiln_inspect defaults to isolate:false and says so in the framing line', async () => {
-    const sink: UnifiedSink = { edits: [] };
-    const tools = makeKilnUnifiedTools({ seedCode: TWO_PART_CODE, sink });
-    const out = (await findTool(tools, 'kiln_inspect').invoke({ part: 'head' })) as unknown[];
+    const { tools, programRef } = await fixture(TWO_PART_CODE);
+    const out = (await findTool(tools, 'kiln_inspect').invoke({
+      programRef,
+      part: 'head',
+    })) as unknown[];
     const json = (out[1] as JsonBlock).json as Record<string, unknown>;
     expect(json['isolated']).toBe(false);
     expect(json['framed']).toContain('may occlude it');
   });
 
   test('kiln_inspect isolate:true without a part is a no-op, not an error', async () => {
-    const sink: UnifiedSink = { edits: [] };
-    const tools = makeKilnUnifiedTools({ seedCode: TWO_PART_CODE, sink });
-    const out = (await findTool(tools, 'kiln_inspect').invoke({ isolate: true })) as unknown[];
+    const { tools, programRef } = await fixture(TWO_PART_CODE);
+    const out = (await findTool(tools, 'kiln_inspect').invoke({
+      programRef,
+      isolate: true,
+    })) as unknown[];
     const json = (out[1] as JsonBlock).json as Record<string, unknown>;
     expect(json['ok']).toBe(true);
     expect(json['isolated']).toBe(false);
@@ -441,9 +293,11 @@ describe('makeKilnUnifiedTools', () => {
   });
 
   test('kiln_inspect with no part frames the whole asset in one view', async () => {
-    const sink: UnifiedSink = { edits: [] };
-    const tools = makeKilnUnifiedTools({ seedCode: TWO_PART_CODE, sink });
-    const out = (await findTool(tools, 'kiln_inspect').invoke({ view: 'front' })) as unknown[];
+    const { tools, programRef } = await fixture(TWO_PART_CODE);
+    const out = (await findTool(tools, 'kiln_inspect').invoke({
+      programRef,
+      view: 'front',
+    })) as unknown[];
     expect(Array.isArray(out)).toBe(true);
     expect(out[0]).toBeInstanceOf(ImageBlock);
     const json = (out[1] as JsonBlock).json as Record<string, unknown>;
@@ -453,10 +307,9 @@ describe('makeKilnUnifiedTools', () => {
     expect(json['framed']).toContain('whole asset');
   });
 
-  test('kiln_view_interior returns [ImageBlock, JsonBlock] for a building buffer', async () => {
-    const sink: UnifiedSink = { edits: [] };
-    const tools = makeKilnUnifiedTools({ seedCode: BUILDING_CODE, sink });
-    const out = (await findTool(tools, 'kiln_view_interior').invoke({})) as unknown[];
+  test('kiln_view_interior returns [ImageBlock, JsonBlock] for a building revision', async () => {
+    const { tools, programRef } = await fixture(BUILDING_CODE);
+    const out = (await findTool(tools, 'kiln_view_interior').invoke({ programRef })) as unknown[];
     expect(Array.isArray(out)).toBe(true);
     expect(out).toHaveLength(2);
     expect(out[0]).toBeInstanceOf(ImageBlock);
@@ -469,12 +322,12 @@ describe('makeKilnUnifiedTools', () => {
   });
 
   test('kiln_view_interior echoes the backdrop it painted, like every other image result', async () => {
-    const sink: UnifiedSink = { edits: [] };
-    const tools = makeKilnUnifiedTools({ seedCode: BUILDING_CODE, sink });
-    const plain = (await findTool(tools, 'kiln_view_interior').invoke({})) as unknown[];
+    const { tools, programRef } = await fixture(BUILDING_CODE);
+    const plain = (await findTool(tools, 'kiln_view_interior').invoke({ programRef })) as unknown[];
     const plainJson = (plain[1] as JsonBlock).json as { capture?: { backdrop?: string } };
     expect(plainJson.capture?.backdrop).toBe('neutral');
     const dark = (await findTool(tools, 'kiln_view_interior').invoke({
+      programRef,
       capture: { version: 'kiln.capture.v1', backdrop: 'dark', shots: [{ name: 'Inside' }] },
     })) as unknown[];
     const darkJson = (dark[1] as JsonBlock).json as {
@@ -485,10 +338,9 @@ describe('makeKilnUnifiedTools', () => {
     expect(darkJson.capture?.backdrop).toBe('dark');
   });
 
-  test('kiln_view_interior on a broken buffer is image-free (plain JSON error)', async () => {
-    const sink: UnifiedSink = { edits: [] };
-    const tools = makeKilnUnifiedTools({ seedCode: 'not a kiln program (', sink });
-    const out = (await findTool(tools, 'kiln_view_interior').invoke({})) as {
+  test('kiln_view_interior on a broken source is image-free (plain JSON error)', async () => {
+    const { tools, programRef } = await fixture('not a kiln program (');
+    const out = (await findTool(tools, 'kiln_view_interior').invoke({ programRef })) as {
       ok: boolean;
       error?: string;
     };
@@ -498,10 +350,9 @@ describe('makeKilnUnifiedTools', () => {
   });
 
   test('kiln_view_interior lifts a semantically-roled roof that is NOT named "Roof"', async () => {
-    const sink: UnifiedSink = { edits: [] };
     const lidCode = BUILDING_CODE.replace("createRoofPlanes('Roof'", "createRoofPlanes('Lid'");
-    const tools = makeKilnUnifiedTools({ seedCode: lidCode, sink });
-    const out = (await findTool(tools, 'kiln_view_interior').invoke({})) as unknown[];
+    const { tools, programRef } = await fixture(lidCode);
+    const out = (await findTool(tools, 'kiln_view_interior').invoke({ programRef })) as unknown[];
     const json = (out[1] as JsonBlock).json as Record<string, unknown>;
     // createRoofPlanes stamps roof.* roles regardless of the node's name, so the
     // tool resolves the roof by role. The asset is already correct — there must
@@ -512,9 +363,9 @@ describe('makeKilnUnifiedTools', () => {
   });
 
   test('kiln_view_interior warns in explicit-override mode when the named node is absent', async () => {
-    const sink: UnifiedSink = { edits: [] };
-    const tools = makeKilnUnifiedTools({ seedCode: BUILDING_CODE, sink });
+    const { tools, programRef } = await fixture(BUILDING_CODE);
     const out = (await findTool(tools, 'kiln_view_interior').invoke({
+      programRef,
       nodeName: 'Canopy',
     })) as unknown[];
     const json = (out[1] as JsonBlock).json as Record<string, unknown>;
@@ -526,101 +377,19 @@ describe('makeKilnUnifiedTools', () => {
   });
 
   test('kiln_view_interior warns in semantic mode when no roof is resolvable at all', async () => {
-    const sink: UnifiedSink = { edits: [] };
-    const tools = makeKilnUnifiedTools({ seedCode: BOX_CODE, sink });
-    const out = (await findTool(tools, 'kiln_view_interior').invoke({})) as unknown[];
+    const { tools, programRef } = await fixture(BOX_CODE);
+    const out = (await findTool(tools, 'kiln_view_interior').invoke({ programRef })) as unknown[];
     const json = (out[1] as JsonBlock).json as Record<string, unknown>;
     expect(json['roofsHidden']).toBe(0);
     const warnings = (json['warnings'] as string[]).join(' ');
     expect(warnings).toContain('No roof was found');
     expect(warnings).toContain('createRoofPlanes');
   });
-
-  test('kiln_finalize requires the current buffer to have rendered successfully', async () => {
-    const sink: UnifiedSink = { edits: [] };
-    const tools = makeKilnUnifiedTools({ sink });
-    await findTool(tools, 'kiln_draft').invoke({ code: BOX_CODE });
-    const premature = (await findTool(tools, 'kiln_finalize').invoke({})) as {
-      ok: boolean;
-      error?: string;
-    };
-    expect(premature.ok).toBe(false);
-    expect(premature.error).toContain('kiln_render');
-    expect(sink.finalized).toBeUndefined();
-
-    await findTool(tools, 'kiln_render').invoke({});
-    const fin = (await findTool(tools, 'kiln_finalize').invoke({})) as {
-      ok: boolean;
-      recorded: boolean;
-      bytes: number;
-    };
-    expect(fin.ok).toBe(true);
-    expect(fin.recorded).toBe(true);
-    expect(sink.code).toBe(BOX_CODE);
-    expect(sink.finalized).toBe(true);
-  });
-
-  test('a mutation invalidates the render receipt until the exact new buffer renders', async () => {
-    const sink: UnifiedSink = { edits: [] };
-    const tools = makeKilnUnifiedTools({ seedCode: BOX_CODE, sink });
-    await findTool(tools, 'kiln_render').invoke({});
-    await findTool(tools, 'kiln_edit').invoke({
-      oldString: 'boxGeo(1, 1, 1)',
-      newString: 'boxGeo(2, 1, 1)',
-    });
-    const stale = (await findTool(tools, 'kiln_finalize').invoke({})) as {
-      ok: boolean;
-      error?: string;
-    };
-    expect(stale.ok).toBe(false);
-    expect(stale.error).toContain('current buffer');
-    await findTool(tools, 'kiln_render').invoke({});
-    expect((await findTool(tools, 'kiln_finalize').invoke({})) as { ok: boolean }).toMatchObject({
-      ok: true,
-    });
-  });
-
-  // No cap by default: an agent that decides its third rewrite is the right move
-  // is not wrong about its own work, and the old bound existed to protect a
-  // hosted call allowance that no longer exists.
-  test('whole rewrites after a render are unlimited by default', async () => {
-    const sink: UnifiedSink = { edits: [] };
-    const tools = makeKilnUnifiedTools({ seedCode: BOX_CODE, sink });
-    const draft = findTool(tools, 'kiln_draft');
-    await findTool(tools, 'kiln_render').invoke({});
-    for (const w of [2, 3, 4, 5, 6]) {
-      expect(
-        (await draft.invoke({ code: BOX_CODE.replace('1, 1, 1', `${w}, 1, 1`) })) as {
-          ok: boolean;
-        },
-      ).toMatchObject({ ok: true });
-    }
-  });
-
-  test('a host that wants the old bound can still ask for it', async () => {
-    const sink: UnifiedSink = { edits: [] };
-    const tools = makeKilnUnifiedTools({ seedCode: BOX_CODE, sink, maxPostRenderRewrites: 2 });
-    const draft = findTool(tools, 'kiln_draft');
-    await findTool(tools, 'kiln_render').invoke({});
-    expect(
-      (await draft.invoke({ code: BOX_CODE.replace('1, 1, 1', '2, 1, 1') })) as { ok: boolean },
-    ).toMatchObject({ ok: true });
-    expect(
-      (await draft.invoke({ code: BOX_CODE.replace('1, 1, 1', '3, 1, 1') })) as { ok: boolean },
-    ).toMatchObject({ ok: true });
-    const beforeRejectedRewrite = sink.code;
-    const rejected = (await draft.invoke({
-      code: BOX_CODE.replace('1, 1, 1', '4, 1, 1'),
-    })) as { ok: boolean; error?: string; hint?: string };
-    expect(rejected.ok).toBe(false);
-    expect(rejected.error).toContain('whole-program rewrite limit');
-    expect(rejected.hint).toContain('kiln_edit');
-    expect(sink.code).toBe(beforeRejectedRewrite);
-  });
 });
-test('buffer inspection forwards the shared exact camera shot', async () => {
-  const tools = makeKilnUnifiedTools({ seedCode: BOX_CODE, sink: { edits: [] } });
+test('reference inspection forwards the shared exact camera shot', async () => {
+  const { tools, programRef } = await fixture(BOX_CODE);
   const result = (await findTool(tools, 'kiln_inspect').invoke({
+    programRef,
     shot: {
       camera: {
         type: 'explicit',

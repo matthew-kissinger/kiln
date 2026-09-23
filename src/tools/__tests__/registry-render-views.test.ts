@@ -6,7 +6,7 @@
 import { describe, expect, test } from 'bun:test';
 import {
   kilnRenderViewsDef,
-  kilnToolRegistry,
+  createKilnProgramToolRegistry,
   screenshotMedia,
   type KilnRenderViewsResult,
 } from '../registry';
@@ -32,18 +32,20 @@ describe('kilnRenderViewsDef (unified kiln_render)', () => {
    * false; the reason is what makes it usable.
    */
   test('says why exactArtifact is false instead of leaving it bare', async () => {
-    const result = (await kilnRenderViewsDef.run({ code: BOX_CODE })) as KilnRenderViewsResult;
+    const result = (await kilnRenderViewsDef.run({
+      code: BOX_CODE,
+    })) as KilnRenderViewsResult;
     expect(result.ok).toBe(true);
     expect(result.viewFidelity?.exactArtifact).toBe(false);
     expect(result.viewFidelity?.reasonCodes).toContain('IN_LOOP_BUILD_NOT_PERSISTED');
   }, 30000);
 
-  test('is named kiln_render and is NOT part of the four-tool registry baseline', () => {
-    expect(kilnRenderViewsDef.name).toBe('kiln_render');
-    expect(kilnRenderViewsDef.media).toBe(screenshotMedia);
-    // The registry array stays at four; the unified def lives outside it.
-    expect(kilnToolRegistry).toHaveLength(4);
-    expect(kilnToolRegistry.filter((d) => d === kilnRenderViewsDef)).toEqual([]);
+  test('the authoring registry uses one render tool with the shared image contract', () => {
+    const registry = createKilnProgramToolRegistry();
+    const renders = registry.filter((d) => d.name === 'kiln_render');
+    expect(renders).toHaveLength(1);
+    expect(renders[0]!.media).toBe(screenshotMedia);
+    expect(registry.some((d) => d.name === 'kiln_screenshot')).toBe(false);
   });
 
   test('describes the conditional GPU PBR path and the flat-shaded CPU fallback honestly', () => {
@@ -55,7 +57,9 @@ describe('kilnRenderViewsDef (unified kiln_render)', () => {
   });
 
   test('valid code returns metrics AND the six-view grid PNG from one execution', async () => {
-    const out = (await kilnRenderViewsDef.run({ code: BOX_CODE })) as KilnRenderViewsResult;
+    const out = (await kilnRenderViewsDef.run({
+      code: BOX_CODE,
+    })) as KilnRenderViewsResult;
     expect(out.ok).toBe(true);
     // Metrics (the kiln_render half).
     expect(out.tris).toBeGreaterThan(0);
@@ -95,7 +99,9 @@ describe('kilnRenderViewsDef (unified kiln_render)', () => {
   });
 
   test('media() returns undefined for a failed run (no image to attach)', async () => {
-    const out = await kilnRenderViewsDef.run({ code: 'throw new Error("boom")' });
+    const out = await kilnRenderViewsDef.run({
+      code: 'throw new Error("boom")',
+    });
     expect(kilnRenderViewsDef.media!(out)).toBeUndefined();
   });
 });

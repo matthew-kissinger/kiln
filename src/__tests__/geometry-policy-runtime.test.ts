@@ -1,19 +1,19 @@
 import { test, expect } from 'bun:test';
 import { renderGLBViaSubprocess } from '../evaluator/subprocess';
-import { createEvaluatorRequestV1, decodeEvaluatorRequestV1 } from '../evaluator/protocol';
+import { createEvaluatorRequestV2, decodeEvaluatorRequestV2 } from '../evaluator/protocol';
 import { createKilnProgramToolRegistry } from '../tools/registry';
 import { createLocalToolContext } from '../local-runtime';
 const code = (colors = false) =>
   `const meta={name:'policy',category:'prop'};function build(){const root=createRoot('Root');const geo=boxGeo(1,1,1);${colors ? "geo.setAttribute('customDisplacement',geo.getAttribute('position').clone());" : ''}createPart('Body',geo,gameMaterial('#888888'),{parent:root});return root;}`;
 test('geometry export policy roundtrips through strict worker protocol and rejects unknown policy', () => {
-  const request = createEvaluatorRequestV1({
+  const request = createEvaluatorRequestV2({
     requestId: 'policy',
     code: code(),
     options: { geometryPolicy: 'strict' },
   });
-  expect(decodeEvaluatorRequestV1(request.json).options.geometryPolicy).toBe('strict');
+  expect(decodeEvaluatorRequestV2(request.json).options.geometryPolicy).toBe('strict');
   expect(() =>
-    createEvaluatorRequestV1({
+    createEvaluatorRequestV2({
       requestId: 'policy',
       code: code(),
       options: { geometryPolicy: 'ignore' as never },

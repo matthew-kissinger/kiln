@@ -1,0 +1,673 @@
+{
+  "runtime": "sha256:1276ef6a16fed0220544b2dad8febbec89305b87c2471d51580d7d37082c774c",
+  "node": "v22.23.2",
+  "bun": "1.4.2",
+  "perCaseTimeoutMs": 20000,
+  "qualification": "Repeated existing bounded experiments on the current checkout; timings include concurrent authoring and are not comparative performance claims.",
+  "results": [
+    {
+      "id": "bevel-concave-profile",
+      "elapsedMs": 7.953800000000001,
+      "triangles": 284,
+      "bounds": {
+        "min": [
+          -1,
+          -1,
+          -0.5
+        ],
+        "max": [
+          1,
+          1,
+          0.5
+        ]
+      },
+      "topology": {
+        "tolerance": 3E-06,
+        "toleranceMode": "relative",
+        "positionScale": 3,
+        "vertices": 852,
+        "triangles": 284,
+        "boundaryEdges": 0,
+        "nonManifoldEdges": 0,
+        "orientationConflicts": 0,
+        "degenerateTriangles": 0,
+        "invalidIndices": 0,
+        "nonFiniteVertices": 0
+      },
+      "capEdgesRounded": false,
+      "selectedEdgeControl": "sweep-axis edges only"
+    },
+    {
+      "id": "bevel-concave",
+      "elapsedMs": 876.6805,
+      "triangles": 1500,
+      "bounds": {
+        "min": [
+          -1,
+          -1,
+          -0.5
+        ],
+        "max": [
+          1,
+          1,
+          0.5
+        ]
+      },
+      "topology": {
+        "tolerance": 3E-06,
+        "toleranceMode": "relative",
+        "positionScale": 3,
+        "vertices": 4500,
+        "triangles": 1500,
+        "boundaryEdges": 0,
+        "nonManifoldEdges": 0,
+        "orientationConflicts": 0,
+        "degenerateTriangles": 0,
+        "invalidIndices": 0,
+        "nonFiniteVertices": 0
+      },
+      "erosionEmpty": false,
+      "inputTriangles": 52,
+      "inputVolume": 2.3099999999999996,
+      "outputVolume": 2.252405433668721,
+      "selectedEdgeControl": false,
+      "attributePolicy": "position-only candidate; UV/material/face provenance not transported",
+      "sampledSourceToResult": {
+        "maxDistance": 0.07320508943426647,
+        "samples": 208
+      }
+    },
+    {
+      "id": "bevel-mixed",
+      "elapsedMs": 1879.4022,
+      "triangles": 1574,
+      "bounds": {
+        "min": [
+          -0.8500000238418579,
+          -0.8500000238418579,
+          -0.75
+        ],
+        "max": [
+          0.8500000238418579,
+          0.8500000238418579,
+          0.6000000238418579
+        ]
+      },
+      "topology": {
+        "tolerance": 2.757263206264917E-06,
+        "toleranceMode": "relative",
+        "positionScale": 2.757263206264917,
+        "vertices": 4722,
+        "triangles": 1574,
+        "boundaryEdges": 0,
+        "nonManifoldEdges": 4,
+        "orientationConflicts": 0,
+        "degenerateTriangles": 4,
+        "invalidIndices": 0,
+        "nonFiniteVertices": 0
+      },
+      "erosionEmpty": false,
+      "inputTriangles": 108,
+      "inputVolume": 1.8534887904082578,
+      "outputVolume": 1.8082695797453114,
+      "selectedEdgeControl": false,
+      "attributePolicy": "position-only candidate; UV/material/face provenance not transported",
+      "sampledSourceToResult": {
+        "maxDistance": 0.07320512384702013,
+        "samples": 432
+      }
+    },
+    {
+      "id": "bevel-thin",
+      "elapsedMs": 48.3483,
+      "triangles": 0,
+      "bounds": null,
+      "topology": {
+        "tolerance": 0,
+        "toleranceMode": "relative",
+        "positionScale": 0,
+        "vertices": 0,
+        "triangles": 0,
+        "boundaryEdges": 0,
+        "nonManifoldEdges": 0,
+        "orientationConflicts": 0,
+        "degenerateTriangles": 0,
+        "invalidIndices": 0,
+        "nonFiniteVertices": 0
+      },
+      "erosionEmpty": true,
+      "inputTriangles": 12,
+      "inputVolume": 0.48,
+      "outputVolume": 0,
+      "selectedEdgeControl": false,
+      "attributePolicy": "position-only candidate; UV/material/face provenance not transported",
+      "sampledSourceToResult": {
+        "empty": true
+      }
+    },
+    {
+      "id": "shell-open-plane-in",
+      "elapsedMs": 2.268099999999997,
+      "triangles": 96,
+      "bounds": {
+        "min": [
+          -1,
+          -1,
+          -0.10000000149011612
+        ],
+        "max": [
+          1,
+          1,
+          0
+        ]
+      },
+      "topology": {
+        "tolerance": 2.8301943396696316E-06,
+        "toleranceMode": "relative",
+        "positionScale": 2.8301943396696316,
+        "vertices": 50,
+        "triangles": 96,
+        "boundaryEdges": 0,
+        "nonManifoldEdges": 0,
+        "orientationConflicts": 0,
+        "degenerateTriangles": 0,
+        "invalidIndices": 0,
+        "nonFiniteVertices": 0
+      },
+      "signedOffset": -0.1,
+      "correspondingVertexDistance": {
+        "min": 0.10000000149011612,
+        "max": 0.10000000149011612
+      },
+      "signedVolume": 0.40000000596046464,
+      "crossesAnalyticAxis": false,
+      "inputUv": true,
+      "outputUv": false,
+      "boundaryCaps": true
+    },
+    {
+      "id": "shell-open-plane-out",
+      "elapsedMs": 2.2686999999999955,
+      "triangles": 96,
+      "bounds": {
+        "min": [
+          -1,
+          -1,
+          0
+        ],
+        "max": [
+          1,
+          1,
+          0.10000000149011612
+        ]
+      },
+      "topology": {
+        "tolerance": 2.8301943396696316E-06,
+        "toleranceMode": "relative",
+        "positionScale": 2.8301943396696316,
+        "vertices": 50,
+        "triangles": 96,
+        "boundaryEdges": 0,
+        "nonManifoldEdges": 0,
+        "orientationConflicts": 0,
+        "degenerateTriangles": 0,
+        "invalidIndices": 0,
+        "nonFiniteVertices": 0
+      },
+      "signedOffset": 0.1,
+      "correspondingVertexDistance": {
+        "min": 0.10000000149011612,
+        "max": 0.10000000149011612
+      },
+      "signedVolume": 0.40000000596046464,
+      "crossesAnalyticAxis": false,
+      "inputUv": true,
+      "outputUv": false,
+      "boundaryCaps": true
+    },
+    {
+      "id": "shell-curved-in",
+      "elapsedMs": 5.294800000000002,
+      "triangles": 656,
+      "bounds": {
+        "min": [
+          -0.9987954497337341,
+          -1,
+          -1
+        ],
+        "max": [
+          1,
+          1,
+          0.9987954497337341
+        ]
+      },
+      "topology": {
+        "tolerance": 3.4627108599697663E-06,
+        "toleranceMode": "relative",
+        "positionScale": 3.4627108599697665,
+        "vertices": 330,
+        "triangles": 656,
+        "boundaryEdges": 0,
+        "nonManifoldEdges": 0,
+        "orientationConflicts": 0,
+        "degenerateTriangles": 0,
+        "invalidIndices": 0,
+        "nonFiniteVertices": 0
+      },
+      "signedOffset": -0.1,
+      "correspondingVertexDistance": {
+        "min": 0.09999996666855356,
+        "max": 0.1000000281884643
+      },
+      "signedVolume": 0.8937219828413444,
+      "curvedRadius": 1,
+      "crossesAnalyticAxis": false,
+      "inputUv": true,
+      "outputUv": false,
+      "boundaryCaps": true
+    },
+    {
+      "id": "shell-curved-out",
+      "elapsedMs": 5.145600000000002,
+      "triangles": 656,
+      "bounds": {
+        "min": [
+          -1.0987653732299805,
+          -1,
+          -1.099729061126709
+        ],
+        "max": [
+          1.099729061126709,
+          1,
+          1.0987653732299805
+        ]
+      },
+      "topology": {
+        "tolerance": 3.696857524411061E-06,
+        "toleranceMode": "relative",
+        "positionScale": 3.6968575244110613,
+        "vertices": 330,
+        "triangles": 656,
+        "boundaryEdges": 0,
+        "nonManifoldEdges": 0,
+        "orientationConflicts": 0,
+        "degenerateTriangles": 0,
+        "invalidIndices": 0,
+        "nonFiniteVertices": 0
+      },
+      "signedOffset": 0.1,
+      "correspondingVertexDistance": {
+        "min": 0.0999999449124343,
+        "max": 0.10000005191141173
+      },
+      "signedVolume": 0.984724901255304,
+      "curvedRadius": 1,
+      "crossesAnalyticAxis": false,
+      "inputUv": true,
+      "outputUv": false,
+      "boundaryCaps": true
+    },
+    {
+      "id": "shell-curved-collision",
+      "elapsedMs": 5.463700000000003,
+      "triangles": 656,
+      "bounds": {
+        "min": [
+          -0.05992772802710533,
+          -1,
+          -0.05999999865889549
+        ],
+        "max": [
+          0.05999999865889549,
+          1,
+          0.05992772802710533
+        ]
+      },
+      "topology": {
+        "tolerance": 2.0071784472876705E-06,
+        "toleranceMode": "relative",
+        "positionScale": 2.0071784472876706,
+        "vertices": 330,
+        "triangles": 656,
+        "boundaryEdges": 0,
+        "nonManifoldEdges": 0,
+        "orientationConflicts": 0,
+        "degenerateTriangles": 0,
+        "invalidIndices": 0,
+        "nonFiniteVertices": 0
+      },
+      "signedOffset": -0.1,
+      "correspondingVertexDistance": {
+        "min": 0.09999999537365979,
+        "max": 0.10000000310454867
+      },
+      "signedVolume": 0.010851887140964262,
+      "curvedRadius": 0.06,
+      "crossesAnalyticAxis": true,
+      "inputUv": true,
+      "outputUv": false,
+      "boundaryCaps": true
+    },
+    {
+      "id": "remesh-deformed",
+      "elapsedMs": 328.514,
+      "triangles": 1798,
+      "bounds": {
+        "min": [
+          -0.7994822263717651,
+          -0.6717725992202759,
+          -1
+        ],
+        "max": [
+          0.7996839880943298,
+          0.6717700958251953,
+          1
+        ]
+      },
+      "topology": {
+        "tolerance": 2.8917882970404088E-06,
+        "toleranceMode": "relative",
+        "positionScale": 2.8917882970404087,
+        "vertices": 901,
+        "triangles": 1798,
+        "boundaryEdges": 0,
+        "nonManifoldEdges": 0,
+        "orientationConflicts": 0,
+        "degenerateTriangles": 0,
+        "invalidIndices": 0,
+        "nonFiniteVertices": 0
+      },
+      "inputTriangles": 540,
+      "inputAspect": {
+        "median": 9.174482165773139,
+        "p95": 12.568353777553783,
+        "max": 13.663018840598264
+      },
+      "outputAspect": {
+        "median": 1.9502807756629694,
+        "p95": 3.3629312919316843,
+        "max": 6.985002376858278
+      },
+      "sourceToResult": {
+        "maxDistance": 0.0797548244063786,
+        "samples": 720
+      },
+      "resultToSource": {
+        "maxDistance": 0.04224846808285183,
+        "samples": 720
+      },
+      "refineControl": {
+        "triangles": 2160,
+        "sourceToResult": {
+          "maxDistance": 2.9273029973045092E-08,
+          "samples": 720
+        },
+        "resultToSource": {
+          "maxDistance": 3.628339752016099E-08,
+          "samples": 720
+        },
+        "aspect": {
+          "median": 9.17446695001618,
+          "p95": 12.568406924299115,
+          "max": 13.663021383140393
+        }
+      },
+      "inputVolume": 1.8521878126470346,
+      "outputVolume": 1.8197383346455207,
+      "attributePolicy": {
+        "inputUv": true,
+        "outputUv": false,
+        "inputGroups": 1,
+        "outputGroups": 0,
+        "inputFaceIds": true,
+        "outputFaceIds": false
+      }
+    },
+    {
+      "id": "remesh-uneven",
+      "elapsedMs": 175.5736,
+      "triangles": 1560,
+      "bounds": {
+        "min": [
+          -0.9967753887176514,
+          -0.2999584674835205,
+          -0.9967753887176514
+        ],
+        "max": [
+          0.9967753887176514,
+          0.2999584674835205,
+          0.9967753887176514
+        ]
+      },
+      "topology": {
+        "tolerance": 2.8824277498813474E-06,
+        "toleranceMode": "relative",
+        "positionScale": 2.8824277498813475,
+        "vertices": 782,
+        "triangles": 1560,
+        "boundaryEdges": 0,
+        "nonManifoldEdges": 0,
+        "orientationConflicts": 0,
+        "degenerateTriangles": 0,
+        "invalidIndices": 0,
+        "nonFiniteVertices": 0
+      },
+      "inputTriangles": 288,
+      "inputAspect": {
+        "median": 2.0304227073255614,
+        "p95": 3.3031469803850335,
+        "max": 3.303146980385036
+      },
+      "outputAspect": {
+        "median": 1.983903923339796,
+        "p95": 2.811298096494163,
+        "max": 3.6157305706713276
+      },
+      "sourceToResult": {
+        "maxDistance": 0.04929846797461604,
+        "samples": 576
+      },
+      "resultToSource": {
+        "maxDistance": 0.031242702245185616,
+        "samples": 696
+      },
+      "refineControl": {
+        "triangles": 1152,
+        "sourceToResult": {
+          "maxDistance": 1.68928679818587E-08,
+          "samples": 576
+        },
+        "resultToSource": {
+          "maxDistance": 2.7533755648471743E-08,
+          "samples": 768
+        },
+        "aspect": {
+          "median": 2.030422561859865,
+          "p95": 3.3031469803850326,
+          "max": 3.303146980385038
+        }
+      },
+      "inputVolume": 1.2072971622372233,
+      "outputVolume": 1.183992637433357,
+      "attributePolicy": {
+        "inputUv": true,
+        "outputUv": false,
+        "inputGroups": 1,
+        "outputGroups": 0,
+        "inputFaceIds": true,
+        "outputFaceIds": false
+      }
+    },
+    {
+      "id": "remesh-boolean",
+      "elapsedMs": 176.1167,
+      "triangles": 2712,
+      "bounds": {
+        "min": [
+          -1,
+          -1,
+          -0.5
+        ],
+        "max": [
+          1,
+          1,
+          0.5
+        ]
+      },
+      "topology": {
+        "tolerance": 3E-06,
+        "toleranceMode": "relative",
+        "positionScale": 3,
+        "vertices": 1356,
+        "triangles": 2712,
+        "boundaryEdges": 0,
+        "nonManifoldEdges": 0,
+        "orientationConflicts": 0,
+        "degenerateTriangles": 0,
+        "invalidIndices": 0,
+        "nonFiniteVertices": 0
+      },
+      "inputTriangles": 112,
+      "inputAspect": {
+        "median": 8.630026777244302,
+        "p95": 32.14211232757532,
+        "max": 32.14211232757532
+      },
+      "outputAspect": {
+        "median": 2,
+        "p95": 2.3515837260023194,
+        "max": 2.351584183942817
+      },
+      "sourceToResult": {
+        "maxDistance": 0.06588500891854919,
+        "samples": 448
+      },
+      "resultToSource": {
+        "maxDistance": 0.04075823481400487,
+        "samples": 724
+      },
+      "refineControl": {
+        "triangles": 448,
+        "sourceToResult": {
+          "maxDistance": 7.881258623607128E-09,
+          "samples": 448
+        },
+        "resultToSource": {
+          "maxDistance": 1.18218861573518E-08,
+          "samples": 600
+        },
+        "aspect": {
+          "median": 8.630027269159383,
+          "p95": 32.14211357799728,
+          "max": 32.14216331200112
+        }
+      },
+      "inputVolume": 3.3710697204008744,
+      "outputVolume": 3.310409385382898,
+      "attributePolicy": {
+        "inputUv": true,
+        "outputUv": false,
+        "inputGroups": 1,
+        "outputGroups": 0,
+        "inputFaceIds": true,
+        "outputFaceIds": false
+      }
+    }
+  ],
+  "shellAlternatives": {
+    "runtime": "sha256:1276ef6a16fed0220544b2dad8febbec89305b87c2471d51580d7d37082c774c",
+    "scope": "Current supported profile alternatives, independent triangle-ray samples. Curved distances are radial through polygon facets, not a global minimum-thickness guarantee or arbitrary shell modifier. Generated surfaces have no inherited UV/material/face attributes; caller must assign materials and mappings.",
+    "rows": [
+      {
+        "id": "planar-wall",
+        "thickness": 0.1,
+        "construction": "extrudeProfile depth",
+        "sampledRadialOrNormalThickness": {
+          "min": 0.10000000149011612,
+          "max": 0.10000000149011612,
+          "expectedFacetThickness": 0.1,
+          "samples": 96
+        },
+        "topology": {
+          "tolerance": 2.8301943396696316E-06,
+          "toleranceMode": "relative",
+          "positionScale": 2.8301943396696316,
+          "vertices": 60,
+          "triangles": 20,
+          "boundaryEdges": 0,
+          "nonManifoldEdges": 0,
+          "orientationConflicts": 0,
+          "degenerateTriangles": 0,
+          "invalidIndices": 0,
+          "nonFiniteVertices": 0
+        },
+        "outputUv": false,
+        "materialGroups": 0,
+        "attributes": [
+          "position",
+          "normal"
+        ]
+      },
+      {
+        "id": "curved-wall",
+        "thickness": 0.1,
+        "construction": "revolveProfile explicit inner/outer contour",
+        "sampledRadialOrNormalThickness": {
+          "min": 0.09994642147423072,
+          "max": 0.09994649004151901,
+          "expectedFacetThickness": 0.09994645874763658,
+          "samples": 96
+        },
+        "topology": {
+          "tolerance": 3.4641016151377543E-06,
+          "toleranceMode": "relative",
+          "positionScale": 3.4641016151377544,
+          "vertices": 384,
+          "triangles": 768,
+          "boundaryEdges": 0,
+          "nonManifoldEdges": 0,
+          "orientationConflicts": 0,
+          "degenerateTriangles": 0,
+          "invalidIndices": 0,
+          "nonFiniteVertices": 0
+        },
+        "outputUv": false,
+        "materialGroups": 0,
+        "attributes": [
+          "position",
+          "normal"
+        ]
+      },
+      {
+        "id": "thin-curved-wall",
+        "thickness": 0.01,
+        "construction": "revolveProfile explicit inner/outer contour",
+        "sampledRadialOrNormalThickness": {
+          "min": 0.009994612682896808,
+          "max": 0.009994668805485496,
+          "expectedFacetThickness": 0.009994645874763657,
+          "samples": 96
+        },
+        "topology": {
+          "tolerance": 3.4641016151377543E-06,
+          "toleranceMode": "relative",
+          "positionScale": 3.4641016151377544,
+          "vertices": 384,
+          "triangles": 768,
+          "boundaryEdges": 0,
+          "nonManifoldEdges": 0,
+          "orientationConflicts": 0,
+          "degenerateTriangles": 0,
+          "invalidIndices": 0,
+          "nonFiniteVertices": 0
+        },
+        "outputUv": false,
+        "materialGroups": 0,
+        "attributes": [
+          "position",
+          "normal"
+        ]
+      }
+    ]
+  }
+}

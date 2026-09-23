@@ -1,0 +1,58 @@
+{
+  "scope": "bounded pure queue and fake loopback probes; loader performs one request to an owned local fixture server; no GPU",
+  "platform": "win32",
+  "arch": "x64",
+  "bun": "1.4.2",
+  "sourceHashes": {
+    "src/render-service-host.ts": "52e708b8491280c286fd1415fcc5a6fb5e68bc5a92d686023c144e85d0dc7820",
+    "render-service/src/server.mjs": "b6bb950be4682b16d93ae4b126893e93cd020d3d77f300021fb002a226e3dd39",
+    "render-service/src/contract.mjs": "423ab34428338369c1253267af8a1ffa887b2219aef8260f723abc7f85b19d5e",
+    "render-service/src/renderer.mjs": "33180ab3bd0cadd6b7d8207b2b349015567bfdf40a52ceeb58c9eec76785be97"
+  },
+  "unknownBusyEndpoint": {
+    "returnedEndpoint": true,
+    "elapsedMs": 1502.2705,
+    "everReturnedHealth": false
+  },
+  "unversionedEndpoint": {
+    "inspected": {
+      "kind": "service",
+      "rendererId": "unversioned-probe",
+      "stale": false,
+      "orphaned": false
+    },
+    "acceptedForStartup": true
+  },
+  "queue": {
+    "admittedBehindBlockedJob": 128,
+    "startedWhileBlocked": 0,
+    "note": "128 tiny jobs only; no resource exhaustion attempted. API has no admission or abort parameter.",
+    "completed": 128,
+    "maxObservedDepthAtEnqueue": 128
+  },
+  "legacyResourceArithmetic": {
+    "acceptedMode": "legacy",
+    "maximumSingleRequestViewPixels": 50331648,
+    "retainedAllRungTargetPixels": 75890688,
+    "note": "Arithmetic only; no large targets allocated. Retained-target totals exclude beauty, depth, MSAA and scene resources."
+  },
+  "externalResource": {
+    "code": 0,
+    "stdout": "{\"node\":\"v22.23.2\",\"glbBytes\":384,\"externalRequests\":1,\"loadedMeshes\":1,\"scope\":\"same GLTFLoader as service, direct parse; no HTTP renderer or GPU initialized\"}\n",
+    "stderr": ""
+  },
+  "browserBuilds": [
+    {
+      "entry": "src/composer/render-port.ts",
+      "code": 0,
+      "stdout": "Bundled 6 modules in 35ms\n\n  src-composer-render-port.js  0.34 MB  (entry point)\n\n",
+      "stderr": ""
+    },
+    {
+      "entry": "src/primitives.ts",
+      "code": 1,
+      "stdout": "",
+      "stderr": "6 | const childProcess = require('child_process');\n                                 ^\nerror: Browser build cannot require() Node.js builtin: \"child_process\". To use Node.js builtins, set target to 'node' or 'bun'\n    at C:\\Users\\Mattm\\X\\kiln-oss\\node_modules\\detect-libc\\lib\\detect-libc.js:6:30\n"
+    }
+  ]
+}

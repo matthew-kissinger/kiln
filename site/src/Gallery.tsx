@@ -118,6 +118,10 @@ export function Gallery({ specimens }: { specimens: Specimen[] }) {
           Props, machines, buildings and experiments made with Kiln. Rotate each asset, inspect its
           geometry, or download the GLB and editable source.
         </p>
+        <p>
+          Historical showcases from earlier Kiln versions. Modeling issues may remain; these are not
+          vetted reference assets.
+        </p>
       </header>
 
       <nav className="filters" aria-label="Filter examples">
@@ -132,7 +136,12 @@ export function Gallery({ specimens }: { specimens: Specimen[] }) {
         </label>
         <Facet label="Model" options={models} value={model} onChange={setModel} />
         <Facet label="Harness" options={harnesses} value={harness} onChange={setHarness} />
-        <Facet label="Category" options={categories} value={category} onChange={setCategory} />
+        <Facet
+          label="Collection tag"
+          options={categories}
+          value={category}
+          onChange={setCategory}
+        />
         <label className="facet">
           <small>Motion</small>
           <select value={motion} onChange={(e) => setMotion(e.target.value)}>

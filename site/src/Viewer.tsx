@@ -1,4 +1,4 @@
-import { Canvas, useThree } from '@react-three/fiber';
+import { Canvas, useFrame, useThree } from '@react-three/fiber';
 import { ContactShadows, Grid, OrbitControls, useGLTF, useProgress } from '@react-three/drei';
 import { Suspense, useEffect, useMemo, useRef, useState } from 'react';
 import * as THREE from 'three';
@@ -6,6 +6,7 @@ import { RoomEnvironment } from 'three/examples/jsm/environments/RoomEnvironment
 
 import { REPO, asset } from './repo';
 import type { Specimen } from './types';
+import { Downloads } from './Downloads';
 
 const num = (n: number) => n.toLocaleString('en-US');
 
@@ -213,13 +214,38 @@ function Model({
   wireframe,
   framing,
   onBounds,
+  clipIndex,
+  paused,
+  onClips,
 }: {
   url: string;
   wireframe: boolean;
   framing: number;
   onBounds: (radius: number) => void;
+  clipIndex: number;
+  paused: boolean;
+  onClips: (clips: { id: string; name: string }[]) => void;
 }) {
-  const { scene } = useGLTF(url);
+  const { scene, animations } = useGLTF(url);
+  const mixer = useMemo(() => new THREE.AnimationMixer(scene), [scene]);
+  useEffect(() => {
+    onClips(animations.map((clip) => ({ id: clip.uuid, name: clip.name })));
+    return () => {
+      mixer.stopAllAction();
+      mixer.uncacheRoot(scene);
+    };
+  }, [animations, mixer, scene, onClips]);
+  useEffect(() => {
+    mixer.stopAllAction();
+    const clip = animations[clipIndex];
+    if (clip) mixer.clipAction(clip).reset().play();
+    return () => {
+      mixer.stopAllAction();
+    };
+  }, [animations, clipIndex, mixer]);
+  useFrame((_, delta) => {
+    if (!paused) mixer.update(Math.min(delta, 0.1));
+  });
   const camera = useThree((s) => s.camera) as THREE.PerspectiveCamera;
   const controls = useThree((s) => s.controls) as OrbitLike | null;
   // The canvas size and not `camera.aspect`, which is still 1 on the frame this
@@ -322,6 +348,9 @@ export function Viewer({ all, current }: { all: Specimen[]; current: Specimen })
   const [framing, setFraming] = useState(0);
   const [radius, setRadius] = useState(4);
   const [canvasReady, setCanvasReady] = useState(false);
+  const [clips, setClips] = useState<{ id: string; name: string }[]>([]);
+  const [clipIndex, setClipIndex] = useState(-1);
+  const [paused, setPaused] = useState(false);
   const historyDialog = useRef<HTMLDialogElement>(null);
 
   const index = all.findIndex((s) => s.name === name);
@@ -364,6 +393,8 @@ export function Viewer({ all, current }: { all: Specimen[]; current: Specimen })
   useEffect(() => {
     setFraming((n) => n + 1);
     setSpin(false);
+    setClipIndex(-1);
+    setPaused(false);
     historyDialog.current?.close();
   }, [name]);
 
@@ -403,6 +434,34 @@ export function Viewer({ all, current }: { all: Specimen[]; current: Specimen })
           <button type="button" className="chip" onClick={() => setFraming((n) => n + 1)}>
             reset view
           </button>
+          {clips.length > 0 && (
+            <>
+              <select
+                className="chip"
+                aria-label="Animation"
+                value={clipIndex}
+                onChange={(event) => {
+                  setClipIndex(Number(event.target.value));
+                  setPaused(false);
+                }}
+              >
+                <option value={-1}>Rest pose</option>
+                {clips.map((clip, index) => (
+                  <option key={clip.id} value={index}>
+                    {clip.name}
+                  </option>
+                ))}
+              </select>
+              <button
+                type="button"
+                className="chip"
+                disabled={clipIndex < 0}
+                onClick={() => setPaused(!paused)}
+              >
+                {paused ? 'Play' : 'Pause'}
+              </button>
+            </>
+          )}
           <a
             className="chip"
             href={
@@ -414,12 +473,15 @@ export function Viewer({ all, current }: { all: Specimen[]; current: Specimen })
           >
             program
           </a>
-          <a className="chip" href={asset(current.file)} download={`${current.name}.glb`}>
-            glb
-          </a>
+          <Downloads specimen={current} />
         </div>
       </div>
 
+      <p className="download-note">
+        Original GLB retains Kiln review data. Runtime GLB moves duplicate animation-review data
+        into the companion JSON; geometry, textures and native animations stay unchanged. Keep the
+        program for editing. These historical examples may contain modeling issues.
+      </p>
       <div className="stage">
         <div className="model-viewport">
           <Canvas
@@ -461,6 +523,9 @@ export function Viewer({ all, current }: { all: Specimen[]; current: Specimen })
                 wireframe={wireframe}
                 framing={framing}
                 onBounds={setRadius}
+                clipIndex={clipIndex}
+                paused={paused}
+                onClips={setClips}
               />
             </Suspense>
 

@@ -30,6 +30,7 @@ interface DuckTrack {
   name?: string;
   times?: ArrayLike<number>;
   values?: ArrayLike<number>;
+  getInterpolation?(): number;
 }
 
 /** Minimal duck-typed view of a Three.js AnimationClip. */
@@ -47,6 +48,7 @@ interface PreparedTrack {
   stride: number;
   times: number[];
   values: number[];
+  interpolation: 'LINEAR' | 'STEP';
 }
 
 /** A clip prepared for repeated time-sampling: parsed tracks + a derived duration. */
@@ -106,10 +108,25 @@ export function prepareClip(root: DuckNode, clip: DuckClip): PreparedClip {
     const values = track.values ? Array.from(track.values) : [];
     if (times.length === 0 || values.length === 0) continue;
 
+    // Three's stable interpolation constants, read without importing its module or
+    // relying on class identity across realms. Plain historical duck tracks are linear.
+    const mode = track.getInterpolation?.();
+    if (mode !== undefined && mode !== 2300 && mode !== 2301) {
+      throw new Error(`Unsupported animation interpolation on ${raw}; use LINEAR or STEP.`);
+    }
+    const interpolation = mode === 2300 ? 'STEP' : 'LINEAR';
+
     if (!nodeNames.has(nodeName)) unresolved.push(raw);
     if (times[times.length - 1]! > maxTime) maxTime = times[times.length - 1]!;
 
-    tracks.push({ nodeName, prop: property, stride: PROP_STRIDE[property], times, values });
+    tracks.push({
+      nodeName,
+      prop: property,
+      stride: PROP_STRIDE[property],
+      times,
+      values,
+      interpolation,
+    });
   }
 
   const duration = clip.duration && clip.duration > 0 ? clip.duration : maxTime;
@@ -180,8 +197,9 @@ function slerpFlat(
 
 const quatTmp: number[] = [0, 0, 0, 1];
 
-/** Sample one prepared track at time `t` into `out` (length = stride). LINEAR for
- *  vectors, slerp for quaternions; clamps outside the keyframe range. */
+/** Sample one prepared track at time `t` into `out` (length = stride). STEP holds
+ *  the previous key until the exact next time. LINEAR uses vector lerp/quaternion
+ *  slerp. Both clamp outside the keyframe range. */
 function sampleTrack(track: PreparedTrack, t: number, out: number[]): void {
   const { times, values, stride } = track;
   const i = keyframeIndexAtOrBefore(times, t);
@@ -195,11 +213,15 @@ function sampleTrack(track: PreparedTrack, t: number, out: number[]): void {
     for (let s = 0; s < stride; s++) out[s] = values[base + s]!;
     return;
   }
+  if (track.interpolation === 'STEP') {
+    for (let s = 0; s < stride; s++) out[s] = values[i * stride + s]!;
+    return;
+  }
 
   const t0 = times[i]!;
   const t1 = times[i + 1]!;
   const span = t1 - t0;
-  const a = span > 1e-9 ? (t - t0) / span : 0;
+  const a = span > 0 ? (t - t0) / span : 0;
   const o0 = i * stride;
   const o1 = (i + 1) * stride;
 
@@ -213,6 +235,111 @@ function sampleTrack(track: PreparedTrack, t: number, out: number[]): void {
     for (let s = 0; s < stride; s++)
       out[s] = values[o0 + s]! + (values[o1 + s]! - values[o0 + s]!) * a;
   }
+}
+
+export interface LoopClosureEvidence {
+  version: 'kiln.loop-closure.v1';
+  status: 'closed' | 'open' | 'incomplete';
+  loopIntent: 'unspecified';
+  scope: string;
+  tolerances: { positionDistance: number; rotationDegrees: number; scaleDistance: number };
+  checkedTracks: number;
+  unassessedTracks: number;
+  mismatchCount: number;
+  maxPositionDistance: number;
+  maxRotationDegrees: number;
+  maxScaleDistance: number;
+  mismatches: { track: string; delta: number; unit: string }[];
+  detailsTruncated: boolean;
+}
+
+/** Endpoint C0 continuity, without assuming the clip was intended to loop.
+ * Uses the same clamping/interpolation as preview, independent of chosen frames.
+ * Quaternion distance is invariant to sign. Does not mutate the scene. */
+export function measureLoopClosure(root: DuckNode, clip: DuckClip): LoopClosureEvidence {
+  const tolerances = { positionDistance: 1e-6, rotationDegrees: 0.001, scaleDistance: 1e-6 };
+  const result: LoopClosureEvidence = {
+    version: 'kiln.loop-closure.v1',
+    status: 'incomplete',
+    loopIntent: 'unspecified',
+    scope:
+      'Local transform values at time 0 and clip duration; endpoint continuity only. Loop intent, velocity continuity, contacts and collision are not assessed. An open one-shot clip is valid.',
+    tolerances,
+    checkedTracks: 0,
+    unassessedTracks: 0,
+    mismatchCount: 0,
+    maxPositionDistance: 0,
+    maxRotationDegrees: 0,
+    maxScaleDistance: 0,
+    mismatches: [],
+    detailsTruncated: false,
+  };
+  const total = clip.tracks?.length ?? 0;
+  let prepared: PreparedClip;
+  try {
+    prepared = prepareClip(root, clip);
+  } catch {
+    result.unassessedTracks = total;
+    return result;
+  }
+  if (!Number.isFinite(prepared.duration) || prepared.duration <= 0) {
+    result.unassessedTracks = total;
+    return result;
+  }
+  result.unassessedTracks = total - prepared.tracks.length;
+  for (const track of prepared.tracks) {
+    const name = `${track.nodeName}.${track.prop}`;
+    const valid =
+      !prepared.unresolved.includes(name) &&
+      track.values.length === track.times.length * track.stride &&
+      track.values.every(Number.isFinite) &&
+      track.times.every(
+        (t, i) => Number.isFinite(t) && t >= 0 && (i === 0 || t > track.times[i - 1]!),
+      ) &&
+      (track.prop !== 'quaternion' ||
+        track.times.every((_, i) => Math.hypot(...track.values.slice(i * 4, i * 4 + 4)) > 1e-12));
+    if (!valid) {
+      result.unassessedTracks++;
+      continue;
+    }
+    const start: number[] = [],
+      end: number[] = [];
+    sampleTrack(track, 0, start);
+    sampleTrack(track, prepared.duration, end);
+    let delta: number, tolerance: number, unit: string;
+    if (track.prop === 'quaternion') {
+      const norm = Math.hypot(...start) * Math.hypot(...end);
+      const dot = start.reduce((sum, v, i) => sum + v * end[i]!, 0) / norm;
+      delta = (2 * Math.acos(Math.min(1, Math.abs(dot))) * 180) / Math.PI;
+      tolerance = tolerances.rotationDegrees;
+      unit = 'degrees';
+      result.maxRotationDegrees = Math.max(result.maxRotationDegrees, delta);
+    } else {
+      delta = Math.hypot(...start.map((v, i) => v - end[i]!));
+      if (track.prop === 'position') {
+        tolerance = tolerances.positionDistance;
+        unit = 'asset units (local)';
+        result.maxPositionDistance = Math.max(result.maxPositionDistance, delta);
+      } else {
+        tolerance = tolerances.scaleDistance;
+        unit = 'scale';
+        result.maxScaleDistance = Math.max(result.maxScaleDistance, delta);
+      }
+    }
+    result.checkedTracks++;
+    if (delta > tolerance) {
+      result.mismatchCount++;
+      if (result.mismatches.length < 32) result.mismatches.push({ track: name, delta, unit });
+    }
+  }
+  result.detailsTruncated = result.mismatchCount > result.mismatches.length;
+  result.status =
+    result.unassessedTracks || !result.checkedTracks
+      ? 'incomplete'
+      : result.mismatchCount
+        ? 'open'
+        : 'closed';
+  return result;
 }
 
 /**

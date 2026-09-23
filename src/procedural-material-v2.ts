@@ -248,10 +248,11 @@ function assertKeys(
   }
 }
 
-function color(value: unknown, path: string): number {
+function color(value: unknown, path: string, diagnostic?: AuthoringDiagnostic): number {
   if (typeof value !== 'number' || !Number.isInteger(value) || value < 0 || value > 0xffffff) {
     throw new ProceduralTextureError(
       `${path} must be a color integer between 0x000000 and 0xffffff, got ${JSON.stringify(value)}.`,
+      diagnostic,
     );
   }
   return value;
@@ -267,18 +268,26 @@ function integer(value: unknown, path: string, fallback: number, min: number, ma
   return value;
 }
 
-function finite(value: unknown, path: string, fallback: number, min: number, max: number): number {
+function finite(
+  value: unknown,
+  path: string,
+  fallback: number,
+  min: number,
+  max: number,
+  diagnostic?: AuthoringDiagnostic,
+): number {
   if (value === undefined) return fallback;
   if (typeof value !== 'number' || !Number.isFinite(value) || value < min || value > max) {
     throw new ProceduralTextureError(
       `${path} must be a finite number between ${min} and ${max}, got ${JSON.stringify(value)}.`,
+      diagnostic,
     );
   }
   return value;
 }
 
 function unit(value: unknown, path: string, fallback: number): number {
-  return finite(value, path, fallback, 0, 1);
+  return finite(value, path, fallback, 0, 1, 'MATERIAL_FRACTION_RANGE');
 }
 
 function optionalName(value: unknown, path: string): string | undefined {
@@ -323,6 +332,7 @@ function blend(record: Record<string, unknown>, path: string): ProceduralBlend {
   if (!BLENDS.includes(value as ProceduralBlend)) {
     throw new ProceduralTextureError(
       `${path}.blend ${JSON.stringify(value)} is not one of ${BLENDS.join(', ')}.`,
+      'PROCEDURAL_TEXTURE_BLEND',
     );
   }
   return value as ProceduralBlend;
@@ -573,6 +583,11 @@ function canonicalTextureRef(
   slot: keyof typeof MATERIAL_TEXTURE_USAGE,
 ): CanonicalPortableTextureRefV2 {
   const path = `portableMaterial.textures.${slot}`;
+  if (value === null || typeof value !== 'object' || Array.isArray(value))
+    throw new ProceduralTextureError(
+      `${path} must be a typed resource or procedural reference.`,
+      'PORTABLE_TEXTURE_REFERENCE',
+    );
   const record = strictRecord(value, path);
   if (record['kind'] === 'procedural') {
     assertKeys(record, ['kind', 'spec'], path);
@@ -597,7 +612,10 @@ function canonicalTextureRef(
     }
     return { kind: 'resource', resourceId };
   }
-  throw new ProceduralTextureError(`${path}.kind must be "procedural" or "resource".`);
+  throw new ProceduralTextureError(
+    `${path}.kind must be "procedural" or "resource".`,
+    'PORTABLE_TEXTURE_REFERENCE',
+  );
 }
 
 export function canonicalizePortableMaterialSpecV2(
@@ -654,7 +672,10 @@ export function canonicalizePortableMaterialSpecV2(
   }
   const alphaMode = record['alphaMode'] ?? 'opaque';
   if (alphaMode !== 'opaque' && alphaMode !== 'mask' && alphaMode !== 'blend') {
-    throw new ProceduralTextureError('portableMaterial.alphaMode must be opaque, mask, or blend.');
+    throw new ProceduralTextureError(
+      'portableMaterial.alphaMode must be opaque, mask, or blend.',
+      'MATERIAL_ALPHA_MODE',
+    );
   }
   if (record['doubleSided'] !== undefined && typeof record['doubleSided'] !== 'boolean') {
     throw new ProceduralTextureError('portableMaterial.doubleSided must be boolean.');
@@ -665,12 +686,24 @@ export function canonicalizePortableMaterialSpecV2(
     model: 'pbrMetallicRoughness',
     ...(name !== undefined ? { name } : {}),
     ...(record['baseColor'] !== undefined
-      ? { baseColor: color(record['baseColor'], 'portableMaterial.baseColor') }
+      ? {
+          baseColor: color(
+            record['baseColor'],
+            'portableMaterial.baseColor',
+            'PORTABLE_COLOR_ARGUMENT',
+          ),
+        }
       : {}),
     roughness: unit(record['roughness'], 'portableMaterial.roughness', 1),
     metalness: unit(record['metalness'], 'portableMaterial.metalness', 0),
     ...(record['emissive'] !== undefined
-      ? { emissive: color(record['emissive'], 'portableMaterial.emissive') }
+      ? {
+          emissive: color(
+            record['emissive'],
+            'portableMaterial.emissive',
+            'PORTABLE_COLOR_ARGUMENT',
+          ),
+        }
       : {}),
     emissiveIntensity: finite(
       record['emissiveIntensity'],

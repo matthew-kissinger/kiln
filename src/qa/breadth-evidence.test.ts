@@ -3,6 +3,7 @@ import * as THREE from 'three';
 
 import { createAssetIntentV1, stampSemanticMetadataV1 } from '../contracts';
 import { renderSceneToGLB } from '../render';
+import { bindLegacyFixtureRequirements } from '../__tests__/helpers/requirements-fixture';
 import {
   analyzeAssetScopeObservationV1,
   analyzeModularEvidenceV1,
@@ -290,7 +291,7 @@ describe('W7 engine-derived QA evidence', () => {
       runDeterministicSceneQa({ intent: vfxIntent(), scene: root, clips: [clip] }).disposition,
     ).not.toBe('block');
     const rendered = await renderSceneToGLB(root, {
-      intent: vfxIntent(),
+      requirements: bindLegacyFixtureRequirements(vfxIntent()),
       clips: [clip],
     });
     const finalEvidence = await analyzeFinalVfxGlbBytesV1(rendered.bytes);
@@ -332,7 +333,7 @@ describe('W7 engine-derived QA evidence', () => {
     material.alphaMap = new THREE.Texture({ width: 2, height: 2 });
     try {
       await renderSceneToGLB(vfxScene(material), {
-        intent: vfxIntent(),
+        requirements: bindLegacyFixtureRequirements(vfxIntent()),
         clips: [exportableLoopClip()],
       });
       throw new Error('expected final-byte VFX QA to block');
@@ -372,7 +373,9 @@ describe('W7 engine-derived QA evidence', () => {
         },
       },
     });
-    const rendered = await renderSceneToGLB(root, { intent });
+    const rendered = await renderSceneToGLB(root, {
+      requirements: bindLegacyFixtureRequirements(intent),
+    });
     const evidence = await analyzeFinalVfxGlbBytesV1(rendered.bytes);
     expect(evidence).toMatchObject({ normalAxis: '+Y', directionAxis: '+X' });
     expect(rendered.qaReport.disposition).not.toBe('block');

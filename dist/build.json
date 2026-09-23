@@ -2,11 +2,12 @@
   "schemaVersion": 1,
   "entries": {
     "worker": {
-      "identity": "sha256:506725cfcbc53420e8d0f08f8517953d2ae35692e34c30d78d019c6648f520d0",
-      "engineVersion": "0.7.1",
+      "identity": "sha256:3c02ee60a43a7423b72b8197438ef38e2dd8fb648028dd30b8640f258b41da6d",
+      "engineVersion": "0.8.0",
       "toolchain": "bun@1.4.2",
-      "sourceHash": "0e84ccf501f73a2a23141b03f39ecbeaa02228869c4cb0d6e1af5ce37670212d",
-      "dependencyHash": "363701eaf4938fc8f46405e6e92d0b36e218439c548b2427da0468edcc78a3dc",
+      "sourceHash": "2cf3b754a1380a1b0101cd7b74387a4009920795c5e678c3cee4ae99ca1aabeb",
+      "rendererSourceHash": "96007ac750645e53e9822a1a74c6aa027ebbd553b61b97fb75e87b8914892666",
+      "dependencyHash": "e17ce943b5391fbbc139202fc566d7ec36da9cf54cfcb9bbbbb98a737851ce97",
       "dependencies": {
         "@gltf-transform/core": "4.5.0",
         "@gltf-transform/extensions": "4.5.0",
@@ -14,28 +15,34 @@
         "@modelcontextprotocol/client": "^2.0.0",
         "@modelcontextprotocol/ext-apps": "2.0.0",
         "@modelcontextprotocol/server": "^2.0.0",
-        "@openrouter/ai-sdk-provider": "^2.10.0",
         "@types/three": "^0.186.0",
         "acorn": "^8.18.0",
         "acorn-walk": "^8.3.5",
         "gltf-validator": "2.0.0-dev.3.10",
         "manifold-3d": "^3.5.3",
+        "minisearch": "7.2.0",
+        "pngjs": "7.0.0",
         "sharp": "^0.35.4",
         "three": "0.186.0",
         "three-subdivide": "1.1.5",
         "xatlasjs": "^0.2.0",
         "zod": "^4.6.4"
+      },
+      "optionalDependencies": {
+        "@napi-rs/canvas": "1.0.9",
+        "webgpu": "0.6.1"
       },
       "target": "node",
       "file": "evaluator-worker.mjs",
-      "bundleHash": "sha256:7087ab40b40fdbd19a2bff3b7e050b10a4fb564acbc90c90a1d62def5df15762"
+      "bundleHash": "sha256:18874f7f68a6b2763b022f4adccbfb684bf703696751a66b5f7d14d5be6349b2"
     },
     "agent-run": {
-      "identity": "sha256:506725cfcbc53420e8d0f08f8517953d2ae35692e34c30d78d019c6648f520d0",
-      "engineVersion": "0.7.1",
+      "identity": "sha256:3c02ee60a43a7423b72b8197438ef38e2dd8fb648028dd30b8640f258b41da6d",
+      "engineVersion": "0.8.0",
       "toolchain": "bun@1.4.2",
-      "sourceHash": "0e84ccf501f73a2a23141b03f39ecbeaa02228869c4cb0d6e1af5ce37670212d",
-      "dependencyHash": "363701eaf4938fc8f46405e6e92d0b36e218439c548b2427da0468edcc78a3dc",
+      "sourceHash": "2cf3b754a1380a1b0101cd7b74387a4009920795c5e678c3cee4ae99ca1aabeb",
+      "rendererSourceHash": "96007ac750645e53e9822a1a74c6aa027ebbd553b61b97fb75e87b8914892666",
+      "dependencyHash": "e17ce943b5391fbbc139202fc566d7ec36da9cf54cfcb9bbbbb98a737851ce97",
       "dependencies": {
         "@gltf-transform/core": "4.5.0",
         "@gltf-transform/extensions": "4.5.0",
@@ -43,28 +50,34 @@
         "@modelcontextprotocol/client": "^2.0.0",
         "@modelcontextprotocol/ext-apps": "2.0.0",
         "@modelcontextprotocol/server": "^2.0.0",
-        "@openrouter/ai-sdk-provider": "^2.10.0",
         "@types/three": "^0.186.0",
         "acorn": "^8.18.0",
         "acorn-walk": "^8.3.5",
         "gltf-validator": "2.0.0-dev.3.10",
         "manifold-3d": "^3.5.3",
+        "minisearch": "7.2.0",
+        "pngjs": "7.0.0",
         "sharp": "^0.35.4",
         "three": "0.186.0",
         "three-subdivide": "1.1.5",
         "xatlasjs": "^0.2.0",
         "zod": "^4.6.4"
+      },
+      "optionalDependencies": {
+        "@napi-rs/canvas": "1.0.9",
+        "webgpu": "0.6.1"
       },
       "target": "node",
       "file": "agent-run.mjs",
-      "bundleHash": "sha256:74ee36c12609c3f72b0e17ab4d2fb4bbe45c9350d14ba646a95bcaaebfe14eea"
+      "bundleHash": "sha256:1067e9fe2af11ae8579fe23e8d3942e5be8aabbcb383e80055e4474c35b7371b"
     },
     "agent-providers": {
-      "identity": "sha256:506725cfcbc53420e8d0f08f8517953d2ae35692e34c30d78d019c6648f520d0",
-      "engineVersion": "0.7.1",
+      "identity": "sha256:3c02ee60a43a7423b72b8197438ef38e2dd8fb648028dd30b8640f258b41da6d",
+      "engineVersion": "0.8.0",
       "toolchain": "bun@1.4.2",
-      "sourceHash": "0e84ccf501f73a2a23141b03f39ecbeaa02228869c4cb0d6e1af5ce37670212d",
-      "dependencyHash": "363701eaf4938fc8f46405e6e92d0b36e218439c548b2427da0468edcc78a3dc",
+      "sourceHash": "2cf3b754a1380a1b0101cd7b74387a4009920795c5e678c3cee4ae99ca1aabeb",
+      "rendererSourceHash": "96007ac750645e53e9822a1a74c6aa027ebbd553b61b97fb75e87b8914892666",
+      "dependencyHash": "e17ce943b5391fbbc139202fc566d7ec36da9cf54cfcb9bbbbb98a737851ce97",
       "dependencies": {
         "@gltf-transform/core": "4.5.0",
         "@gltf-transform/extensions": "4.5.0",
@@ -72,28 +85,34 @@
         "@modelcontextprotocol/client": "^2.0.0",
         "@modelcontextprotocol/ext-apps": "2.0.0",
         "@modelcontextprotocol/server": "^2.0.0",
-        "@openrouter/ai-sdk-provider": "^2.10.0",
         "@types/three": "^0.186.0",
         "acorn": "^8.18.0",
         "acorn-walk": "^8.3.5",
         "gltf-validator": "2.0.0-dev.3.10",
         "manifold-3d": "^3.5.3",
+        "minisearch": "7.2.0",
+        "pngjs": "7.0.0",
         "sharp": "^0.35.4",
         "three": "0.186.0",
         "three-subdivide": "1.1.5",
         "xatlasjs": "^0.2.0",
         "zod": "^4.6.4"
+      },
+      "optionalDependencies": {
+        "@napi-rs/canvas": "1.0.9",
+        "webgpu": "0.6.1"
       },
       "target": "node",
       "file": "agent-providers.mjs",
-      "bundleHash": "sha256:fb2295599724eaa739ef31919eccae0ff6adece4c36b6886863eb7eeacb35650"
+      "bundleHash": "sha256:9d6faf03d307321bc2e3bd5ce5bdee0bbbf61e0ebed8bfebfa1fb072287b83fa"
     },
     "mcp": {
-      "identity": "sha256:506725cfcbc53420e8d0f08f8517953d2ae35692e34c30d78d019c6648f520d0",
-      "engineVersion": "0.7.1",
+      "identity": "sha256:3c02ee60a43a7423b72b8197438ef38e2dd8fb648028dd30b8640f258b41da6d",
+      "engineVersion": "0.8.0",
       "toolchain": "bun@1.4.2",
-      "sourceHash": "0e84ccf501f73a2a23141b03f39ecbeaa02228869c4cb0d6e1af5ce37670212d",
-      "dependencyHash": "363701eaf4938fc8f46405e6e92d0b36e218439c548b2427da0468edcc78a3dc",
+      "sourceHash": "2cf3b754a1380a1b0101cd7b74387a4009920795c5e678c3cee4ae99ca1aabeb",
+      "rendererSourceHash": "96007ac750645e53e9822a1a74c6aa027ebbd553b61b97fb75e87b8914892666",
+      "dependencyHash": "e17ce943b5391fbbc139202fc566d7ec36da9cf54cfcb9bbbbb98a737851ce97",
       "dependencies": {
         "@gltf-transform/core": "4.5.0",
         "@gltf-transform/extensions": "4.5.0",
@@ -101,28 +120,34 @@
         "@modelcontextprotocol/client": "^2.0.0",
         "@modelcontextprotocol/ext-apps": "2.0.0",
         "@modelcontextprotocol/server": "^2.0.0",
-        "@openrouter/ai-sdk-provider": "^2.10.0",
         "@types/three": "^0.186.0",
         "acorn": "^8.18.0",
         "acorn-walk": "^8.3.5",
         "gltf-validator": "2.0.0-dev.3.10",
         "manifold-3d": "^3.5.3",
+        "minisearch": "7.2.0",
+        "pngjs": "7.0.0",
         "sharp": "^0.35.4",
         "three": "0.186.0",
         "three-subdivide": "1.1.5",
         "xatlasjs": "^0.2.0",
         "zod": "^4.6.4"
+      },
+      "optionalDependencies": {
+        "@napi-rs/canvas": "1.0.9",
+        "webgpu": "0.6.1"
       },
       "target": "node",
       "file": "mcp-server.mjs",
-      "bundleHash": "sha256:d7ffb2c39437a46cff62a24ddfda37e12354d5324430ba7222ed26c8a3c08e9e"
+      "bundleHash": "sha256:ed67a463444def312fb520723c4cb87b686d1349cd447cb2638ddd11c8a61294"
     },
     "cli": {
-      "identity": "sha256:506725cfcbc53420e8d0f08f8517953d2ae35692e34c30d78d019c6648f520d0",
-      "engineVersion": "0.7.1",
+      "identity": "sha256:3c02ee60a43a7423b72b8197438ef38e2dd8fb648028dd30b8640f258b41da6d",
+      "engineVersion": "0.8.0",
       "toolchain": "bun@1.4.2",
-      "sourceHash": "0e84ccf501f73a2a23141b03f39ecbeaa02228869c4cb0d6e1af5ce37670212d",
-      "dependencyHash": "363701eaf4938fc8f46405e6e92d0b36e218439c548b2427da0468edcc78a3dc",
+      "sourceHash": "2cf3b754a1380a1b0101cd7b74387a4009920795c5e678c3cee4ae99ca1aabeb",
+      "rendererSourceHash": "96007ac750645e53e9822a1a74c6aa027ebbd553b61b97fb75e87b8914892666",
+      "dependencyHash": "e17ce943b5391fbbc139202fc566d7ec36da9cf54cfcb9bbbbb98a737851ce97",
       "dependencies": {
         "@gltf-transform/core": "4.5.0",
         "@gltf-transform/extensions": "4.5.0",
@@ -130,21 +155,26 @@
         "@modelcontextprotocol/client": "^2.0.0",
         "@modelcontextprotocol/ext-apps": "2.0.0",
         "@modelcontextprotocol/server": "^2.0.0",
-        "@openrouter/ai-sdk-provider": "^2.10.0",
         "@types/three": "^0.186.0",
         "acorn": "^8.18.0",
         "acorn-walk": "^8.3.5",
         "gltf-validator": "2.0.0-dev.3.10",
         "manifold-3d": "^3.5.3",
+        "minisearch": "7.2.0",
+        "pngjs": "7.0.0",
         "sharp": "^0.35.4",
         "three": "0.186.0",
         "three-subdivide": "1.1.5",
         "xatlasjs": "^0.2.0",
         "zod": "^4.6.4"
       },
+      "optionalDependencies": {
+        "@napi-rs/canvas": "1.0.9",
+        "webgpu": "0.6.1"
+      },
       "target": "node",
       "file": "cli.mjs",
-      "bundleHash": "sha256:ade6ba055c1095a57c019ff165016cfd1bdd101085d0c9a2a1e45aa68d51f950"
+      "bundleHash": "sha256:15e7f73e1e1d08e503d20abfd453d5d14026b618c1a71b8b94275b7d4e144a49"
     }
   }
 }

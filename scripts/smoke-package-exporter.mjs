@@ -4,11 +4,16 @@ import { createHash } from 'node:crypto';
 import { readFile, writeFile } from 'node:fs/promises';
 import { createRequire } from 'node:module';
 import { join } from 'node:path';
-import { pathToFileURL } from 'node:url';
 
-export async function smokePackageExporter({ runtime, workspace, cli, command }) {
+export async function smokePackageExporter({
+  runtime,
+  workspace,
+  cli,
+  command,
+  NodeIO,
+  ALL_EXTENSIONS,
+}) {
   const require = createRequire(join(runtime, 'package.json'));
-  const load = (name) => import(pathToFileURL(require.resolve(name)).href);
   // Optional to normal users, required for this explicit textured candidate qualification.
   const canvasPath = require.resolve('@napi-rs/canvas');
   const source = join(workspace, 'community-texture.kiln.js');
@@ -33,8 +38,6 @@ function animate() {return [createClip('turn',1,[rotationTrack('Joint_TexturePiv
     KILN_BUILD_CACHE: 'off',
   });
   const bytes = await readFile(output);
-  const { NodeIO } = await load('@gltf-transform/core');
-  const { ALL_EXTENSIONS } = await load('@gltf-transform/extensions');
   const validator = require('gltf-validator');
   const validation = await validator.validateBytes(new Uint8Array(bytes));
   assert.equal(validation.issues.numErrors, 0, JSON.stringify(validation.issues));

@@ -13,7 +13,6 @@ import {
   settleContacts,
 } from '../render';
 import { validate } from '../validation';
-import { createAssetIntentV1 } from '../contracts';
 
 const FLOATER_CODE = `
 const meta = { name: 'floaty', category: 'prop' };
@@ -99,7 +98,7 @@ describe('orientation advisory', () => {
     expect(inspectSceneStructure(sideways.root).some((w) => w.includes('Orientation'))).toBe(false);
   });
 
-  test('intent-only render uses the trusted vehicle profile for inspection and runtime cost', async () => {
+  test('neutral render does not infer a vehicle requirement from source labels', async () => {
     const sideways = await executeKilnCode(`
       const meta = { name: 'sideways', category: 'prop' };
       function build() {
@@ -123,12 +122,11 @@ describe('orientation advisory', () => {
         return root;
       }
     `);
-    const rendered = await renderSceneToGLB(sideways.root, {
-      intent: createAssetIntentV1({ category: 'vehicle' }),
-    });
+    const rendered = await renderSceneToGLB(sideways.root);
 
-    expect(rendered.warnings.some((warning) => warning.includes('Orientation'))).toBe(true);
-    expect(rendered.qaReport.category).toBe('vehicle');
+    expect(rendered.warnings.some((warning) => warning.includes('Orientation'))).toBe(false);
+    expect(rendered.qaReport).not.toHaveProperty('category');
+    expect(rendered.qaReport.acceptance).toBe('accepted');
     expect(rendered.qaReport.dimensions.runtimeCost.status).toBe('pass');
     expect(rendered.qaReport.dimensions.runtimeCost.metrics?.['instanceabilityGrade']).toBe(
       rendered.instanceability?.grade,
