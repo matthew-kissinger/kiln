@@ -8,8 +8,28 @@ local checks, CI and remaining GPU/provider limits.
 
 ## Use the 0.8 source release
 
-The `v0.8.0` tag identifies the verified main commit. This route builds from source
-and needs Bun 1.4.2; the installed CLI/MCP runtime itself needs only supported Node.
+The `v0.8.0` tag identifies the verified main commit. Its GitHub archive includes
+the built CLI/MCP runtimes, renderer code, plugins and skills. Install it with
+supported Node and npm; this route requires neither Bun nor a build step:
+
+```sh
+mkdir kiln-install
+cd kiln-install
+npm init -y
+npm install "https://github.com/matthew-kissinger/kiln/archive/refs/tags/v0.8.0.tar.gz" --omit=dev --include=optional
+npm exec --offline -- kiln-init ../my-assets --harness opencode
+cd ../my-assets
+# Follow START.md for your harness
+```
+
+You can also download that archive and give its local path to `npm install`.
+This is GitHub's source archive, with more repository files than a curated
+`npm pack` tarball. It does not create an npm registry publication or a GitHub
+Release with separately uploaded packages. The candidate archive passed the same
+17 installed CLI/MCP/export checks on Windows; CI separately tests the curated
+tarball across supported platforms.
+
+To modify Kiln itself, clone the tag and build with Bun 1.4.2 instead:
 
 ```sh
 git clone --branch v0.8.0 --single-branch https://github.com/matthew-kissinger/kiln.git
