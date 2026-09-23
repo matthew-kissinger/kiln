@@ -1,7 +1,16 @@
 import { expect, it } from 'bun:test';
 import { createHash } from 'node:crypto';
 import { spawnSync } from 'node:child_process';
-import { copyFile, mkdir, mkdtemp, readFile, rm, symlink, writeFile } from 'node:fs/promises';
+import {
+  copyFile,
+  mkdir,
+  mkdtemp,
+  readFile,
+  realpath,
+  rm,
+  symlink,
+  writeFile,
+} from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { dirname, join, resolve } from 'node:path';
 import { pathToFileURL } from 'node:url';
@@ -46,6 +55,37 @@ async function fixture(runtime: string, revision: string) {
   for (const name of ['kiln-author-asset', 'kiln-refine-asset', 'kiln-qa-asset'])
     await put(join(runtime, 'skills', name, 'SKILL.md'), `# ${name} ${revision}\n`);
 }
+
+it('workspace paths stay current across parent directory aliases and canonical Node entry paths', async () => {
+  const temp = await mkdtemp(join(tmpdir(), 'kiln-workspace-alias-'));
+  try {
+    const physical = join(temp, 'physical');
+    const alias = join(temp, 'alias');
+    await mkdir(physical);
+    await symlink(physical, alias, process.platform === 'win32' ? 'junction' : 'dir');
+    // Exercise both existing destinations and new nested paths below an alias.
+    for (const suffix of ['existing', 'new/nested/workspace']) {
+      if (suffix === 'existing') await mkdir(join(physical, suffix));
+      const entered = join(alias, suffix);
+      const created = invoke(entered, repo);
+      expect(created.status).toBe(0);
+      const canonical = await realpath(entered);
+      expect(JSON.parse(created.stdout).root).toBe(canonical);
+      for (const root of [entered, canonical]) {
+        const check = invoke(root, repo, { check: true });
+        expect(check.status).toBe(0);
+        expect(JSON.parse(check.stdout).status).toBe('current');
+      }
+      const cli = spawnSync('node', [join(entered, 'kiln.mjs'), 'discover', '--json'], {
+        encoding: 'utf8',
+      });
+      expect(cli.status).toBe(0);
+      expect(JSON.parse(cli.stdout).version).toBe('kiln.discovery.v1');
+    }
+  } finally {
+    await rm(temp, { recursive: true, force: true });
+  }
+}, 30000);
 
 it('checks the recorded interpreter without treating another supported caller as runtime drift', async () => {
   const temp = await mkdtemp(join(tmpdir(), 'kiln-check-node-'));

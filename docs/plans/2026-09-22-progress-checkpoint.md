@@ -17,15 +17,19 @@ blind/game dogfooding. Finish with a reviewed change set and explicit qualificat
 limits. Finish the authorized main update and live gallery verification; official package
 publication remains a separate owner decision.
 
-The pass is complete for local owner review. Its [candidate report](../reviews/2026-09-23-v08-candidate.md)
+The local implementation and public commit review are complete.
+[PR #124](https://github.com/matthew-kissinger/kiln/pull/124) tracks integration,
+required CI and merge; this document records the pre-merge checkpoint. Its [candidate report](../reviews/2026-09-23-v08-candidate.md)
 contains the atomic completion list, trace findings, commit grouping and later gates.
 
 Verified runtime: `sha256:3c02ee60a43a7423b72b8197438ef38e2dd8fb648028dd30b8640f258b41da6d`. Full coverage: 2,659 pass, two skip, zero fail;
 95.14% functions / 92.25% lines. Renderer-service: 73/73. Fresh Windows npm
 installation passes 17 checks on Node 20.15.0 and 22.23.2 without Strands peers.
-Six installed GPU views pass on RTX 3070/D3D12. New Linux minimum-Node and
-software-Vulkan CI jobs are prepared but unexecuted; physical additional GPU
-vendors remain unqualified.
+Six installed GPU views pass on RTX 3070/D3D12. The first PR run passed Linux Node 20/22/24 installation, Windows installation
+and software Vulkan. macOS path aliases and a Windows test expectation required
+corrections; Linux coverage needed direct command-boundary execution of existing
+Discovery tests. The required CI rerun is the remaining integration gate.
+Physical additional GPU vendors remain unqualified.
 
 External/native workflows now have separate entrypoints and explicitly selected
 technical references. Thirteen focused native SDK/resource checks pass. All six
@@ -37,9 +41,9 @@ outputs remain unmodified and are not golden examples.
 
 Evidence: `C:/Users/Mattm/X/kiln-dogfood/v08-2026-09-23`. Final candidate identity
 and file/receipt hashes are retained there. No inference is left running. No
-commit, push or publication has occurred. Broader native-provider work, physical
-GPU coverage and execution of newly prepared CI are later acceptance work, not
-reasons to repeat completed checkout campaigns.
+inference campaign needs restarting. The reviewed candidate is committed and
+pushed on the PR branch; official package publication is excluded. Broader native-
+provider work and physical GPU coverage remain explicit later acceptance work.
 
 The sections below retain the preceding closeout and its historical evidence.
 
@@ -93,10 +97,8 @@ External root: `C:/Users/Mattm/X/kiln-dogfood/unification-2026-09-22`.
 `final-candidate-manifest.json` identifies the dirty checkout, tracked deletions,
 built bundles and selected external receipts independently of base HEAD.
 
-Native13 conservative settled Google usage is $3.8435685, not an invoice. The
-separate authorization is at most $20 of verified eligible credits, no out-of-pocket
-spend. No further call is scheduled; future calls require refreshed credit evidence.
-Original OpenRouter conservative reservations remain $8.312740725 under its $10 cap,
+Native13 conservative settled Google usage is $3.8435685, not an invoice. Operator authorization and account credit evidence are private records. No further
+call is scheduled. Original OpenRouter conservative reservations remain $8.312740725,
 including an unresolved prior reserve. No new inference spending occurred in closeout.
 
 ## What happens later

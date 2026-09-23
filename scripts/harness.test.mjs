@@ -1,6 +1,6 @@
 import { expect, test } from 'bun:test';
 import { spawnSync } from 'node:child_process';
-import { copyFileSync, mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs';
+import { copyFileSync, mkdirSync, mkdtempSync, realpathSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join, resolve } from 'node:path';
 import { HARNESSES, resolveBin } from './harness.mjs';
@@ -36,7 +36,8 @@ test.skipIf(process.platform !== 'win32')(
 test.skipIf(process.platform !== 'win32')(
   'Windows resolution preserves PATH precedence when a later executable shadows a command shim',
   () => {
-    const root = mkdtempSync(join(tmpdir(), 'kiln-harness-resolution-'));
+    // Windows runner TEMP may use an 8.3 alias; compare the actual target.
+    const root = realpathSync(mkdtempSync(join(tmpdir(), 'kiln-harness-resolution-')));
     try {
       const first = join(root, 'current');
       const second = join(root, 'old');

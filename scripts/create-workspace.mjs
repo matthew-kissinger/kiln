@@ -469,7 +469,7 @@ export async function renderServiceNotice(runtime) {
 
 /** Preflight first; create a complete project in a staging directory before installing it. */
 export async function createWorkspace(directory, harness = 'claude', options = {}) {
-  const root = resolve(directory);
+  let root = resolve(directory);
   const runtime = await realpath(resolve(options.installation ?? installation));
   if ([options.repair, options.upgrade, options.check].filter(Boolean).length > 1)
     throw new Error('Choose only one of --repair, --upgrade or --check.');
@@ -503,8 +503,8 @@ export async function createWorkspace(directory, harness = 'claude', options = {
     if (!info.isDirectory() || info.isSymbolicLink())
       throw new Error('Choose a real directory, not a symbolic link.');
     exists = true;
-    if (inside(runtime, await realpath(root)))
-      throw new Error('Choose a directory outside the Kiln installation.');
+    root = await realpath(root);
+    if (inside(runtime, root)) throw new Error('Choose a directory outside the Kiln installation.');
   } catch (error) {
     if (error.code !== 'ENOENT') throw error;
   }
@@ -512,7 +512,12 @@ export async function createWorkspace(directory, harness = 'claude', options = {
   let ancestor = dirname(root);
   while (true) {
     try {
-      ancestor = await realpath(ancestor);
+      const canonical = await realpath(ancestor);
+      // Node resolves entry files through aliases (e.g. /var -> /private/var on
+      // macOS). Generate and later compare the same canonical workspace paths,
+      // including destinations whose final directories do not exist yet.
+      root = resolve(canonical, relative(ancestor, root));
+      ancestor = canonical;
       break;
     } catch (error) {
       if (error.code !== 'ENOENT') throw error;

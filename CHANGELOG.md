@@ -3,9 +3,9 @@
 Changes to `@kiln/engine`. Source and installable packages are distributed through
 GitHub. The package is not published on the npm registry.
 
-## 0.8.0 (unreleased candidate)
+## 0.8.0 (source update; official package pending)
 
-The 0.8.0 candidate also exposes Original GLB and Runtime GLB downloads in the local
+The 0.8.0 source update exposes Original GLB and Runtime GLB downloads in the local
 viewer and public gallery, with companion runtime metadata and unchanged canonical
 files. The public viewer adds native animation selection and pause/play controls.
 Gallery build scripts use the current evaluator API. Site setup text and
@@ -46,10 +46,11 @@ files, with no workspace setup, CLI command or delivery instructions.
 - **Consumer requirements are separate from maintainer pins.** CLI/MCP accept Node
   20.15.0+ on the 20.x line or 22.2.0+; native Strands requires 22.2.0+. Installed
   commands do not require Bun. Read-only workspace checks respect an existing
-  installed interpreter; repair/upgrade remains explicit. OpenCode setup guidance
+  installed interpreter; setup canonicalizes parent directory aliases so macOS temporary
+  workspaces remain current after Node resolves their paths. Repair/upgrade remains explicit. OpenCode setup guidance
   reflects its current CLI, and Cline's affected image path has a documented workaround.
 
-This version is a local candidate, not a published package. Qualification and
+This source update does not publish a new installable package. Qualification and
 remaining limits are recorded in the [progress checkpoint](docs/plans/2026-09-22-progress-checkpoint.md).
 The development entries below retain earlier changes and may describe intermediate
 interfaces superseded by this version; use the current tool and migration guides.
