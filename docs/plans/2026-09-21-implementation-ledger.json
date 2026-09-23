@@ -3697,14 +3697,22 @@
     },
     "finalRuntimeIdentity": "sha256:3c02ee60a43a7423b72b8197438ef38e2dd8fb648028dd30b8640f258b41da6d",
     "finalCoverage": {
-      "pass": 2659,
+      "pass": 2660,
       "skip": 2,
       "fail": 0,
-      "functions": 95.14,
-      "lines": 92.25
+      "functions": 95.2,
+      "lines": 92.36
     },
     "integrationRecord": "https://github.com/matthew-kissinger/kiln/pull/124",
-    "sourceTag": "v0.8.0 after verified integration; no official package publication"
+    "sourceTag": "v0.8.0 after verified integration; no official package publication",
+    "archiveInstallation": {
+      "status": "passed",
+      "platform": "Windows x64",
+      "node": "22.23.2",
+      "checks": 17,
+      "runtimeBuildRequired": false,
+      "officialPackagePublished": false
+    }
   },
   "previousCheckoutCheckpoint": {
     "kind": "validation",

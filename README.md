@@ -62,23 +62,37 @@ issues; they are not golden outputs or reference solutions.
 
 Version **0.8.0** unifies authoring around Discovery and optional requirements,
 with updated geometry helpers, edit evidence and separate native-agent context.
-It is a source update; an official 0.8.0 package has not been published. Use the
-[versioned source installation](docs/install.md#use-the-08-source-release) for the
-new tools. The [qualification report](docs/reviews/2026-09-23-v08-candidate.md)
+The tagged GitHub archive includes the built runtimes and is installable with npm.
+An official 0.8.0 package release has not been published. The [qualification report](docs/reviews/2026-09-23-v08-candidate.md)
 records checks and support limits; the [progress checkpoint](docs/plans/2026-09-22-progress-checkpoint.md)
 retains the detailed work history.
 
 
-Start with the [installation guide](docs/install.md) for a built package on macOS,
-Windows, or Linux. It uses Node.js and creates a project-local agent setup.
-Prior releases have package receipts on Windows, Linux, and hosted macOS runners
-for Apple Silicon and Intel. Those [platform receipts](docs/evaluation/platform-matrix.md)
-do not qualify the current candidate;
-real-world setup reports and GPU checks remain welcome from contributors.
+## Install and start an asset workspace
+
+Use Node.js **20.15.0+ on the 20.x line**, or **22.2.0 and later**, with npm.
+Bun and a separate model API key are not required for this installation:
+
+```sh
+mkdir kiln-install
+cd kiln-install
+npm init -y
+npm install "https://github.com/matthew-kissinger/kiln/archive/refs/tags/v0.8.0.tar.gz" --omit=dev --include=optional
+npm exec --offline -- kiln-init ../my-assets --harness opencode
+cd ../my-assets
+# Follow START.md for your harness
+```
+
+The installation stays separate from your asset workspace. Choose `claude`, `codex`,
+`opencode`, `hermes`, `agy`, `copilot`, or `cursor-agent` for `--harness`.
+The [installation guide](docs/install.md#use-the-08-source-release) covers local
+archive files, existing-workspace upgrades and platform qualification. For a new
+installation, a maintained Node 22 or 24 LTS release is recommended; Node 20
+compatibility accommodates existing distribution-managed installations.
 
 ## Run from a checkout
 
-Install [Bun](https://bun.sh), then:
+For engine development, install [Bun](https://bun.sh) 1.4.2, then:
 
 ```sh
 git clone --filter=blob:none https://github.com/matthew-kissinger/kiln
@@ -108,7 +122,10 @@ batch limits and `replaceAll`.
 materials, backfaces, named pivots and animation checks. The established exporter remains
 the default. An **experimental community exporter** is available for explicit comparison
 when you need its additional feature preservation; the guide includes activation, rollback
-and known limitations. No separate repository is required once this integration is on main.
+and known limitations. Both converters are included in this installation.
+
+<details>
+<summary>For clones made before the September 10 history cleanup</summary>
 
 History was rewritten on 2026-09-10 to drop 288 MB of gallery renders and launch
 video that no tool reads, taking a clone from 440 MB to 60 MB, or 49 MB with
@@ -116,8 +133,9 @@ video that no tool reads, taking a clone from 440 MB to 60 MB, or 49 MB with
 unchanged apart from those files, but every commit hash changed, so a clone made
 before that date cannot fast-forward.
 
-Re-cloning is simplest. To convert a clone you already have, move the **tag** as
-well as the branch:
+Re-cloning is simplest. Before converting an old clone, back up uncommitted work
+and local branches: the commands below reset the checkout and prune recovery
+history. Move the **tag** as well as the branch:
 
 ```sh
 git fetch --tags --force origin
@@ -135,13 +153,18 @@ one in place, holding every removed file reachable. Omit it and `.git` stays at
 The gallery images are served from `assets.kilnstudio.tools`; the 83 poster
 receipts that attest their bytes stayed in `examples/renders/`.
 
+</details>
+
 ## Connect your agent
 
 The [agent reading guide](site/public/llms.txt) links to setup, tool schemas and the
 source revision workflow in plain text.
 
-Create a separate directory for your assets. The setup command writes project-local
-configuration and copies the Kiln skills; it does not change your global settings.
+The installation commands above create a separate asset workspace, register MCP
+and copy the Kiln skills. Follow its START.md to launch your harness. Setup writes
+project-local configuration and leaves your global settings unchanged.
+
+If you are developing Kiln from a source checkout, create that workspace with:
 
 ```sh
 bun run build:runtime
@@ -200,8 +223,8 @@ Save finished work into this workspace with
 `node kiln.mjs save workbench.kiln.js --name "Workbench"`, or add
 `--collection library` when you explicitly want it in your cross-workspace user library.
 Run `node kiln.mjs view` to browse **This project** and **Your library**, inspect revisions,
-and download GLBs or editable ZIP bundles. Both use the same portable collection format and
-the same viewer. See [saved assets and the viewer](docs/collections.md).
+and download Original GLB, Runtime GLB with companion metadata, or editable ZIP
+bundles. Both collections use the same portable format and viewer. See [saved assets and the viewer](docs/collections.md).
 
 For application delivery, export with `--profile runtime --out asset.glb` to move
 Kiln's animation review metadata into a hash-linked JSON sidecar. Native glTF animation
@@ -221,7 +244,7 @@ An agent can also launch the local viewer on the saved revision and provide its 
 Orbit the model and inspect its animation without leaving chat.
 ChatGPT viewing was verified with real saved assets.
 
-1. Build the runtime and connect its stdio MCP server through an OpenAI Secure
+1. Install Kiln (or build the runtime from a checkout) and connect its stdio MCP server through an OpenAI Secure
    MCP Tunnel scoped to your workspace.
 2. Install the authoring and refinement skills with their reference files using
    ChatGPT's native skill uploader.
@@ -319,13 +342,13 @@ then request `{ ids: ["sweepProfile"] }` for a complete contract and example. Ex
 batches accept up to six distinct IDs or executable names. Search is local and needs
 no separate model, network call, or asset-category selection.
 
-The same workflow is available in the CLI:
+The same workflow is available from your asset workspace in the CLI:
 
 ```sh
-bun run kiln discover --query "curved hollow tube"
-bun run kiln discover --id sweepProfile --id createPart --json
-bun run kiln discover --kind recipe
-bun run kiln discover --capabilities
+node kiln.mjs discover --query "curved hollow tube"
+node kiln.mjs discover --id sweepProfile --id createPart --json
+node kiln.mjs discover --kind recipe
+node kiln.mjs discover --capabilities
 ```
 
 Search and overview accept `family`, `kind`, `tags`, `offset` and `limit` (default six,

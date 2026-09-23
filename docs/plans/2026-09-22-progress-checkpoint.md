@@ -22,8 +22,8 @@ The local implementation and public commit review are complete.
 required CI and merge; this document records the pre-merge checkpoint. Its [candidate report](../reviews/2026-09-23-v08-candidate.md)
 contains the atomic completion list, trace findings, commit grouping and later gates.
 
-Verified runtime: `sha256:3c02ee60a43a7423b72b8197438ef38e2dd8fb648028dd30b8640f258b41da6d`. Full coverage: 2,659 pass, two skip, zero fail;
-95.14% functions / 92.25% lines. Renderer-service: 73/73. Fresh Windows npm
+Verified runtime: `sha256:3c02ee60a43a7423b72b8197438ef38e2dd8fb648028dd30b8640f258b41da6d`. Local coverage after CI corrections: 2,660 pass, two skip, zero fail;
+95.20% functions / 92.36% lines. Renderer-service: 73/73. Fresh Windows npm
 installation passes 17 checks on Node 20.15.0 and 22.23.2 without Strands peers.
 Six installed GPU views pass on RTX 3070/D3D12. The first PR run passed Linux Node 20/22/24 installation, Windows installation
 and software Vulkan. macOS path aliases and a Windows test expectation required
